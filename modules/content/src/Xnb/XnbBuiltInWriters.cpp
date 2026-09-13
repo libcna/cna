@@ -4,6 +4,7 @@
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -12,6 +13,7 @@
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 
 #if SHARP_RUNTIME_HAS_NATIVE_INT128
+#include "System/Collections/Generic/OrderedDictionary.hpp"
 #include "System/Decimal.hpp"
 #endif
 
@@ -469,6 +471,44 @@ namespace CNA::Internal::Xnb
             std::make_shared<const XnbDictionaryTypeWriter<std::string, std::int32_t>>(
                 XnbBuiltInReaderIdentity<std::string>(),
                 XnbBuiltInReaderIdentity<std::int32_t>()));
+        // The same `Dictionary<string,int>`, spelled the way the content pipeline holds it. An
+        // `.xml` asset naming that type is read by the intermediate serializer into an
+        // `OrderedDictionary` -- the container `ContentTypeName` is specialized for, because a
+        // dictionary asset is written in its document's order -- and a registry keyed by C++ type
+        // cannot reach the writer above from it (plans/plan_xnapipeline_parity.md XNAPP-260,
+        // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119).
+        registry.Register(
+            std::make_shared<const XnbDictionaryTypeWriter<
+                std::string, std::int32_t,
+                System::Collections::Generic::OrderedDictionary<std::string, std::int32_t>>>(
+                XnbBuiltInReaderIdentity<std::string>(),
+                XnbBuiltInReaderIdentity<std::int32_t>()));
+        registry.Register(
+            std::make_shared<const XnbDictionaryTypeWriter<std::string, std::int32_t,
+                                                           std::map<std::string, std::int32_t>>>(
+                XnbBuiltInReaderIdentity<std::string>(),
+                XnbBuiltInReaderIdentity<std::int32_t>()));
+
+        // `Dictionary<string,string>`, in all three spellings for the same reason. A genuine XNA
+        // sample ships one: Movipa's `App.config.xml` declares `Generic:Dictionary[string,string]`
+        // and its built `.xnb` carries `DictionaryReader`2[[System.String],[System.String]]` as the
+        // root. A dictionary of primitives is pipeline infrastructure rather than a type the game
+        // owns, which is what makes it a built-in here (XNASWEEP-119).
+        registry.Register(
+            std::make_shared<const XnbDictionaryTypeWriter<std::string, std::string>>(
+                XnbBuiltInReaderIdentity<std::string>(),
+                XnbBuiltInReaderIdentity<std::string>()));
+        registry.Register(
+            std::make_shared<const XnbDictionaryTypeWriter<
+                std::string, std::string,
+                System::Collections::Generic::OrderedDictionary<std::string, std::string>>>(
+                XnbBuiltInReaderIdentity<std::string>(),
+                XnbBuiltInReaderIdentity<std::string>()));
+        registry.Register(
+            std::make_shared<const XnbDictionaryTypeWriter<std::string, std::string,
+                                                           std::map<std::string, std::string>>>(
+                XnbBuiltInReaderIdentity<std::string>(),
+                XnbBuiltInReaderIdentity<std::string>()));
 
         // The one array instantiation CNA's runtime reader registry resolves: a real XNA `Model`
         // carries `ArrayReader<Vector3>` in its type table, which is why the reader exists

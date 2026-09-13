@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
@@ -7,13 +8,18 @@
 #endif
 #include "CNA/Internal/Renderers/Common/PlatformVulkanRendererState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanVertexInputLayout.hpp"
 #include <vulkan/vulkan.h>
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstdint>
+#include <functional>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 #include <stdexcept>
@@ -23,6 +29,43 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanRenderer;            // forward
     class VulkanRenderTargetRenderer;        // forward
     class VulkanRenderTargetCubeRenderer;    // forward
+    class VulkanStorageBufferRenderer;       // forward
+    class VulkanComputeShaderRenderer;       // forward
+    class VulkanTexture2DArrayRenderer;      // forward
+    class VulkanStorageTexture2DRenderer;    // forward
+    class VulkanGpuTimerRenderer;            // forward
+
+    /** @brief Renderer-internal logical use of one Vulkan buffer or image subresource. */
+    enum class VulkanResourceIntent : std::uint8_t
+    {
+        None,
+        CpuRead,
+        CpuWrite,
+        TransferRead,
+        TransferWrite,
+        TransferReadWrite,
+        ShaderRead,
+        ShaderWrite,
+        ShaderReadWrite,
+        VertexShaderRead,
+        FragmentShaderRead,
+        GraphicsShaderRead,
+        RenderTargetWrite,
+        SampledRead,
+        IndirectRead,
+        VertexRead,
+        IndexRead
+    };
+
+    /** @brief Accumulated native state for one logical buffer or image subresource. */
+    struct VulkanResourceUsageState
+    {
+        VkPipelineStageFlags stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkAccessFlags access = 0;
+        VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bool initialized = false;
+        bool writes = false;
+    };
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan renderer)
@@ -40,10 +83,28 @@ namespace CNA::Internal::Renderers::Vulkan
         virtual int           GetWidth()                   const = 0;
         virtual int           GetHeight()                  const = 0;
         virtual uint32_t      GetColorAttachmentCount()    const = 0;
+        /**
+         * @brief Returns the exact native format of one colour attachment.
+         *
+         * @param index Zero-based colour-attachment index.
+         * @return The native format, or `VK_FORMAT_UNDEFINED` when the index is not present.
+         */
+        virtual VkFormat      GetColorFormatEXT(uint32_t /*index*/ = 0) const
+        {
+            return VK_FORMAT_UNDEFINED;
+        }
         /// True if this source's actual framebuffer/render pass uses multisample color
         /// attachments plus single-sample resolves. Default false; overridden by the concrete
         /// single-target, cube-face, and MRT sources when MSAA is genuinely engaged.
         virtual bool          WantsMsaa()                   const { return false; }
+        /// plan_vulkan.md VULKAN-216: the sample count THIS source's attachments actually carry.
+        /// `WantsMsaa()` says whether the multisample/resolve shape is in use; this says with how
+        /// many samples, which is what render-pass compatibility and every pipeline's
+        /// `rasterizationSamples` have to agree on. Before this row the renderer had exactly one
+        /// count -- its own `sampleCount_` -- so the two questions collapsed into one; now a
+        /// `RenderTarget2D` carries the count IT asked for, per XNA's per-instance
+        /// `preferredMultiSampleCount`, and the two must be asked separately.
+        virtual VkSampleCountFlagBits GetMsaaSampleCountEXT() const { return VK_SAMPLE_COUNT_1_BIT; }
         /// Task 911: this RT's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
         /// attachment at all, DepthFormat::None). Default VK_FORMAT_UNDEFINED; overridden by
         /// VulkanRenderTargetRenderer/VulkanRenderTargetCubeRenderer with their own instance's
@@ -113,8 +174,12 @@ namespace CNA::Internal::Renderers::Vulkan
         int           height        = 0;
         /** @brief True when `framebuffer` carries multisample colour plus single-sample resolves. */
         bool          msaa          = false;
+        /** @brief VULKAN-216: the sample count `framebuffer`'s colour attachments carry. */
+        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
         /** @brief This target's own depth format, VK_FORMAT_UNDEFINED for no depth attachment. */
         VkFormat      depthFormat   = VK_FORMAT_UNDEFINED;
+        /** @brief The exact native format of this pass's colour attachment. */
+        VkFormat      colorFormat   = VK_FORMAT_UNDEFINED;
         /** @brief Whether `renderPass` begins its colour attachments with LOAD_OP_CLEAR. */
         bool          loadOpIsClear = true;
         /** @brief Shared depth/stencil group identity (REMED-GFX-142); null = this pass alone. */
@@ -125,6 +190,12 @@ namespace CNA::Internal::Renderers::Vulkan
         int           mipLevels     = 1;
         /** @brief Array layer of `mipImage` this pass owns (a cube face index, else 0). */
         uint32_t      mipLayer      = 0;
+        /** @brief MOD-2251: single-sample colour image shared by render, compute and sampling. */
+        VkImage       trackedColorImage = VK_NULL_HANDLE;
+        /** @brief MOD-2251: mip-zero storage view; null when this target has no legal bridge. */
+        VkImageView   storageImageView = VK_NULL_HANDLE;
+        /** @brief MOD-2251: logical usage for every mip of @ref trackedColorImage. */
+        std::vector<VulkanResourceUsageState> colorUsageStates;
 
         /** @brief @copydoc VulkanRTSource::GetFramebuffer */
         VkFramebuffer GetFramebuffer()          const override { return framebuffer; }
@@ -136,8 +207,15 @@ namespace CNA::Internal::Renderers::Vulkan
         int           GetHeight()               const override { return height; }
         /** @brief @copydoc VulkanRTSource::GetColorAttachmentCount */
         uint32_t      GetColorAttachmentCount() const override { return 1; }
+        /** @brief @copydoc VulkanRTSource::GetColorFormatEXT */
+        VkFormat      GetColorFormatEXT(uint32_t index = 0) const override
+        {
+            return index == 0 ? colorFormat : VK_FORMAT_UNDEFINED;
+        }
         /** @brief @copydoc VulkanRTSource::WantsMsaa */
         bool          WantsMsaa()               const override { return msaa; }
+        /** @brief @copydoc VulkanRTSource::GetMsaaSampleCountEXT */
+        VkSampleCountFlagBits GetMsaaSampleCountEXT() const override { return samples; }
         /** @brief @copydoc VulkanRTSource::GetDepthFormat */
         VkFormat      GetDepthFormat()          const override { return depthFormat; }
         /** @brief @copydoc VulkanRTSource::ColorLoadOpIsClearEXT */
@@ -190,12 +268,24 @@ namespace CNA::Internal::Renderers::Vulkan
         virtual VkImageView GetVkVolumeImageView() const = 0;
     };
 
+    /** @brief Native sampled-view contract for a Vulkan two-dimensional texture array. */
+    struct IVulkanArraySamplable
+    {
+        /** @brief Releases the dimensional sampled-view contract. */
+        virtual ~IVulkanArraySamplable() = default;
+        /** @brief Returns a `VK_IMAGE_VIEW_TYPE_2D_ARRAY` view over every layer and mip. */
+        virtual VkImageView GetVkArrayImageView() const = 0;
+    };
+
     // -------------------------------------------------------------------------
     // VulkanTextureRenderer
     // -------------------------------------------------------------------------
 
     class VulkanTextureRenderer : public ITextureRenderer, public IVulkanSamplable
     {
+        friend class VulkanRenderer;
+        friend class VulkanComputeShaderRenderer;
+
     public:
         explicit VulkanTextureRenderer(const ImageData& data, VulkanRenderer* owner);
         ~VulkanTextureRenderer() override;
@@ -215,6 +305,61 @@ namespace CNA::Internal::Renderers::Vulkan
         // VulkanTexture3DRenderer::SetData's established staging-buffer pattern (Task 864).
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
+        /**
+         * @brief The SurfaceFormat ordinal this texture was created with. CNAEXT.
+         *
+         * plan_vulkan.md VULKAN-170, finding F-11. The shared default returns 0, which happens to
+         * BE `Color` -- correct today by coincidence rather than by report. This returns what the
+         * ImageData actually carried.
+         *
+         * @return The SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+
+        /**
+         * @brief The native `VkFormat` this texture's image was actually created in. CNAEXT.
+         *
+         * plan_vulkan.md VULKAN-170. Exposed so a test can assert that the format the renderer
+         * *claims* through `ClassifySurfaceFormatEXT` is the one it *allocates* -- the two used to
+         * be unrelated, because the image format was a constant in the constructor.
+         *
+         * @return The native storage format.
+         */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
+
+        /** @brief Returns the exact usage mask passed to the native image allocation. */
+        [[nodiscard]] VkImageUsageFlags GetVkImageUsageEXT() const noexcept
+        {
+            return imageUsage_;
+        }
+
+        /** @brief Returns the native image handle, or null after renderer teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return image_; }
+
+        /** @brief Returns whether mip zero has a legal storage-image allocation and view. */
+        [[nodiscard]] bool IsStorageImageCapableEXT() const noexcept
+        {
+            return storageImageView_ != VK_NULL_HANDLE;
+        }
+
+        /** @brief Returns the mip-zero view used by compute storage-image descriptors. */
+        [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept
+        {
+            return storageImageView_;
+        }
+
+        /** @brief Returns whether this texture was allocated by the supplied renderer. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+
+        /** @brief Records the exact prior-use to compute dependency for mip zero. */
+        void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
+
+        /** @brief Records a sampled-read transition for every mip without submitting. */
+        void PrepareForSamplingEXT(VkCommandBuffer commandBuffer);
+
     private:
         // Task 925: transitions exactly ONE mip level's layout -- the shared
         // VulkanRenderer::TransitionImageLayout always barriers level 0 regardless of
@@ -226,11 +371,202 @@ namespace CNA::Internal::Renderers::Vulkan
         int                 width_         = 0;
         int                 height_        = 0;
         int                 levelCount_    = 1;
+        /// VULKAN-170: the SurfaceFormat ordinal this texture was created with (F-11).
+        int                 surfaceFormat_ = 0;
+        /// VULKAN-170: the native storage this renderer chose for that format, from the one table.
+        VkFormat            vkFormat_      = VK_FORMAT_R8G8B8A8_UNORM;
+        int                 bytesPerTexel_ = 4;
+        /// VULKAN-172: 4 when the storage is block-compressed, so every size is block-counted.
+        int                 blockExtent_   = 1;
         VkImage             image_         = VK_NULL_HANDLE;
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;
+        VkImageView         storageImageView_ = VK_NULL_HANDLE;
+        VkImageUsageFlags   imageUsage_    = 0;
+        mutable std::vector<VulkanResourceUsageState> mipUsageStates_;
+        bool participatesInModernOrder_ = false;
         VkDescriptorSet     descriptorSet_ = VK_NULL_HANDLE;
+        /// plan_vulkan.md VULKAN-181: see VulkanRenderTargetRenderer's twin -- the set no longer
+        /// always comes from `owner_->descriptorPool_`, so it must be freed from its own pool.
+        VkDescriptorPool    descriptorPool_ = VK_NULL_HANDLE;
         VulkanRenderer* owner_      = nullptr;
+    };
+
+    /** @brief Vulkan-owned image record behind `CNA::Graphics::Texture2DArray`. */
+    class VulkanTexture2DArrayRenderer final
+        : public ITexture2DArrayRenderer
+        , public IVulkanArraySamplable
+    {
+    public:
+        /**
+         * @brief Allocates an array image and one full-array sampled view.
+         *
+         * @param owner Owning renderer.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param layerCount Array-layer count.
+         * @param mipLevelCount Allocated mip-level count.
+         * @param surfaceFormat Public `SurfaceFormat` ordinal.
+         * @param usage Public texture-array usage bits.
+         */
+        VulkanTexture2DArrayRenderer(
+            VulkanRenderer* owner, int width, int height, int layerCount, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage);
+        /** @brief Retires the native image, view and memory. */
+        ~VulkanTexture2DArrayRenderer() override;
+
+        /** @copydoc ITexture2DArrayRenderer::SetData */
+        [[nodiscard]] bool SetData(
+            int layer, int mipLevel, int x, int y, int width, int height,
+            const void* data, std::size_t byteCount) override;
+        /** @copydoc ITexture2DArrayRenderer::GetData */
+        [[nodiscard]] bool GetData(
+            int layer, int mipLevel, int x, int y, int width, int height,
+            void* data, std::size_t byteCount) const override;
+        /** @copydoc IVulkanArraySamplable::GetVkArrayImageView */
+        [[nodiscard]] VkImageView GetVkArrayImageView() const noexcept override
+        {
+            return imageView_;
+        }
+        /** @brief Returns whether linear filtering was declared and device-validated. */
+        [[nodiscard]] bool IsFilterableEXT() const noexcept { return (usage_ & UINT32_C(2)) != 0; }
+
+        /** @brief Returns the level-zero width recorded by the native allocation. */
+        [[nodiscard]] int GetWidthEXT() const noexcept { return width_; }
+        /** @brief Returns the level-zero height recorded by the native allocation. */
+        [[nodiscard]] int GetHeightEXT() const noexcept { return height_; }
+        /** @brief Returns the number of layers recorded by the native allocation. */
+        [[nodiscard]] int GetLayerCountEXT() const noexcept { return layerCount_; }
+        /** @brief Returns the number of mip levels recorded by the native allocation. */
+        [[nodiscard]] int GetMipLevelCountEXT() const noexcept { return mipLevelCount_; }
+        /** @brief Returns the public `SurfaceFormat` ordinal retained by the allocation. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+        /** @brief Returns the public usage mask retained by the allocation. */
+        [[nodiscard]] std::uint32_t GetDeclaredUsageEXT() const noexcept { return usage_; }
+        /** @brief Returns the exact native format passed to `vkCreateImage`. */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
+        /** @brief Returns the exact native usage mask passed to `vkCreateImage`. */
+        [[nodiscard]] VkImageUsageFlags GetVkImageUsageEXT() const noexcept
+        {
+            return imageUsage_;
+        }
+        /** @brief Returns the native image handle, or null after device teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return image_; }
+        /** @brief Returns the view type used to create the sampled view. */
+        [[nodiscard]] VkImageViewType GetVkImageViewTypeEXT() const noexcept
+        {
+            return imageViewType_;
+        }
+        /** @brief Returns whether the renderer record is still connected to its owner. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+
+        /** @brief Retires all live Vulkan handles while the owner is still available. */
+        void ReleaseVulkanResources();
+        /** @brief Disconnects this record from an owner that is being destroyed. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        void RecordTransition(
+            VkCommandBuffer commandBuffer, int layer, int mipLevel,
+            VkImageLayout oldLayout, VkImageLayout newLayout) const;
+
+        VulkanRenderer* owner_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int layerCount_ = 0;
+        int mipLevelCount_ = 0;
+        int surfaceFormat_ = 0;
+        std::uint32_t usage_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
+        int bytesPerTexel_ = 0;
+        int blockExtent_ = 1;
+        VkImageUsageFlags imageUsage_ = 0;
+        VkImageViewType imageViewType_ = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        VkImage image_ = VK_NULL_HANDLE;
+        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        VkImageView imageView_ = VK_NULL_HANDLE;
+    };
+
+    /** @brief Vulkan image record behind `CNA::Graphics::StorageTexture2D`. */
+    class VulkanStorageTexture2DRenderer final : public IStorageTexture2DRenderer
+    {
+        friend class VulkanRenderer;
+
+    public:
+        /**
+         * @brief Allocates one storage-capable 2D image and mip-zero storage view.
+         * @param owner Owning Vulkan renderer.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param mipLevelCount Allocated mip count.
+         * @param surfaceFormat Public `SurfaceFormat` ordinal.
+         * @param usage Immutable `StorageTexture2DUsage` bits.
+         */
+        VulkanStorageTexture2DRenderer(
+            VulkanRenderer* owner, int width, int height, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage);
+        /** @brief Retires the native views, image, and memory. */
+        ~VulkanStorageTexture2DRenderer() override;
+
+        /** @copydoc IStorageTexture2DRenderer::SetData */
+        [[nodiscard]] bool SetData(
+            int mipLevel, int x, int y, int width, int height,
+            const void* data, std::size_t byteCount) override;
+        /** @copydoc IStorageTexture2DRenderer::GetData */
+        [[nodiscard]] bool GetData(
+            int mipLevel, int x, int y, int width, int height,
+            void* data, std::size_t byteCount) const override;
+
+        /** @brief Records a dependency and transitions mip zero to compute `GENERAL` layout. */
+        void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
+        /** @brief Records an ordered sampled-read transition for every mip without submitting. */
+        void PrepareForSamplingEXT(VkCommandBuffer commandBuffer);
+        /** @brief Returns the single-mip view used by storage-image descriptors. */
+        [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept { return storageView_; }
+        /** @brief Returns the full-mip view used by sampled descriptors. */
+        [[nodiscard]] VkImageView GetSampledImageViewEXT() const noexcept { return sampledView_; }
+        /** @brief Returns the exact native storage format. */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
+        /** @brief Returns whether this record belongs to the supplied renderer. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Returns the native image, or null after renderer teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return image_; }
+        /** @brief Returns whether the immutable resource declaration includes @p bits. */
+        [[nodiscard]] bool HasUsageEXT(std::uint32_t bits) const noexcept
+        {
+            return (usage_ & bits) == bits;
+        }
+        /** @brief Returns whether linear filtering was declared and device-validated. */
+        [[nodiscard]] bool IsFilterableEXT() const noexcept { return (usage_ & UINT32_C(8)) != 0; }
+
+        /** @brief Retires every native handle while the owner is live. */
+        void ReleaseVulkanResources();
+        /** @brief Disconnects this record during renderer teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        void RecordUsage(
+            VkCommandBuffer commandBuffer, int mipLevel, VulkanResourceIntent intent) const;
+
+        VulkanRenderer* owner_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int mipLevelCount_ = 0;
+        int surfaceFormat_ = 0;
+        std::uint32_t usage_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
+        int bytesPerTexel_ = 0;
+        VkImageUsageFlags imageUsage_ = 0;
+        VkImage image_ = VK_NULL_HANDLE;
+        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        VkImageView storageView_ = VK_NULL_HANDLE;
+        VkImageView sampledView_ = VK_NULL_HANDLE;
+        mutable std::vector<VulkanResourceUsageState> mipUsageStates_;
     };
 
     // -------------------------------------------------------------------------
@@ -240,19 +576,37 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanRenderTargetRenderer : public IRenderTargetRenderer, public IVulkanSamplable
     {
     public:
-        // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
-        // gives this instance true per-RT DepthStencilFormat fidelity -- a real, distinct
-        // VkFormat picked via PickDepthFormat() (or no depth attachment at all for
-        // DepthFormat::None), independent of the backbuffer's own depthFormat_ and of every
-        // other render target. Each distinct depthVkFormat_ gets its own render pass (see
-        // VulkanRenderer::GetOrCreateRTRenderPass()/GetOrCreateRTRenderPassMsaa()) and its
-        // own pipeline cache entries (DepthStencilKeyParams no longer needs a depth-format
-        // dimension since depthCompareOp/stencil ops are independent of the buffer's exact
-        // format -- but the render pass itself is, since Vulkan pipeline/render-pass
-        // compatibility requires an exact attachment-format match).
+        /**
+         * @brief Reports this target's depth/stencil format in XNA's vocabulary.
+         *
+         * plans/plan_vulkan.md `VULKAN-348`. Unlike the back buffer, a render target honours a
+         * `DepthFormat::None` request -- its `depthVkFormat_` stays `VK_FORMAT_UNDEFINED` -- so
+         * the mapping reports `None` for it without a special case.
+         *
+         * @param requestedDepthStencilFormat Ignored; the applied format is what is reported.
+         * @return The applied `DepthFormat` ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const override;
+        /**
+         * @brief Creates a Vulkan-backed two-dimensional render target.
+         *
+         * The public colour and depth formats are preserved as exact native attachment formats.
+         * Each colour/depth/sample combination obtains a render-pass-compatible pipeline rather
+         * than substituting the swapchain format.
+         *
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depthFormat Requested `DepthFormat` ordinal.
+         * @param preserveContents Whether later bind cycles must load existing attachment data.
+         * @param owner Owning Vulkan renderer.
+         * @param requestedMultiSampleCount Preferred sample count, or zero for single-sampling.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         */
         VulkanRenderTargetRenderer(int w, int h, int depthFormat, bool preserveContents,
                                    VulkanRenderer* owner, int requestedMultiSampleCount = 0,
-                                   bool mipMap = false);
+                                   bool mipMap = false, int surfaceFormat = 0);
         ~VulkanRenderTargetRenderer() override;
 
         int GetWidth()  const override { return width_; }
@@ -273,8 +627,10 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] const std::shared_ptr<VulkanTargetPassEXT>& PassEXT() const { return pass_; }
         // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
         bool            WantsMsaa()                const { return msaaFramebuffer_ != VK_NULL_HANDLE; }
-        // Real, renderer-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
-        // "piggyback on the renderer's own sampleCount_" scope decision in plans/plan_graphics.md).
+        // The applied MultiSampleCount this instance really got (0 if MSAA wasn't engaged),
+        // clamped to what the DEVICE offers rather than to what the back buffer happens to use
+        // (VULKAN-216 -- it was the latter until then, so a 4x target on a single-sampled device
+        // reported 0). VULKAN-347's rule: report what you got, not what you asked for.
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
         VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
         VkImageView     GetColorView()             const { return colorView_; }
@@ -289,20 +645,57 @@ namespace CNA::Internal::Renderers::Vulkan
                 appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 1);
         }
         VkImageView     GetDepthView()             const { return depthView_; }
+        /**
+         * @brief Returns the requested public `SurfaceFormat` ordinal.
+         *
+         * @return The exact public format used to create this target.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        /**
+         * @brief Returns the exact native format of the colour image.
+         *
+         * @return The target's Vulkan colour format.
+         */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return colorVkFormat_; }
         VkDescriptorSet GetVkDescriptorSet()       const override { return descriptorSet_; }
         // Task 878: the full-mip-range view, so mip filtering works when this RT is sampled as
         // an ordinary texture (on-the-fly descriptor sets built by RecordCommandBuffer's texture
         // dispatch), not just via GetDescriptorSet()'s own precreated one.
         VkImageView     GetVkImageView()           const override { return colorSampleView_; }
 
+        /** @brief Returns whether this target's resolve image has a legal storage-image usage. */
+        [[nodiscard]] bool IsStorageImageCapableEXT() const noexcept
+        {
+            return pass_ != nullptr && pass_->storageImageView != VK_NULL_HANDLE;
+        }
+        /** @brief Returns whether this target was allocated by @p owner. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+        /** @brief Returns the mip-zero view used by compute storage-image descriptors. */
+        [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept
+        {
+            return pass_ != nullptr ? pass_->storageImageView : VK_NULL_HANDLE;
+        }
+        /** @brief Returns the native colour image, or null after renderer teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return colorImage_; }
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Records the exact prior-use to compute dependency for mip zero. */
+        void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
+        /** @brief Records the exact prior-use to sampled-read dependency for every mip. */
+        void PrepareForSamplingEXT(VkCommandBuffer commandBuffer);
+
         // REMED-GFX-074: real GPU readback of this render target's colour image so that
         // RenderTarget2D::GetData() observes prior sprite/3D rendering into it even BEFORE
         // Present() runs. Vulkan defers all draw work to a single Present-time record, so this
         // first flushes any deferred passes queued into this target (FlushDeferredRenderTarget),
         // then copies colorImage_ back via a host-visible staging buffer -- mirroring
-        // VulkanTexture3DRenderer::GetData's pattern, plus the swapchain BGRA->RGBA channel swap
-        // (the RT colour image uses swapchainFormat_). Pre-fix this was the unimplemented base
-        // no-op, so a RenderTarget2D read back before Present returned all-zeros.
+        // VulkanTexture3DRenderer::GetData's pattern. A Color target backed by a BGRA swapchain
+        // format receives the required BGRA->RGBA channel swap; wider integer and float targets
+        // are copied byte-for-byte. Pre-fix this was the unimplemented base no-op, so a
+        // RenderTarget2D read back before Present returned all-zeros.
         //
         // REMED-GFX-127: returns true only once the staging copy has filled the whole requested
         // region; false when this target has no usable colour image (torn-down owner/device) so the
@@ -311,7 +704,18 @@ namespace CNA::Internal::Renderers::Vulkan
                                    void* data, int dataLength) const override;
 
         void ReleaseVulkanResources();
-        void DisconnectOwner() { owner_ = nullptr; }
+        /** @brief Disconnects this record and invalidates its non-owning pass description. */
+        void DisconnectOwner()
+        {
+            owner_ = nullptr;
+            if (pass_ != nullptr)
+            {
+                pass_->framebuffer = VK_NULL_HANDLE;
+                pass_->trackedColorImage = VK_NULL_HANDLE;
+                pass_->storageImageView = VK_NULL_HANDLE;
+                pass_->colorUsageStates.clear();
+            }
+        }
 
     private:
         int                     width_            = 0;
@@ -319,6 +723,9 @@ namespace CNA::Internal::Renderers::Vulkan
         bool                    preserveContents_ = false;
         // Task 878: number of mip levels colorImage_ actually owns (1 when mipMap was false).
         int                     levelCount_   = 1;
+        int                     surfaceFormat_ = 0;
+        VkFormat                colorVkFormat_ = VK_FORMAT_UNDEFINED;
+        int                     bytesPerTexel_ = 4;
         VkImage                 colorImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
         VkImageView             colorView_    = VK_NULL_HANDLE; ///< mip 0 only — framebuffer color attachment.
@@ -334,7 +741,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // MSAA color image (attached, never sampled directly) resolved automatically into
         // colorImage_ at vkCmdEndRenderPass, plus a dedicated 3-attachment framebuffer against
         // the owner's shared rtRenderPassMsaa_. depthImage_/depthView_ above are reused in-place
-        // as the MSAA depth attachment (promoted to owner_->sampleCount_ samples) rather than
+        // as the MSAA depth attachment (promoted to this target's own sample count) rather than
         // duplicated, since depthView_ is never sampled externally by anything in this codebase.
         VkImage                 msaaColorImage_  = VK_NULL_HANDLE;
         VkDeviceMemory          msaaColorMemory_ = VK_NULL_HANDLE;
@@ -342,6 +749,11 @@ namespace CNA::Internal::Renderers::Vulkan
         VkFramebuffer           msaaFramebuffer_ = VK_NULL_HANDLE;
         int                     appliedMultiSampleCount_ = 0;
         VkDescriptorSet         descriptorSet_ = VK_NULL_HANDLE;
+        /// plan_vulkan.md VULKAN-181: the pool `descriptorSet_` was allocated from. It is no
+        /// longer always `owner_->descriptorPool_`: this class now goes through
+        /// `AllocateTexSamplerDescSetEXT`, which chains a fresh pool when the existing ones
+        /// are full, so the set has to be freed from whichever pool actually produced it.
+        VkDescriptorPool        descriptorPool_ = VK_NULL_HANDLE;
         VulkanRenderer*  owner_        = nullptr;
         // REMED-GFX-166: the destination the deferred queues name, built once at the end of the
         // constructor from the immutable handles above. Shared, so a command queued against this
@@ -352,6 +764,27 @@ namespace CNA::Internal::Renderers::Vulkan
     // -------------------------------------------------------------------------
     // VulkanEffectRenderer (Task 119 — SPIR-V custom Effect for Vulkan)
     // -------------------------------------------------------------------------
+
+    // plan_vulkan.md VULKAN-058 moved this up from below `PipelineKey`. Two declarations
+    // below now need the COMPLETE type rather than a forward declaration:
+    // `VulkanEffectRenderer::GetOrCreatePipeline` takes one with a `= {}` default, and
+    // `BatchSnapshot` carries one by value. Its contents are unchanged.
+    // plan_vulkan.md VULKAN-058 moved this up from below `PipelineKey`: `BatchSnapshot`
+    // now carries a DepthStencilKeyParams by value, and a SpriteBatch snapshot is declared
+    // long before the pipeline caches are. Its contents are unchanged.
+    struct DepthStencilKeyParams {
+        int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
+        bool stencilEnable        = false;
+        int  stencilFunc          = 0;      // CompareFunction::Always
+        int  stencilFail          = 0;      // StencilOperation::Keep
+        int  stencilDepthFail     = 0;
+        int  stencilPass          = 0;
+        bool twoSidedStencilMode  = false;
+        int  ccwStencilFunc       = 0;
+        int  ccwStencilFail       = 0;
+        int  ccwStencilDepthFail  = 0;
+        int  ccwStencilPass       = 0;
+    };
 
     struct BlendKeyParams;
 
@@ -376,17 +809,288 @@ namespace CNA::Internal::Renderers::Vulkan
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
 
+        /**
+         * @brief Uploads an array of `float` uniforms into this effect's own uniform buffer.
+         *
+         * plans/plan_vulkan.md `VULKAN-252`. `VULKAN-265` refused all four array setters here,
+         * because the fixed 128-byte push-constant block a `ShaderEffect`'s scalars live in has
+         * nowhere to put an array; this renderer now gives them somewhere -- four uniform-buffer
+         * ranges in descriptor set 1, one per element type, at bindings
+         * @ref kEffectFloatArrayBinding .. @ref kEffectMat4ArrayBinding.
+         *
+         * The `name` is not consulted, for the same reason the scalar setters do not consult
+         * theirs: there is no shader reflection here, so an array's **type** selects its slot the
+         * way a scalar's type selects its push-constant offset. A shader reads this one as
+         * `layout(set = 1, binding = 12) uniform FloatArray { float uFloats[72]; };`.
+         *
+         * The contents are captured into a buffer at `SpriteBatch::End()`, alongside the bound
+         * textures and the push constants, so a later write cannot change what an already
+         * recorded batch reads.
+         *
+         * @param name   The uniform the caller asked for; not consulted (see above).
+         * @param values `count` elements, tightly packed.
+         * @param count  Elements to write, 0 .. @ref kEffectUniformArrayCapacity.
+         * @throws System::NotSupportedException if @p count exceeds the capacity, or if @p values
+         *         is null with a non-zero @p count.
+         */
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        /** @brief As @ref SetUniformFloatArray, for `vec2` elements. */
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        /** @brief As @ref SetUniformFloatArray, for `vec3` elements. */
+        void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        /** @brief As @ref SetUniformFloatArray, for `mat4` elements. */
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
+
+        /**
+         * @brief plan_vulkan.md VULKAN-253: binds a texture this effect's shader can sample.
+         *
+         * The bound textures live in **descriptor set 1**, not set 0. Set 0 is the `SpriteBatch`
+         * texture the draw itself supplies and changes per sprite; set 1 is fixed for the batch,
+         * so the two have different lifetimes and cannot share a set without rebuilding it per
+         * draw. A shader reaches an explicitly bound texture as
+         * `layout(set = 1, binding = <unit>) uniform sampler2D`, and the sprite's own texture stays
+         * where every existing shader already expects it, at `set = 0, binding = 0`.
+         *
+         * That numbering differs from EasyGL's, where unit 0 IS the sprite texture. It has to:
+         * `ShaderEffect` takes renderer-specific source by contract (`VULKAN-250`), and a set-0
+         * collision would have meant rebuilding a descriptor set for every sprite in the batch.
+         *
+         * Units the shader does not use still receive a valid descriptor -- the renderer's own
+         * white 1x1 -- because a set must be fully written before it is bound.
+         *
+         * @param unit    Sampler unit, 0 .. kMaxEffectBoundTextures-1.
+         * @param texture The texture, or null to unbind that unit.
+         * @throws System::NotSupportedException if @p unit is outside that range.
+         */
+        void BindTexture(int unit, CNA::Internal::Renderers::ITextureRenderer* texture) override;
+        /** @brief As @ref BindTexture, for a cube map. @throws System::NotSupportedException always. */
+        void BindTextureCube(int unit,
+                             CNA::Internal::Renderers::ITextureCubeRenderer* texture) override;
+        /** @brief As @ref BindTexture, for a volume. @throws System::NotSupportedException always. */
+        void BindTexture3D(int unit,
+                           CNA::Internal::Renderers::ITexture3DRenderer* texture) override;
+        /** @copydoc IEffectRenderer::BindTexture2DArrayEXT */
+        [[nodiscard]] bool BindTexture2DArrayEXT(
+            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
+        /** @copydoc IEffectRenderer::BindStorageTexture2DEXT */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
+
+        /// @param dsParams   plan_vulkan.md VULKAN-058: the batch's DepthStencilState. A custom
+        ///                   effect's sprite pipeline honours it exactly as the built-in one does;
+        ///                   it must, because both are bound in the same command buffer and the
+        ///                   three stencil dynamic states are set before every sprite draw.
+        /// @param depthTest  DepthStencilState.DepthBufferEnable for this batch.
+        /// @param depthWrite DepthStencilState.DepthBufferWriteEnable for this batch.
+        /// plan_vulkan.md VULKAN-255: everything a 3D draw varies that a sprite batch does not.
+        /// Null for a sprite pipeline, which keeps the baked SpriteBatch vertex input and a
+        /// triangle list.
+        struct Pipeline3DDescEXT
+        {
+            VulkanVertexInputLayoutEXT layout{};
+            uint32_t            stride    = 0;
+            VkPrimitiveTopology topology  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            int                 cullMode  = 0;
+            bool                wireframe = false;
+            /// plan_vulkan.md VULKAN-168: the per-instance stream, at binding 1 with
+            /// VK_VERTEX_INPUT_RATE_INSTANCE. `instanceStride` of 0 means there is none, which is
+            /// every ordinary and indexed draw.
+            VulkanVertexInputLayoutEXT instanceLayout{};
+            uint32_t            instanceStride = 0;
+        };
         VkPipeline GetOrCreatePipeline(uint32_t colorAttachmentCount,
                                        VkSampleCountFlagBits sampleCount,
                                        VkFormat depthFormat,
                                        bool blend,
-                                       const BlendKeyParams& blendParams);
+                                       const BlendKeyParams& blendParams,
+                                       const DepthStencilKeyParams& dsParams = {},
+                                       bool depthTest = false, bool depthWrite = false,
+                                       const Pipeline3DDescEXT* three = nullptr);
         VkPipelineLayout GetPipelineLayout() const { return pipelineLayout_; }
+        /**
+         * @brief plan_vulkan.md VULKAN-255: a pipeline for a 3D draw this effect owns.
+         *
+         * The sprite variant above bakes the `SpriteBatch` vertex input and a triangle list. A 3D
+         * draw brings its own stride, attribute set, topology and rasterizer state, so those join
+         * the cache key; everything else -- the render-pass shape, the blend and depth/stencil
+         * state -- is decided exactly as it is for a sprite batch.
+         *
+         * Unlike the sprite path, the pipeline is created at DRAW time rather than deferred: a 3D
+         * draw already knows its render target, so there is nothing left to wait for, and the
+         * deferred replay must not have to reach back into an effect the game may have disposed.
+         *
+         * @param layout   The attribute set, built from the buffer's own declaration.
+         * @param stride   Vertex stride in bytes.
+         * @param topology The draw's primitive topology.
+         * @param cullMode XNA `CullMode` ordinal: 0 None, 1 CullClockwiseFace, 2 counter-clockwise.
+         * @param wireframe Whether the rasterizer fills or outlines.
+         * @return The pipeline, or `VK_NULL_HANDLE` if this effect never compiled.
+         */
+        VkPipeline GetOrCreatePipeline3DEXT(
+            const Pipeline3DDescEXT& three,
+            uint32_t colorAttachmentCount, VkSampleCountFlagBits sampleCount,
+            VkFormat depthFormat, bool blend, const BlendKeyParams& blendParams,
+            const DepthStencilKeyParams& dsParams, bool depthTest, bool depthWrite)
+        {
+            return GetOrCreatePipeline(colorAttachmentCount, sampleCount, depthFormat, blend,
+                                       blendParams, dsParams, depthTest, depthWrite, &three);
+        }
+        /// VULKAN-253: how many sampler units `BindTexture` accepts, and how many bindings the
+        /// set-1 layout declares. Four, because that is what the stock effects use at most and a
+        /// wider set costs a descriptor per unit per effect for nothing.
+        static constexpr int kMaxEffectBoundTextures = 4;
+        /// plan_vulkan.md VULKAN-254: set 1 gives each sampler KIND its own binding range, because
+        /// a descriptor's view type must match the dimensionality the shader declares -- a 2D
+        /// filler cannot stand in for an unbound `samplerCube`. So:
+        ///   bindings  0.. 3  `sampler2D`   units 0..3
+        ///   bindings  4.. 7  `samplerCube` units 0..3
+        ///   bindings  8..11  `sampler3D`   units 0..3
+        /// A shader reaches cube unit `u` at `binding = kEffectCubeBindingBase + u`, and a volume
+        /// at `kEffectVolumeBindingBase + u`.
+        static constexpr int kEffectCubeBindingBase   = kMaxEffectBoundTextures;
+        static constexpr int kEffectVolumeBindingBase = kMaxEffectBoundTextures * 2;
+        /// plan_vulkan.md VULKAN-252: set 1 continues past the samplers with FOUR uniform-buffer
+        /// bindings, one per array element type, rather than one block holding all four. A shader
+        /// that wants a bone palette then declares only
+        /// `layout(set = 1, binding = 15) uniform Mat4Array { mat4 uMat4Array[72]; };` and reads
+        /// the right bytes; with one shared block it would have had to declare the three arrays it
+        /// does not use, in the right order, or silently read the wrong offset. All four are ranges
+        /// of ONE buffer, so the cost of the split is descriptors, not allocations.
+        ///   binding 12  `float` array
+        ///   binding 13  `vec2`  array
+        ///   binding 14  `vec3`  array
+        ///   binding 15  `mat4`  array
+        static constexpr int kEffectFloatArrayBinding = kMaxEffectBoundTextures * 3;
+        static constexpr int kEffectVec2ArrayBinding  = kEffectFloatArrayBinding + 1;
+        static constexpr int kEffectVec3ArrayBinding  = kEffectFloatArrayBinding + 2;
+        static constexpr int kEffectMat4ArrayBinding  = kEffectFloatArrayBinding + 3;
+        static constexpr int kEffectArrayBindingCount = 4;
+        /// MOD-2226: three sampler2DArray bindings follow the stable uniform-array range. Together
+        /// with the twelve existing set-1 samplers and set 0's sprite sampler this keeps the
+        /// fragment-stage pipeline-layout total at Vulkan's guaranteed minimum of sixteen.
+        static constexpr int kEffectTextureArrayBindingBase = kEffectMat4ArrayBinding + 1;
+        static constexpr int kEffectTextureArrayBindingCount = kMaxEffectBoundTextures - 1;
+        /// MOD-2237/MOD-2239l: named matrices used by engine-owned geometry packages. General
+        /// scalar ShaderEffect uniforms retain the fixed push-constant contract; this separate
+        /// block lets shadow casters and the depth/normal prepass carry every independent matrix
+        /// they require instead of overwriting the single push-constant matrix slot.
+        static constexpr int kEffectEngineMatrixBinding =
+            kEffectTextureArrayBindingBase + kEffectTextureArrayBindingCount;
+        static constexpr int kEffectEngineMatrixCount = 6;
+        static constexpr int kEffectBoundBindingCount =
+            kEffectEngineMatrixBinding + 1;
+        static constexpr int kEffectUniformBufferBindingCount = kEffectArrayBindingCount + 1;
+        /// VULKAN-252: elements per array, all four kinds. 72 is XNA's own `SkinnedEffect.MaxBones`,
+        /// so the array a custom effect most plausibly wants -- a bone palette -- fits exactly, and
+        /// the four arrays occupy 8448 bytes at the usual alignment; six engine matrices make the
+        /// complete allocation 8960 bytes, still below the 16384 every device must allow.
+        static constexpr int kEffectUniformArrayCapacity = 72;
+        /**
+         * @brief Returns the set-1 descriptor snapshot for this effect's resources.
+         *
+         * Built on demand at `SpriteBatch::End()` and captured by value into the batch snapshot,
+         * so a texture unbound or disposed after `End()` cannot change what the recorded frame
+         * samples. VK_NULL_HANDLE when nothing was ever bound, in which case the replay binds
+         * nothing. Uniform arrays and the MOD-2237 caster matrices share this set and are always
+         * written with initialized ranges, as are all sampler bindings through typed fillers.
+         */
+        VkDescriptorSet GetOrCreateBoundTextureSetEXT(std::uint64_t segment);
+        /**
+         * @brief Builds the immutable set-2 storage-buffer snapshot required by this effect.
+         *
+         * @param uses Receives shared buffer records and their reflected graphics-stage intent.
+         * @return Descriptor set two, or null when neither shader declares a storage buffer.
+         */
+        VkDescriptorSet GetOrCreateDrawStorageSetEXT(
+            std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                                  VulkanResourceIntent>>& uses);
+        /// VULKAN-253: creates the set-1 layout if it does not exist yet. Called from
+        /// CompileProgram, because the pipeline layout must declare the set before any
+        /// pipeline is made from it, and again from the set builder.
+        void EnsureBoundTextureLayoutEXT();
+        /// VULKAN-253: the set-1 layout, or VK_NULL_HANDLE before the first bind.
+        [[nodiscard]] VkDescriptorSetLayout GetBoundTextureLayoutEXT() const { return boundLayout_; }
         // Returns pointer to 128-byte push-constant staging area (floats 2..31 = user uniforms).
         const float*     GetPushConst()      const { return pushConst_;      }
+        /**
+         * @brief plan_vulkan.md VULKAN-255: whether the game ever set the `uMatrix` slot itself.
+         *
+         * A 3D draw arrives with the world, view and projection the effect's own `IEffectMatrices`
+         * properties carry, and this renderer has no shader reflection to deliver them by name the
+         * way EasyGL does. It writes their product into the one matrix slot the push-constant block
+         * has -- but only when the game left that slot alone, so `SetUniformMat4` always wins and
+         * the two ways of supplying a transform cannot fight.
+         *
+         * @return True once `SetUniformMat4` has been called on this effect.
+         */
+        [[nodiscard]] bool HasGameSuppliedMatrixEXT() const { return matrixSetByGame_; }
 
     private:
         VulkanRenderer* owner_;
+        /// VULKAN-253: textures bound through BindTexture, by unit. Non-owning: the shared layer
+        /// keeps a texture alive for as long as it is bound, and the descriptor set built from
+        /// these is captured by value into the batch snapshot before the batch is recorded.
+        std::array<CNA::Internal::Renderers::ITextureRenderer*, kMaxEffectBoundTextures>
+                         boundTextures_{};
+        /// VULKAN-254: the cube and volume halves of the same idea.
+        std::array<CNA::Internal::Renderers::ITextureCubeRenderer*, kMaxEffectBoundTextures>
+                         boundCubes_{};
+        std::array<CNA::Internal::Renderers::ITexture3DRenderer*, kMaxEffectBoundTextures>
+                         boundVolumes_{};
+        /// MOD-2226: shared lifetime prevents deferred array descriptors from naming dead views.
+        std::array<std::shared_ptr<ITexture2DArrayRenderer>, kMaxEffectBoundTextures>
+                         boundTextureArrays_{};
+        /// MOD-2228: a storage texture samples through the existing sampler2D binding range.
+        std::array<std::shared_ptr<VulkanStorageTexture2DRenderer>, kMaxEffectBoundTextures>
+                         boundStorageTextures_{};
+        VkDescriptorSetLayout boundLayout_    = VK_NULL_HANDLE;
+        VkDescriptorSet       boundSet_       = VK_NULL_HANDLE;
+        VkDescriptorPool      boundSetPool_   = VK_NULL_HANDLE;
+        bool                  boundSetDirty_  = false;
+        /// plan_vulkan.md VULKAN-164: the sampler the current set was built with. The set is
+        /// rebuilt when it changes, because two batches can bind the same textures with
+        /// different SamplerStates and the second must not reuse the first one's sampler.
+        /// VULKAN-166 made it one entry per texture unit rather than one for the whole set: in
+        /// XNA the texture at sampler register `u` is governed by `SamplerStates[u]`, so unit 1
+        /// can differ from unit 0 and the freshness test has to see that.
+        std::array<VkSampler, kMaxEffectBoundTextures> boundSetSamplers_{};
+        struct DrawStorageBindingEXT
+        {
+            std::uint32_t binding = 0;
+            VkShaderStageFlags stages = 0;
+        };
+        std::vector<DrawStorageBindingEXT> drawStorageBindings_;
+        /// MOD-2237: reflected vertex-stage locations, used to omit declaration fields the
+        /// portable shader does not consume and to refuse genuinely missing inputs.
+        std::vector<std::uint32_t> vertexInputLocations_;
+        static constexpr std::uint32_t DrawStorageSetCapacity = 64;
+        VkDescriptorSetLayout drawStorageLayout_ = VK_NULL_HANDLE;
+        VkDescriptorPool drawStoragePool_ = VK_NULL_HANDLE;
+        VkDescriptorSet drawStorageSet_ = VK_NULL_HANDLE;
+        std::vector<std::weak_ptr<VulkanStorageBufferRenderer>> drawStorageSetBuffers_;
+        /// VULKAN-252/MOD-2237/MOD-2239l: the CPU-side copy of the four arrays followed by six
+        /// engine matrices, in the layout the buffer holds. Each
+        /// element occupies 16 bytes for `float`, `vec2` and `vec3` alike, which is what std140
+        /// does to an array of any of them -- so a shader declaring `float uFloats[72]` reads
+        /// element `i` at offset `16 * i`, exactly where this writes it.
+        std::vector<float>    arrayBlock_;
+        /// VULKAN-252: byte offsets of the four sub-ranges inside `uniformBuffer_`, each aligned up
+        /// to the device's `minUniformBufferOffsetAlignment`.
+        std::array<VkDeviceSize, 4> arrayOffsets_{};
+        /// MOD-2237/MOD-2239l: byte offset of the engine-owned named matrix block.
+        VkDeviceSize          engineMatrixOffset_ = 0;
+        VkDeviceSize          arrayBlockSize_  = 0;
+        bool                  arraysDirty_     = false;
+        VkBuffer              uniformBuffer_   = VK_NULL_HANDLE;
+        VkDeviceMemory        uniformMemory_   = VK_NULL_HANDLE;
+        /// VULKAN-252: fills `arrayBlock_`/`arrayOffsets_` on first use and refuses by name if the
+        /// device cannot hold the block. Separate from the buffer so the sizes are known before
+        /// any allocation happens.
+        void EnsureUniformArrayStorageEXT();
+        /// VULKAN-252: the one place a setter writes. `elementFloats` is 1, 2, 3 or 16; every
+        /// element is padded to four floats except `mat4`, which is already sixteen.
+        void WriteUniformArrayEXT(const char* setter, const char* name, int slot,
+                                  int elementFloats, const float* values, int count);
         VkShaderModule   vertModule_     = VK_NULL_HANDLE;
         VkShaderModule   fragModule_     = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
@@ -399,6 +1103,24 @@ namespace CNA::Internal::Renderers::Vulkan
             uint32_t blendBits = 0;
             uint32_t colorWriteBits = 0;
             uint32_t sampleMask = 0xFFFFFFFFu;
+            /// VULKAN-058: the batch's DepthStencilState, packed by PackDepthStencilBits, plus the
+            /// two depth enables. Two batches that differ only in their stencil comparison must not
+            /// share one VkPipeline -- it bakes the compare and the ops.
+            uint64_t depthStencilBits = 0;
+            bool depthTestEnable = false;
+            bool depthWriteEnable = false;
+            /// plan_vulkan.md VULKAN-255: a 3D draw brings its own vertex layout, topology and
+            /// rasterizer state, none of which a sprite pipeline varies. Zero on every sprite
+            /// pipeline, so the two families cannot collide in one cache.
+            uint32_t vertexStride = 0;
+            uint64_t vertexLayoutHash = 0;
+            /// VULKAN-168: the per-instance stream's stride and attribute set, zero without one.
+            uint32_t instanceStride = 0;
+            uint64_t instanceLayoutHash = 0;
+            uint32_t topology = 0;
+            int32_t  cullMode = 0;
+            bool     wireframe = false;
+            std::array<int32_t, 4> colorFormats{};
             bool operator==(const PipelineVariantKey&) const noexcept = default;
         };
         struct PipelineVariantKeyHash
@@ -408,10 +1130,18 @@ namespace CNA::Internal::Renderers::Vulkan
                 std::size_t h = std::hash<uint32_t>{}(key.colorAttachmentCount);
                 h ^= std::hash<uint32_t>{}(key.sampleCount) + (h << 6) + (h >> 2);
                 h ^= std::hash<int32_t>{}(key.depthFormat) + (h << 6) + (h >> 2);
+                for (const int32_t format : key.colorFormats)
+                    h ^= std::hash<int32_t>{}(format) + (h << 6) + (h >> 2);
                 h ^= std::hash<bool>{}(key.blend) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.blendBits) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.colorWriteBits) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.sampleMask) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.vertexStride) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint64_t>{}(key.vertexLayoutHash) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.instanceStride) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint64_t>{}(key.instanceLayoutHash) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.topology) + (h << 6) + (h >> 2);
+                h ^= std::hash<int32_t>{}(key.cullMode) + (h << 6) + (h >> 2);
                 return h;
             }
         };
@@ -426,6 +1156,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // [20..23] = uColor     (bytes 80-95) — set via SetUniformVec4 / Vec3 / Vec2.
         // [24..31] = uFloats×8  (bytes 96-127)— set via SetUniformFloat / Int.
         float            pushConst_[32]  = {};
+        /// VULKAN-255: set by SetUniformMat4; see HasGameSuppliedMatrixEXT.
+        bool             matrixSetByGame_ = false;
     };
 
     // Task 868: the real per-channel Blend/BlendFunction values a BlendState requests, mirrors
@@ -497,6 +1229,10 @@ namespace CNA::Internal::Renderers::Vulkan
             pendingAddressU_ = addressU;
             pendingAddressV_ = addressV;
         }
+        /// VULKAN-164: -1 means "the batch supplied no W", which keeps ApplySamplerState's
+        /// W-follows-U default for any caller that flushes sprites without going through
+        /// SpriteBatch::Begin.
+        void SetSamplerAddressModeWEXT(int addressW) override { pendingAddressW_ = addressW; }
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -529,6 +1265,15 @@ namespace CNA::Internal::Renderers::Vulkan
             VkPipeline                  customPipeline  = VK_NULL_HANDLE;
             VkPipelineLayout            customLayout    = VK_NULL_HANDLE;
             float                       customPushConst[32] = {};
+            /// plan_vulkan.md VULKAN-253: the custom effect's set-1 descriptor set, captured by
+            /// value like everything else about the effect, so a texture unbound or disposed after
+            /// End() cannot change what the recorded frame samples. VK_NULL_HANDLE when the effect
+            /// bound nothing, in which case the replay binds no second set at all.
+            VkDescriptorSet             customBoundSet  = VK_NULL_HANDLE;
+            /// MOD-2250: reflected set-2 storage buffers and their retained native records.
+            VkDescriptorSet             customStorageSet = VK_NULL_HANDLE;
+            std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                                  VulkanResourceIntent>> customStorageBuffers;
             // REMED-GFX-013: scissor state captured at End() so a SpriteBatch filling a render
             // target is clipped correctly regardless of later frame-global scissor changes (e.g.
             // Task 338's ScissorRectangle reset on RT unbind). enabled==false or a zero-sized rect
@@ -562,6 +1307,20 @@ namespace CNA::Internal::Renderers::Vulkan
             // overwrites these from the device state SpriteBatch.Begin() always (re-)applies.
             bool                        blendEnabled = false;
             BlendKeyParams              blendParams;
+            // plan_vulkan.md VULKAN-058: the batch's full DepthStencilState, captured at End() by
+            // value for the same reason the BlendState above is -- a state object changed or
+            // destroyed after End() but before the deferred Present record must not be read then.
+            //
+            // Before this row the 2D pipeline hardcoded depthTestEnable = VK_FALSE and no stencil
+            // at all, so `SpriteBatch::Begin(..., DepthStencilState, ...)` was accepted and
+            // discarded: a stencil-masked sprite -- an ordinary XNA idiom -- covered the whole
+            // target here and only the masked part on EasyGL. Measured on both, side by side.
+            bool                        depthTestEnabled  = false;
+            bool                        depthWriteEnabled = false;
+            DepthStencilKeyParams       dsParams;
+            uint32_t                    stencilReadMask   = 0xFFFFFFFFu;
+            uint32_t                    stencilWriteMask  = 0xFFFFFFFFu;
+            uint32_t                    referenceStencil  = 0;
         };
 
     private:
@@ -614,6 +1373,7 @@ namespace CNA::Internal::Renderers::Vulkan
         int                              pendingFilter_       = 0; // TextureFilter::Linear
         int                              pendingAddressU_     = 1; // TextureAddressMode::Clamp
         int                              pendingAddressV_     = 1; // TextureAddressMode::Clamp
+        int                              pendingAddressW_     = -1; // -1: follow U (see setter)
 
         void FlushTexture();
     };
@@ -651,13 +1411,33 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
 
+        /// Bytes currently mapped at `mappedPtr_`. Never smaller than what a legal upload or a
+        /// legal draw of this buffer touches -- see EnsureByteCapacity.
+        VkDeviceSize GetAllocatedBytesEXT() const { return allocatedBytes_; }
+
     private:
+        /// plan_vulkan.md VULKAN-130: grow the host-visible allocation to hold `needed` bytes.
+        ///
+        /// The constructor cannot size the allocation, because `CreateVertexBuffer` is handed a
+        /// vertex COUNT and the stride only arrives with the first `SetData`. It therefore
+        /// reserves a 64-byte-per-vertex guess, and this repairs it the moment a wider layout
+        /// appears -- the renderer's own pipeline-key table already recognises strides 68, 76 and
+        /// 80, so the guess is genuinely too small for layouts this renderer draws.
+        ///
+        /// Discarding the old handles needs no fence and no device wait: this VkBuffer is a
+        /// host-visible CPU-side store that no command buffer ever binds. Every draw route copies
+        /// the bytes out of `mappedPtr_` into its own deferred record (`Pending3DDraw::vbData`),
+        /// so nothing but this object can name the handle. Keep that true, or this needs the
+        /// retirement queue.
+        void EnsureByteCapacity(VkDeviceSize needed);
+
         VkBuffer                buffer_      = VK_NULL_HANDLE;
         VkDeviceMemory          memory_      = VK_NULL_HANDLE;
         void*                   mappedPtr_   = nullptr;
         int                     capacity_    = 0;
         int                     vertexCount_ = 0;
         std::size_t             stride_      = 0;
+        VkDeviceSize            allocatedBytes_ = 0;
         VulkanRenderer*  owner_       = nullptr;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
@@ -684,14 +1464,355 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
 
+        /// Bytes currently mapped at `mappedPtr_`, i.e. `capacity_` indices of this buffer's own
+        /// element width. plan_vulkan.md VULKAN-131.
+        VkDeviceSize GetAllocatedBytesEXT() const { return allocatedBytes_; }
+
     private:
+        /// plan_vulkan.md VULKAN-131: refuse an upload larger than the mapping, by name.
+        ///
+        /// Unlike the vertex buffer's twin this GROWS nothing, and the difference is deliberate.
+        /// A vertex buffer is allocated from a stride guess and a wider real stride is a legal
+        /// thing for a caller to have; an index buffer is allocated from the element width it was
+        /// created with, so the only ways past its end are more indices than its capacity or a
+        /// width that is not this buffer's. Both are caller errors, and widening the allocation
+        /// would make the second one draw from misread bytes rather than fail.
+        void RequireByteCapacity(VkDeviceSize needed, const char* what) const;
+
         VkBuffer                buffer_        = VK_NULL_HANDLE;
         VkDeviceMemory          memory_        = VK_NULL_HANDLE;
         void*                   mappedPtr_     = nullptr;
         int                     capacity_      = 0;
         int                     indexCount_    = 0;
         bool                    thirtyTwoBit_  = false;
+        VkDeviceSize            allocatedBytes_ = 0;
         VulkanRenderer*  owner_         = nullptr;
+    };
+
+    // -------------------------------------------------------------------------
+    // VulkanStorageBufferRenderer / VulkanComputeShaderRenderer
+    // -------------------------------------------------------------------------
+
+    /** @brief Vulkan storage buffer with immutable portable roles and CPU-access intent. */
+    class VulkanStorageBufferRenderer final : public IStorageBufferRenderer
+    {
+        friend class VulkanRenderer;
+
+    public:
+        /**
+         * @brief Creates a storage buffer of @p byteSize bytes with exact native usage.
+         *
+         * @param owner The Vulkan renderer that owns the device.
+         * @param byteSize The positive buffer size.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        VulkanStorageBufferRenderer(
+            VulkanRenderer* owner, std::size_t byteSize,
+            std::uint32_t usage, std::uint32_t cpuAccess);
+
+        /** @brief Releases the native buffer and its memory. */
+        ~VulkanStorageBufferRenderer() override;
+
+        /**
+         * @brief Copies bytes from the CPU into the storage buffer.
+         *
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to copy from the beginning of the buffer.
+         */
+        void SetData(const void* data, std::size_t byteSize) override;
+
+        /**
+         * @brief Copies bytes from the storage buffer to the CPU after completed dispatch work.
+         *
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to copy from the beginning of the buffer.
+         */
+        void GetData(void* out, std::size_t byteSize) const override;
+
+        /**
+         * @brief Uploads bytes to an exact range.
+         * @param byteOffset First destination byte.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         * @return True when direct CPU write access is available.
+         */
+        bool SetDataRangeEXT(
+            std::size_t byteOffset, const void* data, std::size_t byteSize) override;
+
+        /**
+         * @brief Reads bytes from an exact range.
+         * @param byteOffset First source byte.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         * @return True when direct CPU read access is available.
+         */
+        bool GetDataRangeEXT(
+            std::size_t byteOffset, void* out, std::size_t byteSize) const override;
+
+        /**
+         * @brief Copies an exact range into another Vulkan storage buffer.
+         * @param destination Destination buffer record.
+         * @param sourceByteOffset First source byte.
+         * @param destinationByteOffset First destination byte.
+         * @param byteSize Number of bytes to copy.
+         * @return True when both records and declared transfer usages are compatible.
+         */
+        bool CopyToEXT(
+            IStorageBufferRenderer& destination, std::size_t sourceByteOffset,
+            std::size_t destinationByteOffset, std::size_t byteSize) override;
+
+        /** @brief Returns the allocated byte count. */
+        [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
+
+        /** @brief Returns the immutable portable usage bits. */
+        [[nodiscard]] std::uint32_t GetUsageEXT() const override { return usage_; }
+
+        /** @brief Returns the immutable portable direct CPU-access bits. */
+        [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
+
+        /** @brief Returns the native buffer bound into compute descriptor sets. */
+        [[nodiscard]] VkBuffer GetBufferEXT() const noexcept { return buffer_; }
+
+        /** @brief Returns the exact native buffer-usage flags selected from the descriptor. */
+        [[nodiscard]] VkBufferUsageFlags GetVkBufferUsageEXT() const noexcept
+        {
+            return vkUsage_;
+        }
+
+        /** @brief Returns the requested native memory-property flags. */
+        [[nodiscard]] VkMemoryPropertyFlags GetVkMemoryPropertiesEXT() const noexcept
+        {
+            return memoryProperties_;
+        }
+
+        /** @brief Returns whether this buffer has a persistent CPU mapping. */
+        [[nodiscard]] bool IsMappedEXT() const noexcept { return mapped_ != nullptr; }
+
+        /** @brief Returns whether this resource belongs to @p owner. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+
+        /** @brief Hands live Vulkan handles to fence-safe deferred retirement. */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer after device teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        VulkanRenderer* owner_ = nullptr;
+        VkBuffer buffer_ = VK_NULL_HANDLE;
+        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        void* mapped_ = nullptr;
+        std::size_t byteSize_ = 0;
+        std::uint32_t usage_ = 0;
+        std::uint32_t cpuAccess_ = 0;
+        VkBufferUsageFlags vkUsage_ = 0;
+        VkMemoryPropertyFlags memoryProperties_ = 0;
+        mutable VulkanResourceUsageState usageState_;
+    };
+
+    /**
+     * @brief SPIR-V compute pipeline implementing CNA's existing compute-shader seam.
+     *
+     * plans/plan_modern.md MOD-2241/MOD-2242/MOD-2228/MOD-2233. SPIR-V reflection creates only the
+     * set-zero constant-buffer, storage-buffer, storage-image and sampled-image slots the module
+     * declares, maps named 32-bit scalar push constants, and preserves resource metadata for
+     * deterministic binding validation.
+     */
+    class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
+    {
+        friend class VulkanRenderer;
+
+    public:
+        /** @brief Storage slots required by the permanent baseline vector-add oracle. */
+        static constexpr int BaselineStorageBindingCount = 3;
+
+        /**
+         * @brief Creates and compiles a compute program.
+         *
+         * @param owner The Vulkan renderer that owns the device.
+         * @param computeSrc SPIR-V module bytes.
+         */
+        VulkanComputeShaderRenderer(VulkanRenderer* owner, const std::string& computeSrc);
+
+        /** @brief Fence-retires the compute pipeline, descriptor objects and shader module. */
+        ~VulkanComputeShaderRenderer() override;
+
+        /**
+         * @brief Replaces the program with the supplied SPIR-V module.
+         *
+         * @param computeSrc SPIR-V module bytes.
+         * @return True when module and pipeline creation both succeed.
+         */
+        bool CompileProgram(const std::string& computeSrc) override;
+
+        /** @brief Selects this program for a following dispatch. */
+        void Bind() override;
+
+        /**
+         * @brief Updates a reflected 32-bit integer push-constant member by name.
+         *
+         * @param name Uniform name.
+         * @param value Requested value.
+         */
+        void SetUniformInt(const char* name, int value) override;
+
+        /**
+         * @brief Updates a reflected 32-bit float push-constant member by name.
+         *
+         * @param name Uniform name.
+         * @param value Requested value.
+         */
+        void SetUniformFloat(const char* name, float value) override;
+
+        /**
+         * @brief Binds a Vulkan storage buffer to descriptor set zero.
+         *
+         * @param binding Direct SPIR-V set-zero binding declared by this module.
+         * @param buffer Buffer to bind, or null to unbind it.
+         */
+        void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+
+        /** @copydoc IComputeShaderRenderer::BindConstantBufferEXT */
+        [[nodiscard]] bool BindConstantBufferEXT(
+            int binding, IStorageBufferRenderer* buffer) override;
+
+        /**
+         * @brief Binds a storage-capable Color RenderTarget2D as a compute image.
+         *
+         * @param unit Image binding index.
+         * @param texture Texture requested by the caller.
+         * @param accessMode Requested image access mode.
+         */
+        void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
+
+        /** @copydoc IComputeShaderRenderer::BindStorageTexture2DEXT */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture,
+            int accessMode) override;
+
+        /**
+         * @brief Retains a Vulkan Texture2D or RenderTarget2D at a reflected sampled-image slot.
+         * @param unit Direct set-zero combined-image-sampler binding.
+         * @param texture Texture requested by the caller.
+         */
+        void BindTexture(int unit, ITextureRenderer* texture) override;
+
+        /** @copydoc IComputeShaderRenderer::UsesDirectSampledTextureBindingsEXT */
+        [[nodiscard]] bool UsesDirectSampledTextureBindingsEXT() const override
+        {
+            return true;
+        }
+
+        /** @brief Returns whether module and compute pipeline creation succeeded. */
+        [[nodiscard]] bool IsValid() const override { return pipeline_ != VK_NULL_HANDLE; }
+
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Returns the native pipeline, or null after renderer teardown. */
+        [[nodiscard]] VkPipeline GetVkPipelineEXT() const noexcept { return pipeline_; }
+        /** @brief Returns the descriptor pool, or null after renderer teardown. */
+        [[nodiscard]] VkDescriptorPool GetVkDescriptorPoolEXT() const noexcept
+        {
+            return descriptorPool_;
+        }
+
+        /** @brief Returns the precise refusal or Vulkan creation error from the last compile. */
+        [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+        /**
+         * @brief Enqueues one immutable compute dispatch in public-call order.
+         *
+         * @param groupsX Work-group count on X.
+         * @param groupsY Work-group count on Y.
+         * @param groupsZ Work-group count on Z.
+         */
+        void DispatchEXT(int groupsX, int groupsY, int groupsZ);
+
+        /** @brief Clears a binding that names a storage buffer being destroyed. */
+        void ForgetStorageBufferEXT(const VulkanStorageBufferRenderer* buffer) noexcept;
+
+        /**
+         * @brief Returns whether an immutable descriptor snapshot retains a sampler handle.
+         * @param sampler Native sampler considered for cache eviction.
+         * @return True while destroying @p sampler would invalidate a cached descriptor.
+         */
+        [[nodiscard]] bool ReferencesSamplerEXT(VkSampler sampler) const noexcept;
+
+        /** @brief Retires Vulkan handles while the owning device exists. */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer after device teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        enum class ScalarKind { Int32, Float32 };
+        struct ScalarSlot
+        {
+            ScalarKind kind = ScalarKind::Int32;
+            uint32_t offset = 0;
+        };
+        struct StorageImageSlot
+        {
+            uint32_t spirvImageFormat = 0;
+            int accessMode = 2;
+        };
+
+        struct DescriptorCacheEntry
+        {
+            std::vector<VkBuffer> buffers;
+            std::vector<VkImageView> images;
+            std::vector<VkSampler> samplers;
+            VkDescriptorSet set = VK_NULL_HANDLE;
+            bool initialized = false;
+        };
+
+        static constexpr std::uint32_t DescriptorCacheCapacity = 64;
+
+        void ReleaseProgramEXT();
+        [[nodiscard]] VkDescriptorSet GetOrCreateDescriptorSetEXT(
+            const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
+            const std::vector<VkSampler>& samplers,
+            const std::vector<VkDescriptorBufferInfo>& constantBufferInfos,
+            const std::vector<VkDescriptorBufferInfo>& bufferInfos,
+            const std::vector<VkDescriptorImageInfo>& storageImageInfos,
+            const std::vector<VkDescriptorImageInfo>& sampledImageInfos);
+        void EvictDescriptorSetsReferencingEXT(
+            VkBuffer buffer, VkImageView imageView,
+            std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>>& retiredSets);
+
+        VulkanRenderer* owner_ = nullptr;
+        VkShaderModule shaderModule_ = VK_NULL_HANDLE;
+        VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
+        VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+        std::vector<DescriptorCacheEntry> descriptorCache_;
+        VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+        VkPipeline pipeline_ = VK_NULL_HANDLE;
+        std::vector<uint32_t> constantBindingSlots_;
+        std::unordered_map<uint32_t, VulkanStorageBufferRenderer*> constantBuffers_;
+        std::vector<uint32_t> storageBindingSlots_;
+        std::unordered_map<uint32_t, VulkanStorageBufferRenderer*> storageBuffers_;
+        std::vector<uint32_t> storageImageBindingSlots_;
+        std::unordered_map<uint32_t, StorageImageSlot> storageImageSlots_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanStorageTexture2DRenderer>>
+            storageImages_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanRenderTargetRenderer>>
+            renderTargetImages_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanTextureRenderer>>
+            textureImages_;
+        std::vector<uint32_t> sampledImageBindingSlots_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanTextureRenderer>>
+            sampledTextures_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanRenderTargetRenderer>>
+            sampledRenderTargets_;
+        std::unordered_map<std::string, ScalarSlot> scalarSlots_;
+        std::vector<uint8_t> pushConstantBytes_;
+        std::string compileError_;
     };
 
     // -------------------------------------------------------------------------
@@ -706,6 +1827,20 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap);
         ~VulkanTexture3DRenderer() override;
+
+        /**
+         * @brief Destroys this object's Vulkan resources now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-407. Every other Vulkan-owning class here has this pair, and
+         * these three did not -- so an instance that outlived its `GraphicsDevice` reached its
+         * destructor after `vkDestroyDevice`, found `owner_->device_` null and returned without
+         * freeing anything, having first read a `VulkanRenderer` whose destructor had already
+         * finished.
+         */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer, so an instance outliving it never dereferences it. */
+        void DisconnectOwner() { owner_ = nullptr; }
 
         /// REMED-GFX-135: true only once the host-visible staging buffer has been filled and its
         /// copy submitted and waited on; false when this texture has no usable image, the staging
@@ -738,12 +1873,51 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanTextureCubeRenderer : public ITextureCubeRenderer, public IVulkanCubeSamplable
     {
     public:
-        VulkanTextureCubeRenderer(VulkanRenderer* owner, int size, bool mipMap);
+        /**
+         * @brief Creates cube-map storage in the requested native surface format.
+         *
+         * @param owner Owning Vulkan renderer.
+         * @param size Edge length of every cube face in texels.
+         * @param mipMap Whether to allocate the complete mip chain.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         */
+        VulkanTextureCubeRenderer(
+            VulkanRenderer* owner, int size, bool mipMap, int surfaceFormat);
         ~VulkanTextureCubeRenderer() override;
+
+        /**
+         * @brief Destroys this object's Vulkan resources now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-407. Every other Vulkan-owning class here has this pair, and
+         * these three did not -- so an instance that outlived its `GraphicsDevice` reached its
+         * destructor after `vkDestroyDevice`, found `owner_->device_` null and returned without
+         * freeing anything, having first read a `VulkanRenderer` whose destructor had already
+         * finished.
+         */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer, so an instance outliving it never dereferences it. */
+        void DisconnectOwner() { owner_ = nullptr; }
 
         /// REMED-GFX-135: same explicit completion contract as VulkanTexture3DRenderer::SetData.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads a block-aligned DXT1, DXT3 or DXT5 region to one cube face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to update.
+         * @param x Left edge of the region in texels.
+         * @param y Top edge of the region in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Exact compressed block payload.
+         * @param dataLength Payload size in bytes.
+         * @return True when the entire update was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as VulkanTexture3DRenderer::GetData --
         /// true only once the staging copy has filled the whole requested face rectangle.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -760,6 +1934,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImageView    imageView_ = VK_NULL_HANDLE;
         int size_ = 0;
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_R8G8B8A8_UNORM;
+        int compressedBlockBytes_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     // -------------------------------------------------------------------------
@@ -784,6 +1962,20 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool IsComplete() const override;
         [[nodiscard]] int  PixelCount() const override;
 
+        /**
+         * @brief Whether `PixelCount()` is a real tally rather than "any samples passed".
+         *
+         * plan_vulkan.md VULKAN-370. A Vulkan occlusion query is only required to produce an exact
+         * count when the device's `occlusionQueryPrecise` feature is enabled **and** the query is
+         * begun with `VK_QUERY_CONTROL_PRECISE_BIT`; without both, an implementation may return any
+         * non-zero value once a single sample passes. Inheriting the shared `true` default was
+         * therefore a claim this renderer had not earned, and the lensflare idiom -- `PixelCount()`
+         * divided by an area -- is exactly what it would have broken.
+         *
+         * @return True when this device enabled precise occlusion queries.
+         */
+        [[nodiscard]] bool PixelCountIsPreciseEXT() const noexcept override;
+
     private:
         VulkanRenderer*  owner_      = nullptr;
         VkQueryPool             pool_       = VK_NULL_HANDLE;
@@ -798,6 +1990,74 @@ namespace CNA::Internal::Renderers::Vulkan
         // within the same pass)" policy: only the first run this query appears in each frame is
         // ever actually recorded on the GPU.
         bool                    recordedThisFrame_ = false;
+    };
+
+    // -------------------------------------------------------------------------
+    // VulkanGpuTimerRenderer
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Owns one reusable pair of Vulkan timestamp queries.
+     *
+     * `Begin()` and `End()` enqueue ordered timestamp records into the owning renderer; they do
+     * not submit work or wait. The same two query slots are reset and reused after each sample.
+     */
+    class VulkanGpuTimerRenderer final : public IGpuTimerRenderer
+    {
+        friend class VulkanRenderer;
+
+    public:
+        /**
+         * @brief Creates a timestamp-query pair for one graphics device.
+         * @param owner Owning Vulkan renderer.
+         */
+        explicit VulkanGpuTimerRenderer(VulkanRenderer* owner);
+
+        /** @brief Retires the query pool without waiting for the device. */
+        ~VulkanGpuTimerRenderer() override;
+
+        /** @brief Enqueues the start timestamp unless a range is already open. */
+        void Begin() override;
+
+        /** @brief Enqueues the end timestamp for the currently open range. */
+        void End() override;
+
+        /**
+         * @brief Reports whether both timestamp values can be read without waiting.
+         * @return True only after the GPU has completed the closed range.
+         */
+        [[nodiscard]] bool IsResultAvailable() const override;
+
+        /**
+         * @brief Returns the completed timestamp delta converted with the device timestamp period.
+         * @return Elapsed nanoseconds, or zero while unavailable.
+         */
+        [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Returns the timestamp query pool, or null after renderer teardown. */
+        [[nodiscard]] VkQueryPool GetVkQueryPoolEXT() const noexcept { return pool_; }
+
+        /** @brief Retires the native query pool while the owning device is alive. */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer after device teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        VulkanRenderer* owner_ = nullptr;
+        VkQueryPool pool_ = VK_NULL_HANDLE;
+        std::uint64_t serial_ = 0;
+        bool open_ = false;
+        bool ended_ = false;
+        bool beginRecorded_ = false;
+        bool endRecorded_ = false;
+        VkFence completionFence_ = VK_NULL_HANDLE;
+        std::uint64_t submissionGeneration_ = 0;
+        mutable bool submissionComplete_ = false;
+        mutable bool resultCached_ = false;
+        mutable std::array<std::uint64_t, 2> completedTimestamps_{};
     };
 
     // -------------------------------------------------------------------------
@@ -826,13 +2086,47 @@ namespace CNA::Internal::Renderers::Vulkan
         // shared by all six) and GetOrCreateRTRenderPassMsaa() has gained the LOAD variant it
         // never had, so a multisampled cube face is preserved across bind cycles exactly like a
         // single-sample one.
+        /**
+         * @brief Creates one exact-format six-face Vulkan render target.
+         *
+         * @param owner Owning live Vulkan renderer.
+         * @param size Width and height of every square face.
+         * @param depthFormat Requested XNA depth-format ordinal.
+         * @param preserveContents Whether earlier face contents must survive a later bind.
+         * @param mipMap Whether to allocate and regenerate the complete mip chain.
+         * @param requestedMultiSampleCount Preferred multisample count.
+         * @param surfaceFormat Requested XNA surface-format ordinal.
+         */
         VulkanRenderTargetCubeRenderer(VulkanRenderer* owner, int size, int depthFormat,
                                        bool preserveContents = false,
-                                       bool mipMap = false, int requestedMultiSampleCount = 0);
+                                       bool mipMap = false, int requestedMultiSampleCount = 0,
+                                       int surfaceFormat = 0);
         ~VulkanRenderTargetCubeRenderer() override;
+
+        /**
+         * @brief Destroys this cube target's Vulkan resources now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-407. See the identical pair on `VulkanTexture3DRenderer`.
+         */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer, so an instance outliving it never dereferences it. */
+        void DisconnectOwner() { owner_ = nullptr; }
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
+        /**
+         * @brief Reports this cube's depth/stencil format in XNA's vocabulary.
+         *
+         * plans/plan_vulkan.md `VULKAN-215`. Task 911 gave each cube its own real `VkFormat`, so
+         * this reads that rather than the back buffer's. `VK_FORMAT_UNDEFINED` means no depth
+         * attachment at all and maps to `DepthFormat::None` with no special case.
+         *
+         * @param requestedDepthStencilFormat Ignored; the applied format is what is reported.
+         * @return The applied `DepthFormat` ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const override;
         void UnbindAsRenderTarget() override;
         /// Task 903: real applied MSAA sample count (0 if MSAA wasn't engaged), mirroring
         /// VulkanRenderTargetRenderer::GetMultiSampleCount()'s identical Task 878/879 pattern.
@@ -862,6 +2156,35 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         [[nodiscard]] VkImageView GetDepthViewEXT() const { return depthView_; }
         [[nodiscard]] VkFormat GetDepthFormatEXT() const { return depthVkFormat_; }
+        /**
+         * @brief Returns the exact native colour format allocated for every cube face.
+         * @return The target's Vulkan colour format.
+         */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return colorVkFormat_; }
+        /**
+         * @brief Returns the requested public surface-format ordinal.
+         * @return The target's `SurfaceFormat` ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+        /**
+         * @brief Reads exact native texel bytes from one rendered cube face.
+         *
+         * This internal diagnostic route preserves float/HDR values that the legacy
+         * `ITextureCubeRenderer::GetData` RGBA8 contract cannot represent.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination for exact native-format bytes.
+         * @param dataLength Destination size in bytes.
+         * @return True when the complete region was read.
+         */
+        [[nodiscard]] bool GetNativeDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const;
         [[nodiscard]] VkSampleCountFlagBits GetColorSampleCountEXT() const
         {
             return static_cast<VkSampleCountFlagBits>(
@@ -947,6 +2270,9 @@ namespace CNA::Internal::Renderers::Vulkan
         int                        size_      = 0;
         int                        levelCount_ = 1;
         int                        appliedMultiSampleCount_ = 0;
+        int                        surfaceFormat_ = 0;
+        int                        bytesPerTexel_ = 4;
+        VkFormat                   colorVkFormat_ = VK_FORMAT_R8G8B8A8_UNORM;
         /// REMED-GFX-136: this target's own RenderTargetUsage, collapsed by
         /// RenderTargetUsagePreservesContentsEXT(). Read once, in the constructor, to pick the
         /// face render pass; nothing mutates it afterwards, so a pass can never be built against a
@@ -966,6 +2292,22 @@ namespace CNA::Internal::Renderers::Vulkan
                        uint32_t count);
         ~VulkanMRTProxy() override;
 
+        /**
+         * @brief Destroys this proxy's VkFramebuffer now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-405. A proxy is reference-counted and shared with `currentRT_`
+         * and with every deferred draw/batch/clear record, so the renderer's destructor cannot
+         * assume that dropping its own handle destroys it. The same explicit
+         * release-then-disconnect pair every other owned Vulkan resource uses applies here, and
+         * it settles both halves regardless of who else still holds a share.
+         */
+        void ReleaseVulkanResources();
+
+        /**
+         * @brief Forgets the renderer, so a proxy outliving it never dereferences a dead owner.
+         */
+        void DisconnectOwner() { owner_ = nullptr; }
+
         VkFramebuffer GetFramebuffer()          const override { return framebuffer_; }
         VkRenderPass  GetRenderPass()            const override { return renderPass_; }
         int           GetWidth()                const override { return width_; }
@@ -975,8 +2317,25 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return colorSampleCount_ > VK_SAMPLE_COUNT_1_BIT;
         }
+        /// @brief @copydoc VulkanRTSource::GetMsaaSampleCountEXT
+        ///
+        /// VULKAN-216 needed nothing here: this proxy already took its count from the bound
+        /// targets and already refused a set whose members disagree ("Vulkan MRT targets must
+        /// have matching applied sample counts"). It was the single-target path that was tied
+        /// to the device's count.
+        VkSampleCountFlagBits GetMsaaSampleCountEXT() const override { return colorSampleCount_; }
         // XNA/FNA shares binding 0's depth attachment across the active MRT set.
         VkFormat      GetDepthFormat()           const override { return depthFormat_; }
+        /**
+         * @brief Returns one MRT attachment's exact native colour format.
+         *
+         * @param index Zero-based colour-attachment index.
+         * @return The native format, or `VK_FORMAT_UNDEFINED` when the index is not present.
+         */
+        VkFormat      GetColorFormatEXT(uint32_t index = 0) const override
+        {
+            return index < colorFormats_.size() ? colorFormats_[index] : VK_FORMAT_UNDEFINED;
+        }
         /** @brief Regenerates every mipmapped colour attachment finalized by this MRT pass. */
         void          MaybeGenerateMips(VkCommandBuffer cb) override;
 
@@ -1029,6 +2388,20 @@ namespace CNA::Internal::Renderers::Vulkan
                     return static_cast<int>(i);
             return -1;
         }
+        /**
+         * @brief Reports whether this MRT pass writes a render-target dependency group.
+         *
+         * @param group Stable render-target group identity recorded for a sampled texture.
+         * @return True when one of this proxy's colour attachments belongs to @p group.
+         */
+        [[nodiscard]] bool ProducesRenderTargetGroupEXT(const void* group) const
+        {
+            if (group == nullptr) return false;
+            for (const auto& targetPass : colorTargetPasses_)
+                if (targetPass != nullptr && targetPass->DepthStencilOwnerEXT() == group)
+                    return true;
+            return false;
+        }
 
     private:
         VulkanRenderer* owner_       = nullptr;
@@ -1041,6 +2414,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VkImageView> colorAttachments_;
         std::vector<VkImageView> resolveAttachments_;
         std::vector<VkImageView> framebufferAttachments_;
+        std::vector<VkFormat> colorFormats_;
         // REMED-GFX-190: immutable per-binding destinations, retained in public attachment order.
         // Besides supplying the exact image/layer/level metadata for post-pass mip generation,
         // shared ownership keeps that metadata valid when a bound target is disposed before the
@@ -1068,11 +2442,62 @@ namespace CNA::Internal::Renderers::Vulkan
     // key and packed blend factors/functions; `cw` packs the four colour-write masks; `sm` is the
     // sample mask. The default (cw=0x5555... no — All(15)×4 = 0xFFFF-low16, sm=0xFFFFFFFF) is a
     // fixed contribution, so default draws still collapse to one pipeline (no cache fragmentation).
+    /// plan_vulkan.md VULKAN-146: which of the BasicEffect-family stock programs a 3D draw runs.
+    ///
+    /// Decided from the stride AND the caller's VertexDeclaration, not the stride alone. Stride 32
+    /// is the case that forces it: it is `VertexPositionNormalTexture`'s, and the lit programs take
+    /// `{aPos, aNormal, aUV}` with no colour input -- so a Position+Colour vertex padded to 32
+    /// reaches them and has nothing to bind its colour to. A declaration that names no normal
+    /// cannot be a lit vertex whatever its stride, so it is asked. This is EasyGL's own
+    /// REMED-GFX-234 rule, applied here rather than re-invented.
+    ///
+    /// `None` means this row has not converted the family the draw selects, and the replay keeps
+    /// its existing stride dispatch.
+    enum class BasicProgramShapeEXT
+    {
+        None,
+        Colored,          ///< colored3d: position + colour.
+        Textured,         ///< textured3d: position + uv.
+        ColoredTextured,  ///< colored_textured3d: position + colour + uv.
+        LitTextured,      ///< lit_textured3d (and its vertex-lit sibling): position + normal + uv.
+        /// plan_vulkan.md VULKAN-199: lit_untextured3d (and its vertex-lit sibling):
+        /// position + normal, no uv. XNA's Primitives3D layout, which the lit family could not
+        /// bind at all before this shape existed.
+        LitUntextured,
+        /// plan_vulkan.md VULKAN-200: lit_textured3d_color (and its vertex-lit sibling):
+        /// position + normal + colour + uv. What XNA's stock ModelProcessor emits for a mesh
+        /// carrying a colour channel, alongside setting BasicEffect.VertexColorEnabled.
+        LitColoredTextured,
+    };
+
     struct PipelineKey {
         uint64_t a = 0;
         uint32_t b = 0;
         uint32_t cw = 0;
         uint32_t sm = 0xFFFFFFFFu;
+        /// plan_vulkan.md VULKAN-146: the vertex input layout this pipeline bakes, as
+        /// VulkanVertexInputLayoutEXT::Hash(). 0 means "the factory's own stride-derived layout",
+        /// which is what an empty declaration produces and what every unconverted family still
+        /// uses -- so an untouched family's keys are byte-identical to before.
+        ///
+        /// A field of its own rather than more bits in `a`: `a` is already carrying the stride
+        /// bucket, topology, depth/stencil state, colour-attachment count, the depth format and
+        /// (on the instanced route) a raw stride at bits 53..63, and a 64-bit hash has nowhere to
+        /// hide in what is left.
+        uint64_t vl = 0;
+        /// plan_vulkan.md VULKAN-216: `rasterizationSamples` as an integer (1/2/4/8/...).
+        ///
+        /// A field of its own, and the LAST one, so every existing aggregate initializer in this
+        /// file keeps compiling and keeps meaning what it meant: 1 is "single-sampled", which is
+        /// what every non-MSAA key already was. Before this row `msaa` was a single bit in `a`
+        /// and the count it implied was always the renderer's own `sampleCount_`, so the bit was
+        /// enough. It is not enough once a render target can carry a count of its own -- two
+        /// otherwise identical pipelines for a 2x and a 4x target would collide on the same key,
+        /// and the second target would be drawn with the first's `rasterizationSamples` into a
+        /// render pass that does not match it.
+        uint32_t ms = 1;
+        /// MOD-2223: exact native colour formats of the compatible render pass, one per MRT slot.
+        std::array<int32_t, 4> cf{};
         bool operator==(const PipelineKey&) const noexcept = default;
     };
     struct PipelineKeyHash {
@@ -1082,23 +2507,14 @@ namespace CNA::Internal::Renderers::Vulkan
             h ^= std::hash<uint32_t>{}(k.b) * 0x9E3779B97F4A7C15ull;
             h ^= (std::hash<uint32_t>{}(k.cw) + 0x165667B19E3779F9ull + (h << 6) + (h >> 2));
             h ^= (std::hash<uint32_t>{}(k.sm) + 0x27D4EB2F165667C5ull + (h << 6) + (h >> 2));
+            h ^= (std::hash<uint64_t>{}(k.vl) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2));
+            h ^= (std::hash<uint32_t>{}(k.ms) + 0x85EBCA77C2B2AE63ull + (h << 6) + (h >> 2));
+            for (const int32_t format : k.cf)
+                h ^= (std::hash<int32_t>{}(format) + 0xC2B2AE3D27D4EB4Full + (h << 6) + (h >> 2));
             return h;
         }
     };
 
-    struct DepthStencilKeyParams {
-        int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
-        bool stencilEnable        = false;
-        int  stencilFunc          = 0;      // CompareFunction::Always
-        int  stencilFail          = 0;      // StencilOperation::Keep
-        int  stencilDepthFail     = 0;
-        int  stencilPass          = 0;
-        bool twoSidedStencilMode  = false;
-        int  ccwStencilFunc       = 0;
-        int  ccwStencilFail       = 0;
-        int  ccwStencilDepthFail  = 0;
-        int  ccwStencilPass       = 0;
-    };
 
     // -------------------------------------------------------------------------
     // VulkanRenderer
@@ -1117,6 +2533,11 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanTextureCubeRenderer;
         friend class VulkanRenderTargetCubeRenderer;
         friend class VulkanMRTProxy;
+        friend class VulkanStorageBufferRenderer;
+        friend class VulkanComputeShaderRenderer;
+        friend class VulkanTexture2DArrayRenderer;
+        friend class VulkanStorageTexture2DRenderer;
+        friend class VulkanGpuTimerRenderer;
 
     public:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -1172,11 +2593,396 @@ namespace CNA::Internal::Renderers::Vulkan
         explicit VulkanRenderer(const GraphicsRendererCreateArgs& args);
         ~VulkanRenderer() override;
 
-        // AnisotropicFiltering/WireFrame reflect real, already-cached device feature queries
-        // (anisotropySupported_/fillModeNonSolidSupported_, both set once at device creation).
-        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
-        // here, so falls through to the shared default (true).
+        /**
+         * @brief Whether this renderer supports @p capability on the device it selected.
+         *
+         * plan_vulkan.md VULKAN-020: every member of `CNA::GraphicsCapability` has its own arm,
+         * and the switch has no `default:`. Appending a member therefore stops this target
+         * compiling (`-Werror=switch`) rather than silently claiming the new feature -- which is
+         * what the previous `default: return true` did, and what `GraphicsCapability`'s own
+         * documentation names as the reason several entries had to be made derived.
+         *
+         * @param capability The feature to ask about.
+         * @return Its support on the selected device; false for a value that is not an enumerator.
+         */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /**
+         * @brief The shader dialect a custom `ShaderEffect` must be written in here.
+         *
+         * plan_vulkan.md VULKAN-250. `VulkanEffectRenderer::CompileProgram` accepts nothing but
+         * SPIR-V words, so leaving this at the shared `Unknown` default made the one query that
+         * exists to stop an application guessing answer "guess".
+         *
+         * `VULKAN-264` added a distinct bytecode identity after measuring that IGL's Vulkan backend
+         * reports `GlslVulkan` and compiles GLSL source, while this renderer consumes the compiled
+         * product. Existing source-dialect ordinals were left unchanged.
+         *
+         * @return `ShaderDialectEXT::SpirV`.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT
+            GetShaderDialectEXT() const override;
+
+        /**
+         * @brief Reports the explicit shader payloads consumed by the Vulkan paths.
+         *
+         * @param language Raw `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage Raw `CNA::ShaderStageEXT` ordinal.
+         * @return True for SPIR-V vertex/fragment payloads and for SPIR-V compute payloads when
+         *         compute is supported; false for every other pair.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
+        /** @brief Reports that the stock Vulkan PBR shaders consume all three IBL products. */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+
+        /**
+         * @brief Reports that Vulkan's per-pixel Basic, Skinned and PBR stock shaders consume
+         *        directional, cascaded and punctual shadow state.
+         *
+         * @return `true`.
+         */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+
+        /**
+         * @brief CNAEXT. A `Texture3D` bound to a `ShaderEffect` is sampled by that shader here.
+         *
+         * plan_vulkan.md VULKAN-164. `VulkanEffectRenderer::BindTexture3D` writes the volume into
+         * descriptor set 1 at `kEffectVolumeBindingBase + unit`, and the batch's own `SamplerState`
+         * -- W axis included -- governs it. Proved by `Vulkan_Texture3DAddressW`, which reads two
+         * different pixels from one volume by changing nothing but `AddressW`.
+         *
+         * @return `true`.
+         */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
+
+        /**
+         * @brief CNAEXT. Whether a `RenderTarget2D` of @p format can really be created here.
+         *
+         * plan_vulkan.md VULKAN-020. Mirrors `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT`,
+         * including its `Defer` arm, so this renderer's own answer for the float render-target
+         * capabilities cannot disagree with the one a game gets through `GraphicsDevice`.
+         *
+         * Takes an ordinal rather than the enum for the reason `IGraphicsRenderer` states about
+         * itself: this layer is deliberately not coupled to `SurfaceFormat`.
+         *
+         * @param surfaceFormatOrdinal The `SurfaceFormat` ordinal to ask about.
+         * @return True if a render target of that format is created rather than substituted.
+         */
+        CNAEXT [[nodiscard]] bool SupportsRenderTargetSurfaceFormatEXT(
+            int surfaceFormatOrdinal) const;
+
+        /**
+         * @brief How one public `SurfaceFormat` is stored natively by this renderer.
+         *
+         * plan_vulkan.md VULKAN-170.
+         */
+        struct VulkanSurfaceFormatStorageEXT
+        {
+            VkFormat format        = VK_FORMAT_UNDEFINED;  ///< The native storage format.
+            /// Bytes one *addressable unit* occupies: one texel when @ref blockExtent is 1, one
+            /// 4x4 block when it is 4. plan_vulkan.md VULKAN-172 -- a block-compressed level is
+            /// `ceil(w/4) * ceil(h/4)` of these, never `w * h`.
+            int      bytesPerTexel = 0;
+            /// 1 for an ordinary format, 4 for a block-compressed one. Named rather than inferred
+            /// from the VkFormat so every size calculation asks one question instead of carrying a
+            /// list of compressed enumerators.
+            int      blockExtent   = 1;
+        };
+
+        /**
+         * @brief Bytes one mip level of @p storage occupies at @p w x @p h.
+         *
+         * plan_vulkan.md VULKAN-172. The one place that knows a block-compressed level is counted
+         * in padded 4x4 blocks; every staging allocation and every copy goes through it, so the
+         * uncompressed and compressed paths cannot drift apart.
+         *
+         * @param storage The native storage description.
+         * @param w Level width in texels.
+         * @param h Level height in texels.
+         * @return The byte count.
+         */
+        [[nodiscard]] static VkDeviceSize LevelByteCountEXT(
+            const VulkanSurfaceFormatStorageEXT& storage, int w, int h)
+        {
+            if (storage.blockExtent <= 1)
+                return static_cast<VkDeviceSize>(w) * h * storage.bytesPerTexel;
+            const int cols = (w + storage.blockExtent - 1) / storage.blockExtent;
+            const int rows = (h + storage.blockExtent - 1) / storage.blockExtent;
+            return static_cast<VkDeviceSize>(cols) * rows * storage.bytesPerTexel;
+        }
+
+        /**
+         * @brief The one table saying which `SurfaceFormat` values have native storage here.
+         *
+         * plan_vulkan.md VULKAN-170. Deliberately the only answer to that question: both
+         * @ref ClassifySurfaceFormatEXT and `VulkanTextureRenderer`'s constructor read it, so a
+         * verdict can never be wider than what `CreateTexture` will actually allocate.
+         *
+         * @param surfaceFormatOrdinal The `SurfaceFormat` ordinal to look up.
+         * @param out Receives the native storage description when the format is known.
+         * @return True when this renderer stores that format natively.
+         */
+        /// plan_vulkan.md VULKAN-179 made this a MEMBER: `Bgra4444`'s storage exists only when the
+        /// opened device offered `VK_EXT_4444_formats`, so "what this renderer stores" is a
+        /// property of the device it opened rather than of the build.
+        CNAEXT bool MapSurfaceFormatToStorageEXT(int surfaceFormatOrdinal,
+                                                 VulkanSurfaceFormatStorageEXT& out) const;
+
+        /**
+         * @brief Maps a public surface format to its exact Vulkan storage spelling.
+         *
+         * This table describes semantic Vulkan equivalents, not implemented CNA resource support.
+         * @ref MapSurfaceFormatToStorageEXT is the narrower allocation table and
+         * @ref GetSurfaceFormatUsageSupportEXT intersects both answers with physical-device facts.
+         *
+         * @param surfaceFormatOrdinal The `SurfaceFormat` ordinal to map.
+         * @param out Receives the Vulkan format when an exact representation exists.
+         * @return True for every current `SurfaceFormat` with an exact Vulkan representation.
+         */
+        CNAEXT [[nodiscard]] static bool MapSurfaceFormatToVkFormatEXT(
+            int surfaceFormatOrdinal, VkFormat& out) noexcept;
+
+        /**
+         * @brief Maps one exact Vulkan storage-image format to its SPIR-V Image Format value.
+         *
+         * The mapping follows Vulkan's SPIR-V image-format compatibility table. A successful
+         * mapping alone does not advertise support; callers must still require the native storage
+         * feature and the complete image-usage combination from the selected physical device.
+         *
+         * @param format Vulkan image-view format.
+         * @param imageFormat Receives the SPIR-V Image Format enumerant.
+         * @return True when SPIR-V can name the native representation exactly.
+         */
+        CNAEXT [[nodiscard]] static bool MapVkFormatToSpirvStorageImageFormatEXT(
+            VkFormat format, std::uint32_t& imageFormat) noexcept;
+
+        /**
+         * @brief Reports whether a SPIR-V storage image format needs the extended-format feature.
+         *
+         * @param imageFormat SPIR-V Image Format enumerant.
+         * @return True unless the format is one of Vulkan's five baseline storage formats.
+         */
+        CNAEXT [[nodiscard]] static bool StorageImageFormatRequiresExtendedFeatureEXT(
+            std::uint32_t imageFormat) noexcept;
+
+        /**
+         * @brief Maps a public format to an exact uncompressed storage-image representation.
+         *
+         * Unlike @ref MapSurfaceFormatToStorageEXT, this is the dedicated storage-image table and
+         * is not limited by the ordinary XNA `Texture2D` allocation path.
+         *
+         * @param surfaceFormatOrdinal The public `SurfaceFormat` ordinal.
+         * @param out Receives the exact Vulkan storage and byte width.
+         * @param imageFormat Receives the matching SPIR-V Image Format enumerant.
+         * @return True when the public format has an exact format-qualified storage-image form.
+         */
+        CNAEXT [[nodiscard]] static bool MapStorageImageFormatToStorageEXT(
+            int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out,
+            std::uint32_t& imageFormat) noexcept;
+
+        /**
+         * @brief Maps a faithfully implemented RenderTarget2D format to native storage.
+         *
+         * `Color` follows the selected swapchain format so existing backbuffer-compatible paths
+         * keep their component order. Float/HDR and `Rgba64` targets use their exact semantic
+         * Vulkan formats and byte widths.
+         *
+         * @param surfaceFormatOrdinal The public SurfaceFormat ordinal.
+         * @param out Receives the native storage description.
+         * @return True when VulkanRenderTargetRenderer implements the requested format.
+         */
+        CNAEXT [[nodiscard]] bool MapRenderTargetFormatToStorageEXT(
+            int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out) const noexcept;
+
+        /**
+         * @brief Whether a `Texture2D` may be created with the given surface format.
+         *
+         * plan_vulkan.md VULKAN-170. `Supported`/`Unsupported` for a format this renderer stores
+         * natively, decided from the physical device's own `VkFormatProperties`; `Defer` for every
+         * other format, so the framework's rule applies rather than a verdict this renderer has
+         * not earned.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a `Color`-shaped `GetData`/`SetData` is meaningful for a format.
+         *
+         * plan_vulkan.md VULKAN-174. `Unsupported` for the two signed-normalized byte formats,
+         * which the framework's own width rule would otherwise admit: `NormalizedByte4` is four
+         * bytes wide but those bytes are SIGNED and sample to `[-1, 1]`, so a `Color` transfer
+         * would read the wrong values while looking well-formed. `Defer` for everything else.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyColorTransferFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a format transfers as 4x4 blocks rather than as pixels.
+         *
+         * plan_vulkan.md VULKAN-172. True for exactly the block-compressed formats this renderer's
+         * storage table claims on the opened device, so the transfer route and the storage can
+         * never disagree.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return True when `SetData` hands this renderer raw blocks.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a cube texture format is transferred as native 4x4 blocks.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return True for DXT1, DXT3 or DXT5 when the selected device supports its Vulkan BC
+         *         storage format.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override
+        {
+            return IsCompressedTransferFormatEXT(surfaceFormat);
+        }
+
+        /**
+         * @brief Returns device-derived, implemented usage support for one surface format.
+         *
+         * Every current format and usage is classified. A supported bit requires both the
+         * relevant Vulkan format/property bit and a complete CNA resource path; a native-only
+         * feature remains an explicit unsupported answer.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal to classify.
+         * @return Known and supported usage masks.
+         */
+        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Keeps loader-provided DXT payloads compressed on BC-capable devices.
+         *
+         * The content loaders still apply their per-format transfer gate, so this device-wide
+         * preference does not claim a format whose individual storage properties are unsuitable.
+         *
+         * @return True when the opened Vulkan device enabled block-compression support.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override
+        {
+            return textureCompressionBCSupported_;
+        }
+
+        /**
+         * @brief Whether a `RenderTarget2D` may be created with the given surface format.
+         *
+         * plan_vulkan.md VULKAN-171. Renderability is a strictly narrower question than
+         * storability and is answered separately: `Supported` for `Color` when the device's own
+         * `VkFormatProperties` back the swapchain format as a colour attachment, `Defer` for every
+         * other format -- because both render-target classes create their colour image in
+         * `swapchainFormat_` and the requested format reaches neither.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyRenderTargetFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Reports linear filtering for the implemented half-float render-target path.
+         *
+         * @return True when the selected device can sample RGBA16F with linear filtering and can
+         *         create the matching render target.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+
+        /**
+         * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
+         *
+         * plan_vulkan.md VULKAN-097. XNA 4.0 addresses pixel CENTRES with integer coordinates;
+         * Vulkan (like OpenGL and Direct3D 10+) addresses pixel corners. Without a correction the
+         * screen-space triangle `(x,y),(x+1,y),(x,y+1)` that XNA covers one pixel for lands
+         * entirely on an excluded fill edge and disappears -- which is exactly what
+         * `xna_pixel_center_contract_test.cpp` measured on the real XNA runtime and what this
+         * renderer used to fail.
+         *
+         * Post-multiply it into the world x view x projection product, XNA row-vector order, so it
+         * becomes `clip.xy += offset * clip.w`. The offset is the same slightly-under-half-pixel
+         * displacement EasyGL and Wine use, so the pixel centre stays inside the triangle under
+         * Direct3D's top-left fill rule; the margin is the whole design.
+         *
+         * Empty (identity) in two cases, each for its own reason. When the destination is
+         * multisampled: the correction is a GEOMETRY translation and that is only equivalent to
+         * what it means at one sample per pixel (REMED-GFX-235, and this renderer inherits the
+         * reasoning rather than the code). And for a LINE or POINT topology: what the correction
+         * compensates for is Direct3D's top-left FILL rule, and a line has no fill rule -- Vulkan
+         * rasterizes it by its own line rule, which the half-pixel shift simply moves off the
+         * pixels XNA lights. Measured: applying it to lines turns
+         * `IndexedDrawDeferredTest`'s two indexed-line-list legs red while the three shared
+         * pixel-centre conformance tests it exists for stay green either way.
+         *
+         * @param primitive The topology this draw will rasterize.
+         * @return The clip-space translation, or identity where it must not be applied.
+         */
+        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Matrix XnaPixelCenterCorrectionEXT(
+            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive) const;
+
+        /**
+         * @brief CNAEXT. Refuses a PBR draw whose stride no PBR pipeline can express, at the DRAW.
+         *
+         * plan_vulkan.md VULKAN-346. `GetOrCreatePipelinePbr3D` and its skinned twin raise this
+         * refusal, and they are called from `RecordCommandBuffer` -- at `Present()`, long after the
+         * call that made the mistake. A caller therefore saw its draw accepted, and the exception
+         * arrived from a frame boundary it could no longer associate with anything, escaping
+         * whatever recovery it had around the draw itself. Asking the same question where the draw
+         * is queued makes the refusal reach the caller at the point of the mistake, which is what
+         * section 6.3 of the plan requires of every unsupported combination.
+         *
+         * @param stride Byte stride of the vertex record.
+         * @param skinned True for the SkinnedPbrEffect family.
+         * @throws std::runtime_error naming the strides that family accepts.
+         */
+        void RequirePbrStrideEXT(std::size_t stride, bool skinned) const;
+
+        /**
+         * @brief Refuses a vertex stride the skinned family cannot bind, at the draw.
+         *
+         * plans/plan_vulkan.md `VULKAN-156`. `GetOrCreatePipelineSkinned3D` and its `VertexLit`
+         * sibling reduce their binding stride to `(stride == 56) ? 56 : 52`, so before this every
+         * other stride was bound as 52 and read past the record it was given -- a draw that
+         * rasterized nothing and reported success. Only called when the buffer's declaration did
+         * not supply every input of the shader; one that did is not held to the list.
+         *
+         * @param stride Byte stride of the vertex record.
+         * @throws std::runtime_error naming the strides this family accepts.
+         */
+        void RequireSkinnedStrideEXT(std::size_t stride) const;
+
+        /**
+         * @brief Refuses a skinned draw whose bone indices this device cannot carry.
+         *
+         * plans/plan_vulkan.md `VULKAN-151`. The stride-derived bone-index attribute is
+         * `VK_FORMAT_R8G8B8A8_USCALED`, which is not a mandatory vertex-buffer format; a device
+         * without it is told so by name, with the `Vector4` spelling named as the way round.
+         *
+         * @throws std::runtime_error when `uscaledVertexFormatSupported_` is false.
+         */
+        void RequireBoneIndexFormatEXT() const;
+
+        /**
+         * @brief Refuses a vertex stride the legacy colored-primitive pair cannot express.
+         *
+         * plans/plan_vulkan.md `VULKAN-155` (finding F-24). `GetOrCreatePipeline3D` hard-codes a
+         * 16-byte binding and `Position@0` + `Color@12`, while `DrawColoredPrimitives` and
+         * `DrawIndexedColoredPrimitives` copy the buffer at its own stride -- so any other stride
+         * was copied faithfully and read back misaligned, drawing the wrong picture in silence.
+         *
+         * @param stride Byte stride of the vertex record.
+         * @param route  The entry point's name, for the diagnostic.
+         * @throws std::runtime_error naming the stride this route requires and what to use instead.
+         */
+        void RequireLegacyColoredStrideEXT(std::size_t stride, const char* route) const;
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -1189,7 +2995,120 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         void SetVirtualResolution(int width, int height) override;
-        void SetPresentationMode(int)       override {}
+        /**
+         * @brief Selects how the virtual resolution is mapped onto the swapchain image.
+         *
+         * plans/plan_vulkan.md `VULKAN-330` (finding F-03). This body used to be `{}` — the only
+         * empty override in either renderer — so a game asking for `Letterbox` silently got
+         * Vulkan's uniform height-derived scale instead.
+         *
+         * @param mode A `CnaPresentationMode` ordinal.
+         */
+        void SetPresentationMode(int mode) override
+        {
+            presentationMode_ = static_cast<CNA::Internal::Renderers::CnaPresentationMode>(mode);
+        }
+        /**
+         * @brief The rectangle of the swapchain image the virtual resolution is presented into.
+         *
+         * plans/plan_vulkan.md `VULKAN-330`. Same algorithm as `EasyGLSurfaceState`'s, which the
+         * comment there calls the established reference for these semantics: `Letterbox` scales
+         * uniformly to fit and centres (bars), `Overscan` scales uniformly to cover and centres
+         * (crop), and `Stretch`/`NativeBackBuffer`/`FixedHeightDynamicWidth` take the whole
+         * drawable. Duplicated rather than shared because this row's non-goal forbids touching the
+         * shared contract or another renderer; `VULKAN-331` is where that duplication should be
+         * revisited.
+         *
+         * @param x Receives the rectangle's left edge in swapchain pixels.
+         * @param y Receives its top edge.
+         * @param width Receives its width.
+         * @param height Receives its height.
+         */
+        CNAEXT void GetPresentedRectEXT(int& x, int& y, int& width, int& height) const;
+        /**
+         * @brief Reports the physical rectangle the back buffer presents into.
+         *
+         * plans/plan_vulkan.md `VULKAN-331` (finding F-04). `GraphicsDevice::UpdateViewportFromWindow`
+         * needs the real rectangle, not `(0, 0, GetViewportSize())` — the base default is correct
+         * only while every presentation mode is a no-op, which stopped being true with
+         * `VULKAN-330`.
+         *
+         * @param x Receives the rectangle's left edge.
+         * @param y Receives its top edge.
+         * @param width Receives its width.
+         * @param height Receives its height.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override
+        {
+            GetPresentedRectEXT(x, y, width, height);
+        }
+
+        /**
+         * @brief Applies a runtime swap-interval change by rebuilding the swapchain.
+         *
+         * plan_vulkan.md VULKAN-332. `swapInterval_` used to be read once, at swapchain creation,
+         * so `GraphicsDeviceManager.SynchronizeWithVerticalRetrace` + `ApplyChanges()` -- which
+         * routes through `GraphicsDevice::Reset` and does reach `SetSwapInterval` -- changed
+         * nothing here. `IGraphicsRenderer`'s own comment that Vulkan "cannot change VSync at
+         * runtime" described that implementation, not the API: `CreateSwapchain` already picks the
+         * present mode from `swapInterval_`, and this renderer already rebuilds its swapchain on
+         * every resize, so the mechanism was present and simply never invoked.
+         *
+         * A request equal to the current interval rebuilds nothing.
+         *
+         * @param interval 0 = immediate, 1 = vsync, 2 = half-rate.
+         */
+        void SetSwapInterval(int interval) override;
+
+        /**
+         * @brief The swap interval last requested of this renderer.
+         *
+         * plan_vulkan.md VULKAN-333. `REMED-GFX-243` added this getter because a setter alone
+         * cannot tell "CNA never forwarded the request" from "the driver declined it", and a vsync
+         * test that cannot tell them apart defends nothing. The default `-1` means "this renderer
+         * does not record what it was asked for", which was the honest answer while
+         * `SetSwapInterval` was the inherited no-op and is no longer one.
+         *
+         * This is CNA's own recorded request, not a driver query, so it is answerable anywhere --
+         * including where the surface cannot honour it.
+         *
+         * @return The interval last passed to SetSwapInterval, or the one this renderer was
+         *         constructed with if none has been.
+         */
+        [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+
+
+        /**
+         * @brief CNAEXT. The `VkPresentModeKHR` the live swapchain was actually created with.
+         *
+         * plan_vulkan.md VULKAN-332. The interval is the request; this is what the device gave,
+         * and the two are not the same claim -- `VK_PRESENT_MODE_IMMEDIATE_KHR` may simply not be
+         * offered. A regression that asserted only the recorded interval would pass on a renderer
+         * that recorded it and rebuilt nothing.
+         *
+         * @return The present mode of the current swapchain.
+         */
+        CNAEXT [[nodiscard]] VkPresentModeKHR GetAppliedPresentModeEXT() const noexcept
+        {
+            return appliedPresentMode_;
+        }
+
+        /**
+         * @brief CNAEXT. Whether this surface offers a present mode that does not wait for vblank.
+         *
+         * plan_vulkan.md VULKAN-332. `VK_PRESENT_MODE_FIFO_KHR` is the only mode Vulkan guarantees,
+         * so "the mode is still FIFO with vsync off" is a correct answer on some surfaces and a
+         * broken renderer on others. Without this a regression has to guess which, and guessing
+         * means an escape hatch that excuses the defect -- measured while writing the one for this
+         * task: with `SetSwapInterval` reverted to its no-op the test still passed, because the
+         * lenient branch accepted FIFO.
+         *
+         * @return True if IMMEDIATE or MAILBOX is available on this surface.
+         */
+        CNAEXT [[nodiscard]] bool SupportsUnsynchronisedPresentModeEXT() const noexcept
+        {
+            return unsynchronisedPresentModeAvailable_;
+        }
         // Task 902: real in-place backbuffer MSAA reconfiguration, wired from
         // GraphicsDevice::Reset() so GraphicsDeviceManager.PreferMultiSampling actually reaches
         // the renderer. Deliberately scoped to the backbuffer only -- already-live RenderTarget2D/
@@ -1198,6 +3117,46 @@ namespace CNA::Internal::Renderers::Vulkan
         // cascading invalidation of live render targets is tracked separately as a follow-up.
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         [[nodiscard]] int GetMultiSampleCount() const override;
+        /**
+         * @brief Reports the multisample count actually in effect, ignoring the request.
+         *
+         * plans/plan_vulkan.md `VULKAN-347`. `GraphicsDevice` writes this value back into
+         * `PresentationParameters` after construction, so the identity default let a request the
+         * device never applied be echoed to the game -- ask for 3 on any device and
+         * `PickSampleCount` gives 2 while the identity reported 3. The argument is deliberately
+         * unused, matching GDI's override: both call sites pass the current request and use the
+         * answer as a write-back, so the question is *what is in effect*, not *what would this
+         * request become*.
+         *
+         * @param requestedMultiSampleCount Ignored.
+         * @return The applied count; 0 when no multisampling is in effect, as XNA spells it.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const override
+        {
+            (void)requestedMultiSampleCount;
+            return GetMultiSampleCount();
+        }
+        /**
+         * @brief Reports the back-buffer format actually in effect, ignoring the request.
+         *
+         * plans/plan_vulkan.md `VULKAN-348`. The swapchain takes what the surface offers, never
+         * the requested `SurfaceFormat`, and this renderer accepts `Color` and nothing else.
+         *
+         * @param requestedFormat Ignored.
+         * @return `SurfaceFormat::Color`'s ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reports the back-buffer depth/stencil format actually in effect.
+         *
+         * plans/plan_vulkan.md `VULKAN-348`. Answered from the format `CreateDepthResources`
+         * chose, not from the request — the same way `SupportsCapability(StencilBuffer)` already
+         * answers, and the same way `VULKAN-347` settled the sample count.
+         *
+         * @param requestedDepthStencilFormat Ignored.
+         * @return The applied `DepthFormat` ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedDepthStencilFormat) const override;
         // REMED-GFX-091 test diagnostic: total graphics-pipeline cache entries. BlendFactor's
         // RGBA value is dynamic and must never increase this count; only static state does.
         [[nodiscard]] std::size_t GetGraphicsPipelineCacheEntryCountEXT() const noexcept
@@ -1208,17 +3167,60 @@ namespace CNA::Internal::Renderers::Vulkan
                 + pipelinesLitTextured3D_.size() + pipelinesLitTextured3DVertexLit_.size()
                 + pipelinesFogColored3D_.size() + pipelinesFogTex3D_.size()
                 + pipelinesSkinned3D_.size() + pipelinesSkinned3DVertexLit_.size()
-                + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size()
-                + pipelinesInstanced3D_.size();
+                + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size();
         }
         /// REMED-GFX-212 diagnostic, mirroring the WebGPU renderer's own accessor of the same name.
-        /// `BasicEffect.VertexColorEnabled` is NOT part of this cache's key -- it travels in the
+        /// `BasicEffect.VertexColorEnabled` is NOT part of any pipeline key -- it travels in the
         /// 128-byte push constant, so toggling it must reuse the variant an otherwise-identical
         /// draw already built, while a geometry declaration that carries a COLOR0 element must not
         /// share a pipeline with one that does not.
+        ///
+        /// plans/plan_vulkan.md VULKAN-233: this used to be `pipelinesInstanced3D_.size()`, when
+        /// the instanced route had a program family of its own. It does not any more -- an
+        /// instanced draw takes its effect family's programs with the four per-instance columns
+        /// added -- so the count is now of pipeline CREATIONS whose `instanced` flag was true,
+        /// across every family, plus the position-only fallback's. That answers the question the
+        /// name asks ("how many pipeline variants has instancing cost") more directly than any one
+        /// cache's size now can, and it is the number both cardinality tests assert on.
         CNAEXT [[nodiscard]] std::size_t GetInstancedPipelineCacheSizeEXT() const noexcept
         {
-            return pipelinesInstanced3D_.size();
+            return instancedPipelineVariantsEXT_;
+        }
+        /// plan_vulkan.md `VULKAN-395` diagnostic: live entries in the `VkSampler` cache.
+        ///
+        /// The key is not bounded by the XNA enumerations alone -- `MaxMipLevel` is an `int` and
+        /// `MipMapLevelOfDetailBias` a `float`, both caller-supplied -- so "how many samplers has
+        /// this renderer created" is a question a test has to be able to ask.
+        /// VULKAN-233: how many pipelines this renderer has created for an instanced draw.
+        std::size_t instancedPipelineVariantsEXT_ = 0;
+        CNAEXT [[nodiscard]] std::size_t GetSamplerCacheSizeEXT() const noexcept
+        {
+            return samplerCache_.size();
+        }
+        /// plan_vulkan.md `VULKAN-177` diagnostic: live entries in the (view, sampler) descriptor
+        /// set cache.
+        ///
+        /// `EvictSampledViewFromCaches` exists because a texture destroyed while one of these
+        /// entries still names its `VkImageView` would leave a cached set pointing at a freed
+        /// handle -- and Vulkan reuses handle VALUES, so the next texture can inherit it. Without
+        /// this accessor a test can only assert that the picture came out right afterwards, which
+        /// a renderer that never cached anything would also satisfy. This is what lets a test say
+        /// the entry existed BEFORE the disposal and was gone after.
+        CNAEXT [[nodiscard]] std::size_t GetSampledDescriptorSetCacheSizeEXT() const noexcept
+        {
+            return texSamplerDescSets_.size();
+        }
+        /// plan_vulkan.md `VULKAN-160` diagnostic: the bound `TrimSamplerCacheEXT` enforces.
+        CNAEXT [[nodiscard]] static constexpr std::size_t GetSamplerCacheBoundEXT() noexcept
+        {
+            return kMaxCachedSamplers;
+        }
+        /// plan_vulkan.md `VULKAN-395`: the device's own ceiling on live samplers
+        /// (`VkPhysicalDeviceLimits::maxSamplerAllocationCount`). Creating more fails, and until
+        /// this row that failure was a silently substituted white texture.
+        CNAEXT [[nodiscard]] std::uint32_t GetMaxSamplerAllocationCountEXT() const noexcept
+        {
+            return physicalDeviceProperties_.limits.maxSamplerAllocationCount;
         }
         // REMED-GFX-095: live MRT construction/pipeline diagnostics used by the dedicated
         // regression to distinguish a requested multisample target from a silent 1x pass.
@@ -1247,6 +3249,47 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return lastMrtPipelineColorCountEXT_;
         }
+        /**
+         * @brief CNAEXT. Total host-visible bytes this renderer has mapped for live vertex buffers.
+         *
+         * plan_vulkan.md VULKAN-130. `CreateVertexBuffer` is handed a vertex count, never a
+         * stride, so the allocation starts as a 64-byte-per-vertex guess and is widened by the
+         * first upload that needs more. The guess is not a bound and must never be treated as one:
+         * this renderer's own pipeline-key table recognises strides 68, 76 and 80. Exposed so a
+         * regression can assert the widening happened, rather than inferring it from whether the
+         * process survived writing past its own mapping.
+         *
+         * @return Sum of the mapped sizes of every live `VulkanVertexBufferRenderer`.
+         */
+        CNAEXT [[nodiscard]] VkDeviceSize GetLiveVertexBufferBytesEXT() const noexcept;
+
+        /**
+         * @brief CNAEXT. Total host-visible bytes this renderer has mapped for live index buffers.
+         *
+         * plan_vulkan.md VULKAN-131. The counterpart of GetLiveVertexBufferBytesEXT(), and the
+         * reason it reads differently: an index buffer's allocation is exact from the start
+         * (`capacity` indices of the width it was created with), so a regression asserts that it
+         * stays exact and that an upload which would exceed it is refused by name.
+         *
+         * @return Sum of the mapped sizes of every live `VulkanIndexBufferRenderer`.
+         */
+        CNAEXT [[nodiscard]] VkDeviceSize GetLiveIndexBufferBytesEXT() const noexcept;
+
+        /**
+         * @brief CNAEXT. How many descriptor pools back the single-sampler descriptor cache.
+         *
+         * plan_vulkan.md VULKAN-390. One until a game exceeds `MaxDescriptorSets` distinct live
+         * (image view, sampler) pairs, then one more per overflow. Exposed so a regression can
+         * prove the chaining actually happened rather than inferring it from the pixels being
+         * right -- which is exactly what the old silent white-texture fallback made them not be.
+         *
+         * @return The pool count; at least 1 once the renderer is initialised.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetTexSamplerDescriptorPoolCountEXT() const noexcept
+        {
+            return 1u + texSamplerOverflowPools_.size();
+        }
+
         /**
          * @brief Returns every warning/error emitted by the active Vulkan validation messenger.
          *
@@ -1287,6 +3330,110 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT static void SetSyncValidationEnabledEXT(bool enabled) noexcept;
 
         /**
+         * @brief Test-only. Makes the next @p count single-sampler descriptor allocations fail.
+         *
+         * plan_vulkan.md VULKAN-390. The exhaustion arm cannot be reached by volume on either
+         * driver measured here: `vkAllocateDescriptorSets` keeps succeeding past the pool's
+         * `maxSets`, which the specification permits (running out is a runtime error the
+         * implementation *may* report, not a usage violation the validation layer will flag), and
+         * 4000 simultaneously live pairs still did not trigger it. Shrinking the pool does not help
+         * for the same reason. Without an injected failure a regression on this path would pass
+         * while executing none of it.
+         *
+         * Each failure makes `GetOrCreateTexSamplerDescSet` chain another pool, exactly as a real
+         * `VK_ERROR_OUT_OF_POOL_MEMORY` would. A count large enough to outlast the fresh pool's own
+         * first allocation reaches the named-refusal arm instead.
+         *
+         * @param count How many allocations to fail; 0 disables injection.
+         */
+        CNAEXT static void SetDescriptorAllocationFailuresForTestEXT(
+            std::uint32_t count, std::uint32_t skipFirst = 0) noexcept;
+
+        /**
+         * @brief Test-only: fail the next @p count `vkCreateSampler` calls.
+         *
+         * plans/plan_vulkan.md `VULKAN-161`. Exhausting `maxSamplerAllocationCount` for real means
+         * creating tens of thousands of samplers, which is a slow way to reach one branch — and on
+         * a driver that over-delivers, an unreachable one. Injected instead, exactly as
+         * `SetDescriptorAllocationFailuresForTestEXT` does for descriptor sets.
+         *
+         * @param count How many creations to fail; 0 disables injection.
+         */
+        CNAEXT static void SetSamplerCreationFailuresForTestEXT(std::uint32_t count) noexcept;
+
+        /**
+         * @brief Test-only: report `VK_ERROR_OUT_OF_DATE_KHR` from the next @p count acquires.
+         *
+         * plans/plan_vulkan.md `VULKAN-026`. The out-of-date swapchain is a real state this
+         * renderer already handles -- `GetBackBufferData`'s own comment calls it "common on first
+         * frame under Wayland/RADV" -- but it arrives when the window manager decides, so a test
+         * cannot reach it by resizing a window under a virtual display. Injected instead, exactly
+         * as `SetSamplerCreationFailuresForTestEXT` does for samplers.
+         *
+         * The injection replaces the acquire rather than following it, so no image is handed over
+         * and the image-available semaphore is left unsignalled -- the same shape a real
+         * out-of-date acquire produces.
+         *
+         * @param count How many acquires to report out of date; 0 disables injection.
+         */
+        CNAEXT static void SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept;
+
+        /**
+         * @brief Test-only: report `VK_ERROR_OUT_OF_DATE_KHR` after successful presents.
+         *
+         * The native present is still executed so its wait semaphore and acquired image are
+         * consumed normally. Only the result subsequently handled by the renderer is replaced,
+         * which exercises the production recovery branch without leaving test-only Vulkan state
+         * signalled or acquired.
+         *
+         * @param count How many successful presents to report out of date; 0 disables injection.
+         */
+        CNAEXT static void SetSwapchainPresentOutOfDateForTestEXT(
+            std::uint32_t count) noexcept;
+
+        /**
+         * @brief Test-only: report `VK_SUBOPTIMAL_KHR` after successful presents.
+         *
+         * The native present is still executed before its successful result is replaced. This
+         * keeps synchronization valid while deterministically exercising the same recreation
+         * branch a real suboptimal presentation result takes.
+         *
+         * @param count How many successful presents to report suboptimal; 0 disables injection.
+         */
+        CNAEXT static void SetSwapchainPresentSuboptimalForTestEXT(
+            std::uint32_t count) noexcept;
+
+        /**
+         * @brief Test-only: make `PickDepthFormat` take each request's fallback.
+         *
+         * plans/plan_vulkan.md `VULKAN-215`. Every device measured here honours `Depth16` and
+         * `Depth24` verbatim, so a render target's applied depth format never differs from the
+         * requested one and a test asserting that the report shows a substitution would be
+         * comparing a request with itself. This forces the substitution to happen, exactly as
+         * `SetSwapchainOutOfDateForTestEXT` forces a state the window manager otherwise owns.
+         *
+         * Affects render targets only — the back buffer uses `FindDepthFormat()`, which never
+         * offers those two formats in the first place.
+         *
+         * @param unsupported true to pretend the preferred depth formats are unavailable.
+         */
+        CNAEXT static void SetDepthFormatPreferredUnsupportedForTestEXT(bool unsupported) noexcept;
+
+        /**
+         * @brief Forces @ref ClassifySurfaceFormatEXT to answer `Unsupported` for one format.
+         *
+         * plan_vulkan.md VULKAN-170. Without it that arm is unreachable here: every driver this
+         * renderer runs on reports `SAMPLED_IMAGE`|`TRANSFER_DST` for the formats in the storage
+         * table, so the only format it stores is also the only one it could refuse, and a test
+         * could never observe the refusal it is meant to guarantee. Same instrument, and the same
+         * reason, as @ref SetDepthFormatPreferredUnsupportedForTestEXT: force a state the DEVICE
+         * owns rather than assert around it.
+         *
+         * @param surfaceFormatOrdinal The ordinal to refuse, or -1 to refuse none.
+         */
+        CNAEXT static void SetSurfaceFormatUnsupportedForTestEXT(int surfaceFormatOrdinal) noexcept;
+
+        /**
          * @brief Reports whether the Khronos validation layer is actually active.
          *
          * False once CreateInstance() has found the layer missing, so a validation regression can
@@ -1298,6 +3445,285 @@ namespace CNA::Internal::Renderers::Vulkan
 
         /** @brief Number of vkAcquireNextImageKHR calls that returned an image. */
         CNAEXT [[nodiscard]] uint64_t GetAcquireCountEXT() const noexcept { return acquireCountEXT_; }
+        /**
+         * @brief Test-only: how many full-device stalls this renderer has performed.
+         *
+         * plans/plan_vulkan.md `VULKAN-392` (finding F-13). `vkDeviceWaitIdle` in a routine path
+         * is a named pathology, and "we removed it" is a claim a test must be able to check rather
+         * than take on trust. Every call inside this renderer goes through one helper that
+         * increments this, so the count is complete by construction: a stall reintroduced anywhere
+         * shows up here.
+         *
+         * @return Number of `vkDeviceWaitIdle` calls since construction.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetDeviceWaitIdleCountEXT() const noexcept
+        {
+            return deviceWaitIdleCountEXT_;
+        }
+        /**
+         * @brief Returns the valid timestamp-bit count of the selected graphics queue.
+         * @return Queue-family timestamp bits; zero means timestamp queries are unsupported.
+         */
+        CNAEXT [[nodiscard]] std::uint32_t GetGraphicsQueueTimestampValidBitsEXT() const noexcept
+        {
+            return graphicsQueueTimestampValidBits_;
+        }
+        /**
+         * @brief Returns how many Vulkan timer query pools this renderer has created.
+         * @return Cumulative successful `VkQueryPool` creation count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetGpuTimerQueryPoolCreateCountEXT() const noexcept
+        {
+            return gpuTimerQueryPoolCreateCountEXT_;
+        }
+        /**
+         * @brief Returns how many reusable timer pairs have been reset for another measurement.
+         * @return Cumulative timestamp-pair reset count recorded into command buffers.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetGpuTimerQueryResetCountEXT() const noexcept
+        {
+            return gpuTimerQueryResetCountEXT_;
+        }
+        /**
+         * @brief Reports whether command-buffer debug labels are available.
+         * @return True when insert, begin-region and end-region entry points were loaded.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDebugUtilsLabelsEXT() const noexcept
+        {
+            return debugUtilsEnabled_ && pfnCmdInsertDebugLabel_ != nullptr &&
+                   pfnCmdBeginDebugLabel_ != nullptr && pfnCmdEndDebugLabel_ != nullptr;
+        }
+        /**
+         * @brief Reports whether debug-utils messages reach the installed CNA callback.
+         * @return True when both the submit function and messenger are live.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDebugUtilsMessagesEXT() const noexcept
+        {
+            return debugUtilsEnabled_ && pfnSubmitDebugMessage_ != nullptr &&
+                   debugMessenger_ != VK_NULL_HANDLE;
+        }
+        /**
+         * @brief Submits one test warning through `VK_EXT_debug_utils`.
+         * @param message Owned by the caller for the duration of this synchronous call.
+         * @return True when a debug-utils messenger accepted the submission.
+         */
+        CNAEXT bool SubmitDebugUtilsMessageForTestEXT(const char* message) const;
+        /**
+         * @brief Returns how many public string markers were recorded as debug labels.
+         * @return Cumulative inserted-label count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetRecordedDebugMarkerCountEXT() const noexcept
+        {
+            return recordedDebugMarkerCountEXT_;
+        }
+        /**
+         * @brief Returns how many structured command-buffer regions began recording.
+         * @return Cumulative begin-region count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetRecordedDebugRegionBeginCountEXT() const noexcept
+        {
+            return recordedDebugRegionBeginCountEXT_;
+        }
+        /**
+         * @brief Returns how many structured command-buffer regions ended recording.
+         * @return Cumulative end-region count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetRecordedDebugRegionEndCountEXT() const noexcept
+        {
+            return recordedDebugRegionEndCountEXT_;
+        }
+        /**
+         * @brief Test-only: how many vertex/index buffers have been retired for deferred free.
+         *
+         * plans/plan_vulkan.md `VULKAN-392`. Lets a test show that the buffer create/destroy
+         * cycles whose cost it is measuring really occurred, instead of inferring them from a
+         * pixel and a route's documented behaviour.
+         *
+         * @return Number of `VkBuffer` handles handed to the retirement queue since construction.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetRetiredBufferCountEXT() const noexcept
+        {
+            return retiredBufferCountEXT_;
+        }
+        /**
+         * @brief Test-only: how many one-time command submissions this renderer has performed.
+         *
+         * plans/plan_vulkan.md `VULKAN-396`. Legacy texture transfers and synchronous readbacks
+         * go through `EndOneTimeCommands`, which submits and waits its own fence. Deferred
+         * storage-image uploads from `MOD-2249` deliberately do not increment this counter.
+         *
+         * @return Number of completed one-time command submissions since construction.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetOneTimeCommandCountEXT() const noexcept
+        {
+            return oneTimeCommandCountEXT_;
+        }
+
+        /**
+         * @brief Returns how many resource barriers the logical Vulkan usage tracker emitted.
+         * @return Cumulative emitted buffer/image barrier count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetLogicalResourceBarrierCountEXT() const noexcept
+        {
+            return logicalResourceBarrierCountEXT_;
+        }
+
+        /**
+         * @brief Returns how many compatible resource uses required no Vulkan barrier.
+         * @return Cumulative elided buffer/image transition count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetLogicalResourceBarrierElisionCountEXT() const noexcept
+        {
+            return logicalResourceBarrierElisionCountEXT_;
+        }
+        /**
+         * @brief Test-only: total nanoseconds spent waiting for one-time submission fences.
+         *
+         * plans/plan_vulkan.md `VULKAN-396`, whose whole point is that this must be measured
+         * rather than argued about. Device-dependent by nature: a test may print and bound it,
+         * but failing on an absolute duration would make the suite report the GPU rather than the
+         * renderer.
+         *
+         * @return Accumulated wait time in nanoseconds.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetOneTimeCommandWaitNanosEXT() const noexcept
+        {
+            return oneTimeCommandWaitNanosEXT_;
+        }
+
+        /** @brief Returns how many synchronous command submissions waited on their own fence. */
+        CNAEXT [[nodiscard]] uint64_t GetSynchronousCommandFenceWaitCountEXT() const noexcept
+        {
+            return synchronousCommandFenceWaitCountEXT_;
+        }
+
+        /** @brief Returns live descriptor sets owned by Vulkan compute programs. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputeDescriptorSetCountEXT() const noexcept
+        {
+            return liveComputeDescriptorSetCountEXT_;
+        }
+
+        /** @brief Returns all Vulkan compute descriptor-set allocations since construction. */
+        CNAEXT [[nodiscard]] uint64_t GetComputeDescriptorSetAllocationCountEXT() const noexcept
+        {
+            return computeDescriptorSetAllocationCountEXT_;
+        }
+
+        /** @brief Returns live semantic pipeline layouts owned by Vulkan compute programs. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputePipelineLayoutCountEXT() const noexcept
+        {
+            return liveComputePipelineLayoutCountEXT_;
+        }
+
+        /** @brief Returns all Vulkan compute pipeline-layout creations since construction. */
+        CNAEXT [[nodiscard]] uint64_t GetComputePipelineLayoutCreationCountEXT() const noexcept
+        {
+            return computePipelineLayoutCreationCountEXT_;
+        }
+
+        /** @brief Returns live native compute pipelines. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputePipelineCountEXT() const noexcept
+        {
+            return liveComputePipelineCountEXT_;
+        }
+
+        /** @brief Returns all native compute-pipeline creations since construction. */
+        CNAEXT [[nodiscard]] uint64_t GetComputePipelineCreationCountEXT() const noexcept
+        {
+            return computePipelineCreationCountEXT_;
+        }
+
+        /** @brief Returns live immutable storage-image upload staging allocations. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveModernStagingAllocationCountEXT() const noexcept
+        {
+            return liveModernStagingAllocationCountEXT_;
+        }
+
+        /** @brief Returns all immutable storage-image upload staging allocations. */
+        CNAEXT [[nodiscard]] uint64_t GetModernStagingAllocationCountEXT() const noexcept
+        {
+            return modernStagingAllocationCountEXT_;
+        }
+
+        /** @brief Returns the number of fence-retirement buckets awaiting collection. */
+        CNAEXT [[nodiscard]] std::size_t GetPendingRetiredResourceBucketCountEXT() const noexcept
+        {
+            return retiredResources_.size();
+        }
+
+        /** @brief Returns native handles awaiting fence-retirement collection. */
+        CNAEXT [[nodiscard]] std::size_t GetPendingRetiredNativeHandleCountEXT() const noexcept;
+
+        /** @brief Returns the number of live renderer-owned texture-array records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveTexture2DArrayCountEXT() const noexcept
+        {
+            return liveTexture2DArrays_.size();
+        }
+
+        /** @brief Returns texture-array images handed to fence-gated retirement. */
+        CNAEXT [[nodiscard]] uint64_t GetRetiredTexture2DArrayCountEXT() const noexcept
+        {
+            return retiredTexture2DArrayCountEXT_;
+        }
+        /** @brief Returns the number of live renderer-owned storage-buffer records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveStorageBufferCountEXT() const noexcept
+        {
+            return liveStorageBuffers_.size();
+        }
+        /** @brief Returns the number of live renderer-owned storage-image records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveStorageTexture2DCountEXT() const noexcept
+        {
+            return liveStorageTexture2Ds_.size();
+        }
+        /** @brief Returns the number of live renderer-owned compute-program records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputeShaderCountEXT() const noexcept
+        {
+            return liveComputeShaders_.size();
+        }
+        /** @brief Returns the number of live renderer-owned GPU timer records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveGpuTimerCountEXT() const noexcept
+        {
+            return liveGpuTimers_.size();
+        }
+        /** @brief Returns the number of live renderer-owned two-dimensional render targets. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveRenderTargetCountEXT() const noexcept
+        {
+            return liveRenderTargets_.size();
+        }
+        /** @brief Returns the number of modern commands awaiting command-buffer recording. */
+        CNAEXT [[nodiscard]] std::size_t GetPendingModernCommandCountEXT() const noexcept
+        {
+            return pendingModernCommands_.size();
+        }
+        /**
+         * @brief Test-only: how many deferred 3D draws are still queued for the next submit.
+         *
+         * plans/plan_vulkan.md `VULKAN-026`. The queue is cleared inside `RecordCommandBuffer`,
+         * so a frame whose acquire failed never clears it. Whether that retention is visible in
+         * the next frame's pixels depends on replay ordering against that frame's clear; this
+         * counter answers the retention question directly instead, so the test does not have to
+         * infer it from a colour.
+         *
+         * @return Number of queued deferred draws.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetPendingDrawCountEXT() const noexcept
+        {
+            return pending3D_.size();
+        }
+        /**
+         * @brief Test-only: how many deferred SpriteBatch batches are queued for the next submit.
+         *
+         * plans/plan_vulkan.md `VULKAN-026`. 2D and 3D work live in two separate queues
+         * (`activeBatches_`, `pending3D_`), and a test that measures only one of them reports
+         * "nothing is queued" for work that is. Both are needed to answer what a dropped frame
+         * leaves behind.
+         *
+         * @return Number of queued deferred sprite batches.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetPendingBatchCountEXT() const noexcept
+        {
+            return activeBatches_.size();
+        }
         /** @brief Number of per-frame vkQueueSubmit calls made by SubmitFrame. */
         CNAEXT [[nodiscard]] uint64_t GetFrameSubmitCountEXT() const noexcept { return frameSubmitCountEXT_; }
         /** @brief Number of vkQueuePresentKHR calls, deferred presents included. */
@@ -1306,6 +3732,184 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] uint64_t GetFrameFenceWaitCountEXT() const noexcept { return frameFenceWaitCountEXT_; }
         /** @brief Number of completed swapchain recreations. */
         CNAEXT [[nodiscard]] uint64_t GetSwapchainRecreateCountEXT() const noexcept { return swapchainRecreateCountEXT_; }
+        /**
+         * @brief CNAEXT. Whether this renderer has seen `VK_ERROR_DEVICE_LOST`.
+         *
+         * plan_vulkan.md `VULKAN-334`. Sticky: a lost Vulkan device stays lost, because the spec
+         * gives no way back inside the same `VkDevice`.
+         *
+         * @return True once a submit, present, acquire or wait has reported the loss.
+         */
+        CNAEXT [[nodiscard]] bool IsDeviceLostEXT() const noexcept { return deviceLost_; }
+        /**
+         * @brief CNAEXT. The adapter-level MSAA clamp, answered from a real device when there is one.
+         *
+         * plan_vulkan.md `VULKAN-187`, finding F-34. `GraphicsAdapter::QueryRenderTargetFormat` runs
+         * **before** any `GraphicsDevice` exists, so it reaches a renderer through a plain function
+         * pointer rather than a virtual — and with no hook it reported `0`, telling a game this
+         * renderer has no MSAA on a device with 4× or 8×.
+         *
+         * The honest answer to a pre-device question is what a device already told us: the first
+         * `VulkanRenderer` constructed publishes its physical device's colour+depth sample-count
+         * mask here, and this clamps against that. Before any renderer exists there is still no
+         * answer, and it returns 0 exactly as the shared fallback did — a Vulkan instance created
+         * just to answer a query would be a different, and much larger, promise.
+         *
+         * @param surfaceFormat            `SurfaceFormat` ordinal; only `Color` is a render-target
+         *                                 format on this renderer, so anything else answers 0.
+         * @param requestedMultiSampleCount What the game asked for.
+         * @return The largest supported count not exceeding the request, or 0 when unanswerable.
+         */
+        CNAEXT static int ClampAdapterMultiSampleCountEXT(int surfaceFormat,
+                                                          int requestedMultiSampleCount) noexcept;
+        /// VULKAN-187: published by the constructor; 0 until a device has existed.
+        CNAEXT static uint32_t GetPublishedAdapterSampleCountsEXT() noexcept;
+        /**
+         * @brief CNAEXT. Test hook: treat the next device-loss check as if the device were lost.
+         *
+         * A real `VK_ERROR_DEVICE_LOST` cannot be provoked from inside the process on any driver
+         * here, and this renderer's own rule is that an error path with no test is a claim. The
+         * hook injects the RESULT, not a state machine: everything after the check runs exactly as
+         * it would on a real loss.
+         *
+         * @param count How many upcoming checks report a lost device.
+         */
+        CNAEXT void InjectDeviceLostForTestEXT(int count) noexcept { injectDeviceLost_ = count; }
+        /**
+         * @brief plan_vulkan.md VULKAN-334: the one place a lost device is turned into an answer.
+         *
+         * Reports `RendererDeviceEvent::Lost` to the shared layer the first time only -- so a
+         * game's `GraphicsDevice.DeviceLost` runs and `GraphicsDeviceStatus` becomes `Lost` -- and
+         * then throws, naming the call that failed. It never attempts a reset: see
+         * `docs/vulkan-renderer.md` for why recreating a `VkDevice` under live wrappers is a
+         * different feature from D3D9's.
+         *
+         * @param where  The Vulkan entry point that returned the error.
+         * @param result Its `VkResult`, for the message.
+         * @return True if @p result (or the test hook) means the device is lost; it throws in that
+         *         case, so the return exists only to make the call sites read as a guard.
+         */
+        bool CheckDeviceLostEXT(const char* where, VkResult result);
+        /**
+         * @brief plan_vulkan.md VULKAN-338: the surface description this renderer is currently
+         *        working from, read-only.
+         *
+         * A test that has to reach the zero-extent (minimized) branch of `RecreateSwapchain`
+         * cannot fabricate a `RendererSurfaceInfo` from nothing -- `OnSurfaceChanged` refuses
+         * one whose `windowId` does not match, and rightly so. This hands back the real one so
+         * a test can change only the drawable size and hand it straight back, which is exactly
+         * what the platform does when a window is minimized and restored.
+         *
+         * @return The current surface info; never modified through this accessor.
+         */
+        CNAEXT [[nodiscard]] const RendererSurfaceInfo& GetSurfaceInfoEXT() const noexcept
+        {
+            return surfaceInfo_;
+        }
+        /**
+         * @brief plan_vulkan.md VULKAN-024: this physical device's reported limits, read-only.
+         *
+         * The shared `IGraphicsRenderer` defaults for the profile ceilings and for
+         * `GetMaxTextureDimension()` are constants chosen to match what real hardware
+         * reports. Whether they match THIS device is a question only the device can
+         * answer, and answering it by reading is not the same as answering it by asking.
+         *
+         * @return The `VkPhysicalDeviceLimits` captured at device selection.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceLimits& GetDeviceLimitsEXT() const noexcept
+        {
+            return physicalDeviceProperties_.limits;
+        }
+        /**
+         * @brief Returns the selected physical device properties captured during discovery.
+         *
+         * plans/plan_modern.md `MOD-2240`. The renderer queries these once through
+         * `vkGetPhysicalDeviceProperties2`, after device selection, and uses the same snapshot for
+         * capability reporting and logical-device setup diagnostics.
+         *
+         * @return Read-only physical-device properties.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceProperties&
+        GetPhysicalDevicePropertiesEXT() const noexcept
+        {
+            return physicalDeviceProperties_;
+        }
+
+        /**
+         * @brief Returns the selected physical-device handle for renderer-native diagnostics.
+         * @return Vulkan physical-device handle, or `VK_NULL_HANDLE` before selection.
+         */
+        CNAEXT [[nodiscard]] VkPhysicalDevice GetPhysicalDeviceHandleEXT() const noexcept
+        {
+            return physicalDevice_;
+        }
+
+        /**
+         * @brief Returns the Vulkan format used by current colour render targets.
+         * @return Applied swap-chain-compatible colour format.
+         */
+        CNAEXT [[nodiscard]] VkFormat GetRenderTargetVkFormatEXT() const noexcept
+        {
+            return swapchainFormat_;
+        }
+        /**
+         * @brief Returns the core features reported by the selected physical device.
+         *
+         * plans/plan_modern.md `MOD-2240`. This is the base feature record obtained through
+         * `vkGetPhysicalDeviceFeatures2`; extension feature structs are queried in its `pNext`
+         * chain only when the corresponding extension is advertised.
+         *
+         * @return Read-only supported core features.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceFeatures&
+        GetSupportedDeviceFeaturesEXT() const noexcept
+        {
+            return supportedDeviceFeatures_;
+        }
+        /**
+         * @brief Returns the core features CNA enabled on the logical device.
+         *
+         * plans/plan_modern.md `MOD-2240`. A reported native feature is not enabled merely because
+         * it exists: this record contains only features consumed by an implemented CNA path.
+         *
+         * @return Read-only enabled core features.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceFeatures&
+        GetEnabledDeviceFeaturesEXT() const noexcept
+        {
+            return enabledDeviceFeatures_;
+        }
+        /**
+         * @brief Returns the flags of the queue family used for CNA graphics command submission.
+         *
+         * plans/plan_modern.md `MOD-2240`. Modern Vulkan work uses this same ordered queue in its
+         * first implementation; a compute-capable bit here does not by itself advertise CNA
+         * compute support and no asynchronous-compute promise is made.
+         *
+         * @return The selected graphics queue-family flags.
+         */
+        CNAEXT [[nodiscard]] VkQueueFlags GetGraphicsQueueFlagsEXT() const noexcept
+        {
+            return graphicsQueueFlags_;
+        }
+        /**
+         * @brief plan_vulkan.md VULKAN-180: silences the stderr ECHO of validation messages.
+         *
+         * Never the recording -- `GetValidationMessagesEXT()` keeps every message either way,
+         * so a test that turns the echo off can still assert that the layer complained, and a
+         * silent failure cannot hide behind the switch.
+         *
+         * This exists so that a test which provokes the layer ON PURPOSE -- asking the device
+         * for a resource it cannot possibly back, to prove the refusal is reported -- does not
+         * have to be exempted from `VULKAN-393`'s validation gate. An exemption would weaken the
+         * gate for that test's ordinary operations too; this narrows the silence to the two
+         * statements that mean to be loud.
+         *
+         * @param enabled False to stop echoing to stderr; true to resume. Default true.
+         */
+        CNAEXT void SetValidationEchoEnabledEXT(bool enabled) noexcept { validationEcho_ = enabled; }
+        /** @brief @copydoc SetValidationEchoEnabledEXT */
+        CNAEXT [[nodiscard]] bool IsValidationEchoEnabledEXT() const noexcept { return validationEcho_; }
         /** @brief Count of distinct swapchain image indices an acquire has returned. */
         CNAEXT [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
         /** @brief Count of distinct frame slots a submit has used. */
@@ -1342,7 +3946,208 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unique_ptr<ITextureRenderer>         CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer>     CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetRenderer>    CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /**
+         * @brief Creates an exact-format Vulkan `RenderTarget2D` for the CNA extension path.
+         *
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depthFormat Requested `DepthFormat` ordinal.
+         * @param preserveContents Whether later bind cycles must load existing attachment data.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param multiSampleCount Preferred sample count, or zero for single-sampling.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         * @return A render-target renderer using the requested format exactly.
+         */
+        std::unique_ptr<IRenderTargetRenderer>    CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void                                     SetRenderTarget2D(IRenderTargetRenderer* rt) override;
+
+        /**
+         * @brief Creates a SPIR-V compute pipeline through the existing CNAEXT contract.
+         *
+         * @param computeSrc Raw SPIR-V module bytes.
+         * @return A renderer object whose validity and compile log describe pipeline creation.
+         */
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+
+        /**
+         * @brief Creates a host-visible storage buffer for compute use.
+         *
+         * @param byteSize Positive size in bytes, bounded by this device's storage-buffer limit.
+         * @return The created storage buffer.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
+            std::size_t byteSize) override;
+
+        /**
+         * @brief Creates a storage buffer with exact portable roles and CPU-access intent.
+         * @param byteSize Positive size in bytes, bounded by the selected device limit.
+         * @param usage Raw immutable storage-buffer usage mask.
+         * @param cpuAccess Raw immutable direct CPU-access mask.
+         * @return The created storage buffer, or null when the request is invalid or unsupported.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage,
+            std::uint32_t cpuAccess) override;
+
+        /**
+         * @brief Dispatches a Vulkan compute program on the existing ordered graphics queue.
+         *
+         * @param shader Program created by this renderer.
+         * @param groupsX Work-group count on X.
+         * @param groupsY Work-group count on Y.
+         * @param groupsZ Work-group count on Z.
+         */
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX,
+                             int groupsY, int groupsZ) override;
+
+        /**
+         * @brief Fulfils a compatibility barrier request through automatic ordered dependencies.
+         *
+         * @param barrierBits CNA graphics memory-barrier bits.
+         */
+        void MemoryBarrierEXT(int barrierBits) override;
+
+        /** @brief Returns whether the selected ordered queue and limits support CNA compute. */
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+
+        /** @brief Reports the legal Color RenderTarget2D storage-image bridge. */
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override
+        {
+            return SupportsComputeShadersEXT() && GetMaxStorageImagesPerShaderStageEXT() > 0;
+        }
+
+        /**
+         * @brief Returns this device's maximum dispatch group count for one axis.
+         *
+         * @param axis Axis ordinal: 0 is X, 1 is Y, 2 is Z.
+         * @return Maximum group count, or zero for an invalid axis/unsupported device.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+
+        /**
+         * @brief Returns this device's maximum compute local size for one axis.
+         *
+         * @param axis Axis ordinal: 0 is X, 1 is Y, 2 is Z.
+         * @return Maximum local size, or zero for an invalid axis/unsupported device.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+
+        /** @brief Returns this device's maximum invocations in one compute work group. */
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+
+        /**
+         * @brief Returns the selected device's usable two-dimensional texture dimension.
+         * @return Maximum dimension, clamped to the public integer range.
+         */
+        [[nodiscard]] int GetMaxTextureDimension() const override;
+
+        /**
+         * @brief Returns the public stream ceiling clamped to native input bindings.
+         * @return Maximum accepted vertex stream count.
+         */
+        [[nodiscard]] int GetMaxVertexStreams() const override;
+
+        /**
+         * @brief Returns the maximum byte range of the implemented storage-buffer path.
+         * @return Maximum bytes, or zero when compute storage buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+
+        /**
+         * @brief Returns the maximum byte range used by Vulkan uniform-buffer bindings.
+         * @return Smaller of the native range and CNA's largest implemented binding.
+         */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+
+        /**
+         * @brief Returns the compute-stage storage-buffer binding ceiling.
+         * @return Maximum usable compute storage-buffer binding count.
+         */
+        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
+
+        /**
+         * @brief Returns the native vertex-stage storage-buffer descriptor ceiling.
+         * @return Maximum readable storage-buffer blocks, or zero when the draw path is unavailable.
+         */
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+
+        /**
+         * @brief Selects one storage buffer for a following reflected graphics-shader binding.
+         *
+         * @param binding SPIR-V descriptor-set-two binding number.
+         * @param buffer Live storage-buffer record to snapshot when the draw is accepted.
+         */
+        void BindStorageBufferForDrawEXT(
+            int binding, const IStorageBufferRenderer& buffer) override;
+
+        /**
+         * @brief Returns zero until sampled texture arrays are implemented by MOD-2243.
+         * @return Zero in the current implementation.
+         */
+        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
+
+        /**
+         * @brief Returns the sampled-descriptor ceiling reachable by one custom effect stage.
+         * @return Smaller of all native descriptor ceilings and CNA's twelve bindings.
+         */
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+
+        /**
+         * @brief Returns the implemented storage-image descriptor ceiling.
+         * @return Smaller of the native per-stage and descriptor-set limits.
+         */
+        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
+
+        /**
+         * @brief Returns the public input-binding ceiling clamped to the selected device.
+         * @return Maximum usable vertex-buffer binding count.
+         */
+        [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override;
+
+        /**
+         * @brief Returns the selected device's vertex-attribute ceiling.
+         * @return Maximum usable vertex attribute count.
+         */
+        [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override;
+
+        /**
+         * @brief Returns the selected device's colour-attachment ceiling clamped to XNA's four.
+         * @return Maximum usable simultaneous colour attachment count.
+         */
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override;
+
+        /**
+         * @brief Returns the implemented storage-buffer offset-alignment requirement.
+         * @return Required byte alignment, or zero when storage buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
+
+        /**
+         * @brief Returns the uniform-buffer offset-alignment requirement.
+         * @return Required byte alignment.
+         */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
+
+        /**
+         * @brief Returns one selected-device timestamp tick in integer picoseconds.
+         * @return Rounded picoseconds per tick, or zero when the graphics queue has no timestamps.
+         */
+        [[nodiscard]] std::uint64_t GetTimestampPeriodPicosecondsEXT() const override;
+
+        /**
+         * @brief Reports whether the selected graphics queue supports timestamp queries.
+         * @return True when the queue exposes valid timestamp bits and a positive period.
+         */
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+
+        /**
+         * @brief Creates one reusable Vulkan timestamp-query pair.
+         * @return A timer renderer, or null when timestamp queries are unavailable.
+         */
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
 
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -1372,7 +4177,27 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DRenderer>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int width, int height, int layerCount, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
+        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int width, int height, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a cube render target in the exact requested surface format.
+         *
+         * @param size Face width and height in texels.
+         * @param depthFormat Requested depth-format ordinal.
+         * @param preserveContents Whether face contents survive a later bind.
+         * @param mipMap Whether to allocate and regenerate the full mip chain.
+         * @param multiSampleCount Preferred sample count.
+         * @param surfaceFormat Requested surface-format ordinal.
+         * @return The exact-format Vulkan cube target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 
@@ -1386,6 +4211,54 @@ namespace CNA::Internal::Renderers::Vulkan
         void DrawInstancedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer&,
                                        const Matrix&, const Matrix&, const Matrix&,
                                        PrimitiveType, int, int, const GpuDrawParams&) override;
+        /**
+         * @brief Reports whether this device executes the canonical indirect draw commands.
+         *
+         * @return `true` when non-zero indirect first-instance values are enabled.
+        */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        /**
+         * @brief Queues one non-indexed draw whose operands come from a native argument buffer.
+         *
+         * @param vertexBuffer Bound per-vertex geometry.
+         * @param world World transform captured for the draw.
+         * @param view View transform captured for the draw.
+         * @param projection Projection transform captured for the draw.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Buffer containing one canonical indirect command.
+         * @param argumentByteOffset Byte offset of the command.
+         * @param params Captured effect, declaration, stream, and render-state parameters.
+        */
+        void DrawPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vertexBuffer,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params) override;
+        /**
+         * @brief Queues one indexed draw whose operands come from a native argument buffer.
+         *
+         * @param vertexBuffer Bound per-vertex geometry.
+         * @param indexBuffer Bound index geometry.
+         * @param world World transform captured for the draw.
+         * @param view View transform captured for the draw.
+         * @param projection Projection transform captured for the draw.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Buffer containing one canonical indexed indirect command.
+         * @param argumentByteOffset Byte offset of the command.
+         * @param params Captured effect, declaration, stream, and render-state parameters.
+        */
+        void DrawIndexedPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vertexBuffer,
+            const IIndexBufferRenderer& indexBuffer,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params) override;
+        /**
+         * @brief Reports Vulkan support for non-zero first-instance indexed draws.
+         *
+         * @return Always `true` for the Vulkan renderer.
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override { return true; }
 
         void ClearColorAndDepth(float, float, float, float, float) override;
         void ClearDepth(float) override;
@@ -1414,11 +4287,16 @@ namespace CNA::Internal::Renderers::Vulkan
         static constexpr uint32_t MaxSpriteVertices = 8192;
         static constexpr uint32_t MaxSpriteIndices  = MaxSpriteVertices / 4 * 6;
         static constexpr uint32_t MaxDescriptorSets = 512;
+        /// plan_vulkan.md VULKAN-181: `maxSets` for a chained per-effect descriptor pool --
+        /// the same size the seven base pools are created with (`512 * MaxFramesInFlight`),
+        /// so a chained pool is a like-for-like extension rather than a different bound.
+        static constexpr uint32_t kEffectPoolMaxSets = 512u * MaxFramesInFlight;
 
         // --- Core Vulkan objects (lifetime = renderer) ---
         RendererSurfaceInfo surfaceInfo_;
         CNA::Platform::IPlatformVulkanSurface* platformSurfaceService_ = nullptr;
         VkInstance       instance_       = VK_NULL_HANDLE;
+        bool             debugUtilsEnabled_ = false;
         VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
         std::vector<std::string> validationMessages_;
         /// REMED-GFX-144: pMessageIdName per entry of validationMessages_, same order and size.
@@ -1428,8 +4306,20 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;
 
+        /// plans/plan_modern.md MOD-2240: one features2/properties2 discovery snapshot for the
+        /// selected device. Supported and enabled are deliberately distinct: a native optional
+        /// feature is not enabled until an implemented CNA path consumes it.
+        VkPhysicalDeviceProperties physicalDeviceProperties_{};
+        VkPhysicalDeviceFeatures   supportedDeviceFeatures_{};
+        VkPhysicalDeviceFeatures   enabledDeviceFeatures_{};
+
         uint32_t graphicsQueueFamily_ = 0;
         uint32_t presentQueueFamily_  = 0;
+        /// plans/plan_modern.md MOD-2240: the existing ordered submission queue is also the first
+        /// modern-command queue where its flags permit; CNA does not claim async compute.
+        VkQueueFlags graphicsQueueFlags_ = 0;
+        /// plans/plan_modern.md MOD-2246: zero is Vulkan's explicit no-timestamps queue answer.
+        std::uint32_t graphicsQueueTimestampValidBits_ = 0;
         VkQueue  graphicsQueue_       = VK_NULL_HANDLE;
         VkQueue  presentQueue_        = VK_NULL_HANDLE;
 
@@ -1439,6 +4329,10 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VkSemaphore> imageAvailableSemaphores_;
         std::vector<VkSemaphore> renderFinishedSemaphores_;
         std::vector<VkFence>     inFlightFences_;
+        /// MOD-2246: generation last submitted through each reusable frame fence.
+        std::array<std::uint64_t, MaxFramesInFlight> frameFenceGenerations_{};
+        /// Highest submission generation whose frame fence has been observed signalled.
+        std::uint64_t completedFrameGeneration_ = 0;
 
         // REMED-GFX-144: bounded frame/swapchain instrumentation. A synchronization regression that
         // can only read pixels proves nothing about the model that produced them, and one that can
@@ -1447,10 +4341,49 @@ namespace CNA::Internal::Renderers::Vulkan
         // frame; every frame slot and every swapchain image genuinely re-entered; and no per-frame
         // growth in the objects that carry synchronization.
         uint64_t acquireCountEXT_          = 0;
+        /// plan_vulkan.md VULKAN-392: counts every DeviceWaitIdleEXT() call.
+        uint64_t deviceWaitIdleCountEXT_ = 0;
+        /// plan_vulkan.md VULKAN-392: VkBuffer handles handed to the retirement queue.
+        uint64_t retiredBufferCountEXT_ = 0;
+        /// plan_vulkan.md VULKAN-396/MOD-2253: one-time command submissions and the time their
+        /// individual completion-fence waits cost.
+        uint64_t oneTimeCommandCountEXT_ = 0;
+        uint64_t oneTimeCommandWaitNanosEXT_ = 0;
+        /// MOD-2253: every synchronous helper waits one submission fence, never the whole queue.
+        uint64_t synchronousCommandFenceWaitCountEXT_ = 0;
+        /// MOD-2248: exact logical-resource barriers emitted and compatible uses elided.
+        std::uint64_t logicalResourceBarrierCountEXT_ = 0;
+        std::uint64_t logicalResourceBarrierElisionCountEXT_ = 0;
+        /// plans/plan_modern.md MOD-2242: live and cumulative native compute allocation counters.
+        std::size_t liveComputeDescriptorSetCountEXT_ = 0;
+        uint64_t computeDescriptorSetAllocationCountEXT_ = 0;
+        std::size_t liveComputePipelineLayoutCountEXT_ = 0;
+        uint64_t computePipelineLayoutCreationCountEXT_ = 0;
+        std::size_t liveComputePipelineCountEXT_ = 0;
+        uint64_t computePipelineCreationCountEXT_ = 0;
+        /// MOD-2253: immutable upload staging allocations live only in the retirement window.
+        std::size_t liveModernStagingAllocationCountEXT_ = 0;
+        uint64_t modernStagingAllocationCountEXT_ = 0;
+        /// plans/plan_modern.md MOD-2246: timer-pool allocation/reuse instrumentation.
+        std::uint64_t gpuTimerQueryPoolCreateCountEXT_ = 0;
+        std::uint64_t gpuTimerQueryResetCountEXT_ = 0;
+        /// MOD-2246: structured debug-label instrumentation; commands remain optional.
+        std::uint64_t recordedDebugMarkerCountEXT_ = 0;
+        std::uint64_t recordedDebugRegionBeginCountEXT_ = 0;
+        std::uint64_t recordedDebugRegionEndCountEXT_ = 0;
+        /// plans/plan_modern.md MOD-2243: array image records handed to deferred retirement.
+        uint64_t retiredTexture2DArrayCountEXT_ = 0;
+        /// The single funnel for vkDeviceWaitIdle, so the counter above cannot miss one.
+        void DeviceWaitIdleEXT();
         uint64_t frameSubmitCountEXT_      = 0;
         uint64_t presentCountEXT_          = 0;
         uint64_t frameFenceWaitCountEXT_   = 0;
         uint64_t swapchainRecreateCountEXT_ = 0;
+        /// plan_vulkan.md VULKAN-334: sticky device-loss state and the callback that tells the
+        /// shared layer, so a game's own GraphicsDevice.DeviceLost handler runs.
+        bool     deviceLost_ = false;
+        int      injectDeviceLost_ = 0;
+        std::function<void(CNA::Internal::Renderers::RendererDeviceEvent)> deviceEventCallback_;
         /// Bit i set once swapchain image index i has been returned by an acquire.
         uint32_t acquiredImageMaskEXT_     = 0;
         /// Bit i set once frame slot i has been used by a submit.
@@ -1462,12 +4395,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImage                  msaaColorImage_  = VK_NULL_HANDLE;
         VkDeviceMemory           msaaColorMemory_ = VK_NULL_HANDLE;
         VkImageView              msaaColorView_   = VK_NULL_HANDLE;
-        // Task 911: depth-format-keyed (VK_FORMAT_UNDEFINED = no depth attachment), lazily
-        // populated via GetOrCreatePipeline2DMsaa() -- mirrors the 3D pipeline caches' own
-        // per-target-depth-format fidelity, since the 2D sprite pipeline's render pass must still
-        // exactly attachment-format-match whichever target it draws into even though it never
-        // itself reads/writes the depth attachment (VkPipelineDepthStencilStateCreateInfo has
-        // depthTestEnable=depthWriteEnable=VK_FALSE always).
+        // Task 911/MOD-2223: keyed by the target's exact colour/depth/sample compatibility tuple
+        // and lazily populated via GetOrCreatePipeline2DMsaa(). The sprite pipeline never reads
+        // depth, but its render pass must still attachment-format-match the target it draws into.
         // REMED-GFX-071: now keyed by (depth-format-folded uint64 + blendEnabled bit, PackBlendBits)
         // -- the full PipelineKey shape the 3D caches use -- so a distinct SpriteBatch BlendState
         // gets its own VkPipeline (with FillBlendAttachmentState-derived factors) instead of one
@@ -1488,24 +4418,40 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // --- Render pass (permanent) + framebuffers (per swapchain image) ---
         VkRenderPass               renderPass_       = VK_NULL_HANDLE;
-        // Task 911: RT render passes are now keyed by real depth VkFormat (VK_FORMAT_UNDEFINED =
-        // no depth attachment at all) instead of one hardcoded device-wide format shared by every
-        // render target — each RenderTarget2D/RenderTargetCube gets true per-instance
-        // DepthStencilFormat fidelity. Lazily populated via GetOrCreateRTRenderPass()/
-        // GetOrCreateRTRenderPassMsaa(); a format's entry is shared by every RT requesting that
-        // same format (render-pass "compatibility" requires an exact attachment-format match, so
-        // a distinct format genuinely needs its own render pass, but RTs sharing a format safely
-        // share one pass + one pipeline, mirroring the pre-existing single-format reuse pattern).
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassByDepthFmt_;      // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassLoadByDepthFmt_;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
+        // Task 911/MOD-2223: every RT pass is keyed by its exact colour formats, depth format
+        // (VK_FORMAT_UNDEFINED means no depth attachment) and sample count. Entries are populated
+        // lazily and shared only by targets with a render-pass-compatible attachment tuple.
+        struct RTPassKey
+        {
+            std::array<int32_t, 4> colorFormats{};
+            uint32_t colorCount = 1;
+            int32_t depthFormat = static_cast<int32_t>(VK_FORMAT_UNDEFINED);
+            uint32_t samples = static_cast<uint32_t>(VK_SAMPLE_COUNT_1_BIT);
+            bool operator==(const RTPassKey&) const noexcept = default;
+        };
+        struct RTPassKeyHash {
+            std::size_t operator()(const RTPassKey& k) const noexcept
+            {
+                std::size_t h = std::hash<uint32_t>{}(k.colorCount);
+                h ^= std::hash<int32_t>{}(k.depthFormat) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(k.samples) + (h << 6) + (h >> 2);
+                for (const int32_t format : k.colorFormats)
+                    h ^= std::hash<int32_t>{}(format) + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassByDepthFmt_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassLoadByDepthFmt_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash>
+            rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
         /// REMED-GFX-141: the MSAA render pass's missing LOAD variant. Its multisample colour
         /// attachment uses LOAD_OP_LOAD + STORE_OP_STORE and stays in COLOR_ATTACHMENT_OPTIMAL
         /// across passes, so a PreserveContents target's own multisample samples survive a bind
-        /// cycle instead of being cleared and thrown away. Same depth-format keying, same
-        /// per-format sharing, and render-pass-compatible with the clear variant (load/store ops
-        /// and layouts take no part in compatibility), so no pipeline cache key changed.
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaLoadByDepthFmt_;
+        /// cycle instead of being cleared and thrown away. It uses the same full compatibility key
+        /// and is render-pass-compatible with the clear variant because load/store operations and
+        /// layouts do not participate in compatibility.
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash>
+            rtRenderPassMsaaLoadByDepthFmt_;
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         /**
@@ -1552,6 +4498,13 @@ namespace CNA::Internal::Renderers::Vulkan
         /// Destroys every cached swapchain pass variant (swapchain recreation / shutdown).
         void DestroySwapchainPassVariants();
 
+        /// plan_vulkan.md VULKAN-332: the present mode CreateSwapchain settled on, recorded so a
+        /// regression can tell a real rebuild from a recorded request.
+        VkPresentModeKHR appliedPresentMode_ = VK_PRESENT_MODE_FIFO_KHR;
+        /// plan_vulkan.md VULKAN-332: whether the surface offers IMMEDIATE or MAILBOX at all,
+        /// so a regression can tell "correctly stayed FIFO" from "never applied the request".
+        bool unsynchronisedPresentModeAvailable_ = false;
+
         // --- Depth buffer (recreated with swapchain) ---
         VkFormat        depthFormat_    = VK_FORMAT_UNDEFINED;
         VkImage         depthImage_     = VK_NULL_HANDLE;
@@ -1581,7 +4534,34 @@ namespace CNA::Internal::Renderers::Vulkan
                 return AsTuple() < o.AsTuple();
             }
         };
-        std::map<SamplerStateKey, VkSampler>                         samplerCache_;
+        /// plan_vulkan.md `VULKAN-160`: the cached sampler plus when it was last handed out.
+        ///
+        /// The stamp is what makes eviction *least-recently-used* rather than arbitrary. It matters
+        /// more than it looks: the pathological case this bound exists for is a game sweeping a LOD
+        /// bias, where the entries worth keeping are precisely the handful it keeps coming back to.
+        struct CachedSamplerEXT {
+            VkSampler     sampler  = VK_NULL_HANDLE;
+            std::uint64_t lastUsed = 0;
+        };
+        std::map<SamplerStateKey, CachedSamplerEXT>                  samplerCache_;
+        /// Monotonic clock for `CachedSamplerEXT::lastUsed`; ticks on every cache hit and insert.
+        std::uint64_t                                                samplerUseClock_ = 0;
+        /// plan_vulkan.md `VULKAN-160`: how many samplers this renderer keeps cached.
+        ///
+        /// Far above any real key space -- 9 filters x 3 address modes cubed x a few anisotropy
+        /// values is a few hundred, and a game that legitimately uses more than 256 distinct
+        /// sampler states in one scene does not exist -- and far below every device's
+        /// `maxSamplerAllocationCount` (32768 on the drivers measured here). So the bound never
+        /// bites on real content, and always bites on the unbounded float key `VULKAN-395`
+        /// measured.
+        static constexpr std::size_t kMaxCachedSamplers = 256;
+        /// plan_vulkan.md `VULKAN-160`: evict least-recently-used samplers past the bound.
+        ///
+        /// Called where the frame's pending queues are cleared, which is the only instant at which
+        /// both gates are open: no CPU record still references a sampler (the queues are empty) and
+        /// GPU references are handled by retiring the handle rather than destroying it. Samplers
+        /// currently bound to a device slot are pinned regardless of age.
+        void TrimSamplerCacheEXT();
         /// Returns the cached VkSampler for one XNA sampler state, creating it on first use.
         /// Shared by the per-slot ApplySampler* setters (which then own a slot) and by the
         /// compiled-effect route (which owns none -- an Effect's sampler_state block belongs to the
@@ -1594,13 +4574,86 @@ namespace CNA::Internal::Renderers::Vulkan
         /// later setter cannot drop what an earlier one established.
         SamplerStateKey                                               samplerSlotState_[16] = {};
         VkSampler                                                     slotSamplers_[16] = {};
-        std::map<std::pair<VkImageView,VkSampler>, VkDescriptorSet>  texSamplerDescSets_;
+        /// plan_vulkan.md VULKAN-390: a cached single-sampler descriptor set together with the
+        /// pool it came from. The pool used to be implicit -- there was only one -- and a set
+        /// freed against the wrong pool is undefined behaviour, so chaining pools makes the
+        /// owner part of the entry rather than something a caller has to remember.
+        struct TexSamplerDescSetEXT {
+            VkDescriptorSet  set  = VK_NULL_HANDLE;
+            VkDescriptorPool pool = VK_NULL_HANDLE;
+        };
+        std::map<std::pair<VkImageView,VkSampler>, TexSamplerDescSetEXT>  texSamplerDescSets_;
+        /// VULKAN-390: pools chained after `descriptorPool_` fills. Each holds MaxDescriptorSets
+        /// more combined-image-sampler sets. Empty until a game genuinely exceeds the first pool.
+        std::vector<VkDescriptorPool> texSamplerOverflowPools_;
+        /// VULKAN-390: allocate one single-sampler set, chaining a new pool when the current ones
+        /// are full. Throws a named exception if the device refuses; never substitutes a resource.
+        void AllocateTexSamplerDescSetEXT(VkDescriptorSet& outSet, VkDescriptorPool& outPool);
+        /**
+         * @brief plan_vulkan.md VULKAN-181: allocate one descriptor set, chaining another pool when
+         *        every existing one is full.
+         *
+         * The seven per-effect caches each had ONE fixed pool and threw the moment a device refused
+         * another set. On llvmpipe that never happened; on RADV it happened in
+         * `Vulkan_DescriptorCapacityContract`'s very first textured leg. This is
+         * `AllocateTexSamplerDescSetEXT`'s policy, generalised so each family can bring its own
+         * base pool, layout and pool sizes.
+         *
+         * @param overflow  That family's chained pools; a new one is appended when needed.
+         * @param base      The family's original pool, tried after the newest overflow ones.
+         * @param layout    The set layout to allocate.
+         * @param sizes     Pool sizes for a chained pool -- the same shape the base pool used.
+         * @param sizeCount Number of entries in @p sizes.
+         * @param maxSets   `maxSets` for a chained pool.
+         * @param outSet    The allocated set, or VK_NULL_HANDLE if even a fresh pool refused.
+         * @param outPool   The pool @p outSet came from; the caller must free it from that pool.
+         */
+        void AllocateFromGrowingPoolEXT(VkDescriptorPool base,
+                                        VkDescriptorSetLayout layout,
+                                        const VkDescriptorPoolSize* sizes, uint32_t sizeCount,
+                                        uint32_t maxSets,
+                                        VkDescriptorSet& outSet, VkDescriptorPool& outPool);
+        /// VULKAN-181: the chained pools, keyed by the BASE pool they extend.
+        ///
+        /// Keyed rather than one shared list, so a family's chain contains only its own pools. A
+        /// shared list would still work -- the pool sizes cover the widest layout -- but it would
+        /// make "how many allocation attempts does this family make" depend on what every other
+        /// family had already done, which is exactly the kind of history-dependence a test cannot
+        /// state a contract against.
+        std::unordered_map<VkDescriptorPool, std::vector<VkDescriptorPool>> effectOverflowPools_;
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
         bool independentBlendSupported_ = false;
+        /// plan_vulkan.md VULKAN-370: whether `occlusionQueryPrecise` was enabled on this device.
+        /// Decides both the `VK_QUERY_CONTROL_PRECISE_BIT` this renderer passes to
+        /// `vkCmdBeginQuery` and the answer `PixelCountIsPreciseEXT()` gives.
+        bool occlusionQueryPreciseSupported_ = false;
+        /// plan_vulkan.md `VULKAN-151`: whether this device can bind `VK_FORMAT_R8G8B8A8_USCALED`
+        /// as a vertex attribute.
+        ///
+        /// The skinned shaders take their bone indices as `vec4`, so ONE shader serves both of the
+        /// spellings XNA allows for `BLENDINDICES`: `Vector4` binds natively, and `Byte4` binds
+        /// through this format -- integer values converted to float without normalisation, the
+        /// same conversion `glVertexAttribPointer(..., GL_UNSIGNED_BYTE, GL_FALSE, ...)` performs
+        /// and that EasyGL therefore already depends on.
+        ///
+        /// `_USCALED` is not in Vulkan's mandatory vertex-buffer format list, so this is measured
+        /// on the selected device rather than assumed. Both drivers available here support it
+        /// (`spikes/vulkan-vertex-format-spike/`); a device that does not gets a by-name refusal
+        /// for a `Byte4`-spelled bone index rather than a wrong picture.
+        bool uscaledVertexFormatSupported_ = false;
+        /// VULKAN-180: see SetValidationEchoEnabledEXT. Recording is unconditional.
+        bool                   validationEcho_ = true;
+        /// plan_vulkan.md VULKAN-097: clip-space multiplier for XNA's slightly-less-than-half-
+        /// pixel centre correction. 63/64 in clip space is 63/128 of a viewport pixel, because
+        /// clip [-1,1] spans the viewport. Reduced at device creation if the device's
+        /// `subPixelPrecisionBits` cannot represent it below half a pixel -- rounding back UP to
+        /// exactly half would put the 1x1 triangle back on the excluded edge, which is the same
+        /// trap EasyGL hit on WebGL's four subpixel bits.
+        float xnaPixelCenterScale_ = 63.0f / 64.0f;
 
         // REMED-GFX-076: a cached effect descriptor set together with the sampled VkImageViews it
-        // was written against. The seven per-frame effect descriptor caches below key on a *hash* of
+        // was written against. The per-frame effect descriptor caches below key on a *hash* of
         // raw VkImageView handle values and persist across frames with no per-view free path. A view
         // handle is recyclable once its view is destroyed (GFX-075 retirement only *defers* the free
         // past the consuming frame's fence -- it does not keep the value reserved forever), so a
@@ -1609,10 +4662,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // lets EvictSampledViewFromCaches() drop (and fence-retire) every entry a dying view
         // participates in -- exactly as texSamplerDescSets_ is already evicted per (view,sampler)
         // key -- closing the reuse-aliasing window and giving these caches a bounded free path.
-        // Padded to the max sampled-view count of any effect (PbrEffect/SkinnedPbrEffect: 7).
-        static constexpr std::size_t kMaxEffectSampledViews = 7;
+        // Padded to the max sampled-view count of any effect (PbrEffect/SkinnedPbrEffect: 10).
+        static constexpr std::size_t kMaxEffectSampledViews = 10;
         struct EffectDescSetEntry {
             VkDescriptorSet                                  set = VK_NULL_HANDLE;
+            /// plan_vulkan.md VULKAN-181: the pool this set came from. These caches used to have
+            /// exactly one pool each, so eviction could take it as a parameter; they can now chain
+            /// further pools when a device refuses another set, and a set must be freed from the
+            /// pool that produced it.
+            VkDescriptorPool                                 pool = VK_NULL_HANDLE;
             std::array<VkImageView, kMaxEffectSampledViews>  views{}; // VK_NULL_HANDLE-padded
         };
         using EffectDescSetCache =
@@ -1628,7 +4686,6 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelines2DByDepthFmt_;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelines3D_;
-        VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutAlphaTest3D_ = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesAlphaTest3D_;
         VkDescriptorSetLayout descriptorSetLayout2Tex_     = VK_NULL_HANDLE;
@@ -1660,6 +4717,13 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkDeviceMemory, MaxFramesInFlight> envMapUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> envMapUBOPtr_ = {};
         // Default 1×1 white cube image for fallback when env map texture is null
+        /// plan_vulkan.md VULKAN-254: the 1x1x1 white volume that fills a set-1 `sampler3D` binding
+        /// nothing was bound to. A `sampler2D` filler cannot stand in for one: a descriptor's view
+        /// type must match the dimensionality the shader declares, which is exactly why set 1 gives
+        /// each sampler kind its own binding range rather than sharing four.
+        VkImage               defaultWhiteVolumeImage_ = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultWhiteVolumeMem_   = VK_NULL_HANDLE;
+        VkImageView           defaultWhiteVolumeView_  = VK_NULL_HANDLE;
         VkImage               defaultWhiteCubeImage_  = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteCubeMem_    = VK_NULL_HANDLE;
         VkImageView           defaultWhiteCubeView_   = VK_NULL_HANDLE;
@@ -1779,16 +4843,17 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> skinnedFogUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> skinnedFogUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> skinnedFogUBOPtr_ = {};
-        // --- Instanced 3D pipeline (Task 111) ---
-        // Uses pipelineLayoutExt3D_ (128-byte PC: [0..15]=VP, [16..31]=ext params).
-        // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
-        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelinesInstanced3D_;
+        // plans/plan_vulkan.md VULKAN-234: Task 111's `pipelinesInstanced3D_` and its
+        // `pipelineLayoutExt3D_` were here. An instanced draw takes its effect family's own
+        // pipelines now -- binding 0 per-vertex, binding 1 per-instance at stride 64, in whichever
+        // cache that family owns -- so there is no instanced cache and no instanced layout left.
 
         // PbrEffect resources (stride 48: VertexPositionNormalTangentTexture, or stride 60 with
         // the importer-appended TextureCoordinate1 channel).
-        // 7 combined image samplers (baseColor@0, normalMap@1, metallicRoughnessMap@2,
-        // emissiveMap@3, occlusionMap@4, specular strength@6, specular colour@7) plus one dynamic
-        // UBO (PbrParams@5, world/lights1-2/emissive/
+        // 10 combined image samplers (baseColor@0, normalMap@1, metallicRoughnessMap@2,
+        // emissiveMap@3, occlusionMap@4, specular strength@6, specular colour@7,
+        // irradiance cube@8, prefiltered cube@9, BRDF LUT@10) plus one dynamic UBO
+        // (PbrParams@5, world/lights1-2/emissive/
         // eyePos/metallic-roughness/fog -- everything FillExtPushConst's 128-byte PC has no room
         // for), mirroring descriptorSetLayoutSkinned_'s sampler+dynamic-UBO shape.
         VkDescriptorSetLayout descriptorSetLayoutPbr_ = VK_NULL_HANDLE;
@@ -1797,14 +4862,14 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbr3D_;
         std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        pbrDescSets_;
-        static constexpr uint32_t kPbrUBOStride   = 512; // 496 bytes used (124 floats), padded to 512
+        static constexpr uint32_t kPbrUBOStride   = 512; // 512 bytes used (128 floats)
         static constexpr uint32_t kPbrUBOMaxDraws = 512;
         std::array<VkBuffer,       MaxFramesInFlight> pbrUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrUBOPtr_ = {};
 
         // SkinnedPbrEffect resources (PBR + skinning combo, stride 68, or stride 76 with the
-        // importer-appended TextureCoordinate1 channel). Same 7 samplers as descriptorSetLayoutPbr_
+        // importer-appended TextureCoordinate1 channel). Same 10 samplers as descriptorSetLayoutPbr_
         // above, plus a dynamic bone-palette UBO (binding=5, same shape as
         // descriptorSetLayoutSkinned_'s own BoneBlock) and a PbrParams dynamic UBO at binding=6
         // (WeightsPerVertex packed alongside the fog vector, mirroring
@@ -1820,16 +4885,33 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedBoneUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedBoneUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedBoneUBOPtr_ = {};
-        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 496-byte PbrParams block
+        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 512-byte PbrParams block
         static constexpr uint32_t kPbrSkinnedUBOMaxDraws = 32;
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedUBOPtr_ = {};
 
+        // MOD-2236: one set-1 shadow bundle shared by every stock family that EasyGL makes a
+        // receiver (BasicEffect, SkinnedEffect, PbrEffect and SkinnedPbrEffect). Keeping it out of
+        // each family's set 0 prevents four copies of the same directional/cascade/punctual
+        // descriptors and makes their shader math consume one byte-identical UBO layout.
+        VkDescriptorSetLayout descriptorSetLayoutShadow_ = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolShadow_      = VK_NULL_HANDLE;
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
+                   MaxFramesInFlight>                        shadowDescSets_;
+        // 132 floats (528 bytes) are used. The 768-byte stride preserves the existing 256-byte
+        // dynamic-offset alignment contract used by every stock UBO ring in this renderer.
+        static constexpr uint32_t kShadowUBOStride   = 768;
+        static constexpr uint32_t kShadowUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> shadowUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> shadowUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> shadowUBOPtr_ = {};
+
         // Default 1×1 white texture used when DrawPrimitivesEx has no texture bound.
         VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteMemory_    = VK_NULL_HANDLE;
         VkImageView           defaultWhiteView_      = VK_NULL_HANDLE;
+        VkImageView           defaultWhiteArrayView_ = VK_NULL_HANDLE;
         VkDescriptorSet       defaultWhiteDescSet_   = VK_NULL_HANDLE;
 
         // Default 1×1 "flat" tangent-space normal texture (128,128,255,255 -> decodes to
@@ -1849,9 +4931,23 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // --- Lifetime tracking for externally-owned Vulkan resources ---
         std::vector<VulkanTextureRenderer*>       liveTextures_;
+        std::vector<VulkanTexture2DArrayRenderer*> liveTexture2DArrays_;
+        std::vector<VulkanStorageTexture2DRenderer*> liveStorageTexture2Ds_;
         std::vector<VulkanVertexBufferRenderer*>  liveVertexBuffers_;
         std::vector<VulkanIndexBufferRenderer*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetRenderer*>  liveRenderTargets_;
+        std::vector<VulkanStorageBufferRenderer*> liveStorageBuffers_;
+        std::vector<VulkanComputeShaderRenderer*> liveComputeShaders_;
+        std::vector<VulkanGpuTimerRenderer*>       liveGpuTimers_;
+        VulkanComputeShaderRenderer* boundComputeShader_ = nullptr;
+        std::unordered_map<std::uint32_t, std::weak_ptr<VulkanStorageBufferRenderer>>
+            boundDrawStorageBuffers_;
+        // VULKAN-407: the three classes that were in no list at all. Without them a Texture3D,
+        // TextureCube or RenderTargetCube outliving its GraphicsDevice leaked every Vulkan object
+        // it owned and read a destroyed VulkanRenderer on the way out.
+        std::vector<VulkanTexture3DRenderer*>      liveTexture3Ds_;
+        std::vector<VulkanTextureCubeRenderer*>    liveTextureCubes_;
+        std::vector<VulkanRenderTargetCubeRenderer*> liveRenderTargetCubes_;
 
         // --- MRT proxy (one active binding; old bindings retire through the frame fence) ---
         // REMED-GFX-166: shared, so a deferred entry queued against this proxy keeps it alive
@@ -1861,7 +4957,7 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t              lastMrtPipelineColorCountEXT_ = 0;
 
         // --- MRT render pass cache (target count + samples + shared depth format) ---
-        std::unordered_map<uint64_t, VkRenderPass> mrtRenderPasses_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> mrtRenderPasses_;
 
         // --- Per-frame 3D dynamic geometry buffers ---
         // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
@@ -1897,7 +4993,35 @@ namespace CNA::Internal::Renderers::Vulkan
             // between this draw and the frame that replays it.
             std::shared_ptr<VulkanRTSource> rt; // null = backbuffer
             std::size_t             stride = 16;  // vertex stride in bytes
+            /// plan_vulkan.md VULKAN-146: where each of the selected stock program's inputs
+            /// lives, taken from the caller's own VertexDeclaration at DRAW time (the record is
+            /// replayed at Present, by which point the buffer's declaration may have moved on).
+            /// Empty when the buffer carries no declaration, which is the
+            /// `VertexBuffer(device, count)` convenience constructor -- there the factory keeps its
+            /// stride-derived layout, exactly as before.
+            VulkanVertexInputLayoutEXT vertexLayout{};
+            /// plan_vulkan.md VULKAN-146: which BasicEffect-family program this draw selected,
+            /// decided at draw time so the replay does not have to re-derive it from the stride.
+            /// That matters because the stride is no longer sufficient: a Position+Colour vertex
+            /// padded to 32 bytes reaches the lit-textured stride, and the lit programs have no
+            /// colour input at all (REMED-GFX-234).
+            BasicProgramShapeEXT basicShape = BasicProgramShapeEXT::None;
             VkDescriptorSet         descSet = VK_NULL_HANDLE; // texture (or null)
+            /// plan_vulkan.md VULKAN-255: a `ShaderEffect` driving this draw. Everything the
+            /// replay needs is captured BY VALUE at draw time -- the pipeline included, unlike the
+            /// stock families whose pipelines are chosen at record time -- because the game may
+            /// dispose the effect before `Present()`. The handles stay valid past that: the
+            /// effect's destructor RETIRES its pipeline and layout on the frame fence rather than
+            /// destroying them, which is the same guarantee the sprite path's snapshot relies on.
+            bool                    useCustomEffect = false;
+            VkPipeline              customPipeline  = VK_NULL_HANDLE;
+            VkPipelineLayout        customLayout    = VK_NULL_HANDLE;
+            /// The effect's set-1 descriptor set: textures, array uniforms and caster matrices.
+            VkDescriptorSet         customBoundSet  = VK_NULL_HANDLE;
+            /// MOD-2250: reflected set-2 graphics storage-buffer descriptors and lifetimes.
+            VkDescriptorSet         customStorageSet = VK_NULL_HANDLE;
+            std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                                  VulkanResourceIntent>> customStorageBuffers;
             // Task 899: true for BasicEffect draws with no alpha-test/dual-tex/env-map/skinned/
             // lit-textured override (stride 16/20/24) -- routes to the new fog-capable
             // colored3d/textured3d/colored_textured3d bundle. Left false (default) by the legacy
@@ -1955,7 +5079,7 @@ namespace CNA::Internal::Renderers::Vulkan
             float                   skinnedFogUboData[64] = {};
             bool                    usePbr            = false; // true = Pbr3D pipeline (unskinned)
             bool                    usePbrSkinned     = false; // true = PbrSkinned3D pipeline (combo)
-            VkDescriptorSet         pbrDescSet        = VK_NULL_HANDLE; // 7-sampler set
+            VkDescriptorSet         pbrDescSet        = VK_NULL_HANDLE; // 10-sampler set
             // PbrParams UBO layout (floats), matching pbr3d.vert/frag.glsl's and
             // pbr3d_skinned.vert/frag.glsl's own struct exactly: [0..15]=light1/2 dir+diffuse (4
             // vec4), [16..31]=world mat4, [32..35]=eyePos+metallicFactor, [36..39]=emissive+
@@ -1965,10 +5089,19 @@ namespace CNA::Internal::Renderers::Vulkan
             // [60..63]=unclamped dielectric F0 RGB + specular factor,
             // [64..103]=ten core affine texture-transform rows,
             // [104..119]=four specular affine texture-transform rows,
-            // [120]=seven-bit texture-coordinate-set mask, [121..123]=deterministic padding.
-            // 124 floats = 496 bytes; the dynamic UBO stride is padded to 512 bytes.
-            float                   pbrUboData[124]   = {};
+            // [120]=seven-bit texture-coordinate-set mask, [121..123]=deterministic padding,
+            // [124]=IBL enabled, [125]=prefiltered mip count, [126]=IBL intensity,
+            // [127]=deterministic padding. 128 floats = the 512-byte dynamic UBO stride.
+            float                   pbrUboData[128]   = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
+            /// plan_vulkan.md VULKAN-199: with useLitTextured, selects the UV-less vertex stage --
+            /// XNA's Position+Normal layout, which has no texture coordinate to bind. The fragment
+            /// stage is the same one either way; it already gates its sample on textureEnabled.
+            bool                    litUntextured     = false;
+            /// plan_vulkan.md VULKAN-200: with useLitTextured, selects the vertex stage that reads
+            /// a per-vertex colour. Separate from litUntextured: the two are mutually exclusive
+            /// today (a coloured record carries a UV), but neither implies the other.
+            bool                    litColored        = false;
             // Task 1103: true = select the PreferPerPixelLighting=false (XNA's real default)
             // per-vertex-lit pipeline sibling instead of the (historically always-selected)
             // per-pixel-lit one, for whichever of useLitTextured/useSkinned is set. Only
@@ -1980,11 +5113,33 @@ namespace CNA::Internal::Renderers::Vulkan
             // [60..63]=fogVector. 256 bytes total.
             float                   litUboData[64]    = {};
             VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
+            // MOD-2236: common set 1 for the four EasyGL-equivalent stock receiver families.
+            // ShadowParams is 132 floats; see shadow_sampling.glsl for the matching std140 order.
+            VkDescriptorSet         shadowDescSet    = VK_NULL_HANDLE;
+            float                   shadowUboData[132] = {};
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
-            bool                    useInstanced      = false; // true = Instanced3D pipeline
+            /// plan_vulkan.md VULKAN-233: this draw came in through DrawInstancedPrimitives. It
+            /// is no longer a family selector -- every stock family's own flag decides which
+            /// programs run, and this only adds the per-instance binding to whichever pipeline
+            /// that family builds. It still selects the position-only `instanced3d` fallback when
+            /// no family claimed the draw.
+            bool                    useInstanced      = false;
+            /// plans/plan_vulkan.md VULKAN-234: this instanced draw's record declares only a
+            /// Position, so the BasicEffect colour program is compiled without its colour
+            /// input. Never set on a non-instanced draw -- the ordinary routes' shape
+            /// selector has no position-only answer.
+            bool                    instancedPositionOnly = false;
             std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
+            uint32_t                firstInstance     = 0;     // native first-instance selector
+            // MOD-2245: a live renderer record owns the native argument buffer until this
+            // deferred draw has been recorded; ReleaseVulkanResources retires its handles on the
+            // current frame fence if the public wrapper was disposed in the meantime.
+            std::shared_ptr<const IStorageBufferRenderer> indirectBufferLifetime;
+            VkBuffer                indirectBuffer    = VK_NULL_HANDLE;
+            VkDeviceSize            indirectByteOffset = 0;
+            bool                    indirectIndexed   = false;
             bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
             float                   depthBias         = 0.0f;  // XNA DepthBias (vkCmdSetDepthBias constant)
             float                   slopeScaleDepthBias = 0.0f; // XNA SlopeScaleDepthBias (slope factor)
@@ -2043,6 +5198,49 @@ namespace CNA::Internal::Renderers::Vulkan
             uint64_t                order   = 0;
         };
         std::vector<Pending3DDraw>  pending3D_;
+        /**
+         * @brief plan_vulkan.md VULKAN-255: queues one 3D draw that a `ShaderEffect` owns.
+         *
+         * A custom effect replaces the stock stride-dispatched program entirely, so this runs
+         * BEFORE the declaration guard and the family selection rather than after them: that guard
+         * judges whether the stock attribute table can represent the buffer's declaration, which is
+         * not a question about a shader this renderer did not write.
+         *
+         * Refuses by name -- never silently -- when the effect cannot drive the draw: a buffer with
+         * no `VertexDeclaration` (a custom shader's inputs cannot be inferred from a stride), an
+         * element format with no `VkFormat`, or a pipeline that will not build.
+         *
+         * @param world      The draw's world matrix, for the pixel-centre correction only.
+         * @param view       The view matrix.
+         * @param projection The projection matrix.
+         * @param indexData  Index bytes, or nullptr for a non-indexed draw.
+         * @param indexBytes Size of @p indexData in bytes.
+         * @param indexType  Index width, meaningful only with @p indexData.
+         */
+        void QueueCustomEffect3DDrawEXT(const IVertexBufferRenderer& vb_in,
+                                        const Matrix& world, const Matrix& view,
+                                        const Matrix& projection,
+                                        PrimitiveType primitive, int primitiveCount,
+                                        const GpuDrawParams& params,
+                                        const void* indexData, std::size_t indexBytes,
+                                        VkIndexType indexType,
+                                        const IVertexBufferRenderer* instVb_in = nullptr,
+                                        int instanceVertexOffset = 0,
+                                        int instanceFrequency = 1,
+                                        int instanceCount = 1);
+        void DrawInstancedPrimitivesCoreEXT(
+            const IVertexBufferRenderer& vb,
+            const IIndexBufferRenderer* ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, int instanceCount,
+            const GpuDrawParams& params);
+        void QueueIndirectDrawEXT(
+            const IVertexBufferRenderer& vb,
+            const IIndexBufferRenderer* ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive,
+            const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         [[nodiscard]] VkPipeline GetOrCreateCompiledEffectPipelineEXT(
             const Pending3DDraw& draw, uint32_t colorAttachmentCount, bool msaa,
@@ -2164,6 +5362,97 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         std::vector<PendingClear> pendingClears_;
         /**
+         * @brief One deferred timestamp write in the same ordered stream as graphics work.
+         *
+         * The public timer owns the query pool. Its destructor removes unrecorded events and
+         * fence-retires the pool, so the raw timer pointer is never dereferenced after destruction.
+         */
+        struct PendingTimestamp {
+            VulkanGpuTimerRenderer* timer = nullptr;
+            VkQueryPool pool = VK_NULL_HANDLE;
+            std::uint64_t serial = 0;
+            bool begin = false;
+            std::uint64_t segment = 0;
+            std::shared_ptr<VulkanRTSource> rt;
+            std::uint64_t order = 0;
+        };
+        std::vector<PendingTimestamp> pendingTimestamps_;
+        /** @brief One compute dispatch, buffer copy, or image upload in public-call order. */
+        struct PendingModernCommand {
+            enum class Kind { Compute, BufferCopy, ImageUpload } kind = Kind::Compute;
+            std::uint64_t segment = 0;
+            std::shared_ptr<VulkanRTSource> rt;
+            std::uint64_t order = 0;
+
+            VkPipeline pipeline = VK_NULL_HANDLE;
+            VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+            VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+            std::vector<std::uint8_t> pushConstantBytes;
+            std::uint32_t groupsX = 0, groupsY = 0, groupsZ = 0;
+            std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> constantBuffers;
+            std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> storageBuffers;
+            struct StorageImageUse {
+                std::shared_ptr<VulkanStorageTexture2DRenderer> image;
+                std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+                std::shared_ptr<VulkanTextureRenderer> texture;
+                int accessMode = 2;
+            };
+            std::vector<StorageImageUse> storageImages;
+            struct SampledImageUse {
+                std::shared_ptr<VulkanTextureRenderer> texture;
+                std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+            };
+            std::vector<SampledImageUse> sampledImages;
+
+            std::shared_ptr<VulkanStorageBufferRenderer> copySource;
+            std::shared_ptr<VulkanStorageBufferRenderer> copyDestination;
+            VkDeviceSize sourceOffset = 0;
+            VkDeviceSize destinationOffset = 0;
+            VkDeviceSize byteSize = 0;
+
+            std::shared_ptr<VulkanStorageTexture2DRenderer> uploadImage;
+            std::shared_ptr<VulkanTextureRenderer> uploadTexture;
+            VkBuffer uploadStagingBuffer = VK_NULL_HANDLE;
+            VkBufferImageCopy uploadRegion{};
+        };
+        std::vector<PendingModernCommand> pendingModernCommands_;
+        void QueueComputeDispatchEXT(PendingModernCommand&& command);
+        void QueueStorageBufferCopyEXT(PendingModernCommand&& command);
+        void QueueStorageImageUploadEXT(PendingModernCommand&& command);
+        void RecordModernCommandEXT(VkCommandBuffer cb, const PendingModernCommand& command);
+        void FlushModernSampledRenderTargetsEXT();
+        void FlushPendingModernCommandsForHostEXT(
+            const VulkanStorageBufferRenderer* targetBuffer = nullptr,
+            VulkanResourceIntent hostIntent = VulkanResourceIntent::CpuRead);
+        void SplitRenderPassForModernCommandEXT();
+        struct NativeResourceUsageEXT
+        {
+            VkPipelineStageFlags stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkAccessFlags access = 0;
+            VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            bool writes = false;
+        };
+        [[nodiscard]] static NativeResourceUsageEXT DescribeResourceIntentEXT(
+            VulkanResourceIntent intent, bool image);
+        void NoteHostBufferUsageEXT(
+            VulkanResourceUsageState& state, VulkanResourceIntent intent) const;
+        bool RecordBufferUsageEXT(
+            VkCommandBuffer cb, VkBuffer buffer, VulkanResourceUsageState& state,
+            VulkanResourceIntent intent);
+        std::size_t RecordImageUsageEXT(
+            VkCommandBuffer cb, VkImage image,
+            std::vector<VulkanResourceUsageState>& states,
+            std::uint32_t totalMipLevels, VkImageAspectFlags aspects,
+            std::uint32_t baseMipLevel, std::uint32_t levelCount,
+            std::uint32_t baseArrayLayer, std::uint32_t layerCount,
+            VulkanResourceIntent intent);
+        /**
+         * @brief Queues one timestamp at the current public command position.
+         * @param timer Timer record that owns the query pool.
+         * @param begin True for slot zero/top-of-pipe, false for slot one/bottom-of-pipe.
+         */
+        void QueueGpuTimestampEXT(VulkanGpuTimerRenderer* timer, bool begin);
+        /**
          * @brief Records one public Clear() call. REMED-GFX-129/140/143, Task 875.
          *
          * @param color   The caller cleared the colour target.
@@ -2205,17 +5494,35 @@ namespace CNA::Internal::Renderers::Vulkan
             uint64_t                       generation = 0;
             std::vector<VkImageView>       imageViews;
             std::vector<VkImage>           images;
+            /// plan_vulkan.md `VULKAN-392` (finding F-13): vertex and index buffers. They used to
+            /// be destroyed immediately behind a `vkDeviceWaitIdle`, which made every
+            /// `DrawUserPrimitives` call a full-device stall, because that route allocates and
+            /// destroys a throwaway `VertexBuffer` per call.
+            std::vector<VkBuffer>          buffers;
             std::vector<VkDeviceMemory>    memories;
             std::vector<VkFramebuffer>     framebuffers;
             std::vector<VkPipeline>        pipelines;
             std::vector<VkPipelineLayout>  pipelineLayouts;
             std::vector<VkShaderModule>    shaderModules;
+            /// plan_vulkan.md VULKAN-253: a ShaderEffect's set-1 descriptor set layout. The
+            /// pipeline layouts built from it are themselves retired, and destroying the set
+            /// layout while one of those is still named by a recorded frame is the kind of
+            /// ordering question this queue exists to stop having to reason about.
+            std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+            /// Descriptor pools owned by retired compute programs; their sets die with the pool.
+            std::vector<VkDescriptorPool> descriptorPools;
             std::vector<VkQueryPool>       queryPools;
             std::vector<VkDescriptorSet>   descriptorSets; // all allocated from descriptorPool_
-            // REMED-GFX-076: effect descriptor sets evicted from the seven per-frame effect caches
-            // when a sampled view they reference dies. Unlike `descriptorSets` (all from
-            // descriptorPool_), each is freed from its OWN pool, so the pool is carried with the set.
+            // Descriptor sets evicted from effect or compute caches when a resource they reference
+            // dies. Unlike `descriptorSets` (all from descriptorPool_), each is freed from its OWN
+            // pool, so the pool is carried with the set.
             std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>> poolDescriptorSets;
+            /// plan_vulkan.md `VULKAN-160`: samplers evicted from `samplerCache_` when it passes its
+            /// bound. A `VkSampler` outlives its cache entry by as long as any recorded frame can
+            /// still reference it, which is what this queue is for.
+            std::vector<VkSampler>         samplers;
+            /// MOD-2253: number of storage-image upload staging buffer/memory pairs in this bucket.
+            std::size_t modernStagingAllocations = 0;
         };
         std::vector<RetiredResources>                                    retiredResources_;
         // MRT proxies are retired as whole objects: SetRenderTargets() replaces the live proxy
@@ -2241,14 +5548,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // later resource that happens to reuse the freed VkImageView handle value can never collide
         // with a stale cached descriptor set.
         void EvictSampledViewFromCaches(VkImageView view, RetiredResources& into);
+        void EvictComputeBufferFromCachesEXT(VkBuffer buffer, RetiredResources& into);
         // REMED-GFX-076: erase (and fence-retire to `pool`) every entry in one effect descriptor-set
         // cache that references `view`, so a later resource reusing the freed VkImageView handle
         // value gets a fresh descriptor set rather than aliasing this (now-destroyed) one. Called
         // once per effect cache from EvictSampledViewFromCaches().
-        void EvictViewFromEffectCache(EffectDescSetCache& caches, VkDescriptorPool pool,
+        void EvictViewFromEffectCache(EffectDescSetCache& caches, VkDescriptorPool /*unusedSinceVulkan181*/,
                                       VkImageView view, RetiredResources& into);
     public:
-        // REMED-GFX-076: read-only test introspection -- total live entries across all seven
+        // REMED-GFX-076: read-only test introspection -- total live entries across all
         // per-frame effect descriptor-set caches. The resource-identity regression uses it to prove
         // a destroyed sampled resource's cached sets are evicted (count returns to baseline). No
         // effect on rendering.
@@ -2266,12 +5574,27 @@ namespace CNA::Internal::Renderers::Vulkan
         // pointer, keeping the draw) and from activeOcclusionQuery_, so RecordCommandBuffer never
         // dereferences the freed query wrapper. The VkQueryPool itself is retired separately.
         void PurgeDeferredQuery(VulkanOcclusionQueryRenderer* q);
+        /** @brief Removes every unrecorded event belonging to a destroyed/restarted GPU timer. */
+        void PurgeDeferredGpuTimer(VulkanGpuTimerRenderer* timer);
 
-        // Cached vkCmdInsertDebugUtilsLabelEXT — loaded once after device creation, nullptr if unsupported.
+        // MOD-2246: cached optional debug-utils entry points. Labels work without validation;
+        // message submission additionally requires the validation messenger installed above.
         PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugLabel_ = nullptr;
+        PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugLabel_ = nullptr;
+        PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugLabel_ = nullptr;
+        PFN_vkSubmitDebugUtilsMessageEXT pfnSubmitDebugMessage_ = nullptr;
 
         // --- Virtual (game) resolution for 2D NDC mapping ---
         int virtualWidth_  = 0;
+        /// plan_vulkan.md VULKAN-330: how the virtual resolution maps onto the swapchain image.
+        ///
+        /// FixedHeightDynamicWidth, matching EasyGL's own default and -- more importantly -- the
+        /// behaviour this renderer already had before the mode was implemented: a uniform
+        /// height-derived scale over the whole drawable. GraphicsDevice forwards a mode only when
+        /// a game asks for one, so this default is load-bearing rather than cosmetic; Letterbox
+        /// here would have silently letterboxed every game that never calls SetPresentationMode.
+        CNA::Internal::Renderers::CnaPresentationMode presentationMode_ =
+            CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth;
         int virtualHeight_ = 0;
 
         // --- Frame state ---
@@ -2337,6 +5660,13 @@ namespace CNA::Internal::Renderers::Vulkan
         bool     scissorEnabled_            = false;
         bool     fillModeWireframe_         = false; // current XNA FillMode::WireFrame state
         bool     fillModeNonSolidSupported_ = false; // VkPhysicalDeviceFeatures.fillModeNonSolid
+        // VULKAN-179: VK_EXT_4444_formats was offered by the device and enabled, so
+        // VK_FORMAT_A4R4G4B4_UNORM_PACK16 (SurfaceFormat::Bgra4444) may be named. Optional on
+        // purpose -- the format has no core-1.1 spelling, so this is a device fact, not a build one.
+        bool     formatA4R4G4B4Supported_ = false;
+        // VULKAN-172: VkPhysicalDeviceFeatures.textureCompressionBC, queried AND enabled at device
+        // creation. Without it no BCn format may be used at all, whatever VkFormatProperties says.
+        bool     textureCompressionBCSupported_ = false;
         float    depthBias_                 = 0.0f;  // XNA RasterizerState.DepthBias
         float    slopeScaleDepthBias_       = 0.0f;  // XNA RasterizerState.SlopeScaleDepthBias
         int32_t  scissorX_ = 0, scissorY_ = 0;
@@ -2381,13 +5711,42 @@ namespace CNA::Internal::Renderers::Vulkan
         // created against the discard variant is render-pass-compatible with the load variant
         // too (they differ only in loadOp/initialLayout, which compatibility ignores), so callers
         // that only need a pipeline's *reference* render pass should always pass false.
-        VkRenderPass GetOrCreateRTRenderPass(VkFormat depthFmt, bool discardContents);
+        VkRenderPass GetOrCreateRTRenderPass(VkFormat colorFmt, VkFormat depthFmt,
+                                             bool discardContents);
         // Task 911: MSAA counterpart. REMED-GFX-141 gave it the LOAD_OP_LOAD variant it never had:
         // `discardContents` false keeps the multisample colour attachment's own samples across
         // passes (LOAD/STORE, COLOR_ATTACHMENT_OPTIMAL in and out) instead of clearing them and
         // discarding them at every pass end. The two variants are render-pass-compatible, so the
         // same pipelines serve both.
-        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt, bool discardContents);
+        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat colorFmt, VkFormat depthFmt,
+                                                 bool discardContents,
+                                                 VkSampleCountFlagBits samples);
+        /**
+         * @brief plan_vulkan.md VULKAN-216: the sample count `msaa == true` currently denotes.
+         *
+         * Every pipeline factory here takes a `bool msaa` and, before this row, resolved it
+         * against the renderer's one device-wide `sampleCount_`. A render target may now carry a
+         * count of its own, so the bit alone no longer says how many samples the pipeline must
+         * rasterize with. This member is that answer, set once per render-pass segment in
+         * `RecordCommandBuffer` -- to `sampleCount_` for a backbuffer segment and to the source's
+         * `GetMsaaSampleCountEXT()` for a render-target segment -- and read by every factory
+         * through `MsaaSamplesForPipelinesEXT()`.
+         *
+         * It is deliberately NOT a parameter on fourteen factory signatures: the value is a
+         * property of the pass being recorded, not of the draw, and every one of those factories
+         * is only ever called from inside a segment that has just set it.
+         */
+        [[nodiscard]] VkSampleCountFlagBits MsaaSamplesForPipelinesEXT(bool msaa) const
+        {
+            return msaa ? pipelineSampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        }
+        VkSampleCountFlagBits pipelineSampleCount_ = VK_SAMPLE_COUNT_1_BIT;
+        std::array<int32_t, 4> pipelineColorFormats_{};
+        void SetPipelineColorFormatsEXT(const VulkanRTSource* target);
+        void ApplyPipelineTargetKeyEXT(PipelineKey& key) const noexcept
+        {
+            key.cf = pipelineColorFormats_;
+        }
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();
@@ -2408,8 +5767,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-071: also parameterized by the batch's BlendState (blend enable + per-channel
         // factors/functions) so SpriteBatch.Begin()'s BlendState drives the colour-attachment blend
         // equation via FillBlendAttachmentState, instead of a hardcoded alpha-blend.
+        /// @param ds        VULKAN-058: the batch's DepthStencilState. Baked into the pipeline
+        ///                  (the compare/write/op fields) and into its key; the three mask/reference
+        ///                  values are dynamic, exactly as on the 3D route.
+        /// @param depthTest  VULKAN-058: DepthStencilState.DepthBufferEnable for this batch.
+        /// @param depthWrite VULKAN-058: DepthStencilState.DepthBufferWriteEnable for this batch.
         VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt, uint32_t colorAttachmentCount,
-                                         bool blend, const BlendKeyParams& bp);
+                                         bool blend, const BlendKeyParams& bp,
+                                         const DepthStencilKeyParams& ds = {},
+                                         bool depthTest = false, bool depthWrite = false);
         VkFormat   FindDepthFormat() const;
         void       CreateDepthResources();
         void       CleanupDepthResources();
@@ -2425,7 +5791,9 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    uint32_t colorAttachmentCount, bool wireframe,
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
                                                     VkSampler sampler0, VkSampler sampler1);
@@ -2435,7 +5803,9 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
         /// REMED-GFX-169: `sampler2D`/`samplerCube` are the SamplerStates of slots 0 and 1, the
@@ -2445,13 +5815,17 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
                                                   VkImageView view2D, VkImageView viewCube,
                                                   VkSampler sampler2D, VkSampler samplerCube);
-        VkPipeline GetOrCreatePipelineEnvMap3D(VkPrimitiveTopology,
+        /// VULKAN-158: @p stride is the caller's record stride, used for the vertex binding and the
+        /// cache key when the declaration supplied every input; the family's canonical 32 otherwise.
+        VkPipeline GetOrCreatePipelineEnvMap3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();
@@ -2462,13 +5836,18 @@ namespace CNA::Internal::Renderers::Vulkan
         // (no per-vertex color), 56 = the same layout with a per-vertex Color appended (CNB-67 /
         // SkinnedEffect::VertexColorEnabled) -- mirrors GetOrCreatePipelineDualTex3D's own
         // stride-selects-shader-variant convention.
+        // plans/plan_vulkan.md VULKAN-231: `instanced` selects the CNA_INSTANCED variant of the
+        // same source and adds binding 1, exactly as the alpha-test, lit, dual-texture and env-map
+        // factories do.
         VkPipeline GetOrCreatePipelineSkinned3D(std::size_t stride, VkPrimitiveTopology,
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
                                                  uint32_t colorAttachmentCount, bool wireframe,
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineSkinned3D above
         // (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout, different
         // shader modules and pipeline cache only.
@@ -2478,48 +5857,72 @@ namespace CNA::Internal::Renderers::Vulkan
                                                  uint32_t colorAttachmentCount, bool wireframe,
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // PbrEffect (unskinned, stride 48) / SkinnedPbrEffect (PBR + skinning combo, stride 68).
         // Metallic-roughness BRDF ported from EasyGLRenderer::EnsurePbrProgram()/
         // EnsurePbrSkinnedProgram() unchanged; only the resource-binding plumbing differs.
         void       EnsurePbrResources();
-        /// REMED-GFX-169: @p samplers are the SamplerStates of slots 0..6, one per material map.
-        /// All seven participate in the cache key.
+        /// REMED-GFX-169/MOD-2235: @p samplers are the seven material slots followed by IBL
+        /// slots 10..12. All ten views and samplers participate in the cache key.
         VkDescriptorSet GetOrCreatePbrDescSet(uint32_t frameIdx, VkImageView baseColor,
                                                VkImageView normalMap, VkImageView metallicRoughness,
                                                VkImageView emissive, VkImageView occlusion,
                                                VkImageView specular, VkImageView specularColor,
-                                               const VkSampler (&samplers)[7]);
+                                               VkImageView iblIrradiance,
+                                               VkImageView iblPrefilteredSpecular,
+                                               VkImageView iblBrdfLut,
+                                               const VkSampler (&samplers)[10]);
+        // plans/plan_vulkan.md VULKAN-232: `instanced` selects the CNA_INSTANCED variant of the
+        // same source and adds binding 1, as in every other family.
         VkPipeline GetOrCreatePipelinePbr3D(std::size_t stride, VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
                                              uint32_t colorAttachmentCount, bool wireframe,
                                              bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       EnsurePbrSkinnedResources();
-        /// REMED-GFX-169: as GetOrCreatePbrDescSet, slots 0..6.
+        /// REMED-GFX-169/MOD-2235: as GetOrCreatePbrDescSet, including the three IBL slots.
         VkDescriptorSet GetOrCreatePbrSkinnedDescSet(uint32_t frameIdx, VkImageView baseColor,
                                                       VkImageView normalMap, VkImageView metallicRoughness,
                                                       VkImageView emissive, VkImageView occlusion,
                                                       VkImageView specular, VkImageView specularColor,
-                                                      const VkSampler (&samplers)[7]);
+                                                      VkImageView iblIrradiance,
+                                                      VkImageView iblPrefilteredSpecular,
+                                                      VkImageView iblBrdfLut,
+                                                      const VkSampler (&samplers)[10]);
         VkPipeline GetOrCreatePipelinePbrSkinned3D(std::size_t stride, VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
                                              uint32_t colorAttachmentCount, bool wireframe,
                                              bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       EnsureDefaultWhiteTexture();
+        /// VULKAN-254: creates @ref defaultWhiteVolumeImage_ and its view, once.
+        void       EnsureDefaultWhiteVolumeTexture();
         void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
-        // Fills the 124-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
+        // Fills the 128-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
         // pbr3d_skinned.vert/frag.glsl (see Pending3DDraw::pbrUboData's own layout comment).
         // weightsPerVertex is only meaningful for the pbr+skinned combo (stride 68); pass 0 for
         // the unskinned PbrEffect path (stride 48), where it's unused.
-        void       FillPbrUboData(float (&out)[124], const GpuDrawParams& p, float weightsPerVertex);
+        void       FillPbrUboData(float (&out)[128], const GpuDrawParams& p, float weightsPerVertex);
+        // MOD-2236: shared shadow receiver descriptor/UBO bundle (set 1 in all four families).
+        void       EnsureShadowResources();
+        VkDescriptorSet GetOrCreateShadowDescSet(uint32_t frameIdx,
+                                                  VkImageView directional,
+                                                  VkImageView point,
+                                                  VkImageView spot,
+                                                  const VkSampler (&samplers)[3]);
+        void       FillShadowRecordEXT(Pending3DDraw& d, const GpuDrawParams& p);
         // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).
@@ -2533,7 +5936,10 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      uint32_t colorAttachmentCount, bool wireframe,
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool untextured = false, std::size_t recordStride = 0,
+                                         bool colored = false, bool instanced = false);
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineLitTextured3D
         // above (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout,
         // different shader modules and pipeline cache only.
@@ -2543,7 +5949,10 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      uint32_t colorAttachmentCount, bool wireframe,
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool untextured = false, std::size_t recordStride = 0,
+                                         bool colored = false, bool instanced = false);
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
         /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written. This is
@@ -2551,20 +5960,25 @@ namespace CNA::Internal::Renderers::Vulkan
         /// fog-enabled), so it is the most-travelled of the corrected paths.
         VkDescriptorSet GetOrCreateFogTex3DDescSet(uint32_t frameIdx, VkImageView view2D,
                                                     VkSampler sampler);
-        VkPipeline GetOrCreatePipelineFogColored3D(VkPrimitiveTopology,
+        VkPipeline GetOrCreatePipelineFogColored3D(std::size_t stride, VkPrimitiveTopology,
                                                     bool depthTest, bool depthWrite,
                                                     bool blend, int cullMode,
                                                     uint32_t colorAttachmentCount, bool wireframe,
                                                     bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
-        VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, VkPrimitiveTopology,
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false,
+                                         bool positionOnly = false);
+        VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, bool colored, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
@@ -2572,8 +5986,17 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    uint32_t colorAttachmentCount, bool wireframe,
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
-        void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+        /// plan_vulkan.md VULKAN-223: builds the stock-effect family half of a queued 3D draw --
+        /// descriptor sets, UBO payloads and the per-family flags. Extracted from the two ordinary
+        /// draw routes, which carried copies differing by one redundant statement, so that a third
+        /// caller (the instanced route, `VULKAN-218`) becomes possible without a third copy.
+        void FillStockFamilyRecordEXT(Pending3DDraw& d, const GpuDrawParams& params,
+                                      bool needsPbr, bool needsSkinned, bool needsEnvMap,
+                                      bool needsDualTex, bool needsLitTextured,
+                                      bool needsLitUntextured, bool needsLitColored);
+        void FillInstancedPushConst(float (&pc)[32], const Matrix& world, const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();
         void EnsureFrame3DInstBuffers();
@@ -2584,19 +6007,29 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 911: MSAA counterpart to GetOrCreatePipeline2D(), same depth-format-keyed caching.
         // REMED-GFX-071: also BlendState-parameterized, see GetOrCreatePipeline2D().
         VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt, uint32_t colorAttachmentCount,
-                                             bool blend, const BlendKeyParams& bp);
+                                             bool blend, const BlendKeyParams& bp,
+                                             const DepthStencilKeyParams& ds = {},
+                                             bool depthTest = false, bool depthWrite = false);
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers();
-        VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount,
+        VkRenderPass GetOrCreateMRTRenderPass(const std::vector<VkFormat>& colorFormats,
                                               VkSampleCountFlagBits sampleCount,
                                               VkFormat depthFormat);
-        // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses a
-        // pass keyed by color count, sample count, and binding 0's depth format; single-target
-        // draws reuse compatible backbuffer passes or a depth-format-keyed RT pass.
+        // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses every
+        // colour format, the sample count and binding 0's depth format; single-target draws reuse
+        // compatible backbuffer passes or an exact-format RT pass.
+        /// @param samplesOverride VULKAN-216: the sample count to build against when the caller
+        ///        already knows it and is NOT inside a `RecordCommandBuffer` segment (the effect
+        ///        renderer builds its pipeline at `SpriteBatch::End()` time, before replay, so
+        ///        `pipelineSampleCount_` does not yet describe the target it is about to draw
+        ///        into). 0 means "use `MsaaSamplesForPipelinesEXT(msaa)`", which is every other
+        ///        caller.
         VkRenderPass PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
-                                               VkFormat targetDepthFmt);
+                                               VkFormat targetDepthFmt,
+                                               VkSampleCountFlagBits samplesOverride =
+                                                   static_cast<VkSampleCountFlagBits>(0));
 
         // --- Per-slot SamplerState (Task 118) ---
         void ApplySamplerState(int slot, int filter,
@@ -2621,16 +6054,17 @@ namespace CNA::Internal::Renderers::Vulkan
         void ApplySamplerAddressW(int slot, int addressW) override;
         VkDescriptorSet GetOrCreateTexSamplerDescSet(VkImageView view, VkSampler sampler);
 
-        /// REMED-GFX-169: slots 0..6 as one array, for the two PBR descriptor builders whose
-        /// seven material maps occupy those slots.
+        /// REMED-GFX-169/MOD-2235: material slots 0..6 followed by IBL slots 10..12, for the
+        /// two PBR descriptor builders.
         /// A struct return keeps the array a value at the call site rather than a raw pointer
         /// into member storage that a later ApplySamplerState could mutate.
-        struct PbrSlotSamplersEXTResult { VkSampler s[7]; };
+        struct PbrSlotSamplersEXTResult { VkSampler s[10]; };
         [[nodiscard]] PbrSlotSamplersEXTResult PbrSlotSamplersRawEXT() const
         {
             return { { slotSamplers_[0], slotSamplers_[1], slotSamplers_[2],
                        slotSamplers_[3], slotSamplers_[4], slotSamplers_[5],
-                       slotSamplers_[6] } };
+                       slotSamplers_[6], slotSamplers_[10], slotSamplers_[11],
+                       slotSamplers_[12] } };
         }
 
         // --- Custom Effect / SPIR-V loading (Task 119) ---
@@ -2660,7 +6094,8 @@ namespace CNA::Internal::Renderers::Vulkan
         //
         // `flushSegments` is the exact set of bind cycles this record must replay, computed by
         // FlushDeferredRenderTarget as the transitive closure of "the target being read, plus every
-        // render target its cycles sample, plus theirs". Replay is in ascending segment id, i.e.
+        // render target its cycles sample or an included compute command binds, plus theirs".
+        // Replay is in ascending segment id, i.e.
         // exactly the public order Present would have used. Nothing is over-synchronized: no wait,
         // no submit per target switch, no readback and no extra barrier are introduced, because each
         // render target's render pass already ends in SHADER_READ_ONLY_OPTIMAL with a
@@ -2672,7 +6107,8 @@ namespace CNA::Internal::Renderers::Vulkan
         void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
                                  RecordMode mode = RecordMode::Full,
                                  VulkanRTSource* onlyRT = nullptr,
-                                 const std::vector<uint64_t>* flushSegments = nullptr);
+                                 const std::vector<uint64_t>* flushSegments = nullptr,
+                                 const std::function<void(VkCommandBuffer)>& afterRenderTargets = {});
 
         // REMED-GFX-151: the render-to-texture dependency graph for the frame being accumulated --
         // (bind cycle, group of a render target that cycle SAMPLES). Populated at enqueue time,
@@ -2681,6 +6117,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // `VulkanRTSource::DepthStencilOwnerEXT()` value, the same key the flush and the recorder
         // use for "one target", so a dependency and the work satisfying it cannot drift apart.
         std::vector<std::pair<uint64_t, const void*>> segmentSampledGroups_;
+        struct PendingSampledImageUseEXT
+        {
+            std::uint64_t segment = 0;
+            std::shared_ptr<VulkanStorageTexture2DRenderer> storage;
+            std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+            std::shared_ptr<VulkanTextureRenderer> texture;
+        };
+        std::vector<PendingSampledImageUseEXT> pendingSampledImages_;
         // REMED-GFX-194 test diagnostics: exact pending proxy cycles and public attachment slots
         // selected for the latest 2D/cube target read. Never participates in selection or replay.
         std::vector<std::pair<uint64_t, uint32_t>> lastMrtReadbackMatchesEXT_;
@@ -2692,6 +6136,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void NoteSampledRenderTargetGroupEXT(uint64_t segment, const void* group);
         /** @brief SpriteBatch entry point: notes @p tex if it is a render target. */
         void NoteSampledRenderTargetEXT(uint64_t segment, const IVulkanSamplable* tex);
+        /** @brief Retains and tracks a sampled two-dimensional render target. */
+        void NoteSampledTextureEXT(uint64_t segment, const ITextureRenderer* texture);
+        /** @brief Retains and tracks a sampled dedicated storage texture. */
+        void NoteSampledStorageTextureEXT(
+            uint64_t segment, std::shared_ptr<VulkanStorageTexture2DRenderer> texture);
         /** @brief Notes every render target a 3D draw samples, across all GpuDrawParams slots. */
         void NoteSampledSourcesEXT(const GpuDrawParams& params);
 
@@ -2725,16 +6174,17 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkImage image, VkImageView view, VkFramebuffer fb) const;
 
         // REMED-GFX-074: if `rt` has pending deferred work, record + submit ONLY its off-screen
-        // pass now (no present, no swapchain, no frame-bookkeeping advance) so its colour image
-        // holds the rendered result before a GetData readback, then drop the consumed entries so
-        // Present() never replays them (no double-render). No-op if nothing is queued for `rt`.
+        // pass now (no present, no swapchain, no frame-bookkeeping advance), append the supplied
+        // GetData transition/copy commands, and drop the consumed entries so Present() never
+        // replays them (no double-render). With no pending pass, it records only the copy.
         // REMED-GFX-194: `mrtAttachmentPass` is the exact immutable 2D or cube-face destination
         // being read. Each MRT proxy retains those pass objects in public attachment order, so the
         // lookup distinguishes resource, cube face, mip chain, attachment slot and binding cycle
         // without falling back to parent-cube or resolve-view identity.
         void FlushDeferredRenderTarget(VulkanRTSource* rt,
                                        const VulkanTargetPassEXT* mrtAttachmentPass,
-                                       int requestedMipLevel);
+                                       int requestedMipLevel,
+                                       const std::function<void(VkCommandBuffer)>& recordReadback);
 
         // Submits one frame (render + optional deferred readback copy). When deferSwap is
         // true the swapchain image is acquired, rendered and the GPU is waited on, but
@@ -2753,6 +6203,15 @@ namespace CNA::Internal::Renderers::Vulkan
                               VkBuffer& buf, VkDeviceMemory& mem, void** mapped = nullptr);
         VkCommandBuffer BeginOneTimeCommands();
         void            EndOneTimeCommands(VkCommandBuffer cb);
+        void            SubmitAndWaitCommandBufferEXT(VkCommandBuffer cb, bool countOneTime);
+        /// plan_vulkan.md VULKAN-401: record a layout transition into a caller's command buffer,
+        /// so a multi-step operation on one image costs one completion wait instead of one per step.
+        void RecordImageLayoutTransition(VkCommandBuffer cb, VkImage img,
+                                         VkImageLayout from, VkImageLayout to,
+                                         uint32_t baseMipLevel = 0);
+        /// VULKAN-401: the copy's recording half, for the same reason.
+        void RecordBufferToImageCopy(VkCommandBuffer cb, VkBuffer buf, VkImage img,
+                                     uint32_t w, uint32_t h);
         void TransitionImageLayout(VkImage img, VkImageLayout from, VkImageLayout to,
                                    uint32_t baseMipLevel = 0);
         void CopyBufferToImage(VkBuffer buf, VkImage img, uint32_t w, uint32_t h);

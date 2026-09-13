@@ -65,6 +65,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Smoke COMMAND ${_directx9_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    if(CNA_DIRECTX9_COMPILED_EFFECTS)
+        cna_directx9_ctest_command(_directx9_compiled_effects_cmd CnaRendererTests)
+        cna_register_renderer_test(NAME DirectX9_CompiledEffects
+            COMMAND ${_directx9_compiled_effects_cmd}
+                    --gtest_filter=DirectX9CompiledEffect*
+            TIMEOUT 300 LABELS "DIRECTX9;CompiledEffects")
+    endif()
+
     # REMED-GFX-092: deterministic, renderer-instance-local HRESULT injection for D3D9 state,
     # target/depth binding, depth allocation, retry, rollback, and lost-device mapping.  The
     # native success path is still exercised by DirectX9_Smoke and this test's setup/retry operations.
@@ -383,8 +391,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
 
     # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
-    # DECLARE_TEXTURE(Texture2, 1). D3D9 declares stride 20 with vertexColor=false unsupported for
-    # DualTextureEffect (plans/plan_dx9.md D9-82d), so the fixture reports its own honest skip there.
+    # DECLARE_TEXTURE(Texture2, 1). D9-127 translates the fixture's real dual-UV public declaration,
+    # including the stride-32 vertex-colour variant, rather than inferring either from byte stride.
     cna_directx9_test(cna_test_directx9_dualtexture_slot_sampler
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtexture_slot_sampler_contract_test.cpp)
     cna_directx9_ctest_command(_directx9_dualtexture_slot_sampler_cmd cna_test_directx9_dualtexture_slot_sampler)

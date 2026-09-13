@@ -23,8 +23,8 @@
 // This test resizes the real SDL window directly via SDL_SetWindowSize (bypassing
 // GraphicsDeviceManager entirely) and polls for a few frames until the async X11/Xvfb resize
 // event has propagated, then checks:
-//   1. Viewport height stays pinned to PreferredBackBufferHeight (CNA's default
-//      PresentationMode::FixedHeightDynamicWidth only lets width track the window).
+//   1. Viewport height stays pinned to PreferredBackBufferHeight (this fixture explicitly selects
+//      PresentationMode::FixedHeightDynamicWidth, which only lets width track the window).
 //   2. Viewport width actually changed (proves the real window size is reflected end to end).
 //   3. PresentationParameters.BackBufferWidth/Height do NOT change. This is CNA's confirmed,
 //      deliberate divergence from FNA (see GraphicsDeviceManager::INTERNAL_OnClientSizeChanged's
@@ -44,6 +44,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <memory>
@@ -134,8 +135,11 @@ protected:
 
             int physW = 0, physH = 0;
             SDL_GetWindowSize(window, &physW, &physH);
-            targetPhysicalWidth_  = physW * 2;
-            targetPhysicalHeight_ = physH + 200;
+            // Stay inside the current virtual/desktop work area. Doubling the default 800-pixel
+            // window made a 1600-pixel request that compositors legitimately clamp on smaller
+            // displays, turning this into a desktop-size oracle instead of a resize oracle.
+            targetPhysicalWidth_ = std::max(64, physW - 137);
+            targetPhysicalHeight_ = std::max(64, physH - 91);
 
             // Resize the REAL SDL window directly -- bypasses GraphicsDeviceManager entirely,
             // simulating a user dragging the window edge rather than a game-driven API resize.
@@ -185,6 +189,10 @@ public:
     RealWindowResizeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // This test predates Letterbox becoming CNA's default. Its width-only resize oracle is
+        // specifically for FixedHeightDynamicWidth, so state that prerequisite instead of making
+        // the test silently depend on whichever presentation mode the framework defaults to.
+        gdm_->setPreferredPresentationModeProperty(PresentationMode::FixedHeightDynamicWidth);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }

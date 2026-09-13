@@ -1,15 +1,12 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
 // src/CNA/Internal/Renderers/Vulkan/shaders/instanced3d.vert.glsl.
 //
-// Per-vertex attribute (input slot 0, per-vertex step rate): only Position is consumed by this
-// shader; the per-vertex stride may be 16/20/24/32 -- extra interleaved attributes the input
-// layout provides (color/uv/normal) are simply not declared in VSInput below and go unread,
-// exactly like the GLSL source.
+// The base variant consumes Position only. CNA_INSTANCED_VERTEX_COLOR_INPUT adds COLOR0 so
+// BasicEffect.VertexColorEnabled has the same meaning on ordinary and instanced draw routes.
 //
-// Per-instance world matrix (input slot 1, per-instance step rate, stride = 64): one float4 "row"
-// per semantic, INSTANCEWORLD0..3 -- a project-local semantic name (D3D11_INPUT_ELEMENT_DESC for
-// this instanced input layout is Phase DIRECTX5 scope, not yet written; whoever wires it up must use
-// these exact 4 semantic names/indices to match this shader's input signature).
+// The public TextureCoordinate1..4 instance-matrix columns map to INSTANCEWORLD0..3 here. DX-222
+// assigns each column's native slot and step rate from its VertexBufferBinding, so the four columns
+// may occupy one stream or several without changing this shader signature.
 
 cbuffer PerDraw : register(b0)
 {
@@ -23,6 +20,9 @@ cbuffer PerDraw : register(b0)
 struct VSInput
 {
     float3 Position   : POSITION0;
+#ifdef CNA_INSTANCED_VERTEX_COLOR_INPUT
+    float4 Color      : COLOR0;
+#endif
     float4 InstCol0   : INSTANCEWORLD0;
     float4 InstCol1   : INSTANCEWORLD1;
     float4 InstCol2   : INSTANCEWORLD2;
@@ -46,6 +46,10 @@ VSOutput main(VSInput input)
     float4 worldPos = mul(float4(input.Position, 1.0), world);
     output.Position = mul(worldPos, Vp);
     output.Color = DiffuseColor;
+#ifdef CNA_INSTANCED_VERTEX_COLOR_INPUT
+    if (VertexColorEnabled != 0.0)
+        output.Color *= input.Color;
+#endif
 
     return output;
 }

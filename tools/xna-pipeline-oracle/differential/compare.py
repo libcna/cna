@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""plans/plan_xnapipeline_parity.md XNAPP-266 (§24): compare XNA's `.xnb` with CNA's, semantically.
+
+XNAPP-265 established that both builds accept and refuse the same sources. That is the coarsest
+question the corpus can answer. This one asks the next: given that both produced a file, do the two
+files *mean* the same thing -- the same root reader, the same type-reader table, the same object
+graph, the same texture format and pixels, the same audio format block and loop region, the same
+shared resources, the same external references.
+
+Both sides are read by `tools/xnb/xnb_conformance.py`, which is an independent parser: it shares no
+code with CNA's writer or with CNA's reader, so agreeing with it is evidence rather than a tautology.
+
+A difference is one of three things, and the third is the only one that is a problem:
+
+  * **accepted** -- listed in `decisions.json` with a reason. A deliberate divergence, or something
+    the environment cannot settle. The reason is the record; what this tool checks is that one
+    exists and that it still covers what it claims to. A decision may name the *paths* it explains,
+    and then it explains only those: a case accepted for its compressed pixels stays open if its
+    width changes.
+  * **absent** -- one side has no file, because the corpus case is one it refuses. Reported, not
+    compared.
+  * **open** -- everything else. These are the rows that fail the run.
+
+Usage:
+    compare.py --xna <dir> --cna <dir> [--decisions <file>] [--json <file>]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "xnb"))
+import xnb_conformance  # noqa: E402  (path is set above on purpose)
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import effect_mask  # noqa: E402  (path is set above on purpose)
+
+
+# What §24 says to compare, in the order a reader would look at it. A key absent from a report is
+# compared as absent on both sides rather than skipped, so a field that stops being written is a
+# difference rather than a silence.
+COMPARED = (
+    "platform",
+    "version",
+    "graphicsProfile",
+    "compression",
+    "rootReader",
+    "typeReaders",
+    # The verbatim table entries, assembly qualifiers and all. `typeReaders` above is the
+    # normalized spelling, which is the right key for identity and blind to exactly the thing an
+    # assembly identity is: the Compact Framework's own `mscorlib` on the Xbox 360 and Windows
+    # Phone was written into every genuine console build in this corpus and into none of CNA's
+    # until it was compared here.
+    "typeReaderNames",
+    "sharedResourceCount",
+    "root",
+    "sharedResources",
+)
+
+
+def load(path):
+    """Parses one `.xnb`, or answers the failure as a string."""
+    try:
+        return xnb_conformance.parse(path), None
+    except xnb_conformance.XnbError as error:
+        return None, str(error)
+
+
+def differences(left, right, where=""):
+    """Every place two parsed reports disagree, as `path: xna != cna` strings."""
+    if isinstance(left, dict) and isinstance(right, dict):
+        found = []
+        for key in sorted(set(left) | set(right)):
+            if key in ("path", "status", "totalLength"):
+                continue
+            found += differences(left.get(key, "<absent>"), right.get(key, "<absent>"),
+                                 where + "/" + key if where else key)
+        return found
+    if isinstance(left, list) and isinstance(right, list):
+        if len(left) != len(right):
+            return ["%s: %d element(s) vs %d" % (where, len(left), len(right))]
+        found = []
+        for index, (one, other) in enumerate(zip(left, right)):
+            found += differences(one, other, "%s[%d]" % (where, index))
+        return found
+    if left != right:
+        return ["%s: %r vs %r" % (where, left, right)]
+    return []
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--xna", required=True, help="directory of .xnb files XNA produced")
+    parser.add_argument("--cna", required=True, help="directory of .xnb files CNA produced")
+    parser.add_argument("--decisions", default=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "decisions.json"))
+    parser.add_argument("--json", help="write the full report here")
+    arguments = parser.parse_args(argv[1:])
+
+    decisions = {}
+    if os.path.exists(arguments.decisions):
+        with open(arguments.decisions, "r", encoding="utf-8") as handle:
+            document = json.load(handle)
+        decisions = {row["case"]: row for row in document.get("accepted", [])}
+    # Which of a decision's declared paths actually matched something, so a path that has stopped
+    # explaining anything can be reported the same way an obsolete decision is.
+    matched_paths = {case: set() for case in decisions}
+
+    report = {"cases": [], "accepted": 0, "absent": 0, "open": 0, "identical": 0}
+    names = sorted(name for name in os.listdir(arguments.xna) if name.endswith(".xnb"))
+    for name in names:
+        case = name[:-4]
+        xna_path = os.path.join(arguments.xna, name)
+        cna_path = os.path.join(arguments.cna, name)
+        row = {"case": case}
+        if not os.path.exists(cna_path):
+            # A case CNA has no route for at all is still a difference, and a recorded reason
+            # covers it the same way it covers a difference in the bytes.
+            if case in decisions:
+                row["outcome"] = "accepted"
+                row["reason"] = decisions[case]["reason"]
+                row["detail"] = "CNA produced no file for this case"
+                report["accepted"] += 1
+            else:
+                row["outcome"] = "absent"
+                row["detail"] = "CNA produced no file for this case"
+                report["absent"] += 1
+            report["cases"].append(row)
+            continue
+
+        xna, xna_error = load(xna_path)
+        cna, cna_error = load(cna_path)
+        if xna_error or cna_error:
+            row["outcome"] = "open"
+            row["detail"] = "unreadable: " + (xna_error or "") + (cna_error or "")
+            report["open"] += 1
+            report["cases"].append(row)
+            continue
+
+        found = []
+        for key in COMPARED:
+            found += differences(xna.get(key, "<absent>"), cna.get(key, "<absent>"), key)
+        if not found:
+            row["outcome"] = "identical"
+            report["identical"] += 1
+        elif case in decisions:
+            # A decision that names no paths covers the whole case, which is what every decision
+            # meant before paths existed. One that names them covers those and nothing else.
+            paths = decisions[case].get("paths")
+            uncovered = []
+            if paths:
+                for line in found:
+                    where = line.split(":", 1)[0]
+                    covered = next((p for p in paths if where.startswith(p)), None)
+                    if covered is None:
+                        uncovered.append(line)
+                    else:
+                        matched_paths[case].add(covered)
+            # An effect accepted for `root/digest` is accepted for the two things in a compiled
+            # `fx_2_0` container that are not a function of the source -- the compiler's version
+            # string and the padding `d3dx9` leaves after an aligned string -- and for nothing
+            # else. Without this the acceptance is the whole blob, which is a hole a real change
+            # to the bytecode would fall through (plans/plan_xna_sample_xnb_sweep.md
+            # `XNASWEEP-225`). A decision that also accepts `root/bytecodeByteCount` is the Xbox
+            # 360's Xenos bytecode, which is a different instruction set and a different length;
+            # its own reason covers it and the mask has nothing to say.
+            if (not uncovered and "root/digest" in matched_paths[case]
+                    and "root/bytecodeByteCount" not in paths):
+                masked, mask_error = effect_mask.compare(xna_path, cna_path)
+                if mask_error:
+                    uncovered.append("root/digest: " + mask_error)
+                elif masked["elsewhere"]:
+                    uncovered.append(
+                        "root/digest: %d byte(s) differ outside the compiler's version string and "
+                        "the padding after an aligned string, at %s"
+                        % (len(masked["elsewhere"]), masked["elsewhere"][:8]))
+                else:
+                    row["maskedBytes"] = {"version": masked["inVersion"],
+                                          "padding": masked["inPadding"]}
+            if uncovered:
+                row["outcome"] = "open"
+                row["reason"] = decisions[case]["reason"]
+                row["differences"] = uncovered
+                row["detail"] = ("accepted in decisions.json, and these differences are outside "
+                                 "the paths that decision explains")
+                report["open"] += 1
+            else:
+                row["outcome"] = "accepted"
+                row["reason"] = decisions[case]["reason"]
+                row["differences"] = found
+                report["accepted"] += 1
+        else:
+            row["outcome"] = "open"
+            row["differences"] = found
+            report["open"] += 1
+        report["cases"].append(row)
+
+    # A decision for a case that no longer differs is a decision that has outlived its reason.
+    compared = {row["case"] for row in report["cases"]}
+    for case, decision in sorted(decisions.items()):
+        if case not in compared:
+            report["cases"].append({"case": case, "outcome": "open",
+                                    "detail": "accepted in decisions.json but not in the corpus"})
+            report["open"] += 1
+        elif next(r for r in report["cases"] if r["case"] == case)["outcome"] == "identical":
+            report["cases"].append({"case": case, "outcome": "open",
+                                    "detail": "accepted in decisions.json but the two now agree; "
+                                              "remove the decision"})
+            report["open"] += 1
+        else:
+            # A path that no longer matches any difference is a reason that has outlived what it
+            # explained, exactly as a whole decision can.
+            for path in decision.get("paths", []):
+                if path not in matched_paths[case]:
+                    report["cases"].append(
+                        {"case": case, "outcome": "open",
+                         "detail": "accepted in decisions.json for '%s', which no longer differs; "
+                                   "remove that path" % path})
+                    report["open"] += 1
+
+    for row in report["cases"]:
+        mark = {"identical": "same    ", "accepted": "accepted", "absent": "absent  ",
+                "open": "OPEN    "}[row["outcome"]]
+        print("%s %s" % (mark, row["case"]))
+        for line in row.get("differences", [])[:8]:
+            print("             " + line)
+        if row.get("detail"):
+            print("             " + row["detail"])
+    print("identical %d, accepted %d, absent %d, open %d" %
+          (report["identical"], report["accepted"], report["absent"], report["open"]))
+
+    if arguments.json:
+        with open(arguments.json, "w", encoding="utf-8") as handle:
+            json.dump(report, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    return 1 if report["open"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

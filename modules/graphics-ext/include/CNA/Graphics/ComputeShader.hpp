@@ -5,8 +5,12 @@
 
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
+#include "CNA/Graphics/ConstantBuffer.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Graphics {
@@ -22,6 +26,8 @@ namespace CNA::Graphics {
  */
 
     class StorageBuffer;
+    class StorageTexture2D;
+    class ShaderPackageEXT;
 
     /**
      * @brief One compute program, and the dispatches of it.
@@ -51,11 +57,34 @@ namespace CNA::Graphics {
          * @param source The compute-shader source, in the renderer's own language.
          * @throws System::NotSupportedException If the renderer has no compute support; the
          *         message names the renderer.
-         * @throws std::runtime_error If the program did not compile; the message carries the
-         *         compiler log.
+         * @throws CNA::ShaderCompilationExceptionEXT If the program did not compile; `what()`
+         *         summarizes the owned structured diagnostics.
          */
         ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                       const std::string& source);
+
+        /**
+         * @brief Compiles one explicitly identified compute payload through the existing path.
+         * @param device The device to compile on.
+         * @param code Descriptor whose stage must be `Compute`; it is copied into the program.
+         * @throws std::invalid_argument If the stage or entry point cannot use the existing path.
+         * @throws CNA::ShaderCompilationExceptionEXT If the live renderer refuses the exact
+         *         language or the selected program does not compile.
+         */
+        ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                      const ShaderCodeEXT& code);
+
+        /**
+         * @brief Selects and compiles one complete compute variant from a shader package.
+         * @param device The live device used once for deterministic package selection.
+         * @param package Package whose sole required stage must be `Compute`.
+         * @throws std::invalid_argument If the package is not compute-only or its selected entry
+         *         point cannot use the existing path.
+         * @throws CNA::ShaderCompilationExceptionEXT If no package variant is usable or the
+         *         selected program does not compile.
+         */
+        ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                      const ShaderPackageEXT& package);
 
         /** @brief Releases the program. */
         ~ComputeShader();
@@ -84,9 +113,37 @@ namespace CNA::Graphics {
          *
          * @param binding The binding index the shader declares; must not be negative.
          * @param buffer  The buffer.
-         * @throws std::invalid_argument If @p binding is negative.
+         * @throws std::invalid_argument If @p binding is negative or the buffer belongs to a
+         *         different graphics device.
+         * @throws System::ObjectDisposedException If @p buffer is disposed.
+         * @throws System::NotSupportedException If storage usage was not declared.
          */
         void bindStorageBuffer(int binding, StorageBuffer& buffer);
+
+        /**
+         * @brief Binds a shared buffer through a shader constant-buffer slot.
+         * @param binding Direct binding index declared by the compute program.
+         * @param buffer Buffer whose immutable usage includes `StorageBufferUsage::Constant`.
+         * @throws std::invalid_argument If @p binding is negative or the buffer belongs to a
+         *         different graphics device.
+         * @throws System::ObjectDisposedException If @p buffer is disposed.
+         * @throws System::NotSupportedException If constant usage was not declared or the active
+         *         renderer does not implement constant-buffer binding.
+         */
+        void bindConstantBuffer(int binding, StorageBuffer& buffer);
+
+        /**
+         * @brief Binds a typed constant buffer through its shared buffer resource.
+         * @tparam T Trivially-copyable standard-layout shader block value.
+         * @param binding Direct binding index declared by the compute program.
+         * @param buffer Typed constant buffer owned by the same graphics device.
+         */
+        template<typename T>
+            requires (std::is_trivially_copyable_v<T> && std::is_standard_layout_v<T>)
+        void bindConstantBuffer(int binding, ConstantBufferT<T>& buffer)
+        {
+            bindConstantBuffer(binding, buffer.getBuffer());
+        }
 
         /**
          * @brief Binds a texture the shader will sample, and sets its sampler uniform.
@@ -95,9 +152,12 @@ namespace CNA::Graphics {
          * the texture, so this is the route that works on every context with compute at all.
          *
          * @param unit        The texture unit to bind to; must not be negative.
-         * @param samplerName The `sampler2D` uniform's name, which is set to @p unit.
+         * @param samplerName The `sampler2D` uniform's name for source-language renderers.
+         *                    Descriptor-language renderers use @p unit directly.
          * @param texture     The texture.
-         * @throws std::invalid_argument If @p unit is negative.
+         * @throws std::invalid_argument If @p unit is negative or @p texture belongs to another
+         *         graphics device.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
          */
         void bindTexture(int unit, const std::string& samplerName,
                          Microsoft::Xna::Framework::Graphics::Texture2D& texture);
@@ -120,12 +180,34 @@ namespace CNA::Graphics {
          * @param unit    The image unit the shader declares; must not be negative.
          * @param texture The texture.
          * @param access  How the shader will use it.
-         * @throws std::invalid_argument If @p unit is negative.
+         * @throws std::invalid_argument If @p unit or @p access is invalid, or if @p texture
+         *         belongs to another graphics device.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
          * @throws System::NotSupportedException If @ref isImageBindingSupported is false -- a
          *         binding the driver would reject is refused here, where the reason can be said.
          */
         void bindImage(int unit, Microsoft::Xna::Framework::Graphics::Texture2D& texture,
                        CNA::GraphicsImageAccess access);
+
+        /**
+         * @brief Binds a tracked storage texture for compute reads, writes, or both.
+         *
+         * The requested access must be a subset of the immutable usage declared when the texture
+         * was created. The renderer retains only the texture's internal shared record, so an
+         * accepted deferred dispatch never dereferences a disposed public resource.
+         *
+         * @param unit Direct image binding declared by the compute program.
+         * @param texture Storage texture owned by the same graphics device.
+         * @param access Exact access the program will perform.
+         * @throws std::invalid_argument If @p unit or @p access is invalid, the texture belongs to
+         *         another device, or its immutable usage does not declare the requested access.
+         * @throws std::out_of_range If @p unit is not declared by the compiled program.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
+         * @throws System::NotSupportedException If the renderer refuses the slot, format, or
+         *         binding operation.
+         */
+        void bindStorageTexture(
+            int unit, StorageTexture2D& texture, CNA::GraphicsImageAccess access);
 
         /**
          * @brief Runs the program over a grid of work groups.
@@ -161,10 +243,40 @@ namespace CNA::Graphics {
         /** @brief Returns the compiler log from a failed compile; empty after a successful one. */
         [[nodiscard]] const std::string& getCompileError() const;
 
+        /**
+         * @brief Returns the explicit selected language, or `Unknown` for the legacy string path.
+         * @return Language retained by the code/package constructor.
+         */
+        [[nodiscard]] CNA::ShaderLanguageEXT getSelectedLanguageEXT() const noexcept;
+
+        /**
+         * @brief Returns the retained selected code descriptor.
+         * @return Pointer owned by this program, or null for the legacy string constructor.
+         */
+        [[nodiscard]] const ShaderCodeEXT* getSelectedCodeEXT() const noexcept;
+
     private:
+        struct PreparedPortablePayload
+        {
+            std::string source;
+            ShaderCodeEXT code;
+        };
+
+        ComputeShader(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            PreparedPortablePayload payload);
+        static PreparedPortablePayload preparePortablePayload(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            const ShaderCodeEXT& code);
+        static PreparedPortablePayload preparePortablePayload(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            const ShaderPackageEXT& package);
+        void compile(const std::string& source);
+
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<CNA::Internal::Renderers::IComputeShaderRenderer> renderer_;
         std::string compileError_;
+        std::optional<ShaderCodeEXT> selectedCode_;
     };
 
 /** @} */ // end of cnaext_engine

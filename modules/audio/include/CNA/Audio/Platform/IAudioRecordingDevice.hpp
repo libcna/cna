@@ -136,6 +136,19 @@ namespace CNA::Audio::Platform {
          * At most one entry has `isDefault=true`; when present it is first. Remaining entries are
          * ordered by ascending stable id. A default-route entry may coexist with the physical
          * device it currently selects because they have different reconnection semantics.
+         *
+         * A provider must not *manufacture* a default-route entry that is not a device the host
+         * reports. `Microphone::All` is this list, and XNA's `Microphone.Default` is a real
+         * enumerated device reporting the driver's own name; an invented "default" entry would put
+         * a device in the XNA API that XNA does not have.
+         *
+         * **Ordering carries as much meaning as naming here.** `Microphone::Default` is `All[0]`,
+         * so the first entry is the device a game that asks for "the microphone" will record from.
+         * A provider that can identify the host's default must therefore put that device first and
+         * mark it, rather than falling back on id order: whichever device the backend happens to
+         * number lowest is not necessarily one anything is plugged into. Set `isDefault` only where
+         * the backend genuinely knows; where it does not, leave the list in id order and mark
+         * nothing.
          */
         [[nodiscard]] virtual std::vector<AudioRecordingDeviceInfo> GetDevices() const = 0;
 

@@ -1,21 +1,3 @@
-    // plans/plan_modern.md MOD-2035, rewritten twice.
-    //
-    // For several sessions this test pinned a bisection: SSAO produced no occlusion at all from the
-    // prepass's own depth target while producing plenty from an 8-bit copy of the same values, and
-    // the surface format was the only variable that separated them. A measurement taken on one day
-    // appeared to contradict that and was written up as a closure; **the contradiction did not
-    // survive** -- it reverted on the same machine with the same code, and the original bisection
-    // was right.
-    //
-    // The prepass now packs depth into an 8-bit target on every renderer, which its own
-    // documentation already called the more precise of the two encodings, and this occludes 2101
-    // pixels where the half-float path occluded 0. `HalfFloatDepthSamplingTests` holds the attempt
-    // to reduce the difference to one shader; it does not reproduce, so the *cause* is still open
-    // even though the effect is gone.
-    //
-    // What this test asks is therefore the question that was underneath the format question the
-    // whole time, and the one a game actually cares about: does SSAO occlude from what the prepass
-    // actually wrote?
 // SPDX-License-Identifier: MS-PL
 // plans/plan_modern.md MOD-2035: does SSAO produce occlusion from a *real* prepass?
 //
@@ -163,74 +145,31 @@ TEST(SsaoFromRealPrepassTest, ThePrepassWritesARangeOfDepthsRatherThanOneValue)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd)) GTEST_SKIP() << "no prepass on this renderer";
     RunPrepass(gd, prepass);
 
-    // The depth target may be half-float, which GetData cannot read, so the depth is inspected
-    // through a shader that copies it into a Color target instead.
-    std::string source = "#version 300 es\nprecision highp float;\n";
-    source += DepthNormalPrepass::getDepthDecodeGlsl(prepass.isDepthPacked());
-    source += R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-void main() {
-    float d = cnaDecodeLinearDepth(texture(texture1, TexCoord));
-    FragColor = vec4(d, d, d, 1.0);
-}
-)";
-    ShaderEffect copy(gd, R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); TexCoord = aTexCoord; }
-)", source);
-    ASSERT_TRUE(copy.IsEffectValid());
-
-    RenderTarget2D readable(gd, kSize, kSize);
-    copy.Apply();
-    FullscreenPass fullscreen(gd);
-    fullscreen.draw(prepass.getDepthTexture(), &readable, &copy, kSize, kSize);
-
-    const std::vector<Color> depth = ReadTarget(readable);
+    // Automatic depth is deliberately the portable packed Color encoding. Decode those actual
+    // render-target bytes through the CPU twin rather than introducing a second source-only
+    // visualization shader merely to inspect them.
+    ASSERT_TRUE(prepass.isDepthPacked());
+    std::vector<Color> depth(static_cast<std::size_t>(kSize) * kSize, Color::Black);
+    prepass.getDepthTexture()->GetData(depth.data(), static_cast<int>(depth.size()));
     int lowest = 255, highest = 0, distinct = 0;
     std::vector<int> seen(256, 0);
     for (const Color& pixel : depth)
     {
-        const int v = pixel.getRProperty();
+        const int v = static_cast<int>(std::lround(255.0f * DepthNormalPrepass::unpackDepth(
+            static_cast<float>(pixel.getRProperty()) / 255.0f,
+            static_cast<float>(pixel.getGProperty()) / 255.0f,
+            static_cast<float>(pixel.getBProperty()) / 255.0f,
+            static_cast<float>(pixel.getAProperty()) / 255.0f)));
         lowest = std::min(lowest, v);
         highest = std::max(highest, v);
         if (seen[v]++ == 0) ++distinct;
     }
     std::printf("[ prepass ] depth spans %d..%d over %d distinct values\n", lowest, highest, distinct);
-
-    // And again with two extra sampler units bound first, which is what SsaoPass does before its
-    // own draw. If the float source stops reading when other units are occupied, that interaction
-    // is the fault rather than the format.
-    {
-        std::vector<Color> dummy(static_cast<std::size_t>(kSize) * kSize, Color(1, 2, 3, 255));
-        auto extra = std::make_unique<Texture2D>(gd, kSize, kSize);
-        extra->SetData(dummy.data(), static_cast<int>(dummy.size()));
-        RenderTarget2D again(gd, kSize, kSize);
-        copy.Apply();
-        copy.SetUniformInt("uUnusedOne", 1);
-        copy.SetTexture(1, *extra);
-        copy.SetUniformInt("uUnusedTwo", 2);
-        copy.SetTexture(2, *extra);
-        FullscreenPass second(gd);
-        second.draw(prepass.getDepthTexture(), &again, &copy, kSize, kSize);
-        int low = 255, high = 0;
-        for (const Color& p : ReadTarget(again))
-        { low = std::min(low, static_cast<int>(p.getRProperty()));
-          high = std::max(high, static_cast<int>(p.getRProperty())); }
-        std::printf("[ prepass ] with units 1 and 2 also bound: depth spans %d..%d\n", low, high);
-    }
 
     EXPECT_LT(lowest, 250) << "nothing was drawn: the whole buffer is at the far plane";
     EXPECT_GT(distinct, 8) << "the depth buffer holds no range of distances";
@@ -244,7 +183,6 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     // Near on the left, far on the right -- the step SsaoPassTests uses and knows to occlude.
     std::vector<Color> step;
@@ -325,7 +263,6 @@ TEST(SsaoFromRealPrepassTest, ThePrepassesOwnDepthTargetOccludes)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd)) GTEST_SKIP() << "no prepass on this renderer";

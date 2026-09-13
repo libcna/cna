@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
+#include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
@@ -16,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -27,6 +29,64 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         /// Same ceiling the shared translation applies to reflected tables.
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
+
+        /// Adds XNA's per-register sampler LOD bias before SDL_gpu/ShaderCross create the native
+        /// fragment module. SDL documents the native sampler field as a no-op on Metal, so the
+        /// compiled route uses the same bounded SPIR-V rewrite as WebGPU while keeping
+        /// MojoShader's original combined samplers intact.
+        const char* MOJOSHADERCALL TransformPixelSamplerLodBias(
+            const unsigned char* input, unsigned int inputLength,
+            unsigned char** output, unsigned int* outputLength,
+            MOJOSHADER_malloc allocate, void* allocatorData, void*)
+        {
+            static thread_local std::string error;
+            error.clear();
+            if (output == nullptr || outputLength == nullptr || allocate == nullptr)
+            {
+                error = "CNA SDL_GPU: invalid MojoShader SPIR-V transform arguments";
+                return error.c_str();
+            }
+            *output = nullptr;
+            *outputLength = 0;
+            if (input == nullptr || inputLength % sizeof(std::uint32_t) != 0)
+            {
+                error = "CNA SDL_GPU: compiled effect produced misaligned SPIR-V";
+                return error.c_str();
+            }
+
+            MojoShaderEffect::SpirvLodBiasResult transformed =
+                MojoShaderEffect::InjectSamplerLodBias(
+                    reinterpret_cast<const std::uint32_t*>(input),
+                    inputLength / sizeof(std::uint32_t),
+                    /*samplerDescriptorSet=*/2u, /*uniformDescriptorSet=*/3u,
+                    /*binding=*/1u);
+            if (!transformed.error.empty())
+            {
+                error = "CNA SDL_GPU: could not inject compiled-effect sampler LOD bias: " +
+                        transformed.error;
+                return error.c_str();
+            }
+            if (!transformed.changed) return nullptr;
+
+            const std::size_t byteCount = transformed.words.size() * sizeof(std::uint32_t);
+            if (byteCount > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+                byteCount > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max()))
+            {
+                error = "CNA SDL_GPU: transformed compiled-effect SPIR-V is too large";
+                return error.c_str();
+            }
+            auto* bytes = static_cast<unsigned char*>(
+                allocate(static_cast<int>(byteCount), allocatorData));
+            if (bytes == nullptr)
+            {
+                error = "CNA SDL_GPU: could not allocate transformed compiled-effect SPIR-V";
+                return error.c_str();
+            }
+            std::memcpy(bytes, transformed.words.data(), byteCount);
+            *output = bytes;
+            *outputLength = static_cast<unsigned int>(byteCount);
+            return nullptr;
+        }
 
         /// Resolves a public texture to the SDL_GPU resource behind it, or null if it is not one.
         /// plans/plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
@@ -128,6 +188,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
             textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
             SetTechnique(0);
+            renderer_.RegisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = true;
         }
         catch (...)
         {
@@ -161,6 +223,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             samplerAssigned_ = cloneSource.samplerAssigned_;
             vertexSamplerAssigned_ = cloneSource.vertexSamplerAssigned_;
             SetTechnique(techniqueIndex_);
+            renderer_.RegisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = true;
         }
         catch (...)
         {
@@ -175,6 +239,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuCompiledEffect::~SdlGpuCompiledEffect()
     {
+        if (registeredWithRenderer_)
+        {
+            renderer_.UnregisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = false;
+        }
         if (effectData_ != nullptr)
         {
             if (passActive_) MOJOSHADER_effectEndPass(effectData_);
@@ -182,6 +251,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                 MOJOSHADER_deleteEffect(effectData_);
             effectData_ = nullptr;
         }
+    }
+
+    void SdlGpuCompiledEffect::ReleaseForRendererTeardownEXT()
+    {
+        registeredWithRenderer_ = false;
+        if (effectData_ != nullptr && passActive_)
+            MOJOSHADER_effectEndPass(effectData_);
+        passActive_ = false;
+        programLeases_.clear();
+        if (effectData_ != nullptr &&
+            MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
+        {
+            MOJOSHADER_deleteEffect(effectData_);
+        }
+        effectData_ = nullptr;
+        context_ = nullptr;
     }
 
     std::unique_ptr<ICompiledEffectRuntime> SdlGpuCompiledEffect::Clone() const
@@ -349,6 +434,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
         SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const
     {
+        const std::vector<SdlGpuCompiledEffectVertexStreamEXT> streams{{
+            &declaredElements, 0, SDL_GPU_VERTEXINPUTRATE_VERTEX}};
+        return LinkAndGetShadersMultiEXT(streams, vertexShader, pixelShader).attributes;
+    }
+
+    SdlGpuCompiledEffectVertexLayoutEXT SdlGpuCompiledEffect::LinkAndGetShadersMultiEXT(
+        const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+        SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const
+    {
         vertexShader = nullptr;
         pixelShader = nullptr;
         if (context_ == nullptr)
@@ -370,8 +464,15 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "SDL_GPU compiled effect: the applied vertex shader has no reflection.");
         }
 
-        std::vector<SDL_GPUVertexAttribute> sdlAttributes =
-            BuildCompiledEffectVertexAttributes(*vertexParseData, declaredElements, /*bufferSlot=*/0);
+        SdlGpuCompiledEffectVertexLayoutEXT layout =
+            BuildCompiledEffectVertexLayoutEXT(*vertexParseData, streams);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> declaredElements;
+        for (const SdlGpuCompiledEffectVertexStreamEXT& stream : streams)
+        {
+            if (stream.elements == nullptr) continue;
+            declaredElements.insert(
+                declaredElements.end(), stream.elements->begin(), stream.elements->end());
+        }
         std::vector<MOJOSHADER_vertexAttribute> mojoAttributes =
             BuildMojoShaderVertexAttributes(*vertexParseData, declaredElements);
 
@@ -395,7 +496,36 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "SDL_GPU compiled effect: the linked program has no native shader modules.");
         }
 
-        return sdlAttributes;
+        return layout;
+    }
+
+    bool SdlGpuCompiledEffect::LinkedPixelShaderUsesLodBiasEXT() const
+    {
+        return context_ != nullptr &&
+               MOJOSHADER_sdlGetPixelSpirvTransformApplied(context_) != 0;
+    }
+
+    std::uint64_t SdlGpuCompiledEffect::LinkedProgramIdentityEXT() const
+    {
+        return context_ != nullptr
+                   ? static_cast<std::uint64_t>(MOJOSHADER_sdlGetProgramIdentity(context_))
+                   : 0u;
+    }
+
+    std::shared_ptr<const void> SdlGpuCompiledEffect::RetainProgramIdentityEXT(
+        std::uint64_t programIdentity) const
+    {
+        if (programIdentity == 0)
+            throw std::invalid_argument(
+                "SDL_GPU compiled effect: cannot retain a zero program identity.");
+        const auto existing = programLeases_.find(programIdentity);
+        if (existing != programLeases_.end())
+            return existing->second;
+
+        std::shared_ptr<const void> lease =
+            renderer_.RetainCompiledProgramIdentityEXT(programIdentity);
+        programLeases_.emplace(programIdentity, lease);
+        return lease;
     }
 
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,
@@ -494,8 +624,16 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (mojoShaderContext_ == nullptr && device_ != nullptr)
         {
-            mojoShaderContext_ =
-                MOJOSHADER_sdlCreateContext(device_, nullptr, nullptr, nullptr);
+            mojoShaderContext_ = MOJOSHADER_sdlCreateContext(device_, nullptr, nullptr, nullptr);
+            if (mojoShaderContext_ != nullptr &&
+                !MOJOSHADER_sdlSetSpirvTransform(
+                    mojoShaderContext_, TransformPixelSamplerLodBias, nullptr))
+            {
+                MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
+                mojoShaderContext_ = nullptr;
+                throw std::runtime_error(
+                    "CNA SDL_GPU: could not install the compiled-effect SPIR-V transform.");
+            }
         }
         return mojoShaderContext_;
     }
@@ -504,6 +642,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
         return std::make_unique<SdlGpuCompiledEffect>(*this, effectCode, effectCodeBytes);
+    }
+
+    void SdlGpuRenderer::RegisterCompiledEffectEXT(SdlGpuCompiledEffect* effect)
+    {
+        if (effect == nullptr ||
+            std::find(compiledEffects_.begin(), compiledEffects_.end(), effect) !=
+                compiledEffects_.end())
+        {
+            return;
+        }
+        compiledEffects_.push_back(effect);
+    }
+
+    void SdlGpuRenderer::UnregisterCompiledEffectEXT(SdlGpuCompiledEffect* effect)
+    {
+        compiledEffects_.erase(
+            std::remove(compiledEffects_.begin(), compiledEffects_.end(), effect),
+            compiledEffects_.end());
+    }
+
+    void SdlGpuRenderer::ReleaseCompiledEffectsForRendererTeardownEXT()
+    {
+        for (SdlGpuCompiledEffect* effect : compiledEffects_)
+        {
+            if (effect != nullptr)
+                effect->ReleaseForRendererTeardownEXT();
+        }
+        compiledEffects_.clear();
     }
 }
 

@@ -29,12 +29,18 @@
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnaModelSourceContentPipeline.hpp"
 #include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XmaEncoderService.hpp"
+#include "CNA/Content/Pipeline/XnaXmlSourceContentPipeline.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentProject.hpp"
 #include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
@@ -61,6 +67,31 @@ namespace
         bool quiet = false;
         bool explain = false;
 
+        /** @brief How strictly this invocation refuses what XNA would only warn about. */
+        Pipeline::ContentStrictness strictness = Pipeline::ContentStrictness::Strict;
+
+        /**
+         * @brief Whether the configuration is the asset list rather than a set of overrides.
+         *
+         * A directory build discovers every source under its root, which is what a convention-only
+         * build means. An XNA content project is the other thing: it names its assets, and a file
+         * sitting in the same folder that the project does not list is not part of it -- XNA never
+         * built it, and building it here produces outputs XNA has not got and, when two unlisted
+         * neighbours share a name, refuses a project XNA builds
+         * (plans/plan_xnapipeline_parity.md XNAPP-330).
+         */
+        bool onlyConfiguredAssets = false;
+
+        /**
+         * @brief The build configuration, as MSBuild's `$(Configuration)`.
+         *
+         * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows this, and a content
+         * project's own default is `Debug` -- so a project built without saying which
+         * configuration it is gets optimized effects where XNA's own build gets debuggable ones
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         */
+        std::string buildConfiguration = "Release";
+
         /** @brief Default compiled container for every asset this invocation builds. */
         Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
 
@@ -69,6 +100,21 @@ namespace
 
         /** @brief Build-tool service selection this invocation registers its routes with. */
         Pipeline::ContentCompilerOptions services;
+
+        /**
+         * @brief Whether the command line named the target platform, profile or compression.
+         *
+         * A `.contentproj` carries its own, and a command line that names one overrides it -- the
+         * way an MSBuild property given on a command line overrides the one in the file. Knowing
+         * whether one was *named* is what tells that apart from the default
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-102`).
+         */
+        bool selectedXnbPlatform = false;
+        bool selectedXnbProfile = false;
+
+        /** @brief Whether `--build-configuration` named one, rather than the default standing. */
+        bool selectedBuildConfiguration = false;
+        bool selectedXnbCompression = false;
 
         /** @brief Whether the command line named an effect compiler or launcher explicitly. */
         [[nodiscard]] bool SelectsEffectCompiler() const
@@ -237,19 +283,28 @@ namespace
     void PrintUsage()
     {
         std::cerr
-            << "Usage: cna-content build <source-file-or-directory> -o|--output <output>\n"
+            << "Usage: cna-content build <source-file-or-directory-or-.contentproj>\n"
+               "         -o|--output <output>\n"
                "         [--format cnb|xnb] [--config <file>] [--workers <1..64>]\n"
                "         [--xnb-platform <name>] [--xnb-version 4|5]\n"
                "         [--xnb-profile reach|hidef] [--xnb-compress none|lzx|lz4]\n"
                "         [--xnb-reader-names xna40|portable]\n"
                "         [--xnb-allow-unverified-xbox]\n"
                "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
-               "         [--explain] [--quiet]\n"
+               "         [--xma-encoder <path>] [--xma-encoder-launcher <program>]\n"
+               "         [--xma-encoder-arg <argument>]...\n"
+               "         [--font-directory <dir>]... [--build-configuration <name>]\n"
+               "         [--explain] [--quiet] [--xna-compatible]\n"
+               "         [--only-configured-assets]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
             << "--format selects the compiled container: CNA's native .cnb (the default) or the\n"
             << "XNA-compatible .xnb. Importers and processors are the same either way; only the\n"
             << "writer differs, so every source route reaches both containers.\n\n"
+            << "--only-configured-assets makes the configuration the asset list rather than a\n"
+            << "set of overrides: a discovered source the configuration does not name is left\n"
+            << "alone. A .contentproj build selects it, because a project names its assets and a\n"
+            << "file beside them that it does not list is not part of it.\n\n"
             << "A single source file requires an output path whose extension matches --format.\n"
             << "A source directory requires an output directory; relative paths and logical\n"
             << "content names are preserved. Clean removes only unchanged files proven to be\n"
@@ -264,7 +319,10 @@ namespace
                "would claim a compatibility it cannot deliver. --xnb-allow-unverified-xbox\n"
                "produces one anyway, for testing on real hardware.\n\n"
             << "--xnb-compress lzx is the compression Microsoft XNA 4.0 itself produced and is\n"
-               "the only compressed form an XNA 4.0 runtime loads. CNA emits real LZX: one\n"
+               "the only compressed form an XNA 4.0 runtime loads, and CNA's output is verified\n"
+               "against one: all six fixtures of tests/assets/xnb/cna/windows/lzx load through a\n"
+               "genuine XNA 4.0 ContentManager (tests/interop/xna40/README.md). CNA emits real\n"
+               "LZX: one\n"
                "verbatim block per 32 KiB frame, with Huffman-coded literals and matches,\n"
                "repeated-offset matching and position-slot offsets. Aligned-offset and\n"
                "uncompressed LZX blocks are not emitted; neither is needed for a conforming\n"
@@ -275,7 +333,42 @@ namespace
                "already-compiled bytecode and needs none. --fx-compiler names the compiler and\n"
                "--fx-compiler-launcher a program to run it through, such as wine. Each has the\n"
                "highest precedence in its own order: the option, then CNA_FXC / CNA_FXC_LAUNCHER\n"
-               "in the environment, then the path baked in by CMake, then fxc on PATH.\n";
+               "in the environment, then the path baked in by CMake, then fxc on PATH.\n"
+               "\n"
+               "A .contentproj is an XNA content project and is built as one: its own platform,\n"
+               "profile, compression and per-asset Importer/Processor/ProcessorParameters, through\n"
+               "the same coordinator every other build uses, with XNA's own leniency. Naming\n"
+               "--xnb-platform, --xnb-profile or --xnb-compress overrides the project's own, the\n"
+               "way an MSBuild property given on a command line overrides the one in the file;\n"
+               "--fx-compiler, --xma-encoder and --font-directory reach a project build too. Its\n"
+               "Content and None items are copied rather than built, as XNA's targets copy them,\n"
+               "honouring CopyToOutputDirectory and Link. A project naming a component this build\n"
+               "has not got is refused with all of them named at once, rather than one build at\n"
+               "a time.\n"
+               "\n"
+               "XMA is the Xbox 360's audio codec. It has no public specification sufficient to\n"
+               "implement a conforming encoder, no licensable encoder, and none in FFmpeg, which\n"
+               "decodes xma1 and xma2 and encodes neither, so CNA ships no XMA encoder and asking\n"
+               "for one refuses with XMA ENCODER EXTERNALLY UNAVAILABLE. --xma-encoder attaches\n"
+               "your own: a program handed a RIFF WAVE that writes a .xma (a RIFF whose fmt chunk\n"
+               "is the XMA2WAVEFORMATEX and whose data chunk is the payload).\n"
+               "--xma-encoder-launcher runs it through another program, such as wine, and\n"
+               "--xma-encoder-arg supplies one command-line argument at a time, with {input},\n"
+               "{output}, {quality}, {loopStart} and {loopLength} substituted; the default is\n"
+               "{input} {output}. CNA_XMA_ENCODER, CNA_XMA_ENCODER_LAUNCHER and\n"
+               "CNA_XMA_ENCODER_ARGS are the environment forms. See docs/xma-encoder-backend.md.\n"
+               "\n"
+               "--build-configuration is MSBuild's $(Configuration), Release unless given. It is\n"
+               "what EffectProcessor.DebugMode's default of Auto follows: a Debug build compiles\n"
+               "effects with debug information and without optimization, which is what XNA does.\n"
+               "A .contentproj build takes the project's own Configuration unless this names one.\n"
+               "\n"
+               "--font-directory adds a directory to the .spritefont font search, ahead of the\n"
+               "platform's own; repeat it per directory. CNA_FONT_PATH in the environment says\n"
+               "the same thing and is read after these. <FontName> names a font family, which is\n"
+               "read from each candidate's own family table, so 'Pericles' finds Peric.ttf and\n"
+               "'Segoe UI Mono' finds SegoeUIMono-Regular.ttf, which is what XNA resolves through\n"
+               "Windows. <Style> then selects the real styled face where the family has one.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -358,6 +451,19 @@ namespace
                 }
                 command.output = arguments[index];
             }
+            else if (IsOption(argument, "--xna-compatible"))
+            {
+                // Warn and fall back exactly where XNA warns and falls back: a processor parameter
+                // it cannot recognise or convert, and a character the font has no glyph for. This
+                // tool's own default is to refuse both, because each is a mistake in the project
+                // that nothing else in the build will notice
+                // (plans/plan_xnapipeline_parity.md XNAPP-267).
+                command.strictness = Pipeline::ContentStrictness::XnaCompatible;
+            }
+            else if (IsOption(argument, "--only-configured-assets"))
+            {
+                command.onlyConfiguredAssets = true;
+            }
             else if (IsOption(argument, "--quiet"))
             {
                 command.quiet = true;
@@ -437,6 +543,7 @@ namespace
                                                 "' is not a known target; expected one of: " +
                                                 known + ".");
                 }
+                command.selectedXnbPlatform = true;
             }
             else if (IsOption(argument, "--xnb-version"))
             {
@@ -482,6 +589,7 @@ namespace
                     throw std::invalid_argument("--xnb-profile must be 'reach' or 'hidef', not '" +
                                                 name + "'.");
                 }
+                command.selectedXnbProfile = true;
             }
             else if (IsOption(argument, "--xnb-compress"))
             {
@@ -509,6 +617,7 @@ namespace
                     throw std::invalid_argument(
                         "--xnb-compress must be 'none', 'lzx' or 'lz4', not '" + name + "'.");
                 }
+                command.selectedXnbCompression = true;
             }
             else if (IsOption(argument, "--fx-compiler"))
             {
@@ -536,6 +645,74 @@ namespace
                     throw std::invalid_argument("--fx-compiler-launcher path must not be empty.");
                 }
                 command.services.effectCompilerLauncher = arguments[index];
+            }
+            else if (IsOption(argument, "--xma-encoder"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xma-encoder requires a path to a program that reads a RIFF WAVE and "
+                        "writes a .xma.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--xma-encoder path must not be empty.");
+                }
+                command.services.xmaEncoderExecutable = arguments[index];
+            }
+            else if (IsOption(argument, "--xma-encoder-launcher"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xma-encoder-launcher requires a program to run the encoder through, "
+                        "such as 'wine'.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--xma-encoder-launcher path must not be empty.");
+                }
+                command.services.xmaEncoderLauncher = arguments[index];
+            }
+            else if (IsOption(argument, "--xma-encoder-arg"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xma-encoder-arg requires one argument for the encoder's command line; "
+                        "repeat the option once per argument.");
+                }
+                command.services.xmaEncoderArguments.push_back(arguments[index].string());
+            }
+            else if (IsOption(argument, "--build-configuration"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--build-configuration requires a name, such as Debug or Release.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument(
+                        "--build-configuration must not be empty.");
+                }
+                command.buildConfiguration = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                command.services.buildConfiguration = command.buildConfiguration;
+                command.selectedBuildConfiguration = true;
+            }
+            else if (IsOption(argument, "--font-directory"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--font-directory requires a directory holding font files; repeat the "
+                        "option once per directory.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--font-directory path must not be empty.");
+                }
+                command.services.fontDirectories.push_back(arguments[index]);
             }
             else if (IsOption(argument, "--xnb-reader-names"))
             {
@@ -775,7 +952,14 @@ namespace
         }
 
         const std::filesystem::path path = WeaklyCanonical(authored);
-        if (!IsWithin(WeaklyCanonical(sourceRoot), path))
+        // The containment rule is about what a *source tree* may carry: the configuration this
+        // build discovers under its root has to be inside it, like every other file it reads. A
+        // configuration the command line names is not a discovered source -- it is the
+        // instruction, and requiring it inside the root made a read-only source tree unbuildable,
+        // because `BuildContent` had to write its own configuration into the sources it was
+        // reading. The assets a configuration names are still root-relative and still contained
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-110`).
+        if (!explicitPath && !IsWithin(WeaklyCanonical(sourceRoot), path))
         {
             throw std::runtime_error("content configuration '" +
                                      CNA::Internal::ContentPathToUtf8(path) +
@@ -1208,6 +1392,38 @@ namespace
         return result;
     }
 
+    /**
+     * @brief Whether every schema a writer declares is one the recorded entry already carried.
+     *
+     * Not equality, and the difference is a defect this replaced. A node whose build starts a
+     * *nested* one -- a model whose materials name textures -- records the nested output's schema
+     * alongside its own, so its entry carries two where the writer declares one. Comparing the two
+     * sets for equality can therefore never hold for such a node, and every one of them rebuilt on
+     * every build, for ever, reporting `direct fingerprint changed outside a persisted reason
+     * domain` because the fallback reason is what is left when nothing else explains it. What this
+     * check is actually asking is whether the *route* is still the recorded one, and the answer to
+     * that is whether the writer still emits what it emitted; anything extra in the record belongs
+     * to a nested build, whose own inputs are fingerprinted separately
+     * (plans/plan_xnapipeline_parity.md XNAPP-300).
+     *
+     * @param recorded The schemas the manifest entry carries, the node's own and its nested ones.
+     * @param declared The schemas this writer emits.
+     * @return True when every declared schema is in the recorded set.
+     */
+    [[nodiscard]] bool WriterSchemasStillCovered(
+        const std::vector<Pipeline::ContentWriterSchemaIdentity>& recorded,
+        const std::vector<Pipeline::ContentWriterSchemaIdentity>& declared)
+    {
+        for (const Pipeline::ContentWriterSchemaIdentity& one : declared)
+        {
+            if (std::find(recorded.begin(), recorded.end(), one) == recorded.end())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool IsCurrentRoute(const Pipeline::ContentBuildManifestEntry& entry,
                         const Pipeline::ContentPipelineRegistry& registry,
                         const BuildItem& item)
@@ -1236,7 +1452,8 @@ namespace
                             item.format);
                     if (entry.processor == processor->Identity() &&
                         entry.writer == writer->Identity() &&
-                        entry.writerSchemas == writer->OutputSchemaIdentities())
+                        WriterSchemasStillCovered(entry.writerSchemas,
+                                                  writer->OutputSchemaIdentities()))
                     {
                         return true;
                     }
@@ -1574,10 +1791,29 @@ namespace
         std::string existingOwner_;
     };
 
+    /**
+     * @brief Claims a node's outputs, refusing two nodes that own *different* things under one name.
+     *
+     * Two nodes owning the same name is not by itself a collision: a nested build is keyed by its
+     * source and its processing, so two models that name the same texture describe one asset, and
+     * XNA's own build produces it once and lets both reference it. Spacewar's `p1_bfg` and
+     * `p1_dual` are exactly that -- both name `textures/p1_back.tga` -- and refusing them cost 85
+     * of that sample's 154 assets. What is still refused is two nodes whose outputs *differ*
+     * under one name, which is the case this check exists for
+     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-117`).
+     *
+     * @param entry The node's manifest entry.
+     * @param owner The node's logical name.
+     * @param outputRoot Where the build publishes.
+     * @param logicalOwners Receives the owner of each logical name.
+     * @param pathOwners Receives the owner of each published path.
+     * @param claimed Receives each claimed output, so a second claim can be compared with it.
+     */
     void ReserveOutputs(const Pipeline::ContentBuildManifestEntry& entry,
                         const std::string& owner, const std::filesystem::path& outputRoot,
                         std::map<std::string, std::string>& logicalOwners,
-                        std::map<std::string, std::string>& pathOwners)
+                        std::map<std::string, std::string>& pathOwners,
+                        std::map<std::string, Pipeline::ContentBuildManifestOutput>& claimed)
     {
         std::set<std::string> entryLogicalNames;
         std::set<std::string> entryPaths;
@@ -1593,11 +1829,20 @@ namespace
             const auto logical = logicalOwners.find(output.logicalName);
             if (logical != logicalOwners.end() && logical->second != owner)
             {
-                throw OutputReservationConflict(
-                    "content build nodes '" + logical->second + "' and '" + owner +
-                        "' both own output logical name '" + output.logicalName + "'.",
-                    logical->second);
+                const auto previous = claimed.find(output.logicalName);
+                if (previous == claimed.end() || !(previous->second == output))
+                {
+                    throw OutputReservationConflict(
+                        "content build nodes '" + logical->second + "' and '" + owner +
+                            "' both own output logical name '" + output.logicalName +
+                            "', and the two are not the same asset.",
+                        logical->second);
+                }
+                // The same asset under the same name: one of the two publishes it and the other
+                // refers to it, which is what XNA's own build does.
+                continue;
             }
+            claimed[output.logicalName] = output;
 
             const std::filesystem::path path = WeaklyCanonical(
                 outputRoot / CNA::Internal::ContentPathFromUtf8(output.path));
@@ -1876,6 +2121,91 @@ namespace
         return status.str();
     }
 
+    /**
+     * @brief Every item of this build, as `ContentBuildSibling` describes one.
+     *
+     * The table is what lets a nested build recognise that the asset it is about to ask for is
+     * already an item of the build it is part of, and refer to that item rather than building a
+     * second copy under a generated name. It is computed once, before any node runs, so which
+     * name a nested build answers cannot depend on the order the nodes finish in.
+     *
+     * An item whose importer cannot be resolved is left out rather than described wrongly: its
+     * own node will fail with the reason, and nothing should match it in the meantime.
+     *
+     * @param builds Every item of this build.
+     * @param registry The frozen registry, which resolves each item's importer.
+     * @return The table, shared by every request of this build.
+     */
+    std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>> DescribeSiblings(
+        const std::vector<BuildItem>& builds, const Pipeline::ContentPipelineRegistry& registry)
+    {
+        auto siblings = std::make_shared<std::vector<Pipeline::ContentBuildSibling>>();
+        siblings->reserve(builds.size());
+        for (const BuildItem& build : builds)
+        {
+            Pipeline::ContentBuildSibling sibling;
+            std::error_code error;
+            const std::filesystem::path canonical =
+                std::filesystem::weakly_canonical(build.source, error);
+            sibling.source = error ? build.source : canonical;
+            sibling.logicalName = build.logicalName;
+            try
+            {
+                const std::shared_ptr<const Pipeline::ContentImporter> importer =
+                    registry.ResolveImporter(build.source, build.importer);
+                if (importer == nullptr) { continue; }
+                sibling.importer = importer->Identity().name;
+            }
+            catch (const std::exception&)
+            {
+                continue;
+            }
+            sibling.processor = build.processor;
+            sibling.parameters = build.parameters;
+            siblings->push_back(std::move(sibling));
+        }
+        return siblings;
+    }
+
+    /**
+     * @brief Drops a nested build's copy of an asset another node in this build already owns.
+     *
+     * XNA's `MaterialProcessor` builds every texture a model's materials name as its own asset,
+     * and a project usually lists those textures as items of its own as well. Both produce the
+     * asset called `Textures/surface`, and only one of them can write it. XNA resolves that by
+     * asset name and so does this: the node that owns the name as an item keeps it, and the
+     * model's nested copy is dropped. The model still refers to the name, which the other node
+     * publishes.
+     *
+     * Dropping the model's copy rather than the item's is deliberate: the item is what the project
+     * asked for, with the processor and the parameters the project chose, while the nested copy is
+     * a default the model implied. Only nested copies are dropped -- a writer's own additional
+     * output is that node's product, and a collision between two of those is still a conflict.
+     *
+     * @param entry The node's manifest entry, edited in place.
+     * @param result The build result the entry describes.
+     * @param plannedNodes Logical names of every node in this build.
+     */
+    void DropNestedOutputsOwnedElsewhere(Pipeline::ContentBuildManifestEntry& entry,
+                                         const Pipeline::ContentBuildResult& result,
+                                         const std::set<std::string>& plannedNodes)
+    {
+        std::set<std::string> nested;
+        for (const Pipeline::ContentAdditionalWriteOutput& output :
+             result.output.additionalOutputs)
+        {
+            if (output.fromNestedBuild) { nested.insert(output.logicalName); }
+        }
+        if (nested.empty()) { return; }
+        std::erase_if(entry.outputs,
+                      [&](const Pipeline::ContentBuildManifestOutput& output)
+                      {
+                          return output.logicalName != result.logicalName &&
+                                 nested.contains(output.logicalName) &&
+                                 plannedNodes.contains(output.logicalName);
+                      });
+    }
+
     BuildNodePlan PrepareBuildNode(
         const BuildItem& item, std::size_t index, const Pipeline::ContentPipeline& pipeline,
         const Pipeline::ContentPipelineRegistry& registry,
@@ -1883,7 +2213,9 @@ namespace
         ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::filesystem::path& stagingRoot)
+        const std::filesystem::path& stagingRoot, const std::set<std::string>& plannedNodes,
+        const Pipeline::ContentBuildEnvironment& environment,
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>>& siblings)
     {
         BuildNodePlan plan;
         plan.item = &item;
@@ -1912,11 +2244,14 @@ namespace
             request.writer = item.writer;
             request.outputFormat = item.format;
             request.parameters = item.parameters;
+            request.environment = environment;
+            request.siblings = siblings;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             plan.messages = result.messages;
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            DropNestedOutputsOwnedElsewhere(plan.manifest, result, plannedNodes);
             Pipeline::RefreshContentBuildDirectFingerprint(
                 plan.manifest, sourceRoot, externalSourceRoots);
             plan.decision =
@@ -1977,7 +2312,10 @@ namespace
         const BuildNodePlan& plan, const Pipeline::ContentPipeline& pipeline,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::map<std::string, std::string>& effectiveFingerprints)
+        const std::map<std::string, std::string>& effectiveFingerprints,
+        const std::set<std::string>& plannedNodes,
+        const Pipeline::ContentBuildEnvironment& environment,
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>>& siblings)
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
@@ -2034,9 +2372,12 @@ namespace
             request.writer = item.writer;
             request.outputFormat = item.format;
             request.parameters = item.parameters;
+            request.environment = environment;
+            request.siblings = siblings;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            DropNestedOutputsOwnedElsewhere(outcome.manifest, result, plannedNodes);
             Pipeline::RefreshContentBuildDirectFingerprint(
                 outcome.manifest, sourceRoot, externalSourceRoots);
             if (outcome.manifest.directFingerprint != plan.manifest.directFingerprint ||
@@ -2080,6 +2421,249 @@ namespace
         return outcome;
     }
 
+    namespace Tasks = Microsoft::Xna::Framework::Content::Pipeline::Tasks;
+
+    /** @brief Whether this source names an XNA content project rather than an asset or a tree. */
+    [[nodiscard]] bool IsContentProject(const std::filesystem::path& source)
+    {
+        std::string extension = CNA::Internal::ContentPathToUtf8(source.extension());
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        // A *directory* whose name happens to end in `.contentproj` is a directory, and taking it
+        // for a project reached the reader, which answered "basic_filebuf::underflow error reading
+        // the file: Is a directory" -- a true sentence about a question nobody asked.
+        std::error_code error;
+        return extension == ".contentproj" && std::filesystem::is_regular_file(source, error);
+    }
+
+    /**
+     * @brief Copies one `Content` or `None` item beside the compiled assets.
+     *
+     * XNA's targets copy these rather than building them -- a readme, a shader a game loads at run
+     * time, a `.txt` nothing has an importer for -- and `CopyToOutputDirectory` says whether and
+     * when. `PreserveNewest` is honoured as it is written: the copy happens when the source is
+     * newer than what is there, which is also what makes a repeated build quiet.
+     *
+     * @param item The project item.
+     * @param projectDirectory The directory the item's `Include` is relative to.
+     * @param outputRoot Where compiled assets are being written.
+     * @param quiet Whether to say what was copied.
+     * @return Whether a copy actually happened.
+     */
+    bool CopyProjectItem(const Tasks::ContentProject::Item& item,
+                         const std::filesystem::path& projectDirectory,
+                         const std::filesystem::path& outputRoot, const bool quiet)
+    {
+        std::string when = item.Get("CopyToOutputDirectory");
+        std::transform(when.begin(), when.end(), when.begin(),
+                       [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (when.empty() || when == "never" || when == "donotcopy") { return false; }
+
+        // The source is always where the project says the file is; `Link` decides only where the
+        // copy lands, which is what it means in MSBuild and what a project uses it for when the
+        // file lives outside the project's own directory.
+        std::string include = item.include;
+        std::replace(include.begin(), include.end(), '\\', '/');
+        std::string relative = item.Get("Link");
+        if (relative.empty()) { relative = include; }
+        std::replace(relative.begin(), relative.end(), '\\', '/');
+        const std::filesystem::path source =
+            projectDirectory / CNA::Internal::ContentPathFromUtf8(include);
+        const std::filesystem::path target =
+            outputRoot / CNA::Internal::ContentPathFromUtf8(relative);
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(source, error) || error)
+        {
+            throw std::runtime_error("the project's copy item '" + item.include +
+                                     "' is not a file that exists.");
+        }
+        if (when == "preservenewest" && std::filesystem::exists(target, error) && !error &&
+            std::filesystem::last_write_time(target) >= std::filesystem::last_write_time(source))
+        {
+            if (!quiet) { std::cout << "[SKIP] " << relative << " (copy, up to date)\n"; }
+            return false;
+        }
+        std::filesystem::create_directories(target.parent_path(), error);
+        std::filesystem::copy_file(source, target,
+                                   std::filesystem::copy_options::overwrite_existing, error);
+        if (error)
+        {
+            throw std::runtime_error("could not copy the project's item '" + item.include +
+                                     "': " + error.message());
+        }
+        if (!quiet) { std::cout << "[COPY] " << relative << "\n"; }
+        return true;
+    }
+
+    /**
+     * @brief Builds an XNA `.contentproj` through the same coordinator every other build uses.
+     *
+     * There is no second build engine here and no second project format: the project is read by
+     * `Tasks::ContentProject`, handed to `Tasks::BuildContent` -- the task XNA's own `.targets`
+     * drives -- and that task runs this very coordinator with the project's own platform, profile,
+     * compression and per-asset metadata. What this function adds is the two things a command line
+     * has to do and a task does not: report what happened, and copy the `Content`/`None` items,
+     * which XNA's targets copy rather than build (plans/plan_xnapipeline_parity.md XNAPP-240).
+     *
+     * @param command The parsed command line.
+     * @param createRegistry The registry factory this invocation was given, passed on so a
+     *        user-owned compiler's own components are in the build rather than quietly absent.
+     * @return The process status.
+     */
+    int RunContentProject(const CommandLine& command,
+                          const Pipeline::ContentPipelineRegistryFactory& createRegistry)
+    {
+        if (command.output.empty())
+        {
+            std::cerr << "error: building a .contentproj requires an output directory.\n";
+            return 2;
+        }
+        Tasks::ContentProject project = Tasks::ContentProject::Load(
+            CNA::Internal::ContentPathToUtf8(command.source));
+
+        // Named all at once rather than one per run: a project that needs three custom processors
+        // should say so once, not three builds in a row. The build then goes ahead with the rest,
+        // which is what XNA's own does -- `BuildContent` fails the items whose processor it cannot
+        // find, keeps the ones it can and returns false. Refusing the project outright meant one
+        // game-defined processor cost every other asset in the project: across the public sample
+        // corpus that is 93 of 328 content projects producing nothing at all, most of them over
+        // three or four assets out of dozens (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        const std::vector<std::string> unroutable = project.UnroutableEXT();
+        for (const std::string& reason : unroutable)
+        {
+            std::cerr << "error: " << reason << "\n";
+        }
+        if (!unroutable.empty())
+        {
+            std::cerr << "error: this build has no component for " << unroutable.size()
+                      << " of the project's assets, listed above; the rest are built.\n";
+        }
+
+        const std::filesystem::path outputRoot = WeaklyCanonical(command.output);
+        std::error_code error;
+        std::filesystem::create_directories(outputRoot, error);
+        const std::filesystem::path intermediate = outputRoot / ".cna-contentproj";
+
+        Tasks::BuildContent task = project.ToBuildContentEXT(
+            CNA::Internal::ContentPathToUtf8(outputRoot),
+            CNA::Internal::ContentPathToUtf8(intermediate));
+        // A project carries its own target, and a command line that names one overrides it -- the
+        // way `msbuild /p:XnaPlatform=...` overrides the property in the file. Without this the
+        // options were accepted and ignored: every `.contentproj` built Windows/HiDef whatever
+        // `--xnb-platform` said, so a Windows Phone or Xbox project could not be built at all
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-102`).
+        if (command.selectedXnbPlatform)
+        {
+            // `TargetPlatform` is XNA's property and carries XNA's own spelling; the command
+            // line's is lowercase.
+            const char* xnaSpelling = nullptr;
+            switch (command.xnbOptions.platform)
+            {
+            case CNA::Internal::Xnb::XnbTargetPlatform::Windows: xnaSpelling = "Windows"; break;
+            case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone:
+                xnaSpelling = "WindowsPhone";
+                break;
+            case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360: xnaSpelling = "Xbox360"; break;
+            default:
+                // An extended ecosystem identifier is not an XNA target and a project cannot ask
+                // for one; the coordinator's own refusal is the right one and it is reached below.
+                xnaSpelling = CNA::Internal::Xnb::XnbTargetPlatformName(command.xnbOptions.platform);
+                break;
+            }
+            task.setTargetPlatformProperty(xnaSpelling);
+        }
+        if (command.selectedXnbProfile)
+        {
+            task.setTargetProfileProperty(
+                command.xnbOptions.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
+                    ? "HiDef"
+                    : "Reach");
+        }
+        if (command.selectedXnbCompression)
+        {
+            task.setCompressContentProperty(command.xnbOptions.compression ==
+                                            CNA::Internal::Xnb::XnbOutputCompression::Lzx);
+        }
+        // The task writes its own command line for the coordinator -- the project's platform,
+        // profile, compression and per-asset metadata -- and that command line is not this one,
+        // so nothing this one selected reaches the factory unless it is put there. Without this,
+        // `--fx-compiler`, `--xma-encoder` and `--font-directory` were accepted on a
+        // `.contentproj` build and then silently ignored, which is worse than refusing them: a
+        // project with a `.fx` asset cannot be built at all with a compiler that was named
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-101`).
+        const Pipeline::ContentCompilerOptions& selected = command.services;
+        const bool namedConfiguration = command.selectedBuildConfiguration;
+        task.setRegistryFactoryEXT(
+            [&createRegistry, &selected, namedConfiguration](
+                const Pipeline::ContentCompilerOptions& inner)
+            {
+                Pipeline::ContentCompilerOptions merged = inner;
+                merged.effectCompilerExecutable = selected.effectCompilerExecutable;
+                merged.effectCompilerLauncher = selected.effectCompilerLauncher;
+                merged.xmaEncoderExecutable = selected.xmaEncoderExecutable;
+                merged.xmaEncoderLauncher = selected.xmaEncoderLauncher;
+                merged.xmaEncoderArguments = selected.xmaEncoderArguments;
+                merged.fontDirectories = selected.fontDirectories;
+                // The project's own `Configuration` is what the inner command line carries, and
+                // it is the one XNA's `DebugMode.Auto` follows; the outer one wins only where it
+                // named a configuration, which is what `--build-configuration` is for. Testing
+                // that by comparing the inner value against `"Release"` could not tell a caller
+                // who asked for Release from one who asked for nothing, so an explicit
+                // `--build-configuration Release` was discarded in favour of a project's own
+                // `Debug` default -- and every effect of the twelve samples whose runner passes
+                // `Release` came out compiled `/Zi /Od` against a reference compiled optimized
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-200`).
+                if (namedConfiguration)
+                {
+                    merged.buildConfiguration = selected.buildConfiguration;
+                }
+                else if (!inner.buildConfiguration.empty())
+                {
+                    merged.buildConfiguration = inner.buildConfiguration;
+                }
+                else
+                {
+                    merged.buildConfiguration = selected.buildConfiguration;
+                }
+                return createRegistry(merged);
+            });
+        const bool built = task.Execute();
+
+        if (!command.quiet)
+        {
+            for (const std::string& line : task.MessagesEXT()) { std::cout << line << "\n"; }
+        }
+        for (const std::string& line : task.WarningsEXT()) { std::cerr << "warning: " << line << "\n"; }
+        for (const std::string& line : task.ErrorsEXT()) { std::cerr << "error: " << line << "\n"; }
+        if (!built || !unroutable.empty()) { return 1; }
+
+        std::size_t copied = 0u;
+        try
+        {
+            for (const Tasks::ContentProject::Item& item : project.CopiedFiles())
+            {
+                if (CopyProjectItem(item, CNA::Internal::ContentPathFromUtf8(project.DirectoryEXT()),
+                                    outputRoot, command.quiet))
+                {
+                    ++copied;
+                }
+            }
+        }
+        catch (const std::exception& failure)
+        {
+            std::cerr << "error: " << failure.what() << "\n";
+            return 1;
+        }
+
+        if (!command.quiet)
+        {
+            std::cout << "Built: " << task.getRebuiltContentFilesProperty().size()
+                      << "  Assets: " << task.getOutputContentFilesProperty().size()
+                      << "  Copied: " << copied << "\n";
+        }
+        return 0;
+    }
+
     int Run(const std::vector<std::filesystem::path>& arguments,
             const Pipeline::ContentPipelineRegistryFactory& createRegistry)
     {
@@ -2096,6 +2680,22 @@ namespace
         }
         if (command.operation == ContentCommand::Clean) { return RunClean(command); }
 
+        // An XNA content project is a source this coordinator understands, not a second format
+        // with a second engine behind it: it is read, handed to the task XNA's own targets drive,
+        // and that task runs this coordinator (XNAPP-240).
+        if (IsContentProject(command.source))
+        {
+            try
+            {
+                return RunContentProject(command, createRegistry);
+            }
+            catch (const std::exception& failure)
+            {
+                std::cerr << "error: " << failure.what() << "\n";
+                return 1;
+            }
+        }
+
         // The registry is built here, after parsing, because a route whose backend is an external
         // program cannot be registered before that program has been chosen: the backend's identity
         // enters the incremental fingerprint. Nothing is retained between calls, which is what
@@ -2103,6 +2703,10 @@ namespace
         std::shared_ptr<Pipeline::ContentPipelineRegistry> mutableRegistry;
         try
         {
+            // The container options reach the factory too, so a caller registering writers of
+            // its own binds them to the same platform, version, profile and compression the
+            // built-in writers below are bound to (XNAPP-260).
+            command.services.xnbContainer = command.xnbOptions;
             mutableRegistry = createRegistry(command.services);
         }
         catch (const std::exception& error)
@@ -2150,6 +2754,17 @@ namespace
             externalSourceRoots = Pipeline::ResolveContentSourceRootCapabilities(
                 sourceRoot, configuration.SourceRoots());
             RequireExternalRootsSeparateFromOutput(outputRoot, externalSourceRoots);
+            if (command.onlyConfiguredAssets && directoryBuild)
+            {
+                const auto& named = configuration.Entries();
+                builds.erase(std::remove_if(builds.begin(), builds.end(),
+                                            [&named](const BuildItem& item)
+                                            {
+                                                return named.find(item.relativeSource) ==
+                                                       named.end();
+                                            }),
+                             builds.end());
+            }
             ApplyConfiguration(builds, configuration, *registry, sourceRoot, outputRoot,
                                directoryBuild);
             std::sort(builds.begin(), builds.end(), [](const BuildItem& left,
@@ -2189,6 +2804,7 @@ namespace
         std::size_t skipped = 0u;
         std::size_t failed = 0u;
         std::map<std::string, std::string> logicalOwners;
+        std::map<std::string, Pipeline::ContentBuildManifestOutput> claimedOutputs;
         std::map<std::string, std::string> pathOwners;
         std::map<std::string, std::size_t> plansByNode;
         for (const BuildItem& item : builds)
@@ -2224,7 +2840,41 @@ namespace
             return 1;
         }
 
+        // The host-level facts every component of this build is entitled to know: which target the
+        // content is for, which profile it must respect, where the artefacts go, and how strictly
+        // this invocation refuses what XNA would only warn about. Built once, before any node runs,
+        // because it is the same for all of them (plans/plan_xnapipeline_parity.md XNAPP-267).
+        Pipeline::ContentBuildEnvironment buildEnvironment;
+        switch (command.xnbOptions.platform)
+        {
+        case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360:
+            buildEnvironment.targetPlatform = Pipeline::ContentTargetPlatform::Xbox360;
+            break;
+        case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone:
+            buildEnvironment.targetPlatform = Pipeline::ContentTargetPlatform::WindowsPhone;
+            break;
+        default:
+            // Every other container target -- DesktopGL and the rest of the extended ecosystem --
+            // is a desktop build as far as a processor is concerned; the container byte is the
+            // writer's business, not the processor's.
+            buildEnvironment.targetPlatform = Pipeline::ContentTargetPlatform::Windows;
+            break;
+        }
+        buildEnvironment.targetProfile =
+            command.xnbOptions.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
+                ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
+        buildEnvironment.outputDirectory = outputRoot;
+        buildEnvironment.buildConfiguration = command.buildConfiguration;
+        buildEnvironment.strictness = command.strictness;
+
         std::vector<BuildNodePlan> plans(builds.size());
+        // Known before any node runs, so which node keeps a contested asset name does not depend
+        // on the order the nodes happen to finish in.
+        std::set<std::string> plannedNodes;
+        for (const BuildItem& build : builds) { plannedNodes.insert(build.logicalName); }
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>> siblings =
+            DescribeSiblings(builds, *registry);
         try
         {
             for (std::size_t offset = 0u; offset < builds.size(); offset += command.workers)
@@ -2235,7 +2885,7 @@ namespace
                     plans[offset] = PrepareBuildNode(
                         builds[offset], offset, pipeline, *registry, previousManifest,
                         loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
-                        staging->Path());
+                        staging->Path(), plannedNodes, buildEnvironment, siblings);
                     continue;
                 }
 
@@ -2250,7 +2900,8 @@ namespace
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
                                 loadedManifest.state, sourceRoot, outputRoot,
-                                externalSourceRoots, staging->Path());
+                                externalSourceRoots, staging->Path(), plannedNodes,
+                                buildEnvironment, siblings);
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -2275,7 +2926,7 @@ namespace
             try
             {
                 ReserveOutputs(plans[index].manifest, plans[index].item->logicalName,
-                               outputRoot, logicalOwners, pathOwners);
+                               outputRoot, logicalOwners, pathOwners, claimedOutputs);
             }
             catch (const OutputReservationConflict& error)
             {
@@ -2500,7 +3151,8 @@ namespace
             {
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
-                    externalSourceRoots, effectiveFingerprints));
+                    externalSourceRoots, effectiveFingerprints, plannedNodes,
+                    buildEnvironment, siblings));
             }
             else
             {
@@ -2516,7 +3168,8 @@ namespace
                             {
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
-                                    externalSourceRoots, effectiveFingerprints);
+                                    externalSourceRoots, effectiveFingerprints, plannedNodes,
+                                    buildEnvironment, siblings);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)
@@ -2569,12 +3222,17 @@ namespace
                     for (const Pipeline::ContentLogMessage& message : outcome.messages)
                     {
                         if (message.level == Pipeline::ContentLogLevel::Info) { continue; }
+                        const char* label = "warning";
+                        if (message.level == Pipeline::ContentLogLevel::Error) { label = "error"; }
+                        // An important message is the author's own, asked to be shown; calling it a
+                        // warning would put words in their mouth (XNAPP-260).
+                        else if (message.level == Pipeline::ContentLogLevel::Important)
+                        {
+                            label = "message";
+                        }
                         events.push_back(
-                            {false,
-                             std::string("  ") +
-                                 (message.level == Pipeline::ContentLogLevel::Error ? "error"
-                                                                                    : "warning") +
-                                 " (" + message.component + "): " + message.text});
+                            {false, std::string("  ") + label + " (" + message.component + "): " +
+                                        message.text});
                     }
                     if (outcome.skipped) { ++skipped; }
                     else { ++built; }
@@ -2653,19 +3311,48 @@ namespace CNA::Content::Pipeline
                                         const ContentCompilerOptions& options)
     {
         RegisterTexture2DContentPipeline(registry, MakeBlockCompressionTextureEncoder());
-        RegisterSoundEffectContentPipeline(registry);
-        RegisterSongContentPipeline(registry);
-        RegisterVideoContentPipeline(registry);
+        RegisterSoundEffectContentPipeline(registry,
+                                           BuildTimeMedia::MakeCompressedSoundDecoder());
+        RegisterSongContentPipeline(registry, BuildTimeMedia::MakeSongDurationProbe());
+        RegisterVideoContentPipeline(registry, BuildTimeMedia::MakeVideoMetadataProbe());
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
+        // The font search this process's `.spritefont` builds use, set before any source is
+        // discovered. `<FontName>` is a family name and the families the XNA samples name are not
+        // installed on a build machine, so a build has to be able to say where they are
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+        SetFontSearchDirectoriesEXT(options.fontDirectories);
         RegisterSpriteFontSourceContentPipeline(registry);
+        RegisterXnaModelSourceContentPipeline(registry);
         RegisterCompiledEffectContentPipeline(registry);
 
         ExternalEffectCompilerOptions compiler;
         compiler.executable = options.effectCompilerExecutable;
         compiler.launcher = options.effectCompilerLauncher;
-        RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler));
+        RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler),
+                                            options.buildConfiguration == "Debug");
+
+        // The XMA encoder this process's builds use, attached before any source is discovered.
+        // Nothing here needs one -- the built-in `.wav` route writes PCM for every target -- but
+        // `AudioContent::ConvertFormat(Xma, ...)` is XNA's own API for asking, and a game's own
+        // processor may call it (plans/plan_xnapipeline_parity.md XNAPP-262).
+        ExternalXmaEncoderOptions xma;
+        xma.executable = options.xmaEncoderExecutable;
+        xma.launcher = options.xmaEncoderLauncher;
+        xma.arguments = options.xmaEncoderArguments;
+        SetBuildXmaEncoder(MakeExternalXmaEncoder(xma));
+
+        // The `.xml` route, and with it every `.xnb` writer for a type XNA's own ContentCompiler
+        // knows. A compiler is made here rather than shared with a caller because this is the
+        // built-in registration: a program that wants its own types in an `.xml` document builds
+        // its own compiler, adds its type writers to it, and calls
+        // RegisterXnaXmlSourceContentPipeline itself (see the custom-pipeline example).
+        RegisterXnaXmlSourceContentPipeline(
+            registry,
+            std::make_shared<const Microsoft::Xna::Framework::Content::Pipeline::
+                                 Serialization::Compiler::ContentCompiler>(),
+            options.xnbContainer);
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,

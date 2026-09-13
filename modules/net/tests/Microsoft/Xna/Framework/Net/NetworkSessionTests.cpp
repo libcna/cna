@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -21,6 +22,7 @@
 
 using namespace Microsoft::Xna::Framework::Net;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
+using Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
 
@@ -459,14 +461,36 @@ TEST(NetworkSessionTest, CreateMakesLocalGamersReportIsHostTrue) {
     session->Dispose();
 }
 
-TEST(NetworkSessionTest, JoinInvitedMakesLocalGamersReportIsHostFalse) {
+// "A joiner is not the host" is still worth pinning, but JoinInvited can no longer produce a
+// session to check it on (see JoinInvitedWithExplicitLocalGamersRefuses). Join() is the remaining
+// route by which this machine joins someone else's session, so it carries the assertion now.
+TEST(NetworkSessionTest, AJoinedSessionMakesLocalGamersReportIsHostFalse) {
     auto gamer = MakeSignedInGamer();
-    NetworkSession* session = NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer});
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&gamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(
+                new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))
+            );
+        }
+    } restoreGuard;
+
+    AvailableNetworkSession availableSession = AvailableNetworkSession::CreateInternal(
+        1, "SyntheticHost", 0, 8, NetworkSessionProperties{},
+        QualityOfService::CreateInternal(), "127.0.0.1", 27015,
+        NetworkSessionType::Local
+    );
+
+    NetworkSession* session = NetworkSession::Join(&availableSession);
+    ASSERT_NE(session, nullptr);
 
     EXPECT_FALSE(session->getLocalGamersProperty()[0]->getIsHostProperty());
     EXPECT_FALSE(session->getIsHostProperty());
 
     session->Dispose();
+    delete session;
 }
 
 // NOTE: the explicit-local-gamers Create()/JoinInvited() overloads always set maxLocalGamers_ to
@@ -1015,35 +1039,47 @@ TEST(NetworkSessionTest, BeginJoinInvitedValidatesMaxLocalGamers) {
     );
 }
 
-TEST(NetworkSessionTest, JoinInvitedWithExplicitLocalGamersSucceeds) {
+// Both JoinInvited overloads refuse: nothing raises NetworkSession::InviteAccepted, which is the
+// only place XNA's contract calls JoinInvited from, so no invitation can ever be pending. This
+// overload used to succeed and return a PlayerMatch session built out of nothing -- no invitation
+// token, no host address, no transport -- which is the behaviour SAMPLE-096 measured against the
+// real XNA runtime (see misc/known_gaps.md). The per-type sweep lives in
+// NetworkSessionTypePolicyTests.cpp; these two cases pin the argument-validation ordering and the
+// EndJoinInvited half that no Begin can now feed.
+TEST(NetworkSessionTest, JoinInvitedWithExplicitLocalGamersRefuses) {
     auto gamer = MakeSignedInGamer();
-    // Unlike Join(AvailableNetworkSession*) and JoinInvited(int), this overload's
-    // BeginJoinInvited passes the caller's own gamer list straight through as
-    // NetworkSessionAction::LocalGamers (never std::nullopt), so EndJoinInvited's constructor
-    // call uses that real, non-empty list — it never touches the empty global
-    // Gamer::SignedInGamers and is safe to complete.
-    NetworkSession* session = NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer});
-    EXPECT_EQ(session->getSessionTypeProperty(), NetworkSessionType::PlayerMatch);
-    session->Dispose();
+    EXPECT_THROW(
+        NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer}),
+        GamerServicesNotAvailableException
+    );
 }
 
-// NOTE: JoinInvited(int) is not exercised here for the same reason Create(sessionType,
-// maxLocalGamers, maxGamers) and Join(AvailableNetworkSession*) aren't — its BeginJoinInvited
-// overload always records a std::nullopt LocalGamers list, so completing it via
-// EndJoinInvited always hits the empty-global-SignedInGamers constructor throw, which would
-// permanently strand activeAction_. Only the argument-validation path above is safe.
+TEST(NetworkSessionTest, EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne) {
+    // A BeginCreate result compares equal to activeAction_, so before the refusal this was a way
+    // around it: EndJoinInvited hardcoded a PlayerMatch session regardless of which Begin* had
+    // produced the action.
+    auto gamer = MakeSignedInGamer();
+    System::IAsyncResult* createResult = NetworkSession::BeginCreate(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0,
+        NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_THROW(NetworkSession::EndJoinInvited(createResult), System::ArgumentException);
+
+    // The create action is still pending and still completable, so the refusal stranded nothing.
+    NetworkSession* session = NetworkSession::EndCreate(createResult);
+    ASSERT_NE(session, nullptr);
+    EXPECT_EQ(session->getSessionTypeProperty(), NetworkSessionType::Local);
+    session->Dispose();
+    delete session;
+}
 
 TEST(NetworkSessionTest, EndJoinInvitedWithMismatchedResultThrows) {
-    auto gamer = MakeSignedInGamer();
-    System::IAsyncResult* result = NetworkSession::BeginJoinInvited(
-        std::vector<SignedInGamer*>{&gamer}, System::AsyncCallback{}, std::any{}
-    );
-
+    // BeginJoinInvited now refuses, so there is no matching result to contrast the mismatched one
+    // against; EndJoinInvited refuses every result for that reason. The positive half of this
+    // pair lives in EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne, which proves a
+    // real pending action survives the refusal.
     auto* bogus = reinterpret_cast<System::IAsyncResult*>(0x1);
     EXPECT_THROW(NetworkSession::EndJoinInvited(bogus), System::ArgumentException);
-
-    NetworkSession* session = NetworkSession::EndJoinInvited(result);
-    session->Dispose();
 }
 
 // --- LocalNetworkGamer ---

@@ -232,6 +232,13 @@ class SdlGpuSkinnedFogTest : public Game
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.setTextureProperty(white_.get());
+        // This oracle performs its half-fog mix directly on read-back channel values. Request a
+        // linear output explicitly so that operation matches the shader's linear-space fog mix;
+        // otherwise the default final sRGB encoding makes an arithmetic midpoint intentionally
+        // non-linear in the stored bytes.
+        fx.setBaseColorTextureIsSrgbEXTProperty(false);
+        fx.setEmissiveTextureIsSrgbEXTProperty(false);
+        fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setMetallicFactorProperty(0.0f);
         fx.setRoughnessFactorProperty(1.0f);
         fx.DirectionalLight0.setEnabledProperty(true);
@@ -267,6 +274,9 @@ class SdlGpuSkinnedFogTest : public Game
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.setTextureProperty(white_.get());
+        fx.setBaseColorTextureIsSrgbEXTProperty(false);
+        fx.setEmissiveTextureIsSrgbEXTProperty(false);
+        fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setMetallicFactorProperty(0.0f);
         fx.setRoughnessFactorProperty(1.0f);
         fx.DirectionalLight0.setEnabledProperty(true);

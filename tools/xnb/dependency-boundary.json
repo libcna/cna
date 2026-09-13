@@ -36,6 +36,7 @@
   ],
   "buildTimeOnly": [
     "Freetype::Freetype",
+    "ZLIB::ZLIB",
     "cna_content_compiler",
     "cna_content_pipeline"
   ]

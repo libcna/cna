@@ -30,6 +30,8 @@
 // Check F -- RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle: a full-screen
 //   draw with a left-half scissor rect must only affect the left half, leaving the right half as
 //   background -- proves SetScissorRect/ApplyScissorForRef genuinely clip.
+// Check I -- One/Zero factors with ReverseSubtract must still enable blending for color and alpha;
+//   the factor-only shortcut otherwise silently turns a non-Add XNA equation into a source copy.
 //
 // REMED-GFX-180 (fixture defect, not a renderer one): Check E's triangle buffer holds THREE
 // vertices and used to be drawn through a helper that hardcoded two primitives -- a request for six.
@@ -49,6 +51,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
@@ -80,7 +83,7 @@ namespace
     constexpr int kRTSize = 32;
     constexpr int kTotalFrames = 120;
     /// 16 as originally written, plus REMED-GFX-180's two positive WireFrame checks.
-    constexpr int kTotalChecks = 18;
+    constexpr int kTotalChecks = 20;
 
     bool CloseTo(int a, int b, int tol) { return std::abs(a - b) <= tol; }
     bool Matches(const Color& c, const Color& expected, int tol = 10)
@@ -111,6 +114,8 @@ class SdlGpuRenderStateTest : public Game
 
     std::unique_ptr<RenderTarget2D> rtAdditive_;
     std::unique_ptr<RenderTarget2D> rtAlphaBlend_;
+    std::unique_ptr<RenderTarget2D> rtNonAdditiveColorCopyFactors_;
+    std::unique_ptr<RenderTarget2D> rtNonAdditiveAlphaCopyFactors_;
     std::unique_ptr<RenderTarget2D> rtStencil_;
     std::unique_ptr<RenderTarget2D> rtCullCcw_;
     std::unique_ptr<RenderTarget2D> rtCullCw_;
@@ -208,6 +213,36 @@ class SdlGpuRenderStateTest : public Game
         dev.Clear(Color::White);
         dev.setBlendStateProperty(BlendState::AlphaBlend);
         DrawFullQuad(dev, *fullQuadBlackAlphaVb_);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        // SDLGPU-58: One/Zero factors only describe an opaque copy for Add. A non-Add equation is
+        // still observable and must keep blending enabled. EasyGL currently gets these two cases
+        // wrong by applying the factor-only shortcut; SDL GPU must not copy that oracle defect.
+        BlendState nonAdditiveColor;
+        nonAdditiveColor.setColorSourceBlendProperty(Blend::One);
+        nonAdditiveColor.setColorDestinationBlendProperty(Blend::Zero);
+        nonAdditiveColor.setColorBlendFunctionProperty(BlendFunction::ReverseSubtract);
+        nonAdditiveColor.setAlphaSourceBlendProperty(Blend::One);
+        nonAdditiveColor.setAlphaDestinationBlendProperty(Blend::Zero);
+        nonAdditiveColor.setAlphaBlendFunctionProperty(BlendFunction::Add);
+        dev.SetRenderTarget(rtNonAdditiveColorCopyFactors_.get());
+        dev.Clear(Color::Red);
+        dev.setBlendStateProperty(nonAdditiveColor);
+        DrawFullQuad(dev, *fullQuadGreenVb_);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        BlendState nonAdditiveAlpha;
+        nonAdditiveAlpha.setColorSourceBlendProperty(Blend::One);
+        nonAdditiveAlpha.setColorDestinationBlendProperty(Blend::Zero);
+        nonAdditiveAlpha.setColorBlendFunctionProperty(BlendFunction::Add);
+        nonAdditiveAlpha.setAlphaSourceBlendProperty(Blend::One);
+        nonAdditiveAlpha.setAlphaDestinationBlendProperty(Blend::Zero);
+        nonAdditiveAlpha.setAlphaBlendFunctionProperty(BlendFunction::ReverseSubtract);
+        dev.SetRenderTarget(rtNonAdditiveAlphaCopyFactors_.get());
+        dev.Clear(Color::White);
+        dev.setBlendStateProperty(nonAdditiveAlpha);
+        DrawFullQuad(dev, *fullQuadGreenVb_);
         dev.setBlendStateProperty(BlendState::Opaque);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
     }
@@ -475,6 +510,12 @@ protected:
                                                         DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
         rtAlphaBlend_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                                           DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtNonAdditiveColorCopyFactors_ = std::make_unique<RenderTarget2D>(
+            dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::DiscardContents);
+        rtNonAdditiveAlphaCopyFactors_ = std::make_unique<RenderTarget2D>(
+            dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::DiscardContents);
         rtStencil_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                                        DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
         rtCullCcw_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
@@ -557,6 +598,20 @@ protected:
             const Color gotAlphaBlend = ReadPixel(*rtAlphaBlend_, kRTSize / 2, kRTSize / 2);
             Check(Matches(gotAlphaBlend, Color(127, 127, 127), 16),
                   ("Check B: BlendState.AlphaBlend (White bg + half-alpha Black draw) -> mid-grey: got=" + ColorStr(gotAlphaBlend)).c_str());
+
+            const Color gotNonAdditiveColor =
+                ReadPixel(*rtNonAdditiveColorCopyFactors_, kRTSize / 2, kRTSize / 2);
+            Check(Matches(gotNonAdditiveColor, Color::Black),
+                  ("Check I: ReverseSubtract One/Zero remains enabled for color -> Black: got=" +
+                   ColorStr(gotNonAdditiveColor)).c_str());
+
+            const Color gotNonAdditiveAlpha =
+                ReadPixel(*rtNonAdditiveAlphaCopyFactors_, kRTSize / 2, kRTSize / 2);
+            Check(Matches(gotNonAdditiveAlpha, Color::Green) &&
+                      gotNonAdditiveAlpha.getAProperty() <= 3,
+                  ("Check I: ReverseSubtract One/Zero remains enabled for alpha -> Green,a=0: got=" +
+                   ColorStr(gotNonAdditiveAlpha) + ",a=" +
+                   std::to_string(gotNonAdditiveAlpha.getAProperty())).c_str());
 
             const Color gotStencilLeft = ReadPixel(*rtStencil_, kRTSize / 4, kRTSize / 2);
             Check(Matches(gotStencilLeft, Color::Green),

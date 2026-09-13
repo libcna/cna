@@ -1,0 +1,1512 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plans/plan_xnapipeline_parity.md XNAPP-220, XNAPP-221: the DirectX `.x` importer, against the
+// graph the genuine one answers for the same committed files.
+//
+// The expectations are tests/reference/xna40/model/model-import-oracle.json, cases `x/*`. The
+// comparison is the whole graph -- names, transforms, positions, every vertex channel and its
+// values, materials, bone weights and every animation keyframe -- rather than a summary, because
+// a modelling importer that gets the shape right and the values wrong is exactly what a summary
+// would hide.
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <map>
+#include <memory>
+#include <regex>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VectorConverter.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ModelImporters.hpp"
+#include "System/IO/FileNotFoundException.hpp"
+
+namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
+namespace Graphics = Microsoft::Xna::Framework::Content::Pipeline::Graphics;
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector2;
+using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
+using Xna::InvalidContentException;
+using Xna::XImporter;
+
+namespace
+{
+    std::filesystem::path Locate(const std::filesystem::path& relative)
+    {
+        for (std::filesystem::path dir = std::filesystem::current_path(); !dir.empty();
+             dir = dir.parent_path())
+        {
+            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
+            if (dir == dir.root_path()) { break; }
+        }
+        for (std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path(); !dir.empty();
+             dir = dir.parent_path())
+        {
+            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
+            if (dir == dir.root_path()) { break; }
+        }
+        return relative;
+    }
+
+    std::filesystem::path Fixture(const std::string& name)
+    {
+        return Locate("tests/assets/xna40/model") / name;
+    }
+
+    std::string Unescape(const std::string& text)
+    {
+        std::string out;
+        for (std::size_t i = 0; i < text.size(); ++i)
+        {
+            if (text[i] == '\\' && i + 1 < text.size())
+            {
+                const char next = text[++i];
+                out += next == 'n' ? '\n' : next == 'r' ? '\r' : next;
+            }
+            else
+            {
+                out += text[i];
+            }
+        }
+        return out;
+    }
+
+    std::string Expected(const std::string& name)
+    {
+        static const std::map<std::string, std::string> cases = []
+        {
+            std::map<std::string, std::string> map;
+            std::ifstream in(Locate("tests/reference/xna40/model/model-import-oracle.json"));
+            std::string line;
+            const std::regex pattern("\\{\"case\": \"([^\"]*)\", \"result\": \"((?:[^\"\\\\]|\\\\.)*)\"\\}");
+            while (std::getline(in, line))
+            {
+                std::smatch match;
+                if (std::regex_search(line, match, pattern)) { map[match[1]] = Unescape(match[2]); }
+            }
+            return map;
+        }();
+        const auto found = cases.find(name);
+        return found == cases.end() ? std::string("<missing case ") + name + ">" : found->second;
+    }
+
+    class ImporterContext final : public Xna::ContentImporterContext
+    {
+    public:
+        std::vector<std::string> dependencies;
+        [[nodiscard]] std::string getIntermediateDirectoryProperty() const override { return "obj"; }
+        [[nodiscard]] Xna::ContentBuildLogger& getLoggerProperty() const override
+        {
+            return const_cast<RecordingLogger&>(logger_);
+        }
+        [[nodiscard]] std::string getOutputDirectoryProperty() const override { return "bin"; }
+        void AddDependency(const std::string& filename) override { dependencies.push_back(filename); }
+
+        /** @brief The warnings the importer logged, in the oracle's own `warning: ` form. */
+        [[nodiscard]] const std::vector<std::string>& Warnings() const { return logger_.lines; }
+
+    private:
+        /** @brief Records warnings and drops the rest, because the oracle records only warnings. */
+        class RecordingLogger final : public Xna::ContentBuildLogger
+        {
+        public:
+            std::vector<std::string> lines;
+
+        protected:
+            void LogMessage(const std::string&) override {}
+            void LogImportantMessage(const std::string&) override {}
+            void LogWarning(const std::string&, const Xna::ContentIdentity&,
+                            const std::string& message) override
+            {
+                lines.push_back("warning: " + message);
+            }
+        };
+
+        RecordingLogger logger_;
+    };
+
+    /** @brief The oracle's own `0.######` formatting, so the two strings compare verbatim. */
+    std::string F(const float value)
+    {
+        std::ostringstream out;
+        out << std::fixed << std::setprecision(6) << value;
+        std::string text = out.str();
+        if (text.find('.') != std::string::npos)
+        {
+            while (!text.empty() && text.back() == '0') { text.pop_back(); }
+            if (!text.empty() && text.back() == '.') { text.pop_back(); }
+        }
+        // The oracle prints .NET's "0.######" of a negative zero as "0"; so does this.
+        return text == "-0" ? std::string("0") : text;
+    }
+
+    std::string Describe(const Matrix& m)
+    {
+        return "[" + F(m.M11) + " " + F(m.M12) + " " + F(m.M13) + " " + F(m.M14) + " " + F(m.M21) + " " +
+               F(m.M22) + " " + F(m.M23) + " " + F(m.M24) + " " + F(m.M31) + " " + F(m.M32) + " " +
+               F(m.M33) + " " + F(m.M34) + " " + F(m.M41) + " " + F(m.M42) + " " + F(m.M43) + " " +
+               F(m.M44) + "]";
+    }
+
+    template<typename T>
+    const System::Collections::ObjectModel::Collection<T>& AsCollection(const auto& collection)
+    {
+        return static_cast<const System::Collections::ObjectModel::Collection<T>&>(collection);
+    }
+
+    /** @brief The last segment of a .NET full name, which is what `Type.Name` answers. */
+    std::string ShortTypeName(const std::string& fullName)
+    {
+        const std::size_t dot = fullName.rfind('.');
+        return dot == std::string::npos ? fullName : fullName.substr(dot + 1);
+    }
+
+    /**
+     * @brief One opaque-data value, in the words `ModelImportOracle.cs` writes it in.
+     *
+     * The oracle formats the vector types itself and falls back to `value.ToString()`, whose
+     * default for a type that does not override it is the type's own full name -- which is how an
+     * `ExternalReference<EffectContent>` is printed. A `Matrix` overrides it, and CNA's `ToString`
+     * answers the same form (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-183`).
+     */
+    std::string DescribeOpaqueValue(const Xna::ContentObject& value)
+    {
+        if (Xna::Holds<Vector2>(value))
+        {
+            const Vector2 v = Xna::Unbox<Vector2>(value);
+            return "(" + F(v.X) + "," + F(v.Y) + ")";
+        }
+        if (Xna::Holds<Vector3>(value))
+        {
+            const Vector3 v = Xna::Unbox<Vector3>(value);
+            return "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + ")";
+        }
+        if (Xna::Holds<Vector4>(value))
+        {
+            const Vector4 v = Xna::Unbox<Vector4>(value);
+            return "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + "," + F(v.W) + ")";
+        }
+        if (Xna::Holds<Matrix>(value)) { return Xna::Unbox<Matrix>(value).ToString(); }
+        if (Xna::Holds<float>(value)) { return F(Xna::Unbox<float>(value)); }
+        if (Xna::Holds<SharpRuntime::intcs>(value))
+        {
+            return std::to_string(Xna::Unbox<SharpRuntime::intcs>(value));
+        }
+        // What is left is a type that does not override `ToString()`, whose .NET answer is the
+        // type's own name in `Type.ToString()` form -- a generic argument in single brackets.
+        // CNA's stable type name spells the same type in the `Type.FullName` form the XNB type
+        // table needs, with the argument in doubled brackets, so the one difference is undone
+        // here rather than in the pipeline (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        std::string name = value.StableType();
+        for (const auto& [doubled, single] : {std::pair<const char*, const char*>{"[[", "["},
+                                              std::pair<const char*, const char*>{"]]", "]"}})
+        {
+            for (std::size_t at = name.find(doubled); at != std::string::npos;
+                 at = name.find(doubled, at))
+            {
+                name.replace(at, 2, single);
+                at += 1;
+            }
+        }
+        return name;
+    }
+
+    /** @brief The oracle's own walk over the graph, in the same order and the same words. */
+    void Describe(std::string& text, const std::shared_ptr<Graphics::NodeContent>& node,
+                  const std::string& path)
+    {
+        const std::string here = path + "/" +
+                                 (node->getNameProperty().empty() ? std::string("<null>")
+                                                                  : node->getNameProperty());
+        const auto& children =
+            AsCollection<std::shared_ptr<Graphics::NodeContent>>(node->getChildrenProperty());
+        const std::string type =
+            std::dynamic_pointer_cast<Graphics::MeshContent>(node) != nullptr   ? "MeshContent"
+            : std::dynamic_pointer_cast<Graphics::BoneContent>(node) != nullptr ? "BoneContent"
+                                                                                : "NodeContent";
+        text += here + " type=" + type + " transform=" + Describe(node->getTransformProperty()) +
+                " absolute=" + Describe(node->getAbsoluteTransformProperty()) +
+                " children=" + std::to_string(children.getCountProperty()) +
+                " animations=" + std::to_string(node->getAnimationsProperty().getCountProperty()) +
+                " opaque=" + std::to_string(node->getOpaqueDataProperty().getCountProperty()) + "\n";
+        for (const auto& [name, animation] : node->getAnimationsProperty())
+        {
+            text += "  animation " + name + " duration=" +
+                    std::to_string(animation->getDurationProperty().getTicksProperty()) +
+                    " channels=" + std::to_string(animation->getChannelsProperty().getCountProperty()) + "\n";
+            for (const auto& [channelName, channel] : animation->getChannelsProperty())
+            {
+                text += "   channel " + channelName + " keys=" +
+                        std::to_string(channel->getCountProperty()) + "\n";
+                for (const std::shared_ptr<Graphics::AnimationKeyframe>& key : *channel)
+                {
+                    text += "    key t=" + std::to_string(key->getTimeProperty().getTicksProperty()) +
+                            " " + Describe(key->getTransformProperty()) + "\n";
+                }
+            }
+        }
+        if (const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(node); mesh != nullptr)
+        {
+            const auto& geometry =
+                AsCollection<std::shared_ptr<Graphics::GeometryContent>>(mesh->getGeometryProperty());
+            text += "  mesh positions=" + std::to_string(mesh->getPositionsProperty().getCountProperty()) +
+                    " geometry=" + std::to_string(geometry.getCountProperty()) + "\n";
+            for (SharpRuntime::intcs i = 0; i < mesh->getPositionsProperty().getCountProperty(); ++i)
+            {
+                const Vector3 p = mesh->getPositionsProperty()[i];
+                text += "   position " + std::to_string(i) + " (" + F(p.X) + "," + F(p.Y) + "," + F(p.Z) + ")\n";
+            }
+            for (SharpRuntime::intcs g = 0; g < geometry.getCountProperty(); ++g)
+            {
+                const std::shared_ptr<Graphics::GeometryContent>& batch = geometry[g];
+                const auto& channels = batch->getVerticesProperty().getChannelsProperty();
+                text += "   geometry name=" +
+                        (batch->getNameProperty().empty() ? std::string("<null>") : batch->getNameProperty()) +
+                        " indices=" + std::to_string(batch->getIndicesProperty().getCountProperty()) +
+                        " vertices=" + std::to_string(batch->getVerticesProperty().getVertexCountProperty()) +
+                        " channels=" + std::to_string(channels.getCountProperty()) + " material=" +
+                        (batch->getMaterialProperty() == nullptr
+                             ? std::string("null")
+                             : ShortTypeName(batch->getMaterialProperty()->GetTypeName()) + ":" +
+                                   (batch->getMaterialProperty()->getNameProperty().empty()
+                                        ? "<null>"
+                                        : batch->getMaterialProperty()->getNameProperty())) + "\n";
+                std::string indices;
+                for (SharpRuntime::intcs i = 0; i < batch->getIndicesProperty().getCountProperty(); ++i)
+                {
+                    indices += (indices.empty() ? "" : ",") +
+                               std::to_string(batch->getIndicesProperty()[i]);
+                }
+                text += "    indices " + indices + "\n";
+                std::string positionIndices;
+                const auto& mapped = batch->getVerticesProperty().getPositionIndicesProperty();
+                for (SharpRuntime::intcs i = 0; i < mapped.getCountProperty(); ++i)
+                {
+                    positionIndices += (positionIndices.empty() ? "" : ",") +
+                                       std::to_string(Xna::Unbox<SharpRuntime::intcs>(mapped[i]));
+                }
+                text += "    positionIndices " + positionIndices + "\n";
+                for (SharpRuntime::intcs c = 0; c < channels.getCountProperty(); ++c)
+                {
+                    const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[c];
+                    const std::string full = Graphics::VectorConverter::VectorTypeName(
+                        channel->getElementTypeProperty());
+                    std::string elementType =
+                        full.empty() ? channel->getElementTypeProperty().getNameProperty()
+                                     : full.substr(full.rfind('.') + 1);
+                    std::string values;
+                    for (SharpRuntime::intcs i = 0; i < channel->getCountProperty(); ++i)
+                    {
+                        const Xna::ContentObject value = (*channel)[i];
+                        std::string one;
+                        if (Xna::Holds<Vector3>(value))
+                        {
+                            const Vector3 v = Xna::Unbox<Vector3>(value);
+                            one = "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + ")";
+                        }
+                        else if (Xna::Holds<Vector2>(value))
+                        {
+                            const Vector2 v = Xna::Unbox<Vector2>(value);
+                            one = "(" + F(v.X) + "," + F(v.Y) + ")";
+                        }
+                        else if (Xna::Holds<Vector4>(value))
+                        {
+                            const Vector4 v = Xna::Unbox<Vector4>(value);
+                            one = "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + "," + F(v.W) + ")";
+                        }
+                        else if (Xna::Holds<Graphics::BoneWeightCollection>(value))
+                        {
+                            elementType = "BoneWeightCollection";
+                            const Graphics::BoneWeightCollection weights =
+                                Xna::Unbox<Graphics::BoneWeightCollection>(value);
+                            std::string parts;
+                            for (SharpRuntime::intcs w = 0; w < weights.getCountProperty(); ++w)
+                            {
+                                parts += (parts.empty() ? "" : ",") +
+                                         weights[w].getBoneNameProperty() + ":" +
+                                         F(weights[w].getWeightProperty());
+                            }
+                            one = "{" + parts + "}";
+                        }
+                        values += (values.empty() ? "" : " ") + one;
+                    }
+                    text += "    channel " + channel->getNameProperty() + " type=" + elementType + " " +
+                            values + "\n";
+                }
+                if (batch->getMaterialProperty() != nullptr)
+                {
+                    for (const auto& [key, value] : batch->getMaterialProperty()->getOpaqueDataProperty())
+                    {
+                        text += "    materialData " + key + "=" + DescribeOpaqueValue(value) + "\n";
+                    }
+                    for (const auto& [key, reference] : batch->getMaterialProperty()->getTexturesProperty())
+                    {
+                        // Relative to the fixture directory, as the oracle prints it: a `Texture`
+                        // names its file twice and the two can name different *directories*, so
+                        // the file name alone would not say which one was taken
+                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
+                        const std::filesystem::path referenced =
+                            std::filesystem::path(reference->getFilenameProperty()).lexically_normal();
+                        const std::filesystem::path relative =
+                            referenced.lexically_relative(Fixture("").lexically_normal());
+                        text += "    materialTexture " + key + "=" +
+                                (relative.empty() || relative.begin()->string() == ".."
+                                     ? referenced.filename().string()
+                                     : relative.generic_string()) +
+                                "\n";
+                    }
+                }
+            }
+        }
+        for (SharpRuntime::intcs i = 0; i < children.getCountProperty(); ++i)
+        {
+            Describe(text, children[i], here);
+        }
+    }
+
+    /**
+     * @brief The same text with each node's animation blocks in name order.
+     *
+     * XNA's AnimationContentDictionary is a .NET Dictionary and enumerates in its own hash order,
+     * which is not a behaviour to reproduce -- CNA's is a std::map and enumerates by name. Sorting
+     * both sides is what makes the comparison about the animations rather than about two hash
+     * tables.
+     */
+    std::string SortAnimations(const std::string& text)
+    {
+        std::vector<std::string> lines;
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line)) { lines.push_back(line); }
+        std::string out;
+        for (std::size_t i = 0; i < lines.size();)
+        {
+            if (lines[i].rfind("  animation ", 0) != 0)
+            {
+                out += lines[i] + "\n";
+                ++i;
+                continue;
+            }
+            // Gather the run of animation blocks and sort them by their first line.
+            std::vector<std::string> blocks;
+            while (i < lines.size() && lines[i].rfind("  animation ", 0) == 0)
+            {
+                std::string header = lines[i] + "\n";
+                ++i;
+                // A channel and the keys under it move together; the channels themselves are a
+                // .NET Dictionary on XNA's side and a std::map on CNA's, so they are sorted too.
+                std::vector<std::string> channels;
+                while (i < lines.size() && lines[i].rfind("   ", 0) == 0 &&
+                       lines[i].rfind("  animation ", 0) != 0)
+                {
+                    std::string channel = lines[i] + "\n";
+                    ++i;
+                    while (i < lines.size() && lines[i].rfind("    ", 0) == 0)
+                    {
+                        channel += lines[i] + "\n";
+                        ++i;
+                    }
+                    channels.push_back(std::move(channel));
+                }
+                std::sort(channels.begin(), channels.end());
+                for (const std::string& channel : channels) { header += channel; }
+                blocks.push_back(std::move(header));
+            }
+            std::sort(blocks.begin(), blocks.end());
+            for (const std::string& block : blocks) { out += block; }
+        }
+        return out;
+    }
+
+    /**
+     * @brief Compares two descriptions, holding every number to a tolerance and the rest exactly.
+     *
+     * A keyframe's matrix comes out of float trigonometry on both sides -- XNA's own answer for a
+     * ninety-degree rotation carries -0.000001 where the exact value is zero -- so comparing the
+     * printed digits would be comparing two libraries' rounding rather than the importer.
+     */
+    void ExpectSame(const std::string& actual, const std::string& expected, const std::string& what)
+    {
+        const std::regex number("-?[0-9]+(?:\\.[0-9]+)?(?:[eE]-?[0-9]+)?");
+        const auto split = [&number](const std::string& text)
+        {
+            std::vector<std::string> pieces;
+            std::sregex_token_iterator it(text.begin(), text.end(), number, {-1, 0});
+            for (; it != std::sregex_token_iterator(); ++it) { pieces.push_back(*it); }
+            return pieces;
+        };
+        const std::vector<std::string> left = split(actual);
+        const std::vector<std::string> right = split(expected);
+        if (left.size() != right.size())
+        {
+            EXPECT_EQ(actual, expected) << what;
+            return;
+        }
+        for (std::size_t i = 0; i < left.size(); ++i)
+        {
+            if (left[i] == right[i]) { continue; }
+            char* end = nullptr;
+            const double a = std::strtod(left[i].c_str(), &end);
+            const bool aNumber = end != nullptr && *end == '\0' && !left[i].empty();
+            const double b = std::strtod(right[i].c_str(), &end);
+            const bool bNumber = end != nullptr && *end == '\0' && !right[i].empty();
+            if (aNumber && bNumber && std::abs(a - b) <= 1e-4)
+            {
+                continue;
+            }
+            EXPECT_EQ(actual, expected) << what;
+            return;
+        }
+    }
+
+    /** @brief The whole graph an import answers, in the oracle's own words. */
+    std::string Import(const std::string& fixture, ImporterContext& context)
+    {
+        XImporter importer;
+        const std::shared_ptr<Graphics::NodeContent> root =
+            importer.Import(Fixture(fixture).string(), context);
+        std::string text;
+        Describe(text, root, "");
+        std::string dependencies;
+        for (const std::string& one : context.dependencies)
+        {
+            dependencies += (dependencies.empty() ? "" : ",") +
+                            std::filesystem::path(one).filename().string();
+        }
+        std::string log;
+        for (const std::string& line : context.Warnings())
+        {
+            log += (log.empty() ? "" : " | ") + line;
+        }
+        return text + "dependencies=[" + dependencies + "] log=[" + log + "]";
+    }
+}
+
+TEST(XnaXImporter, TheAttributeMatchesXna)
+{
+    EXPECT_EQ(Expected("attribute/x"),
+              "extensions=[.x] displayName=X File - XNA Framework defaultProcessor=ModelProcessor "
+              "cacheImportedData=True");
+    EXPECT_EQ(XImporter::Attribute().getFileExtensionsProperty(), std::vector<std::string>{".x"});
+    EXPECT_EQ(XImporter::Attribute().getDisplayNameProperty(), "X File - XNA Framework");
+    EXPECT_EQ(XImporter::Attribute().getDefaultProcessorProperty(), "ModelProcessor");
+    EXPECT_TRUE(XImporter::Attribute().getCacheImportedDataProperty());
+}
+
+// Every readable file in the corpus, graph for graph.
+TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
+{
+    for (const std::string& fixture :
+         {"bare_mesh.x", "binary_mesh.x", "generated_normals.x", "hierarchy.x", "missing_texture.x",
+          // `MeshNormals` carries its own face list, so a corner's normal is not its position's:
+          // this quad's two triangles name one normal each and the genuine importer answers six
+          // vertices for four positions (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-144`).
+          "normal_per_face.x",
+          // Two normal entries holding the same three numbers are one normal: this file writes the
+          // same normal six times under six indices, and XNA answers four vertices, not six
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-148`).
+          "normal_duplicate_values.x",
+          // What a `MeshNormals` entry becomes, in one file: the six axis directions, which is
+          // where the sign of the zero the basis change leaves in Z is observable -- `(0, -1, 0)`
+          // answers `-0` where the *position* at the same coordinates answers `+0`; two non-unit
+          // normals, which show that the `.x` route normalizes and the FBX route does not; and
+          // three near-unit ones taken from SAMPLE-014's own models, where a float sum of squares
+          // and a double one give different floats
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+          "x_normal_rules.x",
+          // A mesh's position list holds each *different* position once, and the order is the order
+          // the material batches ask for them: this one declares eight vertices over five
+          // positions, two of which share a position and a normal, and XNA answers five positions
+          // and six vertices (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+          "x_position_merge.x",
+          // And the order that list is built in: two materials, the second naming the *lower*
+          // vertices. A list deduplicated in file order answers them the file's way; the genuine
+          // importer answers the first material's positions first, because each batch adds what
+          // its own faces name (`XNASWEEP-173`).
+          "x_position_batches.x",
+          // An object's type is a template name and the genuine reader matches it without regard
+          // to case: this one spells the frame, its transform, the mesh, its normals and its
+          // texture coordinates in upper case, the material list in lower, and the material and
+          // its texture file name in two mixed spellings -- and carries an object of a type no
+          // template defines, which is accepted and ignored
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-180`).
+          "x_type_name_case.x",
+          // The two stage probes `XNASWEEP-231` measured the generated-normal rule on: the first
+          // leaves only the normalization rounding, the second only the cross product's products.
+          // Their bits are checked by `AGeneratedNormalIsTheUnitFaceNormalSummedByPosition`.
+          "x_generated_normals_exact.x", "x_generated_normals_wide.x",
+          // A `Material` carrying an `EffectInstance` is an `EffectMaterialContent`: the opaque
+          // data is the effect reference and the instance's parameters in file order, an
+          // `EffectParamFloats` is typed by its count, and an `EffectParamString` is a *texture*
+          // under that parameter's name. None of the material's own colours survives
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+          "x_effect_instance.x",
+          // The signs of the zeros the basis change leaves behind. The committed oracle rounds a
+          // negative zero to `0`, so this file's *values* are checked here and its *bits* by
+          // `ASignedZeroInANormalIsTheMatrixsOwn` below (`XNASWEEP-181`).
+          "x_normal_signed_zero.x",
+          // Nine frames whose transforms hold a zero of each sign, checked entry by entry in
+          // `TheBasisChangeIsAMultiplicationRatherThanFiveNegations` below (`XNASWEEP-189`).
+          "x_basis_signed_zero.x",
+          "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
+          "with_templates.x", "zero_power.x"})
+    {
+        ImporterContext context;
+        ExpectSame(SortAnimations(Import(fixture, context)),
+                   SortAnimations(Expected("x/" + fixture)), fixture);
+    }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-231: what a `.x` mesh with no `MeshNormals` answers,
+// stage by stage. The committed probes leave exactly one stage rounding at a time --
+// `x_generated_normals_exact.x` is triangles of the origin and two small integer vectors, so the
+// subtraction and the cross product are exact and only the normalization rounds;
+// `x_generated_normals_wide.x` is integer coordinates up to 20,000, so the differences are still
+// exact and every product in the cross rounds. The bits below are the genuine importer's own.
+//
+// The first file also shares one position -- the origin -- between all 24 of its triangles, so its
+// normal is the accumulation rather than one face's.
+TEST(XnaXImporter, AGeneratedNormalIsTheUnitFaceNormalSummedByPosition)
+{
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+    const auto normalsOf = [](const std::shared_ptr<Graphics::NodeContent>& root)
+    {
+        std::map<int, std::array<std::uint32_t, 3>> found;
+        const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(
+            std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]));
+        EXPECT_NE(mesh, nullptr);
+        for (SharpRuntime::intcs batch = 0;
+             batch < mesh->getGeometryProperty().getCountProperty(); ++batch)
+        {
+            const std::shared_ptr<Graphics::GeometryContent> geometry =
+                mesh->getGeometryProperty()[batch];
+            const auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+            std::shared_ptr<Graphics::VertexChannelBase> normals;
+            for (SharpRuntime::intcs at = 0; at < channels.getCountProperty(); ++at)
+            {
+                const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[at];
+                if (channel != nullptr && channel->getNameProperty() == "Normal0")
+                {
+                    normals = channel;
+                }
+            }
+            if (normals == nullptr) { continue; }
+            const auto& mapped = geometry->getVerticesProperty().getPositionIndicesProperty();
+            for (SharpRuntime::intcs index = 0; index < normals->getCountProperty(); ++index)
+            {
+                const Xna::ContentObject boxed = (*normals)[index];
+                if (!Xna::Holds<Vector3>(boxed)) { continue; }
+                const Vector3 normal = Xna::Unbox<Vector3>(boxed);
+                std::array<std::uint32_t, 3> raw{};
+                std::memcpy(&raw[0], &normal.X, sizeof(float));
+                std::memcpy(&raw[1], &normal.Y, sizeof(float));
+                std::memcpy(&raw[2], &normal.Z, sizeof(float));
+                found[static_cast<int>(Xna::Unbox<SharpRuntime::intcs>(mapped[index]))] = raw;
+            }
+        }
+        return found;
+    };
+
+    ImporterContext context;
+    XImporter importer;
+
+    // Twenty-four unit face normals summed into one position and normalized: what the origin of
+    // every triangle answers. A sum in double, or one normalization rather than the three the
+    // pipeline applies, answers different bits here.
+    const std::shared_ptr<Graphics::NodeContent> exact =
+        importer.Import(Fixture("x_generated_normals_exact.x").string(), context);
+    ASSERT_NE(exact, nullptr);
+    const auto exactNormals = normalsOf(exact);
+    ASSERT_TRUE(exactNormals.count(0) == 1);
+    EXPECT_EQ(exactNormals.at(0)[0], 0xBE8B4A60u);
+    EXPECT_EQ(exactNormals.at(0)[1], 0x3ECA4AE6u);
+    EXPECT_EQ(exactNormals.at(0)[2], 0x3F609F30u);
+    // ...and a vertex of one face alone, where the accumulation adds nothing.
+    ASSERT_TRUE(exactNormals.count(1) == 1);
+    EXPECT_EQ(exactNormals.at(1)[0], 0x3F19A0D7u);
+    EXPECT_EQ(exactNormals.at(1)[1], 0x3E682E28u);
+    EXPECT_EQ(exactNormals.at(1)[2], 0x3F44614Au);
+
+    // The cross product's own rounding: each component is one wide expression narrowed when it is
+    // stored, which is the x87 shape XNA 4.0 is compiled to. A `float` product answers differently
+    // on 78 of these 24 triangles' 72 vertices.
+    const std::shared_ptr<Graphics::NodeContent> wide =
+        importer.Import(Fixture("x_generated_normals_wide.x").string(), context);
+    ASSERT_NE(wide, nullptr);
+    const auto wideNormals = normalsOf(wide);
+    ASSERT_TRUE(wideNormals.count(0) == 1);
+    EXPECT_EQ(wideNormals.at(0)[0], 0x3F630382u);
+    EXPECT_EQ(wideNormals.at(0)[1], 0x3EA51050u);
+    EXPECT_EQ(wideNormals.at(0)[2], 0xBEA99442u);
+    ASSERT_TRUE(wideNormals.count(3) == 1);
+    EXPECT_EQ(wideNormals.at(3)[0], 0x3EFC858Au);
+    EXPECT_EQ(wideNormals.at(3)[1], 0x3E4337EEu);
+    EXPECT_EQ(wideNormals.at(3)[2], 0xBF5948B1u);
+    ASSERT_TRUE(wideNormals.count(6) == 1);
+    EXPECT_EQ(wideNormals.at(6)[0], 0x3F1F0B22u);
+    EXPECT_EQ(wideNormals.at(6)[1], 0x3BBBE41Fu);
+    EXPECT_EQ(wideNormals.at(6)[2], 0xBF4898BEu);
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-181: the sign of a zero in a `.x` normal, which the
+// committed oracle cannot carry -- .NET Framework's `ToString` writes a negative zero as `0`.
+// These are the bits the genuine importer answered for the same file, read with the oracle's
+// `CNA_MODEL_ORACLE_BITS=1` mode. They pin three things at once: `M31` is a negative zero, so a
+// normal whose `x` is `-0`, whose `y` is below zero and whose `z` is above it keeps the negative
+// zero and its positive-zero twin does not; a zero-length normal answers exactly `(+0, +0, +0)`
+// rather than the accumulation's own signs; and the fold of `XNASWEEP-148` does not collapse two
+// entries that hold the same three float *values* under different zero signs -- entries 10 and 11
+// are `(-0, -1, 1)` and `(+0, -1, 1)` and answer differently.
+TEST(XnaXImporter, ASignedZeroInANormalIsTheMatrixsOwn)
+{
+    static constexpr std::array<std::array<std::uint32_t, 3>, 12> expected = {{
+        {0x80000000u, 0xBF328506u, 0xBF377C29u},
+        {0x00000000u, 0xBF328506u, 0xBF377C29u},
+        {0x00000000u, 0x3F800000u, 0x00000000u},
+        {0x00000000u, 0xBF800000u, 0x00000000u},
+        {0x00000000u, 0xBF800000u, 0x00000000u},
+        {0x00000000u, 0xB58637BDu, 0x3F800000u},
+        {0x00000000u, 0xB58637BDu, 0x3F800000u},
+        {0x00000000u, 0xBF800000u, 0x80000000u},
+        {0x00000000u, 0x00000000u, 0x00000000u},
+        {0x00000000u, 0x00000000u, 0x00000000u},
+        {0x80000000u, 0xBF3504F3u, 0xBF3504F3u},
+        {0x00000000u, 0xBF3504F3u, 0xBF3504F3u},
+    }};
+
+    ImporterContext context;
+    XImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("x_normal_signed_zero.x").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::MeshContent> mesh =
+        std::dynamic_pointer_cast<Graphics::MeshContent>(
+            std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]));
+    ASSERT_NE(mesh, nullptr);
+    ASSERT_EQ(mesh->getGeometryProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::GeometryContent> geometry = mesh->getGeometryProperty()[0];
+    ASSERT_NE(geometry, nullptr);
+    const auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+    std::shared_ptr<Graphics::VertexChannelBase> normals;
+    for (SharpRuntime::intcs at = 0; at < channels.getCountProperty(); ++at)
+    {
+        const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[at];
+        if (channel != nullptr && channel->getNameProperty() == "Normal0") { normals = channel; }
+    }
+    ASSERT_NE(normals, nullptr);
+    ASSERT_EQ(normals->getCountProperty(), static_cast<SharpRuntime::intcs>(expected.size()));
+    const auto bits = [](const float value)
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof(raw));
+        return raw;
+    };
+    for (std::size_t at = 0; at < expected.size(); ++at)
+    {
+        const Xna::ContentObject boxed = (*normals)[static_cast<SharpRuntime::intcs>(at)];
+        ASSERT_TRUE(Xna::Holds<Vector3>(boxed)) << "normal " << at;
+        const Vector3 normal = Xna::Unbox<Vector3>(boxed);
+        EXPECT_EQ(bits(normal.X), expected[at][0]) << "normal " << at << " X";
+        EXPECT_EQ(bits(normal.Y), expected[at][1]) << "normal " << at << " Y";
+        EXPECT_EQ(bits(normal.Z), expected[at][2]) << "normal " << at << " Z";
+    }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: the sign of a zero in a converted transform,
+// which the committed oracle cannot carry either. The basis change is `B_L M B_R`, two matrix
+// multiplications by two matrices that are `diag(1, 1, -1, 1)` in value and *not* the same in the
+// signs of their zeros; negating the third row and the third column instead is equal in value and
+// answers a negative zero wherever the entry it negated was a positive one. Over 144 measured
+// matrices in three independent batches the negations reproduce 3, one shared basis 142, and this
+// all 144. The last two frames are what a shared basis cannot answer -- every term of one dot
+// product is a negative zero there -- `Car` is SAMPLE-028's own shape, and `Dense` is the negative
+// control, with no zero in its upper 3x3 at all.
+TEST(XnaXImporter, TheBasisChangeIsAMultiplicationRatherThanFiveNegations)
+{
+    static constexpr std::array<std::array<std::uint32_t, 16>, 11> expected = {{
+        // Car
+        {{0x3EBBC2FCu, 0x00000000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x3EBBC2FCu, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x00000000u, 0x3EBBC2FCu, 0x00000000u,
+         0xB58637BDu, 0x3FC471B4u, 0xBF3DE508u, 0x3F800000u}},
+        // Dense
+        {{0x3F800000u, 0x40000000u, 0xC0400000u, 0x00000000u,
+         0x40800000u, 0x40A00000u, 0xC0C00000u, 0x00000000u,
+         0xC0E00000u, 0xC1000000u, 0x41100000u, 0x00000000u,
+         0x41200000u, 0x41300000u, 0xC1400000u, 0x3F800000u}},
+        // RowNegative
+        {{0xBFC00000u, 0x00000000u, 0x3FC00000u, 0xBFC00000u,
+         0x40200000u, 0xBFC00000u, 0x00000000u, 0xBFC00000u,
+         0xC0200000u, 0x3FC00000u, 0xBFC00000u, 0x3FC00000u,
+         0x00000000u, 0x00000000u, 0x3FC00000u, 0x00000000u}},
+        // ColumnNegative
+        {{0xBFC00000u, 0x00000000u, 0x3FC00000u, 0x40200000u,
+         0x80000000u, 0xBFC00000u, 0x3FC00000u, 0xBFC00000u,
+         0x3FC00000u, 0x3FC00000u, 0x40200000u, 0x00000000u,
+         0x40200000u, 0x40200000u, 0xC0200000u, 0xBFC00000u}},
+        // MixedA
+        {{0x40200000u, 0x40200000u, 0xC0200000u, 0x00000000u,
+         0x00000000u, 0xBFC00000u, 0xC0200000u, 0x40200000u,
+         0xC0200000u, 0xC0200000u, 0x00000000u, 0x00000000u,
+         0x40200000u, 0xBFC00000u, 0xC0200000u, 0x40200000u}},
+        // MixedB
+        {{0x00000000u, 0x00000000u, 0x3FC00000u, 0x40200000u,
+         0x00000000u, 0x40200000u, 0x00000000u, 0xBFC00000u,
+         0xC0200000u, 0x3FC00000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0xBFC00000u, 0x00000000u, 0x00000000u}},
+        // MixedC
+        {{0xBFC00000u, 0x40200000u, 0xC0200000u, 0xBFC00000u,
+         0x40200000u, 0x40200000u, 0xC0200000u, 0x40200000u,
+         0xC0200000u, 0xC0200000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x40200000u, 0x00000000u, 0xBFC00000u}},
+        // MixedD
+        {{0x00000000u, 0xBFC00000u, 0x00000000u, 0x00000000u,
+         0x40200000u, 0xBFC00000u, 0x3FC00000u, 0x00000000u,
+         0x00000000u, 0x00000000u, 0x40200000u, 0x00000000u,
+         0xBFC00000u, 0x00000000u, 0xC0200000u, 0x00000000u}},
+        // MixedE
+        {{0xBFC00000u, 0xBFC00000u, 0x3FC00000u, 0xBFC00000u,
+         0x40200000u, 0x00000000u, 0x00000000u, 0x40200000u,
+         0x00000000u, 0x00000000u, 0x00000000u, 0x3FC00000u,
+         0xBFC00000u, 0x40200000u, 0x00000000u, 0x00000000u}},
+        // RowAllNegative
+        {{0xBFC00000u, 0xBFC00000u, 0xC0200000u, 0x40200000u,
+         0xBFC00000u, 0x00000000u, 0x3FC00000u, 0x40200000u,
+         0x3FC00000u, 0x3FC00000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x00000000u, 0xC0200000u, 0x00000000u}},
+        // ColumnAllNegative
+        {{0x00000000u, 0xBFC00000u, 0x3FC00000u, 0x00000000u,
+         0xBFC00000u, 0x40200000u, 0x3FC00000u, 0x40200000u,
+         0x80000000u, 0xC0200000u, 0x40200000u, 0xC0200000u,
+         0x00000000u, 0xBFC00000u, 0x00000000u, 0xBFC00000u}},
+    }};
+
+    ImporterContext context;
+    XImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("x_basis_signed_zero.x").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(),
+              static_cast<SharpRuntime::intcs>(expected.size()));
+    const auto bits = [](const float value)
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof(raw));
+        return raw;
+    };
+    for (std::size_t at = 0; at < expected.size(); ++at)
+    {
+        const std::shared_ptr<Graphics::NodeContent> frame =
+            root->getChildrenProperty()[static_cast<SharpRuntime::intcs>(at)];
+        ASSERT_NE(frame, nullptr) << "frame " << at;
+        const Matrix& m = frame->getTransformProperty();
+        const std::array<float, 16> answered = {m.M11, m.M12, m.M13, m.M14,
+                                                m.M21, m.M22, m.M23, m.M24,
+                                                m.M31, m.M32, m.M33, m.M34,
+                                                m.M41, m.M42, m.M43, m.M44};
+        for (std::size_t entry = 0; entry < answered.size(); ++entry)
+        {
+            EXPECT_EQ(bits(answered[entry]), expected[at][entry])
+                << "frame " << frame->getNameProperty() << " entry " << entry;
+        }
+    }
+}
+
+// The skinning and animation files, which carry everything the simple ones do not.
+TEST(XnaXImporter, SkinningAndAnimationAnswerWhatXnaAnswers)
+{
+    for (const std::string& fixture :
+         {"anim_default_rate.x", "two_animations.x", "two_bones_animated.x",
+          "skinned_two_animations.x", "skinned_animated.x"})
+    {
+        ImporterContext context;
+        ExpectSame(SortAnimations(Import(fixture, context)),
+                   SortAnimations(Expected("x/" + fixture)), fixture);
+    }
+}
+
+// Every refusal, including the D3DX code the genuine reader appends and which one it picks.
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122: `Name` is a nullable string in XNA and the two
+// empty values reach a built `.xnb` differently -- a null object against a zero-length string. The
+// `.x` importer has both: a file with no enclosing frame gets a synthesized root that carries no
+// name, while `Frame {` declares one that happens to be empty. Measured on the genuine importer,
+// which answers `/<null>` for `bare_mesh.x`'s root and `/glass/` -- a path ending in nothing -- for
+// SAMPLE-028 `Car.x`'s unnamed frames.
+TEST(XnaXImporter, AnUnnamedFrameAndAnAbsentOneAreDifferentNames)
+{
+    ImporterContext context;
+    Xna::XImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("bare_mesh.x").string(), context);
+    ASSERT_NE(root, nullptr);
+    EXPECT_TRUE(root->getNameIsNullEXT()) << "the synthesized root carries no name";
+    EXPECT_TRUE(root->getNameProperty().empty());
+
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> mesh = root->getChildrenProperty()[0];
+    EXPECT_FALSE(mesh->getNameIsNullEXT());
+    EXPECT_EQ(mesh->getNameProperty(), "Loose");
+}
+
+TEST(XnaXImporter, RefusalsMatchXna)
+{
+    for (const std::string& fixture :
+         {"empty.x", "not_x.x", "bad_version.x", "truncated.x", "index_out_of_range.x"})
+    {
+        ImporterContext context;
+        const std::string record = Expected("x/" + fixture);
+        ASSERT_EQ(record.rfind("throws InvalidContentException: ", 0), 0u) << fixture;
+        const std::string message = record.substr(std::string("throws InvalidContentException: ").size());
+        XImporter importer;
+        try
+        {
+            (void)importer.Import(Fixture(fixture).string(), context);
+            ADD_FAILURE() << fixture << " was accepted";
+        }
+        catch (const InvalidContentException& error)
+        {
+            EXPECT_EQ(error.getMessageProperty(), message) << fixture;
+        }
+    }
+}
+
+TEST(XnaXImporter, DisposeIsIdempotentAndAMissingFileIsTheRuntimesOwnRefusal)
+{
+    EXPECT_EQ(Expected("x/dispose_twice"), "accepted");
+    XImporter importer;
+    importer.Dispose();
+    importer.Dispose();
+
+    ImporterContext context;
+    XImporter another;
+    EXPECT_THROW((void)another.Import(Fixture("no_such_model.x").string(), context),
+                 System::IO::FileNotFoundException);
+}
+
+// ---- XNAPP-216: the FBX importer -------------------------------------------------------------
+//
+// The same corpus discipline as the .x side, and the same oracle file. What FBX and .x differ on
+// is measured, not inferred: FBX is right-handed so nothing is converted, the winding IS reversed,
+// a texture coordinate's V is flipped, the channel order differs, and a colour is not quantized.
+
+namespace
+{
+    /** @brief The whole graph an FBX import answers, in the oracle's own words. */
+    std::string ImportFbx(const std::string& fixture, ImporterContext& context)
+    {
+        Xna::FbxImporter importer;
+        const std::shared_ptr<Graphics::NodeContent> root =
+            importer.Import(Fixture(fixture).string(), context);
+        std::string text;
+        Describe(text, root, "");
+        std::string dependencies;
+        for (const std::string& one : context.dependencies)
+        {
+            dependencies += (dependencies.empty() ? "" : ",") +
+                            std::filesystem::path(one).filename().string();
+        }
+        std::string log;
+        for (const std::string& line : context.Warnings())
+        {
+            log += (log.empty() ? "" : " | ") + line;
+        }
+        return text + "dependencies=[" + dependencies + "] log=[" + log + "]";
+    }
+
+    /**
+     * @brief The same text with each triangle rotated to start at its lowest corner.
+     *
+     * A triangle is a cycle: (2,1,0), (1,0,2) and (0,2,1) are the same face wound the same way,
+     * and XNA's FBX SDK picks its own starting corner when it triangulates a polygon -- a quad
+     * answers (2,1,0) then (0,3,2) where the fan would give (3,2,0). Rotating both sides is what
+     * makes the comparison about the winding and the vertices rather than about a triangulator's
+     * bookkeeping.
+     */
+    std::string NormalizeTriangles(const std::string& text)
+    {
+        std::vector<std::string> lines;
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line)) { lines.push_back(line); }
+        std::string out;
+        for (std::string& one : lines)
+        {
+            const std::string prefix = "    indices ";
+            if (one.rfind(prefix, 0) != 0)
+            {
+                out += one + "\n";
+                continue;
+            }
+            std::vector<int> indices;
+            std::istringstream values(one.substr(prefix.size()));
+            std::string value;
+            while (std::getline(values, value, ',')) { indices.push_back(std::stoi(value)); }
+            std::string rebuilt;
+            for (std::size_t i = 0; i + 2 < indices.size() + 1 && i + 3 <= indices.size(); i += 3)
+            {
+                std::array<int, 3> triangle{indices[i], indices[i + 1], indices[i + 2]};
+                const std::size_t lowest = static_cast<std::size_t>(
+                    std::min_element(triangle.begin(), triangle.end()) - triangle.begin());
+                for (std::size_t c = 0; c < 3; ++c)
+                {
+                    rebuilt += (rebuilt.empty() ? "" : ",") +
+                               std::to_string(triangle[(lowest + c) % 3]);
+                }
+            }
+            out += prefix + rebuilt + "\n";
+        }
+        return out;
+    }
+}
+
+TEST(XnaFbxImporter, TheAttributeMatchesXna)
+{
+    EXPECT_EQ(Expected("attribute/fbx"),
+              "extensions=[.fbx] displayName=Autodesk FBX - XNA Framework "
+              "defaultProcessor=ModelProcessor cacheImportedData=True");
+    EXPECT_EQ(Xna::FbxImporter::Attribute().getFileExtensionsProperty(),
+              std::vector<std::string>{".fbx"});
+    EXPECT_EQ(Xna::FbxImporter::Attribute().getDisplayNameProperty(), "Autodesk FBX - XNA Framework");
+    EXPECT_EQ(Xna::FbxImporter::Attribute().getDefaultProcessorProperty(), "ModelProcessor");
+    EXPECT_TRUE(Xna::FbxImporter::Attribute().getCacheImportedDataProperty());
+}
+
+TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
+{
+    for (const std::string& fixture :
+         {"fbx_bare_mesh.fbx", "fbx_cameras.fbx", "fbx_hierarchy.fbx",
+          "fbx_material_factor_texture.fbx", "fbx_material_legacy.fbx",
+          // A Lambert material *with* a texture. A Lambert has no specular power, and the
+          // material the genuine importer answers for this one carries a diffuse, an emissive,
+          // an alpha and a specular colour and no `SpecularPower` at all -- so the model built
+          // from it takes `BasicEffect`'s own default of 16, and materialising the absence as 0
+          // is what put a 0 in two of the corpus's references
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-171`).
+          "fbx_material_lambert_textured.fbx",
+          // The diffuse channel spelled the way an older Maya exporter spells it: a
+          // `LayerElementReflectionUV` and a `LayerElementReflectionTextures`, and no
+          // `LayerElementTexture` at all. The genuine importer answers the texture under
+          // `Reflection`, *not* under `Texture`, so the material a model built from it carries has
+          // no texture -- which is what SAMPLE-131's own `p1_piece.xnb` has
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-177`).
+          "fbx_reflection_texture.fbx",
+          // A vertex is the `float` values it will be stored as, not the doubles the file holds.
+          // Two corners of this quad share a control point and carry normals that differ only past
+          // the 24th bit; the genuine importer answers four vertices, and comparing the doubles
+          // answers six (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-178`).
+          "fbx_normal_narrow.fbx",
+          // And the same question for a texture coordinate, which is stored *flipped*: two corners
+          // of this quad share a control point and carry V values that differ as doubles and agree
+          // once `float(1.0 - v)` has been taken. The genuine importer answers four vertices, and
+          // comparing what the file holds answers five -- which is the shape SAMPLE-142's
+          // `AircraftCarrier.FBX` has sixty-one times (`XNASWEEP-178`).
+          "fbx_uv_narrow.fbx",
+          // Where the colour goes when a mesh carries more than one texture-coordinate set: after
+          // the *first* of them, with the rest following. The genuine importer answers
+          // `Normal0, TextureCoordinate0, Color0, TextureCoordinate1` for this quad, whatever
+          // order its `Layer` block names the elements in (`XNASWEEP-179`).
+          "fbx_uv_two_sets_colour.fbx",
+          "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
+          "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
+          // The scene lists its children in the order the file connects them, and a `Material`
+          // sharing a `Model`'s bare name is a different object: this one's three meshes come
+          // back as `Alpha`, `Beta`, `Gamma`, where keying on the bare name lost `Beta` to the
+          // material of the same name and reading the objects by identity reversed the three
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-145`).
+          "fbx_scene_order.fbx",
+          // The geometry's own offset -- `GeometricScaling`, `GeometricRotation` and
+          // `GeometricTranslation` -- is folded into the node's transform and undone again on its
+          // child, and the `PreRotation` this file also carries is *not* applied because it does
+          // not set `RotationActive` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+          "fbx_geometric_offset.fbx",
+          // FBX 7 splits a mesh in two, a `Geometry` object connected to the `Model` that places
+          // it. The geometry is that model's data, not a node of its own: XNA answers one node,
+          // `marble`, where reading the `Geometry` as a node answers two
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-151`).
+          "fbx7_geometry.fbx",
+          // The six terms of FBX's transform formula a scaling, a rotation and a translation do
+          // not reach. The first sets `RotationOffset`, `RotationPivot`, `ScalingOffset` and
+          // `ScalingPivot`; the second sets `PostRotation` beside a `PreRotation` and an
+          // `Lcl Rotation`, which is what settles that `R` comes before `Rpre`
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`).
+          "fbx_pivots.fbx", "fbx_postrotation.fbx",
+          // A mesh's batches come out in the order its polygons first name each material, not the
+          // order the materials are connected: this one connects `First` then `Second` and its two
+          // polygons name them the other way round, and XNA answers `Second`'s batch first
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
+          "fbx_material_order.fbx",
+          // A mesh that declares no normals gets them computed, per control point, as the
+          // normalized sum of the *unit* normals of the polygons that name it. These two are the
+          // same fold with one face four times the other's area and XNA answers the same normal on
+          // the shared edge for both, which rules area weighting out
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-156`).
+          "fbx_generated_normals.fbx", "fbx_generated_normals_area.fbx",
+          // The three `InheritType` modes, which are three different answers for the same scene.
+          // Their bits are checked by `InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild`
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`, `XNASWEEP-229`).
+          "fbx_inherit_rrss.fbx", "fbx_inherit_rsrs.fbx", "fbx_inherit_rrs.fbx",
+          // A number written with too few digits to name a float: XNA rounds it to the nearest,
+          // not toward zero (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-153`).
+          "fbx_float_rounding.fbx",
+          "fbx_split_vertices.fbx",
+          // A `Texture` names its file twice and the two can name different directories; the
+          // reference XNA writes is whichever one resolves. These two separate the branches:
+          // the first's `FileName` names a directory that is there and its `RelativeFilename`
+          // one that is not, the second's the other way round
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
+          "fbx_texture_path_filename.fbx", "fbx_texture_path_relative.fbx",
+          // `fbx_texture_second_batch.fbx` is deliberately NOT compared here. Which texture a
+          // batch gets is its polygons' own `TextureId` and this one's first polygon carries -1,
+          // which is where `XNASWEEP-141`'s rule came from -- but the genuine importer's answer
+          // for this one file is not a property of the file. `XNASWEEP-147` recorded it answering
+          // a material with no texture, and with one, depending on what else was in the directory;
+          // regenerating the reference on 2026-09-10 answered *with* the texture, and so did a
+          // copy of the same directory with eight unrelated files removed. Comparing CNA against
+          // one of two answers would be asserting a coin toss, so the fixture and its recording
+          // stay and the comparison does not (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-202`).
+          // A UV set's channel index is its `Layer` block's own number, and two sets in one block
+          // take consecutive indices: the first of these declares its only UV in `Layer: 1` and
+          // answers `TextureCoordinate1`, the second declares a `LayerElementUV` and a
+          // `LayerElementReflectionUV` in `Layer: 0` and answers both indices
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-143`).
+          "fbx_uv_layer_one.fbx", "fbx_uv_two_sets.fbx",
+          // The skeleton's root is promoted: the first bone a depth-first walk reaches leaves the
+          // node it was connected under and becomes the *last* child of the scene's root, with its
+          // transform re-expressed against that root. The first of these is SAMPLE-142's own
+          // shape -- a `Root`-class bone connected before a `Null`, and the null comes back first;
+          // the second shows only the *first* bone moving; the third a bone two levels down coming
+          // back carrying the transform it had in the world; and the fourth a scene whose single
+          // top-level object is the skeleton, where making the bone's transform relative to itself
+          // is the identity `Duskmas.FBX` comes back with
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-150`, `XNASWEEP-160`, `XNASWEEP-161`).
+          "fbx_bone_scene_order.fbx", "fbx_bone_first_only.fbx", "fbx_bone_promoted.fbx",
+          "fbx_bone_is_root.fbx",
+          // A `Light` and a `Marker` are not nodes, which no source in the corpus had ever carried
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
+          "fbx_light_marker.fbx",
+          // A polygon with more than three corners is triangulated as a *strip*, not a fan, and
+          // what it answers is a function of the corner count alone: a concave quad and a convex
+          // one give the same triangles, and so does the same octagon walked from a different
+          // corner or backwards (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`).
+          "fbx_polygon4.fbx", "fbx_polygon5.fbx", "fbx_polygon6.fbx", "fbx_polygon7.fbx",
+          "fbx_polygon8.fbx", "fbx_polygon12.fbx", "fbx_polygon8_rotated.fbx",
+          "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx", "fbx_polygon_concave6.fbx",
+          "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx",
+          // A `Materials` array that names an index no connected material answers. Those polygons
+          // are not dropped: XNA answers all of them in one batch with no material at all, whatever
+          // index each named, and a mesh whose polygons name only out-of-range indices comes back
+          // as a single null-material batch (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-165`).
+          "fbx_material_gap.fbx", "fbx_material_gap_negative.fbx", "fbx_material_gap_skip.fbx",
+          // The scene's `UnitScaleFactor` multiplies the *composed* transform, basis and
+          // translation both, and not the `Lcl Scaling` and `Lcl Translation` it is built from --
+          // which is only the same thing when the node has no scaling pivot. It reaches the nodes
+          // the scene connects and not their children
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-162`).
+          "fbx_unit_scale_pivot.fbx", "fbx_unit_scale_offset.fbx", "fbx_unit_scale_both.fbx",
+          "fbx_unit_scale_plain.fbx", "fbx_unit_scale_two.fbx", "fbx_unit_scale_child.fbx",
+          "fbx_unit_scale_siblings.fbx",
+          // A UV set is not only `LayerElementUV`. Every `LayerElement...UV` a `Layer` block names
+          // is one, in the block's own order -- but a set other than the diffuse one is read only
+          // when that same block also names a *texture* element, whichever one, and whether or not
+          // a texture is connected to the mesh. `..._pair` names one and answers two channels;
+          // `..._no_texture` is the same file with the texture entry removed and answers one;
+          // `..._unnamed` declares the second set without naming it and answers one; `..._alone`
+          // has only the transparency set and it takes index 0; `..._three_types` answers three;
+          // and `..._same_type_twice` names one type at two `TypedIndex`es and answers one channel
+          // carrying the second (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`).
+          "fbx_uv_transparent_pair.fbx", "fbx_uv_transparent_no_texture.fbx",
+          "fbx_uv_transparent_unnamed.fbx", "fbx_uv_transparent_alone.fbx",
+          "fbx_uv_three_types.fbx", "fbx_uv_same_type_twice.fbx",
+          // FBX's pivot set is not something an XNA `Matrix` carries, so the conversion replaces a
+          // node's `Rpost^-1 . R . Rpre` with a single Euler triple decomposed from the *float*
+          // matrix -- which at a quarter turn cannot tell 90 from 90.0000839, because `sin` of
+          // both is `1.0f`. The node keeps its composed rotation and its children carry the
+          // difference. Five pairs: three with a visible residue, including the `PreRotation` on X
+          // against a rotation on Z that RobotGame's mechs have, and two negative controls whose
+          // composition stays a single-axis turn and whose children are their own
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+          "fbx_pivot_residue.fbx",
+          "fbx_two_materials.fbx"})
+    {
+        ImporterContext context;
+        ExpectSame(NormalizeTriangles(SortAnimations(ImportFbx(fixture, context))),
+                   NormalizeTriangles(SortAnimations(Expected("fbx/" + fixture))), fixture);
+    }
+}
+
+// `EveryFileAnswersTheGraphXnaAnswers` rotates every triangle to start at its lowest index before
+// comparing, so it cannot tell `3,2,0` from `0,3,2`. Those are the same triangle wound the same
+// way, but they are *not* the same six bytes: `ModelProcessor` writes the index buffer verbatim
+// and a rotated corner is a differing `.xnb`. This is the comparison that keeps the corner order,
+// and the polygon fixtures are where the two readings part company -- a quad's second triangle
+// alone (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`).
+TEST(XnaFbxImporter, APolygonIsTriangulatedIntoXnasOwnCornerOrder)
+{
+    for (const std::string& fixture :
+         {"fbx_quad_polygon.fbx", "fbx_polygon4.fbx", "fbx_polygon5.fbx", "fbx_polygon6.fbx",
+          "fbx_polygon7.fbx", "fbx_polygon8.fbx", "fbx_polygon12.fbx",
+          "fbx_polygon8_rotated.fbx", "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx",
+          "fbx_polygon_concave6.fbx", "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx",
+          "fbx_material_gap.fbx", "fbx_material_gap_negative.fbx", "fbx_material_gap_skip.fbx"})
+    {
+        ImporterContext context;
+        ExpectSame(SortAnimations(ImportFbx(fixture, context)),
+                   SortAnimations(Expected("fbx/" + fixture)), fixture);
+    }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121: the oracle's own record prints a transform
+// rounded, so `EveryFileAnswersTheGraphXnaAnswers` above cannot tell -4.4e-08 from 6.1e-17 -- both
+// print as `0`. This is the one that can. A quarter turn is where a float and a double `cos` part
+// company, and XNA's `Cube.xnb` (SAMPLE-003, `PreRotation -90` under `UnitScaleFactor 2.54`)
+// carries 2.54 * 6.123233995736766e-17 = 1.555301383669155e-16 on the two entries the turn zeroes.
+// A float rotation puts -1.11e-07 there instead, seven orders of magnitude away, and every model
+// standing on a Z-up exporter's -90 carried it.
+TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
+{
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> node =
+        importer.Import(Fixture("fbx_prerotation_units.fbx").string(), context);
+    ASSERT_NE(node, nullptr);
+    const Matrix transform = node->getTransformProperty();
+
+    // The scale is exact in both, and it is what the near-zero entries carry.
+    EXPECT_FLOAT_EQ(transform.M11, 2.54f);
+    // cos(pi/2) in double, times that scale. Written as the literal XNA's own file holds.
+    EXPECT_EQ(transform.M22, 1.555301383669155e-16f);
+    EXPECT_EQ(transform.M33, 1.555301383669155e-16f);
+    // And not what a float `cos` answers, which is where this used to be.
+    EXPECT_NE(transform.M22, 2.54f * std::cos(1.5707964f));
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-228, XNASWEEP-229: FBX writes three inheritance
+// modes and they are three different answers.
+//
+// The three fixtures differ in one property and nothing else: a root scaled (2, 3, 5) carries a
+// child that turns 37 degrees about Z -- whose rotation itself has +/-0.602 -- and scales
+// (1.5, 0.5, 2.5), and that child carries a grandchild. The bits below are the genuine importer's
+// own, read with the oracle's `CNA_MODEL_ORACLE_BITS=1` mode.
+//
+// `eInheritRSrs`'s *grandchild* is the second rule: its parent's world is a rotation composed onto
+// a non-uniform scaling, which is a basis whose rows are not orthogonal, and FBX's translation /
+// rotation / scaling form cannot carry that shear. The grandchild composes onto what is left of it
+// once it is re-expressed -- which is why 0.412 comes back as 0.406 rather than unchanged.
+TEST(XnaFbxImporter, ARootsUnderflowedRotationEntryIsAPositiveZero)
+{
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+
+    ImporterContext context;
+    Xna::FbxImporter importer;
+
+    // A rotation small enough that its sine underflows when the transform is narrowed to `float`.
+    // The double the composition holds is *negative*, so narrowing it alone answers `0x80000000`
+    // -- a negative zero -- and the genuine importer answers `0x00000000`. It divides by its
+    // parent even at the root, and a product's entry is a sum, in which `0.0 + -0.0` is `+0.0`
+    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+    const std::shared_ptr<Graphics::NodeContent> underflow =
+        importer.Import(Fixture("fbx_underflow_rotation.fbx").string(), context);
+    ASSERT_NE(underflow, nullptr);
+    const Matrix small = underflow->getTransformProperty();
+    EXPECT_EQ(asBits(small.M13), 0x00000000u);
+    EXPECT_EQ(asBits(small.M31), 0x00000000u);
+    EXPECT_EQ(asBits(small.M11), 0x3F800000u);
+    EXPECT_EQ(asBits(small.M33), 0x3F800000u);
+
+    // The same, written as a *subnormal* double -- which is the shape SAMPLE-046's `spaceship.fbx`
+    // carries, an exporter having written two `float` `-0.0`s into one `double` slot. `std::stod`
+    // reports `ERANGE` for a value it has converted correctly, and reading that as a parse failure
+    // refused the whole scene where the genuine importer reads it.
+    const std::shared_ptr<Graphics::NodeContent> denormal =
+        importer.Import(Fixture("fbx_denormal_rotation.fbx").string(), context);
+    ASSERT_NE(denormal, nullptr);
+    const Matrix tiny = denormal->getTransformProperty();
+    EXPECT_EQ(asBits(tiny.M13), 0x00000000u);
+    EXPECT_EQ(asBits(tiny.M31), 0x00000000u);
+    EXPECT_EQ(asBits(tiny.M11), 0x3F800000u);
+    EXPECT_EQ(asBits(tiny.M33), 0x3F800000u);
+    ASSERT_EQ(denormal->getChildrenProperty().getCountProperty(), 1);
+}
+
+TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
+{
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+    const auto midOf = [](const std::shared_ptr<Graphics::NodeContent>& root)
+    {
+        return std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]);
+    };
+
+    ImporterContext context;
+    Xna::FbxImporter importer;
+
+    // `InheritType 0`, `eInheritRrSs`: the parent's scaling is applied after the child's own
+    // rotation, so the answered rotation is the conjugate `S . R . S^-1` and the 0.602 comes back
+    // as 0.601815045 and -0.451361269 -- the child's own scaling times the conjugation.
+    const std::shared_ptr<Graphics::NodeContent> rrss =
+        importer.Import(Fixture("fbx_inherit_rrss.fbx").string(), context);
+    ASSERT_NE(rrss, nullptr);
+    const Matrix conjugated = midOf(rrss)->getTransformProperty();
+    EXPECT_EQ(asBits(conjugated.M11), 0x3F995688u);
+    EXPECT_EQ(asBits(conjugated.M12), 0x3F1A108Du);
+    EXPECT_EQ(asBits(conjugated.M21), 0xBEE718D3u);
+    EXPECT_EQ(asBits(conjugated.M22), 0x3ECC7360u);
+    EXPECT_EQ(asBits(conjugated.M33), 0x40200000u);
+
+    // `InheritType 1`, `eInheritRSrs`: the scaling belongs to the parent's world and the child's
+    // rotation comes back untouched -- 0.902722538 and -0.300907522 are 0.602 times the child's
+    // own scaling and nothing else.
+    const std::shared_ptr<Graphics::NodeContent> rsrs =
+        importer.Import(Fixture("fbx_inherit_rsrs.fbx").string(), context);
+    ASSERT_NE(rsrs, nullptr);
+    const Matrix plain = midOf(rsrs)->getTransformProperty();
+    EXPECT_EQ(asBits(plain.M11), 0x3F995688u);
+    EXPECT_EQ(asBits(plain.M12), 0x3F6718D3u);
+    EXPECT_EQ(asBits(plain.M21), 0xBE9A108Du);
+    EXPECT_EQ(asBits(plain.M22), 0x3ECC7360u);
+    EXPECT_EQ(asBits(plain.M33), 0x40200000u);
+
+    // `InheritType 2`, `eInheritRrs`: the child does not inherit it at all and the quotient
+    // divides it out of the columns -- every entry of the two above, over (2, 3, 5).
+    const std::shared_ptr<Graphics::NodeContent> rrs =
+        importer.Import(Fixture("fbx_inherit_rrs.fbx").string(), context);
+    ASSERT_NE(rrs, nullptr);
+    const Matrix divided = midOf(rrs)->getTransformProperty();
+    EXPECT_EQ(asBits(divided.M11), 0x3F195688u);
+    EXPECT_EQ(asBits(divided.M12), 0x3E9A108Du);
+    EXPECT_EQ(asBits(divided.M21), 0xBE1A108Du);
+    EXPECT_EQ(asBits(divided.M22), 0x3E084CEBu);
+    EXPECT_EQ(asBits(divided.M33), 0x3F000000u);
+    // ...and the scaling a grandchild sees is then the node's own rather than the product, which
+    // is what leaves the grandchild's own rotation divided by (1.5, 0.5, 2.5) and by nothing else.
+    const Matrix rrsTip =
+        std::shared_ptr<Graphics::NodeContent>(midOf(rrs)->getChildrenProperty()[0])
+            ->getTransformProperty();
+    EXPECT_EQ(asBits(rrsTip.M11), 0x3F04B5F1u);
+    EXPECT_EQ(asBits(rrsTip.M13), 0xBE197059u);
+    EXPECT_EQ(asBits(rrsTip.M31), 0x3E8CBD30u);
+
+    // XNASWEEP-229: the shear the `eInheritRSrs` world carries is not in the form FBX holds a
+    // transform in, and the grandchild composes onto the re-expressed one.
+    const Matrix rsrsTip =
+        std::shared_ptr<Graphics::NodeContent>(midOf(rsrs)->getChildrenProperty()[0])
+            ->getTransformProperty();
+    EXPECT_EQ(asBits(rsrsTip.M11), 0x3F33DE6Bu);
+    EXPECT_EQ(asBits(rsrsTip.M12), 0x3F0B4239u);
+    EXPECT_EQ(asBits(rsrsTip.M13), 0xBEBFCC70u);
+    EXPECT_EQ(asBits(rsrsTip.M31), 0x3ED00C56u);
+    EXPECT_EQ(asBits(rsrsTip.M32), 0x3D3199B6u);
+    EXPECT_EQ(asBits(rsrsTip.M33), 0x3F68FF85u);
+    // The grandchild's own rotation, which is what it would answer if the shear survived.
+    EXPECT_NE(asBits(rsrsTip.M31), 0x3ED31BC9u);
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176: the pivot residue stops at the node that
+// inherits it. `fbx_pivot_residue_chain.fbx` is two degenerate nodes and a child: the first
+// node's decomposition loses the 0.0000839 of its quarter turn, its child carries the difference,
+// and the *grandchild* does not -- even though its own parent's decomposition is just as lossy.
+// The genuine importer answers the child's cosine as twice the angle's own and the grandchild's
+// as the angle's own, which is a factor of two apart and far outside any tolerance.
+//
+// This file is not in the graph regression above because CNA does not reproduce its grandchild
+// bit for bit: four entries a quarter turn nearly zeroes come back as exact zeros here and as
+// ~1e-17 there, which is the composition's own residue rather than this rule's, and is recorded
+// in the row as what is left.
+TEST(XnaFbxImporter, ThePivotResidueStopsAtTheNodeThatInheritsIt)
+{
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("fbx_pivot_residue_chain.fbx").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> child = root->getChildrenProperty()[0];
+    ASSERT_NE(child, nullptr);
+    ASSERT_EQ(child->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> grandchild = child->getChildrenProperty()[0];
+    ASSERT_NE(grandchild, nullptr);
+
+    // The two upper nodes declare `Lcl Rotation (0, 0, 90.0000839233398)` with
+    // `PreRotation (-90, 0, 0)`; the leaf declares `(0, 0, -90.0000839233398)`.
+    //
+    // The child carries the residue, and where it shows is the entry a quarter turn nearly
+    // zeroes: 2.1455817e-12 against the 6.123234e-17 the composition alone leaves, which is the
+    // value the genuine importer answers for this file.
+    EXPECT_EQ(child->getTransformProperty().M12, 2.1455817e-12f);
+    EXPECT_NE(child->getTransformProperty().M12, 6.123234e-17f);
+    // The grandchild does not, although its own parent's decomposition is just as lossy: it keeps
+    // the cosine of its own angle. A residue that chained would answer twice that.
+    EXPECT_EQ(grandchild->getTransformProperty().M11, -1.4647386e-06f);
+    EXPECT_NE(grandchild->getTransformProperty().M11, -2.9294772e-06f);
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-213: a chain of plain `Lcl Rotation` takes no pivot
+// residue, and used to take one.
+//
+// `fbx_rotation_chain.fbx` is three nodes under an identity root, each carrying the same three-axis
+// rotation and translation and no `PreRotation` at all. The Euler decomposition of the accumulated
+// rotation is lossy from the second node down -- which is what the old rule keyed on -- but the
+// genuine importer takes no residue here, because nothing was ever decomposed: the file wrote the
+// Euler triple and the importer used it.
+//
+// The five basis entries below are the genuine importer's own bits for the second node. Under the
+// rule this replaces, four of them came back one to two ulps away. The node's `M42` is one ulp out
+// and is what the row still owes; asserting the basis is what separates the two rules.
+TEST(XnaFbxImporter, APlainRotationChainTakesNoPivotResidue)
+{
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("fbx_rotation_chain.fbx").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> first = root->getChildrenProperty()[0];
+    ASSERT_NE(first, nullptr);
+    ASSERT_EQ(first->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> second = first->getChildrenProperty()[0];
+    ASSERT_NE(second, nullptr);
+
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+    const Matrix transform = second->getTransformProperty();
+    EXPECT_EQ(asBits(transform.M11), 0x3F4710E9u);
+    EXPECT_EQ(asBits(transform.M13), 0xBEBFCC71u);
+    EXPECT_EQ(asBits(transform.M31), 0x3ED31BC8u);
+    EXPECT_EQ(asBits(transform.M32), 0x3D24DE37u);
+    EXPECT_EQ(asBits(transform.M33), 0x3F68FF84u);
+
+    // The first node is the same either way -- the root's rotation is the identity and its
+    // decomposition is exact -- so it is the second that says which rule is in force.
+    const Matrix top = first->getTransformProperty();
+    EXPECT_EQ(asBits(top.M11), 0x3F4710EAu);
+    EXPECT_EQ(asBits(top.M41), 0x3FC00000u);
+}
+
+TEST(XnaFbxImporter, RefusalsMatchXna)
+{
+    for (const std::string& fixture : {"fbx_empty.fbx", "fbx_not_fbx.fbx", "fbx_not_fbx_large.fbx"})
+    {
+        ImporterContext context;
+        const std::string record = Expected("fbx/" + fixture);
+        ASSERT_EQ(record.rfind("throws InvalidContentException: ", 0), 0u) << fixture;
+        const std::string message = record.substr(std::string("throws InvalidContentException: ").size());
+        Xna::FbxImporter importer;
+        try
+        {
+            (void)importer.Import(Fixture(fixture).string(), context);
+            ADD_FAILURE() << fixture << " was accepted";
+        }
+        catch (const InvalidContentException& error)
+        {
+            EXPECT_EQ(error.getMessageProperty(), message) << fixture;
+        }
+    }
+    // A `.x` handed to the FBX importer is refused for what it is, with its own sentence.
+    {
+        ImporterContext context;
+        Xna::FbxImporter importer;
+        try
+        {
+            (void)importer.Import(Fixture("bare_mesh.x").string(), context);
+            ADD_FAILURE() << "a .x file was accepted as FBX";
+        }
+        catch (const InvalidContentException& error)
+        {
+            EXPECT_EQ("throws InvalidContentException: " + error.getMessageProperty(),
+                      Expected("fbx/an_x_file"));
+        }
+    }
+    // A missing file is the runtime's own refusal, and XNA's sentence names the path.
+    {
+        ImporterContext context;
+        Xna::FbxImporter importer;
+        EXPECT_NE(Expected("fbx/missing.fbx").find("Cannot import the specified mesh."),
+                  std::string::npos);
+        EXPECT_THROW((void)importer.Import(Fixture("no_such_model.fbx").string(), context),
+                     System::IO::FileNotFoundException);
+    }
+}
+
+// XNA's own SDK refuses a modern FBX; CNA reads one. The divergence is deliberate and measured.
+// The wrapping every Autodesk exporter uses and nothing written here did.
+TEST(XnaFbxImporter, AValueListWrappedAcrossLinesReadsAsTheSameMesh)
+{
+    // FBX 6 ASCII breaks a long value list across lines and writes the comma that separates the
+    // last value on one line from the first on the next at the *start* of the next line. A reader
+    // that ends a list at the newline reads every fixture written here and none of the 149 real
+    // ones in the public samples, which is exactly what happened until XNAPP-242 built them.
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> wrapped =
+        importer.Import(Fixture("fbx_wrapped_values.fbx").string(), context);
+    const std::shared_ptr<Graphics::NodeContent> plain =
+        importer.Import(Fixture("fbx_bare_mesh.fbx").string(), context);
+    ASSERT_NE(wrapped, nullptr);
+    ASSERT_NE(plain, nullptr);
+
+    // The two documents are the same mesh; only the line breaks differ, so the graphs must be
+    // identical rather than merely both readable.
+    std::string wrappedText;
+    std::string plainText;
+    Describe(wrappedText, wrapped, "");
+    Describe(plainText, plain, "");
+    EXPECT_EQ(wrappedText, plainText);
+}
+
+TEST(XnaFbxImporter, AModernBinaryFbxIsReadWhereXnasSdkRefusesIt)
+{
+    // The genuine importer's answer for this exact file is recorded, and it is a refusal: its FBX
+    // SDK 2011.3.1 does not read version 7500, which is what every current exporter writes.
+    EXPECT_NE(Expected("fbx/fbx_binary_modern.fbx").find("encountered when importing the scene"),
+              std::string::npos)
+        << "the recorded divergence assumes XNA refuses this file";
+
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("fbx_binary_modern.fbx").string(), context);
+    ASSERT_NE(root, nullptr);
+    // The document is the two-material quad, written binary with deflated arrays, so reading it
+    // exercises the record stream, the property types and the decompression at once.
+    std::string text;
+    Describe(text, root, "");
+    EXPECT_NE(text.find("MeshContent"), std::string::npos) << text;
+    EXPECT_NE(text.find("position 0 "), std::string::npos) << text;
+    EXPECT_NE(text.find("channel Normal0"), std::string::npos) << text;
+}

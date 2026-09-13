@@ -534,6 +534,42 @@ namespace CNA::Internal::Renderers::OpenGL4
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
+        /**
+         * @brief Returns the source dialect consumed by the implemented custom-effect path.
+         *
+         * @return Desktop GLSL; OpenGL4 compiles the supplied source in its live core context.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override
+        {
+            return ShaderDialectEXT::GlslDesktop;
+        }
+
+        /**
+         * @brief Reports the explicit shader payloads consumed by the implemented OpenGL4 path.
+         *
+         * @param language `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage `CNA::ShaderStageEXT` ordinal.
+         * @return True for desktop GLSL vertex and fragment payloads; false otherwise.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
+        /** @brief Returns true because custom-effect source is compiled and executed by OpenGL. */
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /**
+         * @brief Returns independently probed native modern-GL facts for this live context.
+         *
+         * These facts do not themselves advertise the corresponding public CNA contracts. Each
+         * feature override remains false until its allocation, validation and execution path is
+         * implemented and tested.
+         *
+         * @return Immutable capabilities discovered immediately after context creation.
+         */
+        CNAEXT [[nodiscard]] const GL4::ModernCapabilities& GetModernCapabilitiesEXT() const
+        {
+            return modernCapabilities_;
+        }
+
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
@@ -726,7 +762,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         PlatformGlSurfaceState surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
         bool depthWriteEnabled_ = true;
 
@@ -754,6 +790,8 @@ namespace CNA::Internal::Renderers::OpenGL4
         /// Driver-granted anisotropic-filtering ceiling, queried once at context creation;
         /// stays 1.0 when EXT/ARB_texture_filter_anisotropic is absent (core only in GL 4.6).
         float maxAnisotropy_ = 1.0f;
+        /// Native post-4.1 facts; public CNA feature promises remain separate renderer overrides.
+        GL4::ModernCapabilities modernCapabilities_;
 
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;

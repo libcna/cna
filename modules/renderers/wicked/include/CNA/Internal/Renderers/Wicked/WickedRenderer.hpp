@@ -1433,7 +1433,7 @@ namespace CNA::Internal::Renderers::Wicked
         int virtualHeight_ = 0;
         int preferredWidth_ = 0;
         int preferredHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int multiSampleCount_ = 0;
         int requestedMultiSampleCount_ = 1;
         int swapInterval_ = 1;

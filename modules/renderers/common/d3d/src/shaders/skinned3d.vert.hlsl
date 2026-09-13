@@ -1,6 +1,6 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
 // src/CNA/Internal/Renderers/Vulkan/shaders/skinned3d.vert.glsl.
-// Stride 52: VertexPositionNormalTextureSkinned.
+// Accepts either Byte4 or Vector4 BLENDINDICES through the translated vertex declaration.
 
 cbuffer PerDraw : register(b0)
 {
@@ -47,7 +47,11 @@ struct VSInput
     float3 Normal       : NORMAL0;
     float2 UV           : TEXCOORD0;
     float4 BoneWeights  : BLENDWEIGHT0;
+#ifdef CNA_SKINNED_FLOAT_INDICES
+    float4 BoneIndices  : BLENDINDICES0;
+#else
     uint4  BoneIndices  : BLENDINDICES0;
+#endif
 };
 
 struct VSOutput
@@ -71,6 +75,16 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0, c1, c2) / det;
 }
 
+float3 TransformSkinNormal(float3 normal, float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    float3 transformed = mul(normal, float3x3(c0, c1, c2));
+    return abs(det) > 1e-6 ? transformed * sign(det) : mul(normal, m);
+}
+
 VSOutput main(VSInput input)
 {
     VSOutput output;
@@ -78,16 +92,17 @@ VSOutput main(VSInput input)
     // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
     // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
     float weightsPerVertex = EyePosPad.w;
-    float4x4 skinMat = Bones[input.BoneIndices.x] * input.BoneWeights.x;
-    if (weightsPerVertex >= 2.0) skinMat += Bones[input.BoneIndices.y] * input.BoneWeights.y;
-    if (weightsPerVertex >= 4.0) skinMat += Bones[input.BoneIndices.z] * input.BoneWeights.z
-                                           + Bones[input.BoneIndices.w] * input.BoneWeights.w;
+    float4x4 skinMat = Bones[(uint)input.BoneIndices.x] * input.BoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += Bones[(uint)input.BoneIndices.y] * input.BoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += Bones[(uint)input.BoneIndices.z] * input.BoneWeights.z
+                                           + Bones[(uint)input.BoneIndices.w] * input.BoneWeights.w;
     float4 skinnedPos = mul(float4(input.Position, 1.0), skinMat);
     output.Position = mul(skinnedPos, Mvp);
     // REMED-GFX-006: compose the bone-skin 3x3 with the outer World inverse-transpose normal
     // matrix (was skin-only, so any rotated / non-uniformly-scaled skinned model was lit as if
     // World were identity). Matches the corrected Vulkan skinned3d.vert.glsl exactly.
-    output.Normal = normalize(mul(mul(input.Normal, (float3x3)skinMat), InverseTranspose3x3((float3x3)World)));
+    output.Normal = normalize(mul(TransformSkinNormal(input.Normal, (float3x3)skinMat),
+                                  InverseTranspose3x3((float3x3)World)));
     output.UV = input.UV;
     output.WorldPos = mul(skinnedPos, World).xyz;
     // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector

@@ -2,14 +2,25 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 
-#include <string>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers { class IEffectRenderer; }
+#ifdef CNA_CNAEXT
+namespace CNA::Graphics {
+    class ShaderCodeEXT;
+    class ShaderPackageEXT;
+    class Texture2DArray;
+    class StorageTexture2D;
+}
+#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -36,6 +47,32 @@ namespace Microsoft::Xna::Framework::Graphics
                            const std::string& vertSrc,
                            const std::string& fragSrc);
 
+#ifdef CNA_CNAEXT
+        /**
+         * @brief Compiles an explicitly identified vertex/fragment pair through this effect.
+         * @param device The live device used to validate both exact language/stage pairs.
+         * @param vertexCode Vertex payload.
+         * @param fragmentCode Fragment payload in the same language as @p vertexCode.
+         * @throws std::invalid_argument If stages, languages or entry points are incompatible.
+         * @throws CNA::ShaderCompilationExceptionEXT If the live renderer refuses the exact
+         *         language.
+         */
+        CNAEXT ShaderEffect(
+            GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
+            const CNA::Graphics::ShaderCodeEXT& fragmentCode);
+
+        /**
+         * @brief Selects and compiles one vertex/fragment variant from a shader package.
+         * @param device The live device used once for deterministic package selection.
+         * @param package Package whose required stages must be exactly vertex and fragment.
+         * @throws std::invalid_argument If the package stage contract or selected entry points are
+         *         incompatible with the existing effect path.
+         * @throws CNA::ShaderCompilationExceptionEXT If no package variant is usable.
+         */
+        CNAEXT ShaderEffect(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package);
+#endif
+
         // Destructor defined in .cpp to avoid incomplete-type error on IEffectRenderer.
         ~ShaderEffect();
 
@@ -60,17 +97,31 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] std::string GetCompileErrorEXT() const;
 
+        /**
+         * @brief Returns owned structured compiler diagnostics for the last failed compile.
+         * @return Ordered diagnostics with stage, source label and available source location;
+         *         empty while this effect is valid.
+         */
+        CNAEXT [[nodiscard]] std::vector<CNA::ShaderDiagnosticEXT>
+            GetShaderDiagnosticsEXT() const;
+
+        /**
+         * @brief Returns the explicit selected language, or `Unknown` for the string constructor.
+         * @return Language retained by a code/package constructor for this effect's lifetime.
+         */
+        CNAEXT [[nodiscard]] CNA::ShaderLanguageEXT GetSelectedShaderLanguageEXT() const noexcept;
+
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
         /**
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
          *
-         * Required on a renderer whose shading dialect has no loose (non-block) uniforms -- every
-         * SPIR-V target, which today means IGL's Vulkan backend. Harmlessly ignored everywhere
-         * else, so the same call can sit unconditionally beside the effect's construction.
+         * Required on a source-compiling renderer whose shading dialect has no loose (non-block)
+         * uniforms -- today IGL's Vulkan backend. Harmlessly ignored everywhere else, so the same
+         * call can sit unconditionally beside the effect's construction.
          *
-         * Ask @ref GraphicsDevice::GetShaderDialectEXT which dialect the active renderer wants;
-         * an application that needs both generally supplies two shader sources and one of these
-         * declarations describing the Vulkan one.
+         * Ask @ref GraphicsDevice::GetShaderDialectEXT which payload dialect the active renderer
+         * wants; an application that needs both generally supplies two shader payload pairs and
+         * one of these declarations describing the source-compiled Vulkan one.
          *
          * @param blockSizeBytes Size of the whole block in bytes, std140-padded.
          * @param names          Member names, `count` of them.
@@ -155,6 +206,50 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture Volume texture to bind.
          */
         CNAEXT void SetTexture(int unit, Texture3D& texture);
+
+#ifdef CNA_CNAEXT
+        /**
+         * @brief Binds a sampled two-dimensional texture array to a custom shader.
+         *
+         * Texture-array bindings occupy their own renderer-defined descriptor range; they never
+         * alias a `Texture2D`, cube or volume binding with an incompatible native view type.
+         *
+         * @param unit Zero-based texture-array sampler unit.
+         * @param texture Live texture-array resource to bind.
+         * @throws System::ObjectDisposedException If @p texture has been disposed.
+         * @throws System::NotSupportedException If the active renderer does not implement array
+         *         sampling or refuses @p unit.
+         */
+        CNAEXT void SetTextureArrayEXT(int unit, CNA::Graphics::Texture2DArray& texture);
+
+        /**
+         * @brief Clears a previously bound texture array from a custom shader.
+         *
+         * @param unit Zero-based texture-array sampler unit.
+         * @throws System::NotSupportedException If the active renderer does not implement array
+         *         sampling or refuses @p unit.
+         */
+        CNAEXT void ClearTextureArrayEXT(int unit);
+
+        /**
+         * @brief Binds a sampled storage texture to an ordinary two-dimensional sampler unit.
+         * @param unit Zero-based 2D sampler unit.
+         * @param texture Live storage texture with `Sampled` usage declared.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
+         * @throws std::invalid_argument If the texture belongs to another graphics device or was
+         *         not created with sampled usage.
+         * @throws System::NotSupportedException If the renderer refuses the sampled binding.
+         */
+        CNAEXT void SetStorageTextureEXT(
+            int unit, CNA::Graphics::StorageTexture2D& texture);
+
+        /**
+         * @brief Clears a sampled storage texture from a two-dimensional sampler unit.
+         * @param unit Zero-based 2D sampler unit.
+         * @throws System::NotSupportedException If the renderer refuses the clear operation.
+         */
+        CNAEXT void ClearStorageTextureEXT(int unit);
+#endif
 
         /**
          * @brief Task 1079: enables a `ShaderEffect` to drive a real 3D `GraphicsDevice::
@@ -242,6 +337,25 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
+#ifdef CNA_CNAEXT
+        /**
+         * @brief Selects a portable package when available, otherwise compiles legacy sources.
+         *
+         * This overload is for built-in derived effects being migrated incrementally. A renderer
+         * with a package variant records that explicit language and uses it; every other renderer
+         * retains the legacy constructor's non-throwing compile/invalid-effect behaviour.
+         *
+         * @param device GraphicsDevice that owns this effect.
+         * @param package Portable vertex/fragment variants preferred by the live renderer.
+         * @param fallbackVertexSource Legacy vertex source used when no variant is selectable.
+         * @param fallbackFragmentSource Legacy fragment source used when no variant is selectable.
+         */
+        CNAEXT ShaderEffect(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package,
+            const std::string& fallbackVertexSource,
+            const std::string& fallbackFragmentSource);
+#endif
+
         /**
          * @brief Applies the GLSL shaders to the graphics device before drawing.
          */
@@ -263,8 +377,33 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+#ifdef CNA_CNAEXT
+        struct PreparedPortablePayload
+        {
+            std::string vertexSource;
+            std::string fragmentSource;
+            std::string vertexLabel;
+            std::string fragmentLabel;
+            CNA::ShaderLanguageEXT language;
+        };
+
+        ShaderEffect(GraphicsDevice& device, PreparedPortablePayload payload);
+        static PreparedPortablePayload PreparePortablePayload(
+            GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
+            const CNA::Graphics::ShaderCodeEXT& fragmentCode);
+        static PreparedPortablePayload PreparePortablePayload(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package);
+        static PreparedPortablePayload PreparePortablePayloadOrFallback(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package,
+            const std::string& fallbackVertexSource,
+            const std::string& fallbackFragmentSource);
+#endif
+
         std::string vertSrc_;
         std::string fragSrc_;
+        std::string selectedVertexLabelEXT_;
+        std::string selectedFragmentLabelEXT_;
+        CNA::ShaderLanguageEXT selectedShaderLanguageEXT_ = CNA::ShaderLanguageEXT::Unknown;
         std::unique_ptr<CNA::Internal::Renderers::IEffectRenderer> effectRenderer_;
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();

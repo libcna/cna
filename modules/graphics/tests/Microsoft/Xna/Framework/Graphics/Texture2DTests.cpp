@@ -777,11 +777,17 @@ protected:
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
     // The two signed-normalized byte formats differ only in channel count, and EasyGL stores
-    // them through one branch -- EasyGL widens the two-channel form to RGBA8_SNORM so every
-    // stock-effect shader sees XNA's missing-channel expansion, while Software retains signed
-    // float samples. Both are real format implementations, so this list is deliberately the
-    // same one NormalizedByte4Throws uses.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
+    // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
+    // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
+    // is deliberately the same one NormalizedByte4Throws uses.
+    // plans/plan_webgpu.md WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
+    // `rgba8snorm`, so the format is stored natively there too, with no expansion.
+    // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8_SNORM -- core 1.0, plain
+    // component order. Verified by a real sampled draw including a NEGATIVE texel
+    // (Vulkan_NormalizedByteFormat), which is the only thing that distinguishes SNORM storage from
+    // UNORM storage of the same bytes.
+    // Software retains the signed values in its canonical CPU sampling plane.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -793,7 +799,8 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
+    // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -806,7 +813,11 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
     // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
+    // plan_vulkan.md VULKAN-173: and on Vulkan, where SurfaceFormat::Bgra5551 is
+    // VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field -- core 1.0, no extension. Verified by a real
+    // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
+    // copy and which therefore cannot see a wrong channel order.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -1155,30 +1166,83 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
         const bool igl = CNA_RENDERER_IS(Igl);
+        // WEBGPU-184/SDLGPU-69: these renderers provide the signed-normalized formats end to end.
+        // The name keeps its EasyGL prefix only because the list began there.
         const bool easyGlSignedNormalized =
-            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software);
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software);
+        // plan_vulkan.md VULKAN-174: CNA's Vulkan renderer stores both, as VK_FORMAT_R8G8_SNORM and
+        // VK_FORMAT_R8G8B8A8_SNORM. Kept as its own flag rather than folded into the EasyGL one
+        // above for the reason vulkanPacked16 is separate: these two renderers promote different
+        // sets, and one merged predicate would stop this sweep saying which.
+        const bool vulkanSignedNormalized = CNA_RENDERER_IS(Vulkan);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
         // copy and which therefore cannot see a wrong channel order.
-        const bool packed16Renderer = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software);
+        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software);
+        // plan_vulkan.md VULKAN-173: CNA's Vulkan renderer stores the two packed 16-bit formats
+        // whose exact VkFormat is CORE 1.0 -- Bgr565 as VK_FORMAT_R5G6B5_UNORM_PACK16 and Bgra5551
+        // as VK_FORMAT_A1R5G5B5_UNORM_PACK16, both field for field. Bgra4444 is deliberately NOT
+        // here: VK_FORMAT_A4R4G4B4_UNORM_PACK16 came with VK_EXT_4444_formats and is core only in
+        // 1.3, while the instance asks for 1.1, so the renderer refuses it by name (VULKAN-179).
+        // A separate flag rather than an addition to the line above, because the two renderers
+        // promote DIFFERENT sets and merging them would hide exactly that.
+        const bool vulkanPacked16 = CNA_RENDERER_IS(Vulkan);
+        // plan_vulkan.md VULKAN-179: Bgra4444 is the one format in this whole sweep whose
+        // promotion is a DEVICE fact rather than a renderer fact, so it is the one entry derived
+        // from the renderer instead of named. VK_FORMAT_A4R4G4B4_UNORM_PACK16 has no core-1.1
+        // spelling; CNA's Vulkan renderer enables VK_EXT_4444_formats where the device offers it
+        // and refuses the format by name where it does not. Naming it unconditionally would make
+        // this test wrong on every device without that extension, and omitting it would make it
+        // wrong on every device with one. Everything else here stays named on purpose -- deriving
+        // the WHOLE predicate from ClassifySurfaceFormatEXT would turn this sweep into a tautology
+        // against Texture2D's own gate and stop it asserting anything about the renderer.
+        const bool vulkanA4R4G4B4 =
+            CNA_RENDERER_IS(Vulkan, SdlGpu) &&
+            gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
+                CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
         // refused however capable the renderer is -- so the profile is a factor of "supported",
         // not an alternative to it.
         const bool profileAllows =
             Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
+        // WEBGPU-144/SDLGPU-69: block-compressed support is a runtime storage decision. WebGPU and
+        // SDL GPU may upload native BC blocks; SDL GPU can instead decode them into RGBA8 while
+        // preserving the public compressed-transfer contract.
+        //
+        // Unlike every other clause here this one is not a hardcoded list ANDed with an identity:
+        // BC is an OPTIONAL native adapter feature, so a hardcoded identity list would be wrong.
+        // Ask the renderer whether the public transfer layout is block-compressed; its answer may
+        // be backed by native storage or by an exact renderer-side decode fallback.
+        const bool rendererBlockCompressed =
+            gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
         const bool supported = profileAllows && (format == SurfaceFormat::Color
+            || rendererBlockCompressed
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
-            || (packed16Renderer && (format == SurfaceFormat::Bgr565
+            || (easyGlPacked16 && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551
                                    || format == SurfaceFormat::Bgra4444))
+            || (vulkanPacked16 && (format == SurfaceFormat::Bgr565
+                                   || format == SurfaceFormat::Bgra5551))
+            || (vulkanA4R4G4B4 && format == SurfaceFormat::Bgra4444)
+            || (vulkanSignedNormalized && (format == SurfaceFormat::NormalizedByte2
+                                           || format == SurfaceFormat::NormalizedByte4))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.
             || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software)
+            // plan_vulkan.md VULKAN-172: and on Vulkan, natively as BC1/BC2/BC3 rather than
+            // through a decode -- conditional on VkPhysicalDeviceFeatures.textureCompressionBC,
+            // so derived from the renderer for the same reason Bgra4444 is. Verified by a real
+            // sampled draw of two blocks side by side (Vulkan_DxtFormat).
                 && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
                     || format == SurfaceFormat::Dxt5))
+            || (CNA_RENDERER_IS(Vulkan)
+                && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
+                    || format == SurfaceFormat::Dxt5)
+                && gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                       CNA::Internal::Renderers::RendererFormatVerdict::Supported)
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565

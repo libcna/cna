@@ -107,6 +107,7 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -364,9 +365,12 @@ protected:
         // and a REAL Reset() call, even though the "loss" itself is simulated, not driver-detected.
         {
             int lostCount = 0, resettingCount = 0, resetCount = 0;
-            dev.DeviceLost += [&](System::Object*, const System::EventArgs&) { ++lostCount; };
-            dev.DeviceResetting += [&](System::Object*, const System::EventArgs&) { ++resettingCount; };
-            dev.DeviceReset += [&](System::Object*, const System::EventArgs&) { ++resetCount; };
+            const auto lostToken =
+                dev.DeviceLost.Add([&](System::Object*, const System::EventArgs&) { ++lostCount; });
+            const auto resettingToken =
+                dev.DeviceResetting.Add([&](System::Object*, const System::EventArgs&) { ++resettingCount; });
+            const auto resetToken =
+                dev.DeviceReset.Add([&](System::Object*, const System::EventArgs&) { ++resetCount; });
 
             check(dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal,
                   "D9-34: GraphicsDeviceStatus starts Normal");
@@ -397,6 +401,10 @@ protected:
             check(postRecoveryPixels[0].getRProperty() == 6 && postRecoveryPixels[0].getGProperty() == 7 &&
                   postRecoveryPixels[0].getBProperty() == 8,
                   "D9-34: the device genuinely works again after recovery -- Clear()+readback exact");
+
+            dev.DeviceLost.Remove(lostToken);
+            dev.DeviceResetting.Remove(resettingToken);
+            dev.DeviceReset.Remove(resetToken);
         }
 
         // Check N (D9-40) -- a real D3D9VertexBufferRenderer round-trips known bytes: SetData()
@@ -1363,7 +1371,7 @@ namespace
         }
 
         CNA::Internal::Renderers::GraphicsRendererCreateArgs createArgs;
-        createArgs.surface.windowId = SDL_GetWindowID(sdlWindow);
+        createArgs.surface = CNA::Examples::SdlTestSurface(sdlWindow);
         createArgs.virtualWidth = 64;
         createArgs.virtualHeight = 64;
         createArgs.depthStencilFormat = 0;  // DepthFormat::None
@@ -1403,7 +1411,7 @@ namespace
         }
 
         CNA::Internal::Renderers::GraphicsRendererCreateArgs createArgs;
-        createArgs.surface.windowId = SDL_GetWindowID(sdlWindow);
+        createArgs.surface = CNA::Examples::SdlTestSurface(sdlWindow);
         createArgs.virtualWidth = 64;
         createArgs.virtualHeight = 64;
         createArgs.graphicsProfile = 1;  // GraphicsProfile::HiDef

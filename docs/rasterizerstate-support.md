@@ -108,6 +108,50 @@ post-assignment mutation would be visible). This closes Phase 38's last open tas
 
 ---
 
+## 8. `MultiSampleAntiAlias` reaches no renderer, by decision (`plans/plan_vulkan.md` VULKAN-099, 2026-09-07)
+
+`VULKAN-096` measured all 34 `RasterizerState` fields against the Vulkan pipeline and found exactly
+one that reaches no renderer at all. `IGraphicsRenderer::ApplyRasterizerState` takes
+`(cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias)` — five parameters, none
+of them this flag — so the value stops at the shared interface for **every** renderer family.
+`D3D11StateObjectCache.cpp:164` already documented its own `MultisampleEnable = FALSE` on the same
+grounds.
+
+**What XNA actually does with it, measured rather than read.**
+`spikes/xna-multisample-antialias-spike/` runs the property on the real XNA 4.0 runtime in
+`~/.wine-cna-xna40` (D3D9 through DXVK, RADV PHOENIX). Setting
+`RasterizerState.MultiSampleAntiAlias = false` makes the D3D9 layer report
+
+```
+warn:  D3D9DeviceEx::SetRenderState: Unhandled render state 161
+```
+
+and **161 is `D3DRS_MULTISAMPLEANTIALIAS`** (`d3d9types.h:1008`). The attribution is measured, not
+inferred: re-running with `PROBE_SKIP_FALSE=1`, so that no leg ever sets the flag to `false`,
+produces the warning **zero** times. So XNA does carry the property down to the D3D9 render state,
+and writes it only when the value is not D3D9's default — the field is live upstream, not inert.
+
+**What it does to pixels could not be measured here**, and the probe says so rather than guessing:
+DXVK reports the state as unhandled, so the edge-pixel counts are identical either way
+(4× multisampled triangle: 151 blended pixels with the flag true, 151 with it false, against 0 on
+an unmultisampled target — multisampling itself demonstrably worked, which is what rules out the
+"MSAA never happened" reading). Answering the behavioural half needs a native D3D9 stack, which
+this machine does not have.
+
+**Why CNA leaves it dropped.** Vulkan fixes a graphics pipeline's `rasterizationSamples` to the
+render pass attachment's sample count, so "do not multisample *this draw*" is not expressible as a
+per-draw property: it would mean changing the attachment, and a coverage mask (`pSampleMask`)
+restricts which samples are written rather than reproducing D3D9's rasterizer behaviour. Adding a
+sixth parameter to an interface twelve renderer families implement, so that every one of them can
+refuse it, buys nothing that the current silence does not — and it is not a parity gap, because no
+renderer receives the field, so no two renderers disagree.
+
+**Guarded by** `Vulkan_PipelineKeyStateCoverage`, which asserts both halves rather than describing
+them: the field does not fragment the pipeline cache, and `ApplyRasterizerState` has exactly five
+parameters (a `void_t` detector with a positive control, so a renamed method cannot make the
+negative pass vacuously). Adding the sixth argument fails the build with a message naming this
+section.
+
 ## Summary: what actually works today, per renderer
 
 | Feature | EasyGL | Vulkan | Bgfx |

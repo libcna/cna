@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::Generated",
+  "package": "shadow_caster",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kDirectionalEsVertexSource","source":"directional.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kDirectionalEsFragmentSource","source":"directional.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kSkinnedEsVertexSource","source":"skinned.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kCubeEsVertexSource","source":"cube.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kSpotEsVertexSource","source":"spot.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kPunctualEsFragmentSource","source":"punctual.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+
+    {"symbol":"kDirectionalDesktopVertexSource","source":"directional.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kDirectionalDesktopFragmentSource","source":"directional.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kSkinnedDesktopVertexSource","source":"skinned.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kCubeDesktopVertexSource","source":"cube.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kSpotDesktopVertexSource","source":"spot.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kPunctualDesktopFragmentSource","source":"punctual.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+
+    {"symbol":"kDirectionalVulkanVertexSpirV","source":"directional.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kDirectionalVulkanFragmentSpirV","source":"directional.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
+    {"symbol":"kSkinnedVulkanVertexSpirV","source":"skinned.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kPunctualVulkanVertexSpirV","source":"punctual.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kPunctualVulkanFragmentSpirV","source":"punctual.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

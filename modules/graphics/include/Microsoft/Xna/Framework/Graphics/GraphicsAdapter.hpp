@@ -48,9 +48,24 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns true if the current display mode has a widescreen aspect ratio.
          *
-         * Common widescreen modes include 16:9, 16:10, and 2:1.
+         * Common widescreen modes include 16:9 and 2:1. 16:10 is **not** one of them here: XNA
+         * compares strictly greater than 1.6, and 16:10 is exactly 1.6.
          */
         [[nodiscard]] bool getIsWideScreenProperty() const;
+
+        /**
+         * @brief The rule `getIsWideScreenProperty()` applies, decoupled from any display.
+         *
+         * CNAEXT — CNA extension, not XNA API. It exists so the threshold XNA actually uses can be
+         * pinned by a test: the property itself reads whatever display the host happens to have,
+         * so a regression in the constant would go unnoticed on any one machine. `BINDFIX-033`
+         * moved this from FNA's `4.0f/3.0f` to XNA's `1.6f`, and the two disagree over every mode
+         * between them.
+         *
+         * @param aspectRatio Width divided by height.
+         * @return true when @p aspectRatio is strictly greater than XNA's 1.6 limit.
+         */
+        CNAEXT [[nodiscard]] static bool IsWideScreenAspectRatioEXT(float aspectRatio);
 
         /** @brief Returns the native monitor handle for this adapter. */
         [[nodiscard]] IntPtr getMonitorHandleProperty() const;

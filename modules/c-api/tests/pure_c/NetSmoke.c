@@ -350,7 +350,7 @@ static int read_packet(const CNA_PacketReaderHandle reader)
         matrix.m41 == 13.0F && matrix.m44 == 16.0F;
 }
 
-static int validate_color_asymmetry(void)
+static int validate_color_roundtrip(void)
 {
     CNA_PacketWriterHandle writer = CNA_INVALID_HANDLE;
     CNA_PacketReaderHandle reader = CNA_INVALID_HANDLE;
@@ -364,8 +364,10 @@ static int validate_color_asymmetry(void)
         cna_packet_reader_create(0, &reader) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* The canonical writer emits four bytes while the canonical reader consumes four floats, so a
-       direct round trip cannot work and the C API preserves that rather than symmetrizing it. */
+    /* Writer and reader are inverses: four bytes out, the same four back. This block used to assert
+       the opposite -- that a direct round trip could not work, because the canonical reader consumed
+       four floats for a colour the writer had emitted as four bytes -- and was left behind when
+       PacketReader::ReadColor was corrected. See the comment at that function. */
     ok = cna_packet_writer_write_color(writer, written) == CNA_RESULT_SUCCESS &&
         cna_packet_writer_copy_data_ext(writer, buffer, (uint64_t)sizeof(buffer), &bytes) ==
             CNA_RESULT_SUCCESS &&
@@ -373,22 +375,28 @@ static int validate_color_asymmetry(void)
         buffer[0] == UINT8_C(10) && buffer[1] == UINT8_C(20) && buffer[2] == UINT8_C(30) &&
         buffer[3] == UINT8_C(40) &&
         cna_packet_reader_set_data_ext(reader, buffer, bytes) == CNA_RESULT_SUCCESS &&
-        cna_packet_reader_read_color(reader, &read) == CNA_RESULT_IO;
+        cna_packet_reader_read_color(reader, &read) == CNA_RESULT_SUCCESS &&
+        read.r == written.r && read.g == written.g && read.b == written.b && read.a == written.a;
 
-    /* Four floats do round-trip into a color through the canonical float constructor. */
+    /* A packet shorter than one colour is still an end-of-stream failure, not a partial read. */
     if (ok) {
+        ok = cna_packet_reader_set_data_ext(reader, buffer, UINT64_C(3)) == CNA_RESULT_SUCCESS &&
+            cna_packet_reader_read_color(reader, &read) == CNA_RESULT_IO;
+    }
+
+    /* Rewinding the writer overwrites the colour in place rather than appending a second one, so
+       four bytes in the buffer stay four. */
+    if (ok) {
+        const CNA_Color rewritten = {UINT8_C(50), UINT8_C(60), UINT8_C(70), UINT8_C(80)};
         ok = cna_packet_writer_set_position(writer, 0) == CNA_RESULT_SUCCESS &&
-            cna_packet_writer_write_single(writer, 1.0F) == CNA_RESULT_SUCCESS &&
-            cna_packet_writer_write_single(writer, 0.0F) == CNA_RESULT_SUCCESS &&
-            cna_packet_writer_write_single(writer, 1.0F) == CNA_RESULT_SUCCESS &&
-            cna_packet_writer_write_single(writer, 0.0F) == CNA_RESULT_SUCCESS &&
+            cna_packet_writer_write_color(writer, rewritten) == CNA_RESULT_SUCCESS &&
             cna_packet_writer_copy_data_ext(writer, buffer, (uint64_t)sizeof(buffer), &bytes) ==
                 CNA_RESULT_SUCCESS &&
-            bytes == UINT64_C(16) &&
+            bytes == UINT64_C(4) &&
             cna_packet_reader_set_data_ext(reader, buffer, bytes) == CNA_RESULT_SUCCESS &&
             cna_packet_reader_read_color(reader, &read) == CNA_RESULT_SUCCESS &&
-            read.r == UINT8_C(255) && read.g == UINT8_C(0) && read.b == UINT8_C(255) &&
-            read.a == UINT8_C(0);
+            read.r == rewritten.r && read.g == rewritten.g && read.b == rewritten.b &&
+            read.a == rewritten.a;
     }
     return cna_packet_writer_destroy(writer) == CNA_RESULT_SUCCESS &&
         cna_packet_reader_destroy(reader) == CNA_RESULT_SUCCESS && ok;
@@ -1608,49 +1616,55 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     int completions = 0;
     int32_t number = -1;
 
-    /* The canonical search refuses a local-only session type outright, and only a SystemLink
-       search reaches real discovery, so a PlayerMatch search is empty by design. */
+    /* The canonical search refuses a local-only session type outright (INVALID_ARGUMENT: Local
+       sessions are not discoverable), and refuses PlayerMatch/Ranked as unsupported, because
+       matchmaking is a service this platform does not have. Neither refusal produces a collection,
+       and an async refusal never reaches its callback, so `completions` stays where it was. */
     if (cna_network_session_find(
             CNA_NETWORK_SESSION_TYPE_LOCAL, 1, CNA_INVALID_HANDLE, &collection) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_network_session_find(
             CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, CNA_INVALID_HANDLE, &collection) !=
-            CNA_RESULT_SUCCESS ||
-        cna_available_network_session_collection_get_count(collection, &number) !=
-            CNA_RESULT_SUCCESS ||
-        number != 0 ||
-        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_find(
+            CNA_NETWORK_SESSION_TYPE_RANKED, 1, CNA_INVALID_HANDLE, &collection) !=
+            CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
     if (cna_network_session_find_with_local_gamers(
             CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, &signed_in, UINT64_C(1), CNA_INVALID_HANDLE,
-            &collection) != CNA_RESULT_SUCCESS ||
-        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+            &collection) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
     if (cna_network_session_find_async(
             CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, CNA_INVALID_HANDLE, on_async_completed,
-            &completions, &collection) != CNA_RESULT_SUCCESS ||
-        completions != 1 ||
-        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+            &completions, &collection) != CNA_RESULT_NOT_SUPPORTED ||
+        completions != 0) {
         return 0;
     }
     if (cna_network_session_find_with_local_gamers_async(
             CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, &signed_in, UINT64_C(1), CNA_INVALID_HANDLE,
-            on_async_completed, &completions, &collection) != CNA_RESULT_SUCCESS ||
-        completions != 2 ||
-        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+            on_async_completed, &completions, &collection) != CNA_RESULT_NOT_SUPPORTED ||
+        completions != 0) {
         return 0;
     }
+    /* A null out-parameter is still an argument error, checked before the session type. */
     if (cna_network_session_find(CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, CNA_INVALID_HANDLE, 0) !=
         CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* Creating a matchmaking session is refused for the same reason a search is. */
+    if (cna_network_session_create(CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, 8, &session) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_create(CNA_NETWORK_SESSION_TYPE_RANKED, 1, 8, &session) !=
+            CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
 
     if (cna_network_session_create_async(
             CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 8, on_async_completed, &completions, &session) !=
             CNA_RESULT_SUCCESS ||
-        completions != 3 ||
+        completions != 1 ||
         cna_network_session_get_max_gamers(session, &number) != CNA_RESULT_SUCCESS ||
         number != 8) {
         return destroy_session_and_check(session, 0);
@@ -1661,7 +1675,7 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     if (cna_network_session_create_with_properties_async(
             CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 8, 2, CNA_INVALID_HANDLE, on_async_completed,
             &completions, &session) != CNA_RESULT_SUCCESS ||
-        completions != 4 ||
+        completions != 2 ||
         cna_network_session_get_max_gamers(session, &number) != CNA_RESULT_SUCCESS ||
         number != 8 ||
         cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
@@ -1670,7 +1684,7 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     if (cna_network_session_create_with_local_gamers_async(
             CNA_NETWORK_SESSION_TYPE_LOCAL, &signed_in, UINT64_C(1), 8, 0, CNA_INVALID_HANDLE,
             on_async_completed, &completions, &session) != CNA_RESULT_SUCCESS ||
-        completions != 5 ||
+        completions != 3 ||
         cna_network_session_get_max_gamers(session, &number) != CNA_RESULT_SUCCESS ||
         number != 8 ||
         cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
@@ -1693,35 +1707,32 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     }
     if (cna_network_session_join_async(available, on_async_completed, &completions, &session) !=
             CNA_RESULT_SUCCESS ||
-        completions != 6 ||
+        completions != 4 ||
         cna_network_session_destroy(session) != CNA_RESULT_SUCCESS ||
         cna_available_network_session_destroy(available) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 
-    /* The canonical invite path builds its session from fixed values, not from live invite state. */
-    if (cna_network_session_join_invited(1, &session) != CNA_RESULT_SUCCESS ||
-        cna_network_session_get_session_type(session, &type) != CNA_RESULT_SUCCESS ||
-        type != CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH ||
-        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+    /* The invite path refuses: nothing raises InviteAccepted, which is the only place XNA's own
+       contract calls JoinInvited from, so no invitation can ever be pending. This used to return a
+       PlayerMatch session assembled from fixed values -- no invitation token, no host address, no
+       transport. */
+    if (cna_network_session_join_invited(1, &session) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
     if (cna_network_session_join_invited_with_local_gamers(
-            &signed_in, UINT64_C(1), &session) != CNA_RESULT_SUCCESS ||
-        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+            &signed_in, UINT64_C(1), &session) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
     if (cna_network_session_join_invited_async(
-            1, on_async_completed, &completions, &session) != CNA_RESULT_SUCCESS ||
-        completions != 7 ||
-        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+            1, on_async_completed, &completions, &session) != CNA_RESULT_NOT_SUPPORTED ||
+        completions != 4) {
         return 0;
     }
     return cna_network_session_join_invited_with_local_gamers_async(
             &signed_in, UINT64_C(1), on_async_completed, &completions, &session) ==
-            CNA_RESULT_SUCCESS &&
-        completions == 8 &&
-        cna_network_session_destroy(session) == CNA_RESULT_SUCCESS &&
+            CNA_RESULT_NOT_SUPPORTED &&
+        completions == 4 &&
         cna_network_session_join_invited(1, 0) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
@@ -1846,7 +1857,7 @@ int main(void)
     if (!validate_packets()) {
         return CNA_TEST_FAIL(4);
     }
-    if (!validate_color_asymmetry()) {
+    if (!validate_color_roundtrip()) {
         return CNA_TEST_FAIL(5);
     }
     if (!validate_join_error()) {

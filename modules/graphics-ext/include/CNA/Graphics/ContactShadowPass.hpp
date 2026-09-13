@@ -72,7 +72,7 @@ namespace CNA::Graphics {
          * @brief Returns whether this renderer can run the pass.
          *
          * @param device The device whose renderer is queried.
-         * @return True when custom effects are supported and the shader compiled.
+         * @return True when custom effects are supported and a complete shader package compiled.
          */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;
@@ -222,6 +222,7 @@ namespace CNA::Graphics {
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
+        bool packedDepth_ = true;
 
         Microsoft::Xna::Framework::Vector3 lightDirection_{0.0f, -1.0f, 0.0f};
         float maxDistance_ = 0.25f;

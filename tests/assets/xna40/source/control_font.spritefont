@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-267: the font case that is meant to build.
+
+    missing_glyph.spritefont beside this one differs from it in one element, the character region,
+    so that a refusal there is about the glyphs and not about whether the font resolved at all.
+
+    Both harnesses put the same face where their side looks for it: the oracle installs
+    tests/assets/fonts/LiberationMono-Regular.ttf into the Wine prefix, where XNA's family lookup
+    finds "Liberation Mono", and the differential test copies the same file beside the description
+    as `Liberation Mono.ttf`, which is where CNA's file lookup looks first. One committed copy of
+    the font, presented to each side the way that side resolves one.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>14</Size>
+    <Spacing>0</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#32;</Start>
+        <End>&#126;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

@@ -34,6 +34,28 @@
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
+    /** @brief One declared public vertex stream offered to a compiled effect. CNAEXT. */
+    struct SdlGpuCompiledEffectVertexStreamEXT
+    {
+        /** @brief Stream-local declaration elements. */
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>* elements = nullptr;
+        /** @brief Stream-local byte stride. */
+        Uint32 stride = 0;
+        /** @brief Whether native addressing advances per vertex or per instance. */
+        SDL_GPUVertexInputRate inputRate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    };
+
+    /** @brief Native compiled-effect input layout plus the public streams it consumes. CNAEXT. */
+    struct SdlGpuCompiledEffectVertexLayoutEXT
+    {
+        /** @brief Shader inputs in reflected location order. */
+        std::vector<SDL_GPUVertexAttribute> attributes;
+        /** @brief Dense native buffer descriptions for the streams actually read by the shader. */
+        std::vector<SDL_GPUVertexBufferDescription> buffers;
+        /** @brief For each dense native slot, the corresponding index in the offered stream list. */
+        std::vector<std::size_t> sourceIndices;
+    };
+
     /**
      * @brief Maps one XNA vertex element format to its SDL_GPU vertex attribute format.
      *
@@ -75,8 +97,8 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @param vertexParseData The applied pass's vertex shader reflection
      *        (`MOJOSHADER_sdlGetShaderParseData` on the bound vertex shader data).
      * @param declaredElements The caller's `VertexDeclaration` elements, in declaration order.
-     * @param bufferSlot The SDL_GPU vertex buffer slot every attribute binds to. This builder
-     *        supports one vertex stream; multi-stream compiled-effect draws are not yet implemented.
+     * @param bufferSlot The SDL_GPU vertex buffer slot every attribute binds to. This compatibility
+     *        wrapper builds one stream; multi-stream draws use BuildCompiledEffectVertexLayoutEXT.
      * @return One `SDL_GPUVertexAttribute` per shader attribute, `location` set to that attribute's
      *         index in @p vertexParseData (matching `MOJOSHADER_sdlGetVertexAttribLocation`'s own
      *         convention), in that same order.
@@ -87,6 +109,23 @@ namespace CNA::Internal::Renderers::SdlGpu
         const MOJOSHADER_parseData& vertexParseData,
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
         Uint32 bufferSlot);
+
+    /**
+     * @brief Resolves arbitrary compiled-effect inputs across several vertex streams.
+     *
+     * Each shader semantic is matched against the offered streams in public binding order. Only
+     * streams that supply a consumed semantic become dense SDL_gpu slots, so sparse or unused
+     * public bindings do not require dummy native buffers. Instance-frequency streams use native
+     * per-instance addressing; frequencies above one are expanded before binding by the renderer.
+     *
+     * @param vertexParseData The applied vertex shader's reflection.
+     * @param streams Stream-local declarations, strides and input rates.
+     * @return The complete native input layout and its source-stream mapping.
+     * @throws System::NotSupportedException if a shader input has no matching declared element.
+     */
+    [[nodiscard]] SdlGpuCompiledEffectVertexLayoutEXT BuildCompiledEffectVertexLayoutEXT(
+        const MOJOSHADER_parseData& vertexParseData,
+        const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams);
 
     /**
      * @brief Maps one XNA vertex element format to MojoShader's own vertex element format enum.

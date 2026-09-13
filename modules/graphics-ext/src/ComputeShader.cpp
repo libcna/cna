@@ -4,13 +4,17 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace CNA::Graphics {
 
@@ -19,6 +23,11 @@ namespace CNA::Graphics {
 
     ComputeShader::ComputeShader(GraphicsDevice& device, const std::string& source)
         : device_(device)
+    {
+        compile(source);
+    }
+
+    void ComputeShader::compile(const std::string& source)
     {
         if (!device_.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
             throw System::NotSupportedException(
@@ -35,9 +44,81 @@ namespace CNA::Graphics {
         if (!renderer_->IsValid())
         {
             compileError_ = renderer_->GetCompileError();
-            throw std::runtime_error("CNA::Graphics::ComputeShader: the program did not compile: "
-                                     + compileError_);
+            const std::string label = selectedCode_.has_value()
+                ? selectedCode_->getSourceLabel() : std::string();
+            std::vector<CNA::ShaderDiagnosticEXT> diagnostics =
+                CNA::ShaderDiagnosticEXT::parseCompilerLog(
+                compileError_, CNA::ShaderStageEXT::Compute, label);
+            if (diagnostics.empty())
+                diagnostics.emplace_back(
+                    CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Compute,
+                    label, 0, 0, "renderer did not provide compiler diagnostic text");
+            throw CNA::ShaderCompilationExceptionEXT(std::move(diagnostics));
         }
+    }
+
+    ComputeShader::ComputeShader(GraphicsDevice& device, const ShaderCodeEXT& code)
+        : ComputeShader(device, preparePortablePayload(device, code))
+    {
+    }
+
+    ComputeShader::ComputeShader(GraphicsDevice& device, const ShaderPackageEXT& package)
+        : ComputeShader(device, preparePortablePayload(device, package))
+    {
+    }
+
+    ComputeShader::ComputeShader(GraphicsDevice& device, PreparedPortablePayload payload)
+        : device_(device)
+        , selectedCode_(std::move(payload.code))
+    {
+        compile(payload.source);
+    }
+
+    ComputeShader::PreparedPortablePayload ComputeShader::preparePortablePayload(
+        GraphicsDevice& device, const ShaderCodeEXT& code)
+    {
+        return preparePortablePayload(
+            device, ShaderPackageEXT({code}, {CNA::ShaderStageEXT::Compute}));
+    }
+
+    ComputeShader::PreparedPortablePayload ComputeShader::preparePortablePayload(
+        GraphicsDevice& device, const ShaderPackageEXT& package)
+    {
+        if (package.getRequiredStages().size() != 1
+            || !package.requiresStage(CNA::ShaderStageEXT::Compute))
+        {
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader: a package must require only Compute");
+        }
+        const ShaderPackageSelectionEXT selection = package.selectFor(device);
+        if (!selection.isUsable())
+        {
+            std::vector<CNA::ShaderDiagnosticEXT> diagnostics;
+            diagnostics.reserve(package.getVariants().size());
+            for (const auto& variant : package.getVariants())
+                diagnostics.emplace_back(
+                    CNA::ShaderDiagnosticSeverityEXT::Error, variant.getStage(),
+                    variant.getSourceLabel(), 0, 0, selection.getDiagnostic());
+            throw CNA::ShaderCompilationExceptionEXT(std::move(diagnostics));
+        }
+        const ShaderCodeEXT* code = selection.findStage(CNA::ShaderStageEXT::Compute);
+        if (code == nullptr)
+            throw std::logic_error(
+                "CNA::Graphics::ComputeShader: usable selection has no Compute payload");
+        if (code->getEntryPoint() != "main")
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader: the existing renderer path requires entry point "
+                "'main'");
+
+        std::string source;
+        if (code->isText())
+            source = code->getText();
+        else
+        {
+            const auto& bytes = code->getBytes();
+            source.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        }
+        return PreparedPortablePayload{std::move(source), *code};
     }
 
     ComputeShader::~ComputeShader() = default;
@@ -59,8 +140,47 @@ namespace CNA::Graphics {
         if (binding < 0)
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindStorageBuffer: the binding must not be negative");
+        if (buffer.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageBuffer");
+        if (buffer.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageBuffer: the buffer belongs to another "
+                "GraphicsDevice");
+        if ((buffer.getDescriptor().getUsage() & StorageBufferUsage::Storage) ==
+            StorageBufferUsage::None)
+        {
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindStorageBuffer: Storage usage was not "
+                "declared");
+        }
         renderer_->Bind();
         renderer_->BindStorageBuffer(binding, buffer.getRendererEXT());
+    }
+
+    void ComputeShader::bindConstantBuffer(const int binding, StorageBuffer& buffer)
+    {
+        if (binding < 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: the binding must not be "
+                "negative");
+        if (buffer.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageBuffer");
+        if (buffer.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: the buffer belongs to another "
+                "GraphicsDevice");
+        if ((buffer.getDescriptor().getUsage() & StorageBufferUsage::Constant) ==
+            StorageBufferUsage::None)
+        {
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: Constant usage was not "
+                "declared");
+        }
+        renderer_->Bind();
+        if (!renderer_->BindConstantBufferEXT(binding, buffer.getRendererEXT()))
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: the active renderer refused "
+                "constant-buffer binding");
     }
 
     void ComputeShader::bindTexture(const int unit, const std::string& samplerName,
@@ -69,9 +189,16 @@ namespace CNA::Graphics {
         if (unit < 0)
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindTexture: the texture unit must not be negative");
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture2D");
+        if (texture.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindTexture: the texture belongs to another "
+                "GraphicsDevice");
         renderer_->Bind();
         renderer_->BindTexture(unit, &texture.GetRenderer());
-        renderer_->SetUniformInt(samplerName.c_str(), unit);
+        if (!renderer_->UsesDirectSampledTextureBindingsEXT())
+            renderer_->SetUniformInt(samplerName.c_str(), unit);
     }
 
     bool ComputeShader::isImageBindingSupported() const
@@ -85,6 +212,20 @@ namespace CNA::Graphics {
         if (unit < 0)
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindImage: the image unit must not be negative");
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture2D");
+        if (texture.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindImage: the texture belongs to another "
+                "GraphicsDevice");
+        if (access != CNA::GraphicsImageAccess::ReadOnly &&
+            access != CNA::GraphicsImageAccess::WriteOnly &&
+            access != CNA::GraphicsImageAccess::ReadWrite)
+        {
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindImage: access is outside "
+                "GraphicsImageAccess");
+        }
         if (!isImageBindingSupported())
             throw System::NotSupportedException(
                 "CNA::Graphics::ComputeShader::bindImage: the '"
@@ -94,6 +235,54 @@ namespace CNA::Graphics {
                   "instead");
         renderer_->Bind();
         renderer_->BindImageTexture(unit, &texture.GetRenderer(), static_cast<int>(access));
+    }
+
+    void ComputeShader::bindStorageTexture(
+        const int unit, StorageTexture2D& texture, const CNA::GraphicsImageAccess access)
+    {
+        if (unit < 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the image unit must not be "
+                "negative");
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageTexture2D");
+        if (texture.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the texture belongs to "
+                "another GraphicsDevice");
+
+        const StorageTexture2DUsage usage = texture.getDescriptor().getUsage();
+        StorageTexture2DUsage required = StorageTexture2DUsage::None;
+        switch (access)
+        {
+            case CNA::GraphicsImageAccess::ReadOnly:
+                required = StorageTexture2DUsage::StorageRead;
+                break;
+            case CNA::GraphicsImageAccess::WriteOnly:
+                required = StorageTexture2DUsage::StorageWrite;
+                break;
+            case CNA::GraphicsImageAccess::ReadWrite:
+                required = StorageTexture2DUsage::StorageRead |
+                           StorageTexture2DUsage::StorageWrite;
+                break;
+            default:
+                throw std::invalid_argument(
+                    "CNA::Graphics::ComputeShader::bindStorageTexture: access is not a declared "
+                    "GraphicsImageAccess value");
+        }
+        if ((usage & required) != required)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the texture's immutable usage "
+                "does not declare every requested storage access");
+
+        renderer_->Bind();
+        if (!renderer_->BindStorageTexture2DEXT(
+                unit, texture.renderer_, static_cast<int>(access)))
+        {
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the renderer refused image "
+                "unit " + std::to_string(unit));
+        }
     }
 
     void ComputeShader::dispatch(const int groupsX, const int groupsY, const int groupsZ)
@@ -134,6 +323,18 @@ namespace CNA::Graphics {
     bool ComputeShader::isValid() const { return renderer_ != nullptr && renderer_->IsValid(); }
 
     const std::string& ComputeShader::getCompileError() const { return compileError_; }
+
+    CNA::ShaderLanguageEXT ComputeShader::getSelectedLanguageEXT() const noexcept
+    {
+        return selectedCode_.has_value()
+            ? selectedCode_->getLanguage()
+            : CNA::ShaderLanguageEXT::Unknown;
+    }
+
+    const ShaderCodeEXT* ComputeShader::getSelectedCodeEXT() const noexcept
+    {
+        return selectedCode_.has_value() ? &*selectedCode_ : nullptr;
+    }
 
 } // namespace CNA::Graphics
 

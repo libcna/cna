@@ -1,0 +1,106 @@
+; FBX 7.1.0 project file
+; Written for this repository, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-151.
+; FBX 7 splits a mesh in two: a `Geometry` object holding the vertices, connected to the `Model`
+; that positions it. The mesh belongs to the model, not to a node of its own.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",1
+	}
+}
+
+Documents:  {
+	Count: 1
+	Document: 100000, "", "Scene" {
+		RootNode: 0
+	}
+}
+
+References:  {
+}
+
+Definitions:  {
+	Version: 100
+	Count: 2
+	ObjectType: "Geometry" {
+		Count: 1
+	}
+	ObjectType: "Model" {
+		Count: 1
+	}
+}
+
+Objects:  {
+	Geometry: 200000, "Geometry::marbleMesh", "Mesh" {
+		Properties70:  {
+		}
+		GeometryVersion: 124
+		Vertices: *9 {
+			a: -1,-1,0,1,-1,0,1,1,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+		Edges: *3 {
+			a: 0,1,2
+		}
+		LayerElementNormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "Direct"
+			Normals: *9 {
+				a: 0,0,1,0,0,1,0,0,1
+			}
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementNormal"
+				TypedIndex: 0
+			}
+		}
+	}
+	Model: 300000, "Model::marble", "Mesh" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",1,2,3
+			P: "DefaultAttributeIndex", "int", "Integer", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: T
+		Culling: "CullingOff"
+	}
+}
+
+Connections:  {
+	C: "OO",300000,0
+	C: "OO",200000,300000
+}
+
+Takes:  {
+	Current: ""
+}

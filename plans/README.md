@@ -34,6 +34,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_cnj.md`](plan_cnj.md) — `.cnj` content format.
 - [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
+- [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
+- [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.
 
 ## Shader language and conformance
 
@@ -84,6 +86,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_svg_dom.md`](plan_svg_dom.md) — SVG DOM rendering.
 - [`plan_tinygl.md`](plan_tinygl.md) — TinyGL.
 - [`plan_threejs.md`](plan_threejs.md) — Three.js feasibility analysis (candidate identity; not authorized).
+- [`plan_vulkan.md`](plan_vulkan.md) — Vulkan renderer parity, correctness, validation and
+  EasyGL-equivalence plan.
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
 - [`plan_wicked.md`](plan_wicked.md) — Wicked Engine.
 

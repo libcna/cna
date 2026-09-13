@@ -79,13 +79,50 @@ namespace CNA::Content::Pipeline
             return text;
         }
 
+        /**
+         * @brief The highest Direct3D 9 shader model a compiled effect contains, or 0 for none.
+         *
+         * A compiled `fx_2_0` effect stores each shader as a Direct3D 9 bytecode blob, and every
+         * such blob begins with a version token: `0xFFFEmmnn` for a vertex shader and `0xFFFFmmnn`
+         * for a pixel shader, `mm` being the major version. Those tokens are DWORD-aligned inside
+         * the container, so the highest major version present can be read without a container
+         * parser -- which this module has not got, and which pulling a renderer's bytecode reader
+         * into a build-time library to obtain would be the wrong trade.
+         *
+         * Verified against the corpus's two effects: `probe.fx` answers 2 and
+         * `shader_model_3.fx` answers 3 (plans/plan_xnapipeline_parity.md XNAPP-267). A major
+         * version outside 1..3 is not a shader token -- `0xFFFFFFFF` is the container's own end
+         * marker -- and is skipped.
+         *
+         * @param bytecode The compiled effect.
+         * @return The highest major shader version found, or 0 when none was.
+         */
+        [[nodiscard]] unsigned HighestShaderModel(const std::vector<std::uint8_t>& bytecode)
+        {
+            unsigned highest = 0u;
+            for (std::size_t at = 0u; at + 4u <= bytecode.size(); at += 4u)
+            {
+                const std::uint32_t token = static_cast<std::uint32_t>(bytecode[at]) |
+                                            (static_cast<std::uint32_t>(bytecode[at + 1u]) << 8) |
+                                            (static_cast<std::uint32_t>(bytecode[at + 2u]) << 16) |
+                                            (static_cast<std::uint32_t>(bytecode[at + 3u]) << 24);
+                const std::uint32_t kind = token & 0xFFFF0000u;
+                if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
+                const unsigned major = (token >> 8) & 0xFFu;
+                if (major < 1u || major > 3u) { continue; }
+                highest = std::max(highest, major);
+            }
+            return highest;
+        }
+
         /** @brief Reads the `profile` parameter, defaulting to Reach. */
         [[nodiscard]] EffectSourceProfile ReadProfile(
-            const ContentProcessorParameters& parameters)
+            const ContentProcessorParameters& parameters,
+            const EffectSourceProfile fallback = EffectSourceProfile::Reach)
         {
             const ContentProcessorParameterValue* value =
                 parameters.Find(EffectProfileParameter);
-            if (value == nullptr) { return EffectSourceProfile::Reach; }
+            if (value == nullptr) { return fallback; }
             const std::string* text = std::get_if<std::string>(value);
             EffectSourceProfile profile = EffectSourceProfile::Reach;
             if (text == nullptr || !TryParseEffectSourceProfile(Lowercase(*text), profile))
@@ -97,11 +134,25 @@ namespace CNA::Content::Pipeline
             return profile;
         }
 
-        /** @brief Reads the `debug` parameter, defaulting to false. */
-        [[nodiscard]] bool ReadDebug(const ContentProcessorParameters& parameters)
+        /**
+         * @brief Reads the `debug` parameter, defaulting to what the build configuration says.
+         *
+         * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which is documented as following
+         * the build configuration, and a content project's own default `Configuration` is `Debug`.
+         * Defaulting to false here meant every effect in the sample corpus was compiled optimized
+         * against a reference that was not: the ParticleEffect of the Particles3D sample is 7,624
+         * bytes in XNA's own build and was 4,604 here (plans/plan_xna_sample_xnb_sweep.md
+         * `XNASWEEP-108`).
+         *
+         * @param parameters The processor's parameters.
+         * @param configurationIsDebug Whether the build configuration is `Debug`.
+         * @return Whether to compile with debug information and without optimization.
+         */
+        [[nodiscard]] bool ReadDebug(const ContentProcessorParameters& parameters,
+                                     const bool configurationIsDebug)
         {
             const ContentProcessorParameterValue* value = parameters.Find(EffectDebugParameter);
-            if (value == nullptr) { return false; }
+            if (value == nullptr) { return configurationIsDebug; }
             if (const bool* boolean = std::get_if<bool>(value); boolean != nullptr)
             {
                 return *boolean;
@@ -364,8 +415,8 @@ namespace CNA::Content::Pipeline
     }
 
     EffectSourceProcessor::EffectSourceProcessor(
-        std::shared_ptr<const EffectCompilerService> compiler)
-        : compiler_(std::move(compiler))
+        std::shared_ptr<const EffectCompilerService> compiler, const bool debugByDefault)
+        : compiler_(std::move(compiler)), debugByDefault_(debugByDefault)
     {
         if (compiler_ == nullptr)
         {
@@ -378,7 +429,11 @@ namespace CNA::Content::Pipeline
         // The compiler's identity is part of the processor's version, because the manifest
         // fingerprints the processor identity and the same source legitimately compiles to
         // different bytes under a different compiler. Changing compilers therefore rebuilds.
-        return {kProcessorName, "1+" + compiler_->Identity().ToString()};
+        // The default the build configuration decides is part of it for the same reason: an
+        // asset that names no `debug` compiles to different bytes under `Debug` and `Release`,
+        // and a build that switched configuration must not keep the other one's output.
+        return {kProcessorName, "1+" + compiler_->Identity().ToString() +
+                                    (debugByDefault_ ? "+debug" : "")};
     }
 
     std::string EffectSourceProcessor::InputType() const { return ImportedEffectSourceType; }
@@ -394,13 +449,14 @@ namespace CNA::Content::Pipeline
             if (name != EffectProfileParameter && name != EffectDefinesParameter &&
                 name != EffectDebugParameter)
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
                     "EffectSourceProcessor does not recognize parameter '" + name + "'.");
             }
         }
         static_cast<void>(ReadProfile(parameters));
         static_cast<void>(ReadDefines(parameters));
-        static_cast<void>(ReadDebug(parameters));
+        static_cast<void>(ReadDebug(parameters, false));
     }
 
     ContentValue EffectSourceProcessor::Process(const ContentValue& input,
@@ -408,6 +464,16 @@ namespace CNA::Content::Pipeline
     {
         const ImportedEffectSource& source = input.Get<ImportedEffectSource>();
         const ContentProcessorParameters& parameters = context.Parameters();
+
+        // Windows Phone 7 has a fixed-function graphics stack: no game may ship a shader of its
+        // own, and XNA refuses the asset at build time in exactly these words rather than letting
+        // a project discover it on a device (measured, `phone/fx_minimal` and `phone/fx_sampler`
+        // in the differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251).
+        if (context.Environment().targetPlatform == ContentTargetPlatform::WindowsPhone)
+        {
+            throw ContentLoadException(
+                "The Windows Phone platform does not support custom shaders.");
+        }
 
         if (!compiler_->Available())
         {
@@ -417,9 +483,17 @@ namespace CNA::Content::Pipeline
 
         EffectCompileRequest request;
         request.source = source.source;
-        request.profile = ReadProfile(parameters);
+        // XNA has no `profile` parameter on its EffectProcessor: the profile is the build's, and
+        // the processor obeys it. CNA's parameter is an extension, so it wins when a project sets
+        // it and the build's own target profile is what answers otherwise.
+        request.profile = ReadProfile(
+            parameters,
+            context.Environment().targetProfile ==
+                    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                ? EffectSourceProfile::HiDef
+                : EffectSourceProfile::Reach);
         request.defines = ReadDefines(parameters);
-        request.debugInformation = ReadDebug(parameters);
+        request.debugInformation = ReadDebug(parameters, debugByDefault_);
         // The source's own directory, so `#include "Common.fxh"` beside the effect works without
         // configuration. Nothing else is added: an include the importer did not resolve is an
         // include the incremental build does not know about, and the two must agree.
@@ -470,6 +544,21 @@ namespace CNA::Content::Pipeline
                 "requires that container; the compiler must be asked for the fx_2_0 profile.");
         }
 
+        // Reach is shader model 2.0 and HiDef is 3.0, and the compiler does not enforce it: an
+        // `.fx` saying `compile vs_3_0` compiles happily under fx_2_0 and then fails to load on a
+        // Reach device. XNA refuses it at build time, in these words, and so does this
+        // (plans/plan_xnapipeline_parity.md XNAPP-267).
+        if (request.profile == EffectSourceProfile::Reach)
+        {
+            const unsigned model = HighestShaderModel(compiled.bytecode);
+            if (model > 2u)
+            {
+                throw ContentLoadException(
+                    "XNA Framework Reach profile does not support vertex shader model " +
+                    std::to_string(model) + ".0.");
+            }
+        }
+
         context.LogInfo("compiled " + std::to_string(compiled.bytecode.size()) +
                         " bytes of effect bytecode with " + compiler_->Identity().ToString() +
                         " at profile " + EffectSourceProfileName(request.profile) + ".");
@@ -477,11 +566,13 @@ namespace CNA::Content::Pipeline
     }
 
     void RegisterEffectSourceContentPipeline(
-        ContentPipelineRegistry& registry, std::shared_ptr<const EffectCompilerService> compiler)
+        ContentPipelineRegistry& registry, std::shared_ptr<const EffectCompilerService> compiler,
+        const bool debugByDefault)
     {
         if (compiler == nullptr) { compiler = MakeExternalEffectCompiler(); }
         registry.RegisterImporter(std::make_shared<EffectSourceImporter>());
-        registry.RegisterProcessor(std::make_shared<EffectSourceProcessor>(std::move(compiler)));
+        registry.RegisterProcessor(
+            std::make_shared<EffectSourceProcessor>(std::move(compiler), debugByDefault));
         // The same processed type the `.fxb` route produces, so the same documented absence --
         // registered here too because either route may be the only one a registry has.
         if (registry.AbsentWriterReason(ContentOutputFormat::Cnb,

@@ -23,11 +23,12 @@
 // Check F -- Viewport smaller than the backbuffer confines a full-clip-space quad to that
 //   sub-rectangle: a pixel inside the viewport shows the quad colour, a pixel outside it (but
 //   still inside the backbuffer) shows the untouched clear colour.
-// Check G -- FillMode.WireFrame is REFUSED deterministically (WEBGPU-115). wgpu-native has no
-//   polygon-mode API at all, so the renderer reports the capability as unsupported and throws
-//   System::NotSupportedException at the draw rather than silently rendering a solid fill. The
-//   check asserts the throw, that the backbuffer the refused draw was aimed at still holds the
-//   clear colour, and that an ordinary Solid draw works immediately afterwards.
+// Check G -- FillMode.WireFrame renders a WIREFRAME (WEBGPU-153). It asserted WEBGPU-115's
+//   refusal contract until WEBGPU-153 implemented the state by expanding each triangle's edges
+//   into a line list -- the reference renderer's own mechanism, which needs no polygon-mode API on
+//   any target. The check now asserts that the draw is served rather than refused, that the quad's
+//   interior is EMPTY under WireFrame and filled under Solid through the identical route, and that
+//   an ordinary Solid draw works immediately afterwards.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -293,20 +294,36 @@ protected:
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
         }
 
-        // ---- Check G: FillMode.WireFrame is refused deterministically (WEBGPU-115). ----
-        // The backbuffer route, and the typed DrawUserPrimitives route with it -- the render-target
-        // routes and the full cardinality live in the CnaTests WebGpuWireFrameContract suite.
+        // ---- Check G: FillMode.WireFrame renders a WIREFRAME (plans/plan_webgpu.md WEBGPU-153). ----
+        // This arm asserted WEBGPU-115's refusal contract until WEBGPU-153 implemented the state by
+        // expanding each triangle's edges into a line list -- the reference renderer's own
+        // mechanism, needing no polygon mode on any target. The backbuffer route is checked here;
+        // the render-target routes and the full native cardinality live in the CnaTests
+        // WebGpuWireFrameContract suite.
         {
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
-                  "WEBGPU-115: SupportsCapability(WireFrame) reports false");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
+                  "WEBGPU-153: SupportsCapability(WireFrame) reports true");
+
+            // Solid first, as the control: the same quad through the same route, so the wireframe
+            // reading below is a comparison rather than an isolated number.
+            RasterizerState solid;
+            solid.setCullModeProperty(CullMode::None);
+            solid.setFillModeProperty(FillMode::Solid);
+            dev.setRasterizerStateProperty(solid);
+            dev.Clear(Color::Black);
+            DrawWindingQuad(dev, Color::White);
+            const Color solidCentre = readPixel(dev, kSize / 2, kSize / 2);
+            check(colorNear(solidCentre, Color::White),
+                  ("WEBGPU-153: Solid fills the quad's centre: got=" +
+                   ColorStr(solidCentre)).c_str());
 
             RasterizerState rs;
             rs.setCullModeProperty(CullMode::None);
             rs.setFillModeProperty(FillMode::WireFrame);
-            dev.setRasterizerStateProperty(rs);   // a state operation, and still legal
+            dev.setRasterizerStateProperty(rs);
             dev.Clear(Color::Black);
 
-            bool refused = false;
+            bool threw = false;
             std::string message;
             try
             {
@@ -314,30 +331,29 @@ protected:
             }
             catch (const System::NotSupportedException& e)
             {
-                refused = true;
+                threw = true;
                 message = e.what();
             }
-            check(refused,
-                  "WEBGPU-115: a WireFrame draw throws System::NotSupportedException instead of "
-                  "silently rendering a solid fill");
-            check(message.find("WireFrame") != std::string::npos,
-                  ("WEBGPU-115: the refusal names what was refused: \"" + message + '"').c_str());
-            // The refused draw wrote nothing: the backbuffer still holds the Clear that preceded it.
-            const Color afterRefusal = readPixel(dev, kSize / 2, kSize / 2);
-            check(colorNear(afterRefusal, Color::Black),
-                  ("WEBGPU-115: the refused WireFrame draw left the backbuffer untouched: got=" +
-                   ColorStr(afterRefusal)).c_str());
+            check(!threw,
+                  ("WEBGPU-153: a WireFrame draw is served rather than refused: \"" +
+                   message + '"').c_str());
+
+            // THE measurement: the quad's centre is empty under WireFrame and filled under Solid.
+            // The two Clears are identical, so a centre that is still black is the interior the
+            // wireframe did not fill rather than a draw that never happened -- and the Solid
+            // control above is what rules the second reading out.
+            const Color wireCentre = readPixel(dev, kSize / 2, kSize / 2);
+            check(colorNear(wireCentre, Color::Black),
+                  ("WEBGPU-153: WireFrame leaves the quad's interior unfilled: got=" +
+                   ColorStr(wireCentre)).c_str());
 
             // And the device is immediately usable again through the identical route.
-            RasterizerState solid;
-            solid.setCullModeProperty(CullMode::None);
-            solid.setFillModeProperty(FillMode::Solid);
             dev.setRasterizerStateProperty(solid);
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
             const Color recovered = readPixel(dev, kSize / 2, kSize / 2);
             check(colorNear(recovered, Color::White),
-                  ("WEBGPU-115: Solid renders exactly after a refused WireFrame draw: got=" +
+                  ("WEBGPU-153: Solid renders exactly after a WireFrame draw: got=" +
                    ColorStr(recovered)).c_str());
 
             dev.setRasterizerStateProperty(RasterizerState::CullNone);

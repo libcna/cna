@@ -396,6 +396,17 @@ static int validate_capability_profile(CNA_Handle graphics_device)
             &known, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    for (CNA_RendererLimit limit = UINT32_C(0);
+         limit <= CNA_RENDERER_LIMIT_MAXIMUM;
+         ++limit) {
+        known = CNA_FALSE;
+        value = UINT64_MAX;
+        if (cna_graphics_device_get_renderer_limit_ext(
+                graphics_device, limit, &known, &value) != CNA_RESULT_SUCCESS ||
+            known != CNA_TRUE) {
+            return 0;
+        }
+    }
 
     CNA_RendererFormatUsageFlags known_usages = 0U;
     CNA_RendererFormatUsageFlags supported_usages = 0U;

@@ -38,7 +38,7 @@ namespace CNA::Graphics {
     {
     public:
         /**
-         * @brief Creates the pass and compiles its three shaders.
+         * @brief Creates the pass and compiles its four shaders.
          *
          * A compilation failure is not thrown: the pass reports `isSupported() == false` and
          * copies its input instead, so a renderer-specific shader problem cannot take down a game
@@ -100,7 +100,7 @@ namespace CNA::Graphics {
          * @brief Returns whether this renderer can run the pass.
          *
          * @param device The device whose renderer is queried.
-         * @return True when custom effects are supported and all three shaders compiled.
+         * @return True when custom effects are supported and all four shaders compiled.
          */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;

@@ -1,0 +1,120 @@
+{
+ "format": "CNA.XnaDifferential.Corpus",
+ "version": 1,
+ "comment": "plans/plan_xna_sample_xnb_sweep.md XNASWEEP-196: where the genuine BuildContent writes a model's nested texture when the item's Name and Include disagree about their directory. Sources are this probe's own, handed over with CNA_DIFFERENTIAL_SOURCES.",
+ "cases": [
+  {
+   "case": "nested/name_dir_include_flat",
+   "source": "model_root.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "skybox/model_root"
+  },
+  {
+   "case": "nested/name_dir_two_levels",
+   "source": "model_root.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "a/b/model_root"
+  },
+  {
+   "case": "nested/include_dir_name_flat",
+   "source": "sub/model_sub.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "model_sub"
+  },
+  {
+   "case": "nested/both_differ",
+   "source": "sub/model_sub.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "other/model_sub"
+  },
+  {
+   "case": "nested/baseline_flat",
+   "source": "model_root.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "nested/baseline_sub",
+   "source": "sub/model_sub.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "nested/dotdot_baseline",
+   "source": "sub/model_up.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "nested/dotdot_named_dir",
+   "source": "sub/model_up.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "named/model_up"
+  },
+  {
+   "case": "nested/dotdot_flat_name",
+   "source": "sub/model_up.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "model_up"
+  },
+  {
+   "case": "nested/deep_baseline",
+   "source": "sub/deep/model_deep.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "nested/deep_named",
+   "source": "sub/deep/model_deep.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "x/y/model_deep"
+  },
+  {
+   "case": "nested/name_matches_include",
+   "source": "sub/model_sub.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "sub/model_sub"
+  },
+  {
+   "case": "nested/name_backslash",
+   "source": "model_root.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "name": "skybox\\\\model_root"
+  }
+ ]
+}

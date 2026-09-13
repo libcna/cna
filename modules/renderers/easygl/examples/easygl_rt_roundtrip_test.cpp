@@ -4,11 +4,10 @@
 // Sequence (all within one Initialize pass):
 //   1. Clear backbuffer Red (no RT bound).
 //   2. SetRenderTarget(rt1)  — DiscardContents → auto-Clear(black); then Clear(Green).
-//   3. Unbind/resolve RT1, then read its texture → expect Green.
-//   5. SetRenderTarget(rt2)  — DiscardContents → auto-Clear(black); then Clear(Blue).
-//   6. Unbind/resolve RT2, then read its texture → expect Blue.
-//   8. Read backbuffer pixel → expect Red (never overwritten after step 1).
-//
+//   3. SetRenderTarget(nullptr), then read RT1 through RenderTarget2D::GetData → expect Green.
+//   4. SetRenderTarget(rt2)  — DiscardContents → auto-Clear(black); then Clear(Blue).
+//   5. SetRenderTarget(nullptr), then read RT2 through RenderTarget2D::GetData → expect Blue.
+//   6. Read backbuffer pixel → expect Red (never overwritten after step 1).
 // Texture data transfers are performed only after unbinding, matching XNA's active-target rule.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -50,7 +49,7 @@ class RtRoundtripTest : public Game
         return px;
     }
 
-    Color readBackbufferPixel(GraphicsDevice& dev, int x = 0, int y = 0)
+    Color readBackBufferPixel(GraphicsDevice& dev, int x = 0, int y = 0)
     {
         Color px(0, 0, 0, 0);
         Rectangle reg(x, y, 1, 1);
@@ -83,26 +82,26 @@ protected:
         dev.SetRenderTarget(&rt1);   // DiscardContents → auto-Clear(0,0,0,255)
         dev.Clear(Color::Green);
 
-        // Step 3: resolve and verify RT1 contains Green.
+        // Step 3: finalize RT1 and verify it through the target's public readback path.
         dev.SetRenderTarget(nullptr);
         Color px1 = readTargetPixel(rt1);
         std::printf("RT1 readback: R=%d G=%d B=%d\n",
             px1.getRProperty(), px1.getGProperty(), px1.getBProperty());
         check(eq(px1, Color::Green), "RT1 contains Green after Clear");
 
-        // Step 5: switch to RT2, fill with Blue.
+        // Step 4: switch to RT2, fill with Blue.
         dev.SetRenderTarget(&rt2);   // DiscardContents → auto-Clear(0,0,0,255)
         dev.Clear(Color::Blue);
 
-        // Step 6: resolve and verify RT2 contains Blue.
+        // Step 5: finalize RT2 and verify it through the target's public readback path.
         dev.SetRenderTarget(nullptr);
         Color px2 = readTargetPixel(rt2);
         std::printf("RT2 readback: R=%d G=%d B=%d\n",
             px2.getRProperty(), px2.getGProperty(), px2.getBProperty());
         check(eq(px2, Color::Blue), "RT2 contains Blue after Clear");
 
-        // Step 8: verify backbuffer still contains Red.
-        Color pxBB = readBackbufferPixel(dev);
+        // Step 6: verify backbuffer still contains Red.
+        Color pxBB = readBackBufferPixel(dev);
         std::printf("Backbuffer readback: R=%d G=%d B=%d\n",
             pxBB.getRProperty(), pxBB.getGProperty(), pxBB.getBProperty());
         check(eq(pxBB, Color::Red), "Backbuffer preserved Red across RT switches");

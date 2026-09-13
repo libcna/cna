@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <tuple>
 #include <unordered_map>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -23,10 +25,13 @@ namespace CNA::Internal::Renderers::DirectX12
     public:
         /// Returns the sampler-heap descriptor INDEX for a cached (or newly created) sampler for the
         /// given raw XNA TextureFilter/TextureAddressMode ordinals (via D3DStateMapping's existing
-        /// TextureFilterToD3D11/TextureAddressModeToD3D11 tables). AddressW is set equal to
-        /// addressV -- IGraphicsRenderer::ApplySamplerState's signature has no third address mode
-        /// parameter (a pre-existing interface limitation, matches D3D11SamplerCache's own
-        /// documented choice, not something this cache can fix on its own).
+        /// TextureFilterToD3D11/TextureAddressModeToD3D11 tables).
+        ///
+        /// plans/plan_dx.md DX-216: `addressW`, `maxMipLevel` and `lodBias` are real parameters. The text
+        /// that used to stand here said AddressW was set equal to addressV because the interface had
+        /// no third address mode -- it has `ApplySamplerAddressW`, and its documentation names
+        /// inventing a W mode as the thing a renderer must not do. `maxMipLevel` is XNA's
+        /// `SamplerState.MaxMipLevel`, the MOST DETAILED level index, so it maps to `MinLOD`.
         ///
         /// REMED-GFX-177: an INDEX, not a GPU handle. A shader-visible sampler heap that grows is
         /// replaced by a larger object, so a cached handle would point into a retired heap; an index
@@ -37,12 +42,17 @@ namespace CNA::Internal::Renderers::DirectX12
         /// sampler in the renderer's own sampler heap and return the index it landed at.
         std::uint32_t GetOrCreateIndex(
             int filter, int addressU, int addressV, int maxAnisotropy,
+            int addressW, int maxMipLevel, float lodBias,
             const std::function<std::uint32_t(const D3D12_SAMPLER_DESC&)>& createSlot);
 
         /// Number of distinct sampler states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
-        std::unordered_map<std::uint64_t, std::uint32_t> cache_;
+        /// DX-216: a tuple key rather than a hand-packed 64-bit word, for the same reason
+        /// D3D11SamplerCache changed -- the field set no longer fits in one, and a packed key
+        /// that silently drops a field is the defect this task exists to fix.
+        using Key = std::tuple<int, int, int, int, int, int, float>;
+        std::map<Key, std::uint32_t> cache_;
     };
 }

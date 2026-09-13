@@ -325,7 +325,7 @@ namespace CNA::Internal::Renderers::DirectX9
         BindPbrSampler(device_.Get(), 5, params.pbrSpecularMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 6, params.pbrSpecularColorMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 

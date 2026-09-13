@@ -1,7 +1,7 @@
 # Renderer-naming normalization — validation ledger
 
 Base `25db3ccbe` → branch `feature/renderer-naming-normalization`.
-Build trees on `/media/robertvokac/claude/tmp/cna/` (`cmake-build-next-*`,
+Build trees on `build-probe/` (`cmake-build-next-*`,
 `cmake-probe-selector`, logs `naming-*.log`, `selector-probes/`); ccache
 30 G shared; every build capped at `-j4` under `nice -n 10`.
 

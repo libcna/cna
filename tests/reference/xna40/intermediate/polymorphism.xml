@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle" xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="IntermediateOracle:Polymorphism">
+    <DeclaredBase Type="IntermediateOracle:Dog">
+      <Name>rex</Name>
+      <Tricks>3</Tricks>
+    </DeclaredBase>
+    <ExactType>
+      <Name>plain</Name>
+    </ExactType>
+    <NullAnimal Null="true" />
+    <ViaAbstract Type="IntermediateOracle:Circle">
+      <Area>1</Area>
+      <Radius>2</Radius>
+    </ViaAbstract>
+    <BoxedInt Type="int">42</BoxedInt>
+    <BoxedVector Type="Framework:Vector3">1 2 3</BoxedVector>
+    <BoxedString Type="string">boxed</BoxedString>
+    <BoxedNested Type="IntermediateOracle:Nested">
+      <Name>nested</Name>
+      <Value>7</Value>
+    </BoxedNested>
+    <NullObject Null="true" />
+    <Mixed>
+      <Item Type="IntermediateOracle:Dog">
+        <Name>generic</Name>
+        <Tricks>3</Tricks>
+      </Item>
+      <Item Type="IntermediateOracle:Cat">
+        <Name>generic</Name>
+        <Indoor>true</Indoor>
+      </Item>
+      <Item>
+        <Name>generic</Name>
+      </Item>
+    </Mixed>
+    <Objects>
+      <Item Type="int">1</Item>
+      <Item Type="string">two</Item>
+      <Item Type="Framework:Vector2">3 3</Item>
+      <Item Null="true" />
+    </Objects>
+  </Asset>
+</XnaContent>

@@ -4,10 +4,11 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
-#include "LensPassVertexSource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "PostProcessShaderPackages.hpp"
 
 #include <algorithm>
 #include <string>
@@ -17,54 +18,14 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
-    namespace {
-
-        constexpr const char* kVertexSource = detail::kLensVertexSource;
-
-        // Ghosts land on the far side of the axis from what threw them, which is why the step is
-        // the vector *towards* the centre and is walked past it. A pass that stepped away from the
-        // centre would put a window's ghosts on top of the window.
-        constexpr const char* kFlareSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform float uThreshold;
-uniform float uIntensity;
-uniform float uDispersal;
-uniform int   uGhostCount;
-
-vec3 cnaBright(vec2 uv) {
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
-    return max(texture(texture1, uv).rgb - vec3(uThreshold), vec3(0.0));
-}
-
-void main() {
-    vec4 source = texture(texture1, TexCoord);
-    vec2 toCentre = vec2(0.5) - TexCoord;
-
-    vec3 ghosts = vec3(0.0);
-    for (int i = 1; i <= 8; ++i) {
-        if (i > uGhostCount) break;
-        // Walking past the centre: at i * uDispersal greater than 1 the sample is on the opposite
-        // side, which is where a lens actually puts its reflections.
-        vec2 uv = TexCoord + toCentre * (1.0 + float(i) * uDispersal);
-        // Nearer ghosts are brighter, as the reflections that made them are.
-        ghosts += cnaBright(uv) / float(i);
-    }
-
-    FragColor = vec4(source.rgb + ghosts * uIntensity, source.a);
-}
-)";
-
-    } // namespace
-
     // ── Lens flare ───────────────────────────────────────────────────────────
 
     LensFlarePass::LensFlarePass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kFlareSource);
+        const ShaderPackageEXT package = detail::CreateLensFlareShaderPackage();
+        if (package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
         bool logged = false;
         detail::reportShaderCompileFailure(device, "LensFlarePass", effect_.get(), logged);
     }
@@ -86,10 +47,8 @@ void main() {
         }
 
         effect_->Apply();
-        effect_->SetUniformFloat("uThreshold", threshold);
-        effect_->SetUniformFloat("uIntensity", intensity);
-        effect_->SetUniformFloat("uDispersal", dispersal);
-        effect_->SetUniformInt("uGhostCount", kGhostCount);
+        effect_->SetUniformVec4("uLensFlareParams", threshold, intensity, dispersal,
+                                static_cast<float>(kGhostCount));
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);
     }
@@ -102,7 +61,8 @@ void main() {
 
     bool LensFlarePass::isSupported(GraphicsDevice& device) const
     {
-        return PostProcessPass::isSupported(device) && effect_ && effect_->IsEffectValid();
+        return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+            && effect_ && effect_->IsEffectValid();
     }
 
     float LensFlarePass::getThreshold() const { return threshold_; }

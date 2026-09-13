@@ -33,7 +33,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo depth_effect_demo_test.cpp)
     # The shared example-support headers ("common/ScreenshotEXT.hpp", ...) live with the
     # graphics module's examples.
@@ -56,7 +56,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGL
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CNA_GRAPHICS_EXAMPLES_DIR})
     target_compile_definitions(cna_crt_effect_demo PRIVATE
@@ -137,6 +137,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
 
     cna_graphics_ext_test(cna_test_cnaext_ibl cnaext_ibl_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ImageBasedLighting COMMAND cna_test_cnaext_ibl
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # MOD-2236: constant-map receiver oracle, independent of ShaderEffect caster support.
+    cna_graphics_ext_test(cna_test_cnaext_shadow_receiver cnaext_shadow_receiver_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_ShadowReceiver COMMAND cna_test_cnaext_shadow_receiver
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_instancing_lod cnaext_instancing_lod_test.cpp)

@@ -149,6 +149,12 @@ def structural_problems(path: Path) -> list[str]:
 def include_roots() -> list[str]:
     roots = [str(p) for p in sorted((REPO / "modules").glob("*/include"))]
     roots += [str(p) for p in sorted((REPO / "modules" / "renderers").glob("*/include"))]
+    # Families that share code do it through modules/renderers/common/<name>/include -- one level
+    # deeper than a family's own root, so the glob above cannot see it. cmake/RendererDescriptorGate.cmake
+    # carries the same pair of roots; this one was left behind when D3DCommon became shared by the
+    # DirectX 11 and 12 descriptors (plans/plan_dx.md DX-214/DX-225), which is how a descriptor that
+    # compiles under the CMake gate still failed here.
+    roots += [str(p) for p in sorted((REPO / "modules" / "renderers").glob("common/*/include"))]
 
     # sharp-runtime is a sibling checkout, not a submodule (see the top-level CMakeLists.txt).
     sharp = os.environ.get("CNA_SHARP_RUNTIME_ROOT") or str(REPO.parent / "sharp-runtime")

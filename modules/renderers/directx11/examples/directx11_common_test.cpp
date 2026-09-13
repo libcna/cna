@@ -62,10 +62,10 @@ int main()
           "CompareFunction::LessEqual -> D3D11_COMPARISON_LESS_EQUAL");
     check(CullModeToD3D11(static_cast<int>(CullMode::None)) == D3D11_CULL_NONE,
           "CullMode::None -> D3D11_CULL_NONE");
-    check(CullModeToD3D11(static_cast<int>(CullMode::CullClockwiseFace)) == D3D11_CULL_FRONT,
-          "CullMode::CullClockwiseFace -> D3D11_CULL_FRONT (FrontCounterClockwise=FALSE convention)");
-    check(CullModeToD3D11(static_cast<int>(CullMode::CullCounterClockwiseFace)) == D3D11_CULL_BACK,
-          "CullMode::CullCounterClockwiseFace -> D3D11_CULL_BACK");
+    check(CullModeToD3D11(static_cast<int>(CullMode::CullClockwiseFace)) == D3D11_CULL_BACK,
+          "CullMode::CullClockwiseFace -> D3D11_CULL_BACK (FrontCounterClockwise=TRUE convention)");
+    check(CullModeToD3D11(static_cast<int>(CullMode::CullCounterClockwiseFace)) == D3D11_CULL_FRONT,
+          "CullMode::CullCounterClockwiseFace -> D3D11_CULL_FRONT");
     check(FillModeToD3D11(static_cast<int>(FillMode::WireFrame)) == D3D11_FILL_WIREFRAME,
           "FillMode::WireFrame -> D3D11_FILL_WIREFRAME");
     check(FillModeToD3D11(static_cast<int>(FillMode::Solid)) == D3D11_FILL_SOLID,

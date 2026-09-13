@@ -19,6 +19,7 @@ namespace CNA::Graphics {
     class ClusteredLightAssignment;
     class ClusteredLightGrid;
     class ComputeShader;
+    class StorageBuffer;
 
 /** @addtogroup cnaext_engine
  *  @{
@@ -100,6 +101,7 @@ namespace CNA::Graphics {
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<ComputeShader> program_;
+        std::unique_ptr<StorageBuffer> parameters_;
         std::string unsupportedReason_;
         int  stride_;
         bool usedCompute_ = false;

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_modern.md MOD-1550: a GPU particle system, and the honest shape of one on CNA today.
 //
-// 100 000 particles are integrated by a compute shader into a storage buffer. What CNA cannot yet
-// do is DRAW from that buffer: a storage buffer and a vertex buffer are separate objects with no
-// way to alias the same GPU memory, so the positions have to come back to the CPU before they can
-// be drawn. This program measures all three costs -- the GPU simulation, the same simulation on the
-// CPU, and the read-back -- so the missing piece is a number rather than an opinion.
+// 100 000 particles are integrated by a compute shader into a storage buffer. This low-level
+// baseline deliberately reads them back and feeds an ordinary instance stream, measuring the GPU
+// simulation, the same CPU simulation and that read-back. The later `ParticleSystem` avoids the
+// transfer by reading its storage buffer in a portable custom vertex shader; keeping this baseline
+// makes the cost of the avoided transfer measurable.
 //
 // Check A -- the renderer supports compute, or the program SKIPs.
 // Check B -- the GPU integration matches a CPU integration of the same steps.
@@ -16,7 +16,10 @@
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = SKIP.
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ConstantBuffer.hpp"
 #include "CNA/Graphics/InstancedRendererEXT.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -39,9 +42,13 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "ComputeParticlesShaderPackage.generated.hpp"
 
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -53,7 +60,12 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ConstantBufferT;
 using CNA::Graphics::InstancedRendererEXT;
+using CNA::Graphics::ShaderBindingRequirementEXT;
+using CNA::Graphics::ShaderBindingTypeEXT;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::StorageBufferT;
 
 namespace
@@ -70,22 +82,46 @@ namespace
         float velocity[4];
     };
 
-    const char* const kIntegrator = R"(#version 310 es
-layout(local_size_x = 64) in;
-struct Particle { vec4 position; vec4 velocity; };
-layout(std430, binding = 0) buffer Particles { Particle particles[]; };
-uniform int uCount;
-uniform float uStep;
-void main() {
-    uint index = gl_GlobalInvocationID.x;
-    if (index >= uint(uCount)) return;
-    vec3 velocity = particles[index].velocity.xyz + vec3(0.0, -9.81, 0.0) * uStep;
-    vec3 position = particles[index].position.xyz + velocity * uStep;
-    if (position.y < 0.0) { position.y = -position.y; velocity.y = -velocity.y * 0.5; }
-    particles[index].position = vec4(position, particles[index].position.w);
-    particles[index].velocity = vec4(velocity, 0.0);
-}
-)";
+    struct IntegratorParameters
+    {
+        std::array<float, 4> Value{};
+    };
+
+    template <std::size_t N>
+    [[nodiscard]] std::vector<std::uint8_t> ToBytes(const std::uint32_t (&words)[N])
+    {
+        const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+        return std::vector<std::uint8_t>(begin, begin + sizeof(words));
+    }
+
+    [[nodiscard]] ShaderPackageEXT IntegratorPackage()
+    {
+        using namespace CNA::Examples::ComputeParticlesGenerated;
+        return ShaderPackageEXT(
+            {
+                ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                              CNA::ShaderStageEXT::Compute, "main",
+                              "compute_particles/integrate.es.comp.glsl",
+                              std::string(kIntegratorEsComputeSource)),
+                ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                              CNA::ShaderStageEXT::Compute, "main",
+                              "compute_particles/integrate.desktop.comp.glsl",
+                              std::string(kIntegratorDesktopComputeSource)),
+                ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                              CNA::ShaderStageEXT::Compute, "main",
+                              "compute_particles/integrate.vulkan.comp.spv",
+                              ToBytes(kIntegratorVulkanComputeSpirV)),
+            },
+            {CNA::ShaderStageEXT::Compute},
+            {
+                ShaderBindingRequirementEXT(
+                    "Particles", 0, ShaderBindingTypeEXT::StorageBuffer,
+                    CNA::ShaderStageEXT::Compute),
+                ShaderBindingRequirementEXT(
+                    "IntegratorParameters", 1, ShaderBindingTypeEXT::ConstantBuffer,
+                    CNA::ShaderStageEXT::Compute),
+            });
+    }
 
     std::vector<Particle> InitialParticles()
     {
@@ -182,10 +218,18 @@ protected:
         StorageBufferT<Particle> buffer(device, kParticles);
         buffer.setData(initial);
 
-        ComputeShader integrator(device, kIntegrator);
+        const ShaderPackageEXT package = IntegratorPackage();
+        if (!package.selectFor(device).isUsable())
+        {
+            std::printf("SKIP: this renderer has no portable compute-particle shader variant\n");
+            std::exit(77);
+        }
+        ComputeShader integrator(device, package);
+        ConstantBufferT<IntegratorParameters> parameters(device);
+        parameters.setData(IntegratorParameters{{static_cast<float>(kParticles), kStep, 0.0f,
+                                                  0.0f}});
         integrator.bindStorageBuffer(0, buffer.getBuffer());
-        integrator.setUniform("uCount", kParticles);
-        integrator.setUniform("uStep", kStep);
+        integrator.bindConstantBuffer(1, parameters);
 
         constexpr int kSteps = 30;
         for (int i = 0; i < kSteps; ++i)
@@ -208,10 +252,9 @@ protected:
         check(worst < 0.01, "the GPU integration matches the CPU one");
 
         // --- the particles reach a frame -------------------------------------------------------
-        // Only kDrawn of them: this is where CNA's missing piece shows. A storage buffer cannot be
-        // bound as a vertex stream, so every particle drawn has to be copied back to the CPU and
-        // re-uploaded as instance transforms. Drawing all 100 000 that way measures the copy, not
-        // the renderer.
+        // Only kDrawn of them: this baseline intentionally converts the read-back into ordinary
+        // instance transforms. Drawing all 100 000 that way would measure the conversion/upload,
+        // not the renderer. `ParticleSystem` is the storage-reading, no-read-back production path.
         BuildQuad(device);
         InstancedRendererEXT renderer(device, part_.get());
         std::vector<Matrix> transforms;
@@ -274,7 +317,7 @@ protected:
             std::printf("--- MOD-1550: %d particles, Mesa llvmpipe ---\n", kParticles);
             std::printf("    GPU simulation step : %8.3f ms\n", gpuStep);
             std::printf("    CPU simulation step : %8.3f ms\n", cpuStep);
-            std::printf("    read-back to the CPU: %8.3f ms  <- the cost CNA cannot yet avoid\n",
+            std::printf("    read-back to the CPU: %8.3f ms  <- avoided by ParticleSystem\n",
                         readBack);
         }
 

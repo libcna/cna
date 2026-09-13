@@ -222,12 +222,28 @@ TEST(FontDescriptionTest, CharacterRegionsExpandAscendingAndDeduplicated)
     EXPECT_EQ(characters, expected);
 }
 
-TEST(FontDescriptionTest, ADefaultCharacterOutsideTheRegionsIsRefused)
+// A <DefaultCharacter> the regions do not cover joins them, which is what XNA does: measured on
+// font_regions.spritefont, whose two regions cover 42 characters and whose built font carries 43
+// (plans/plan_xnapipeline_parity.md XNAPP-182). Refusing was this pipeline's own idea, and the
+// reason it gave -- that such a font could never draw its own fallback -- was true only because it
+// declined to put the glyph there.
+TEST(FontDescriptionTest, ADefaultCharacterOutsideTheRegionsJoinsThem)
 {
     Pipeline::FontDescription description;
     description.characterRegions = {{u'a', u'c'}};
     description.defaultCharacter = u'?';
-    EXPECT_THROW((void)Pipeline::ExpandCharacterRegions(description), std::runtime_error);
+    const std::vector<SharpRuntime::charcs> characters =
+        Pipeline::ExpandCharacterRegions(description);
+    // Sorted, so the fallback lands where its code point belongs rather than at either end.
+    EXPECT_EQ(characters, (std::vector<SharpRuntime::charcs>{u'?', u'a', u'b', u'c'}));
+}
+
+TEST(FontDescriptionTest, ADefaultCharacterAlreadyInTheRegionsIsNotDuplicated)
+{
+    Pipeline::FontDescription description;
+    description.characterRegions = {{u'a', u'c'}};
+    description.defaultCharacter = u'b';
+    EXPECT_EQ(Pipeline::ExpandCharacterRegions(description).size(), 3u);
 }
 
 TEST(FontDescriptionTest, AMalformedDescriptionNamesTheOffendingElement)
@@ -544,4 +560,174 @@ TEST(SpriteFontSourceRouteTest, AnAtlasThatCannotFitIsRefusedWithTheSizeThatCaus
         EXPECT_NE(message.find("2048"), std::string::npos) << message;
         EXPECT_NE(message.find("<Size>"), std::string::npos) << message;
     }
+}
+
+// -- resolving `<FontName>` as a family (plan_xna_sample_xnb_sweep.md XNASWEEP-100) -------------
+//
+// `<FontName>` is a font *family* name -- XNA resolves it through Windows -- and the families the
+// public XNA samples name are in files called something else: 'Pericles' is `Peric.ttf`, 'Segoe UI
+// Mono' is `SegoeUIMono-Regular.ttf`, 'Kootenay' is `kooten.ttf`, 'Wasco Sans' is `wscsnrg.ttf`.
+// A file-name match cannot find any of them, and of the 260 `.spritefont` files in the sample
+// corpus only a handful name a family whose file happens to be called after it. The vendored test
+// font is the same shape: `LiberationMono-Regular.ttf` declares the family 'Liberation Mono'.
+
+namespace
+{
+    /**
+     * @brief Copies the vendored font under a new name, with its style bits set.
+     *
+     * A family lookup has to choose a face, so a test of that needs two faces of one family. The
+     * second is made here from the first by setting the bold bit in `head.macStyle` and in
+     * `OS/2.fsSelection`, which is what a rasterizer reads a face's style from; nothing else about
+     * the file changes, so both copies still declare the family 'Liberation Mono'.
+     *
+     * @param source The font to copy.
+     * @param destination Where to write the copy.
+     * @return False when the source is not an sfnt this can patch.
+     */
+    bool WriteBoldFlaggedCopy(const std::filesystem::path& source,
+                              const std::filesystem::path& destination)
+    {
+        std::ifstream input(source, std::ios::binary);
+        std::string bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+        if (bytes.size() < 12u) { return false; }
+        const auto be16 = [&bytes](const std::size_t at)
+        {
+            return static_cast<unsigned>(static_cast<unsigned char>(bytes[at])) << 8 |
+                   static_cast<unsigned>(static_cast<unsigned char>(bytes[at + 1u]));
+        };
+        const auto be32 = [&bytes](const std::size_t at)
+        {
+            unsigned value = 0u;
+            for (std::size_t index = 0u; index < 4u; ++index)
+            {
+                value = (value << 8) | static_cast<unsigned char>(bytes[at + index]);
+            }
+            return value;
+        };
+        const auto setBit = [&bytes](const std::size_t at, const unsigned mask)
+        {
+            const unsigned value = (static_cast<unsigned>(static_cast<unsigned char>(bytes[at])) << 8 |
+                                    static_cast<unsigned>(static_cast<unsigned char>(bytes[at + 1u]))) |
+                                   mask;
+            bytes[at] = static_cast<char>((value >> 8) & 0xFF);
+            bytes[at + 1u] = static_cast<char>(value & 0xFF);
+        };
+        const unsigned tables = be16(4u);
+        bool patched = false;
+        for (unsigned index = 0u; index < tables; ++index)
+        {
+            const std::size_t record = 12u + static_cast<std::size_t>(index) * 16u;
+            if (record + 16u > bytes.size()) { return false; }
+            const std::string tag = bytes.substr(record, 4u);
+            const std::size_t offset = be32(record + 8u);
+            if (tag == "head" && offset + 46u <= bytes.size())
+            {
+                setBit(offset + 44u, 0x0001u);   // macStyle bit 0: bold
+                patched = true;
+            }
+            else if (tag == "OS/2" && offset + 64u <= bytes.size())
+            {
+                setBit(offset + 62u, 0x0020u);   // fsSelection bit 5: bold
+            }
+        }
+        if (!patched) { return false; }
+        std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+        output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        return true;
+    }
+}
+
+TEST(SpriteFontFamilyResolutionTest, AFamilyNameFindsAFontFileCalledSomethingElse)
+{
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
+    if (!std::filesystem::exists(kTestFont)) { GTEST_SKIP() << "the vendored test font is missing"; }
+    ScratchDirectory scratch("family_beside");
+    std::filesystem::copy_file(kTestFont, scratch.Path() / kTestFont.filename(),
+                               std::filesystem::copy_options::overwrite_existing);
+    // Named by its family, which is not this file's stem: 'Liberation Mono' against
+    // `LiberationMono-Regular`.
+    WriteText(scratch.Path() / "Console.spritefont", SpriteFontXml("Liberation Mono"));
+
+    const Pipeline::ContentBuildResult result =
+        BuildFont(scratch, Pipeline::ContentOutputFormat::Xnb);
+    EXPECT_EQ(result.importer.name, "CNA.FontDescriptionImporter");
+    EXPECT_FALSE(result.output.bytes.empty());
+    EXPECT_EQ(result.output.rootReaderName, "Microsoft.Xna.Framework.Content.SpriteFontReader");
+}
+
+TEST(SpriteFontFamilyResolutionTest, AFileNamedAfterTheFamilyStillWinsOverTheFamilyTable)
+{
+    if (!std::filesystem::exists(kTestFont)) { GTEST_SKIP() << "the vendored test font is missing"; }
+    ScratchDirectory scratch("exact_name_first");
+    // Two files, both the 'Liberation Mono' family: one named after the family and one not. The
+    // exact-name rule is the reproducible one and stays ahead of the family table.
+    std::filesystem::copy_file(kTestFont, scratch.Path() / "Liberation Mono.ttf",
+                               std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(kTestFont, scratch.Path() / kTestFont.filename(),
+                               std::filesystem::copy_options::overwrite_existing);
+    WriteText(scratch.Path() / "Console.spritefont", SpriteFontXml("Liberation Mono"));
+
+    const Pipeline::ContentBuildResult result =
+        BuildFont(scratch, Pipeline::ContentOutputFormat::Xnb);
+    EXPECT_FALSE(result.output.bytes.empty());
+    bool named = false;
+    for (const Pipeline::ContentDependency& dependency : result.dependencies)
+    {
+        if (dependency.identity.find("Liberation Mono.ttf") != std::string::npos) { named = true; }
+    }
+    EXPECT_TRUE(named) << "the file named after the family is the one the build depends on";
+}
+
+TEST(SpriteFontFamilyResolutionTest, TheStyledFaceOfAFamilyIsChosenWhereTheFamilyHasOne)
+{
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
+    if (!std::filesystem::exists(kTestFont)) { GTEST_SKIP() << "the vendored test font is missing"; }
+    ScratchDirectory scratch("styled_face");
+    std::filesystem::copy_file(kTestFont, scratch.Path() / "regular.ttf",
+                               std::filesystem::copy_options::overwrite_existing);
+    if (!WriteBoldFlaggedCopy(kTestFont, scratch.Path() / "bold.ttf"))
+    {
+        GTEST_SKIP() << "the vendored test font is not an sfnt this test can restyle";
+    }
+
+    const std::filesystem::path regular =
+        Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono",
+                                       Pipeline::FontDescriptionStyle::Regular);
+    const std::filesystem::path bold =
+        Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono",
+                                       Pipeline::FontDescriptionStyle::Bold);
+    EXPECT_EQ(regular.filename().string(), "regular.ttf");
+    EXPECT_EQ(bold.filename().string(), "bold.ttf");
+
+    // A style the family has not got falls back to its regular face rather than to whichever file
+    // sorted first, which is what makes the answer independent of the directory walk.
+    const std::filesystem::path italic =
+        Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono",
+                                       Pipeline::FontDescriptionStyle::Italic);
+    EXPECT_EQ(italic.filename().string(), "regular.ttf");
+}
+
+TEST(SpriteFontFamilyResolutionTest, AConfiguredDirectoryIsSearchedAndIsNotSticky)
+{
+    if (!std::filesystem::exists(kTestFont)) { GTEST_SKIP() << "the vendored test font is missing"; }
+    ScratchDirectory fonts("configured_fonts");
+    std::filesystem::copy_file(kTestFont, fonts.Path() / kTestFont.filename(),
+                               std::filesystem::copy_options::overwrite_existing);
+
+    EXPECT_TRUE(Pipeline::FontSearchDirectoriesEXT().empty());
+
+    Pipeline::SetFontSearchDirectoriesEXT({fonts.Path()});
+    const std::filesystem::path found = Pipeline::FindSystemFontFile("Liberation Mono");
+    Pipeline::SetFontSearchDirectoriesEXT({});
+    // A configured directory is searched ahead of the platform's own, so this answer is the
+    // staged copy whether or not the machine happens to have the family installed.
+    EXPECT_EQ(found, fonts.Path() / kTestFont.filename());
+    EXPECT_TRUE(Pipeline::FontSearchDirectoriesEXT().empty());
 }

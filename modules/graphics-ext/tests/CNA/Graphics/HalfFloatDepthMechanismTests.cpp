@@ -86,8 +86,14 @@ layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aTexCoord;
 layout(location = 2) in vec4 aColor;
 out vec2 TexCoord;
+out vec4 SpriteColor;
 uniform mat4 projection;
-void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); TexCoord = aTexCoord; }
+void main()
+{
+    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+    SpriteColor = aColor;
+}
 )";
 
 Matrix View()
@@ -166,13 +172,13 @@ void BindEstimator(ShaderEffect& effect, const SsaoPass& reference, Texture2D& n
     effect.SetTexture(1, normals);
     effect.SetUniformInt("uNoiseSampler", 2);
     effect.SetTexture(2, noise);
-    effect.SetUniformVec3Array("uKernel", &reference.getKernel()[0].X, 64);
-    effect.SetUniformVec2("uNoiseScale", static_cast<float>(kSize) / 4.0f,
-                          static_cast<float>(kSize) / 4.0f);
-    effect.SetUniformFloat("uRadius", 0.25f);
-    effect.SetUniformFloat("uBias", 0.005f);
-    effect.SetUniformFloat("uDepthRange", 0.0625f);
-    effect.SetUniformInt("uSampleCount", 16);
+    effect.SetUniformVec3Array("uSsaoKernel", &reference.getKernel()[0].X, 64);
+    const std::array noiseScale{static_cast<float>(kSize) / 4.0f,
+                                static_cast<float>(kSize) / 4.0f};
+    const std::array ssaoScalars{0.25f, 0.005f, 0.0625f, 16.0f};
+    effect.SetUniformVec2Array("uSsaoVectors", noiseScale.data(), 1);
+    effect.SetUniformFloatArray("uSsaoScalars", ssaoScalars.data(),
+                                static_cast<int>(ssaoScalars.size()));
 }
 
 int CountBelow(const std::vector<Color>& pixels, const int threshold)

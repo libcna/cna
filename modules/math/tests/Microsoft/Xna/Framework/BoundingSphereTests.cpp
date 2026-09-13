@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: MS-PL
+#include <iomanip>
+#include <locale>
+#include <sstream>
+#include <string>
 #include <gtest/gtest.h>
 #include <cmath>
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -526,4 +530,74 @@ TEST(BoundingSphereTest, CreateMergedAdditionalContainsOriginal)
     EXPECT_NEAR(result.Center.Y, additional.Center.Y, kEps);
     EXPECT_NEAR(result.Center.Z, additional.Center.Z, kEps);
     EXPECT_NEAR(result.Radius, additional.Radius, kEps);
+}
+
+// --- CreateFromPoints against the genuine runtime -------------------------------------------
+//
+// plans/plan_xnapipeline_parity.md XNAPP-266. The sphere is seeded from the widest axis, and when
+// two axes tie something has to break it. FNA keeps the earlier axis and CNA followed it; XNA keeps
+// the later one, which is why a right triangle's mesh bounding sphere came out mirrored in the
+// model differential. Measured directly rather than inferred from a model
+// (tests/reference/xna40/framework/framework-packing-oracle.json, cases boundingsphere/*).
+namespace
+{
+    /** @brief The oracle's own wording, so a failure quotes what XNA answered. */
+    [[nodiscard]] std::string DescribeSphere(const BoundingSphere& sphere)
+    {
+        const auto number = [](float value)
+        {
+            std::ostringstream text;
+            text.imbue(std::locale::classic());
+            text << std::setprecision(9) << value;
+            std::string spelled = text.str();
+            return spelled;
+        };
+        return "center=(" + number(sphere.Center.X) + "," + number(sphere.Center.Y) + "," +
+               number(sphere.Center.Z) + ") radius=" + number(sphere.Radius);
+    }
+}
+
+TEST(BoundingSphereTest, CreateFromPointsBreaksAnAxisTieTheWayXnaDoes)
+{
+    // The exact centre XNA answered, to the digits it printed.
+    const BoundingSphere tie = BoundingSphere::CreateFromPoints(
+        {Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(0, 2, 0)});
+    EXPECT_NEAR(tie.Center.X, 0.5527864f, 1e-6f) << DescribeSphere(tie);
+    EXPECT_NEAR(tie.Center.Y, 0.7236068f, 1e-6f) << DescribeSphere(tie);
+    EXPECT_NEAR(tie.Center.Z, 0.0f, 1e-6f) << DescribeSphere(tie);
+    EXPECT_NEAR(tie.Radius, 1.618034f, 1e-6f) << DescribeSphere(tie);
+
+    // The same three points in another order, where both tie-breaks give the same answer: this is
+    // the case that would still pass if the rule were wrong, which is why it is not the only one.
+    const BoundingSphere reversed = BoundingSphere::CreateFromPoints(
+        {Vector3(0, 2, 0), Vector3(2, 0, 0), Vector3(0, 0, 0)});
+    EXPECT_NEAR(reversed.Center.X, 1.0f, 1e-6f) << DescribeSphere(reversed);
+    EXPECT_NEAR(reversed.Center.Y, 1.0f, 1e-6f) << DescribeSphere(reversed);
+    EXPECT_NEAR(reversed.Radius, 1.41421354f, 1e-6f) << DescribeSphere(reversed);
+
+    // Three axes tied at once, which is what makes the rule "the last axis wins" rather than
+    // "Y beats X".
+    const BoundingSphere all = BoundingSphere::CreateFromPoints(
+        {Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(0, 2, 0), Vector3(0, 0, 2)});
+    EXPECT_NEAR(all.Center.X, 0.479899734f, 1e-6f) << DescribeSphere(all);
+    EXPECT_NEAR(all.Center.Y, 0.263706475f, 1e-6f) << DescribeSphere(all);
+    EXPECT_NEAR(all.Center.Z, 0.628196955f, 1e-6f) << DescribeSphere(all);
+    EXPECT_NEAR(all.Radius, 1.90778685f, 1e-6f) << DescribeSphere(all);
+
+    // No tie at all: the widest axis wins outright, and these two are mirror images.
+    const BoundingSphere widestX = BoundingSphere::CreateFromPoints(
+        {Vector3(0, 0, 0), Vector3(4, 0, 0), Vector3(0, 2, 0)});
+    EXPECT_NEAR(widestX.Center.X, 1.70710683f, 1e-6f) << DescribeSphere(widestX);
+    EXPECT_NEAR(widestX.Center.Y, 0.2928931f, 1e-6f) << DescribeSphere(widestX);
+    EXPECT_NEAR(widestX.Radius, 2.41421366f, 1e-6f) << DescribeSphere(widestX);
+
+    const BoundingSphere widestY = BoundingSphere::CreateFromPoints(
+        {Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(0, 4, 0)});
+    EXPECT_NEAR(widestY.Center.X, 0.2928931f, 1e-6f) << DescribeSphere(widestY);
+    EXPECT_NEAR(widestY.Center.Y, 1.70710683f, 1e-6f) << DescribeSphere(widestY);
+    EXPECT_NEAR(widestY.Radius, 2.41421366f, 1e-6f) << DescribeSphere(widestY);
+
+    const BoundingSphere single = BoundingSphere::CreateFromPoints({Vector3(1, 2, 3)});
+    EXPECT_NEAR(single.Center.X, 1.0f, 1e-6f) << DescribeSphere(single);
+    EXPECT_NEAR(single.Radius, 0.0f, 1e-6f) << DescribeSphere(single);
 }

@@ -192,6 +192,10 @@ namespace
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
 
+    /// XNA DualTextureEffect input: position plus two independently declared texture coordinates.
+    struct VtxDualPT { float px, py, pz; float u0, v0; float u1, v1; };
+    static_assert(sizeof(VtxDualPT) == 28, "stride 28");
+
     /// Stride-32 position + normal + texture coordinate, the shape EnvironmentMapEffect needs.
     struct VtxPNT { float px, py, pz; float nx, ny, nz; float u, v; };
     static_assert(sizeof(VtxPNT) == 32, "stride 32");
@@ -217,11 +221,28 @@ namespace
         return out;
     }
 
+    std::vector<VtxDualPT> MakeQuadDualTexture()
+    {
+        std::vector<VtxDualPT> out;
+        for (const VtxPT& v : MakeQuad())
+            out.push_back(VtxDualPT{v.px, v.py, v.pz, v.u, v.v, v.u, v.v});
+        return out;
+    }
+
     VertexDeclaration PositionTextureDecl()
     {
         return VertexDeclaration(20, {
             VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
             VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        });
+    }
+
+    VertexDeclaration DualTextureDecl()
+    {
+        return VertexDeclaration(28, {
+            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
         });
     }
 
@@ -731,11 +752,8 @@ class DescriptorCapacityContractTest : public Game
         for (int i = 0; i < kPairs; ++i) textures.push_back(MakeIdentityTexture(dev, i));
 
         const SamplerState sampler = MakeSampler();
-        // Stride 20: DualTextureEffect's only portable vertex shape -- the stride-28 two-UV-set
-        // sibling was never ported on the D3D-family renderers, so it is not the common denominator
-        // this cross-renderer fixture can drive.
-        const std::vector<VtxPT> verts = MakeQuad();
-        const VertexDeclaration decl = PositionTextureDecl();
+        const std::vector<VtxDualPT> verts = MakeQuadDualTexture();
+        const VertexDeclaration decl = DualTextureDecl();
 
         int wrong = 0;
         for (int i = 0; i < kPairs; ++i)

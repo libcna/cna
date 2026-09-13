@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::VolumetricFogGenerated",
+  "package": "volumetric_fog",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kFullscreenEsVertexSource","source":"fullscreen.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kBuildEsFragmentSource","source":"build.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kResolveEsFragmentSource","source":"resolve.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kFullscreenDesktopVertexSource","source":"fullscreen.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kBuildDesktopFragmentSource","source":"build.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kResolveDesktopFragmentSource","source":"resolve.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kFullscreenVulkanVertexSpirV","source":"fullscreen.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kBuildVulkanFragmentSpirV","source":"build.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
+    {"symbol":"kResolveVulkanFragmentSpirV","source":"resolve.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

@@ -153,6 +153,7 @@ struct ResolvedSpriteCommand final {
         case ShaderDialectEXT::Hlsl:        return CNA_SHADER_DIALECT_HLSL;
         case ShaderDialectEXT::Msl:         return CNA_SHADER_DIALECT_MSL;
         case ShaderDialectEXT::Wgsl:        return CNA_SHADER_DIALECT_WGSL;
+        case ShaderDialectEXT::SpirV:       return CNA_SHADER_DIALECT_SPIRV;
     }
     return CNA_SHADER_DIALECT_UNKNOWN;
 }
@@ -280,6 +281,10 @@ static_assert(
     static_cast<uint32_t>(CNA::RendererFeature::ComputeImageBinding) ==
         CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING &&
     static_cast<uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) ==
+        CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL &&
+    static_cast<uint32_t>(CNA::RendererFeature::Texture3DSampling) ==
+        CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING &&
+    static_cast<uint32_t>(CNA::RendererFeature::BaseInstanceDrawing) ==
         CNA_RENDERER_FEATURE_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererFeature::Count) ==
         CNA_RENDERER_FEATURE_MAXIMUM + UINT32_C(1));
@@ -290,6 +295,8 @@ static_assert(
     static_cast<uint32_t>(CNA::RendererLimit::MaxComputeWorkGroupInvocations) ==
         CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS &&
     static_cast<uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) ==
+        CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS &&
+    static_cast<uint32_t>(CNA::RendererLimit::TimestampPeriodPicoseconds) ==
         CNA_RENDERER_LIMIT_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererLimit::Count) ==
         CNA_RENDERER_LIMIT_MAXIMUM + UINT32_C(1));

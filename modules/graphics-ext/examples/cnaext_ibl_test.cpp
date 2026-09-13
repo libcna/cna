@@ -13,6 +13,8 @@
 // Check E -- an occlusion map darkens the environment term but not the direct light (MOD-1227).
 // Check F -- the white furnace: a white environment on a white non-metal returns near-white, and
 //            the shortfall is the measured quality of the approximation (MOD-1229).
+// Check G -- on renderers with shadow sampling, a shadow attenuates direct light only (MOD-1228).
+// Check H -- the same environment reaches SkinnedPbrEffect's distinct stock pipeline.
 //
 // `--benchmark` times an IBL-lit frame against a flat-ambient one (MOD-1246).
 //
@@ -35,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -45,6 +48,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -101,6 +105,7 @@ class IblExample : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::vector<std::unique_ptr<Texture2D>> textures_;
     std::unique_ptr<VertexBuffer> quad_;
+    std::unique_ptr<VertexBuffer> skinnedQuad_;
     bool benchmark_ = false;
     int  passCount_ = 0;
     int  checkCount_ = 0;
@@ -128,6 +133,18 @@ class IblExample : public Game
     };
     static_assert(sizeof(PbrGpuVertex) == 48, "the PBR stream is 48 bytes per vertex");
 
+    struct SkinnedPbrGpuVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(SkinnedPbrGpuVertex) == 68,
+                  "the skinned PBR stream is 68 bytes per vertex");
+
     void DrawQuad(GraphicsDevice& device, PbrEffect& effect)
     {
         if (!quad_)
@@ -150,6 +167,39 @@ class IblExample : public Game
         device.setBlendStateProperty(BlendState::Opaque);
         effect.Apply();
         device.SetVertexBuffer(quad_.get());
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        device.SetVertexBuffer(nullptr);
+    }
+
+    void DrawSkinnedQuad(GraphicsDevice& device, SkinnedPbrEffect& effect)
+    {
+        if (!skinnedQuad_)
+        {
+            const std::array<SkinnedPbrGpuVertex, 6> vertices{
+                SkinnedPbrGpuVertex{-1, -1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1,
+                                    1, 0, 0, 0, 0, 0, 0, 0},
+                SkinnedPbrGpuVertex{ 1, -1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1,
+                                    1, 0, 0, 0, 0, 0, 0, 0},
+                SkinnedPbrGpuVertex{ 1,  1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0,
+                                    1, 0, 0, 0, 0, 0, 0, 0},
+                SkinnedPbrGpuVertex{-1, -1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1,
+                                    1, 0, 0, 0, 0, 0, 0, 0},
+                SkinnedPbrGpuVertex{ 1,  1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0,
+                                    1, 0, 0, 0, 0, 0, 0, 0},
+                SkinnedPbrGpuVertex{-1,  1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0,
+                                    1, 0, 0, 0, 0, 0, 0, 0},
+            };
+            skinnedQuad_ =
+                std::make_unique<VertexBuffer>(device, static_cast<int>(vertices.size()));
+            skinnedQuad_->SetDataRaw(vertices.data(), static_cast<int>(vertices.size()),
+                                     static_cast<int>(sizeof(SkinnedPbrGpuVertex)));
+        }
+
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.Apply();
+        device.SetVertexBuffer(skinnedQuad_.get());
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         device.SetVertexBuffer(nullptr);
     }
@@ -179,11 +229,53 @@ class IblExample : public Game
         return effect;
     }
 
+    std::unique_ptr<SkinnedPbrEffect> MakeUnlitSkinnedPbr(
+        GraphicsDevice& device, float roughness, float metallic)
+    {
+        auto effect = std::make_unique<SkinnedPbrEffect>(device);
+        effect->setWorldProperty(Matrix::getIdentityProperty());
+        effect->setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero,
+                                                     Vector3(0.0f, 1.0f, 0.0f)));
+        effect->setProjectionProperty(
+            Matrix::CreatePerspectiveFieldOfView(1.0f, 1.0f, 0.1f, 100.0f));
+        effect->setTextureProperty(MakeConstantTexture(device, Color::White, textures_));
+        effect->setBaseColorTextureIsSrgbEXTProperty(false);
+        effect->setEncodeOutputToSrgbEXTProperty(false);
+        effect->setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        effect->setMetallicRoughnessMapProperty(
+            MakeConstantTexture(device, Color::White, textures_));
+        effect->setRoughnessFactorProperty(roughness);
+        effect->setMetallicFactorProperty(metallic);
+        effect->setAmbientLightColorProperty(Vector3::Zero);
+        effect->setEmissiveFactorProperty(Vector3::Zero);
+        effect->DirectionalLight0.setEnabledProperty(false);
+        effect->DirectionalLight1.setEnabledProperty(false);
+        effect->DirectionalLight2.setEnabledProperty(false);
+        effect->setFogEnabledProperty(false);
+        effect->setWeightsPerVertexProperty(1);
+        effect->SetBoneTransforms(std::vector<Matrix>{Matrix::getIdentityProperty()});
+        return effect;
+    }
+
     std::vector<Color> Render(GraphicsDevice& device, PbrEffect& effect)
     {
         std::vector<Color> pixels(static_cast<std::size_t>(kFrame) * kFrame, Color::Transparent);
         device.Clear(Color::Black);
         DrawQuad(device, effect);
+        try { device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size())); }
+        catch (const System::NotSupportedException&)
+        {
+            std::printf("SKIP: this renderer has no readable back buffer\n");
+            std::exit(77);
+        }
+        return pixels;
+    }
+
+    std::vector<Color> Render(GraphicsDevice& device, SkinnedPbrEffect& effect)
+    {
+        std::vector<Color> pixels(static_cast<std::size_t>(kFrame) * kFrame, Color::Transparent);
+        device.Clear(Color::Black);
+        DrawSkinnedQuad(device, effect);
         try { device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size())); }
         catch (const System::NotSupportedException&)
         {
@@ -249,6 +341,14 @@ protected:
         check(dark < 12, "with no environment and no lights the surface is black, so the light in "
                          "the frame above came from the environment");
 
+        // --- H: the distinct SkinnedPbrEffect descriptor layout consumes the same products ----
+        auto skinned = MakeUnlitSkinnedPbr(device, 0.6f, 0.0f);
+        skinned->setImageBasedLightEXT(white);
+        const int skinnedLit = Luma(Centre(Render(device, *skinned)));
+        std::printf("    rigid IBL-lit %d, identity-skinned IBL-lit %d\n", lit, skinnedLit);
+        check(skinnedLit > dark + 40 && std::abs(skinnedLit - lit) <= 6,
+              "the environment reaches SkinnedPbrEffect and identity skinning preserves it");
+
         // --- C: flat ambient and IBL are exclusive, not additive -------------------------------
         effect->setImageBasedLightEXT(ImageBasedLightEXT{});
         effect->setAmbientLightColorProperty(Vector3(0.5f, 0.5f, 0.5f));
@@ -303,24 +403,31 @@ protected:
         // distance 0 in front of me" -- a fully shadowed surface without needing a caster pass.
         // The environment term must survive it, because a shadow answers the visibility of one
         // light and says nothing about the rest of the sky.
-        auto shadowed = MakeUnlitPbr(device, 0.6f, 0.0f);
-        shadowed->DirectionalLight0.setEnabledProperty(true);
-        shadowed->DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
-        shadowed->DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        shadowed->setImageBasedLightEXT(half);
-        const int litByBoth = Luma(Centre(Render(device, *shadowed)));
-        shadowed->setShadowMapEXT(MakeConstantTexture(device, Color::Black, textures_));
-        shadowed->setLightViewProjectionEXT(Matrix::getIdentityProperty());
-        shadowed->setShadowsEnabledEXT(true);
-        const int litByEnvironmentOnly = Luma(Centre(Render(device, *shadowed)));
-        auto environmentOnly = MakeUnlitPbr(device, 0.6f, 0.0f);
-        environmentOnly->setImageBasedLightEXT(half);
-        const int noDirectAtAll = Luma(Centre(Render(device, *environmentOnly)));
-        std::printf("    sun + environment %d, fully shadowed %d, environment alone %d\n",
-                    litByBoth, litByEnvironmentOnly, noDirectAtAll);
-        check(litByEnvironmentOnly < litByBoth - 10 &&
-                  std::abs(litByEnvironmentOnly - noDirectAtAll) <= 6,
-              "a shadow removes the direct light and leaves the environment term (MOD-1228)");
+        if (device.SupportsShadowSamplingEXT())
+        {
+            auto shadowed = MakeUnlitPbr(device, 0.6f, 0.0f);
+            shadowed->DirectionalLight0.setEnabledProperty(true);
+            shadowed->DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+            shadowed->DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            shadowed->setImageBasedLightEXT(half);
+            const int litByBoth = Luma(Centre(Render(device, *shadowed)));
+            shadowed->setShadowMapEXT(MakeConstantTexture(device, Color::Black, textures_));
+            shadowed->setLightViewProjectionEXT(Matrix::getIdentityProperty());
+            shadowed->setShadowsEnabledEXT(true);
+            const int litByEnvironmentOnly = Luma(Centre(Render(device, *shadowed)));
+            auto environmentOnly = MakeUnlitPbr(device, 0.6f, 0.0f);
+            environmentOnly->setImageBasedLightEXT(half);
+            const int noDirectAtAll = Luma(Centre(Render(device, *environmentOnly)));
+            std::printf("    sun + environment %d, fully shadowed %d, environment alone %d\n",
+                        litByBoth, litByEnvironmentOnly, noDirectAtAll);
+            check(litByEnvironmentOnly < litByBoth - 10 &&
+                      std::abs(litByEnvironmentOnly - noDirectAtAll) <= 6,
+                  "a shadow removes the direct light and leaves the environment term (MOD-1228)");
+        }
+        else
+        {
+            std::printf("    shadow/IBL interaction: SKIP (shadow sampling unsupported)\n");
+        }
 
         // --- F: the white furnace ----------------------------------------------------------------
         // At intensity 1 a white environment saturates the frame, and a saturated frame can only

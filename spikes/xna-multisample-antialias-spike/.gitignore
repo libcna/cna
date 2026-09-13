@@ -1,0 +1,4 @@
+*.exe
+*.pdb
+*.dxvk-cache
+probe-output.txt

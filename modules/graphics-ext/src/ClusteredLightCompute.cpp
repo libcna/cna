@@ -6,15 +6,23 @@
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "shaders/clustered_light_compute/ClusteredLightComputeShaderPackage.generated.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace CNA::Graphics {
 
@@ -27,100 +35,59 @@ namespace CNA::Graphics {
 
         constexpr int kGroupSize = 64;
 
-        // One invocation per cluster, walking every light in order. The naive shape on purpose:
-        // with no atomics and no two invocations writing to the same place, a cluster's list comes
-        // out sorted and identical to the one the CPU builds, which is the only way the two paths
-        // can be compared for equality rather than for plausibility.
-        constexpr const char* kComputeSource = R"(#version 310 es
-layout(local_size_x = 64) in;
+        struct ClusteredLightParameters
+        {
+            std::array<std::int32_t, 4> Grid{};
+            std::array<std::int32_t, 4> Output{};
+            std::array<float, 4> Depth{};
+        };
+        static_assert(sizeof(ClusteredLightParameters) == 48);
 
-layout(std430, binding = 0) readonly buffer CnaLights   { vec4  uLights[]; };
-layout(std430, binding = 1) readonly buffer CnaMatrix   { float uInverseProjection[]; };
-layout(std430, binding = 2) buffer CnaCounts            { int   uCounts[]; };
-layout(std430, binding = 3) buffer CnaIndices           { int   uIndices[]; };
-
-uniform int   uTilesX;
-uniform int   uTilesY;
-uniform int   uSliceCount;
-uniform int   uLightCount;
-uniform int   uStride;
-uniform int   uClusterCount;
-uniform float uNearPlane;
-uniform float uFarPlane;
-
-vec3 cnaUnproject(mat4 inverseProjection, float x, float y, float z) {
-    vec4 p = inverseProjection * vec4(x, y, z, 1.0);
-    if (abs(p.w) <= 1e-9) return p.xyz;
-    return p.xyz / p.w;
-}
-
-vec3 cnaAtDistance(vec3 atNear, vec3 atFar, float distance) {
-    float span = atNear.z - atFar.z;
-    if (abs(span) <= 1e-9) return atNear;
-    float t = (atNear.z + distance) / span;
-    return vec3(atNear.x + (atFar.x - atNear.x) * t,
-                atNear.y + (atFar.y - atNear.y) * t,
-                -distance);
-}
-
-float cnaSliceDistance(int slice) {
-    if (slice == 0) return uNearPlane;
-    if (slice == uSliceCount) return uFarPlane;
-    return uNearPlane * pow(uFarPlane / uNearPlane, float(slice) / float(uSliceCount));
-}
-
-void main() {
-    int cluster = int(gl_GlobalInvocationID.x);
-    if (cluster >= uClusterCount) return;
-
-    int x = cluster % uTilesX;
-    int y = (cluster / uTilesX) % uTilesY;
-    int slice = cluster / (uTilesX * uTilesY);
-
-    mat4 inverseProjection = mat4(
-        uInverseProjection[0],  uInverseProjection[1],  uInverseProjection[2],  uInverseProjection[3],
-        uInverseProjection[4],  uInverseProjection[5],  uInverseProjection[6],  uInverseProjection[7],
-        uInverseProjection[8],  uInverseProjection[9],  uInverseProjection[10], uInverseProjection[11],
-        uInverseProjection[12], uInverseProjection[13], uInverseProjection[14], uInverseProjection[15]);
-
-    float u0 = 2.0 * float(x)     / float(uTilesX) - 1.0;
-    float u1 = 2.0 * float(x + 1) / float(uTilesX) - 1.0;
-    float v0 = 2.0 * float(y)     / float(uTilesY) - 1.0;
-    float v1 = 2.0 * float(y + 1) / float(uTilesY) - 1.0;
-    float d0 = cnaSliceDistance(slice);
-    float d1 = cnaSliceDistance(slice + 1);
-
-    vec3 minimum = vec3(3.4028235e38);
-    vec3 maximum = vec3(-3.4028235e38);
-    for (int i = 0; i < 2; ++i) {
-        float u = (i == 0) ? u0 : u1;
-        for (int j = 0; j < 2; ++j) {
-            float v = (j == 0) ? v0 : v1;
-            vec3 atNear = cnaUnproject(inverseProjection, u, v, 0.0);
-            vec3 atFar  = cnaUnproject(inverseProjection, u, v, 1.0);
-            for (int k = 0; k < 2; ++k) {
-                vec3 p = cnaAtDistance(atNear, atFar, (k == 0) ? d0 : d1);
-                minimum = min(minimum, p);
-                maximum = max(maximum, p);
-            }
+        template <std::size_t N>
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(const std::uint32_t (&words)[N])
+        {
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+            return std::vector<std::uint8_t>(begin, begin + sizeof(words));
         }
-    }
 
-    int found = 0;
-    for (int light = 0; light < uLightCount; ++light) {
-        vec4 sphere = uLights[light];
-        if (sphere.w <= 0.0) continue;
-        vec3 nearest = clamp(sphere.xyz, minimum, maximum);
-        vec3 delta = sphere.xyz - nearest;
-        if (dot(delta, delta) > sphere.w * sphere.w) continue;
-        if (found < uStride) uIndices[cluster * uStride + found] = light;
-        ++found;
-    }
-
-    uCounts[cluster] = min(found, uStride);
-    if (found > uStride) uCounts[uClusterCount] = 1;
-}
-)";
+        [[nodiscard]] ShaderPackageEXT CreateAssignmentPackage()
+        {
+            using namespace detail::ClusteredLightComputeGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "clustered_light_compute/assign.es.comp.glsl",
+                                  std::string(kAssignEsComputeSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "clustered_light_compute/assign.desktop.comp.glsl",
+                                  std::string(kAssignDesktopComputeSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "clustered_light_compute/assign.vulkan.comp.spv",
+                                  ToBytes(kAssignVulkanComputeSpirV)),
+                },
+                {CNA::ShaderStageEXT::Compute},
+                {
+                    ShaderBindingRequirementEXT(
+                        "CnaLights", 0, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                    ShaderBindingRequirementEXT(
+                        "CnaMatrix", 1, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                    ShaderBindingRequirementEXT(
+                        "CnaCounts", 2, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                    ShaderBindingRequirementEXT(
+                        "CnaIndices", 3, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                    ShaderBindingRequirementEXT(
+                        "ClusteredLightParameters", 4,
+                        ShaderBindingTypeEXT::ConstantBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                });
+        }
 
     } // namespace
 
@@ -138,13 +105,19 @@ void main() {
         }
         try
         {
-            program_ = std::make_unique<ComputeShader>(device, kComputeSource);
+            program_ = std::make_unique<ComputeShader>(device, CreateAssignmentPackage());
+            parameters_ = std::make_unique<StorageBuffer>(
+                device,
+                StorageBufferDescriptor(
+                    sizeof(ClusteredLightParameters), StorageBufferUsage::Constant,
+                    StorageBufferCpuAccess::Write));
         }
         catch (const std::exception& error)
         {
             // A device that advertises compute and then refuses this program is a fallback, not a
             // failure: the CPU path answers the same question.
             program_.reset();
+            parameters_.reset();
             unsupportedReason_ = error.what();
         }
     }
@@ -220,14 +193,13 @@ void main() {
         program_->bindStorageBuffer(1, matrixBuffer.getBuffer());
         program_->bindStorageBuffer(2, countBuffer.getBuffer());
         program_->bindStorageBuffer(3, indexBuffer.getBuffer());
-        program_->setUniform("uTilesX", grid.getTilesX());
-        program_->setUniform("uTilesY", grid.getTilesY());
-        program_->setUniform("uSliceCount", grid.getSliceCount());
-        program_->setUniform("uLightCount", lightCount);
-        program_->setUniform("uStride", stride_);
-        program_->setUniform("uClusterCount", clusterCount);
-        program_->setUniform("uNearPlane", grid.getNearPlane());
-        program_->setUniform("uFarPlane", grid.getFarPlane());
+        const ClusteredLightParameters parameters{
+            {grid.getTilesX(), grid.getTilesY(), grid.getSliceCount(), lightCount},
+            {stride_, clusterCount, 0, 0},
+            {grid.getNearPlane(), grid.getFarPlane(), 0.0f, 0.0f},
+        };
+        parameters_->setBytes(&parameters, sizeof(parameters));
+        program_->bindConstantBuffer(4, *parameters_);
         program_->dispatch((clusterCount + kGroupSize - 1) / kGroupSize, 1, 1);
 
         const std::vector<int> counts = countBuffer.getData();

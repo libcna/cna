@@ -22,8 +22,14 @@ layout(set = 3, binding = 0) uniform PC {
     float vertexColorEnabled;
 } pc;
 
+layout(set = 3, binding = 1) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 void main() {
-    vec4 tex = (pc.textureEnabled > 0.5) ? texture(uTexture, fragUV) : vec4(1.0);
+    vec4 tex = (pc.textureEnabled > 0.5)
+        ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
     outColor = tex * fragTint;
     // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
     outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);

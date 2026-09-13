@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-260: a game-defined type supplied as XNA-style
+    intermediate XML. Nothing in CNA knows what a QuestBook is; the document names it, the game's
+    own DescribeContent says what its members are, and the game's own ContentTypeWriter turns it
+    into an .xnb. Reusable is left out so an omitted optional member keeps its C++ default.
+-->
+<XnaContent xmlns:Quest="QuestGame">
+  <Asset Type="Quest:QuestBook">
+    <Name>The Dawn Errand, Annotated</Name>
+    <Chapters>
+      <Item>The Gate</Item>
+      <Item>The Well</Item>
+      <Item>The Tower</Item>
+    </Chapters>
+    <Opening>
+      <Position>0 0 0</Position>
+      <Label>gate</Label>
+    </Opening>
+    <RecommendedLevel>7</RecommendedLevel>
+  </Asset>
+</XnaContent>

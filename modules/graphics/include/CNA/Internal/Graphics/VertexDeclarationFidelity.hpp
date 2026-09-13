@@ -190,8 +190,32 @@ namespace CNA::Internal::Graphics
         Microsoft::Xna::Framework::Graphics::VertexElementUsage usage{};
         /** @brief The semantic's usage index. */
         int usageIndex = 0;
+        /** @brief The format the shader input expects. */
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format{};
         /** @brief The attribute's name in the shader, for the diagnostic. */
         const char* name = "";
+        /**
+         * @brief A second format the same input accepts, when the semantic has more than one
+         *        legal spelling.
+         *
+         * XNA's vertex element format describes the bytes in the buffer, not the shader register:
+         * a `BLENDINDICES` semantic arrives as a float4 in the shader whether the declaration
+         * spelled it `Byte4` or `Vector4`, and a content processor is free to write either.
+         * Defaults to @ref format, so an input with one legal spelling says nothing extra.
+         */
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat alternateFormat = format;
+        /**
+         * @brief The shader location this input binds to, when it is not the input's own index.
+         *
+         * plans/plan_webgpu.md WEBGPU-172. Every stock program written before the instanced family
+         * numbers its inputs 0, 1, 2 ... in declaration order, and -1 (the default) keeps saying
+         * exactly that. The instanced program is the exception: its per-instance world matrix
+         * occupies locations 4-7 in already-written shader source, leaving a deliberate gap so the
+         * geometry colour at location 1 can never collide with it. Spelling the location here is
+         * what lets that program be resolved by the same code as every other one instead of keeping
+         * a hand-built attribute array.
+         */
+        int explicitLocation = -1;
     };
 
     /// Implementation detail of the predicate below; not part of any renderer's contract.

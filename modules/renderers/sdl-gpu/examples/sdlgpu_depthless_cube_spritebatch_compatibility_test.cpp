@@ -36,6 +36,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "common/PixelTestGame.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -236,6 +237,37 @@ protected:
         Check(facesCorrect, "only NegativeZ receives the opaque SpriteBatch result");
         Check(renderer.GetSpritePipelineCacheSizeEXT() == 1,
               "fresh depthless cube creates exactly one compatible SpriteBatch pipeline");
+
+        // SDLGPU-123: a cube face is an offscreen target in its own pixel coordinate system.
+        // Make the backbuffer logical size deliberately disagree with its physical extent, then
+        // draw only the top-left quarter of a 16x16 face. Presentation scaling must not stretch
+        // that 8x8 sprite across the complete face merely because a cube is bound.
+        int originalLogicalWidth = 0;
+        int originalLogicalHeight = 0;
+        renderer.GetViewportSize(originalLogicalWidth, originalLogicalHeight);
+        renderer.SetVirtualResolution(std::max(1, originalLogicalWidth / 2),
+                                      std::max(1, originalLogicalHeight / 2));
+        RenderTargetCube logicalIsolation(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        const Color logicalIsolationBackground(7, 23, 43, 255);
+        device.SetRenderTarget(&logicalIsolation, CubeMapFace::PositiveX);
+        device.Clear(logicalIsolationBackground);
+        device.setViewportProperty(Viewport(0, 0, kCubeSize, kCubeSize));
+        device.setScissorRectangleProperty(Rectangle(0, 0, kCubeSize, kCubeSize));
+        SamplerState logicalIsolationPoint = SamplerState::PointClamp;
+        RasterizerState logicalIsolationCull = RasterizerState::CullNone;
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &logicalIsolationPoint,
+                        &noDepth, &logicalIsolationCull);
+        sprites_->Draw(*marker_, Rectangle(0, 0, kCubeSize / 2, kCubeSize / 2),
+                       Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        renderer.SetVirtualResolution(originalLogicalWidth, originalLogicalHeight);
+        Check(Matches(ReadCube(logicalIsolation, CubeMapFace::PositiveX, 3, 3), kMarker)
+                  && Matches(ReadCube(logicalIsolation, CubeMapFace::PositiveX, 12, 12),
+                             logicalIsolationBackground),
+              "cube SpriteBatch coordinates ignore backbuffer presentation scaling");
 
         // Depthless RenderTarget2D is the same attachment compatibility class as a depthless
         // single-sample cube face: it must be clean and reuse the pipeline.

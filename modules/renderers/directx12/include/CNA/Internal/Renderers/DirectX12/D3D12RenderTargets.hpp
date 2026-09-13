@@ -13,18 +13,18 @@
 // GenerateMips() equivalent the way D3D11 does; rather than a manual compute/pixel-shader mip
 // cascade (real additional pipeline/shader infrastructure), this uses a synchronous CPU box-filter
 // downsample cascade -- read a level back via a READBACK-heap CopyTextureRegion, box-filter it on
-// the CPU, upload the result to the next level via an UPLOAD-heap CopyTextureRegion -- the same
-// ExecuteCommandListAndWaitEXT-synchronous discipline this renderer's own D3D12Textures.cpp/
-// D3D12Buffers.cpp already establish for every other real upload/readback path. Triggered from
+// the CPU, upload the result to the next level via an UPLOAD-heap CopyTextureRegion. This remains an
+// explicit immediate-list synchronization boundary while ordinary resolves stay frame-scoped.
+// Triggered from
 // UnbindAsRenderTarget(), mirroring D3D11RenderTargetRenderer's own GenerateMips()-on-unbind timing.
 //
 // plans/plan_dx.md DX-117 MSAA follow-up: real, device-queried MSAA is now supported for
 // D3D12RenderTargetRenderer (2D), mirroring D3D11RenderTargetRenderer's own DX-45 design exactly --
 // never assumes a requested sample count is supported (ID3D12Device::CheckFeatureSupport with
-// D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS), MSAA and a full mip chain are mutually exclusive on
-// the same attachment (same rationale D3D11 already established), and the MSAA color resource is
-// never sampled directly -- ResolveSubresource() into a separate single-sample resource on
-// UnbindAsRenderTarget(), the D3D12-command-list equivalent of D3D11's own
+// D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS), and the MSAA color resource is never sampled directly
+// -- ResolveSubresource() into a separate single-sample resource on UnbindAsRenderTarget(). That
+// resource retains and regenerates the full mip chain when requested. This is the D3D12-command-
+// list equivalent of D3D11's own
 // ID3D11DeviceContext::ResolveSubresource() call (D3D12's own version additionally needs explicit
 // RESOLVE_SOURCE/RESOLVE_DEST resource-state transitions, which D3D11 doesn't).
 //
@@ -44,6 +44,8 @@
 // against a bound render target is DX-118's job, same as it is for the back buffer.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
@@ -59,12 +61,13 @@ namespace CNA::Internal::Renderers::DirectX12
     class DirectX12Renderer;
 
     /// Real D3D12 2D render-target renderer (DX-117).
-    class D3D12RenderTargetRenderer final : public IRenderTargetRenderer
+    class D3D12RenderTargetRenderer final : public IRenderTargetRenderer,
+                                            public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
         D3D12RenderTargetRenderer(DirectX12Renderer* owner, ID3D12Device* device,
                                  int w, int h, int depthFormat, bool mipMap = false,
-                                 int multiSampleCount = 0);
+                                 int multiSampleCount = 0, int surfaceFormat = 0);
         /// REMED-GFX-177: returns this target's SRV slot, RTV and (when it has depth) DSV to their
         /// allocators, which reissue them once the GPU has passed the fence value current at
         /// destruction. Before this, all three were consumed for the lifetime of the process.
@@ -72,12 +75,14 @@ namespace CNA::Internal::Renderers::DirectX12
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /** @brief Returns the XNA SurfaceFormat ordinal used by the native color attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
 
         /**
-         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         * @brief Reads this target's rendered pixels back as tightly packed format-native rows.
          *
          * REMED-GFX-127. Reuses the READBACK-heap `CopyTextureRegion` + fence-wait + `Map`
          * discipline DX-144's own mip cascade already established in this file, against the
@@ -89,9 +94,8 @@ namespace CNA::Internal::Renderers::DirectX12
          *
          * The readback buffer is created and released inside this call, so repeated readbacks hold
          * no extra GPU memory; the fence wait is the one D3D12 genuinely requires for a synchronous
-         * read and is confined to this call. Storage is DXGI_FORMAT_R8G8B8A8_UNORM, so no swizzle
-         * applies; rows are top-first, so no flip applies, and the placed footprint's RowPitch is
-         * honoured rather than assuming tightly packed rows.
+         * read and is confined to this call. Rows are top-first, so no flip applies, and the placed
+         * footprint's RowPitch is honoured rather than assuming tightly packed rows.
          *
          * @param level      Mip level; this target has a full chain only when it was created with
          *                   mipMap.
@@ -99,7 +103,7 @@ namespace CNA::Internal::Renderers::DirectX12
          * @param y          Top edge of the requested rectangle, in level pixels.
          * @param w          Width of the requested rectangle, in pixels.
          * @param h          Height of the requested rectangle, in pixels.
-         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param data       Destination for @p w * @p h tightly packed format-native texels.
          * @param dataLength Capacity of @p data in bytes.
          * @return True once the whole rectangle has been written; false if D3D12 could not complete
          *         the readback, leaving @p data untouched.
@@ -128,9 +132,9 @@ namespace CNA::Internal::Renderers::DirectX12
         /// resolved single-sample resource.
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
         /// The resource tests/shaders should actually read from -- `resolveResource_` when MSAA
-        /// (post-`ResolveSubresource()`, only valid after `UnbindAsRenderTarget()` has run at least
-        /// once), else the same object `GetColorResourceEXT()` already returns (CNAEXT, mirrors
-        /// D3D11RenderTargetRenderer's own `GetSampleableTextureEXT()` naming/behavior exactly).
+        /// (post-`ResolveSubresource()`, refreshed by either `UnbindAsRenderTarget()` or an active
+        /// public `GetData`), else the same object `GetColorResourceEXT()` already returns (CNAEXT,
+        /// mirrors D3D11RenderTargetRenderer's own `GetSampleableTextureEXT()` naming/behavior).
         [[nodiscard]] ID3D12Resource* GetSampleableColorResourceEXT() const
         {
             return isMsaa_ ? resolveResource_.Get() : colorResource_.Get();
@@ -157,16 +161,20 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetDsvEXT() const { return dsv_; }
         [[nodiscard]] DXGI_FORMAT GetDsvFormatEXT() const { return dsvFormat_; }
 
+        void ReleaseDeviceResourcesEXT() noexcept override;
+        void RecreateDeviceResourcesEXT() override;
+
     private:
+        void CreateDeviceResources();
         /// DX-144: CPU box-filter downsample cascade, base level (0) -> levelCount_-1, called from
         /// UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.
-        void GenerateMipsEXT();
+        void GenerateMipsEXT() const;
         /// DX-117 MSAA follow-up: ResolveSubresource() the MSAA color resource into
-        /// resolveResource_, called from UnbindAsRenderTarget() before GenerateMipsEXT(). No-op
-        /// when isMsaa_ is false.
-        void ResolveMsaaEXT();
+        /// resolveResource_, called from UnbindAsRenderTarget() and active GetData before
+        /// GenerateMipsEXT(). No-op when isMsaa_ is false.
+        void ResolveMsaaEXT() const;
 
-        DirectX12Renderer* owner_ = nullptr;
+        D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
 
         /// Kept alive independently of owner_ so the destructor can always free the descriptors.
@@ -186,6 +194,11 @@ namespace CNA::Internal::Renderers::DirectX12
 
         int width_ = 0;
         int height_ = 0;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
+        int depthFormat_ = 0;
+        int requestedMultiSampleCount_ = 0;
         bool mipMap_ = false;
         int levelCount_ = 1;
         bool isMsaa_ = false;
@@ -202,13 +215,15 @@ namespace CNA::Internal::Renderers::DirectX12
     public:
         D3D12RenderTargetCubeRenderer(DirectX12Renderer* owner, ID3D12Device* device,
                                      int size, int depthFormat, bool mipMap = false,
-                                     int multiSampleCount = 0);
+                                     int multiSampleCount = 0, int surfaceFormat = 0);
         /// REMED-GFX-177: returns this cube target's SRV slot, its SIX per-face RTVs and (when it
         /// has depth) its DSV to their allocators. A cube target is the largest single descriptor
         /// consumer in this renderer, so it is also the one a fixed bump allocator exhausted fastest.
         ~D3D12RenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
+        /** @brief Returns the XNA SurfaceFormat ordinal used by the native cube attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
@@ -252,8 +267,8 @@ namespace CNA::Internal::Renderers::DirectX12
          * The resource's tracked state is restored afterwards: this is a read, and leaving it in
          * COPY_SOURCE would desynchronise the shared state tracker for the next render pass.
          *
-         * No row flip and no channel swizzle: D3D12's render-target origin is top-left and this
-         * resource is `DXGI_FORMAT_R8G8B8A8_UNORM`.
+         * No row flip or conversion applies: D3D12's render-target origin is top-left and bytes
+         * remain in the target's native SurfaceFormat.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to read.
@@ -261,8 +276,8 @@ namespace CNA::Internal::Renderers::DirectX12
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Destination for tightly packed format-native rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * format bytes per texel.
          * @return True once the whole region was written; false for an out-of-range
          *         face/level/region, or a readback buffer this device refused to create or map.
          */
@@ -278,7 +293,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// when isMsaa_ is false or no face is currently active.
         void ResolveMsaaEXT();
 
-        DirectX12Renderer* owner_ = nullptr;
+        D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
 
         /// Kept alive independently of owner_ so the destructor can always free the descriptors.
@@ -293,9 +308,16 @@ namespace CNA::Internal::Renderers::DirectX12
 
         ComPtr<ID3D12Resource> depthResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE dsv_{};
+        /// plans/plan_dx.md DX-209: needed by BindAsRenderTargetFace() for the same reason the 2D leg's
+        /// own dsvFormat_ is needed by BindAsRenderTarget() -- the bound DSV's format is baked into
+        /// every pipeline state built for a draw against this face.
+        DXGI_FORMAT dsvFormat_ = DXGI_FORMAT_UNKNOWN;
         bool hasDepth_ = false;
 
         int size_ = 0;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
         int activeFace_ = -1;
         bool mipMap_ = false;
         int levelCount_ = 1;

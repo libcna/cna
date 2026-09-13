@@ -568,7 +568,7 @@ namespace CNA::Internal::Renderers::Magnum
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int sampleCount_ = 1;
         int swapInterval_ = 1;
 

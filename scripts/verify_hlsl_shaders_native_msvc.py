@@ -6,10 +6,15 @@ GitHub-hosted Windows CI runner can usefully verify, distinct from (and not a su
 swap-chain/tearing/device-lost/driver-parity items that need a real display + GPU driver. This
 script is that check: it builds hlsl_compiler_tool.cpp with the real, native cl.exe (assumes an
 MSVC developer environment is already active on PATH -- e.g. via ilammy/msvc-dev-cmd in CI) and
-recompiles every one of DX-13-hlsl's 20 checked-in .hlsl sources against a genuine
-D3DCOMPILER_47.dll (not Wine's), confirming the shaders this project ships are still real,
-compiler-accepted HLSL on an actual Windows machine -- something Wine+DXVK could never prove on
-its own, no matter how many times it passed.
+recompiles every checked-in .hlsl source named by compile_shaders_hlsl.py's canonical SHADERS list
+against a genuine D3DCOMPILER_47.dll (not Wine's), confirming the shaders this project ships are
+still real, compiler-accepted HLSL on an actual Windows machine -- something Wine+DXVK could never
+prove on its own, no matter how many times it passed.
+
+plans/plan_dx.md DX-226: the count is deliberately NOT written down here. This docstring used to say
+"DX-13-hlsl's 20", which had been wrong since the PBR/glTF shaders landed (the list holds 40 today),
+and a number in prose is one more thing that silently goes stale. The list itself is the authority
+and the RESULT line prints its real length.
 
 This intentionally does NOT byte-diff the result against the checked-in hlsl_shaders.hpp: a
 different D3DCOMPILER_47.dll version/build can legitimately produce different-but-equivalent DXBC
@@ -27,7 +32,18 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SHADERS_DIR = REPO_ROOT / "src" / "CNA" / "Internal" / "Renderers" / "D3DCommon" / "shaders"
+# plans/plan_dx.md DX-226: the shaders moved to their owning physical module and this path did not follow.
+# It pointed at src/CNA/Internal/Renderers/D3DCommon/shaders, and there is no src/ directory in this
+# repository at all -- so the import below raised, and the workflow step that runs this script could
+# not have executed since the module migration. Checked explicitly rather than left to fail as an
+# ImportError three lines later, because "no module named compile_shaders_hlsl" does not say which
+# path was wrong.
+SHADERS_DIR = REPO_ROOT / "modules" / "renderers" / "common" / "d3d" / "src" / "shaders"
+if not (SHADERS_DIR / "compile_shaders_hlsl.py").is_file():
+    raise SystemExit(
+        f"verify_hlsl_shaders_native_msvc: no compile_shaders_hlsl.py under {SHADERS_DIR}. "
+        "The canonical shader list has moved again; fix SHADERS_DIR here (plans/plan_dx.md DX-226)."
+    )
 sys.path.insert(0, str(SHADERS_DIR))
 from compile_shaders_hlsl import SHADERS  # noqa: E402  (reuses the one canonical shader list)
 

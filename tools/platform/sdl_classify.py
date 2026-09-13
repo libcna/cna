@@ -160,6 +160,14 @@ RULES: list[tuple[str, str, str]] = [
     # GenerateMipmapsForGPUTexture). Anchoring on the infix is what makes this area complete.
     (r"^SDL_\w*GPU", "sdl-renderer-specific", "SDL_GPU API"),
 
+    # SDL_shadercross is the companion library the SDL_GPU renderer compiles its shaders with
+    # (SDL_shadercross.h). It carries no "GPU" in its names, so the infix catch-all above misses
+    # it, yet it belongs to the same renderer-specific area: it is a shader toolchain, never an
+    # IPlatform service. The one pattern covers both the API (SDL_ShaderCross_Init) and the bare
+    # header token (SDL_shadercross), and the SDL_SHADERCROSS_* constants, which is why the
+    # group is case-insensitive rather than three spellings written out.
+    (r"^SDL_(?i:shadercross)", "sdl-renderer-specific", "SDL_shadercross shader compilation"),
+
     # SDL_Renderer (the 2D renderer). Also before the generic window/texture rules.
     (r"^SDL_Render[A-Z]", "sdl-renderer-specific", "SDL_Renderer draw call"),
     (r"^SDL_(RENDERER|LOGICAL_PRESENTATION|TEXTUREACCESS|SOFTWARE_RENDERER)", "sdl-renderer-specific", "SDL_Renderer constant"),

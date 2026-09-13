@@ -9,6 +9,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ## [Unreleased]
 
+### Added
+
+- Capability-gated CNAEXT base-instance drawing through
+  `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT`, with the append-only
+  `RendererFeature::BaseInstanceDrawing` / C ABI 0.26.0 feature identity and a Vulkan
+  implementation verified on RADV and llvmpipe.
+- Device-gated Vulkan indirect drawing through both canonical command layouts, including
+  compute-generated arguments, non-zero command/geometry/base-instance offsets, automatic command
+  visibility and fence-safe deferred argument-buffer lifetime, verified on RADV and llvmpipe.
+- Vulkan GPU timing through recycled timestamp query pools, device-derived timestamp periods and
+  nonblocking result polling, plus debug-utils pass regions and one-copy structured logger output,
+  verified on RADV and llvmpipe.
+
 ## [0.1.0-alpha.1] — 2026-08-20
 
 First tagged release. CNA has been developed continuously since 2025-02-22; this tag names a

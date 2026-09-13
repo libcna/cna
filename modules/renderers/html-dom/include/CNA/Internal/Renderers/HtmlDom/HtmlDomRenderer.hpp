@@ -447,7 +447,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         /// Last LogicalViewport pushed to JS; the DOM is only touched when this actually changes, so
         /// a steady-state frame performs no layout-affecting style writes at all. HTMLDOM-108:
         /// tracking the full viewport (not just logical/physical W/H, as before) so that a

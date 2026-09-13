@@ -4,11 +4,12 @@
 
 #ifdef CNA_CNAEXT
 
-#include "LensPassVertexSource.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "PostProcessShaderPackages.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -25,8 +26,6 @@ namespace CNA::Graphics {
 
     namespace {
 
-        constexpr const char* kVertexSource = detail::kLensVertexSource;
-
         // ST 2084's constants, as the standard states them: exact ratios rather than decimals,
         // because the curve is steep enough at the bottom that a rounded m1 is visible as a lifted
         // black.
@@ -36,71 +35,18 @@ namespace CNA::Graphics {
         constexpr float kC2 = 2413.0f / 4096.0f * 32.0f;
         constexpr float kC3 = 2392.0f / 4096.0f * 32.0f;
 
-        constexpr const char* kFragmentSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform int   uSpace;          // 0 = sRGB, 1 = scRGB, 2 = HDR10
-uniform float uPaperWhiteNits;
-uniform float uPeakNits;
-
-const float kM1 = 0.1593017578125;
-const float kM2 = 78.84375;
-const float kC1 = 0.8359375;
-const float kC2 = 18.8515625;
-const float kC3 = 18.6875;
-
-vec3 cnaEncodePq(vec3 nits) {
-    vec3 l = clamp(nits / 10000.0, 0.0, 1.0);
-    vec3 p = pow(l, vec3(kM1));
-    return pow((kC1 + kC2 * p) / (1.0 + kC3 * p), vec3(kM2));
-}
-
-vec3 cnaRec709ToRec2020(vec3 c) {
-    return vec3(
-        dot(c, vec3(0.6274039, 0.3292830, 0.0433131)),
-        dot(c, vec3(0.0690973, 0.9195404, 0.0113623)),
-        dot(c, vec3(0.0163914, 0.0880133, 0.8955953)));
-}
-
-float cnaRollOff(float nits, float peak) {
-    // Reinhard against the peak: monotonic, never reaches it, and leaves everything well below the
-    // peak essentially untouched -- which is what stops a bright highlight becoming a flat shape.
-    return nits <= 0.0 ? 0.0 : peak * nits / (peak + nits);
-}
-
-void main() {
-    vec4 source = texture(texture1, TexCoord);
-
-    // The identity, and it has to be exact: SDR output must be the frame the pipeline already
-    // produced, or the pass cannot be left in the chain.
-    if (uSpace == 0) { FragColor = source; return; }
-
-    if (uSpace == 1) {
-        // scRGB: still linear Rec. 709, still the same primaries -- only the scale changes, because
-        // 1.0 means 80 nits there rather than "as bright as the display goes".
-        FragColor = vec4(source.rgb * (uPaperWhiteNits / 80.0), source.a);
-        return;
-    }
-
-    vec3 nits = source.rgb * uPaperWhiteNits;
-    nits = vec3(cnaRollOff(nits.r, uPeakNits), cnaRollOff(nits.g, uPeakNits),
-                cnaRollOff(nits.b, uPeakNits));
-    FragColor = vec4(cnaEncodePq(cnaRec709ToRec2020(nits)), source.a);
-}
-)";
-
     } // namespace
 
     HdrDisplayOutput::HdrDisplayOutput(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kFragmentSource);
+        const ShaderPackageEXT package = detail::CreateHdrDisplayShaderPackage();
+        if (package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
         bool logged = false;
         detail::reportShaderCompileFailure(device, "HdrDisplayOutput", effect_.get(), logged);
-        supported_ = effect_ != nullptr && effect_->IsEffectValid() &&
-                     device.ExecutesShaderEffectSourceEXT();
+        supported_ = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+                  && effect_ != nullptr && effect_->IsEffectValid();
     }
 
     HdrDisplayOutput::~HdrDisplayOutput() = default;
@@ -188,9 +134,8 @@ void main() {
         }
 
         effect_->Apply();
-        effect_->SetUniformInt("uSpace", static_cast<int>(space_));
-        effect_->SetUniformFloat("uPaperWhiteNits", paperWhiteNits_);
-        effect_->SetUniformFloat("uPeakNits", peakNits_);
+        effect_->SetUniformVec4("uHdrDisplayParams", static_cast<float>(space_),
+                                paperWhiteNits_, peakNits_, 0.0f);
         fullscreen_->draw(source, destination, effect_.get(), width, height);
     }
 

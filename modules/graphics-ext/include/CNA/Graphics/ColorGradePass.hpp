@@ -66,7 +66,7 @@ namespace CNA::Graphics {
          * @brief Returns whether this renderer can run the pass.
          *
          * @param device The device whose renderer is queried.
-         * @return True when the renderer executes shader source and the shader compiled.
+         * @return True when the renderer selects and accepts the pass's packaged shader.
          */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;

@@ -44,9 +44,13 @@ layout(set = 0, binding = 2) uniform FogParams {
 
 void main() {
     vec4 tex = (pc.textureEnabled > 0.5) ? texture(uTexture, vUV) : vec4(1.0);
+    // plan_vulkan.md VULKAN-205 (F-39): the colour's RGB is already inside vLitRGB, applied in
+    // the vertex stage ahead of the saturate. Only its ALPHA is used here -- FNA's AddSpecular
+    // adds `Specular * color.a`, so the highlight is scaled by the alpha and by nothing else.
+    // Measured on the real XNA runtime (spikes/xna-vertex-color-specular-spike/): a 20% grey
+    // vertex colour leaves the highlight at (249,249,249), exactly where white leaves it.
     vec4 vc  = (pc.vertexColorEnabled > 0.5) ? vColor : vec4(1.0, 1.0, 1.0, 1.0);
     outColor = vec4(vLitRGB * tex.rgb, pc.diffuseColor.a * tex.a * vc.a);
     outColor.rgb += vSpecularRGB * outColor.a;
-    outColor.rgb *= vc.rgb;
     outColor.rgb = mix(fog.fogColorEnabled.xyz, outColor.rgb, vFogFactor);
 }

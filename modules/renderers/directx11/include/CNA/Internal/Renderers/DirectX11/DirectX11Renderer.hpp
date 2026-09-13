@@ -5,6 +5,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 #include "D3D11InputLayoutCache.hpp"
 #include "D3D11SamplerCache.hpp"
 #include "D3D11StateObjectCache.hpp"
@@ -14,7 +15,18 @@
 #include <wrl/client.h>
 
 #include <cstddef>
-#include <unordered_map>
+#include <functional>
+#include <memory>
+#include <vector>
+
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+typedef struct MOJOSHADER_d3d11Context MOJOSHADER_d3d11Context;
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+#endif
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -22,6 +34,10 @@ namespace CNA::Internal::Renderers::DirectX11
 
     class D3D11RenderTargetRenderer;
     class D3D11RenderTargetCubeRenderer;
+    class D3D11VertexBufferRenderer;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+    class D3D11CompiledEffect;
+#endif
 
     /**
      * D3D11 graphics renderer (plans/plan_dx.md). Implements IGraphicsRenderer on top of Direct3D 11 via
@@ -52,13 +68,101 @@ namespace CNA::Internal::Renderers::DirectX11
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical back-buffer rectangle used for logical presentation.
+         * @param x Receives the rectangle's left edge in drawable pixels.
+         * @param y Receives the rectangle's top edge in drawable pixels.
+         * @param width Receives the rectangle's width in drawable pixels.
+         * @param height Receives the rectangle's height in drawable pixels.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
+        /**
+         * @brief Rebuilds the default back-buffer render surface with a device-supported sample count.
+         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
+         * @return The sample count actually applied, or zero when multisampling is disabled.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /** @brief Returns the sample count actually used by the default render surface. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
+        /**
+         * @brief Maps a requested sample count to the count currently applied by this renderer.
+         * @param requestedMultiSampleCount The caller's requested count.
+         * @return The current device-clamped count.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void) requestedMultiSampleCount;
+            return appliedMultiSampleCount_;
+        }
+        /**
+         * @brief Reports the fixed XNA surface format of the DXGI swap chain.
+         * @param requestedFormat The caller's requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color, matching the actual R8G8B8A8_UNORM resource.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reports the fixed XNA depth format of the default D3D11 depth resource.
+         * @param requestedFormat The caller's requested DepthFormat ordinal.
+         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        /** @brief Enables registration of subsequently-created resources for device recovery. */
+        void SetContextRecoveryEnabled(bool enabled) override;
+        /** @brief Reports whether the renderer currently accepts drawing commands. */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /** @brief Enters the deterministic lost-device state used by lifecycle tests. */
+        void DebugSimulateContextLoss() override;
+        /** @brief Recreates the device and registered resources after a simulated loss. */
+        void DebugRestoreContext() override;
+        /**
+         * @brief Returns the most recently requested DXGI presentation interval.
+         * @return The exact interval most recently passed to SetSwapInterval.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+        /**
+         * @brief Maps a platform-window point into the current logical presentation.
+         * @param windowX Window-space X coordinate.
+         * @param windowY Window-space Y coordinate.
+         * @param logX Receives the logical X coordinate.
+         * @param logY Receives the logical Y coordinate.
+         * @return true when the point lies inside the presented image.
+         */
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        /**
+         * @brief Maps a logical point into platform-window coordinates.
+         * @param logX Logical X coordinate.
+         * @param logY Logical Y coordinate.
+         * @param windowX Receives the window-space X coordinate.
+         * @param windowY Receives the window-space Y coordinate.
+         * @return true when presentation geometry is available.
+         */
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        /// plans/plan_dx.md DX-212: TRUE, because the source handed to CreateEffectRenderer() genuinely
+        /// determines the pixels here. The default is FALSE, which means "this renderer ACCEPTS an
+        /// effect and keeps rendering with its own fixed path" -- the SOFTWARE/HEADLESS answer, and
+        /// the reason a caller is told to ask this IN ADDITION to GraphicsCapability::CustomEffects.
+        /// D3D11EffectRenderer::CompileProgram() runs a real D3DCompile() on the caller's HLSL and binds the resulting shader
+        /// objects, so a post-process pass that believes its shader ran is right.
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /**
+         * @brief Reports the complete runtime-backed D3D11 capability surface.
+         *
+         * @param capability Capability to query.
+         * @return true only when this renderer and its current device implement the capability.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -85,6 +189,23 @@ namespace CNA::Internal::Renderers::DirectX11
         /// draw calls without duplicating this renderer's own context-creation path (CNAEXT,
         /// DX-30/DX-31's buffer renderers both need this).
         [[nodiscard]] ID3D11DeviceContext* GetContextEXT() const { return context_.Get(); }
+        /** @brief Registers a live resource for D3D11 device recreation. */
+        void RegisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource);
+        /** @brief Removes a live resource from the D3D11 recovery registry. */
+        void UnregisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept;
+        /** @brief Returns the number of resources currently tracked for recovery. */
+        [[nodiscard]] std::size_t GetRecoverableResourceCountEXT() const noexcept
+        {
+            return recoverableResources_.size();
+        }
+        /** @brief Recreates the D3D11 device domain and every registered resource. */
+        void RecreateDeviceEXT();
+        /**
+         * @brief Returns the active SpriteBatch projection size in logical viewport units.
+         * @param width Receives the logical viewport width.
+         * @param height Receives the logical viewport height.
+         */
+        CNAEXT void GetSpriteViewportSizeEXT(float& width, float& height) const;
         /// Exposes the per-(shader,stride) ID3D11InputLayout cache (CNAEXT, DX-32) -- shared by
         /// tests now and by Phase DIRECTX8's draw-call wiring later.
         [[nodiscard]] D3D11InputLayoutCache& GetInputLayoutCacheEXT() { return inputLayoutCache_; }
@@ -95,6 +216,37 @@ namespace CNA::Internal::Renderers::DirectX11
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX6) ----
+        /** @brief Classifies core XNA surface formats backed by native D3D11 storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies XNA render-target formats using actual D3D11 device support.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported only when the format is an XNA render-target format that this device
+         *         can render to and sample.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /** @brief Restricts Color-shaped transfers to actual Color storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether D3D11 transfers the specified surface format as compressed blocks.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the core XNA Dxt1, Dxt3, and Dxt5 formats.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether D3D11 accepts compressed block transfers for cube faces.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the core XNA Dxt1, Dxt3, and Dxt5 formats.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Keeps supported compressed content in its native block-compressed form.
+         *
+         * @return true because D3D11 uploads XNA DXT blocks without CPU decompression.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
@@ -102,17 +254,51 @@ namespace CNA::Internal::Renderers::DirectX11
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a D3D11 2D render target in the requested XNA surface format.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat DepthFormat ordinal.
+         * @param preserveContents Whether previous contents should be preserved.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The native D3D11 render target.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat,
                                                                           bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a D3D11 cube render target in the requested XNA surface format.
+         * @param size Face width and height in pixels.
+         * @param depthFormat DepthFormat ordinal.
+         * @param preserveContents Whether previous contents should be preserved.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The native D3D11 cube render target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
         /// REMED-GFX-134: overrides IGraphicsRenderer's default so a bound cube face is TRACKED and
         /// therefore finalized (MSAA resolve + mip regeneration) when the binding changes.
         void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /// plans/plan_dx.md DX-216: SamplerState.MaxMipLevel (XNA's MOST DETAILED level index, i.e. D3D's
+        /// MinLOD) and MipMapLevelOfDetailBias (MipLODBias). Tracked per slot and applied by
+        /// rebuilding that slot's ID3D11SamplerState, which is the only granularity D3D11 offers.
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        /// DX-216: SamplerState.AddressW. The cache used to mirror AddressV, which the interface
+        /// documentation names as the one thing a renderer that has not implemented W must not do.
+        void ApplySamplerAddressW(int slot, int addressW) override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX8, DX-58 -- custom ShaderEffect) ----
@@ -159,6 +345,18 @@ namespace CNA::Internal::Renderers::DirectX11
         /// to do), and internally whenever SetRenderTarget2D(nullptr)/SetRenderTargets(nullptr, 0)
         /// is used to go straight back to the back buffer.
         void RestoreBackBufferRenderTargetEXT();
+        /** @brief Detaches a dying 2D target from every non-owning current-binding slot. */
+        void NotifyRenderTargetDestroyedEXT(D3D11RenderTargetRenderer* target) noexcept;
+        /** @brief Detaches a dying cube target from the non-owning current cube binding. */
+        void NotifyRenderTargetCubeDestroyedEXT(D3D11RenderTargetCubeRenderer* target) noexcept;
+        /** @brief Reports whether a 2D target occupies the active single-target or MRT binding. */
+        [[nodiscard]] bool IsRenderTargetActiveEXT(
+            const D3D11RenderTargetRenderer* target) const noexcept;
+        /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
+        [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
+        {
+            return lifetimeToken_;
+        }
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX8, DX-61) ----
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
@@ -191,17 +389,50 @@ namespace CNA::Internal::Renderers::DirectX11
         // ---- IGraphicsRenderer: real (Phase DX9, DX-70/DX-71/DX-72) ----
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        /** @brief Creates a MojoShader-backed compiled XNA effect for this D3D11 device. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /** @brief Reports compiled effects only in the fully conformance-gated opt-in build. */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /** @brief Returns the one MojoShader D3D11 context associated with this native device. */
+        CNAEXT MOJOSHADER_d3d11Context* GetMojoShaderContextEXT();
+
+        /**
+         * @brief Binds an applied compiled effect for an immediate D3D11 draw.
+         * @param fallback Primary vertex buffer used when @p params has no explicit stream list.
+         * @param params Complete public draw parameters and vertex stream bindings.
+         * @param runtime Applied compiled-effect runtime.
+         * @param spriteBatchSlotZeroTexture Optional SpriteBatch source that must win pixel slot 0.
+         * @param spriteBatchTextures Optional public texture collection used for unassigned slots.
+         */
+        CNAEXT void BindCompiledEffectForDrawEXT(
+            const D3D11VertexBufferRenderer& fallback,
+            const GpuDrawParams& params,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
+#endif
+
     private:
+        std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+
         void CreateDeviceResources();
         void CreateSwapChainResources();
         void CreateWindowSizeDependentViews();
+        void RecreateDefaultRenderSurfaces(int requestedMultiSampleCount);
+        void ResolveBackBufferMsaa();
+        [[nodiscard]] ID3D11RenderTargetView* GetBackBufferDrawRtv() const;
         void ReleaseWindowSizeDependentViews();
         /// DX-29: resize handling -- touches ONLY the window-size group + ResizeBuffers() on the
         /// existing swap chain. Called lazily from Present() when the platform surface size no longer
         /// matches the swap chain's own cached size.
         void EnsureSwapChainSize();
-        /// DX-27: device-lost/removed detection (not full automatic recovery yet).
-        void CheckDeviceRemoved(HRESULT hr) const;
+        /// Routes a native device-removed result into the shared lost-device state.
+        void CheckDeviceRemoved(HRESULT hr);
 
         /// DX-62/DX-63/DX-64: shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib is nullptr for the non-indexed path (context_->Draw), non-null for the indexed path
@@ -212,6 +443,8 @@ namespace CNA::Internal::Renderers::DirectX11
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount,
                                   const GpuDrawParams& params);
+
+        [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
 
         PlatformRendererSurfaceState surface_;
         HWND hwnd_ = nullptr;
@@ -225,6 +458,13 @@ namespace CNA::Internal::Renderers::DirectX11
         bool allowTearingSupported_ = false;
         bool debugLayerEnabled_ = false;
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;
+        bool contextRecoveryEnabled_ = true;
+        bool deviceLost_ = false;
+        std::function<void(RendererDeviceEvent)> deviceEventCallback_;
+        std::vector<D3DCommon::ID3DDeviceRecoverableEXT*> recoverableResources_;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        MOJOSHADER_d3d11Context* mojoShaderContext_ = nullptr;
+#endif
 
         // Swap-chain lifetime.
         ComPtr<IDXGISwapChain1> swapChain_;
@@ -232,6 +472,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // Window-size lifetime.
         ComPtr<ID3D11Texture2D> backBufferTexture_;
         ComPtr<ID3D11RenderTargetView> backBufferRTV_;
+        ComPtr<ID3D11Texture2D> backBufferMsaaTexture_;
+        ComPtr<ID3D11RenderTargetView> backBufferMsaaRTV_;
         ComPtr<ID3D11Texture2D> depthStencilTexture_;
         ComPtr<ID3D11DepthStencilView> depthStencilView_;
 
@@ -280,6 +522,21 @@ namespace CNA::Internal::Renderers::DirectX11
 
         // Phase DIRECTX6 (DX-44): sampler-state cache shared by ApplySamplerState().
         D3D11SamplerCache samplerCache_;
+        /// DX-216: the XNA-level SamplerState this renderer last applied per slot. D3D11 bakes the
+        /// whole state into one immutable sampler object, so a change to any single field means
+        /// rebuilding that slot's sampler from all of them -- which needs all of them remembered.
+        /// Defaults match SamplerState::LinearWrap plus XNA's own MaxMipLevel = 0 / bias = 0.
+        static constexpr int kMaxSamplerSlotsEXT = 16;
+        int samplerFilter_[kMaxSamplerSlotsEXT] = {};
+        int samplerAddressU_[kMaxSamplerSlotsEXT] = {};
+        int samplerAddressV_[kMaxSamplerSlotsEXT] = {};
+        int samplerAddressW_[kMaxSamplerSlotsEXT] = {};
+        int samplerMaxAnisotropy_[kMaxSamplerSlotsEXT] = {4, 4, 4, 4, 4, 4, 4, 4,
+                                                         4, 4, 4, 4, 4, 4, 4, 4};
+        int samplerMaxMipLevel_[kMaxSamplerSlotsEXT] = {};
+        float samplerLodBias_[kMaxSamplerSlotsEXT] = {};
+        /// Rebuilds and binds slot @p slot's sampler from the tracked fields above.
+        void RebindSamplerEXT(int slot);
 
         // Phase DIRECTX7 (DX-50/DX-51/DX-52): blend/depth-stencil/rasterizer state caches, plus the
         // currently-bound state objects and the two standalone-settable values (blend factor,
@@ -323,13 +580,27 @@ namespace CNA::Internal::Renderers::DirectX11
         /// ApplyDepthStencilState(), SetDepthTestEnabled() and SetDepthWriteEnabled().
         void RebindDepthStencilState();
 
+        // XNA DepthBias is normalized, while D3D11 stores depth-format-dependent integer units.
+        // Keep the XNA state so a D16/D24 target switch can rebuild the native rasterizer state.
+        int rsCullMode_ = 2;
+        int rsFillMode_ = 0;
+        bool rsScissorTestEnable_ = false;
+        float rsDepthBias_ = 0.0f;
+        float rsSlopeScaleDepthBias_ = 0.0f;
+        bool rasterizerStateApplied_ = false;
+        void RebindRasterizerState();
+
         // Presentation policy (plans/plan_dx.md design decision 13: capability vs. policy, kept separate).
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;
         bool exclusiveFullscreen_ = false;
+        int swapInterval_ = 1;
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
+        int requestedMultiSampleCount_ = 0;
+        int appliedMultiSampleCount_ = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
 
         // Phase DIRECTX5 (DX-32): per-(shader,stride) ID3D11InputLayout cache.
         D3D11InputLayoutCache inputLayoutCache_;
@@ -392,15 +663,5 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11ShaderResourceView* GetOrCreateDefaultWhiteSrvEXT();
         ID3D11ShaderResourceView* GetOrCreateDefaultFlatNormalSrvEXT();
 
-        // Phase DIRECTX8 (DX-68): instanced3d's fixed 5-element input layout (POSITION0 @ slot 0,
-        // per-vertex; INSTANCEWORLD0-3 @ slot 1, per-instance) -- independent of the bound vertex
-        // buffer's own stride (the shader only reads Position, DX-13-hlsl's own row notes), so
-        // unlike D3D11InputLayoutCache this needs no stride key.
-        // REMED-GFX-123: it does need an InstanceDataStepRate key. The rate is baked into the
-        // native layout object, so a single cached layout would silently reuse the previous draw's
-        // VertexBufferBinding.InstanceFrequency. The map holds one layout per distinct rate (one or
-        // two entries in practice) so alternating frequencies never create a layout per draw.
-        std::unordered_map<UINT, ComPtr<ID3D11InputLayout>> instancedInputLayouts_;
-        ID3D11InputLayout* GetOrCreateInstancedInputLayoutEXT(UINT instanceStepRate);
     };
 }

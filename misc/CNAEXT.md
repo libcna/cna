@@ -57,7 +57,7 @@ this document designs the "engine orchestration" half that `CNA_CNAEXT` was crea
 │  CNA::Graphics engine layer      (opt-in, CNA_CNAEXT=ON)                    │
 │  RenderPipeline · HdrSceneTarget · BloomPass · SsaoPass · TonemapPass      │
 │  ShadowMap · CascadedShadowMap · Skybox · EnvironmentProcessor (IBL)       │
-│  ComputeShader · StorageBuffer                                             │
+│  ComputeShader · StorageBuffer · Texture2DArray                            │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  XNA 4.0 + CNAEXT-tagged extensions   (always built)                       │
 │  GraphicsDevice · Texture2D/3D/Cube · Effect · SpriteBatch · Model         │
@@ -843,8 +843,9 @@ evidence puts it.
   with a `RenderTargetPool` behind it, one shadow class per light type, `Skybox` and
   `EnvironmentProcessor` for image-based lighting. Every subsystem has landed against this shape and
   none of them fought it.
-- The **ownership rules** (`docs/cnaext-ownership.md`): three shapes, no `shared_ptr`, nothing
-  outlives its `GraphicsDevice`.
+- The **ownership rules** (`docs/cnaext-ownership.md`): three public shapes, no public
+  `shared_ptr`, and nothing outlives its `GraphicsDevice`; renderer-internal records may retain
+  already accepted work through shared lifetime identity.
 - The **two-part support question** (`MOD-1699`): asking a capability is not asking whether the
   renderer will run your shader. This one cost three separate bugs to learn and is not going to be
   unlearned.

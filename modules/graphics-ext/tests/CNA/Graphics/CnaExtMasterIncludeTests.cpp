@@ -17,6 +17,7 @@ namespace {
 
 using CNA::Graphics::AsciiQuantizeMode;
 using CNA::Graphics::CRTMaskType;
+using CNA::Graphics::ConstantBufferT;
 using CNA::Graphics::DepthEffectMode;
 using CNA::Graphics::DitherMode;
 using CNA::Graphics::PbrMaterial;
@@ -24,6 +25,11 @@ using CNA::Graphics::RenderPipelineSettings;
 using CNA::Graphics::RenderQuality;
 using CNA::Graphics::ShadowQuality;
 using CNA::Graphics::TonemappingMode;
+
+struct MasterIncludeConstantBlock
+{
+    float value[4];
+};
 
 TEST(CnaExtMasterIncludeTest, ConfigurationTypesAreVisible)
 {
@@ -43,6 +49,15 @@ TEST(CnaExtMasterIncludeTest, MaterialTypeIsVisible)
     const PbrMaterial material;
 
     EXPECT_GE(material.getMetallicFactor(), 0.0f);
+}
+
+TEST(CnaExtMasterIncludeTest, ConstantBufferTypeIsVisible)
+{
+    static_assert(std::is_trivially_copyable_v<MasterIncludeConstantBlock>);
+    static_assert(std::is_standard_layout_v<MasterIncludeConstantBlock>);
+    static_assert(std::is_class_v<ConstantBufferT<MasterIncludeConstantBlock>>);
+
+    EXPECT_GT(sizeof(ConstantBufferT<MasterIncludeConstantBlock>), 0u);
 }
 
 TEST(CnaExtMasterIncludeTest, PostProcessEnumerationsAreVisible)

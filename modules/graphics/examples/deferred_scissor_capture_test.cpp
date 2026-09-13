@@ -175,11 +175,11 @@ namespace
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
                                  true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
-    // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
-    // render-target oracle still answers every render-target question in this file.
-    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and bgfx.
-    constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true,
-                                 true, true, true, false, true, false};
+    // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
+    // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
+    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
+    constexpr Contract kContract{"SDL_GPU", Support::Exact, Support::Exact, true,
+                                 true, true, true, false, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
@@ -194,7 +194,15 @@ namespace
                                  true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, true, false};
+                                 true, true, true, true, false, false};
+#elif defined(CNA_RENDERER_DIRECTX12)
+    // plans/plan_dx.md DX-201: identical to the DIRECTX11 claim beside it, deliberately -- one XNA
+    // ScissorRectangle has to mean one thing across the D3D family. D3D12 has no ScissorEnable in
+    // D3D12_RASTERIZER_DESC (the test is always on), so DirectX12Renderer::GetEffectiveScissorEXT
+    // expresses a disabled test as "the whole target" and a degenerate rectangle as an empty one,
+    // which is what makes `emptyScissorDrawsNothing` true here as well.
+    constexpr Contract kContract{"DIRECTX12", Support::Exact, Support::Exact, true,
+                                 true, true, true, true, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};

@@ -24,17 +24,21 @@ static int color_equals_channels(
     return value.r == r && value.g == g && value.b == b && value.a == a;
 }
 
+/* A float channel saturates and then rounds to the nearest byte with ties to even, which
+   is what the XNA 4.0 runtime does and what FNA's truncation does not: 0.5 packs as 128
+   rather than 127, and 0.25 as 64 rather than 63
+   (tests/reference/xna40/framework/framework-packing-oracle.json, cases color/vector4_*). */
 static int validate_construction(void)
 {
     CNA_Color value = {1U, 2U, 3U, 4U};
     if (cna_color_init_vector4((CNA_Vector4){0.0F, 0.5F, 1.0F, 2.0F}, &value) !=
-            CNA_RESULT_SUCCESS || !color_equals_channels(value, 0U, 127U, 255U, 255U) ||
+            CNA_RESULT_SUCCESS || !color_equals_channels(value, 0U, 128U, 255U, 255U) ||
         cna_color_init_vector3((CNA_Vector3){1.0F, -1.0F, 0.25F}, &value) !=
-            CNA_RESULT_SUCCESS || !color_equals_channels(value, 255U, 0U, 63U, 255U) ||
+            CNA_RESULT_SUCCESS || !color_equals_channels(value, 255U, 0U, 64U, 255U) ||
         cna_color_init_float_rgb(0.1F, 0.2F, 0.3F, &value) != CNA_RESULT_SUCCESS ||
-        !color_equals_channels(value, 25U, 51U, 76U, 255U) ||
+        !color_equals_channels(value, 26U, 51U, 76U, 255U) ||
         cna_color_init_float_rgba(0.1F, 0.2F, 0.3F, 0.4F, &value) != CNA_RESULT_SUCCESS ||
-        !color_equals_channels(value, 25U, 51U, 76U, 102U) ||
+        !color_equals_channels(value, 26U, 51U, 76U, 102U) ||
         cna_color_init_int_rgb(-1, 128, 300, &value) != CNA_RESULT_SUCCESS ||
         !color_equals_channels(value, 0U, 128U, 255U, 255U) ||
         cna_color_init_int_rgba(-1, 128, 300, 64, &value) != CNA_RESULT_SUCCESS ||
@@ -146,7 +150,10 @@ static int validate_value_operations(void)
 
     if (cna_color_from_non_premultiplied_vector4(
             (CNA_Vector4){0.8F, 0.4F, 0.2F, 0.5F}, &result) != CNA_RESULT_SUCCESS ||
-        !color_equals_channels(result, 102U, 51U, 25U, 127U) ||
+        /* The float overload builds a Color from floats, so it rounds: 0.2*0.5*255 = 25.5
+           packs as 26 and 0.5*255 = 127.5 as 128. The int overload below keeps XNA's own
+           integer arithmetic and is unaffected. */
+        !color_equals_channels(result, 102U, 51U, 26U, 128U) ||
         cna_color_from_non_premultiplied_int(255, 128, 64, 128, &result) !=
             CNA_RESULT_SUCCESS ||
         !color_equals_channels(result, 128U, 64U, 32U, 128U) ||
@@ -159,7 +166,12 @@ static int validate_value_operations(void)
     result = value;
     if (cna_color_pack_from_vector4(
             &result, (CNA_Vector4){2.0F, -1.0F, NAN, INFINITY}) != CNA_RESULT_SUCCESS ||
-        !color_equals_channels(result, 254U, 1U, 0U, 0U) ||
+        /* XNA's PackFromVector4 saturates and rounds exactly like the Color(Vector4)
+           constructor, so 2.0 clamps to 255 and -1.0 to 0 rather than wrapping to 254 and 1
+           the way FNA's does; NaN packs as 0 and +INFINITY saturates at 255
+           (tests/reference/xna40/framework/framework-packing-oracle.json,
+           color/packfromvector4_out_of_range). */
+        !color_equals_channels(result, 255U, 0U, 0U, 255U) ||
         cna_color_pack_from_vector4(0, vector4) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }

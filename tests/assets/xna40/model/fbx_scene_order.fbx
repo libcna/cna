@@ -1,0 +1,172 @@
+; FBX 6.1.0 project file
+; Written for this repository, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-145.
+; Three meshes whose declaration order is not their connection order, and a material whose name
+; is the same string as the second mesh's. The scene lists them the way the connections do.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+Definitions:  {
+	Version: 100
+	Count: 4
+	ObjectType: "Model" {
+		Count: 3
+	}
+	ObjectType: "Material" {
+		Count: 1
+	}
+}
+
+Objects:  {
+	Model: "Model::Gamma", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",4,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: -1,-1,0,1,-1,0,1,1,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: 0
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Model: "Model::Alpha", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: -1,-1,0,1,-1,0,1,1,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: 0
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Model: "Model::Beta", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",2,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: -1,-1,0,1,-1,0,1,1,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: 0
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
+	Material: "Material::Beta", "" {
+		Version: 102
+		ShadingModel: "phong"
+		MultiLayer: 0
+		Properties60:  {
+			Property: "ShadingModel", "KString", "", "Phong"
+			Property: "DiffuseColor", "ColorRGB", "",1,1,1
+			Property: "DiffuseFactor", "double", "",1
+			Property: "SpecularColor", "ColorRGB", "",0.5,0.25,0.125
+			Property: "SpecularFactor", "double", "",1
+			Property: "ShininessExponent", "double", "",20
+			Property: "Diffuse", "Vector3D", "",1,1,1
+			Property: "Specular", "Vector3D", "",0.5,0.25,0.125
+			Property: "Shininess", "double", "",20
+			Property: "Opacity", "double", "",1
+		}
+	}
+}
+
+Relations:  {
+	Model: "Model::Alpha", "Mesh" {
+	}
+	Model: "Model::Beta", "Mesh" {
+	}
+	Model: "Model::Gamma", "Mesh" {
+	}
+	Material: "Material::Beta", "" {
+	}
+}
+
+Connections:  {
+	Connect: "OO", "Model::Alpha", "Model::Scene"
+	Connect: "OO", "Model::Beta", "Model::Scene"
+	Connect: "OO", "Model::Gamma", "Model::Scene"
+	Connect: "OO", "Material::Beta", "Model::Alpha"
+	Connect: "OO", "Material::Beta", "Model::Beta"
+	Connect: "OO", "Material::Beta", "Model::Gamma"
+}
+
+Takes:  {
+	Current: ""
+}
+
+Version5:  {
+	AmbientRenderSettings:  {
+		Version: 101
+		AmbientLightColor: 0,0,0,0
+	}
+}

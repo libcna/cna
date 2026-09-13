@@ -17,19 +17,13 @@ namespace CNA::Internal::Renderers::DirectX11
             return buf;
         }
 
-        std::uint64_t MakeKey(int filter, int addressU, int addressV, int maxAnisotropy)
-        {
-            return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(filter)) << 32)
-                 | (static_cast<std::uint64_t>(static_cast<std::uint8_t>(addressU)) << 24)
-                 | (static_cast<std::uint64_t>(static_cast<std::uint8_t>(addressV)) << 16)
-                 | static_cast<std::uint64_t>(static_cast<std::uint16_t>(maxAnisotropy));
-        }
     }
 
     ComPtr<ID3D11SamplerState> D3D11SamplerCache::GetOrCreate(
-        ID3D11Device* device, int filter, int addressU, int addressV, int maxAnisotropy)
+        ID3D11Device* device, int filter, int addressU, int addressV, int maxAnisotropy,
+        int addressW, int maxMipLevel, float lodBias)
     {
-        const std::uint64_t key = MakeKey(filter, addressU, addressV, maxAnisotropy);
+        const Key key{filter, addressU, addressV, maxAnisotropy, addressW, maxMipLevel, lodBias};
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
 
@@ -37,14 +31,18 @@ namespace CNA::Internal::Renderers::DirectX11
         desc.Filter = D3DCommon::TextureFilterToD3D11(filter);
         desc.AddressU = D3DCommon::TextureAddressModeToD3D11(addressU);
         desc.AddressV = D3DCommon::TextureAddressModeToD3D11(addressV);
-        // IGraphicsRenderer::ApplySamplerState has no addressW parameter (a pre-existing interface
-        // limitation, not introduced here) -- reuse addressV, matching the V axis rather than
-        // leaving W at an arbitrary default.
-        desc.AddressW = desc.AddressV;
-        desc.MipLODBias = 0.0f;
+        // plans/plan_dx.md DX-216: the caller's own W mode. This used to be `desc.AddressV` on the strength
+        // of a comment saying the interface carried no third address mode -- it does
+        // (ApplySamplerAddressW), and mirroring V is precisely the "invent a W mode of your own"
+        // that the interface documentation tells a renderer not to do.
+        desc.AddressW = D3DCommon::TextureAddressModeToD3D11(addressW);
+        desc.MipLODBias = lodBias;
         desc.MaxAnisotropy = static_cast<UINT>(std::clamp(maxAnisotropy, 1, 16));
         desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-        desc.MinLOD = 0.0f;
+        // XNA's SamplerState.MaxMipLevel is the index of the MOST DETAILED level the sampler may
+        // use -- larger means coarser -- which is D3D's MinLOD, not MaxLOD. Naming it "Max" and
+        // mapping it to MaxLOD is the obvious wrong answer, so it is spelled out here.
+        desc.MinLOD = static_cast<float>(std::max(0, maxMipLevel));
         desc.MaxLOD = D3D11_FLOAT32_MAX;
 
         ComPtr<ID3D11SamplerState> sampler;

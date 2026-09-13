@@ -1,0 +1,92 @@
+; FBX 6.1.0 project file
+; Written for this repository, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-146.
+; A mesh carrying a geometric offset -- scaling, rotation and translation together -- beside a
+; local transform of its own, and a child under it, so the composition order and whether a child
+; inherits the offset are both readable from one file.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+Definitions:  {
+	Version: 100
+	Count: 2
+	ObjectType: "Model" {
+		Count: 2
+	}
+}
+
+Objects:  {
+	Model: "Model::Offset", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",1,2,3
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",2,2,2
+			Property: "PreRotation", "Vector3D", "",-90,0,0
+			Property: "GeometricTranslation", "Vector3D", "",0,0,0.5
+			Property: "GeometricRotation", "Vector3D", "",0,0,30
+			Property: "GeometricScaling", "Vector3D", "",0.25,0.5,0.75
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: -1,-1,0,1,-1,0,1,1,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+	}
+	Model: "Model::Child", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: -1,-1,0,1,-1,0,1,1,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+	}
+}
+
+Relations:  {
+	Model: "Model::Offset", "Mesh" {
+	}
+	Model: "Model::Child", "Mesh" {
+	}
+}
+
+Connections:  {
+	Connect: "OO", "Model::Offset", "Model::Scene"
+	Connect: "OO", "Model::Child", "Model::Offset"
+}
+
+Takes:  {
+	Current: ""
+}
+
+Version5:  {
+	AmbientRenderSettings:  {
+		Version: 101
+		AmbientLightColor: 0,0,0,0
+	}
+}

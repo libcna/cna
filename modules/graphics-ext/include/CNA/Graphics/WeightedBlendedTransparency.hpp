@@ -38,7 +38,7 @@ namespace CNA::Graphics {
      *
      * ```cpp
      * oit.begin(farPlane);
-     * DrawTransparentGeometry(effect);   // its shader includes getAccumulationGlsl()
+     * DrawTransparentGeometry(effect);   // its shader writes accumulation + revealage outputs
      * oit.end();
      * // ... the opaque frame is bound ...
      * oit.resolve(width, height);
@@ -78,7 +78,7 @@ namespace CNA::Graphics {
         WeightedBlendedTransparency(const WeightedBlendedTransparency&)            = delete;
         WeightedBlendedTransparency& operator=(const WeightedBlendedTransparency&) = delete;
 
-        /** @brief Returns whether this renderer can run the whole route. */
+        /** @brief Returns whether this renderer can allocate and resolve the accumulation route. */
         [[nodiscard]] bool isSupported() const;
 
         /** @brief Returns which requirement is missing, or an empty string when none is. */
@@ -142,7 +142,10 @@ namespace CNA::Graphics {
          * @brief The GLSL a transparent shader includes to contribute to the accumulation.
          *
          * Declares both fragment outputs and `cnaOitEmit(vec3 color, float alpha, float viewDepth)`.
-         * A shader calls it instead of writing `FragColor`, and writes nothing else.
+         * A source-capable GLSL renderer can concatenate this convenience block before its own
+         * `main`, call it instead of writing `FragColor`, and write nothing else. Renderers that
+         * consume another shader language use the same two-output contract through a
+         * `ShaderPackageEXT` variant; the resolve shader itself is already portable.
          *
          * @return GLSL source, to be concatenated ahead of the shader's own `main`.
          */

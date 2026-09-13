@@ -189,19 +189,39 @@ TEST_F(Sdl3WindowTest, ExclusiveFullscreenUsesThePlatformFaithfulMode)
 #endif
     EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
 #else
-    try
-    {
-        window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen);
-    }
-    catch (const PlatformException&)
-    {
-        SUCCEED() << "the dummy driver has no exclusive display mode and refused cleanly";
-        return;
-    }
+    // A display that lists no switchable mode -- the dummy driver, an Xvfb screen, a compositor
+    // publishing one mode -- takes the desktop mode instead of refusing. XNA gives a game only the
+    // IsFullScreen boolean, so a refusal here has nowhere to go but out of Game::Run().
+    EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen));
 
-    EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::ExclusiveFullscreen);
+    const WindowFullscreenMode currentMode = window_->GetFullscreenMode();
+    EXPECT_TRUE(currentMode == WindowFullscreenMode::ExclusiveFullscreen ||
+                currentMode == WindowFullscreenMode::BorderlessFullscreen)
+        << "fullscreen was requested, so the window must be fullscreen one way or the other";
     EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
 #endif
+}
+
+TEST_F(Sdl3WindowTest, FullscreenAtAPhoneShapedSizeDoesNotEndTheGame)
+{
+    // The regression this guards: a Windows Phone port keeps its 480x800 backbuffer and sets
+    // IsFullScreen, and no desktop display has a 480x800 video mode. Asking for one used to throw
+    // out of SetFullscreenMode(), and the exception unwound through Game::Run() and killed the
+    // process. Whichever fullscreen the display can actually give is a correct answer; dying is
+    // not.
+    EXPECT_NO_THROW(window_->SetSize(480, 800));
+    // Sync() before going fullscreen: SetFullscreenMode() asks the window for its own bounds, and
+    // without the round trip it would still be answering the fixture's 320x240 -- a size a display
+    // is far likelier to have a mode for, which would leave the entry path untested.
+    window_->Sync();
+    ASSERT_EQ(window_->GetClientBounds().width, 480);
+    EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen));
+
+    // SetSize() takes the same path once the window is already fullscreen, so exercise it there
+    // too rather than only on the way in.
+    EXPECT_NO_THROW(window_->SetSize(480, 800));
+
+    EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
 }
 
 TEST_F(Sdl3WindowTest, VisibilityAndStateCallsAreAccepted)

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -22,6 +23,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -294,8 +298,13 @@ namespace CNA::Internal::Xnb
     /** @brief One bone in the canonical XNB Model graph. */
     struct XnbModelBoneData
     {
-        /** @brief Bone name. */
+        /** @brief Bone name; empty both when the bone is unnamed and when its name is empty. */
         std::string name;
+        /**
+         * @brief Whether the bone has no name at all, written as a null object rather than as a
+         *        zero-length string (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         */
+        bool nameIsNull = false;
         /** @brief Bone-local transform. */
         Microsoft::Xna::Framework::Matrix transform;
         /** @brief Parent bone index, or -1. */
@@ -336,6 +345,80 @@ namespace CNA::Internal::Xnb
         std::vector<XnbModelPartData> parts;
     };
 
+    /**
+     * @brief A reference to another compiled asset, written through `ExternalReferenceReader`
+     *        (plans/plan_xnapipeline.md `XNAP-2B`).
+     *
+     * `XnbWriter::WriteExternalReference()` covers the far more common case: a reference sitting
+     * inline in a field whose static type is already known, consuming no dispatch index. This
+     * type is the other case -- a reference stored where the static type is `object`, which is
+     * how the content pipeline writes a texture-valued effect parameter, and which therefore
+     * needs its own reader in the type table.
+     */
+    struct XnbExternalAssetReference
+    {
+        /**
+         * @brief Reference to another asset in the same content tree, without an extension.
+         *
+         * Written verbatim after the same validation `WriteExternalReference()` applies: an
+         * absolute path, or one that escapes the content root, is refused rather than written.
+         */
+        std::string reference;
+
+        /** @brief Compares the reference string. */
+        bool operator==(const XnbExternalAssetReference& other) const = default;
+    };
+
+    /**
+     * @brief One value an `EffectMaterial`'s parameter table can hold.
+     *
+     * These are the types CNA's own `EffectMaterialReader` knows how to apply to an
+     * `EffectParameter`, minus the array forms. Array-valued parameters are deliberately absent:
+     * which reader instantiation XNA writes for them (`ArrayReader` or `ListReader`, and over
+     * which element type) is not established from any fixture available here, and guessing would
+     * produce a file that loads into the wrong shape rather than one that fails to load.
+     */
+    using XnbEffectParameterValue =
+        std::variant<bool, std::int32_t, float, Microsoft::Xna::Framework::Vector2,
+                     Microsoft::Xna::Framework::Vector3, Microsoft::Xna::Framework::Vector4,
+                     Microsoft::Xna::Framework::Matrix, Microsoft::Xna::Framework::Quaternion,
+                     XnbExternalAssetReference>;
+
+    /**
+     * @brief An `EffectMaterial`'s parameter table: `Dictionary<String, Object>`.
+     *
+     * A distinct type rather than a `std::map` alias, because the registry is keyed by C++ type
+     * and this dictionary's values are polymorphic -- each one carries its own dispatch index --
+     * which the homogeneous `XnbDictionaryTypeWriter` cannot express.
+     */
+    struct XnbEffectParameterTable
+    {
+        /** @brief Parameter values by effect parameter name, written in sorted key order. */
+        std::map<std::string, XnbEffectParameterValue> values;
+
+        /** @brief Compares every parameter name and value. */
+        bool operator==(const XnbEffectParameterTable& other) const = default;
+    };
+
+    /**
+     * @brief A material that clones a compiled custom effect and overrides its parameters
+     *        (plans/plan_xnapipeline.md `XNAP-29`).
+     *
+     * This is the shape XNA's `ModelProcessor` produces when a model's material names an `.fx`
+     * file instead of resolving to a stock effect.
+     */
+    struct XnbEffectMaterialData
+    {
+        /** @brief Reference to the compiled effect asset this material clones. */
+        std::string effectReference;
+
+        /** @brief Parameter values the build resolved, applied to the clone after loading. */
+        XnbEffectParameterTable parameters;
+
+        /** @brief Compares the effect reference and every parameter. */
+        bool operator==(const XnbEffectMaterialData& other) const = default;
+    };
+
     /** @brief One supported shared resource in a canonical XNB Model graph. */
     struct XnbModelSharedResourceData
     {
@@ -344,7 +427,8 @@ namespace CNA::Internal::Xnb
         /** @brief CPU value produced by that reader. */
         std::variant<XnbVertexBufferData, XnbIndexBufferData, XnbBasicEffectData,
                      XnbAlphaTestEffectData, XnbDualTextureEffectData,
-                     XnbEnvironmentMapEffectData, XnbSkinnedEffectData> value;
+                     XnbEnvironmentMapEffectData, XnbSkinnedEffectData, XnbEffectMaterialData>
+            value;
     };
 
     /** @brief Complete device-independent XNB Model graph before schema-1 subset conversion. */

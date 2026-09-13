@@ -75,17 +75,16 @@ namespace CNA::Internal::Renderers::DirectX11
         std::map<Key, ComPtr<ID3D11DepthStencilState>> cache_;
     };
 
-    /// Caches ID3D11RasterizerState objects keyed by ApplyRasterizerState()'s 5 fields.
-    /// DepthBias is rounded to the nearest D3D11_RASTERIZER_DESC::DepthBias INT (see .cpp for the
-    /// unit-convention note); SlopeScaleDepthBias maps directly to the FLOAT
-    /// D3D11_RASTERIZER_DESC::SlopeScaledDepthBias field, no conversion needed.
+    /// Caches ID3D11RasterizerState objects keyed by ApplyRasterizerState()'s native fields.
+    /// The caller converts XNA's normalized DepthBias for the active DSV format before lookup;
+    /// SlopeScaleDepthBias maps directly to D3D11_RASTERIZER_DESC::SlopeScaledDepthBias.
     class D3D11RasterizerStateCache
     {
     public:
         ComPtr<ID3D11RasterizerState> GetOrCreate(ID3D11Device* device,
                                                    int cullMode, int fillMode,
                                                    bool scissorTestEnable,
-                                                   float depthBias, float slopeScaleDepthBias);
+                                                   int depthBias, float slopeScaleDepthBias);
 
         /// Number of distinct rasterizer states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }

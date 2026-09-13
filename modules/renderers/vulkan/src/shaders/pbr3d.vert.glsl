@@ -1,4 +1,15 @@
 #version 450
+//
+// plans/plan_vulkan.md VULKAN-227/VULKAN-232: compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION()/CNA_INSTANCE_WORLD() from the identity into the per-instance
+// transform. Without the define each call expands to exactly the text that was here before,
+// so every ordinary module's SPIR-V is byte-identical. See compile_shaders.py.
+//
+// The instance matrix is folded into World for the normal, the tangent AND the handedness,
+// so a mirroring instance flips the bitangent exactly as a mirroring World does -- EasyGL
+// spells the same thing as a separate `instanceHandedness` factor, and the two agree
+// because sign(det(World x Instance)) == sign(det(World)) * sign(det(Instance)).
 
 // PbrEffect vertex shader — stride 48 (VertexPositionNormalTangentTexture): float3 position +
 // float3 normal + float4 tangent (xyz + bitangent handedness in w, glTF convention) + float2 uv.
@@ -62,9 +73,8 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 specularFresnelInputs; // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
     vec4 specularTextureTransformRows[4];
-#ifdef CNA_PBR_DUAL_UV
     vec4 textureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
-#endif
+    vec4 iblParams;             // x = enabled, y = prefiltered mip count, z = intensity
 } pbr;
 
 float cnaDirectionHandedness(mat3 m) {
@@ -72,7 +82,7 @@ float cnaDirectionHandedness(mat3 m) {
 }
 
 void main() {
-    gl_Position = pc.mvp * vec4(aPos, 1.0);
+    gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(aPos, 1.0));
     // REMED-GFX-011: Vulkan NDC Y is inverted vs OpenGL and the C++ side supplies no correction,
     // so every 3D vertex shader in this renderer flips here. This is a renderer-wide convention,
     // not a per-family choice -- omitting it renders PbrEffect vertically mirrored relative to
@@ -81,13 +91,13 @@ void main() {
     gl_PointSize = 1.0;
     // World's inverse-transpose upper-left 3x3 (mirrors lit_textured3d.vert.glsl's Task 898 fix
     // and EnvironmentMapEffect's own already-correct env_map3d.vert.glsl pattern).
-    mat3 normalMatrix = transpose(inverse(mat3(pbr.world)));
+    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(pbr.world))));
     vNormal = normalize(normalMatrix * aNormal);
     // Tangent transforms as a plain direction under mat3(world) (not the normal's inverse-
     // transpose) — correct for uniform-scale World transforms, matching
     // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification.
-    vTangent = mat3(pbr.world) * aTangent.xyz;
-    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world));
+    vTangent = mat3(CNA_INSTANCE_WORLD(pbr.world)) * aTangent.xyz;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(pbr.world)));
     vUV = aUV;
 #ifdef CNA_PBR_DUAL_UV
     vUV1 = aUV1;
@@ -95,6 +105,6 @@ void main() {
 #ifdef CNA_PBR_VERTEX_COLOR
     vColor = aColor;
 #endif
-    vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    vWorldPos = (pbr.world * CNA_INSTANCE_POSITION(vec4(aPos, 1.0))).xyz;
+    vFogFactor = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(aPos, 1.0)), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

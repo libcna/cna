@@ -1,0 +1,1348 @@
+{
+ "format": "CNA.XnaDifferential.Corpus",
+ "version": 1,
+ "comment": "plans/plan_xnapipeline_parity.md XNAPP-265: one row per (source, importer, processor, parameters, platform, profile). Sources are paths under tests/assets/xna40, copied into the runner's directory so a Wine path can be handed over. Adding a case is an edit here, not a code change.",
+ "cases": [
+  {
+   "case": "texture/png_sprite_windows_reach",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png_gamma_no_alpha",
+   "source": "texture/png_gamma_no_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png_gamma_with_alpha",
+   "source": "texture/png_gamma_with_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png_sprite_windows_hidef",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png_texture_dxt",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png_texture_mipmaps",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png4x4_texture_dxt",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png3x2_texture_dxt",
+   "source": "texture/probe_3x2.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/bmp_sprite",
+   "source": "texture/probe.bmp",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/tga_sprite",
+   "source": "texture/probe.tga",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/dds_sprite",
+   "source": "texture/probe.dds",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/dib_sprite",
+   "source": "texture/probe.dib",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/pfm_sprite",
+   "source": "texture/probe.pfm",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/ppm_sprite",
+   "source": "texture/probe.ppm",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/hdr_sprite",
+   "source": "texture/probe.hdr",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/jpg_sprite",
+   "source": "texture/probe.jpg",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png_sprite_windowsphone",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png_sprite_xbox360",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/empty_png_refused",
+   "source": "texture/empty.png",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/truncated_png_refused",
+   "source": "texture/truncated.png",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/garbage_tga_refused",
+   "source": "texture/garbage.tga",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "audio/wav_soundeffect",
+   "source": "media/tone_mono_44100.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "audio/wav_soundeffect_stereo",
+   "source": "media/tone_stereo_44100.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "audio/wav_soundeffect_xbox360",
+   "source": "media/tone_mono_44100.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "audio/wav_soundeffect_windowsphone",
+   "source": "media/tone_mono_44100.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "audio/mp3_song",
+   "source": "media/mp3_mono_44100_128k.mp3",
+   "importer": "Mp3Importer",
+   "processor": "SongProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "audio/wma_song",
+   "source": "media/wma_mono_44100.wma",
+   "importer": "WmaImporter",
+   "processor": "SongProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "video/wmv_video",
+   "source": "media/wmv_64x48_15fps_silent.wmv",
+   "importer": "WmvImporter",
+   "processor": "VideoProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "model/x_bare_mesh",
+   "source": "model/bare_mesh.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/x_hierarchy",
+   "source": "model/hierarchy.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/x_textured",
+   "source": "model/quad_textured.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/x_skinned",
+   "source": "model/skinned_animated.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/x_bare_mesh_scaled",
+   "source": "model/bare_mesh.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "parameters": {
+    "Scale": "2.0"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/fbx_bare_mesh",
+   "source": "model/fbx_bare_mesh.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/fbx_hierarchy",
+   "source": "model/fbx_hierarchy.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/x_two_textures",
+   "source": "model/two_textures.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/x_truncated_refused",
+   "source": "model/truncated.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/fbx_not_fbx_refused",
+   "source": "model/fbx_not_fbx.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "model/fbx_float_rounding",
+   "source": "model/fbx_float_rounding.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "font/description",
+   "source": "source/control_font.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "font/description_spacing",
+   "source": "source/font_spacing.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "font/description_size10",
+   "source": "source/font_size10.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "font/description_size18",
+   "source": "source/font_size18.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "font/description_size32",
+   "source": "source/font_size32.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "font/description_size24",
+   "source": "source/font_size24.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "font/description_regions",
+   "source": "source/font_regions.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "effect/fx_source",
+   "source": "source/probe.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_source_reach",
+   "source": "source/probe.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "effect/fx_minimal",
+   "source": "source/fx_minimal.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_initializer",
+   "source": "source/fx_initializer.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler",
+   "source": "source/fx_sampler.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_two_techniques",
+   "source": "source/fx_two_techniques.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_two_passes",
+   "source": "source/fx_two_passes.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_include",
+   "source": "source/fx_include.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_macro",
+   "source": "source/fx_macro.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_state_blend",
+   "source": "source/fx_state_blend.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_state_depth",
+   "source": "source/fx_state_depth.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_state_raster",
+   "source": "source/fx_state_raster.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_two_samplers",
+   "source": "source/fx_two_samplers.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_register",
+   "source": "source/fx_sampler_register.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_plain",
+   "source": "source/fx_sampler_plain.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_state_only",
+   "source": "source/fx_sampler_state_only.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_one_textured",
+   "source": "source/fx_sampler_one_textured.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_pass_split",
+   "source": "source/fx_sampler_pass_split.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_state_blend_wide",
+   "source": "source/fx_state_blend_wide.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_state_depth_wide",
+   "source": "source/fx_state_depth_wide.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_state_raster_wide",
+   "source": "source/fx_state_raster_wide.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "phone/png_texture",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/png_texture_dxt",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/png_texture_mipmaps",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/jpg_sprite",
+   "source": "texture/probe.jpg",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/wav_soundeffect_stereo",
+   "source": "media/tone_stereo_44100.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/mp3_song",
+   "source": "media/mp3_mono_44100_128k.mp3",
+   "importer": "Mp3Importer",
+   "processor": "SongProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/wmv_video",
+   "source": "media/wmv_64x48_15fps_silent.wmv",
+   "importer": "WmvImporter",
+   "processor": "VideoProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/x_model",
+   "source": "model/quad_textured.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/fbx_model",
+   "source": "model/fbx_bare_mesh.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/fx_minimal",
+   "source": "source/fx_minimal.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/fx_sampler",
+   "source": "source/fx_sampler.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "phone/font_description",
+   "source": "source/control_font.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png4x4_texture_color",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png4x4_colorkey_off",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png4x4_colorkey_custom",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyColor": "255,255,0,255"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png4x4_no_premultiply",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "profile/tex2049_reach",
+   "source": "texture/probe_2049x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "profile/tex2049_hidef",
+   "source": "texture/probe_2049x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "profile/tex4097_hidef",
+   "source": "texture/probe_4097x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "profile/dxt_reach",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "profile/mipmaps_npot_reach",
+   "source": "texture/probe_3x2.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "profile/mipmaps_npot_hidef",
+   "source": "texture/probe_3x2.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "profile/tex2048x1_reach",
+   "source": "texture/probe_2048x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "profile/tex4096x1_hidef",
+   "source": "texture/probe_4096x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "profile/npot_reach",
+   "source": "texture/probe_3x2.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xbox/png_texture",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/png_texture_dxt",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/png_texture_mipmaps",
+   "source": "texture/probe_4x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/x_model",
+   "source": "model/quad_textured.x",
+   "importer": "XImporter",
+   "processor": "ModelProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/fbx_model",
+   "source": "model/fbx_bare_mesh.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/fx_minimal",
+   "source": "source/fx_minimal.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/font_description",
+   "source": "source/control_font.spritefont",
+   "importer": "FontDescriptionImporter",
+   "processor": "FontDescriptionProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/xml_passthrough",
+   "source": "source/probe.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_cube",
+   "source": "texture/probe_cube.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_volume",
+   "source": "texture/probe_volume.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/dds_cube",
+   "source": "texture/probe_cube.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xbox/dds_volume",
+   "source": "texture/probe_volume.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Xbox360",
+   "profile": "HiDef"
+  },
+  {
+   "case": "mip/impulse16",
+   "source": "texture/probe_impulse16.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "mip/step16",
+   "source": "texture/probe_step16.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "xml/intermediate_passthrough",
+   "source": "source/probe.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xml/primitive_int",
+   "source": "source/xml_int.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xml/framework_vector3",
+   "source": "source/xml_vector3.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xml/framework_curve",
+   "source": "source/xml_curve.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xml/generic_dictionary",
+   "source": "source/xml_dictionary.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xml/generic_dictionary_order",
+   "source": "source/xml_dictionary_order.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "xml/generic_rectangle_list",
+   "source": "source/xml_rectangles.xml",
+   "importer": "XmlImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/png_default",
+   "source": "texture/probe.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/sheet_default",
+   "source": "texture/font_sheet.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/sheet_uneven",
+   "source": "texture/font_sheet_uneven.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/sheet_many",
+   "source": "texture/font_sheet_many.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/sheet_alpha_border",
+   "source": "texture/font_sheet_alpha_border.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/sheet_edge_touch",
+   "source": "texture/font_sheet_edge_touch.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "fonttexture/sheet_white_corner",
+   "source": "texture/font_sheet_white_corner.png",
+   "importer": "TextureImporter",
+   "processor": "FontTextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/dds_mipchain_default",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_generate",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_colorkey",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_premultiply",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "PremultiplyAlpha": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_nochange",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "NoChange"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_dxt",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_sprite",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_passthrough",
+   "source": "texture/probe_mipchain.dds",
+   "importer": "TextureImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_default",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_nochange",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "NoChange"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_passthrough",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "PassThroughProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_generate",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_sprite",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "SpriteTextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_reach",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/dds_dxt3_blue_sweep",
+   "source": "texture/probe_dxt3_blue_sweep.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_green_sweep",
+   "source": "texture/probe_dxt3_green_sweep.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_red_sweep",
+   "source": "texture/probe_dxt3_red_sweep.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_lerp",
+   "source": "texture/probe_dxt3_lerp.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_npot",
+   "source": "texture/probe_mipchain_npot.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_mipchain_npot_resize",
+   "source": "texture/probe_mipchain_npot.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ResizeToPowerOfTwo": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_raw",
+   "source": "texture/probe_dxt3.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_lerp_premultiplied",
+   "source": "texture/probe_dxt3_lerp.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_blue_sweep_hi",
+   "source": "texture/probe_dxt3_blue_sweep_hi.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_dxt3_blue_sweep_lo",
+   "source": "texture/probe_dxt3_blue_sweep_lo.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png_colorkey_alpha",
+   "source": "texture/probe_colorkey_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png_colorkey_alpha_off",
+   "source": "texture/probe_colorkey_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_partial_levels_pot",
+   "source": "texture/probe_dxt5_partial_pot.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_partial_levels_npot",
+   "source": "texture/probe_dxt5_partial_npot.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_dxt5_three_colour",
+   "source": "texture/probe_dxt5_three_colour.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_dxt1_three_colour",
+   "source": "texture/probe_dxt1_three_colour.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_mip_dither",
+   "source": "texture/probe_mip_dither.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False",
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  }
+ ]
+}

@@ -33,11 +33,12 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
 - **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested. **As of 2026-07-11, all 5 confirmed bugs behind the original 2026-07-09 milestone declaration are fixed** (Vulkan `BlendState`, EasyGL anisotropic filtering, `IndexElementSize`'s numeric values, `Model`'s root-bone override, `SpriteBatch::Draw`'s optional source rectangle), and Vulkan `OcclusionQuery` (previously architecturally blocked) is fixed too. `docs/graphics-compatibility-report.md` is a dated snapshot from that declaration, kept for its methodology, not current status — see `NEXT.md` §5 for the actively-maintained bug list. What's left to 100% is a smaller set of individually-tracked issues plus a handful of project-owner architecture decisions (e.g. SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, `Texture3D`/`TextureCube` sampler-bind architecture) — none silent or undocumented.
 - **Overall XNA 4.0 API surface:** 227 of 245 public FNA types are present in CNA (**92.7%**, computed 2026-07-11 by diffing FNA's public type list against CNA's headers) — 100% for `Graphics`/`Audio`/`Input`(+`Touch`)/`Storage`; the real gap is `.Content` (4/12 — no `.xnb` reader, by design) and `.Media` (25/25 present, but 14 are shells). See `docs/xna-4-api-coverage.md`. **Note this is a different metric from the Graphics bullet above** — this one counts whether a type/class exists at all across every XNA namespace (a raw presence count), while the Graphics "~90%" figure is a narrower, bug-weighted quality gate scoped to just the ~26 major Graphics classes (it also counts behavioral correctness, not just presence — Graphics itself is 91/91 = 100% present). The two numbers measuring different things is expected, not a typo or a contradiction.
 - **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
-  execute XNA/FNA Direct3D 9 Effect Framework bytecode on the `FNA3D` renderer, including public
-  reflection, parameter mutation, techniques/passes, pass states, cloning, 3D draws, and
-  `SpriteBatch`. Other renderers currently report `GraphicsCapability::CompiledEffects == false`
-  and reject the constructor explicitly; MGFX and runtime `.fx` source compilation remain separate
-  formats/projects. See [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
+  execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally and on SDL_GPU,
+  EasyGL/OpenGL, Vulkan, and DirectX 11 behind their renderer-specific build options. The shared
+  public contract covers reflection, parameter mutation, techniques/passes, pass states, cloning,
+  3D draws, and `SpriteBatch`. Unsupported renderers reject the constructor explicitly; MGFX and
+  runtime `.fx` source compilation remain separate formats/projects. See
+  [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
 - **`SDL_RENDERER` renderer:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
 - **`OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not five separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plans/plan_glbackends.md` for current per-profile status. `OPENGLES2` (native GLES 2.0, GLSL ES 1.00, Phase-2 expansion) carries a deliberately narrower ES 2.0 capability boundary — see [`docs/opengles2-renderer.md`](docs/opengles2-renderer.md).
 - **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-renderer table for current detail.
@@ -127,8 +128,8 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
 ### The CNAEXT Engine Layer (opt-in, experimental, `CNA::Graphics`)
 
 - **Maturity: the API is still moving.** Every subsystem below is implemented and tested, and the
-  HDR spine runs end to end — but the layer is at engine revision 2 and revision 2 already carried
-  renames. Build against a pinned CNA revision, read `CNA_CNAEXT_ENGINE_VERSION` and
+  HDR spine runs end to end — but the layer is at engine revision 10, and earlier revisions already
+  carried renames. Build against a pinned CNA revision, read `CNA_CNAEXT_ENGINE_VERSION` and
   [`docs/cnaext-engine-changelog.md`](docs/cnaext-engine-changelog.md) when you move, and expect
   more of the same. [`CNAEXT.md`](misc/CNAEXT.md) §9.1 says exactly which parts are settled (the layer's
   shape, the ownership rules, the naming conventions) and which are not (per-renderer behaviour

@@ -7,6 +7,7 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
 
 #include <cstdint>
@@ -47,6 +48,14 @@ namespace CNA::Internal::Renderers::Vulkan
             .needsVulkanSurface       = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
+            // plan_vulkan.md VULKAN-187 (F-34): GraphicsAdapter::QueryRenderTargetFormat runs
+            // before any GraphicsDevice exists and, with no hook, reported 0 samples on a device
+            // with 4x or 8x. Only the MSAA clamp is registered: the shared format table already
+            // agrees with this renderer's own verdict (Vulkan_AdapterQueryContract leg B), and a
+            // second answer where the first is right is a way to make them disagree later.
+            .adapterQueries           = RendererAdapterQueries{
+                .clampMultiSampleCount = &VulkanRenderer::ClampAdapterMultiSampleCountEXT,
+            },
         };
         return descriptor;
     }

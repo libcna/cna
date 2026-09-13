@@ -3,6 +3,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 #include <string>
 
 #include "CNA/Internal/Xnb/XnbByteWriter.hpp"
@@ -68,6 +69,23 @@ namespace CNA::Internal::Xnb
          * the reading side.
          */
         [[nodiscard]] virtual bool IsSerializedByReference() const noexcept = 0;
+
+        /**
+         * @brief Readers this one names, interned with it and immediately after it.
+         *
+         * XNA's `ContentTypeWriter.Initialize` asks the compiler for the writers it depends on,
+         * and asking is what puts their readers in the type table -- whether or not anything is
+         * ever read through them. `ExternalReferenceWriter<T>` is the case the corpus needs:
+         * SAMPLE-028's `Car.xnb` carries a texture-valued effect parameter, and XNA's table holds
+         * `ExternalReferenceReader` *and* `TextureReader` where CNA held only the first, which
+         * shifts every byte after the table (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-188`).
+         *
+         * @return The identities to intern after this writer's own, in order; empty by default.
+         */
+        [[nodiscard]] virtual std::vector<XnbReaderIdentity> DependentReaders() const
+        {
+            return {};
+        }
 
         /**
          * @brief Writes one value's payload, without any dispatch index.

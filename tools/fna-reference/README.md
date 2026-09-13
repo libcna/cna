@@ -14,7 +14,7 @@ source. Not part of the CNA C++ build; never run by CNA at runtime.
 
   ```bash
   cd /rv/data/library/github.com/FNA-XNA/FNA
-  git submodule update --init lib/FAudio lib/FNA3D lib/SDL2-CS lib/SDL3-CS lib/Theorafile lib/dav1dfile
+  git submodule update --init --recursive lib/FAudio lib/FNA3D lib/SDL2-CS lib/SDL3-CS lib/Theorafile lib/dav1dfile
   xbuild FNA.csproj /p:Configuration=Debug
   ```
 
@@ -95,34 +95,37 @@ no `GraphicsDevice`, so the tool creates an FNA3D device itself through P/Invoke
 the parsed effect, and then lets FNA's own method build `Parameters`/`Techniques` on an `Effect`
 that never ran its constructor.
 
-The native layer is deliberately the same one CNA links -- the FNA3D revision CNA pins, including
-CNA's managed MojoShader robustness patch. That is the point: the oracle is FNA's C# reflection
-mapping, not a second parser. A difference in this output is a difference in how CNA and FNA
-interpret an identical parse tree.
+The native layer must match the `FNA.dll` being loaded. In particular, the current reference FNA
+checkout is FNA 26.05 and pins FNA3D 26.05, while CNA currently pins FNA3D 26.08. Mixing those two
+versions crashed executable Effect operations instead of producing an oracle. The state and pixel
+modes query `FNA3D_LinkedVersion` before creating a device and reject a mismatch explicitly. The
+oracle is FNA's C# mapping and execution of an identical compiled effect, not a second parser.
 
 ### Regenerating
 
-FNA3D has to exist as a shared library for mono to P/Invoke (CNA links it statically), so build one
-from the revision CNA pins:
+FNA3D has to exist as a shared library for mono to P/Invoke (CNA links it statically), so build the
+revision pinned by the FNA source checkout, including that FNA3D revision's MojoShader submodule:
 
 ```bash
-CNA_FNA3D_SRC=<cna-build-dir>/_deps/fna3d-src        # carries CNA's applied MojoShader patch
-SDLROOT=<cna>/.sdl-prebuilt-Linux-x86_64
-cmake -S "$CNA_FNA3D_SRC" -B /tmp/fna3d-shared -DCMAKE_BUILD_TYPE=Release \
+FNA_ROOT=/rv/data/library/github.com/FNA-XNA/FNA
+FNA3D_SRC="$FNA_ROOT/lib/FNA3D"
+SDLROOT=<cna>/.sdl-prebuilt-Linux-x86_64-wayland
+git -C "$FNA_ROOT" submodule update --init --recursive lib/FNA3D
+cmake -S "$FNA3D_SRC" -B /tmp/fna3d-fna-version -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=ON -DCMAKE_PREFIX_PATH="$SDLROOT/install"
-cmake --build /tmp/fna3d-shared -j3
+cmake --build /tmp/fna3d-fna-version -j3
 
 cd tools/fna-reference && xbuild FnaReference.csproj /p:Configuration=Debug && cd ../..
 SDL_VIDEODRIVER=offscreen \
-LD_LIBRARY_PATH=/tmp/fna3d-shared:$SDLROOT/SDL/build \
-MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
+LD_LIBRARY_PATH=/tmp/fna3d-fna-version:$SDLROOT/install/lib \
+MONO_PATH="$FNA_ROOT/bin/Debug" \
   mono tools/fna-reference/bin/Debug/FnaReference.exe --effects \
     modules/renderers/fna3d/effects \
     tests/fixtures/compiled-effects/fna-effect-reflection.json
 ```
 
 `Fna3dCompiledEffectTest.StockFixtureReflectionMatchesTheFnaOracle` reads that checked-in JSON and
-compares CNA's reflection of the same six binaries against it, subtree by subtree.
+compares CNA's reflection of the same seven binaries against it, subtree by subtree.
 
 ## `--effect-states`: what FNA installs when a pass is applied (plans/plan_fx.md FX-005)
 
@@ -141,8 +144,8 @@ property assignments live. It builds one straight from an SDL window rather than
 
 ```bash
 SDL_VIDEODRIVER=offscreen \
-LD_LIBRARY_PATH=/tmp/fna3d-shared:$SDLROOT/SDL/build \
-MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
+LD_LIBRARY_PATH=/tmp/fna3d-fna-version:$SDLROOT/install/lib \
+MONO_PATH="$FNA_ROOT/bin/Debug" \
   mono tools/fna-reference/bin/Debug/FnaReference.exe --effect-states \
     modules/renderers/fna3d/effects \
     tests/fixtures/compiled-effects/fna-effect-states.json
@@ -153,3 +156,27 @@ Every pass is applied from the same starting device state (`BlendState.Opaque`,
 the first four slots), so a pass that assigns nothing is recorded as leaving that selection alone.
 "Unchanged" is as much a result as "replaced", and
 `Fna3dEffectStateOracleTest.EveryPassInstallsTheStateFnaInstalls` checks both.
+
+## `--effect-pixels`: what FNA renders for every compiled pass (plans/plan_fx.md FX-005)
+
+`FnaReference.exe --effect-pixels <directory-of-fxb> [output.json]` renders every technique/pass
+of all seven committed compiler-produced effects through FNA's public `Effect` and
+`GraphicsDevice` APIs. Each pass starts from a clean state and an 8x8 render target, and uses flat
+textures, identity transforms, and a full-screen triangle pair. The output records the number of
+pixels changed from the clear colour and three interior RGBA samples. Flat inputs avoid depending
+on interpolation or render-target orientation while still proving shader selection, parameter and
+texture binding, pass application, drawing, and readback.
+
+```bash
+SDL_VIDEODRIVER=offscreen \
+LD_LIBRARY_PATH=/tmp/fna3d-fna-version:$SDLROOT/install/lib \
+MONO_PATH="$FNA_ROOT/bin/Debug" \
+  mono tools/fna-reference/bin/Debug/FnaReference.exe --effect-pixels \
+    modules/renderers/fna3d/effects \
+    tests/fixtures/compiled-effects/fna-effect-pixels.json
+```
+
+`Fna3dEffectPixelOracleTest.EveryCompilerProducedPassMatchesFnaPixels` recreates the same inputs
+through CNA's public API. It requires the same changed-pixel count and allows only three integer
+levels of per-channel variance in the sampled pixels, covering normal cross-driver rounding without
+turning the oracle into a broad visual approximation.

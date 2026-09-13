@@ -214,7 +214,7 @@ namespace CNA::Internal::Renderers::OpenVg
         PlatformGlSurfaceState surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         bool blendEnabled_ = true;
         int lastBlendMode_ = 0x2001; // VG_BLEND_SRC_OVER (matches ShivaVG's own VGContext_ctor default)
         int swapInterval_ = 1;

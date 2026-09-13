@@ -1,0 +1,23 @@
+{
+ "sample": "SAMPLE-129-LobbyChatImages",
+ "runner": "scripts/XnaPipelineRunner.cs",
+ "guid": "6C2C6E48-4E51-4E62-9C71-2C4D9A0F5322",
+ "comment": "Its ReadAssets() walks Content for *.png, names each by its stem and gives every one TextureImporter and TextureProcessor. Windows/Reach, CompressContent false, OutputDirectory xna4-build\\Content.",
+ "units": [
+  {
+   "project": "LobbyChatImages.contentproj",
+   "sourceRoot": "xna4-original/LobbyChatImages",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor"
+    }
+   ]
+  }
+ ]
+}

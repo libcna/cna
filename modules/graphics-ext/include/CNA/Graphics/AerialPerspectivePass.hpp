@@ -72,7 +72,7 @@ namespace CNA::Graphics {
          * @brief Returns whether this renderer can run the pass.
          *
          * @param device The device whose renderer is queried.
-         * @return True when custom effects are supported and the shader compiled.
+         * @return True when custom effects are supported and a complete shader package compiled.
          */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;
@@ -172,6 +172,7 @@ namespace CNA::Graphics {
         float turbidity_   = 2.5f;
         float intensity_   = 1.0f;
         float scaleHeight_ = 8400.0f;
+        bool packedDepth_  = true;
         std::string fallbackReason_;
     };
 

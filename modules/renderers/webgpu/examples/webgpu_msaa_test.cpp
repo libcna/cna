@@ -280,25 +280,47 @@ protected:
         check(checkC, "Check C: ApplyMultiSampleCount(8) clamps to a legal WebGPU value (0 or 4), "
                       "never echoes back the raw unsupported request");
 
-        // Check D: a RenderTarget2D created AFTER backbuffer MSAA is engaged mirrors the
-        // renderer's global sample count (WebGPURenderTargetRenderer's own "unconditional mirror"
-        // design -- see that class's doc comment) even though it deliberately requests
-        // multiSampleCount=0 itself here, proving the mirroring really is unconditional, not just
-        // a pass-through of a matching per-instance request.
+        // Check D (WEBGPU-165): a RenderTarget2D created AFTER backbuffer MSAA is engaged honours
+        // its OWN request, not the renderer's global count. This check used to assert the opposite
+        // -- WebGPURenderTargetRenderer mirrored the global unconditionally, because every pipeline
+        // baked one renderer-global sample count and a target that opted out would have been
+        // pipeline-incompatible. WEBGPU-197 made the count a per-pass property, so a target that
+        // asks for none gets none while the backbuffer stays multisampled, which is what XNA means
+        // by a per-target MultiSampleCount and what the reference renderer has always done.
         RenderTarget2D rt(device, kRTSize, kRTSize, false, SurfaceFormat::Color,
                            DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
         const int rtMultiSampleCount = rt.getMultiSampleCountProperty();
         std::printf("[INFO] RenderTarget2D created after enabling backbuffer MSAA (requested "
-                    "multiSampleCount=0 itself) -> MultiSampleCount=%d\n", rtMultiSampleCount);
-        const bool checkD1 = (rtMultiSampleCount == appliedMultiSampleCount);
-        check(checkD1, "Check D (1/2): RenderTarget2D created after backbuffer MSAA is engaged "
-                       "reports the SAME real sample count as the backbuffer, regardless of its "
-                       "own constructor request");
+                    "multiSampleCount=0 itself) -> MultiSampleCount=%d (backbuffer %d)\n",
+                    rtMultiSampleCount, appliedMultiSampleCount);
+        const bool checkD1 = (rtMultiSampleCount == 0);
+        check(checkD1, "Check D (1/2): a RenderTarget2D that requested multiSampleCount=0 reports 0 "
+                       "even while the backbuffer is multisampled -- the per-instance request is "
+                       "honoured, not overridden by the renderer's global count");
 
+        // ... and it renders like a single-sample target: a binary diagonal, no coverage blending.
+        // This is the half a property check alone cannot give, and it is now the interesting one,
+        // because the backbuffer beside it IS multisampled in this very frame.
         const std::vector<Color> rtRow = RenderRTRow(device, rt);
-        const bool checkD2 = (appliedMultiSampleCount == 4) ? HasIntermediate(rtRow) : IsBinary(rtRow);
-        check(checkD2, "Check D (2/2): RenderTarget2D diagonal edge blending matches whether MSAA "
-                       "actually engaged");
+        const bool checkD2 = IsBinary(rtRow);
+        check(checkD2, "Check D (2/2): that single-sample target's diagonal edge really is binary, "
+                       "with the multisampled backbuffer alive alongside it");
+
+        // Check D (3/3), WEBGPU-165: the other direction, in the same frame. A target that DOES ask
+        // for 4x gets it and blends, so the two targets differ by their own requests rather than by
+        // anything global.
+        RenderTarget2D rtMsaa(device, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                              DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
+        const int rtMsaaCount = rtMsaa.getMultiSampleCountProperty();
+        std::printf("[INFO] sibling RenderTarget2D requesting 4 -> MultiSampleCount=%d\n",
+                    rtMsaaCount);
+        const std::vector<Color> rtMsaaRow = RenderRTRow(device, rtMsaa);
+        const bool checkD3 = (appliedMultiSampleCount == 4)
+                                 ? (rtMsaaCount == 4 && HasIntermediate(rtMsaaRow))
+                                 : (rtMsaaCount == 0 && IsBinary(rtMsaaRow));
+        check(checkD3, "Check D (3/3): a sibling target requesting 4x applies it and blends its "
+                       "diagonal, while the single-sample target above does not -- two live targets, "
+                       "two different sample counts, one frame");
 
         // Check E: consistency cross-check -- the clamped-return-value contract (Check C) and the
         // actual visual evidence (Check B) must agree; a renderer claiming a sample count it never
@@ -315,8 +337,8 @@ protected:
                         "reported unsupported, or the resolve did not produce genuine blending.\n");
         }
 
-        std::printf("=== %d/6 PASS ===\n", passCount_);
-        result_ = (passCount_ == 6) ? 0 : 1;
+        std::printf("=== %d/7 PASS ===\n", passCount_);
+        result_ = (passCount_ == 7) ? 0 : 1;
         Exit();
     }
 

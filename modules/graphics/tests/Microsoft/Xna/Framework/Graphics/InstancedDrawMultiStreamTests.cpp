@@ -156,7 +156,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Magnum, Software);
+                           DirectX9, DirectX11, DirectX12, Magnum, SdlGpu, Software);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
@@ -176,7 +176,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
-                           Vulkan, Bgfx, WebGPU, Magnum, Software);
+                           Vulkan, Bgfx, WebGPU, Magnum, SdlGpu, Software);
 }
 
 namespace
@@ -787,13 +787,9 @@ namespace
         }
 
         /// The same assertion WITHOUT the colour axis, for the legs that run on every instancing
-        /// renderer. EasyGL, bgfx, Vulkan and WebGPU all colour the instanced route from the
-        /// per-vertex stream now (REMED-GFX-212 corrected the last two), but D3D11's and D3D12's
-        /// stock instanced shaders are still identified from source as taking `DiffuseColor`
-        /// instead, and no D3D display was reachable to measure them. A cross-renderer preservation
-        /// gate must therefore assert WHICH RECORDS each stream supplied, which the cell positions
-        /// alone already say, and leave the colour axis to the mixed-stream group and to
-        /// InstancedVertexColorTests.cpp, which measures it directly on every renderer it runs on.
+        /// renderer. This preservation helper deliberately asserts only WHICH RECORDS each stream
+        /// supplied; the mixed-stream group and InstancedVertexColorTests.cpp independently assert
+        /// the colour axis.
         static void ExpectExactlyTheseCellsIgnoringColour(
             const FrameSnapshot& snapshot, const GridLayout& layout,
             const std::vector<ExpectedCell>& expected, const char* label)
@@ -2250,7 +2246,8 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU))
+    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
+                        DirectX11, DirectX12))
     {
         // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
         // is why the measured-defect arm this leg used to carry for those two is gone. It carried one
@@ -2264,11 +2261,8 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
     }
     else
     {
-        // D3D9, D3D11 and D3D12: REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
-        // instanced route from DiffuseColor, but no D3D display was reachable from the triage session
-        // (SDL reports "x11 not available" under Wine on the Xvfb displays this environment permits),
-        // so neither arm above may claim them. The measurement above still prints on any host that can
-        // run this renderer, which is the whole evidence the ticket is missing for them.
+        // D3D9 and any future rasterizing oracle not yet measured retain a recorded result without
+        // a fabricated expectation.
         SUCCEED() << "unmeasured renderer: ordinary=" << ordinary << " instanced=" << instanced;
     }
 }

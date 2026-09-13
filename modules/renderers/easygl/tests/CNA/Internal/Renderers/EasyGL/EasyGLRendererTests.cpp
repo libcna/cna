@@ -243,8 +243,9 @@ TEST(EasyGLSurfaceState, ResizeAndDisplayScaleUseLogicalInputAndPhysicalFramebuf
 // thinks its resolution is, GetDefaultViewportRect() is which drawable pixels that lands on.
 // EasyGL used to have only the first and inherited IGraphicsRenderer's default for the second --
 // which returns the LOGICAL size as if it were physical pixels. Since GraphicsDevice::Reset()
-// gives this renderer a virtual resolution on every device creation and the default presentation
-// mode is FixedHeightDynamicWidth, that default was wrong on any window whose aspect differs from
+// gives this renderer a virtual resolution on every device creation, the inherited default was
+// wrong under every mode that scales -- including the FixedHeightDynamicWidth this case pins, and
+// the Letterbox that is the default today -- on any window whose aspect differs from
 // the virtual one: the game rendered into a sub-rectangle and the rest of the window kept the
 // clear colour (reported against galaxy-eggbert 2026-08-21 -- resizing or F11 did not enlarge it).
 TEST(EasyGLSurfaceState, FixedHeightDynamicWidthViewportRectCoversTheWholeDrawable)
@@ -292,7 +293,20 @@ TEST(EasyGLSurfaceState, StretchAndNativeBackBufferAlsoCoverTheWholeDrawable)
     }
 }
 
-TEST(EasyGLSurfaceState, NativeBackBufferInputUsesIndependentAxisScales)
+// plans/plan_dx.md DX-217 settled what NativeBackBuffer means, and it is the mode's own
+// documentation: "no scaling; game draws at its requested size" (IGraphicsRenderer.hpp's
+// CnaPresentationMode). The logical surface IS the client area, so a requested virtual resolution
+// is deliberately NOT applied in this mode.
+//
+// This test previously asserted the opposite -- that each axis scaled independently to the
+// requested 800x480 -- and it was carried on `next` while the `dx` branch implemented the mode's
+// documented meaning. The merge brought the two together and the owner ruled for the documented
+// semantics on 2026-09-10. Keeping the old expectation would have mapped input onto coordinates
+// the game never draws at in this mode.
+//
+// A 2400x1080 drawable at displayScale 3 is an 800x360 client area, so window and logical
+// coordinates coincide and the round trip is the identity.
+TEST(EasyGLSurfaceState, NativeBackBufferDoesNotScaleAndIgnoresTheRequestedVirtualSize)
 {
     EasyGLSurfaceState state(
         Surface(83, 2400, 1080, 3.0f), 800, 480,
@@ -302,7 +316,7 @@ TEST(EasyGLSurfaceState, NativeBackBufferInputUsesIndependentAxisScales)
     float y = 0.0f;
     ASSERT_TRUE(state.WindowToLogical(600.0f, 270.0f, x, y));
     EXPECT_FLOAT_EQ(x, 600.0f);
-    EXPECT_FLOAT_EQ(y, 360.0f);
+    EXPECT_FLOAT_EQ(y, 270.0f);
 
     ASSERT_TRUE(state.LogicalToWindow(x, y, x, y));
     EXPECT_FLOAT_EQ(x, 600.0f);
@@ -363,6 +377,90 @@ TEST(EasyGLSurfaceState, InvalidScaleFallsBackToUnscaledClientCoordinates)
     state.GetLogicalSize(width, height);
     EXPECT_EQ(width, 320);
     EXPECT_EQ(height, 180);
+}
+
+// Letterbox is the default presentation mode since 2026-09-08, and it is the only one of the five
+// that reproduces XNA: GraphicsDevice.Viewport is the backbuffer whatever shape the window is.
+// The pair of numbers below is exactly what Yacht needs -- a 480x800 phone backbuffer presented
+// into an 800x600 window -- and under the previous FixedHeightDynamicWidth default the logical
+// width came back as 1067 instead of 480, which moved every Viewport.Width-anchored element
+// outside the frame the rest of the game drew.
+TEST(EasyGLSurfaceState, LetterboxKeepsTheLogicalSizeAtTheBackbufferAndCentresTheRect)
+{
+    EasyGLSurfaceState state(
+        Surface(81, 800, 600, 1.0f), 480, 800, CnaPresentationMode::Letterbox);
+
+    int width = 0;
+    int height = 0;
+    state.GetLogicalSize(width, height);
+    EXPECT_EQ(width, 480);
+    EXPECT_EQ(height, 800);
+
+    // scale = min(800/480, 600/800) = 0.75, so 360x600 centred horizontally in 800 wide.
+    int x = -1;
+    int y = -1;
+    state.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(x, 220);
+    EXPECT_EQ(y, 0);
+    EXPECT_EQ(width, 360);
+    EXPECT_EQ(height, 600);
+}
+
+// The bars are the part a scaling mode without them cannot get wrong: a press inside the game has
+// to have the offset taken off before it is scaled, or every touch in a letterboxed window lands
+// to the right of where the player aimed.
+TEST(EasyGLSurfaceState, LetterboxInputMappingSubtractsTheBarsBeforeScaling)
+{
+    EasyGLSurfaceState state(
+        Surface(82, 800, 600, 1.0f), 480, 800, CnaPresentationMode::Letterbox);
+
+    float x = 0.0f;
+    float y = 0.0f;
+    // The centre of the drawable is the centre of the game.
+    ASSERT_TRUE(state.WindowToLogical(400.0f, 300.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 240.0f);
+    EXPECT_FLOAT_EQ(y, 400.0f);
+
+    // The left edge of the picture, not the left edge of the window.
+    ASSERT_TRUE(state.WindowToLogical(220.0f, 0.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 0.0f);
+    EXPECT_FLOAT_EQ(y, 0.0f);
+
+    ASSERT_TRUE(state.LogicalToWindow(480.0f, 800.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 580.0f);
+    EXPECT_FLOAT_EQ(y, 600.0f);
+}
+
+// XNA's RasterizerState.DepthBias is a normalized depth added straight to the depth, the way
+// D3D9's D3DRS_DEPTHBIAS is; OpenGL counts its polygon-offset units in the smallest resolvable
+// depth step, 2^-bits. EasyGL passed the value through unconverted, which applies about a
+// sixteen-millionth of what the game asked for -- indistinguishable from no bias. SAMPLE-073's
+// flattened ball shadow sets -0.0001f to lift itself off the pitch and z-fought with it into
+// horizontal scanlines, where real XNA on D3D9 draws it solid.
+TEST(EasyGLDepthBias, IsScaledByTheDepthBuffersOwnResolution)
+{
+    // The sample's own number on the usual 24-bit buffer: -0.0001 of normalized depth is 1677.7
+    // steps of 2^-24, not -0.0001 of a step.
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(-0.0001f, 24), -0.0001f * 16777216.0f);
+    EXPECT_NEAR(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(-0.0001f, 24), -1677.7216f, 0.001f);
+
+    // A shallower buffer resolves less, so the same request is fewer steps.
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(-0.0001f, 16), -0.0001f * 65536.0f);
+
+    // No bias stays no bias at any precision, so the always-enabled polygon offset stays a no-op.
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(0.0f, 24), 0.0f);
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(0.0f, 16), 0.0f);
+}
+
+TEST(EasyGLDepthBias, DepthFormatOrdinalsMapToTheirRealPrecision)
+{
+    // DepthFormat: None = 0, Depth16 = 1, Depth24 = 2, Depth24Stencil8 = 3.
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(1), 16);
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(2), 24);
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(3), 24);
+    // None allocates no depth buffer; the answer only has to be defined, and a bias applied
+    // against no depth buffer cannot be observed.
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(0), 24);
 }
 
 } // namespace

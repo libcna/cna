@@ -12,8 +12,8 @@
 
 #include <gtest/gtest.h>
 
-#include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/WeightedBlendedTransparency.hpp"
+#include "TransparencyShaderTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -27,7 +27,6 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <array>
@@ -70,15 +69,6 @@ std::unique_ptr<RenderTarget2D> MakeFrame(GraphicsDevice& device)
         Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
 }
 
-constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPos;
-uniform mat4 World;
-uniform mat4 View;
-uniform mat4 Projection;
-void main() { gl_Position = vec4(aPos, 1.0); }
-)";
-
 /// A quad covering the whole target, so every pixel carries the same answer and one read is enough.
 std::array<VertexPositionColor, 6> FullscreenQuad()
 {
@@ -106,36 +96,23 @@ struct Surface
 /// A shader that contributes one flat surface to the accumulation.
 std::unique_ptr<ShaderEffect> MakeEmitter(GraphicsDevice& device)
 {
-    std::string source = "#version 300 es\nprecision highp float;\n";
-    source += WeightedBlendedTransparency::getAccumulationGlsl();
-    source += R"(
-uniform vec3  uColour;
-uniform float uAlpha;
-uniform float uDepth;
-void main() { cnaOitEmit(uColour, uAlpha, uDepth); }
-)";
-    return std::make_unique<ShaderEffect>(device, kVertexSource, source);
+    return std::make_unique<ShaderEffect>(
+        device, CNA::Tests::Transparency::CreateEmitterPackage());
 }
 
 /// A shader for the control: ordinary alpha blending, which is order dependent by construction.
 std::unique_ptr<ShaderEffect> MakeBlender(GraphicsDevice& device)
 {
-    return std::make_unique<ShaderEffect>(device, kVertexSource, R"(#version 300 es
-precision highp float;
-out vec4 FragColor;
-uniform vec3  uColour;
-uniform float uAlpha;
-void main() { FragColor = vec4(uColour, uAlpha); }
-)");
+    return std::make_unique<ShaderEffect>(
+        device, CNA::Tests::Transparency::CreateFlatPackage());
 }
 
 void DrawSurface(GraphicsDevice& device, ShaderEffect& effect, const Surface& surface)
 {
     effect.Apply();
-    effect.SetUniformVec3("uColour", surface.Colour.X, surface.Colour.Y, surface.Colour.Z);
-    effect.SetUniformFloat("uAlpha", surface.Alpha);
-    effect.SetUniformFloat("uDepth", surface.Depth);
-    effect.SetUniformFloat("uCnaOitFarPlane", kFarPlane);
+    effect.SetUniformVec4("uEffectParams", surface.Colour.X, surface.Colour.Y,
+                          surface.Colour.Z, surface.Alpha);
+    effect.SetUniformFloat("uScalar", surface.Depth / kFarPlane);
     const auto quad = FullscreenQuad();
     device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
 }
@@ -170,47 +147,24 @@ TEST(WeightedBlendedTransparencyTest, TheShaderAndTheCpuWeightAgree)
     // The weight spans four orders of magnitude, so it is compared as a ratio in log space: an
     // 8-bit target cannot carry the value itself, and scaling it linearly would test only the
     // clamp. log10(w) over [-2, 3.5] maps onto the byte range with room to spare.
-    std::string source = "#version 300 es\nprecision highp float;\n";
-    source += WeightedBlendedTransparency::getAccumulationGlsl();
-    source += R"(
-in vec2 TexCoord;
-uniform float uAlpha;
-uniform float uNearDepth;
-uniform float uFarDepth;
-void main() {
-    float depth = mix(uNearDepth, uFarDepth, TexCoord.x);
-    float encoded = (log(cnaOitWeight(depth, uAlpha)) / 2.302585 + 2.0) / 5.5;
-    cnaOitAccumulation = vec4(clamp(encoded, 0.0, 1.0), 0.0, 0.0, 1.0);
-    cnaOitRevealage = vec4(0.0);
-}
-)";
-    ShaderEffect probe(device, R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); TexCoord = aTexCoord; }
-)", source);
+    ShaderEffect probe(device, CNA::Tests::Transparency::CreateWeightProbePackage());
     ASSERT_TRUE(probe.IsEffectValid());
 
     constexpr float kAlpha = 0.6f;
     constexpr float kNear = 0.5f;
     constexpr float kFar  = 95.0f;
     const auto frame = MakeFrame(device);
-    Microsoft::Xna::Framework::Graphics::Texture2D white(device, 1, 1);
-    const Color pixel = Color::White;
-    white.SetData(&pixel, 1);
-    {
-        CNA::Graphics::FullscreenPass pass(device);
-        probe.Apply();
-        probe.SetUniformFloat("uAlpha", kAlpha);
-        probe.SetUniformFloat("uNearDepth", kNear);
-        probe.SetUniformFloat("uFarDepth", kFar);
-        probe.SetUniformFloat("uCnaOitFarPlane", kFarPlane);
-        pass.draw(&white, frame.get(), &probe, kSize, kSize);
-    }
+    device.SetRenderTarget(frame.get());
+    device.Clear(Color::Black);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.SetVertexBuffer(nullptr);
+    probe.Apply();
+    probe.SetUniformVec4("uEffectParams", kAlpha, kNear, kFar, kFarPlane);
+    const auto quad = FullscreenQuad();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
+    device.SetRenderTarget(nullptr);
 
     const std::vector<Color> pixels = Read(*frame);
     int compared = 0;
@@ -371,8 +325,8 @@ std::vector<Color> BlendInOrder(GraphicsDevice& device, ShaderEffect& blender,
     for (const Surface& surface : {first, second})
     {
         blender.Apply();
-        blender.SetUniformVec3("uColour", surface.Colour.X, surface.Colour.Y, surface.Colour.Z);
-        blender.SetUniformFloat("uAlpha", surface.Alpha);
+        blender.SetUniformVec4("uEffectParams", surface.Colour.X, surface.Colour.Y,
+                               surface.Colour.Z, surface.Alpha);
         const auto quad = FullscreenQuad();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
     }

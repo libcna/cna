@@ -22,22 +22,36 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Textured3d:        return {kTextured3dVertDxbc, kTextured3dVertDxbc_size};
                 case D3DShaderVariant::ColoredTextured3d: return {kColoredTextured3dVertDxbc, kColoredTextured3dVertDxbc_size};
                 case D3DShaderVariant::LitTextured3d:     return {kLitTextured3dVertDxbc, kLitTextured3dVertDxbc_size};
+                case D3DShaderVariant::LitTextured3dColored: return {kLitTextured3dColoredVertDxbc, kLitTextured3dColoredVertDxbc_size};
+                case D3DShaderVariant::LitUntextured3d:   return {kLitUntextured3dVertDxbc, kLitUntextured3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTest3d:       return {kAlphaTest3dVertDxbc, kAlphaTest3dVertDxbc_size};
+                case D3DShaderVariant::AlphaTestUntextured3d: return {kAlphaTestUntextured3dVertDxbc, kAlphaTestUntextured3dVertDxbc_size};
                 case D3DShaderVariant::DualTexture3d:     return {kDualTexture3dVertDxbc, kDualTexture3dVertDxbc_size};
+                case D3DShaderVariant::DualTextureDualUv3d: return {kDualTextureDualUv3dVertDxbc, kDualTextureDualUv3dVertDxbc_size};
+                case D3DShaderVariant::DualTextureColored3d: return {kDualTextureColored3dVertDxbc, kDualTextureColored3dVertDxbc_size};
+                case D3DShaderVariant::DualTextureColoredDualUv3d: return {kDualTextureColoredDualUv3dVertDxbc, kDualTextureColoredDualUv3dVertDxbc_size};
                 case D3DShaderVariant::EnvMap3d:          return {kEnvMap3dVertDxbc, kEnvMap3dVertDxbc_size};
                 case D3DShaderVariant::Skinned3d:         return {kSkinned3dVertDxbc, kSkinned3dVertDxbc_size};
+                case D3DShaderVariant::Skinned3dFloatIndices: return {kSkinned3dFloatIndicesVertDxbc, kSkinned3dFloatIndicesVertDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dVertDxbc, kSprite2dVertDxbc_size};
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dVertDxbc, kInstanced3dVertDxbc_size};
+                case D3DShaderVariant::InstancedColored3d: return {kInstancedColored3dVertDxbc, kInstancedColored3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dVertDxbc, kAlphaTestColored3dVertDxbc_size};
+                case D3DShaderVariant::AlphaTestUntexturedColored3d: return {kAlphaTestUntexturedColored3dVertDxbc, kAlphaTestUntexturedColored3dVertDxbc_size};
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitVertDxbc, kLitTextured3dVertexLitVertDxbc_size};
+                case D3DShaderVariant::LitTextured3dVertexLitColored: return {kLitTextured3dVertexLitColoredVertDxbc, kLitTextured3dVertexLitColoredVertDxbc_size};
+                case D3DShaderVariant::LitUntextured3dVertexLit: return {kLitUntextured3dVertexLitVertDxbc, kLitUntextured3dVertexLitVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLit:     return {kSkinned3dVertexLitVertDxbc, kSkinned3dVertexLitVertDxbc_size};
+                case D3DShaderVariant::Skinned3dVertexLitFloatIndices: return {kSkinned3dVertexLitFloatIndicesVertDxbc, kSkinned3dVertexLitFloatIndicesVertDxbc_size};
                 case D3DShaderVariant::Pbr3d:                  return {kPbr3dVertDxbc, kPbr3dVertDxbc_size};
                 case D3DShaderVariant::Pbr3dDualUv:            return {kPbr3dDualUvVertDxbc, kPbr3dDualUvVertDxbc_size};
                 case D3DShaderVariant::PbrSkinned3d:           return {kPbrSkinned3dVertDxbc, kPbrSkinned3dVertDxbc_size};
                 case D3DShaderVariant::PbrSkinned3dDualUv:     return {kPbrSkinned3dDualUvVertDxbc, kPbrSkinned3dDualUvVertDxbc_size};
                 case D3DShaderVariant::PbrSkinned3dDualUvColor: return {kPbrSkinned3dDualUvColorVertDxbc, kPbrSkinned3dDualUvColorVertDxbc_size};
                 case D3DShaderVariant::Skinned3dColored:       return {kSkinned3dColoredVertDxbc, kSkinned3dColoredVertDxbc_size};
+                case D3DShaderVariant::Skinned3dColoredFloatIndices: return {kSkinned3dColoredFloatIndicesVertDxbc, kSkinned3dColoredFloatIndicesVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColored: return {kSkinned3dVertexLitColoredVertDxbc, kSkinned3dVertexLitColoredVertDxbc_size};
+                case D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices: return {kSkinned3dVertexLitColoredFloatIndicesVertDxbc, kSkinned3dVertexLitColoredFloatIndicesVertDxbc_size};
             }
             return {nullptr, 0};
         }
@@ -51,22 +65,37 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Textured3d:        return {kTextured3dFragDxbc, kTextured3dFragDxbc_size};
                 case D3DShaderVariant::ColoredTextured3d: return {kColoredTextured3dFragDxbc, kColoredTextured3dFragDxbc_size};
                 case D3DShaderVariant::LitTextured3d:     return {kLitTextured3dFragDxbc, kLitTextured3dFragDxbc_size};
+                case D3DShaderVariant::LitTextured3dColored: return {kLitTextured3dColoredFragDxbc, kLitTextured3dColoredFragDxbc_size};
+                case D3DShaderVariant::LitUntextured3d:   return {kLitTextured3dFragDxbc, kLitTextured3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTest3d:       return {kAlphaTest3dFragDxbc, kAlphaTest3dFragDxbc_size};
+                case D3DShaderVariant::AlphaTestUntextured3d: return {kAlphaTest3dFragDxbc, kAlphaTest3dFragDxbc_size};
                 case D3DShaderVariant::DualTexture3d:     return {kDualTexture3dFragDxbc, kDualTexture3dFragDxbc_size};
+                case D3DShaderVariant::DualTextureDualUv3d:
+                case D3DShaderVariant::DualTextureColored3d:
+                case D3DShaderVariant::DualTextureColoredDualUv3d:
+                    return {kDualTexture3dFragDxbc, kDualTexture3dFragDxbc_size};
                 case D3DShaderVariant::EnvMap3d:          return {kEnvMap3dFragDxbc, kEnvMap3dFragDxbc_size};
                 case D3DShaderVariant::Skinned3d:         return {kSkinned3dFragDxbc, kSkinned3dFragDxbc_size};
+                case D3DShaderVariant::Skinned3dFloatIndices: return {kSkinned3dFragDxbc, kSkinned3dFragDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dFragDxbc, kSprite2dFragDxbc_size};
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dFragDxbc, kInstanced3dFragDxbc_size};
+                case D3DShaderVariant::InstancedColored3d: return {kInstanced3dFragDxbc, kInstanced3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dFragDxbc, kAlphaTestColored3dFragDxbc_size};
+                case D3DShaderVariant::AlphaTestUntexturedColored3d: return {kAlphaTestColored3dFragDxbc, kAlphaTestColored3dFragDxbc_size};
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
+                case D3DShaderVariant::LitTextured3dVertexLitColored: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
+                case D3DShaderVariant::LitUntextured3dVertexLit: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLit:     return {kSkinned3dVertexLitFragDxbc, kSkinned3dVertexLitFragDxbc_size};
+                case D3DShaderVariant::Skinned3dVertexLitFloatIndices: return {kSkinned3dVertexLitFragDxbc, kSkinned3dVertexLitFragDxbc_size};
                 case D3DShaderVariant::Pbr3d:                  return {kPbr3dFragDxbc, kPbr3dFragDxbc_size};
                 case D3DShaderVariant::Pbr3dDualUv:            return {kPbr3dDualUvFragDxbc, kPbr3dDualUvFragDxbc_size};
                 case D3DShaderVariant::PbrSkinned3d:           return {kPbrSkinned3dFragDxbc, kPbrSkinned3dFragDxbc_size};
                 case D3DShaderVariant::PbrSkinned3dDualUv:     return {kPbrSkinned3dDualUvFragDxbc, kPbrSkinned3dDualUvFragDxbc_size};
                 case D3DShaderVariant::PbrSkinned3dDualUvColor: return {kPbrSkinned3dDualUvColorFragDxbc, kPbrSkinned3dDualUvColorFragDxbc_size};
                 case D3DShaderVariant::Skinned3dColored:       return {kSkinned3dColoredFragDxbc, kSkinned3dColoredFragDxbc_size};
+                case D3DShaderVariant::Skinned3dColoredFloatIndices: return {kSkinned3dColoredFragDxbc, kSkinned3dColoredFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColored: return {kSkinned3dVertexLitColoredFragDxbc, kSkinned3dVertexLitColoredFragDxbc_size};
+                case D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices: return {kSkinned3dVertexLitColoredFragDxbc, kSkinned3dVertexLitColoredFragDxbc_size};
             }
             return {nullptr, 0};
         }

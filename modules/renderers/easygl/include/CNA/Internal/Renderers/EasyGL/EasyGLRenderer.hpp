@@ -31,6 +31,7 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLRenderTargetRenderer;
     class EasyGLRenderTargetCubeRenderer;
     class EasyGLPlatformContext;
+    class EasyGLThreadContextLeaseControl;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
     class EasyGLCompiledEffect;
 #endif
@@ -84,7 +85,7 @@ namespace CNA::Internal::Renderers::EasyGL
         RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
     };
 
     /**
@@ -123,6 +124,40 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Returns whether this slot names no live attachment. */
         [[nodiscard]] bool IsEmpty() const { return rt2D == nullptr && cube == nullptr; }
     };
+
+    /**
+     * @brief CNAEXT. Depth precision of a `Microsoft::Xna::Framework::Graphics::DepthFormat` ordinal.
+     *
+     * Depth16 stores 16 bits; Depth24 and Depth24Stencil8 store 24. `None` allocates no depth
+     * buffer at all, and answers 24 so a caller scaling a depth bias has a defined number rather
+     * than a division by zero -- with no depth buffer bound the bias cannot be observed anyway.
+     *
+     * @param depthFormat Raw `DepthFormat` ordinal.
+     * @return Bits of depth precision.
+     */
+    [[nodiscard]] inline int EasyGLDepthBufferBits(const int depthFormat)
+    {
+        // DepthFormat: None = 0, Depth16 = 1, Depth24 = 2, Depth24Stencil8 = 3.
+        return depthFormat == 1 ? 16 : 24;
+    }
+
+    /**
+     * @brief CNAEXT. Converts an XNA `RasterizerState.DepthBias` into OpenGL polygon-offset units.
+     *
+     * XNA's value is a normalized depth added straight to the depth, as D3D9's `D3DRS_DEPTHBIAS`
+     * is. GL's `units` argument is counted in the smallest resolvable depth step, `2^-bits`, so
+     * the same number means `2^bits` times less offset there. Passing it through unconverted is
+     * indistinguishable from applying no bias at all.
+     *
+     * @param depthBias XNA depth bias, in normalized depth.
+     * @param bits      Depth precision of the buffer being drawn into.
+     * @return The value to hand `glPolygonOffset`'s `units` argument.
+     */
+    [[nodiscard]] inline float EasyGLDepthBiasToPolygonOffsetUnits(const float depthBias,
+                                                                   const int bits)
+    {
+        return depthBias * static_cast<float>(1u << bits);
+    }
 
     struct EasyGLBoundTargetEXT
     {
@@ -287,6 +322,8 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
+        [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
         /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
@@ -294,6 +331,12 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && depthFormat_ != 0;
+        }
+
+        /** @brief CNAEXT. Depth precision of this target, from the DepthFormat it was created with. */
+        [[nodiscard]] int DepthBufferBitsEXT() const override
+        {
+            return EasyGLDepthBufferBits(depthFormat_);
         }
 
         void release_gl_handle_only() override;
@@ -360,6 +403,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetGLHandle() const override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
+        [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
 
         // ITextureCubeRenderer — bind and upload to the shared cube texture.
         void BindGL(int unit) const override;
@@ -450,6 +495,12 @@ namespace CNA::Internal::Renderers::EasyGL
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
+
+        /** @brief CNAEXT. Depth precision of this cube target, from its own DepthFormat. */
+        [[nodiscard]] int DepthBufferBitsEXT() const override
+        {
+            return EasyGLDepthBufferBits(depthFormat_);
+        }
 
     private:
         friend class EasyGLRenderer;
@@ -732,26 +783,102 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLStorageBufferRenderer : public IStorageBufferRenderer
     {
     public:
-        /** @brief Allocates @p byteSize bytes of storage. */
-        explicit EasyGLStorageBufferRenderer(std::size_t byteSize);
+        /**
+         * @brief Allocates a GL buffer with exact portable roles and CPU-access intent.
+         * @param byteSize Positive allocation size in bytes.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        EasyGLStorageBufferRenderer(
+            std::size_t byteSize, std::uint32_t usage = UINT32_C(0x0F),
+            std::uint32_t cpuAccess = UINT32_C(0x03));
+        /** @brief Releases the GL buffer. */
         ~EasyGLStorageBufferRenderer() override;
 
+        /**
+         * @brief Uploads a prefix of the buffer.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         */
         void SetData(const void* data, std::size_t byteSize) override;
+        /**
+         * @brief Reads a prefix of the buffer.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         */
         void GetData(void* out, std::size_t byteSize) const override;
+        /**
+         * @brief Uploads bytes into an exact storage-buffer range.
+         * @param byteOffset First destination byte.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         * @return True when the complete range was uploaded.
+         */
+        bool SetDataRangeEXT(
+            std::size_t byteOffset, const void* data, std::size_t byteSize) override;
+        /**
+         * @brief Reads bytes from an exact storage-buffer range.
+         * @param byteOffset First source byte.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         * @return True when the complete range was read.
+         */
+        bool GetDataRangeEXT(
+            std::size_t byteOffset, void* out, std::size_t byteSize) const override;
+        /**
+         * @brief Copies bytes to another EasyGL storage buffer.
+         * @param destination Destination record.
+         * @param sourceByteOffset First source byte.
+         * @param destinationByteOffset First destination byte.
+         * @param byteSize Number of bytes to copy.
+         * @return True when the destination is compatible and the copy was issued.
+         */
+        bool CopyToEXT(
+            IStorageBufferRenderer& destination, std::size_t sourceByteOffset,
+            std::size_t destinationByteOffset, std::size_t byteSize) override;
+        /**
+         * @brief Returns the allocation size.
+         * @return Buffer size in bytes.
+         */
         [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
+        /**
+         * @brief Returns the immutable portable usage mask.
+         * @return Raw `CNA::Graphics::StorageBufferUsage` bits.
+         */
+        [[nodiscard]] std::uint32_t GetUsageEXT() const override { return usage_; }
+        /**
+         * @brief Returns the immutable direct CPU-access mask.
+         * @return Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
 
-        /// Binds this buffer to a shader storage binding point.
+        /**
+         * @brief Binds this buffer to a shader-storage binding point.
+         * @param binding Binding-point index.
+         */
         void BindBase(int binding) const;
 
-        /// plans/plan_modern.md MOD-2090: binds this buffer as the source of an indirect draw's
-        /// arguments. The same buffer object in a second role -- which is exactly what makes an
-        /// indirect draw worth having, since a compute shader can write the arguments through the
-        /// storage binding and the draw fetches them here without a readback in between.
+        /**
+         * @brief Binds this buffer to a uniform/constant-buffer binding point.
+         * @param binding Binding-point index.
+         */
+        void BindUniformBase(int binding) const;
+
+        /**
+         * @brief Binds this buffer as the source of indirect-draw arguments.
+         *
+         * A buffer with both Storage and IndirectArguments roles can be written by compute and
+         * consumed by a draw without a CPU readback. An indirect-only buffer needs no SSBO role.
+         */
         void BindAsDrawIndirect() const;
 
     private:
+        [[nodiscard]] ::easygl::BufferTarget TransferTarget() const;
+
         mutable ::easygl::Buffer buffer_;
         std::size_t byteSize_ = 0;
+        std::uint32_t usage_ = 0;
+        std::uint32_t cpuAccess_ = 0;
     };
 
     /**
@@ -768,6 +895,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformInt(const char* name, int value) override;
         void SetUniformFloat(const char* name, float value) override;
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+        [[nodiscard]] bool BindConstantBufferEXT(
+            int binding, IStorageBufferRenderer* buffer) override;
         void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
         void BindTexture(int unit, ITextureRenderer* texture) override;
         [[nodiscard]] bool IsValid() const override { return valid_; }
@@ -900,6 +1029,11 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingMaxAnisotropy_ = 4; // SamplerState default
         int pendingMaxMipLevel_ = 0; // SamplerState default
         float pendingLodBias_ = 0.0f; // SamplerState default
+        // plans/plan_vulkan.md VULKAN-167: -1 means "the batch supplied no W", which keeps
+        // ApplySamplerState's W-follows-U default for any caller that flushes sprites without
+        // going through SetSamplerState. SpriteBatch always supplies one, so the sentinel only
+        // survives for those other callers.
+        int pendingAddressW_ = -1;
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -914,6 +1048,23 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetSamplerMaxAnisotropy(int maxAnisotropy) override;
         void SetSamplerMipState(int maxMipLevel, float lodBias) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        /**
+         * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
+         *
+         * This renderer overrides the COMPLETE hook, so IGraphicsRenderer's default fan-out to
+         * SetSamplerMipState/SetSamplerAddressW/SetSamplerAddressModeWEXT does not run here -- this
+         * method does all of their work and carries maxAnisotropy besides, which none of them did.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
         /**
          * @brief Selects whether each Draw call must submit before returning.
          *
@@ -1083,9 +1234,36 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
-        std::unique_ptr<EasyGLPlatformContext> platformContext_;
-        std::recursive_mutex threadContextMutex_;
+        std::shared_ptr<EasyGLPlatformContext> platformContext_;
+        std::shared_ptr<EasyGLThreadContextLeaseControl> threadContextLeaseControl_;
         friend class EasyGLSpriteBatchRenderer;
+        // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
+        // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
+        // the default, would not compile. Compiled-effect draws narrow it and put it back
+        // (see SetCompiledEffectDepthRangeEXT).
+    public:
+        /**
+         * @brief Whether the viewport currently programmed is the default one.
+         *
+         * @note CNAEXT — CNA extension, not XNA API. The sprite batcher needs to tell a game-set
+         * sub-viewport from the default one, and cannot do it by comparing live GL state: a window
+         * resize moves the presentation rectangle while the GL viewport still holds the previous
+         * one. This is decided in SetViewport(), when the rectangle is fresh.
+         *
+         * @return true when the last programmed viewport was the presentation rectangle (or, with
+         *         a render target bound, that target's full extent).
+         */
+        CNAEXT [[nodiscard]] bool ViewportIsDefaultEXT() const { return viewportIsDefault_; }
+
+    private:
+        // Whether the last SetViewport() was the default viewport -- i.e. the presentation
+        // rectangle -- rather than a sub-viewport the game asked for. Decided when the viewport is
+        // set, while the rectangle is fresh, because the alternative (comparing live GL state
+        // against the rectangle later) cannot tell a game's sub-viewport from a default viewport
+        // that a window resize has since made stale. See the sprite flush for what depends on it.
+        bool viewportIsDefault_ = true;
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         friend class EasyGLCompiledEffect;
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
@@ -1196,7 +1374,6 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
-        void ReleaseCallingThreadContextLease() noexcept;
 
         /// Returns the shared registry when context recovery is enabled, an empty pointer
         /// otherwise. Children keep only a weak reference to what this returns.
@@ -1902,6 +2079,23 @@ namespace CNA::Internal::Renderers::EasyGL
         /// renderer does not rely on, so it is reported false there.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
+        /**
+         * @brief Returns the GLSL dialect consumed by this renderer instance's active profile.
+         *
+         * @return Desktop GLSL for OpenGL33 and GLSL ES for the GLES/WebGL profiles.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override;
+
+        /**
+         * @brief Reports the explicit shader payloads consumed by the EasyGL paths.
+         *
+         * @param language Raw `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage Raw `CNA::ShaderStageEXT` ordinal.
+         * @return True for the active profile's exact GLSL dialect at vertex/fragment stages and
+         *         at compute when compute is supported; false for every other pair.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
         /// plans/plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
         /// answer is the *runtime* context's version, not the compile-time profile: this renderer
         /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has
@@ -1914,6 +2108,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+        /// plan_vulkan.md VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
+        /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
+        /// bound volume through a `sampler3D`.
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
         /// plans/plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
         /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the
@@ -1926,11 +2124,36 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
         [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
         [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        /**
+         * @brief Returns the live context's maximum shader-storage block size.
+         * @return Maximum bytes, or zero when shader storage is unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+        /**
+         * @brief Returns the live context's maximum uniform-block size.
+         * @return Maximum bytes, or zero when uniform buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+        /**
+         * @brief Returns the live context's required uniform-buffer offset alignment.
+         * @return Positive alignment, or zero when uniform buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
         void BindStorageBufferForDrawEXT(int binding,
                                          const IStorageBufferRenderer& buffer) override;
         std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
             const std::string& computeSrc) override;
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
+        /**
+         * @brief Creates a GL buffer for the exact declared portable roles.
+         * @param byteSize Positive allocation size in bytes.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return The buffer, or null if a requested role is unsupported by the live context.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage,
+            std::uint32_t cpuAccess) override;
         void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
                              int groupsZ) override;
         void MemoryBarrierEXT(int barrierBits) override;

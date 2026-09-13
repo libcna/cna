@@ -1,0 +1,332 @@
+{
+ "format": "CNA.XnaDifferential.Decisions",
+ "version": 1,
+ "comment": "plans/plan_xnapipeline_parity.md XNAPP-266 (\u00a724): a difference between XNA's .xnb and CNA's is one of three things, and this file is the second of them. A case listed here differs for a reason that has been established and written down -- a deliberate divergence, or something this environment cannot settle. Everything not listed here and not identical is open, and fails the comparison. A decision whose case has since become identical also fails, so a reason cannot outlive what it explained. A decision may name the `paths` it explains, and then it explains only those: a case accepted for its compressed pixels stays open if its width changes, and a listed path that no longer differs fails the same way an obsolete decision does.",
+ "accepted": [
+  {
+   "case": "audio_wav_soundeffect_xbox360",
+   "reason": "XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601 read little-endian, which is 0x0166 in the big-endian order the console's whole format block is written in, a 34-byte XMA2WAVEFORMATEX, a rate rounded down to a multiple of 128, a loop region quantized to the same 128-sample subframe and a payload a seventh of the size. XMA ENCODER EXTERNALLY UNAVAILABLE: the codec has no public specification sufficient to implement a conforming encoder, no licensable encoder, and none in FFmpeg, which decodes xma1 and xma2 and encodes neither. CNA answers the Windows PCM payload instead. Everything around the encoder is measured and built -- docs/xma-encoder-backend.md, and the seam an encoder attaches to is CNA::Content::Pipeline::XmaEncoderService. Recorded at the processor level too (soundeffectprofile/*, XNAPP-021); .wav's xbox360 row reads the same sentence.",
+   "paths": [
+    "root/formatTag",
+    "root/sampleRate",
+    "root/averageBytesPerSecond",
+    "root/extensionByteCount",
+    "root/sampleByteCount",
+    "root/sampleDigest",
+    "root/loopStart",
+    "root/loopLength"
+   ]
+  },
+  {
+   "case": "effect_fx_include",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_initializer",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_macro",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_minimal",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_register",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_plain",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_state_only",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_one_textured",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_pass_split",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_source",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_source_reach",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_state_blend",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_state_blend_wide",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_state_depth",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_state_depth_wide",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_state_raster",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_state_raster_wide",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_two_passes",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_two_samplers",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_two_techniques",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "font_description",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "font_description_regions",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "font_description_size10",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The sheet is also transposed: 128x64 against 64x128. Both hold the same glyphs in the same 8192 texels and neither is squarer, so which one a packer picks is a tie-break rather than a rule. Five of the seven font cases do agree about the sheet.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "font_description_size18",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "font_description_size24",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "font_description_size32",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The sheet is half the size: CNA packs these glyphs into 256x256 where XNA needed 256x512. Smaller is not a defect, and it is recorded rather than chased because matching it exactly would mean reproducing XNA's packer.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests",
+    "root/atlas/levelByteSizes",
+    "root/atlas/height"
+   ]
+  },
+  {
+   "case": "font_description_spacing",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The kerning differences are the same pixel: with <UseKerning>false</UseKerning> the B width is the ink width, so a glyph whose ink is a pixel wider advances a pixel more. 39 of the 95 are identical.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/kerning",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "mip_step16",
+   "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units. Measured again over a real photograph, SAMPLE-059's 256x256 CatTexture.tga, the residual is characterised rather than merely small: level 0 is byte-identical, every generated level differs, every differing byte differs by exactly one, and the sign is decided by the accumulator's own fraction. Sorted by distance from the rounding tie, the disagreement rate rises monotonically -- 0.5% at 112/256 from the tie, 19% at 80, 33% at 48, 45% at 16 -- and never once crosses over: below the tie XNA is always the higher value and above it always the lower. That is a dither applied before quantisation, of roughly half a least-significant bit, and no filter change reaches it: the kernel was re-fitted here over every symmetric six-tap with integer weights and {1,7,7,1} is the optimum, and neither float32, float64, normalised nor pairwise-summed arithmetic, nor truncation, half-up, half-even or half-down rounding, moves the count by more than eight bytes in 65,536. (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-123.)",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "phone_font_description",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests"
+   ]
+  },
+  {
+   "case": "phone_jpg_sprite",
+   "reason": "Two conformant JPEG decoders disagree within an IDCT's tolerance. XNA decodes through D3DX and CNA through stb_image; the pixels differ by a few units and neither is wrong. Already recorded for the per-extension differential, which compares JPEG pixels within a tolerance rather than exactly (XNAPP-167).",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "phone_png_texture_dxt",
+   "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "profile_dxt_reach",
+   "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "texture_dds_dxt3_nochange",
+   "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do. `NoChange` on a block-compressed `.dds` is the same route: XNA decodes it, keys and premultiplies it and *re-encodes* it, which is why it is not the file's own blocks -- a pass-through is (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "texture_dds_mipchain_dxt",
+   "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do. `NoChange` on a block-compressed `.dds` is the same route: XNA decodes it, keys and premultiplies it and *re-encodes* it, which is why it is not the file's own blocks -- a pass-through is (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "texture_hdr_sprite",
+   "reason": "A Radiance picture reaches XNA's TextureImporter as a PixelBitmapContent<Vector4> and its SpriteTextureProcessor converts those floats to Color; the canonical route decodes .hdr through the shared image decoder, whose RGBE-to-LDR conversion applies its own gamma. The XNA facade's own route answers the floats (RadianceHdrDecoder, XNAPP-167); it is the canonical Rgba8 route this case exercises. Open as a *design* question rather than a defect, and recorded so the choice is visible.",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "texture_jpg_sprite",
+   "reason": "Two conformant JPEG decoders disagree within an IDCT's tolerance. XNA decodes through D3DX and CNA through stb_image; the pixels differ by a few units and neither is wrong. Already recorded for the per-extension differential, which compares JPEG pixels within a tolerance rather than exactly (XNAPP-167).",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "texture_png4x4_texture_dxt",
+   "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+   "paths": [
+    "root/levelDigests"
+   ]
+  },
+  {
+   "case": "xbox_font_description",
+   "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The sheet's height follows the same pixel: on a HiDef target it is the packed height rounded up to four -- measured over the 186 distinct sprite-font atlases in the public sample corpus whose two candidate answers differ, where every HiDef one is that and every Reach one is the next power of two, with no exception either way (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-104). XNA's glyphs reach y=124 here and CNA's y=114, so the two sheets are 128 and 116 rows tall for the same reason their boxes differ.",
+   "paths": [
+    "root/glyphs",
+    "root/cropping",
+    "root/atlas/levelDigests",
+    "root/atlas/height",
+    "root/atlas/levelByteSizes"
+   ]
+  },
+  {
+   "case": "xbox_fx_minimal",
+   "reason": "The Xbox 360's shaders are a different instruction set. XNA compiles this effect to 980 bytes of Xenos bytecode where the same source is 804 bytes of Direct3D 9 bytecode for Windows, and the compiler that produces the console's form ships only inside XNA Game Studio's Xbox toolchain -- there is no fxc profile for it and no public specification of the encoding. Every other Xbox payload in this corpus is now byte-identical; this one is the type the plan calls EXTERNAL_BLOCKED (plans/plan_xnapipeline_parity.md XNAPP-252).",
+   "paths": [
+    "root/digest",
+    "root/bytecodeByteCount"
+   ]
+  },
+  {
+   "case": "xbox_png_texture_dxt",
+   "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+   "paths": [
+    "root/levelDigests"
+   ]
+  }
+ ]
+}

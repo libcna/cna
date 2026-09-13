@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::ClusteredForwardGenerated",
+  "package": "clustered_forward",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kForwardEsVertexSource","source":"forward.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kForwardEsFragmentSource","source":"forward.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kForwardVulkanVertexSpirV","source":"forward.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kForwardVulkanFragmentSpirV","source":"forward.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

@@ -5,13 +5,20 @@
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "shaders/auto_exposure/AutoExposureShaderPackage.generated.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace CNA::Graphics {
 
@@ -26,42 +33,46 @@ namespace CNA::Graphics {
         constexpr int kGroupSize = 8;
         constexpr int kPartials = kGroups * kGroups;
 
-        const char* const kReduction = R"(#version 310 es
-precision highp float;
-layout(local_size_x = 8, local_size_y = 8) in;
-uniform sampler2D uScene;
-layout(std430, binding = 0) writeonly buffer Partials { float partials[]; };
-shared float sharedSums[64];
-void main() {
-    // One sample per invocation, at the centre of its cell of a 64 x 64 grid over the frame.
-    vec2 grid = vec2(gl_NumWorkGroups.xy * gl_WorkGroupSize.xy);
-    vec2 uv = (vec2(gl_GlobalInvocationID.xy) + 0.5) / grid;
-    vec3 colour = texture(uScene, uv).rgb;
-    float luminance = dot(colour, vec3(0.2126, 0.7152, 0.0722));
-    // The log-average is what a plain mean is not: robust to a handful of very bright pixels.
-    // The epsilon keeps a black frame finite rather than negative infinity.
-    float value = log(max(luminance, 1e-4));
+        template <std::size_t N>
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(const std::uint32_t (&words)[N])
+        {
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+            return std::vector<std::uint8_t>(begin, begin + sizeof(words));
+        }
 
-    uint local = gl_LocalInvocationIndex;
-    sharedSums[local] = value;
-    memoryBarrierShared();
-    barrier();
-    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
-        if (local < stride) sharedSums[local] += sharedSums[local + stride];
-        memoryBarrierShared();
-        barrier();
-    }
-    if (local == 0u) {
-        uint group = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
-        partials[group] = sharedSums[0];
-    }
-}
-)";
+        [[nodiscard]] ShaderPackageEXT CreateReductionPackage()
+        {
+            using namespace detail::AutoExposureGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "auto_exposure/reduction.es.comp.glsl",
+                                  std::string(kReductionEsComputeSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "auto_exposure/reduction.desktop.comp.glsl",
+                                  std::string(kReductionDesktopComputeSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "auto_exposure/reduction.vulkan.comp.spv",
+                                  ToBytes(kReductionVulkanComputeSpirV)),
+                },
+                {CNA::ShaderStageEXT::Compute},
+                {
+                    ShaderBindingRequirementEXT(
+                        "uScene", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Compute),
+                    ShaderBindingRequirementEXT(
+                        "Partials", 1, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                });
+        }
 
     } // namespace
 
     AutoExposureEXT::AutoExposureEXT(GraphicsDevice& device)
-        : reducer_(std::make_unique<ComputeShader>(device, kReduction)),
+        : reducer_(std::make_unique<ComputeShader>(device, CreateReductionPackage())),
           partials_(std::make_unique<StorageBufferT<float>>(device, kPartials))
     {
     }
@@ -71,7 +82,7 @@ void main() {
     float AutoExposureEXT::measureAverageLuminance(Texture2D& scene)
     {
         reducer_->bindTexture(0, "uScene", scene);
-        reducer_->bindStorageBuffer(0, partials_->getBuffer());
+        reducer_->bindStorageBuffer(1, partials_->getBuffer());
         reducer_->dispatch(kGroups, kGroups);
 
         const std::vector<float> partials = partials_->getData();

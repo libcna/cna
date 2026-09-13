@@ -32,9 +32,11 @@ namespace CNA::Graphics {
          * @brief Weighted blended order-independent transparency.
          *
          * The pipeline owns the accumulation targets and the resolve; the application's shader
-         * writes through `WeightedBlendedTransparency::getAccumulationGlsl()` and no sorting is
-         * needed. An approximation, and the one place sorting still wins is a small number of
-         * large surfaces at very different depths.
+         * writes the matching accumulation and revealage outputs, either through
+         * `WeightedBlendedTransparency::getAccumulationGlsl()` on source-capable GLSL renderers or
+         * an equivalent portable shader-package variant. No sorting is needed. An approximation,
+         * and the one place sorting still wins is a small number of large surfaces at very
+         * different depths.
          */
         OrderIndependent
     };

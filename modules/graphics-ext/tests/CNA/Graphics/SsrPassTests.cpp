@@ -19,6 +19,8 @@
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
+#include "CNA/GraphicsCapability.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -237,7 +239,8 @@ TEST(SsrPassTest, ATiltedSurfaceReflectsTheColourItsRayReaches)
     // Without a working march the pixel keeps the plane's own black.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -265,7 +268,8 @@ TEST(SsrPassTest, ZeroIntensityReproducesTheSceneExactly)
     // come back byte-identical to the source, so the hit above is the pass and not the setup.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -294,7 +298,8 @@ TEST(SsrPassTest, APlaneDoesNotReflectItself)
     // computed from the normal supplied with it, so the scene is one a camera could actually see.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepthWithoutBand(gd);
@@ -326,7 +331,8 @@ TEST(SsrPassTest, MismatchedDepthAndNormalsDoNotFabricateAReflection)
     // reflection until you notice it never shows anything else. The depth bias is what rejects it.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeFlatDepth(gd, kFarByte);
@@ -363,7 +369,8 @@ TEST(SsrPassTest, TheDepthBiasIsWhatSeparatesASelfHitFromARealOne)
     // bias is in the comparison and doing the work the test above depends on.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -393,7 +400,8 @@ TEST(SsrPassTest, ASurfaceFacingTheCameraReflectsNothing)
     // the classic symptom.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeFlatDepth(gd, kFarByte);
@@ -421,7 +429,8 @@ TEST(SsrPassTest, TheClearedFarPlaneIsNotReflective)
     // have shipped broken.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeFlatDepth(gd, 255);
@@ -446,7 +455,8 @@ TEST(SsrPassTest, AZeroDepthIsAlsoNotReflective)
     // position from zero puts the surface at the eye, and every ray from there hits immediately.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeFlatDepth(gd, 0);
@@ -474,7 +484,8 @@ TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
     // it, both marches converge on the same crossing and answer with the same colour.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -515,7 +526,8 @@ TEST(SsrPassTest, RoughnessSpreadsTheReflectionAndSmoothnessDoesNot)
     // across a hard edge *is* -- there is no second thing a 32-pixel frame could show.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeTiltedPlaneDepth(gd);
@@ -570,7 +582,8 @@ TEST(SsrPassTest, ABackFacingSurfaceIsNotReflected)
     // entirely plausible, which is why it needs asserting rather than eyeballing.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -599,7 +612,8 @@ TEST(SsrPassTest, ARayPassingWellBehindASurfaceIsNotAHit)
     // would put a foreground object into a mirror that is looking somewhere else entirely.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -629,7 +643,8 @@ TEST(SsrPassTest, AReflectionEndingNearTheBorderFadesRatherThanStopping)
     // down the edge of the screen, which is the usual giveaway of the technique.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -757,7 +772,8 @@ TEST(SsrPassTest, AnAbsurdStepCountIsClampedOnUseRatherThanRejected)
     // a file should not throw, and a pass that silently marched 100000 steps would hang the frame.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -791,7 +807,8 @@ TEST(SsrPassTest, SupportAnswersAboutTheRendererAndNotAboutTheFrame)
     // sentence and the code cannot drift apart again.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     EXPECT_TRUE(pass.isSupported(gd))
@@ -821,7 +838,8 @@ TEST(SsrPassTest, AFrameWithNoCameraIsCopiedThroughRatherThanGuessedAt)
     // unchanged.
     GraphicsDevice gd;
     SsrPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSR shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
@@ -845,15 +863,22 @@ TEST(SsrPassTest, AFrameWithNoCameraIsCopiedThroughRatherThanGuessedAt)
 
 TEST(SsrPassTest, SupportAsksTheTwoPartQuestion)
 {
-    // MOD-1699: CustomEffects alone means the renderer *accepts* an effect. A pass that believed it
-    // would report success while copying its input.
+    // MOD-1699/MOD-2239m: CustomEffects alone means the renderer accepts an effect. The pass also
+    // needs one complete language variant from its package; it does not require runtime execution
+    // of source text when a renderer can select the checked-in SPIR-V payload instead.
     GraphicsDevice gd;
     SsrPass pass(gd);
 
-    const bool executes = gd.ExecutesShaderEffectSourceEXT();
-    if (!executes)
-        EXPECT_FALSE(pass.isSupported(gd))
-            << "the pass claimed support on a renderer that will not run its source";
+    const auto supportsPair = [&gd](const CNA::ShaderLanguageEXT language) {
+        return gd.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Vertex) &&
+               gd.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment);
+    };
+    const bool hasPackageLanguage = supportsPair(CNA::ShaderLanguageEXT::SpirV) ||
+                                    supportsPair(CNA::ShaderLanguageEXT::GlslDesktop) ||
+                                    supportsPair(CNA::ShaderLanguageEXT::GlslEs);
+    const bool expected = gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects) &&
+                          hasPackageLanguage;
+    EXPECT_EQ(pass.isSupported(gd), expected);
 }
 
 } // namespace

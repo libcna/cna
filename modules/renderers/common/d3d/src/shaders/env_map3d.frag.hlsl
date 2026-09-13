@@ -31,6 +31,7 @@ struct PSInput
     float3 EyeDir       : TEXCOORD1;
     float2 UV           : TEXCOORD2;
     float  FogFactor    : TEXCOORD3;
+    float  Fresnel      : TEXCOORD4;
 };
 
 float4 main(PSInput input) : SV_Target
@@ -53,10 +54,7 @@ float4 main(PSInput input) : SV_Target
     float4 envSample = uEnvMap.Sample(uEnvMapSampler, reflDir);
     float3 baseColor = litRGB * texColor.rgb;
     float combinedAlpha = DiffuseColor.a * texColor.a;
-    float viewAngle = dot(E, N);
-    float blendFactor = (Light0DiffFresnelEn.w > 0.5)
-        ? pow(max(1.0 - abs(viewAngle), 0.0), EnvMapSpecFresnelF.w) * EmissiveEm.w
-        : EmissiveEm.w;
+    float blendFactor = input.Fresnel;
     // Task 891: FNA's real PSEnvMap/PSEnvMapSpecular scale the whole `envmap` sample (both the
     // base lerp target and the specular term, the latter already fixed by Task 395) by
     // combinedAlpha before use -- the base lerp's envSample.rgb was still unscaled here.

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/AerialPerspectivePass.hpp"
-#include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -11,8 +11,10 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "AerialPerspectiveShaderPackage.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace CNA::Graphics {
@@ -22,75 +24,6 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
     namespace {
-
-        constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-}
-)";
-
-        // Two matrices, because the two questions this pass asks are in different spaces. The world
-        // direction decides how much atmosphere is above the ray and where the sun is relative to
-        // it, and both of those are world quantities. The ray *length* is a view quantity: the
-        // prepass records distance along view -Z, and a pixel at the edge of a wide frame is
-        // further from the eye than its depth says. Using the depth directly would thin the
-        // atmosphere toward the corners of the screen -- a vignette in reverse, which reads as a
-        // lens artefact rather than as air.
-        constexpr const char* kFragmentBody = R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uDepthSampler;
-uniform mat4  uInverseViewProjection;
-uniform mat4  uInverseProjection;
-uniform vec3  uSunDirection;
-uniform float uTurbidity;
-uniform float uIntensity;
-uniform float uScaleHeight;
-uniform float uFarPlane;
-
-const float kCnaSkyDepth = 0.999;
-
-void main() {
-    vec4 source = texture(texture1, TexCoord);
-    float depth = cnaDecodeLinearDepth(texture(uDepthSampler, TexCoord));
-
-    // Nothing was drawn here: this pixel *is* the sky, which already carries the whole atmosphere.
-    // Adding more would double it, and the seam where geometry meets sky is exactly where an error
-    // of that kind is most visible.
-    if (depth <= 0.0 || depth >= kCnaSkyDepth) {
-        FragColor = source;
-        return;
-    }
-
-    vec2 ndc = TexCoord * 2.0 - 1.0;
-
-    vec4 world = uInverseViewProjection * vec4(ndc, 1.0, 1.0);
-    vec3 direction = normalize(world.xyz / world.w);
-
-    vec4 viewRay = uInverseProjection * vec4(ndc, 1.0, 1.0);
-    vec3 view = viewRay.xyz / viewRay.w;
-    float alongRay = depth * uFarPlane * (length(view) / max(-view.z, 1e-4));
-
-    float airMass = cnaAerialAirMass(direction, alongRay, uScaleHeight);
-
-    // The two halves of `cnaAerialPerspective`, separated only so the intensity multiplies the
-    // scattered light and not the geometry's own colour. Applying it to both -- by dividing on the
-    // way in and multiplying on the way out -- gives the same answer and divides by zero when a
-    // caller turns the sun off.
-    vec3 graded = source.rgb * cnaAtmosphereTransmittance(uTurbidity, airMass)
-                + cnaScatteringAlongPath(direction, uSunDirection, uTurbidity, airMass)
-                  * uIntensity;
-    FragColor = vec4(graded, source.a);
-}
-)";
 
         float AirMassAlongDirection(const float upwards)
         {
@@ -104,14 +37,11 @@ void main() {
 
     AerialPerspectivePass::AerialPerspectivePass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
+        , packedDepth_(DepthNormalPrepass::usesPackedDepthEXT(device))
     {
-        std::string source = "#version 300 es\nprecision highp float;\n";
-        source += DepthNormalPrepass::getDepthDecodeGlsl(
-            DepthNormalPrepass::usesPackedDepthEXT(device));
-        // MOD-2141: the sky's own model, emitted rather than restated here.
-        source += AtmosphericSky::getModelGlsl();
-        source += kFragmentBody;
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, source);
+        const ShaderPackageEXT package = detail::CreateAerialPerspectiveShaderPackage();
+        if (package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
 
         bool logged = false;
         detail::reportShaderCompileFailure(device, "AerialPerspectivePass", effect_.get(), logged);
@@ -174,13 +104,22 @@ void main() {
         effect_->Apply();
         effect_->SetUniformInt("uDepthSampler", 1);
         effect_->SetTexture(1, *context.sourceDepth);
-        effect_->SetUniformMat4("uInverseViewProjection", &inverseViewProjection.M11);
-        effect_->SetUniformMat4("uInverseProjection", &context.inverseProjection.M11);
-        effect_->SetUniformVec3("uSunDirection", sunDirection_.X, sunDirection_.Y, sunDirection_.Z);
-        effect_->SetUniformFloat("uTurbidity", std::max(turbidity_, 1.0f));
-        effect_->SetUniformFloat("uIntensity", std::max(intensity_, 0.0f));
-        effect_->SetUniformFloat("uScaleHeight", std::max(scaleHeight_, 1e-3f));
-        effect_->SetUniformFloat("uFarPlane", context.farPlane);
+        std::array<float, 32> matrices{};
+        inverseViewProjection.ToColumnMajor(matrices.data());
+        context.inverseProjection.ToColumnMajor(matrices.data() + 16);
+        const std::array sunDirection{
+            sunDirection_.X, sunDirection_.Y, sunDirection_.Z};
+        const std::array scalars{
+            std::max(turbidity_, 1.0f),
+            std::max(intensity_, 0.0f),
+            std::max(scaleHeight_, 1e-3f),
+            context.farPlane,
+            packedDepth_ ? 1.0f : 0.0f,
+        };
+        effect_->SetUniformMat4Array("uAerialMatrices", matrices.data(), 2);
+        effect_->SetUniformVec3Array("uAerialVectors", sunDirection.data(), 1);
+        effect_->SetUniformFloatArray("uAerialScalars", scalars.data(),
+                                      static_cast<int>(scalars.size()));
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);
@@ -194,7 +133,8 @@ void main() {
 
     bool AerialPerspectivePass::isSupported(GraphicsDevice& device) const
     {
-        return PostProcessPass::isSupported(device) && effect_ && effect_->IsEffectValid();
+        return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+            && effect_ && effect_->IsEffectValid();
     }
 
     Vector3 AerialPerspectivePass::getSunDirection() const { return sunDirection_; }

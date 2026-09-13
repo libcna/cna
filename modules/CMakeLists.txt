@@ -324,6 +324,7 @@ add_subdirectory(content-pipeline)
 add_subdirectory(storage)
 add_subdirectory(runtime)
 add_subdirectory(devices)
+add_subdirectory(phone)
 add_subdirectory(devices-ext)
 add_subdirectory(graphics-ext)
 if(CNA_ENABLE_NET)
@@ -384,7 +385,7 @@ endif()
 set(_cna_framework_modules
     c-api core math platform runtime graphics input audio media video-ffmpeg content
     content-pipeline storage
-    devices devices-ext graphics-ext gamer-services net)
+    devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12

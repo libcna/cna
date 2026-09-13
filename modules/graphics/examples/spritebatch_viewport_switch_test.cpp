@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -116,6 +117,11 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
+        // This fixture isolates per-batch Viewport capture. Keep its authored 96x72
+        // coordinates in physical pixels even when a headless renderer owns a larger
+        // implicit back buffer and its default presentation policy would scale them.
+        dev.GetRenderer().SetPresentationMode(static_cast<int>(
+            CNA::Internal::Renderers::CnaPresentationMode::NativeBackBuffer));
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         dev.setViewportProperty(Viewport(0, 0, kBBW, kBBH));
         dev.Clear(Color::Black);

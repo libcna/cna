@@ -28,6 +28,7 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace CNA::Internal::Renderers::DirectX11
@@ -36,6 +37,9 @@ namespace CNA::Internal::Renderers::DirectX11
 
     class DirectX11Renderer;
     class D3D11EffectRenderer;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+    class D3D11CompiledEffect;
+#endif
 
     /// Real D3D11 SpriteBatch renderer (plans/plan_dx.md Phase DX9).
     class D3D11SpriteBatchRenderer final : public ISpriteBatchRenderer
@@ -47,6 +51,7 @@ namespace CNA::Internal::Renderers::DirectX11
         struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
 
         explicit D3D11SpriteBatchRenderer(DirectX11Renderer* owner);
+        ~D3D11SpriteBatchRenderer() override;
 
         void Begin() override;
         void End() override;
@@ -54,6 +59,8 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetCustomEffect(Microsoft::Xna::Framework::Graphics::Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -74,6 +81,10 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11InputLayout* GetOrCreateSprite2DInputLayout();
         ID3D11Buffer* GetOrCreatePerDrawBuffer();
         void GetCurrentViewportSize(float& width, float& height) const;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        void ApplyCompiledSpriteVertexShader(float viewportWidth, float viewportHeight);
+        void FlushBatchWithCompiledEffect();
+#endif
 
         DirectX11Renderer* owner_ = nullptr;
         ComPtr<ID3D11Device> device_;
@@ -91,6 +102,10 @@ namespace CNA::Internal::Renderers::DirectX11
         bool begun_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Microsoft::Xna::Framework::Graphics::Effect* customEffect_ = nullptr;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        std::unique_ptr<D3D11CompiledEffect> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+#endif
 
         // Defaults mirror EasyGLSpriteBatchRenderer's own: Linear filter, Clamp address -- a
         // SpriteBatch that never calls SetSamplerFilter/SetSamplerAddressMode behaves exactly as
@@ -98,5 +113,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_ = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
     };
 }

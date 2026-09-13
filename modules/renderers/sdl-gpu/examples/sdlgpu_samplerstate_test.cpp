@@ -45,6 +45,10 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
@@ -103,6 +107,14 @@ namespace
             }
         return pixels;
     }
+
+    struct DualTextureVertex
+    {
+        float x, y, z;
+        float u0, v0;
+        float u1, v1;
+    };
+    static_assert(sizeof(DualTextureVertex) == 28);
 }
 
 class SdlGpuSamplerStateTest : public Game
@@ -118,6 +130,7 @@ class SdlGpuSamplerStateTest : public Game
     std::unique_ptr<Texture2D> texBlackWhite_;
 
     std::unique_ptr<VertexBuffer> quadU2Vb_;
+    std::unique_ptr<VertexBuffer> dualU2Vb_;
 
     int frame_ = 0;
     int passCount_ = 0;
@@ -197,7 +210,11 @@ class SdlGpuSamplerStateTest : public Game
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.Apply();
-        dev.SetVertexBuffer(quadU2Vb_.get());
+        // DualTextureEffect owns two independent coordinate semantics. Supplying only TEXCOORD0
+        // legitimately defaults TEXCOORD1 to (0,0), which would make this old oracle sample the
+        // black half regardless of the slot-1 addressing mode. Feed the same U=1.25 through both
+        // declared sets so Wrap versus Clamp is the only discriminator.
+        dev.SetVertexBuffer(dualU2Vb_.get());
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -250,6 +267,25 @@ protected:
         };
         quadU2Vb_ = std::make_unique<VertexBuffer>(dev, VertexPositionTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
         quadU2Vb_->SetData(verts, 0, 6);
+
+        const VertexDeclaration dualDeclaration(28, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 1),
+        });
+        const DualTextureVertex dualVerts[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 2.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f, 2.0f, 0.0f, 2.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 2.0f, 1.0f, 2.0f, 1.0f},
+        };
+        dualU2Vb_ = std::make_unique<VertexBuffer>(
+            dev, dualDeclaration, 6, BufferUsage::None);
+        dualU2Vb_->SetDataRaw(dualVerts, 6, static_cast<int>(sizeof(DualTextureVertex)));
     }
 
     void Draw(const GameTime&) override

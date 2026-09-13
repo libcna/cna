@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
+#include "CNA/Internal/PackedRounding.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
@@ -79,9 +80,15 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     private:
         uint16_t packedValue_;
         static uint16_t Pack(float r, float g, float b) {
-            auto ri = static_cast<uint16_t>(std::clamp(r, 0.0f, 1.0f) * 31.0f + 0.5f);
-            auto gi = static_cast<uint16_t>(std::clamp(g, 0.0f, 1.0f) * 63.0f + 0.5f);
-            auto bi = static_cast<uint16_t>(std::clamp(b, 0.0f, 1.0f) * 31.0f + 0.5f);
+            // XNA saturates the channel and rounds it to the nearest integer with ties to even
+            // (.NET Math.Round), where a "+ 0.5f then truncate" rounds a tie away from zero and a
+            // NaN channel reaches an integer cast undefined in C++. Measured on the XNA 4.0
+            // runtime: tests/reference/xna40/framework/framework-packing-oracle.json, cases
+            // packed/*/ties and packed/*/nan_and_infinities.
+
+            auto ri = static_cast<uint16_t>(CNA::Internal::ClampAndRound(std::clamp(r, 0.0f, 1.0f) * 31.0f, 0.0f, 31.0f));
+            auto gi = static_cast<uint16_t>(CNA::Internal::ClampAndRound(std::clamp(g, 0.0f, 1.0f) * 63.0f, 0.0f, 63.0f));
+            auto bi = static_cast<uint16_t>(CNA::Internal::ClampAndRound(std::clamp(b, 0.0f, 1.0f) * 31.0f, 0.0f, 31.0f));
             return static_cast<uint16_t>((ri << 11) | (gi << 5) | bi);
         }
     };

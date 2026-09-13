@@ -21,6 +21,11 @@
 #include <unordered_map>
 #include <vector>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+
 namespace CNA::Internal::Renderers::DirectX9
 {
     using Microsoft::WRL::ComPtr;
@@ -28,6 +33,10 @@ namespace CNA::Internal::Renderers::DirectX9
     class D3D9RenderTargetRenderer;
     class D3D9RenderTargetCubeRenderer;
     class D3D9ShaderCache;
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+    class D3D9CompiledEffect;
+    struct D3D9MojoShaderContextEXT;
+#endif
 
     /// Narrow operation list for REMED-GFX-092's checked D3D9 state/target/depth path.  This is
     /// deliberately not a general D3D9 interception layer: it exists both to centralize the
@@ -209,7 +218,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// target transition.  Used only by the D3D9 render-target implementations.
         void BindRenderTargetSurfacesEXT(IDirect3DSurface9* const* colorSurfaces, int colorCount,
                                          IDirect3DSurface9* depthStencilSurface,
-                                         int width, int height, const char* context);
+                                         int depthStencilFormat, int width, int height,
+                                         const char* context);
         /// REMED-GFX-092: checked creation wrapper used only for render-target depth surfaces.
         /// It guarantees a failed call leaves the supplied output slot null and maps device-lost
         /// results through this renderer's established lost-device lifecycle.
@@ -269,6 +279,48 @@ namespace CNA::Internal::Renderers::DirectX9
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        /** @brief Creates a compiled XNA effect using its native D3D9 shader tokens. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /** @brief Reports compiled effects only in the conformance-gated opt-in build. */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /** @brief Returns the renderer-wide compiled-effect shader/register context. */
+        CNAEXT D3D9MojoShaderContextEXT* GetMojoShaderContextEXT();
+
+        /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
+        [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
+        {
+            return lifetimeToken_;
+        }
+
+        /**
+         * @brief Draws with the currently applied compiled-effect pass.
+         * @param fallback Primary vertex buffer used when @p params has no explicit stream list.
+         * @param indexBuffer Optional index buffer.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param instanceCount Number of instances; one for an ordinary draw.
+         * @param params Complete public draw parameters and stream bindings.
+         * @param runtime Applied compiled-effect runtime.
+         * @param spriteBatchSlotZeroTexture Optional SpriteBatch source overriding pixel slot zero.
+         * @param spriteBatchTextures Optional public texture collection for unassigned pixel slots.
+         */
+        CNAEXT void DrawCompiledEffectEXT(
+            const IVertexBufferRenderer& fallback,
+            const IIndexBufferRenderer* indexBuffer,
+            PrimitiveType primitive,
+            int primitiveCount,
+            int instanceCount,
+            const GpuDrawParams& params,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
+#endif
+
         // ---- IGraphicsRenderer: real (D9-30/D9-6 -- GraphicsDevice's own constructor unconditionally
         // pushes BlendState::Opaque/DepthStencilState::Default/RasterizerState::CullCounterClockwise
         // and the viewport right after construction (Task 896/955, UpdateViewportFromWindow()), so
@@ -307,6 +359,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// exist to sample -- previously listed there since nothing forced it in early the way
         /// `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` were.
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        void ApplySamplerAddressW(int slot, int addressW) override;
 
         // ---- IGraphicsRenderer: silently-empty-default virtuals, explicitly loud until real ----
         // (D9-11's own distinction: these have a `{}` default on IGraphicsRenderer itself, so an
@@ -385,6 +439,11 @@ namespace CNA::Internal::Renderers::DirectX9
         void UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
 
     private:
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        friend class D3D9CompiledEffect;
+#endif
+        std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+
         void CreateDeviceResources(const GraphicsRendererCreateArgs& args);
         /// D9-33/D9-34: (re)builds currentPresentParams_ from the tracked width_/height_/format/
         /// fullscreen/swap-interval fields -- shared by construction, resize, and device-lost
@@ -445,10 +504,14 @@ namespace CNA::Internal::Renderers::DirectX9
         void CacheDefaultDepthStencilSurfaceEXT();
         /// D9-82: returns (creating + caching on first request) the real IDirect3DVertexDeclaration9
         /// for `strideInBytes`, using D3D9VertexDeclarations.hpp's own stride-keyed
-        /// D3DVERTEXELEMENT9 tables. Throws if `strideInBytes` is not one of the 5 established
-        /// layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
+        /// D3DVERTEXELEMENT9 tables. Throws if `strideInBytes` is not one of the established
+        /// fallback layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
         /// (real D3D9 semantics), so this cache is never invalidated/re-registered.
         IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes);
+        /// Returns the buffer's translated public declaration, falling back to the legacy
+        /// stride-keyed declaration only for internal buffers that do not carry one.
+        IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(
+            const IVertexBufferRenderer& buffer, std::size_t strideInBytes);
         /// D9-83: returns (creating on first request) the real 2-stream
         /// IDirect3DVertexDeclaration9 for CNA's own CNAEXT Instanced3D shader -- stream 0
         /// (per-vertex, step rate 1): POSITION0 (FLOAT3, offset 0); stream 1 (per-instance, step
@@ -491,10 +554,9 @@ namespace CNA::Internal::Renderers::DirectX9
                                     const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                     const GpuDrawParams& params);
         /// D9-82d: real `DualTextureEffect` dispatch -- two-sampler draw (`texture0`/`texture1` ->
-        /// `Texture`/`Texture2`). Uses a new, D3D9-only stride-28 vertex layout
-        /// (`D3D9VertexDeclarations.hpp`) since `DualTextureEffect.fx`'s real `VSInputTx2` needs two
-        /// distinct texture-coordinate sets, unlike D3D11's own simplified single-UV
-        /// reimplementation. Defined in `D3D9EffectDraw.cpp`.
+        /// `Texture`/`Texture2`). Uses the caller's translated stride-28 or vertex-colour stride-32
+        /// declaration because `DualTextureEffect.fx`'s real inputs require two distinct texture
+        /// coordinates. Defined in `D3D9EffectDraw.cpp`.
         void DrawDualTextureEffectEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                       std::size_t stride, const Matrix& world, const Matrix& view,
                                       const Matrix& projection, PrimitiveType primitive, int primitiveCount,
@@ -567,6 +629,9 @@ namespace CNA::Internal::Renderers::DirectX9
         // BuildPresentParameters() without needing the original GraphicsRendererCreateArgs again.
         int backBufferFormatOrdinal_ = 0;   // Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color
         int depthStencilFormatOrdinal_ = 0; // Microsoft::Xna::Framework::Graphics::DepthFormat::None
+        /// D9-128: format of the currently bound depth-stencil surface. Offscreen targets can
+        /// differ from the presentation format, and native clear flags must follow this value.
+        int activeDepthStencilFormatOrdinal_ = 0;
         bool isFullScreen_ = false;
         int swapInterval_ = 1;
         /// D9-32: the game's requested Microsoft::Xna::Framework::Graphics::GraphicsProfile
@@ -602,6 +667,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
         ComPtr<IDirect3D9> d3d9_;
         ComPtr<IDirect3DDevice9> device_;
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        std::shared_ptr<D3D9MojoShaderContextEXT> mojoShaderContext_;
+#endif
         D3DCAPS9 caps_{};
         /// D9-53: the device's own implicit default depth-stencil surface, cached by
         /// CacheDefaultDepthStencilSurfaceEXT() so RestoreBackBufferRenderTargetEXT() can restore it

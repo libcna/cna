@@ -122,12 +122,20 @@ namespace Microsoft::Xna::Framework
 
     float MathHelper::ToDegrees(float radians)
     {
-        return static_cast<float>(radians * 57.295779513082320876798154814105);
+        // The conversion factor is `180 / Pi` computed in single precision from XNA's own `Pi`,
+        // not the exactly rounded 57.29578: over 31 measured angles that form answers every one
+        // and `radians * 57.29577951308232f` answers 12 of them
+        // (tests/reference/xna40/framework/matrix-oracle.txt, `todegrees/*`;
+        // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        return radians * (180.0f / Pi);
     }
 
     float MathHelper::ToRadians(float degrees)
     {
-        return static_cast<float>(degrees * 0.017453292519943295769236907684886);
+        // A single-precision multiplication by a single-precision constant. Multiplying in
+        // `double` by the exact factor and narrowing once is a different answer, by an ulp, on an
+        // angle small enough for it to show (`toradians/1eneg07`).
+        return degrees * 0.017453292519943295f;
     }
 
     float MathHelper::WrapAngle(float angle)

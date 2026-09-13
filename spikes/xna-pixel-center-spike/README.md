@@ -15,7 +15,7 @@ Two CNA expectations contradict each other, and each is defended by a passing te
 
 ## How to run
 
-    ./build-and-run.sh              # WINEPREFIX=~/.wine-cna-xna40, DISPLAY=:131
+    ./build-and-run.sh              # WINEPREFIX=~/.wine-cna-xna40, DISPLAY=:0
 
 Needs the XNA 4.0 redistributable in that prefix (it is in the GAC there) and `csc.exe` from
 .NET 4.0. The prefix routes Direct3D 9 through **DXVK**, not wined3d -- so what is measured is a
@@ -149,6 +149,39 @@ reported all twenty formats "accepted" at both profiles, which was implausible e
 leg report what the target actually IS rather than that construction had not thrown -- and that is
 where the substitution appeared. CNA deliberately does NOT follow this (MOD-115); see
 `REMED-GFX-245`.
+
+## Fifth question: constant depth bias
+
+`LEG-D` redraws a flat triangle under `CompareFunction.Less` on a `Depth24` render target. Red means
+the equal-depth green redraw was rejected; green means its negative constant bias pulled it toward
+the camera. The real XNA 4.0 D3D9 result through DXVK 2.6 is:
+
+| geometry and XNA bias | result |
+|---|---|
+| near plane `z=0`, `-1e-4` | red |
+| `z=0.5`, `0` | red |
+| `z=0.5`, `-1e-8` | green |
+| `z=0.5`, `-1e-7` | green |
+| `z=0.5`, `-1e-4` | green |
+| `z=0.5`, `+1e-4` | red |
+
+The near-plane result exposed a bad CNA fixture premise: in D3D/XNA clip space `z=0` is already the
+near plane, so a negative offset clamps and cannot become less. The original EasyGL fixture used
+that geometry because OpenGL maps clip `z=0` to depth 0.5, then used `-1e6`, a magnitude expressed
+as if XNA exposed `glPolygonOffset` units. It was not a renderer-neutral XNA contract.
+
+FNA3D supplies the implementation evidence for the units. Its D3D11 and OpenGL drivers both
+multiply `RasterizerState.DepthBias` by `(2^depthBits - 1)` before assigning D3D's integer
+`DepthBias` or GL's `units`; D16 uses 65535 and D24/D24S8 use 16777215. XNA therefore exposes a
+**normalized depth offset**, while each backend converts it to the active target's native units.
+The small values above are additionally translation-sensitive because DXVK maps D24S8 to
+D32_FLOAT_S8 on this GPU, but the sign controls and `-1e-4` result are unambiguous.
+
+The permanent shared fixture now uses `z=0.5`, constant bias `-1e-4`, and slope bias `-2`. Before
+conversion, D3D11 and D3D12 each scored 3/4 because direct float-to-integer conversion made the
+constant term zero. With target-format conversion, D3D11, D3D12, and EasyGL each score 4/4. EasyGL
+must use its tracked target format: querying `GL_DEPTH_BITS` on CNA's framebuffer returned zero even
+while its attached depth renderbuffer was active.
 
 ## What this settles
 

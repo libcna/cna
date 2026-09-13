@@ -1634,7 +1634,7 @@ namespace CNA::Internal::Renderers::Diligent
         int virtualHeight_ = 0;
         int swapInterval_ = 1;
         int maxTextureDimension_ = 16384;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
 
         PipelineKey state_;
         int referenceStencil_ = 0;

@@ -4,9 +4,10 @@
 # run on a clean checkout at all (GLTF-003/GLTF-011). Keep this anchored and directory-only.
 /build*/
 cmake-build-*/
-# The same names as SYMLINKS: build trees now live on the external disk
-# (/media/robertvokac/claude/tmp/cna) with an in-repo symlink, and a trailing-slash
-# pattern matches only real directories.
+# The same names without a trailing slash. A trailing-slash pattern matches only real
+# directories, so this second form also covers symlinked build trees. Build trees once
+# lived on an external disk reached by an in-repo symlink; that disk is gone and they
+# now live in the repo (see /build*/ above).
 cmake-build-*
 .idea/*
 cmake-build-debug/*
@@ -103,3 +104,9 @@ build/doxygen-cnaext/
 # checked; the logs are kept only until the next run.
 build/renderer-sweep/
 spikes/occlusion-count-spike/occlusion_count_probe
+
+# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-187: the importer suites give their contexts an
+# intermediate directory of `obj` and an output directory of `bin`, which is what XNA's own
+# `ContentImporterContext` answers; run from the repository root, that leaves an `obj/` here.
+# Build output of a test run, never source.
+/obj/

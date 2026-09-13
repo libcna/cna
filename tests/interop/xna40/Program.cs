@@ -26,6 +26,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Media;
 
 namespace Cna.Xna40.Interop
 {
@@ -218,6 +219,110 @@ namespace Cna.Xna40.Interop
             }
         }
 
+        private static void CheckTextureCube(Outcome outcome, ContentManager content,
+                                              string name, Dictionary<string, object> root)
+        {
+            TextureCube texture = content.Load<TextureCube>(name);
+            Expect(outcome, "Size", Number(root, "size"), texture.Size);
+            Expect(outcome, "LevelCount", Number(root, "mipCount"), texture.LevelCount);
+            Expect(outcome, "Format", root["surfaceFormat"], texture.Format.ToString());
+
+            // Each face is a different flat colour, which is the one shape that makes a runtime
+            // reading the faces in another order say so rather than merely look wrong.
+            var expected = root["faceFirstTexels"] as List<object>;
+            if (expected == null || expected.Count != 6)
+            {
+                outcome.Problems.Add("the expectation names no six face colours");
+                return;
+            }
+            CubeMapFace[] faces =
+            {
+                CubeMapFace.PositiveX, CubeMapFace.NegativeX, CubeMapFace.PositiveY,
+                CubeMapFace.NegativeY, CubeMapFace.PositiveZ, CubeMapFace.NegativeZ,
+            };
+            for (int index = 0; index < 6; index++)
+            {
+                var pixels = new Color[texture.Size * texture.Size];
+                texture.GetData(faces[index], pixels);
+                var want = expected[index] as List<object>;
+                Expect(outcome, faces[index] + " R", want[0], (int)pixels[0].R);
+                Expect(outcome, faces[index] + " G", want[1], (int)pixels[0].G);
+                Expect(outcome, faces[index] + " B", want[2], (int)pixels[0].B);
+                Expect(outcome, faces[index] + " A", want[3], (int)pixels[0].A);
+            }
+        }
+
+        private static void CheckTexture3D(Outcome outcome, ContentManager content,
+                                            string name, Dictionary<string, object> root)
+        {
+            Texture3D texture = content.Load<Texture3D>(name);
+            Expect(outcome, "Width", Number(root, "width"), texture.Width);
+            Expect(outcome, "Height", Number(root, "height"), texture.Height);
+            Expect(outcome, "Depth", Number(root, "depth"), texture.Depth);
+            Expect(outcome, "LevelCount", Number(root, "mipCount"), texture.LevelCount);
+            Expect(outcome, "Format", root["surfaceFormat"], texture.Format.ToString());
+
+            // The two slices differ, so a runtime that collapsed the depth says so here.
+            var pixels = new Color[texture.Width * texture.Height * texture.Depth];
+            texture.GetData(pixels);
+            var first = root["firstTexel"] as List<object>;
+            var second = root["secondSliceFirstTexel"] as List<object>;
+            int sliceStride = texture.Width * texture.Height;
+            Expect(outcome, "slice 0 texel 0 R", first[0], (int)pixels[0].R);
+            Expect(outcome, "slice 0 texel 0 G", first[1], (int)pixels[0].G);
+            Expect(outcome, "slice 1 texel 0 R", second[0], (int)pixels[sliceStride].R);
+            Expect(outcome, "slice 1 texel 0 G", second[1], (int)pixels[sliceStride].G);
+        }
+
+        private static void CheckEffect(Outcome outcome, ContentManager content,
+                                         string name, Dictionary<string, object> root)
+        {
+            // Loading an Effect is the assertion: the runtime hands the bytes straight to
+            // Direct3D, which either accepts them as a compiled effect or does not. Everything
+            // after this is what the container says *about* them.
+            Effect effect = content.Load<Effect>(name);
+            Expect(outcome, "Techniques.Count", Number(root, "techniqueCount"),
+                   effect.Techniques.Count);
+            Expect(outcome, "Parameters.Count", Number(root, "parameterCount"),
+                   effect.Parameters.Count);
+            if (root.ContainsKey("techniqueName"))
+            {
+                Expect(outcome, "Techniques[0].Name", root["techniqueName"],
+                       effect.Techniques[0].Name);
+            }
+            if (root.ContainsKey("passName"))
+            {
+                Expect(outcome, "Techniques[0].Passes[0].Name", root["passName"],
+                       effect.Techniques[0].Passes[0].Name);
+            }
+            if (root.ContainsKey("parameterName"))
+            {
+                Expect(outcome, "Parameters[0].Name", root["parameterName"],
+                       effect.Parameters[0].Name);
+            }
+        }
+
+        private static void CheckSong(Outcome outcome, ContentManager content,
+                                       string name, Dictionary<string, object> root)
+        {
+            Song song = content.Load<Song>(name);
+            Expect(outcome, "Duration (ms)", Number(root, "durationMs"),
+                   (int)Math.Round(song.Duration.TotalMilliseconds));
+            outcome.Skipped.Add(
+                "Song exposes no sample data in XNA 4.0, and playing one needs the media stack, " +
+                "so only the load and the duration are asserted here.");
+        }
+
+        private static void CheckVideo(Outcome outcome, ContentManager content,
+                                        string name, Dictionary<string, object> root)
+        {
+            Video video = content.Load<Video>(name);
+            Expect(outcome, "Width", Number(root, "width"), video.Width);
+            Expect(outcome, "Height", Number(root, "height"), video.Height);
+            Expect(outcome, "FramesPerSecond", Number(root, "framesPerSecond"),
+                   (int)Math.Round(video.FramesPerSecond));
+        }
+
         private static void CheckSoundEffect(Outcome outcome, ContentManager content,
                                               string name, Dictionary<string, object> root)
         {
@@ -370,8 +475,44 @@ namespace Cna.Xna40.Interop
             // obtain a real device from XNA 4.0.
             using (var game = new Game())
             {
-                new GraphicsDeviceManager(game);
-                game.RunOneFrame();
+                var manager = new GraphicsDeviceManager(game);
+                // HiDef rather than the default Reach, because Reach is a *smaller* profile and
+                // one of the output families needs the larger one: XNA refuses a Texture3D under
+                // Reach outright -- `XNA Framework Reach profile does not support Texture3D` --
+                // and a corpus that cannot ask about volume textures is not covering that family
+                // (plans/plan_xnapipeline_parity.md XNAPP-281). Every Reach asset loads on a HiDef
+                // device; the reverse is what does not hold.
+                manager.GraphicsProfile = GraphicsProfile.HiDef;
+                // RunOneFrame() is what a game does, and on some hosts it never reaches device
+                // creation: under Wine it returns with GraphicsDeviceManager.GraphicsDevice still
+                // null, and every Texture2D, SpriteFont and Model then fails with "GraphicsDevice
+                // component not found" for a reason that has nothing to do with the .xnb. The
+                // documented interface method creates the device directly, so it is tried first
+                // and RunOneFrame is the fallback.
+                try
+                {
+                    ((IGraphicsDeviceManager)manager).CreateDevice();
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine("CreateDevice failed (" + error.GetType().Name + ": " +
+                                            error.Message + "); falling back to RunOneFrame");
+                }
+                if (manager.GraphicsDevice == null)
+                {
+                    game.RunOneFrame();
+                }
+                if (manager.GraphicsDevice == null)
+                {
+                    Console.Error.WriteLine(
+                        "no GraphicsDevice could be created on this host; Texture2D, SpriteFont " +
+                        "and Model will fail for that reason and not because of their .xnb");
+                }
+                else
+                {
+                    Console.WriteLine("graphics device: " + manager.GraphicsDevice.Adapter.Description +
+                                      " (" + manager.GraphicsDevice.GraphicsProfile + ")");
+                }
 
                 var content = new ContentManager(game.Services, root);
                 var outcomes = new List<Outcome>();
@@ -394,6 +535,28 @@ namespace Cna.Xna40.Interop
                         if (reader.EndsWith("Texture2DReader", StringComparison.Ordinal))
                         {
                             CheckTexture2D(outcome, content, name, Object(rootValue, name));
+                        }
+                        else if (reader.EndsWith("TextureCubeReader", StringComparison.Ordinal))
+                        {
+                            CheckTextureCube(outcome, content, name, Object(rootValue, name));
+                        }
+                        else if (reader.EndsWith("Texture3DReader", StringComparison.Ordinal))
+                        {
+                            CheckTexture3D(outcome, content, name, Object(rootValue, name));
+                        }
+                        // The dot matters: `SoundEffectReader` also ends with `EffectReader`.
+                        else if (reader.EndsWith("SongReader", StringComparison.Ordinal))
+                        {
+                            CheckSong(outcome, content, name, Object(rootValue, name));
+                        }
+                        else if (reader.EndsWith("VideoReader", StringComparison.Ordinal))
+                        {
+                            CheckVideo(outcome, content, name, Object(rootValue, name));
+                        }
+                        // The dot matters: `SoundEffectReader` also ends with `EffectReader`.
+                        else if (reader.EndsWith(".EffectReader", StringComparison.Ordinal))
+                        {
+                            CheckEffect(outcome, content, name, Object(rootValue, name));
                         }
                         else if (reader.EndsWith("SoundEffectReader", StringComparison.Ordinal))
                         {

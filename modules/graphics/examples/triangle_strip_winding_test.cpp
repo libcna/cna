@@ -115,6 +115,14 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr const char* kRendererName = "DIRECTX11";
+    constexpr bool kRasterizes = true;
+    constexpr bool kKnownStripBoundary = false;
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr const char* kRendererName = "DIRECTX12";
+    constexpr bool kRasterizes = true;
+    constexpr bool kKnownStripBoundary = false;
 #else
 #error "REMED-GFX-183: this renderer has no declared triangle-strip control boundary."
 #endif

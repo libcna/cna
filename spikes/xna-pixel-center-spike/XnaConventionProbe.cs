@@ -70,7 +70,7 @@ public class Probe : Game
               Leg2x2("LEG-C 2x2 -> 2x2 LINEAR", TextureFilter.Linear);
               LegSprite("LEG-S SpriteBatch 3x3 -> 10x10", 3, 3, 10, 10);
               LegSprite("LEG-S SpriteBatch 8x4 -> 21x13", 8, 4, 21, 13);
-              LegFormats(); LegOtherKinds(); }
+              LegDepthBias(); LegFormats(); LegOtherKinds(); }
         catch (Exception e) { Say("EXCEPTION: " + e); }
         File.WriteAllText("probe-output.txt", log.ToString());
         Exit();
@@ -261,6 +261,82 @@ public class Probe : Game
     }
 
     static bool Clean(int v) { return v == 0 || v == 255; }
+
+    void LegDepthBias()
+    {
+        var dev = GraphicsDevice;
+        const int width = 192;
+        const int height = 96;
+        var rt = new RenderTarget2D(dev, width, height, false, SurfaceFormat.Color,
+                                    DepthFormat.Depth24, 0, RenderTargetUsage.DiscardContents);
+        dev.SetRenderTarget(rt);
+        dev.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
+                  new Color(0, 0, 0, 255), 1.0f, 0);
+        dev.BlendState = BlendState.Opaque;
+
+        var dss = new DepthStencilState {
+            DepthBufferEnable = true,
+            DepthBufferWriteEnable = true,
+            DepthBufferFunction = CompareFunction.Less,
+        };
+        dev.DepthStencilState = dss;
+
+        var fx = new BasicEffect(dev);
+        fx.VertexColorEnabled = true;
+        fx.World = Matrix.Identity;
+        fx.View = Matrix.Identity;
+        fx.Projection = Matrix.Identity;
+        fx.CurrentTechnique.Passes[0].Apply();
+
+        float[] biases = { -0.0001f, 0.0f, -0.00000001f, -0.0000001f, -0.0001f, 0.0001f };
+        float[] depths = { 0.0f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f };
+        string[] labels = {
+            "near z=0, bias=-1e-4",
+            "z=0.5, bias=0",
+            "z=0.5, bias=-1e-8",
+            "z=0.5, bias=-1e-7",
+            "z=0.5, bias=-1e-4",
+            "z=0.5, bias=+1e-4",
+        };
+
+        for (int i = 0; i < biases.Length; ++i)
+        {
+            float cx = -0.83f + i * 0.33f;
+            DrawDepthBiasPair(dev, cx, depths[i], biases[i]);
+        }
+        dev.SetRenderTarget(null);
+
+        var pixels = new Color[width * height];
+        rt.GetData(pixels);
+        Say("LEG-D XNA DepthBias sweep (D3D9, Depth24, LESS; red=equal/rejected, green=pulled forward):");
+        for (int i = 0; i < biases.Length; ++i)
+        {
+            float cx = -0.83f + i * 0.33f;
+            int x = (int)((cx + 1.0f) * 0.5f * width);
+            Color p = pixels[(height / 2) * width + x];
+            Say("        " + labels[i].PadRight(24) + " -> (" + p.R + "," + p.G + "," + p.B + ")");
+        }
+    }
+
+    static void DrawDepthBiasPair(GraphicsDevice dev, float cx, float depth, float bias)
+    {
+        var noBias = new RasterizerState { CullMode = CullMode.None };
+        var withBias = new RasterizerState { CullMode = CullMode.None, DepthBias = bias };
+        dev.RasterizerState = noBias;
+        DrawDepthBiasTriangle(dev, cx, depth, new Color(255, 0, 0, 255));
+        dev.RasterizerState = withBias;
+        DrawDepthBiasTriangle(dev, cx, depth, new Color(0, 255, 0, 255));
+    }
+
+    static void DrawDepthBiasTriangle(GraphicsDevice dev, float cx, float depth, Color color)
+    {
+        var vertices = new VertexPositionColor[] {
+            new VertexPositionColor(new Vector3(cx,         0.75f, depth), color),
+            new VertexPositionColor(new Vector3(cx + 0.13f, -0.75f, depth), color),
+            new VertexPositionColor(new Vector3(cx - 0.13f, -0.75f, depth), color),
+        };
+        dev.DrawUserPrimitives(PrimitiveType.TriangleList, vertices, 0, 1);
+    }
 
     /// The same sweep for the two resource kinds REMED-GFX-242 did not cover. XNA's profile rules
     /// are not one list: a render target is a far narrower thing than a texture, and guessing which

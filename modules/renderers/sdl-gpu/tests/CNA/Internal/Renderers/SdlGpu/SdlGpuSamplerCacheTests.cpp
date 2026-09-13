@@ -15,6 +15,16 @@
 #if defined(CNA_RENDERER_SDL_GPU)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 #include <gtest/gtest.h>
 
@@ -149,6 +159,69 @@ TEST(SdlGpuSamplerCacheKeyTest, MaxMipLevelKeepsItsFullSignedRange)
         for (std::size_t j = i + 1; j < keys.size(); ++j)
             EXPECT_FALSE(keys[i] == keys[j])
                 << "MaxMipLevel " << levels[i] << " and " << levels[j] << " aliased";
+}
+
+// SDLGPU-126: EasyGL mutates one sampler object per slot, but SDL_GPU's immutable sampler cache
+// used to retain every state ever observed until GraphicsDevice destruction. MaxMipLevel is an
+// unrestricted ordinary-XNA integer, so a long-running game could grow native sampler ownership
+// without bound even while keeping one Texture2D and one SamplerState alive at a time.
+TEST(SdlGpuSamplerCacheLifetimeTest, DistinctStatesAreBoundedAcrossSubmittedFrames)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer;
+
+    GraphicsDevice device;
+    auto* renderer = dynamic_cast<SdlGpuRenderer*>(&device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+
+    Texture2D source(device, 1, 1);
+    const Color white[1] = {Color::White};
+    source.SetData(white, 1);
+    RenderTarget2D target(device, 4, 4);
+    SpriteBatch sprites(device);
+
+    constexpr std::size_t extraStates = 32;
+    for (std::size_t i = 0;
+         i < SdlGpuRenderer::MaxRetainedSamplerCountEXT + extraStates;
+         ++i)
+    {
+        SamplerState sampler;
+        sampler.setFilterProperty(TextureFilter::Point);
+        sampler.setMaxMipLevelProperty(static_cast<int>(i));
+        device.SetRenderTarget(&target);
+        sprites.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler,
+                      nullptr, nullptr);
+        sprites.Draw(source, Rectangle(0, 0, 4, 4), Color::White);
+        sprites.End();
+    }
+
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color centre{};
+    const Rectangle probe(2, 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_EQ(centre, Color::White);
+    EXPECT_LE(renderer->GetSamplerCacheSizeEXT(),
+              SdlGpuRenderer::MaxRetainedSamplerCountEXT)
+        << "native sampler ownership must not scale with every state ever observed";
+    // State zero was least-recently used and must have been evicted. Reusing it exercises native
+    // recreation after eviction; a stale released handle can otherwise leave the size bounded
+    // while corrupting the next draw.
+    SamplerState firstState;
+    firstState.setFilterProperty(TextureFilter::Point);
+    firstState.setMaxMipLevelProperty(0);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    sprites.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &firstState,
+                  nullptr, nullptr);
+    sprites.Draw(source, Rectangle(0, 0, 4, 4), Color::White);
+    sprites.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    centre = Color::Black;
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_EQ(centre, Color::White);
+    EXPECT_EQ(renderer->GetSamplerCacheSizeEXT(),
+              SdlGpuRenderer::MaxRetainedSamplerCountEXT);
 }
 
 #endif  // CNA_RENDERER_SDL_GPU

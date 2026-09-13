@@ -123,6 +123,53 @@ def with_defines(source: str, defines: tuple[str, ...]) -> str:
     return source[:version_end] + "".join(f"#define {name} 1\n" for name in defines) + source[version_end:]
 
 
+def expand_local_includes(source: str, script_dir: Path) -> str:
+    """Expand the checked-in GLSL snippet shared by the stock receiver families."""
+    marker = '#include "shadow_sampling.glsl"'
+    if marker not in source:
+        return source
+    return source.replace(marker, (script_dir / "shadow_sampling.glsl").read_text())
+
+
+# plans/plan_vulkan.md VULKAN-227: the per-instance world matrix, as an OPTIONAL input to every
+# stock 3D vertex shader rather than a program family of its own. This is the Vulkan counterpart of
+# EasyGL's CNA_GL_INSTANCE_TRANSFORM_DECL (EasyGLRenderer.cpp) -- the same four columns, at the same
+# four locations, behind the same idea that instancing composes with an effect instead of replacing
+# it. Vulkan cannot leave a declared vertex input unbound, so where EasyGL toggles one program with
+# a uniform this compiles two SPIR-V modules from the one source.
+#
+# Locations 12..15 for the same reason EasyGL picked them: the widest stock per-vertex input set
+# here is SkinnedPbrEffect's dual-UV+colour record, which reaches location 7, so 12..15 cannot
+# collide with an existing input and leaves room for a wider record later.
+#
+# The NON-instanced expansion is textually the identity, so every ordinary module's SPIR-V is
+# byte-identical to what it was before a family became instanceable -- checked by regenerating this
+# header and diffing, not assumed.
+_INSTANCE_PROLOGUE = """\
+#ifdef CNA_INSTANCED
+layout(location = 12) in vec4 aCnaInstCol0;
+layout(location = 13) in vec4 aCnaInstCol1;
+layout(location = 14) in vec4 aCnaInstCol2;
+layout(location = 15) in vec4 aCnaInstCol3;
+mat4 cnaInstanceMatrix() { return mat4(aCnaInstCol0, aCnaInstCol1, aCnaInstCol2, aCnaInstCol3); }
+#define CNA_INSTANCE_POSITION(p) (cnaInstanceMatrix() * (p))
+#define CNA_INSTANCE_WORLD(w) ((w) * cnaInstanceMatrix())
+#else
+#define CNA_INSTANCE_POSITION(p) (p)
+#define CNA_INSTANCE_WORLD(w) (w)
+#endif
+"""
+
+
+def with_instance_prologue(source: str) -> str:
+    """Insert the optional per-instance transform block after #version and any variant defines."""
+    lines = source.split("\n")
+    at = 1
+    while at < len(lines) and lines[at].startswith("#define "):
+        at += 1
+    return "\n".join(lines[:at]) + "\n" + _INSTANCE_PROLOGUE + "\n".join(lines[at:])
+
+
 def spv_to_cpp_array(name: str, spv: bytes) -> str:
     # SPIR-V is an array of uint32_t words
     assert len(spv) % 4 == 0, "SPIR-V size not a multiple of 4"
@@ -150,6 +197,7 @@ def main():
         # (Task 899: colored3d.vert.glsl above now needs a fog UBO binding that
         # pipelineLayout3D_'s zero-descriptor-set layout doesn't provide).
         ("colored3d_legacy.vert.glsl",  VERTEX_SHADER,   "kColored3dLegacyVertSpv"),
+        ("colored3d_legacy.frag.glsl",  FRAGMENT_SHADER, "kColored3dLegacyFragSpv"),
         # Textured 3D pipeline — stride 20 (VertexPositionTexture)
         ("textured3d.vert.glsl",         VERTEX_SHADER,   "kTextured3dVertSpv"),
         ("textured3d.frag.glsl",         FRAGMENT_SHADER, "kTextured3dFragSpv"),
@@ -163,6 +211,20 @@ def main():
         # XNA's real default) — same UBO/push-constant layout as lit_textured3d above.
         ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,   "kLitTextured3dVertexLitVertSpv"),
         ("lit_textured3d_vertexlit.frag.glsl", FRAGMENT_SHADER, "kLitTextured3dVertexLitFragSpv"),
+        # plan_vulkan.md VULKAN-199: the untextured lit layouts (Position+Normal, no UV). Vertex
+        # stages only -- the fragment stages above already gate their sample on pc.textureEnabled,
+        # so these pair with them unchanged and differ in exactly two things: no aUV input and a
+        # zero fragUV. Vulkan cannot default an absent vertex attribute, which is why they exist.
+        ("lit_untextured3d.vert.glsl",           VERTEX_SHADER, "kLitUntextured3dVertSpv"),
+        ("lit_untextured3d_vertexlit.vert.glsl", VERTEX_SHADER, "kLitUntextured3dVertexLitVertSpv"),
+        # plan_vulkan.md VULKAN-200: the vertex-colour variants. The per-VERTEX one needs no new
+        # fragment stage -- FNA multiplies the colour into vout.Diffuse ahead of oD0, so fragLitRGB
+        # already carries what the existing fragment stage expects. The per-PIXEL one does, because
+        # FNA applies the colour to the whole lit bracket in the pixel shader instead.
+        ("lit_textured3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
+         "kLitTextured3dVertexLitColorVertSpv"),
+        ("lit_textured3d_color.vert.glsl",       VERTEX_SHADER,   "kLitTextured3dColorVertSpv"),
+        ("lit_textured3d_color.frag.glsl",       FRAGMENT_SHADER, "kLitTextured3dColorFragSpv"),
         # AlphaTestEffect pipeline — single VS handles stride 20/32 via attribute remapping
         ("alpha_test3d.vert.glsl",       VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
         ("alpha_test3d.frag.glsl",       FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),
@@ -216,15 +278,68 @@ def main():
         # and Vulkan requires every shader input to have a vertex attribute description.
         ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedDualUvColorVertSpv"),
         ("pbr3d_skinned.frag.glsl",      FRAGMENT_SHADER, "kPbr3dSkinnedDualUvColorFragSpv"),
-        # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4.
-        # Dedicated FS (Task 899: previously reused colored3d's, but that now has a 2nd
-        # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
-        ("instanced3d.vert.glsl",        VERTEX_SHADER,   "kInstanced3dVertSpv"),
-        ("instanced3d.frag.glsl",        FRAGMENT_SHADER, "kInstanced3dFragSpv"),
-        # REMED-GFX-212: the position+colour Instanced3D VS, selected when the geometry stride's
-        # packed layout carries a COLOR0 element (16/24). Shares instanced3d's FS and its
-        # 1-binding pipeline layout; only the vertex input set and the diffuse mixing differ.
-        ("instanced_colored3d.vert.glsl", VERTEX_SHADER,  "kInstancedColored3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-233: the three BasicEffect shapes an instanced draw can take
+        # are the ORDINARY fog-capable bundle's own sources compiled again -- REMED-GFX-212's
+        # colour shape, VULKAN-217's textured one and VULKAN-220's colour-and-texture one, which
+        # used to be three separate fog-less copies. instanced3d above stays as the position-only
+        # fallback, which that bundle has no program for.
+        ("colored3d.vert.glsl",          VERTEX_SHADER, "kInstancedColored3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-234: the same program without the colour input, for the one
+        # BasicEffect record that declares only a Position. It replaces instanced3d.vert/frag,
+        # whose whole limitation was that it had no fog term.
+        ("colored3d.vert.glsl",          VERTEX_SHADER, "kInstancedPositionOnly3dVertSpv"),
+        ("textured3d.vert.glsl",         VERTEX_SHADER, "kInstancedTextured3dVertSpv"),
+        ("colored_textured3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedColoredTextured3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-227: the instanced variants of the ordinary families are the
+        # ORDINARY sources compiled a second time with CNA_INSTANCED -- there is no separate
+        # instanced_*.vert.glsl copy to keep in step any more. VULKAN-222 (alpha test), VULKAN-224
+        # (both lit variants; XNA's real default is PreferPerPixelLighting=false, so an instanced
+        # draw must not silently switch a game to the other one), VULKAN-225 (dual texture) and
+        # VULKAN-226 (env map) each keep their family's push constant, UBO, pipeline layout,
+        # descriptor set and fragment stage; only the vertex module differs.
+        ("alpha_test3d.vert.glsl",  VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-229: the coloured alpha-test shape, which VULKAN-222
+        # left -- a Position+Colour+TextureCoordinate instanced draw took the uncoloured
+        # module and bound its colour bytes to that shader's UV input.
+        ("alpha_test_colored3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedAlphaTestColored3dVertSpv"),
+        ("lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv"),
+        ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,
+         "kInstancedLitTextured3dVertexLitVertSpv"),
+        # plans/plan_vulkan.md VULKAN-228: the lit family's other two vertex shapes, which
+        # VULKAN-224 deliberately left out -- Position+Normal with TextureEnabled false, and the
+        # stock ModelProcessor's Position+Normal+Colour+TextureCoordinate mesh. Both variants of
+        # each, for the PreferPerPixelLighting reason above.
+        ("lit_untextured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitUntextured3dVertSpv"),
+        ("lit_untextured3d_vertexlit.vert.glsl", VERTEX_SHADER,
+         "kInstancedLitUntextured3dVertexLitVertSpv"),
+        ("lit_textured3d_color.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dColorVertSpv"),
+        ("lit_textured3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
+         "kInstancedLitTextured3dVertexLitColorVertSpv"),
+        ("dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-230: the coloured dual-texture shape, which VULKAN-225
+        # left -- a stride-24 instanced draw took the uncoloured module, whose location 1 is
+        # a UV, so the record's colour bytes were read as a texture coordinate.
+        ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedDualTextureColored3dVertSpv"),
+        ("env_map3d.vert.glsl",      VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-231: SkinnedEffect, all four of its modules -- both
+        # PreferPerPixelLighting variants times the plain/vertex-colour record (stride 52/56).
+        ("skinned3d.vert.glsl",           VERTEX_SHADER, "kInstancedSkinned3dVertSpv"),
+        ("skinned3d_vertexlit.vert.glsl", VERTEX_SHADER, "kInstancedSkinned3dVertexLitVertSpv"),
+        ("skinned3d_color.vert.glsl",     VERTEX_SHADER, "kInstancedSkinned3dColorVertSpv"),
+        ("skinned3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
+         "kInstancedSkinned3dVertexLitColorVertSpv"),
+        # plans/plan_vulkan.md VULKAN-232: PbrEffect and SkinnedPbrEffect, one instanced module
+        # per existing vertex-record variant and not one more -- stride 48/60 rigid, 68/76/80
+        # skinned. The fragment stages are unchanged, so no new pipeline layout or descriptor set.
+        ("pbr3d.vert.glsl",         VERTEX_SHADER, "kInstancedPbr3dVertSpv"),
+        ("pbr3d.vert.glsl",         VERTEX_SHADER, "kInstancedPbr3dDualUvVertSpv"),
+        ("pbr3d_skinned.vert.glsl", VERTEX_SHADER, "kInstancedPbr3dSkinnedVertSpv"),
+        ("pbr3d_skinned.vert.glsl", VERTEX_SHADER, "kInstancedPbr3dSkinnedDualUvVertSpv"),
+        ("pbr3d_skinned.vert.glsl", VERTEX_SHADER,
+         "kInstancedPbr3dSkinnedDualUvColorVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.
@@ -234,6 +349,8 @@ def main():
     VERTEX_COLOR_VARIANTS = {
         "kPbr3dDualUvVertSpv", "kPbr3dDualUvFragSpv",
         "kPbr3dSkinnedDualUvColorVertSpv", "kPbr3dSkinnedDualUvColorFragSpv",
+        # VULKAN-232: the instanced twins of the two above, on the same rule.
+        "kInstancedPbr3dDualUvVertSpv", "kInstancedPbr3dSkinnedDualUvColorVertSpv",
     }
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \
@@ -253,11 +370,20 @@ def main():
         if not glsl_path.exists():
             print(f"ERROR: {glsl_path} not found", file=sys.stderr)
             sys.exit(1)
-        source = glsl_path.read_text()
+        source = expand_local_includes(glsl_path.read_text(), script_dir)
         defines = ("CNA_PBR_DUAL_UV",) if "DualUv" in cname else ()
         if cname in VERTEX_COLOR_VARIANTS:
             defines += ("CNA_PBR_VERTEX_COLOR",)
+        # VULKAN-227: the instanced variant of a stock family is the SAME source compiled with the
+        # per-instance columns declared. No cname of a non-instanced module contains "Instanced".
+        if "Instanced" in cname:
+            defines += ("CNA_INSTANCED",)
+        # VULKAN-234: the colour-less variant of the BasicEffect colour program.
+        if "PositionOnly" in cname:
+            defines += ("CNA_NO_VERTEX_COLOR",)
         source = with_defines(source, defines)
+        if kind == VERTEX_SHADER:
+            source = with_instance_prologue(source)
         print(f"Compiling {filename} ...", end=" ", flush=True)
         spv = compile_glsl(source, kind, filename)
         print(f"OK ({len(spv)} bytes, {len(spv)//4} words)")

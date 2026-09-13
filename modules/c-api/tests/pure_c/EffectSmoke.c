@@ -130,12 +130,18 @@ static int validate_base_effect(const CNA_Handle device)
         }
     }
     {
-        /* The dialect a custom ShaderEffect's sources must use. Every renderer answers, and an
-           undeclared one answers UNKNOWN rather than guessing. */
+        /* The payload dialect a custom ShaderEffect must use. Every renderer answers, and an
+           undeclared one answers UNKNOWN rather than guessing. Vulkan's value specifically proves
+           that the C mapping keeps compiled SPIR-V distinct from Vulkan GLSL source. */
         CNA_ShaderDialect dialect = UINT32_MAX;
+        CNA_RendererInfo renderer = {
+            sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U};
         REQUIRE(cna_graphics_device_get_shader_dialect_ext(device, &dialect) ==
                     CNA_RESULT_SUCCESS &&
                 dialect <= CNA_SHADER_DIALECT_MAXIMUM &&
+                cna_graphics_device_get_renderer_info(device, &renderer) == CNA_RESULT_SUCCESS &&
+                (renderer.renderer_type != CNA_GRAPHICS_RENDERER_VULKAN ||
+                 dialect == CNA_SHADER_DIALECT_SPIRV) &&
                 cna_graphics_device_get_shader_dialect_ext(device, 0) ==
                     CNA_RESULT_INVALID_ARGUMENT &&
                 cna_graphics_device_get_shader_dialect_ext(CNA_INVALID_HANDLE, &dialect) ==

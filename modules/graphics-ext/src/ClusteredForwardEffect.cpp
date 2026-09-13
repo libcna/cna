@@ -5,22 +5,29 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/AreaLightBrdfTable.hpp"
-#include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/LightProbeEXT.hpp"
 #include "CNA/Graphics/LightProbeVolumeEXT.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/ThinFilmIridescence.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "shaders/clustered_forward/ClusteredForwardShaderPackage.generated.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace CNA::Graphics {
 
@@ -34,256 +41,64 @@ namespace CNA::Graphics {
 
     namespace {
 
-        constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec3 aNormal;
-uniform mat4 uWorld;
-uniform mat4 uView;
-uniform mat4 uProjection;
-out vec3  vWorldPosition;
-out vec3  vWorldNormal;
-out vec4  vClipPosition;
-out float vViewDistance;
-void main() {
-    vec4 world = uWorld * vec4(aPosition, 1.0);
-    vec4 view  = uView * world;
-    gl_Position = uProjection * view;
-
-    vWorldPosition = world.xyz;
-    // The upper 3x3 is the normal matrix only for a uniformly scaled world; the prepass documents
-    // the same limitation, and correcting it needs an inverse per draw nothing else here pays for.
-    vWorldNormal   = mat3(uWorld) * aNormal;
-    vClipPosition  = gl_Position;
-    vViewDistance  = -view.z;
-}
-)";
-
-        // The reflectance model is the same GGX / Smith / Schlick trio the rest of this layer uses,
-        // and the falloff is glTF's windowed inverse square: physical up to the range, and exactly
-        // zero at it, which is what makes a light's cluster assignment honest -- a light that faded
-        // asymptotically would still be contributing outside the sphere it was sorted by.
-        constexpr const char* kShadingGlsl = R"(
-const float kCnaPi = 3.14159265359;
-
-float cnaDistribution(float NoH, float roughness) {
-    float a = roughness * roughness;
-    float aa = a * a;
-    float d = NoH * NoH * (aa - 1.0) + 1.0;
-    return aa / max(kCnaPi * d * d, 1e-7);
-}
-
-float cnaGeometry(float NoV, float NoL, float roughness) {
-    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
-    float gv = NoV / max(NoV * (1.0 - k) + k, 1e-7);
-    float gl = NoL / max(NoL * (1.0 - k) + k, 1e-7);
-    return gv * gl;
-}
-
-vec3 cnaFresnel(float VoH, vec3 f0) {
-    return f0 + (vec3(1.0) - f0) * pow(clamp(1.0 - VoH, 0.0, 1.0), 5.0);
-}
-
-float cnaFalloff(float distance, float range) {
-    float ratio = distance / max(range, 1e-4);
-    float window = clamp(1.0 - ratio * ratio * ratio * ratio, 0.0, 1.0);
-    return window * window / max(distance * distance, 1e-4);
-}
-
-uniform float uClearcoat;
-uniform float uClearcoatRoughness;
-uniform vec3  uSheenColor;
-uniform float uSheenRoughness;
-uniform vec3  uSubsurfaceColor;
-uniform float uSubsurfaceWrap;
-uniform float uIridescence;
-uniform float uIridescenceIor;
-uniform float uIridescenceThickness;
-uniform float uTransmission;
-uniform float uThickness;
-uniform float uAttenuationDistance;
-uniform vec3  uAttenuationColor;
-uniform float uIor;
-uniform mat4  uViewProjection;
-uniform sampler2D uOpaqueFrame;
-
-// KHR_materials_sheen: the Charlie distribution with Ashikhmin's visibility. Its peak is where the
-// half-vector is *perpendicular* to the normal, which is the opposite of a specular lobe -- that is
-// why sheen appears as a rim at grazing angles and why no roughness on the base material produces
-// it. The alpha floor is not cosmetic: the exponent is 1/alpha, so a small roughness gives a rim
-// too tight to survive any sensible resolution.
-float cnaSheenDistribution(float NoH, float roughness) {
-    float alpha = max(roughness * roughness, 0.07);
-    float inverseAlpha = 1.0 / alpha;
-    float sinSquared = max(1.0 - NoH * NoH, 0.0078125);
-    return (2.0 + inverseAlpha) * pow(sinSquared, inverseAlpha * 0.5) / 6.28318530718;
-}
-
-float cnaSheenVisibility(float NoV, float NoL) {
-    return 1.0 / max(4.0 * (NoL + NoV - NoL * NoV), 1e-7);
-}
-
-vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirection,
-              vec3 baseColor, float metallic, float roughness, out vec3 diffuseOut) {
-    diffuseOut = vec3(0.0);
-    vec3 toLight = light.position - surface;
-    float distance = length(toLight);
-    if (distance >= light.range || distance <= 0.0) return vec3(0.0);
-    vec3 L = toLight / distance;
-
-    float attenuation = cnaFalloff(distance, light.range);
-    if (light.isSpot > 0.5) {
-        // The cone, measured from the light outwards, so -L is the direction the light travels.
-        float cosAngle = dot(-L, light.direction);
-        attenuation *= clamp((cosAngle - light.cosOuter) / max(light.cosInner - light.cosOuter, 1e-4),
-                             0.0, 1.0);
-    }
-    if (attenuation <= 0.0) return vec3(0.0);
-
-    // Guarded: with the light exactly behind the surface, L is -V and their sum is the zero
-    // vector, so normalizing it is a NaN -- which then survives being multiplied by a zero N.L and
-    // paints the pixel black. That configuration is not exotic, it is precisely the one the
-    // subsurface back-scatter exists for.
-    vec3 halfSum = L + viewDirection;
-    vec3 H = dot(halfSum, halfSum) > 1e-8 ? normalize(halfSum) : normal;
-    float rawNoL = dot(normal, L);
-    float NoL = max(rawNoL, 0.0);
-    // Wrapped diffuse: light reaches a little past the terminator, which is what a surface light
-    // travels *inside* looks like. An approximation, and one that cannot know how thick the object
-    // is -- see PbrMaterialExtensions::setSubsurfaceColor for what that costs.
-    float subsurface = uSubsurfaceColor.r + uSubsurfaceColor.g + uSubsurfaceColor.b;
-    float wrappedNoL = NoL;
-    if (subsurface > 0.0) {
-        float w = uSubsurfaceWrap;
-        wrappedNoL = clamp((rawNoL + w) / ((1.0 + w) * (1.0 + w)), 0.0, 1.0);
-    }
-    float NoV = max(dot(normal, viewDirection), 1e-4);
-    float NoH = max(dot(normal, H), 0.0);
-    float VoH = max(dot(viewDirection, H), 0.0);
-    float backScatter = 0.0;
-    if (subsurface > 0.0) backScatter = pow(clamp(dot(viewDirection, -L), 0.0, 1.0), 4.0);
-    if (NoL <= 0.0 && wrappedNoL <= 0.0 && backScatter <= 0.0) return vec3(0.0);
-
-    vec3 f0 = mix(vec3(0.04), baseColor, metallic);
-    vec3 fresnel = cnaFresnel(VoH, f0);
-    // KHR_materials_iridescence replaces the Fresnel term itself rather than adding a lobe: what a
-    // thin film changes is *which wavelengths* the surface reflects, not how much it reflects.
-    if (uIridescence > 0.0) {
-        vec3 film = cnaThinFilmIridescence(1.0, uIridescenceIor, NoV, uIridescenceThickness, f0);
-        fresnel = mix(fresnel, film, uIridescence);
-    }
-    vec3 specular = fresnel * cnaDistribution(NoH, roughness) * cnaGeometry(NoV, NoL, roughness)
-                  / max(4.0 * NoV * NoL, 1e-7);
-    vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / kCnaPi;
-    // The diffuse term leaves separately, because KHR_materials_transmission replaces *it* with
-    // what is behind the surface and leaves the highlights alone -- glass with no highlight is the
-    // thing that stops looking like glass.
-    diffuseOut = diffuse * light.colour * attenuation * wrappedNoL;
-    // What comes through from behind: strongest when looking straight into the light through the
-    // surface, which is the second half of what makes a leaf or an ear read as translucent.
-    if (subsurface > 0.0) diffuseOut += uSubsurfaceColor * backScatter * light.colour * attenuation;
-    vec3 layered = specular;
-
-    if (uSheenColor.r + uSheenColor.g + uSheenColor.b > 0.0) {
-        layered += uSheenColor * cnaSheenDistribution(NoH, uSheenRoughness)
-                 * cnaSheenVisibility(NoV, NoL);
-    }
-
-    // KHR_materials_clearcoat: a second, thin specular layer over the whole material, with its own
-    // roughness. Not a brighter highlight -- a *second* one. What it takes from the base layer is
-    // exactly what it reflects, so a coat brightens the surface where it catches the light and
-    // darkens it everywhere else, which is what makes lacquer look like lacquer.
-    if (uClearcoat > 0.0) {
-        float ccRoughness = max(uClearcoatRoughness, 0.04);
-        float ccFresnel = 0.04 + 0.96 * pow(clamp(1.0 - VoH, 0.0, 1.0), 5.0);
-        float ccSpecular = ccFresnel * cnaDistribution(NoH, ccRoughness)
-                         * cnaGeometry(NoV, NoL, ccRoughness) / max(4.0 * NoV * NoL, 1e-7);
-        layered = layered * (1.0 - uClearcoat * ccFresnel) + vec3(uClearcoat * ccSpecular);
-    }
-
-    return layered * light.colour * attenuation * NoL;
-}
-)";
-
-        constexpr const char* kFragmentBody = R"(
-in vec3  vWorldPosition;
-in vec3  vWorldNormal;
-in vec4  vClipPosition;
-in float vViewDistance;
-out vec4 FragColor;
-
-uniform vec3  uCameraPosition;
-uniform vec3  uBaseColor;
-uniform vec3  uAmbient;
-uniform vec3  uProbeCoefficients[9];
-uniform float uHasProbe;
-uniform float uMetallic;
-uniform float uRoughness;
-
-void main() {
-    vec3 normal = normalize(vWorldNormal);
-    vec3 viewDirection = normalize(uCameraPosition - vWorldPosition);
-    vec2 ndc = vClipPosition.xy / max(abs(vClipPosition.w), 1e-6) * sign(vClipPosition.w);
-
-    int cluster = cnaClusterFromNdc(ndc, vViewDistance);
-    int count = cnaClusterLightCount(cluster);
-
-    // The ambient: a probe where one was given, the flat term where none was. A probe carries
-    // irradiance, so the Lambertian surface reflects albedo/pi of it -- the flat term is the colour
-    // a surface *shows*, and the two are not interchangeable without that division.
-    vec3 ambient = uAmbient * uBaseColor;
-    if (uHasProbe > 0.5) {
-        ambient = cnaProbeIrradiance(uProbeCoefficients, normal) * uBaseColor / kCnaPi;
-    }
-    vec3 diffuseSum = ambient;
-    diffuseSum += cnaAreaContribution(vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
-                                      uRoughness);
-    vec3 otherSum = vec3(0.0);
-    for (int i = 0; i < kCnaMaxLightsPerFragment; ++i) {
-        if (i >= count) break;
-        CnaClusteredLight light = cnaLoadLight(cnaClusterLightIndex(cluster, i));
-        vec3 lightDiffuse;
-        otherSum += cnaShade(light, vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
-                             uRoughness, lightDiffuse);
-        diffuseSum += lightDiffuse;
-    }
-
-    if (uTransmission > 0.0) {
-        // Refraction, not transparency: the ray bends entering the surface, travels the volume's
-        // thickness, and leaves somewhere else -- so what shows through is *displaced*, which is
-        // the whole visual difference from alpha blending. The exit point is projected back to
-        // screen space to find it in the copy of the opaque frame.
-        vec3 refracted = refract(-viewDirection, normal, 1.0 / max(uIor, 1.0));
-        vec3 exitPoint = vWorldPosition + refracted * uThickness;
-        vec4 exitClip = uViewProjection * vec4(exitPoint, 1.0);
-        vec2 uv = exitClip.xy / max(abs(exitClip.w), 1e-4) * sign(exitClip.w) * 0.5 + 0.5;
-        vec3 behind = texture(uOpaqueFrame, clamp(uv, 0.0, 1.0)).rgb;
-
-        vec3 absorbed = vec3(1.0);
-        if (uAttenuationDistance > 0.0 && uThickness > 0.0) {
-            vec3 sigma = -log(clamp(uAttenuationColor, 1e-4, 1.0)) / uAttenuationDistance;
-            absorbed = exp(-sigma * uThickness);
-        }
-        diffuseSum = mix(diffuseSum, behind * absorbed, uTransmission);
-    }
-
-    FragColor = vec4(diffuseSum + otherSum, 1.0);
-}
-)";
-
-        std::string MakeFragmentSource()
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(
+            const std::uint32_t* words, const std::size_t byteSize)
         {
-            std::string source = "#version 300 es\nprecision highp float;\n";
-            source += "const int kCnaMaxLightsPerFragment = " +
-                      std::to_string(ClusteredForwardEffect::kMaxLightsPerFragment) + ";\n";
-            source += ClusteredLightBuffer::getLightLookupGlsl();
-            source += LightProbeEXT::getEvaluationGlsl();
-            source += ThinFilmIridescence::getGlsl();
-            source += AreaLightBrdfTable::getLookupGlsl();
-            source += AreaLightShading::getShadingGlsl();
-            source += kShadingGlsl;
-            source += kFragmentBody;
-            return source;
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+            return std::vector<std::uint8_t>(begin, begin + byteSize);
+        }
+
+        [[nodiscard]] ShaderPackageEXT CreateClusteredForwardPackage()
+        {
+            using namespace detail::ClusteredForwardGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "clustered_forward/forward.es.vert.glsl",
+                                  std::string(kForwardEsVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "clustered_forward/forward.es.frag.glsl",
+                                  std::string(kForwardEsFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "clustered_forward/forward.vulkan.vert.spv",
+                                  ToBytes(kForwardVulkanVertexSpirV,
+                                          kForwardVulkanVertexSpirVByteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "clustered_forward/forward.vulkan.frag.spv",
+                                  ToBytes(kForwardVulkanFragmentSpirV,
+                                          kForwardVulkanFragmentSpirVByteSize)),
+                },
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
+                {
+                    ShaderBindingRequirementEXT(
+                        "uCnaAreaBrdf", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "uOpaqueFrame", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "uCnaLightData", 2, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "uCnaClusterTable", 3, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "uCnaLightIndices", 4, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "CnaClusteredLights", 6, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "CnaClusterTable", 7, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "CnaLightIndices", 8, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Fragment),
+                });
         }
 
         float Dot(const Vector3& a, const Vector3& b) { return a.X * b.X + a.Y * b.Y + a.Z * b.Z; }
@@ -299,11 +114,13 @@ void main() {
 
     ClusteredForwardEffect::ClusteredForwardEffect(GraphicsDevice& device)
     {
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, MakeFragmentSource());
+        const ShaderPackageEXT package = CreateClusteredForwardPackage();
+        if (device.SupportsCapability(CNA::GraphicsCapability::CustomEffects) &&
+            package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
         bool logged = false;
         detail::reportShaderCompileFailure(device, "ClusteredForwardEffect", effect_.get(), logged);
-        supported_ = effect_ != nullptr && effect_->IsEffectValid() &&
-                     device.ExecutesShaderEffectSourceEXT();
+        supported_ = effect_ != nullptr && effect_->IsEffectValid();
     }
 
     ClusteredForwardEffect::~ClusteredForwardEffect() = default;
@@ -320,15 +137,6 @@ void main() {
                 "there is no cluster table for the shader to walk");
         if (effect_ == nullptr || !effect_->IsEffectValid()) return;
 
-        effect_->Apply();
-        effect_->SetUniformMat4("uWorld", &world.M11);
-        effect_->SetUniformMat4("uView", &view.M11);
-        effect_->SetUniformMat4("uProjection", &projection.M11);
-        effect_->SetUniformVec3("uCameraPosition", cameraPosition.X, cameraPosition.Y,
-                                cameraPosition.Z);
-        effect_->SetUniformVec3("uBaseColor", baseColor_.X, baseColor_.Y, baseColor_.Z);
-        effect_->SetUniformVec3("uAmbient", ambient_.X, ambient_.Y, ambient_.Z);
-
         // The volume is sampled at the world matrix's translation, which is the object's origin.
         const LightProbeEXT* activeProbe = probe_.get();
         LightProbeEXT sampled;
@@ -337,6 +145,109 @@ void main() {
             sampled = probeVolume_->sampleProbe(Vector3(world.M41, world.M42, world.M43));
             activeProbe = &sampled;
         }
+
+        effect_->Apply();
+        if (effect_->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV)
+        {
+            const bool transmits = extensions_ != nullptr && extensions_->isTransmissionEnabled();
+            if (transmits && opaqueFrame_ == nullptr)
+                throw std::runtime_error(
+                    "CNA::Graphics::ClusteredForwardEffect::begin: this material transmits, and no "
+                    "copy of the opaque frame has been given to refract against. Refused rather "
+                    "than approximated: a transmissive material drawn without one is not slightly "
+                    "wrong, it is an opaque object where a glass one was asked for -- see "
+                    "setOpaqueFrame");
+            const bool haveArea = areaLight_ != nullptr && areaTable_ != nullptr &&
+                                  areaTable_->getTexture() != nullptr;
+
+            std::array<float, 4 * 16> matrices{};
+            world.ToColumnMajor(matrices.data());
+            view.ToColumnMajor(matrices.data() + 16);
+            projection.ToColumnMajor(matrices.data() + 32);
+            const Matrix viewProjection = view * projection;
+            viewProjection.ToColumnMajor(matrices.data() + 48);
+
+            std::array<float, 19 * 3> vectors{};
+            const auto setVector = [&vectors](const int index, const Vector3& value) {
+                vectors[static_cast<std::size_t>(index) * 3] = value.X;
+                vectors[static_cast<std::size_t>(index) * 3 + 1] = value.Y;
+                vectors[static_cast<std::size_t>(index) * 3 + 2] = value.Z;
+            };
+            if (activeProbe != nullptr)
+                for (int index = 0; index < LightProbeEXT::kCoefficientCount; ++index)
+                    setVector(index, activeProbe->getCoefficient(index));
+            setVector(9, cameraPosition);
+            setVector(10, baseColor_);
+            setVector(11, ambient_);
+            const Vector3 sheen = extensions_ != nullptr
+                                      ? extensions_->getSheenColorFactor()
+                                      : Vector3::Zero;
+            const Vector3 subsurface = extensions_ != nullptr
+                                           ? extensions_->getSubsurfaceColor()
+                                           : Vector3::Zero;
+            const Vector3 attenuation = extensions_ != nullptr
+                                            ? extensions_->getAttenuationColor()
+                                            : Vector3::One;
+            setVector(12, sheen);
+            setVector(13, subsurface);
+            setVector(14, attenuation);
+            if (haveArea)
+            {
+                setVector(15, areaLight_->Position);
+                setVector(16, areaLight_->RightAxis);
+                setVector(17, areaLight_->UpAxis);
+                setVector(18, Vector3(
+                                  areaLight_->Color.X * areaLight_->Intensity,
+                                  areaLight_->Color.Y * areaLight_->Intensity,
+                                  areaLight_->Color.Z * areaLight_->Intensity));
+            }
+
+            const std::array<float, 24> scalars{
+                activeProbe != nullptr ? 1.0f : 0.0f,
+                metallic_,
+                roughness_,
+                extensions_ != nullptr ? extensions_->getClearcoatFactor() : 0.0f,
+                extensions_ != nullptr ? extensions_->getClearcoatRoughness() : 0.0f,
+                extensions_ != nullptr ? extensions_->getSheenRoughness() : 0.0f,
+                extensions_ != nullptr ? extensions_->getSubsurfaceWrap() : 0.5f,
+                extensions_ != nullptr ? extensions_->getIridescenceFactor() : 0.0f,
+                extensions_ != nullptr ? extensions_->getIridescenceIor() : 1.3f,
+                extensions_ != nullptr ? extensions_->getIridescenceThicknessMaximum() : 400.0f,
+                transmits ? extensions_->getTransmissionFactor() : 0.0f,
+                ior_,
+                transmits ? extensions_->getThicknessFactor() : 0.0f,
+                transmits ? extensions_->getAttenuationDistance() : 0.0f,
+                haveArea ? static_cast<float>(areaLight_->Shape) : -1.0f,
+                haveArea ? static_cast<float>(areaTable_->getSize()) : 1.0f,
+                haveArea ? areaLight_->Range : 0.0f,
+                haveArea && areaLight_->TwoSided ? 1.0f : 0.0f,
+                static_cast<float>(lights.tilesX_),
+                static_cast<float>(lights.tilesY_),
+                static_cast<float>(lights.sliceCount_),
+                static_cast<float>(lights.lightCount_),
+                lights.nearPlane_,
+                lights.farPlane_,
+            };
+            effect_->SetUniformMat4Array(
+                "uClusterMatrices", matrices.data(), 4);
+            effect_->SetUniformVec3Array(
+                "uClusterVectors", vectors.data(), 19);
+            effect_->SetUniformFloatArray(
+                "uClusterScalars", scalars.data(), static_cast<int>(scalars.size()));
+            lights.bindStorageForDraw();
+            if (haveArea) effect_->SetTexture(0, *areaTable_->getTexture());
+            if (transmits) effect_->SetTexture(1, *opaqueFrame_);
+            return;
+        }
+
+        effect_->SetUniformMat4("uWorld", &world.M11);
+        effect_->SetUniformMat4("uView", &view.M11);
+        effect_->SetUniformMat4("uProjection", &projection.M11);
+        effect_->SetUniformVec3("uCameraPosition", cameraPosition.X, cameraPosition.Y,
+                                cameraPosition.Z);
+        effect_->SetUniformVec3("uBaseColor", baseColor_.X, baseColor_.Y, baseColor_.Z);
+        effect_->SetUniformVec3("uAmbient", ambient_.X, ambient_.Y, ambient_.Z);
+
         effect_->SetUniformFloat("uHasProbe", activeProbe != nullptr ? 1.0f : 0.0f);
         if (activeProbe != nullptr)
         {
@@ -401,19 +312,19 @@ void main() {
                                     attenuation.Z);
             const Matrix viewProjection = view * projection;
             effect_->SetUniformMat4("uViewProjection", &viewProjection.M11);
-            effect_->SetUniformInt("uOpaqueFrame", 5);
-            effect_->SetTexture(5, *opaqueFrame_);
+            effect_->SetUniformInt("uOpaqueFrame", 1);
+            effect_->SetTexture(1, *opaqueFrame_);
         }
 
-        lights.bind(*effect_, 1);
+        lights.bind(*effect_, 2);
 
         const bool haveArea = areaLight_ != nullptr && areaTable_ != nullptr &&
                               areaTable_->getTexture() != nullptr;
         effect_->SetUniformInt("uAreaShape", haveArea ? static_cast<int>(areaLight_->Shape) : -1);
         if (haveArea)
         {
-            effect_->SetUniformInt("uCnaAreaBrdf", 4);
-            effect_->SetTexture(4, *areaTable_->getTexture());
+            effect_->SetUniformInt("uCnaAreaBrdf", 0);
+            effect_->SetTexture(0, *areaTable_->getTexture());
             effect_->SetUniformFloat("uCnaAreaBrdfSize",
                                      static_cast<float>(areaTable_->getSize()));
             effect_->SetUniformVec3("uAreaPosition", areaLight_->Position.X, areaLight_->Position.Y,

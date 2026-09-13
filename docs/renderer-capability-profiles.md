@@ -1,6 +1,7 @@
 # Detailed renderer capability profiles
 
-Status: implemented as `MOD-2203` on 2026-08-22.
+Status: implemented as `MOD-2203` on 2026-08-22; numeric inventory extended by `MOD-2220`
+and detailed format plumbing by `MOD-2221` on 2026-09-08.
 
 CNA has two capability-discovery levels. `GraphicsCapability` remains the small compatibility
 summary used by existing code. `RendererCapabilityProfile` is the detailed, immutable snapshot for
@@ -38,12 +39,21 @@ The two format masks are intentional. For example, a missing `Sampled` bit in `k
 that this support path has not been classified; it does not mean the format cannot be sampled.
 `supportedUsages` is always a subset of `knownUsages`.
 
-The initial limit section consolidates the existing texture, vertex-stream, compute and
-vertex-storage-block queries. The initial format section classifies the three facts the existing
-renderer boundary can answer honestly: texture storage, render-target creation and `Color`-shaped
-transfer. The remaining usage identities already have stable names but stay unknown. Completing
-the broader native limit and format probes remains tracked by `MOD-2220` and `MOD-2221`; this
-profile does not mark those tasks complete prematurely.
+The limit section consolidates the existing texture, vertex-stream and compute-group queries and
+also has append-only identities for storage/uniform-buffer byte ranges, compute SSBO bindings,
+texture-array layers, per-stage sampled/storage images, vertex bindings/attributes, colour
+attachments, buffer-offset alignments and timestamp period. Timestamp period is represented as an
+integer number of **picoseconds** so the public/C ABI snapshot stays fixed-width without discarding
+Vulkan's fractional nanosecond values. A zero is the explicit unsupported/unimplemented result;
+the separate `known` bit remains available for a renderer that cannot classify a value.
+
+The common format boundary covers texture storage, sampling, linear filtering, render-target and
+blend attachment use, storage read/write/atomic use, transfer source/destination, mipmapping,
+multisampling and `Color`-shaped transfer. A renderer returns separate known and supported masks
+for one `SurfaceFormat`; its audited facts override the three older framework classifications for
+the same bits, while every omitted bit remains unknown. The false-by-default renderer hook therefore
+cannot turn native availability into an accidental CNA promise. Renderer-specific values and format
+facts are populated only by their owning rollout rows rather than inferred from renderer names.
 
 ## English limitations and complete report
 

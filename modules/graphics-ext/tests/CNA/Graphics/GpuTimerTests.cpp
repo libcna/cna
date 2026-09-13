@@ -120,12 +120,17 @@ TEST(GpuTimerTest, AClosedRangeEventuallyReportsANonNegativeTime)
     timer.end();
     EXPECT_FALSE(timer.isOpen());
 
+    // Deferred renderers do not submit a public frame from GpuTimer::end(); doing so would turn a
+    // measurement helper into a hidden present boundary. Submit exactly as an application does.
+    gd.Present();
+
     // Never blocks, so the result is collected by asking repeatedly rather than by waiting.
     bool collected = false;
     for (int attempt = 0; attempt < 10000 && !collected; ++attempt)
     {
         gd.Clear(Color::Black);
         collected = timer.poll();
+        if (!collected && (attempt % 8) == 7) gd.Present();
     }
 
     ASSERT_TRUE(collected) << "the GPU never finished a range of fifty clears";
@@ -193,6 +198,10 @@ TEST(GpuTimerTest, MoreWorkTakesMoreGpuTime)
         gd.SetRenderTarget(nullptr);
         timer.end();
 
+        // Make the asynchronous contract explicit for deferred APIs. Immediate GL simply submits
+        // an otherwise ordinary frame here; Vulkan records the two timestamps with this work.
+        gd.Present();
+
         // A one-texel read-back to force the batch through. Polling in a spin loop is what a game
         // does and what `PollingBeforeTheGpuFinishesReturnsFalseRatherThanBlocking` covers; here the
         // point is a number, and on a software rasteriser a spin of cheap clears can keep appending
@@ -206,6 +215,10 @@ TEST(GpuTimerTest, MoreWorkTakesMoreGpuTime)
         return -1.0;
     };
 
+    // The first use may compile/link the pipeline lazily inside a software driver. Keep that
+    // one-time cost out of a scaling assertion that is meant to compare steady-state fill work.
+    const double warmUp = measure(4);
+    ASSERT_GE(warmUp, 0.0);
     const double few  = measure(4);
     const double many = measure(40);
     ASSERT_GE(few, 0.0);

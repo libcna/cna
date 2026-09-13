@@ -9,6 +9,7 @@
 #include <memory>
 #include <set>
 #include <shared_mutex>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -17,8 +18,14 @@
 #include <variant>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+
 namespace CNA::Content::Pipeline
 {
+    class ContentPipeline;
+    class ContentPipelineRegistry;
+    struct ContentAdditionalWriteOutput;
+
     /** @brief Maximum number of named read-only external source roots in one build request. */
     inline constexpr std::size_t MaxContentSourceRoots = 32u;
 
@@ -132,6 +139,93 @@ namespace CNA::Content::Pipeline
     [[nodiscard]] bool TryParseContentOutputFormat(const std::string& name,
                                                    ContentOutputFormat& format);
 
+    /**
+     * @brief The XNA 4.0 platform a build produces content for
+     *        (plans/plan_xnapipeline_parity.md `XNAPP-040`).
+     *
+     * Format-neutral: a processor may consult it to take a platform-specific decision (texture
+     * format, profile limits) whatever container the build writes. The XNB writer maps it onto
+     * its own platform byte.
+     */
+    enum class ContentTargetPlatform
+    {
+        /** @brief Windows desktop. The default. */
+        Windows,
+        /** @brief Xbox 360. */
+        Xbox360,
+        /** @brief Windows Phone 7. */
+        WindowsPhone,
+    };
+
+    /**
+     * @brief Returns the XNA spelling of a target platform (`Windows`, `Xbox360`, `WindowsPhone`).
+     *
+     * @param platform The platform.
+     * @return A process-lifetime string literal.
+     */
+    [[nodiscard]] const char* ContentTargetPlatformName(ContentTargetPlatform platform) noexcept;
+
+    /**
+     * @brief Host-level facts about a build that any component may consult
+     *        (plans/plan_xnapipeline_parity.md `XNAPP-040`).
+     *
+     * These are the values XNA exposes on its processor context. None of them changes what a
+     * built-in CNA component does today; they exist so a component written against the XNA shape
+     * can ask the questions XNA lets it ask. Every field has the default XNA's own tooling uses
+     * for a Windows build.
+     */
+    /**
+     * @brief How strictly a build refuses what XNA would only warn about.
+     *
+     * `cna-content`'s own default is Strict, and deliberately: a parameter naming a property the
+     * processor has not got, or a character region the font cannot cover, is a mistake in the
+     * project that nothing else in the build will notice, and refusing is how an author finds out.
+     *
+     * XNA warns and carries on for both, measured case by case in
+     * plans/plan_xnapipeline_parity.md XNAPP-267, so the XNA task façade selects XnaCompatible:
+     * a `.contentproj` that builds there has to build here. Every refusal *not* listed as a
+     * leniency stays a refusal in both modes -- an impossible request is impossible whoever asked.
+     */
+    enum class ContentStrictness
+    {
+        /** @brief Refuse what cannot be honoured exactly. */
+        Strict,
+
+        /**
+         * @brief Warn and fall back where XNA warns and falls back.
+         *
+         * Two places today: a processor parameter it cannot recognise or convert is dropped and
+         * the processor keeps its default, and a character a font has no glyph for is drawn with
+         * the font's own `.notdef` rather than refusing the whole font.
+         */
+        XnaCompatible,
+    };
+
+    struct ContentBuildEnvironment
+    {
+        /** @brief Platform the content is built for. */
+        ContentTargetPlatform targetPlatform = ContentTargetPlatform::Windows;
+
+        /** @brief Graphics profile the content must respect. */
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile targetProfile =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
+
+        /** @brief Build configuration name, as MSBuild's `$(Configuration)`; `Release` by default. */
+        std::string buildConfiguration = "Release";
+
+        /** @brief Directory compiled artifacts are published to, or empty when not yet decided. */
+        std::filesystem::path outputDirectory;
+
+        /** @brief Directory a component may use for scratch files, or empty for none. */
+        std::filesystem::path intermediateDirectory;
+
+        /** @brief How strictly this build refuses what XNA would only warn about. */
+        ContentStrictness strictness = ContentStrictness::Strict;
+
+        /** @brief Compares every field. */
+        bool operator==(const ContentBuildEnvironment&) const = default;
+    };
+
     /** @brief Stable, author-controlled identity used for diagnostics and build invalidation. */
     struct ContentComponentIdentity
     {
@@ -201,8 +295,22 @@ namespace CNA::Content::Pipeline
     /** @brief Severity of one build log message. */
     enum class ContentLogLevel
     {
+        /** @brief Detail a build tool shows only when asked for it. */
         Info,
+        /**
+         * @brief Something the author asked to be told, shown at ordinary verbosity.
+         *
+         * XNA's `ContentBuildLogger` has two message levels and the distinction is the whole point
+         * of the second: `LogImportantMessage` is documented as reaching the user even at low
+         * verbosity, and a component uses it for what the author needs to see. Without a level
+         * between `Info` and `Warning`, a user's important message either vanishes with the
+         * chatter or is dressed up as a warning it is not
+         * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+         */
+        Important,
+        /** @brief Something the author lost, or is about to. */
         Warning,
+        /** @brief Something that stopped the build. */
         Error,
     };
 
@@ -370,6 +478,70 @@ namespace CNA::Content::Pipeline
     using ContentProcessorParameterValue =
         std::variant<bool, std::int64_t, std::uint64_t, double, std::string>;
 
+    /**
+     * @brief The two ways a processor parameter can be wrong on its own terms.
+     *
+     * Kept apart from every other reason a processor refuses one, because these two are the ones a
+     * host may choose to be lenient about. A parameter naming a property the processor has not got,
+     * and a value that cannot be converted to the property's type, are mistakes in the *project*
+     * that leave the processor's own defaults perfectly usable. "This build has no DXT encoder" and
+     * "this image cannot be block-compressed at 3x2" are not: honouring the request is impossible
+     * and defaulting past it would produce content nobody asked for.
+     *
+     * XNA is lenient about exactly these two -- it warns and builds with the default, measured in
+     * plans/plan_xnapipeline_parity.md XNAPP-267 -- and `cna-content` is not, because a typo in a
+     * parameter name should stop a build that nothing else will notice.
+     */
+    enum class ContentParameterFault
+    {
+        /** @brief The processor has no parameter of that name. */
+        UnknownName,
+
+        /** @brief The parameter exists and its written value is not of the property's type. */
+        UnconvertibleValue,
+    };
+
+    /**
+     * @brief A processor's refusal of one named parameter, carrying which one and why.
+     *
+     * Derives from `std::invalid_argument` so that every existing handler keeps working; what it
+     * adds is the two facts a lenient host needs, so that leniency never has to read a message.
+     */
+    class ContentParameterError : public std::invalid_argument
+    {
+    public:
+        /**
+         * @brief Creates the error.
+         *
+         * @param fault Which of the two mistakes this is.
+         * @param parameter The parameter's name, exactly as the processor knows it.
+         * @param message The full sentence, which stays the diagnostic a strict build reports.
+         */
+        ContentParameterError(ContentParameterFault fault, std::string parameter,
+                              const std::string& message)
+            : std::invalid_argument(message), fault_(fault), parameter_(std::move(parameter))
+        {
+        }
+
+        /**
+         * @brief Which of the two mistakes this is.
+         *
+         * @return The fault.
+         */
+        [[nodiscard]] ContentParameterFault Fault() const noexcept { return fault_; }
+
+        /**
+         * @brief The parameter the processor refused.
+         *
+         * @return Its name.
+         */
+        [[nodiscard]] const std::string& Parameter() const noexcept { return parameter_; }
+
+    private:
+        ContentParameterFault fault_;
+        std::string parameter_;
+    };
+
     /** @brief Ordered, explicitly typed processor parameters. */
     class ContentProcessorParameters
     {
@@ -407,6 +579,46 @@ namespace CNA::Content::Pipeline
 
     private:
         std::map<std::string, ContentProcessorParameterValue> values_;
+    };
+
+    /**
+     * @brief One other asset of the same build, as the coordinator holds it.
+     *
+     * XNA's build coordinator keeps every build it has been asked for and answers a repeated ask
+     * with the build it already has: `ContentProcessorContext.BuildAsset` creates a *request*, and
+     * a request that names the same source through the same importer, the same processor and the
+     * same parameters as one already in the build is that same request -- so it carries that
+     * request's asset name and produces no second output. Measured on the genuine `BuildContent`
+     * with a model whose material names an effect: with the effect an item of its own the model
+     * refers to the item's name (`shader`, and `shaders/mine` when the item is named that) and no
+     * `shader_0.xnb` is written, and with the item carrying one processor parameter -- even
+     * `DebugMode=Auto`, the default -- it is a different request again and `shader_0.xnb` comes
+     * back (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+     *
+     * A nested texture never matches an item this way, because `MaterialProcessor` asks for its
+     * textures with six parameters and an item that names none carries none -- which is what the
+     * genuine build does too: `tex_0.xnb` is written beside `tex.xnb` in every arrangement of the
+     * two that was measured.
+     */
+    struct ContentBuildSibling
+    {
+        /** @brief The item's canonical primary source path. */
+        std::filesystem::path source;
+
+        /** @brief The item's logical ContentManager asset name. */
+        std::string logicalName;
+
+        /** @brief The importer identity the item resolves to. */
+        std::string importer;
+
+        /** @brief The item's explicit processor name, or empty when the imported type chooses. */
+        std::string processor;
+
+        /** @brief The item's processor parameters. */
+        ContentProcessorParameters parameters;
+
+        /** @brief Compares every field. */
+        bool operator==(const ContentBuildSibling&) const = default;
     };
 
     /**
@@ -456,6 +668,27 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] bool Empty() const noexcept;
 
         /**
+         * @brief Returns the process-local C++ type of the stored value, for a component that
+         *        dispatches on it without knowing @p T statically (the XNA-shaped
+         *        `ContentCompiler`, plans/plan_xnapipeline_parity.md `XNAPP-062`).
+         *
+         * Never serialized: it identifies a type only within this process.
+         *
+         * @return The stored value's `std::type_index`, or `typeid(void)` when empty.
+         */
+        [[nodiscard]] std::type_index CppType() const noexcept;
+
+        /**
+         * @brief Returns the erased address of the stored value, valid while this object lives.
+         *
+         * The pointer is meaningful only together with CppType(); a caller casts it to that type
+         * and to nothing else.
+         *
+         * @return The stored value, or null when empty.
+         */
+        [[nodiscard]] const void* RawData() const noexcept;
+
+        /**
          * @brief Accesses the concrete value after checking its process-local C++ type.
          *
          * @tparam T Concrete type expected by the component.
@@ -503,7 +736,8 @@ namespace CNA::Content::Pipeline
                                std::string logicalName, std::string component,
                                const ContentSourceRootCapabilities& externalSourceRoots,
                                ContentDependencyCollector& dependencies,
-                               ContentBuildLogger& logger);
+                               ContentBuildLogger& logger,
+                               ContentBuildEnvironment environment = {});
 
         /** @brief Importer contexts are call-scoped and cannot be copied. */
         ContentImporterContext(const ContentImporterContext&) = delete;
@@ -519,6 +753,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Returns the logical ContentManager asset name. */
         [[nodiscard]] const std::string& LogicalName() const noexcept;
+
+        /** @brief Returns the host-level build facts (platform, profile, configuration, directories). */
+        [[nodiscard]] const ContentBuildEnvironment& Environment() const noexcept;
 
         /**
          * @brief Resolves and records a file dependency relative to the primary source.
@@ -541,6 +778,13 @@ namespace CNA::Content::Pipeline
         void LogInfo(std::string text) const;
 
         /**
+         * @brief Records a message the author asked to be told, at ordinary verbosity.
+         *
+         * @param text The message.
+         */
+        void LogImportant(std::string text) const;
+
+        /**
          * @brief Emits an importer warning.
          *
          * @param text Message text.
@@ -555,6 +799,7 @@ namespace CNA::Content::Pipeline
         ContentDependencyCollector* dependencies_ = nullptr;
         ContentBuildLogger* logger_ = nullptr;
         const ContentSourceRootCapabilities* externalSourceRoots_ = nullptr;
+        ContentBuildEnvironment environment_;
     };
 
     /** @brief Focused, call-scoped services available to a Content Processor. */
@@ -573,6 +818,10 @@ namespace CNA::Content::Pipeline
          * @param dependencies Per-build dependency collector.
          * @param logger Scoped logger.
          * @param outputFormat Compiled container this build is producing.
+         * @param environment Host-level build facts; defaults describe a Windows/Reach build.
+         * @param pipeline The coordinator running this build, so a processor can request a
+         *        nested in-process build (plans/plan_xnapipeline_parity.md `XNAPP-044`); null
+         *        when the context is constructed outside a coordinator.
          */
         ContentProcessorContext(std::filesystem::path sourceRoot, std::filesystem::path source,
                                 std::string logicalName, std::string component,
@@ -580,7 +829,10 @@ namespace CNA::Content::Pipeline
                                 const ContentSourceRootCapabilities& externalSourceRoots,
                                 ContentDependencyCollector& dependencies,
                                 ContentBuildLogger& logger,
-                                ContentOutputFormat outputFormat = ContentOutputFormat::Cnb);
+                                ContentOutputFormat outputFormat = ContentOutputFormat::Cnb,
+                                ContentBuildEnvironment environment = {},
+                                const ContentPipeline* pipeline = nullptr,
+                                std::shared_ptr<const std::vector<ContentBuildSibling>> siblings = {});
 
         /** @brief Processor contexts are call-scoped and cannot be copied. */
         ContentProcessorContext(const ContentProcessorContext&) = delete;
@@ -590,6 +842,34 @@ namespace CNA::Content::Pipeline
 
         /** @brief Returns the logical ContentManager asset name. */
         [[nodiscard]] const std::string& LogicalName() const noexcept;
+
+        /** @brief Returns the canonical source root. */
+        [[nodiscard]] const std::filesystem::path& SourceRoot() const noexcept;
+
+        /** @brief Returns the canonical primary source path. */
+        [[nodiscard]] const std::filesystem::path& SourcePath() const noexcept;
+
+        /** @brief Returns the host-level build facts (platform, profile, configuration, directories). */
+        [[nodiscard]] const ContentBuildEnvironment& Environment() const noexcept;
+
+        /** @brief Returns the external source-root capabilities this build was given. */
+        [[nodiscard]] const ContentSourceRootCapabilities& ExternalSourceRoots() const noexcept;
+
+        /** @brief Returns the dependency collector, so a nested build can merge its edges into this one. */
+        [[nodiscard]] ContentDependencyCollector& Dependencies() const noexcept;
+
+        /** @brief Returns the scoped logger this context reports through. */
+        [[nodiscard]] ContentBuildLogger& Logger() const noexcept;
+
+        /**
+         * @brief Returns the coordinator running this build, or null outside a coordinator.
+         *
+         * A processor that needs another asset built in-process -- XNA's `BuildAsset`,
+         * `BuildAndLoadAsset` and `Convert` -- goes through this rather than constructing a
+         * second pipeline, so the nested build shares the registry, the components and their
+         * frozen state.
+         */
+        [[nodiscard]] const ContentPipeline* Pipeline() const noexcept;
 
         /** @brief Returns the ordered processor parameters. */
         [[nodiscard]] const ContentProcessorParameters& Parameters() const noexcept;
@@ -668,13 +948,85 @@ namespace CNA::Content::Pipeline
         void LogInfo(std::string text) const;
 
         /**
+         * @brief Records a message the author asked to be told, at ordinary verbosity.
+         *
+         * @param text The message.
+         */
+        void LogImportant(std::string text) const;
+
+        /**
          * @brief Emits a processor warning.
          *
          * @param text Message text.
          */
         void LogWarning(std::string text) const;
 
+        /**
+         * @brief Adds a compiled asset a nested build produced, to be published as an additional
+         *        output of the current node (plans/plan_xnapipeline_parity.md `XNAPP-044`).
+         *
+         * This is how XNA's `ContentProcessorContext.BuildAsset` reaches the canonical
+         * multi-output path: the nested build ran through the same pipeline, its bytes and
+         * identity are complete, and `ContentPipeline::Build()` appends them after the current
+         * writer's own outputs -- so they are owned, fingerprinted and cleaned like any other
+         * artifact. A name that collides with the primary output or another additional output is
+         * refused when the build completes.
+         *
+         * @param output Complete compiled output with a distinct logical name.
+         * @throws std::invalid_argument for an empty logical name or empty bytes.
+         */
+        void AddNestedOutput(ContentAdditionalWriteOutput output);
+
+        /**
+         * @brief Returns the nested outputs added so far, in the order they were added.
+         *
+         * @return The outputs; the coordinator moves them into the build result.
+         */
+        [[nodiscard]] const std::vector<ContentAdditionalWriteOutput>& NestedOutputs() const noexcept;
+
+        /**
+         * @brief Records the writer schemas a nested build's own writer declared.
+         *
+         * A nested output was written by a different writer than this node's, so its schema is not
+         * one this node's writer declares. Both the manifest and the incremental check read the
+         * node's schema list -- the first to recognise every output it publishes, the second to
+         * invalidate the node when a schema it depends on changes -- so a nested build's schemas
+         * have to join that list or the node publishes an output it cannot describe and survives a
+         * change to the codec that wrote it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         *
+         * Duplicates are ignored, so repeating a schema across nested builds is harmless.
+         *
+         * @param schemas The nested build's declared writer schemas.
+         */
+        void AddNestedWriterSchemas(const std::vector<ContentWriterSchemaIdentity>& schemas);
+
+        /**
+         * @brief Returns the nested writer schemas added so far, in the order they were added.
+         *
+         * @return The schemas; the coordinator merges them into the node's own list.
+         */
+        [[nodiscard]] const std::vector<ContentWriterSchemaIdentity>& NestedWriterSchemas() const noexcept;
+
+        /**
+         * @brief Returns the other assets of the same build, or an empty span outside one.
+         *
+         * A processor starting a nested build consults this to see whether the asset it is about
+         * to ask for is already an item of the build it is part of; see ContentBuildSibling.
+         *
+         * @return The siblings, in the order the build lists them.
+         */
+        [[nodiscard]] std::span<const ContentBuildSibling> Siblings() const noexcept;
+
+        /**
+         * @brief Returns the shared sibling table itself, so a nested build request can carry it.
+         *
+         * @return The table, or null when this build has none.
+         */
+        [[nodiscard]] const std::shared_ptr<const std::vector<ContentBuildSibling>>&
+        SiblingsShared() const noexcept;
+
     private:
+        friend class ContentPipeline;
         std::filesystem::path sourceRoot_;
         std::filesystem::path source_;
         std::string logicalName_;
@@ -684,6 +1036,11 @@ namespace CNA::Content::Pipeline
         ContentBuildLogger* logger_ = nullptr;
         const ContentSourceRootCapabilities* externalSourceRoots_ = nullptr;
         ContentOutputFormat outputFormat_ = ContentOutputFormat::Cnb;
+        ContentBuildEnvironment environment_;
+        const ContentPipeline* pipeline_ = nullptr;
+        std::shared_ptr<const std::vector<ContentBuildSibling>> siblings_;
+        std::vector<ContentAdditionalWriteOutput> nestedOutputs_;
+        std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas_;
     };
 
     /**
@@ -705,6 +1062,19 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] virtual std::vector<std::string> SourceExtensions() const = 0;
 
         /**
+         * @brief Returns the stable name of the processor used when a build names none, or
+         *        empty to keep the registry's own default resolution
+         *        (plans/plan_xnapipeline_parity.md `XNAPP-038`).
+         *
+         * XNA's `ContentImporterAttribute.DefaultProcessor`: the importer, not the registry,
+         * knows which processor its output is meant for when several accept the same type. Every
+         * built-in CNA importer returns empty, so their resolution is unchanged.
+         *
+         * @return A registered processor name, or empty.
+         */
+        [[nodiscard]] virtual std::string DefaultProcessor() const { return {}; }
+
+        /**
          * @brief Returns the bounded stable type identities this importer may produce.
          *
          * Most source formats return one type. A self-describing container such as CNJ may return
@@ -714,6 +1084,24 @@ namespace CNA::Content::Pipeline
          * @return Non-empty stable ABI-independent imported type identities.
          */
         [[nodiscard]] virtual std::vector<std::string> OutputTypes() const = 0;
+
+        /**
+         * @brief Whether this importer takes part in choosing a route for a source extension.
+         *
+         * An importer that answers true is left out of default resolution: it still runs when a
+         * build names it, and it never becomes the answer to "which importer reads this extension"
+         * on its own.
+         *
+         * This exists because XNA has one `AudioContent` where CNA has two imported types, so an
+         * extension can legitimately be read two ways. A `.wma` is a song by convention and a
+         * sound effect when a project asks for one -- XNA's `WmaImporter` feeds either processor,
+         * and 14 of the sample corpus's `.wma` items ask for `SoundEffectProcessor`. Registering
+         * the second reader as an ordinary importer would make every convention build of a `.wma`
+         * ambiguous instead (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         *
+         * @return false for every ordinary importer.
+         */
+        [[nodiscard]] virtual bool SelectedByNameOnly() const { return false; }
 
         /**
          * @brief Imports the context's primary source into a source-oriented value.
@@ -762,6 +1150,23 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] virtual ContentValue Process(const ContentValue& input,
                                                    ContentProcessorContext& context) const = 0;
+
+        /**
+         * @brief Whether this processor is chosen only when a build names it.
+         *
+         * A processor that answers true is left out of default resolution: it still runs when a
+         * build, or a component starting a nested build, asks for it by name, and it never becomes
+         * the answer to "which processor handles this imported type" on its own.
+         *
+         * This exists for a processor registered under a name some other component reaches it by
+         * rather than as a route of its own -- the XNA-named `TextureProcessor` that `XNA`'s
+         * `MaterialProcessor` builds a model's textures through, which accepts imported images and
+         * must not therefore start competing with the built-in texture route for every `.png` in
+         * the tree (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         *
+         * @return false for every ordinary processor.
+         */
+        [[nodiscard]] virtual bool SelectedByNameOnly() const { return false; }
     };
 
     /** @brief Maximum number of primary and additional CNB outputs from one build node. */
@@ -796,6 +1201,18 @@ namespace CNA::Content::Pipeline
          * (plans/plan_xnapipeline.md `XNAP-99`). A CNB writer leaves this empty.
          */
         std::string rootReaderName;
+
+        /**
+         * @brief Whether a nested build produced this output rather than this node's own writer.
+         *
+         * The two are published the same way and differ in one respect that matters: a writer's
+         * additional output is this node's product and its name is this node's to claim, while a
+         * nested build's output is a copy of an asset another node may already own -- a model's
+         * materials build the textures they name, and a project usually lists those textures as
+         * items of its own. In-memory only; the manifest records what was published, not who asked
+         * for it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         */
+        bool fromNestedBuild = false;
     };
 
     /** @brief Primary CNB output and any bounded, explicitly named additional outputs. */
@@ -894,6 +1311,28 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] virtual ContentWriteResult Write(const ContentValue& input,
                                                        const std::string& logicalName) const = 0;
+
+        /**
+         * @brief Writes with the build's host-level facts available
+         *        (plans/plan_xnapipeline_parity.md `XNAPP-063`).
+         *
+         * The coordinator calls this form; the default forwards to Write() so every existing
+         * writer is unchanged. A writer whose bytes depend on the environment -- an XNB object
+         * writer spelling external references relative to the asset's output location -- overrides
+         * it.
+         *
+         * @param input Processed value whose stable type equals InputType().
+         * @param logicalName Logical name recorded in the output.
+         * @param environment The build's platform, profile, configuration and directories.
+         * @return The same result Write() returns.
+         */
+        [[nodiscard]] virtual ContentWriteResult Write(const ContentValue& input,
+                                                       const std::string& logicalName,
+                                                       const ContentBuildEnvironment& environment) const
+        {
+            (void)environment;
+            return Write(input, logicalName);
+        }
     };
 
     /**
@@ -1103,8 +1542,22 @@ namespace CNA::Content::Pipeline
         /** @brief Processor parameters included in the effective build identity. */
         ContentProcessorParameters parameters;
 
+        /** @brief Host-level build facts handed to every context of this build. */
+        ContentBuildEnvironment environment;
+
         /** @brief Optional scoped logger; null selects a no-op logger. */
         ContentBuildLogger* logger = nullptr;
+
+        /**
+         * @brief The other assets of the same build, or null when this build stands alone.
+         *
+         * Shared by every request of one build and inherited by every nested build, which is what
+         * makes a nested `BuildAsset` able to see that another item already asks for the same
+         * source in the same way. A single build with no siblings -- one asset built on its own,
+         * or a nested build inside it -- leaves this null and every nested asset gets a generated
+         * name, which is what happened before this existed.
+         */
+        std::shared_ptr<const std::vector<ContentBuildSibling>> siblings;
     };
 
     /** @brief Complete observable result of one in-memory content build. */
@@ -1151,6 +1604,31 @@ namespace CNA::Content::Pipeline
 
         /** @brief True for the current non-incremental coordinator; future manifests may skip. */
         bool built = true;
+    };
+
+    /** @brief Result of ContentPipeline::ImportAndProcess(): a processed value that was not written. */
+    struct ContentProcessResult
+    {
+        /** @brief Canonical primary source path of the nested stages. */
+        std::filesystem::path source;
+
+        /** @brief Logical name the request carried. */
+        std::string logicalName;
+
+        /** @brief Importer identity used. */
+        ContentComponentIdentity importer;
+
+        /** @brief Processor identity used. */
+        ContentComponentIdentity processor;
+
+        /** @brief The processed value, boxed under the processor's declared output type. */
+        ContentValue processed;
+
+        /** @brief Compiled assets the nested processor itself produced through further nested builds. */
+        std::vector<ContentAdditionalWriteOutput> nestedOutputs;
+
+        /** @brief Ordered messages the nested stages emitted. */
+        std::vector<ContentLogMessage> messages;
     };
 
     /** @brief Context-rich failure at a specific pipeline boundary. */
@@ -1214,7 +1692,39 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] ContentBuildResult Build(const ContentBuildRequest& request) const;
 
+        /**
+         * @brief Runs Importer -> Processor for a source and returns the processed value without
+         *        writing it (plans/plan_xnapipeline_parity.md `XNAPP-044`).
+         *
+         * The in-process half of a build, for a processor that needs another asset's *processed
+         * object* rather than its compiled bytes -- XNA's `BuildAndLoadAsset`. Dependencies the
+         * nested import and processing record go into @p dependencies, which a nesting processor
+         * passes its own collector so the outer node is rebuilt when the nested source changes;
+         * the nested source itself is recorded as a source-file dependency there, never as a
+         * second primary source.
+         *
+         * @param request Source identity, optional component overrides and processor parameters.
+         * @param dependencies Collector that receives every dependency of the nested stages.
+         * @return The processed value and the identities that produced it.
+         * @throws ContentPipelineError with source/stage/component context on any failure.
+         */
+        [[nodiscard]] ContentProcessResult ImportAndProcess(const ContentBuildRequest& request,
+                                                            ContentDependencyCollector& dependencies) const;
+
+        /**
+         * @brief Returns the frozen registry this coordinator builds with.
+         *
+         * @return The registry; never null.
+         */
+        [[nodiscard]] const ContentPipelineRegistry& Registry() const noexcept;
+
     private:
+        struct StagedBuild;
+        [[nodiscard]] StagedBuild RunImportAndProcess(const ContentBuildRequest& request,
+                                                      ContentDependencyCollector& dependencies,
+                                                      ContentBuildLogger& logger,
+                                                      bool nested) const;
+
         std::shared_ptr<const ContentPipelineRegistry> registry_;
     };
 }

@@ -16,6 +16,10 @@
 //   Color::White, no tint) reads back plain white, NOT the tint color -- the real discriminator
 //   that Check B's result came from the custom shader actually being bound, not the custom
 //   effect's pipeline/uniform being ignored and the stock shader winning regardless.
+// Check D -- a function-local custom effect may be destroyed after SpriteBatch.End() but before
+//   this whole-frame-deferred renderer replays the draw. The queued command must retain everything
+//   it needs and still produce the exact snapshotted tint; it must never dereference the dead
+//   public effect wrapper at replay time.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -123,6 +127,29 @@ class SdlGpuShaderEffectTest : public Game
         return px;
     }
 
+    Color RenderCenterPixelAfterEffectDestruction(GraphicsDevice& dev)
+    {
+        dev.SetRenderTarget(rt_.get());
+        dev.Clear(Color(0, 0, 0, 255));
+
+        SpriteBatch sb(dev);
+        {
+            ShaderEffect localEffect(dev, kVertSrc, kFragSrc);
+            localEffect.SetUniformVec4("color", 0.8f, 0.4f, 0.2f, 1.0f);
+            sb.Begin(SpriteSortMode::Immediate, BlendState::Opaque, nullptr, nullptr, nullptr,
+                     &localEffect);
+            sb.Draw(*whiteTex_, Rectangle(0, 0, kRTSize, kRTSize), Rectangle(0, 0, 1, 1),
+                    Color::White);
+            sb.End();
+        }
+
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
+        Color px(0, 0, 0, 0);
+        rt_->GetData(0, &centre, &px, 0, 1);
+        return px;
+    }
+
 protected:
     void LoadContent() override
     {
@@ -160,8 +187,21 @@ protected:
         Check(plain.getRProperty() == 255 && plain.getGProperty() == 255 && plain.getBProperty() == 255,
               "same draw with no custom effect reads back plain white (discriminates real binding from a no-op)");
 
-        std::printf("=== %d/3 PASS ===\n", passCount_);
-        result_ = (passCount_ == 3) ? 0 : 1;
+        const Color afterDestruction = RenderCenterPixelAfterEffectDestruction(dev);
+        const Color wantAfterDestruction(204, 102, 51, 255);
+        const bool lifetimeOk =
+            std::abs(afterDestruction.getRProperty() - wantAfterDestruction.getRProperty()) <= 1 &&
+            std::abs(afterDestruction.getGProperty() - wantAfterDestruction.getGProperty()) <= 1 &&
+            std::abs(afterDestruction.getBProperty() - wantAfterDestruction.getBProperty()) <= 1;
+        std::printf("       after-destruction=(%d,%d,%d) want~(%d,%d,%d)\n",
+                    afterDestruction.getRProperty(), afterDestruction.getGProperty(),
+                    afterDestruction.getBProperty(), wantAfterDestruction.getRProperty(),
+                    wantAfterDestruction.getGProperty(), wantAfterDestruction.getBProperty());
+        Check(lifetimeOk,
+              "queued custom-effect draw retains the snapshotted program after effect destruction");
+
+        std::printf("=== %d/4 PASS ===\n", passCount_);
+        result_ = (passCount_ == 4) ? 0 : 1;
         Exit();
     }
 

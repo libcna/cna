@@ -57,6 +57,16 @@ namespace CNA::Content::Pipeline
     /** @brief TextureProcessor parameter (`true`/`false`) rounding level zero up to powers of two. */
     inline constexpr const char* TextureResizeToPowerOfTwoParameter = "resizeToPowerOfTwo";
 
+    /**
+     * @brief `TextureProcessor` parameter selecting XNA's `PassThroughProcessor` behaviour.
+     *
+     * A pass-through writes what the importer produced, with none of the processor's own steps:
+     * no colour key, no premultiply, and a block-compressed `.dds` keeps the file's own blocks
+     * rather than being decoded and re-encoded (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+     * Set by the `.contentproj` route when a project names `PassThroughProcessor` on an image.
+     */
+    inline constexpr const char* TexturePassThroughParameter = "passThrough";
+
     /** @brief The compiled representation a texture build produces. */
     enum class TextureBuildFormat
     {
@@ -180,6 +190,21 @@ namespace CNA::Content::Pipeline
         /** @brief Optional additional Rgba8 mip levels in descending dimension order. */
         std::vector<std::vector<std::uint8_t>> additionalRgbaMipLevels;
 
+        /**
+         * @brief The block-compressed levels a `.dds` arrived with, kept beside the decoded ones.
+         *
+         * XNA does not throw a compressed source's blocks away. `TextureFormat=NoChange` on a DXT3
+         * `.dds` writes Dxt3 -- re-encoded, because the colour key and the premultiply ran first --
+         * and a `PassThroughProcessor` writes the file's own blocks *verbatim*, neither keyed nor
+         * premultiplied (measured, tests/reference/xna40/differential/texture_dds_dxt3_nochange.xnb
+         * and texture_dds_dxt3_passthrough.xnb; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+         * Empty for every source that is not a compressed `.dds`.
+         */
+        std::vector<std::vector<std::uint8_t>> sourceCompressedLevels;
+
+        /** @brief The format @ref sourceCompressedLevels are in, when there are any. */
+        std::optional<Cnb::CnbTextureFormat> sourceCompressedFormat;
+
         /** @brief Source-authored colour-key policy, or absent for ordinary image sources. */
         std::optional<std::array<std::uint8_t, 3>> authoredColorKey;
 
@@ -204,6 +229,19 @@ namespace CNA::Content::Pipeline
      * @return Validated dimensions and exact Rgba8 pixels.
      */
     [[nodiscard]] ImportedImage DecodeImportedImage(const std::filesystem::path& source);
+
+    /**
+     * @brief Applies a PNG's own `gAMA` chunk to already-decoded RGBA8 texels, as GDI+ does.
+     *
+     * XNA's `TextureImporter` loads through `System.Drawing`, and GDI+ honours a PNG's gamma
+     * chunk. Exported because the XNA façade's own `TextureImporter` decodes through a different
+     * route and has to apply the same rule (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).
+     *
+     * @param file The source file's bytes; anything that is not a PNG is left alone.
+     * @param pixels The decoded RGBA8 texels, corrected in place.
+     */
+    void ApplyPngFileGammaEXT(const std::vector<std::uint8_t>& file,
+                              std::vector<std::uint8_t>& pixels);
 
     /**
      * @brief Converts validated source-oriented pixels into canonical Texture2D CNB data.

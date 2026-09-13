@@ -105,10 +105,10 @@ Effect Framework header are `CNA_RESULT_INVALID_ARGUMENT`, and MonoGame's distin
 is `CNA_RESULT_NOT_SUPPORTED` — a recognized format this route does not accept, not a malformed
 one. Whether *valid* bytecode is then accepted is the renderer's answer, and
 `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is how a caller asks in advance rather than by
-attempting it. That capability is true for the `FNA3D` renderer always, and for `SDL_GPU`, `VULKAN`
-and the EasyGL family when their build option is on; every other renderer reports false and refuses
-the bytecode rather than quietly drawing with a stock shader, because a silent fallback makes a
-porting bug look like an art bug. `docs/fx-compiled-effects.md` is the full matrix.
+attempting it. That capability is true for the `FNA3D` renderer always, and for `SDL_GPU`, `VULKAN`,
+the EasyGL family, and `DIRECTX11` when their build option is on; unsupported renderers report false
+and refuse the bytecode rather than quietly drawing with a stock shader, because a silent fallback
+makes a porting bug look like an art bug. `docs/fx-compiled-effects.md` is the full matrix.
 
 `cna_effect_get_is_compiled_ext` reports whether an effect carries a compiled runtime. The
 canonical accessor hands back the runtime object, which is renderer-owned implementation a C caller

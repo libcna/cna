@@ -243,25 +243,13 @@ TEST(ShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
 
-    const bool canRaster  = gd.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-    const bool canCompile = CnaTest::EngineLayer::RunsShaderSource(gd);
-    if (!canRaster || !canCompile)
+    // MOD-2237: support follows actual multi-language package selection. In particular, Vulkan
+    // cannot compile the GLSL text at runtime but selects the checked-in SPIR-V caster instead.
+    EXPECT_EQ(shadowMap.isSupported(), shadowMap.getCasterEffect() != nullptr);
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
     {
         EXPECT_FALSE(shadowMap.isSupported());
         EXPECT_EQ(shadowMap.getCasterEffect(), nullptr);
-    }
-    else if (gd.SupportsShadowSamplingEXT())
-    {
-        EXPECT_TRUE(shadowMap.isSupported());
-        EXPECT_NE(shadowMap.getCasterEffect(), nullptr);
-    }
-    else
-    {
-        // MOD-1699: `CustomEffects` and "this layer's caster shader compiles here" are different
-        // claims, and the Vulkan renderer is where they come apart -- it compiles custom effects
-        // from SPIR-V bytecode, not from the GLSL the caster is written in. What must hold on such
-        // a renderer is not that the map works, but that it says so consistently.
-        EXPECT_EQ(shadowMap.isSupported(), shadowMap.getCasterEffect() != nullptr);
     }
 
     // Either way a pass opens and closes without throwing, which is the property that lets a game

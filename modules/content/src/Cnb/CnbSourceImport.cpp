@@ -120,13 +120,21 @@ namespace CNA::Content::Cnb
             // Exactly the runtime rule: a matching pixel keeps its RGB and loses its alpha. Not
             // "becomes transparent black" -- that would change the colour a bilinear filter blends
             // toward at the edge of a keyed region.
+            //
+            // The match is on **four** channels, a document's three-component key standing for an
+            // alpha of 255. It is the same rule the `.contentproj` route follows, and it has to be:
+            // `CnjContentPipelineTest.Texture2DConvergesOnTheExistingTextureProcessorAndWriter`
+            // compiles one document both ways and compares the bytes, so a key that clears a
+            // different set of pixels here than there is a defect whichever set is right
+            // (`CNBF-118`; the four-channel rule is measured in
+            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-142`).
             const std::uint8_t keyR = (*options.colorKey)[0];
             const std::uint8_t keyG = (*options.colorKey)[1];
             const std::uint8_t keyB = (*options.colorKey)[2];
             for (std::size_t i = 0; i + 3u < image.pixels.size(); i += 4u)
             {
                 if (image.pixels[i] == keyR && image.pixels[i + 1u] == keyG &&
-                    image.pixels[i + 2u] == keyB)
+                    image.pixels[i + 2u] == keyB && image.pixels[i + 3u] == 255u)
                 {
                     image.pixels[i + 3u] = 0u;
                 }
@@ -196,26 +204,29 @@ namespace CNA::Content::Cnb
             FailWav(origin, "is not a RIFF/WAVE file.");
         }
 
-        // The RIFF header's own length field bounds the chunk list, and it is checked rather than
-        // ignored (plans/plan_cnb.md CNBF-117). A declared length longer than the file is a
-        // truncated download; a shorter one means the chunks after it are not part of this RIFF
-        // form and must not be walked into.
+        // The RIFF header's length field is checked for one thing only -- that it is at least the
+        // four bytes of its own 'WAVE' form identifier -- and bounds nothing. That is measured on
+        // the genuine `WavImporter` rather than assumed
+        // (tests/reference/xna40/audio/audio-content-oracle.json, `wav/riff-size` and
+        // `wav/riff-size-threshold`): a length of 0, 1, 2 or 3 is refused and every other value is
+        // accepted, including one that cuts the 'data' chunk in half, one 100 bytes past the end
+        // of the file, and `0xFFFFFFFF` -- all of which answer the whole of the declared 'data'
+        // chunk. SAMPLE-145's six `Whoosh` WAVs are the corpus's own case: each declares a length
+        // 68 bytes short of the file, which is exactly the `smpl` chunk somebody inserted after
+        // that length was computed, and XNA built all six
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-192`). This replaces the stricter reading
+        // `plans/plan_cnb.md` CNBF-117 chose before the importer had been measured.
         const std::uint32_t riffSize = ReadU32(wavBytes, 4u);
         if (riffSize < 4u)
         {
             FailWav(origin, "declares a RIFF length of " + std::to_string(riffSize) +
                                 " bytes, too short even for its own 'WAVE' form identifier.");
         }
-        if (static_cast<std::uint64_t>(riffSize) + 8u > wavBytes.size())
-        {
-            FailWav(origin, "declares a RIFF length of " + std::to_string(riffSize) +
-                                " bytes, which runs past the end of the " +
-                                std::to_string(wavBytes.size()) + "-byte file by " +
-                                std::to_string(static_cast<std::uint64_t>(riffSize) + 8u -
-                                               wavBytes.size()) +
-                                " byte(s).");
-        }
-        const std::size_t riffEnd = 8u + static_cast<std::size_t>(riffSize);
+        // The chunk walk is bounded by the file. A chunk that runs past *that* is still refused:
+        // the genuine importer answers it by reading past its own buffer -- a 1,600-byte payload
+        // whose 'data' chunk claims 4,000 more comes back 5,600 bytes long, and what those 4,000
+        // hold differs from run to run -- so there is no answer to reproduce.
+        const std::size_t fileEnd = wavBytes.size();
 
         bool haveFmt = false;
         std::uint16_t formatTag = 0u;
@@ -229,21 +240,37 @@ namespace CNA::Content::Cnb
         std::uint32_t loopStart = 0u;
         std::uint32_t loopLength = 0u;
 
-        // One pass over the chunk list, bounded by the RIFF form rather than by the file. Chunks
-        // are word-aligned and a chunk that claims to extend past the form is malformed, not
-        // something to read anyway.
+        // One pass over the chunk list, bounded by the file. A chunk whose declared size runs past
+        // the end of the file **ends the walk** rather than failing the import, which is what the
+        // genuine importer does and is separately measured: a chunk of an impossible size placed
+        // after the 'data' chunk is accepted and the same chunk placed before it is refused, so
+        // what fails is having no 'data' rather than the unreadable chunk itself
+        // (tests/reference/xna40/audio/audio-content-oracle.json `wav/riff-size-threshold`,
+        // `junk_after_data` and `junk_before_data`; plans/plan_xna_sample_xnb_sweep.md
+        // `XNASWEEP-192`). The same measurement is why trailing bytes too few to be another chunk
+        // header are ignored: one through nine of them are all accepted.
+        //
+        // The one deliberate divergence is a 'fmt ' or 'data' chunk that itself runs past the end
+        // of the file. XNA reads it anyway, past its own buffer: a 1,600-byte payload whose 'data'
+        // declares 4,000 more comes back 5,600 bytes long and the extra 4,000 differ from run to
+        // run. There is no answer to reproduce, so CNA refuses by name.
         std::size_t pos = 12u;
-        while (pos + 8u <= riffEnd)
+        while (pos + 8u <= fileEnd)
         {
             const std::uint8_t* id = wavBytes.data() + pos;
             const std::string idText(reinterpret_cast<const char*>(id), 4);
             const std::uint32_t chunkSize = ReadU32(wavBytes, pos + 4u);
             const std::size_t start = pos + 8u;
-            if (static_cast<std::uint64_t>(start) + chunkSize > riffEnd)
+            if (static_cast<std::uint64_t>(start) + chunkSize > fileEnd)
             {
-                FailWav(origin, "has a '" + idText + "' chunk claiming " +
-                                    std::to_string(chunkSize) +
-                                    " bytes, which runs past the end of the RIFF form.");
+                if (idText == "fmt " || idText == "data")
+                {
+                    FailWav(origin, "has a '" + idText + "' chunk claiming " +
+                                        std::to_string(chunkSize) +
+                                        " bytes, which runs past the end of the " +
+                                        std::to_string(wavBytes.size()) + "-byte file.");
+                }
+                break;
             }
             const std::size_t chunkEnd = start + chunkSize;
 
@@ -363,8 +390,13 @@ namespace CNA::Content::Cnb
                         const std::uint32_t last = ReadU32(wavBytes, start + 36u + 12u);
                         if (last > first)
                         {
+                            // RIFF's loop End is the last frame *played*, so the region is
+                            // inclusive and one frame longer than the difference. Measured on
+                            // Spacewar's `Menu_Loop.wav`, whose `smpl` names 67693-859611 and
+                            // whose genuine `.xnb` carries a loop length of 791919
+                            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-124).
                             loopStart = first;
-                            loopLength = last - first;
+                            loopLength = last - first + 1u;
                         }
                     }
                 }
@@ -375,18 +407,12 @@ namespace CNA::Content::Cnb
             // and refusing on it would reject files every other tool plays.
             //
             // The pad byte is required only when something FOLLOWS the chunk: an odd-length chunk
-            // ending exactly at the form's end needs none, and every real encoder omits it there.
-            // `chunkEnd` cannot exceed `riffEnd` -- the bound above already refused that -- so the
+            // ending exactly at the file's end needs none, and every real encoder omits it there.
+            // `chunkEnd` cannot exceed `fileEnd` -- the bound above already stopped that -- so the
             // two cases here are the whole space.
             std::size_t next = chunkEnd;
-            if ((chunkSize & 1u) != 0u && chunkEnd < riffEnd) { next = chunkEnd + 1u; }
+            if ((chunkSize & 1u) != 0u && chunkEnd < fileEnd) { next = chunkEnd + 1u; }
             pos = next;
-        }
-        if (pos != riffEnd)
-        {
-            FailWav(origin, "has " + std::to_string(riffEnd - pos) +
-                                " byte(s) after its last chunk, too few to be another chunk "
-                                "header; the RIFF form and its chunk list disagree.");
         }
 
         if (!haveFmt) { FailWav(origin, "has no 'fmt ' chunk."); }
@@ -518,7 +544,8 @@ namespace CNA::Content::Cnb
     }
 
     CnbSoundEffectData ProcessImportedSoundEffect(
-        const CNA::Content::Import::ImportedSound& imported)
+        const CNA::Content::Import::ImportedSound& imported,
+        const SoundEffectLoopPolicy loopPolicy)
     {
         if (imported.channels != 1u && imported.channels != 2u)
         {
@@ -537,6 +564,14 @@ namespace CNA::Content::Cnb
             throw ContentLoadException(
                 "CNB SoundEffect processing: imported loop region exceeds the frame count.");
         }
+        // See SoundEffectLoopPolicy: a build gives a loopless source the whole sound, as XNA does,
+        // and a runtime reader keeps what its file declared.
+        const std::uint32_t effectiveLoopLength =
+            loopPolicy == SoundEffectLoopPolicy::WholeSoundWhenUnset &&
+                    imported.loopStart == 0u && imported.loopLength == 0u
+                ? imported.frameCount
+                : imported.loopLength;
+
         const std::uint64_t sourceBytesPerSample =
             CNA::Content::Import::ImportedPcmSampleBytes(imported.encoding);
         if (sourceBytesPerSample == 0u)
@@ -557,15 +592,22 @@ namespace CNA::Content::Cnb
         }
 
         CnbSoundEffectData sound;
-        sound.format = CnbAudioFormat::Pcm16;
+        // 8-bit stays 8-bit: the `SoundEffect` schema carries the width from version 2 on, so the
+        // source route answers what the source declared for the same reason the XNA-compatible
+        // pipeline does. Wider encodings still narrow to 16 bits, because no schema version
+        // stores them (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        sound.format = imported.encoding == CNA::Content::Import::ImportedPcmEncoding::Unsigned8
+                           ? CnbAudioFormat::Pcm8
+                           : CnbAudioFormat::Pcm16;
         sound.sampleRate = imported.sampleRate;
         sound.channels = imported.channels;
         sound.frameCount = imported.frameCount;
         sound.loopStart = imported.loopStart;
-        sound.loopLength = imported.loopLength;
+        sound.loopLength = effectiveLoopLength;
 
         using CNA::Content::Import::ImportedPcmEncoding;
-        if (imported.encoding == ImportedPcmEncoding::Signed16LittleEndian)
+        if (imported.encoding == ImportedPcmEncoding::Signed16LittleEndian ||
+            imported.encoding == ImportedPcmEncoding::Unsigned8)
         {
             sound.samples = imported.samples;
             return sound;
@@ -592,11 +634,6 @@ namespace CNA::Content::Cnb
             std::int64_t value = 0;
             switch (imported.encoding)
             {
-            case ImportedPcmEncoding::Unsigned8:
-                // 8-bit WAV samples are UNSIGNED with a bias of 128. (s - 128) * 256 is exact:
-                // nothing is rounded or clipped.
-                value = (static_cast<std::int64_t>(imported.samples[offset]) - 128) * 256;
-                break;
             case ImportedPcmEncoding::Signed24LittleEndian:
             {
                 std::int32_t packed =
@@ -636,6 +673,7 @@ namespace CNA::Content::Cnb
                 value = std::llround(std::clamp(scaled, -32768.0, 32767.0));
                 break;
             }
+            case ImportedPcmEncoding::Unsigned8:
             case ImportedPcmEncoding::Signed16LittleEndian:
             default:
                 throw ContentLoadException(
@@ -655,7 +693,8 @@ namespace CNA::Content::Cnb
     CnbSoundEffectData DecodeWavAsCnbSoundEffect(std::span<const std::uint8_t> wavBytes,
                                                   const std::string& origin)
     {
-        return ProcessImportedSoundEffect(DecodeWavAsImportedSound(wavBytes, origin));
+        return ProcessImportedSoundEffect(DecodeWavAsImportedSound(wavBytes, origin),
+                                          SoundEffectLoopPolicy::WholeSoundWhenUnset);
     }
 
     CNA::Content::Import::ImportedSound ImportWavAsImportedSound(const std::string& wavPath)
@@ -677,6 +716,7 @@ namespace CNA::Content::Cnb
 
     CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::filesystem::path& wavPath)
     {
-        return ProcessImportedSoundEffect(ImportWavAsImportedSound(wavPath));
+        return ProcessImportedSoundEffect(ImportWavAsImportedSound(wavPath),
+                                          SoundEffectLoopPolicy::WholeSoundWhenUnset);
     }
 }

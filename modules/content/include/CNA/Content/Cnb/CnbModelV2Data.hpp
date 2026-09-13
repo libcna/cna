@@ -205,8 +205,18 @@ namespace CNA::Content::Cnb
     /** @brief One Model schema-2 bone. */
     struct CnbModelV2Bone
     {
-        /** @brief Bone name. */
+        /** @brief Bone name; empty both when the bone is unnamed and when its name is empty. */
         std::string name;
+        /**
+         * @brief Whether the bone has no name at all, which XNA writes as a null object rather
+         *        than as a zero-length string.
+         *
+         * In memory only: schema 2's file format is frozen and stores a name string, so this is
+         * carried between the XNA-shaped model and the `.xnb` writer -- the route every built
+         * model takes -- and is not serialized. A model that has been through a `.cnb` file comes
+         * back with an empty name rather than none (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         */
+        bool nameIsNull = false;
         /** @brief Parent index, or -1. */
         std::int32_t parent = -1;
         /** @brief Bone-local transform in M11..M44 order. */

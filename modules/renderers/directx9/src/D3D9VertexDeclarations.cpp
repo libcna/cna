@@ -1,10 +1,57 @@
 // plans/plan_dx9.md Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 
+#include <limits>
+#include <stdexcept>
+
 namespace CNA::Internal::Renderers::DirectX9
 {
     namespace
     {
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        BYTE ToD3D9Type(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single:           return D3DDECLTYPE_FLOAT1;
+                case VertexElementFormat::Vector2:          return D3DDECLTYPE_FLOAT2;
+                case VertexElementFormat::Vector3:          return D3DDECLTYPE_FLOAT3;
+                case VertexElementFormat::Vector4:          return D3DDECLTYPE_FLOAT4;
+                case VertexElementFormat::Color:            return D3DDECLTYPE_UBYTE4N;
+                case VertexElementFormat::Byte4:            return D3DDECLTYPE_UBYTE4;
+                case VertexElementFormat::Short2:           return D3DDECLTYPE_SHORT2;
+                case VertexElementFormat::Short4:           return D3DDECLTYPE_SHORT4;
+                case VertexElementFormat::NormalizedShort2: return D3DDECLTYPE_SHORT2N;
+                case VertexElementFormat::NormalizedShort4: return D3DDECLTYPE_SHORT4N;
+                case VertexElementFormat::HalfVector2:      return D3DDECLTYPE_FLOAT16_2;
+                case VertexElementFormat::HalfVector4:      return D3DDECLTYPE_FLOAT16_4;
+            }
+            throw std::runtime_error("DirectX9Renderer: unsupported vertex element format");
+        }
+
+        BYTE ToD3D9Usage(VertexElementUsage usage)
+        {
+            switch (usage)
+            {
+                case VertexElementUsage::Position:          return D3DDECLUSAGE_POSITION;
+                case VertexElementUsage::Color:             return D3DDECLUSAGE_COLOR;
+                case VertexElementUsage::TextureCoordinate: return D3DDECLUSAGE_TEXCOORD;
+                case VertexElementUsage::Normal:            return D3DDECLUSAGE_NORMAL;
+                case VertexElementUsage::Binormal:          return D3DDECLUSAGE_BINORMAL;
+                case VertexElementUsage::Tangent:           return D3DDECLUSAGE_TANGENT;
+                case VertexElementUsage::BlendIndices:      return D3DDECLUSAGE_BLENDINDICES;
+                case VertexElementUsage::BlendWeight:       return D3DDECLUSAGE_BLENDWEIGHT;
+                case VertexElementUsage::Depth:             return D3DDECLUSAGE_DEPTH;
+                case VertexElementUsage::Fog:               return D3DDECLUSAGE_FOG;
+                case VertexElementUsage::PointSize:         return D3DDECLUSAGE_PSIZE;
+                case VertexElementUsage::Sample:            return D3DDECLUSAGE_SAMPLE;
+                case VertexElementUsage::TessellateFactor:  return D3DDECLUSAGE_TESSFACTOR;
+            }
+            throw std::runtime_error("DirectX9Renderer: unsupported vertex element usage");
+        }
+
         // D9-82 real finding (plans/plan_dx9.md's DirectX9Renderer's own first real draw, empirically
         // verified with cna_test_directx9_draw before AND after this fix -- not assumed): COLOR0 was
         // originally declared D3DDECLTYPE_D3DCOLOR (D9-22, "same semantic meaning" as D3D11's
@@ -42,8 +89,7 @@ namespace CNA::Internal::Renderers::DirectX9
             D3DDECL_END()
         };
 
-        // D9-82d: D3D9-only, not shared with D3D11/D3D12 -- see this file's own header comment for
-        // why (DualTextureEffect.fx's real VSInputTx2 genuinely needs two distinct UV sets).
+        // D9-82d: DualTextureEffect.fx's real VSInputTx2 genuinely needs two distinct UV sets.
         // Position+TexCoord0+TexCoord1 (stride 28): POSITION0 (FLOAT3, 0), TEXCOORD0 (FLOAT2, 12),
         // TEXCOORD1 (FLOAT2, 20).
         constexpr D3DVERTEXELEMENT9 kStride28[] = {
@@ -169,5 +215,31 @@ namespace CNA::Internal::Renderers::DirectX9
             case 80: count = 7; return kStride80Color;
             default: count = 0; return nullptr;
         }
+    }
+
+    std::vector<D3DVERTEXELEMENT9> TranslateVertexElementsD3D9(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements)
+    {
+        std::vector<D3DVERTEXELEMENT9> translated;
+        translated.reserve(elements.size() + 1);
+        for (const auto& element : elements)
+        {
+            const int offset = element.getOffsetProperty();
+            const int usageIndex = element.getUsageIndexProperty();
+            if (offset < 0 || offset > std::numeric_limits<WORD>::max() ||
+                usageIndex < 0 || usageIndex > std::numeric_limits<BYTE>::max())
+                throw std::runtime_error("DirectX9Renderer: vertex declaration value is out of range");
+
+            translated.push_back({
+                0,
+                static_cast<WORD>(offset),
+                ToD3D9Type(element.getVertexElementFormatProperty()),
+                D3DDECLMETHOD_DEFAULT,
+                ToD3D9Usage(element.getVertexElementUsageProperty()),
+                static_cast<BYTE>(usageIndex),
+            });
+        }
+        translated.push_back(D3DDECL_END());
+        return translated;
     }
 }

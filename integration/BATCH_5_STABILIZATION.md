@@ -91,7 +91,7 @@ None is a supported-path defect introduced by HTML DOM or a Batch 5 technical-st
 Every compile invocation used an explicit numeric bound of at most four jobs. The only nested SDL
 bootstrap helper was inspected and invokes `--parallel 2`; no bare argument-less parallel mode ran.
 The session-wide maximum is therefore **4**, `-j8` was never reached, and the required ≤8 ceiling
-holds. Persistent lane-specific build trees live under `/media/robertvokac/claude/tmp/cna`; the
+holds. Persistent lane-specific build trees live under `build-probe`; the
 configure-time SDL bootstrap output was moved out of the source worktree into the same persistent
 storage area rather than deleted.
 

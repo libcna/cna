@@ -113,10 +113,15 @@ struct Halves
     int right = 0;
 };
 
-Halves CountPaintedHalves(RenderTarget2D& target)
+std::vector<Color> ReadTarget(RenderTarget2D& target)
 {
     std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
     target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    return pixels;
+}
+
+Halves CountPaintedHalves(const std::vector<Color>& pixels)
+{
     Halves halves;
     for (int y = 0; y < kSize; ++y)
         for (int x = 0; x < kSize; ++x)
@@ -136,9 +141,9 @@ std::unique_ptr<Texture2D> WhiteDecal(GraphicsDevice& device)
     return texture;
 }
 
-/// Runs the whole route and returns what the decal painted.
-Halves PaintDecal(GraphicsDevice& device, DecalPass& pass, const Matrix& decalWorld,
-                  const bool useNormals)
+std::vector<Color> PaintDecalPixels(GraphicsDevice& device, DecalPass& pass,
+                                    Texture2D& decal, const Matrix& decalWorld,
+                                    const bool useNormals)
 {
     DepthNormalPrepass prepass(device, kSize, kSize);
     RunPrepass(device, prepass);
@@ -147,13 +152,37 @@ Halves PaintDecal(GraphicsDevice& device, DecalPass& pass, const Matrix& decalWo
                           useNormals ? prepass.getNormalTexture() : nullptr);
     pass.setCamera(View(), Projection(), kFarPlane);
 
-    const auto decal = WhiteDecal(device);
     RenderTarget2D target(device, kSize, kSize);
     device.SetRenderTarget(&target);
     device.Clear(Color::Black);
-    pass.draw(decal.get(), decalWorld, kSize, kSize);
+    pass.draw(&decal, decalWorld, kSize, kSize);
     device.SetRenderTarget(nullptr);
-    return CountPaintedHalves(target);
+    return ReadTarget(target);
+}
+
+/// Runs the whole route and returns what the decal painted.
+Halves PaintDecal(GraphicsDevice& device, DecalPass& pass, const Matrix& decalWorld,
+                  const bool useNormals)
+{
+    const auto decal = WhiteDecal(device);
+    return CountPaintedHalves(
+        PaintDecalPixels(device, pass, *decal, decalWorld, useNormals));
+}
+
+float RegionMean(const std::vector<Color>& pixels, const int channel,
+                 const int lowY, const int highY)
+{
+    float total = 0.0f;
+    int count = 0;
+    for (int y = lowY; y < highY; ++y)
+        for (int x = 4; x < kSize / 2 - 4; ++x)
+        {
+            const Color& pixel = pixels[static_cast<std::size_t>(y) * kSize + x];
+            total += channel == 0 ? pixel.getRProperty()
+                                  : pixel.getBProperty();
+            ++count;
+        }
+    return total / static_cast<float>(count);
 }
 
 TEST(DecalPassTest, TheBoxTestIsAvailableWithoutAGpu)
@@ -217,7 +246,7 @@ TEST(DecalPassTest, WithNoPrepassDepthNothingIsPainted)
     pass.draw(decal.get(), NearDecal(), kSize, kSize);
     device.SetRenderTarget(nullptr);
 
-    const Halves painted = CountPaintedHalves(target);
+    const Halves painted = CountPaintedHalves(ReadTarget(target));
     EXPECT_EQ(painted.left, 0);
     EXPECT_EQ(painted.right, 0);
 }
@@ -233,6 +262,53 @@ TEST(DecalPassTest, ADecalLandsOnTheSurfaceUnderItAndNotOnTheOneBehind)
         << "the near surface, which the decal box encloses, was not painted";
     EXPECT_EQ(painted.right, 0)
         << "the far surface was painted too, so the box's depth extent is not being tested";
+}
+
+TEST(DecalPassTest, TheDecalImageKeepsItsLocalVerticalAxisOnEveryBackend)
+{
+    GraphicsDevice device;
+    DecalPass pass(device);
+    if (!pass.isSupported()) GTEST_SKIP() << "this renderer cannot select the decal package";
+
+    Texture2D decal(device, 4, 4);
+    std::array<Color, 16> texels{};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            texels[static_cast<std::size_t>(y) * 4 + x] = y < 2 ? Color::Red : Color::Blue;
+    decal.SetData(texels.data(), static_cast<int>(texels.size()));
+
+    const std::vector<Color> pixels =
+        PaintDecalPixels(device, pass, decal, NearDecal(), /*useNormals=*/false);
+    const float upperRed  = RegionMean(pixels, 0, 8, 24);
+    const float upperBlue = RegionMean(pixels, 2, 8, 24);
+    const float lowerRed  = RegionMean(pixels, 0, 40, 56);
+    const float lowerBlue = RegionMean(pixels, 2, 40, 56);
+
+    EXPECT_GT(upperBlue, upperRed + 50.0f)
+        << "local +Y sampled the wrong half of the decal image";
+    EXPECT_GT(lowerRed, lowerBlue + 50.0f)
+        << "local -Y sampled the wrong half of the decal image";
+}
+
+TEST(DecalPassTest, TintAndOpacityReachTheNonPremultipliedBlend)
+{
+    GraphicsDevice device;
+    DecalPass pass(device);
+    if (!pass.isSupported()) GTEST_SKIP() << "this renderer cannot select the decal package";
+
+    pass.setTint(Vector3(0.5f, 0.25f, 0.125f));
+    pass.setOpacity(0.5f);
+    const auto decal = WhiteDecal(device);
+    const std::vector<Color> pixels =
+        PaintDecalPixels(device, pass, *decal, NearDecal(), /*useNormals=*/false);
+    const Color sample = pixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 4];
+
+    // NonPremultiplied multiplies the shader's straight RGB by its alpha during blending. The
+    // opaque-black destination leaves the resulting alpha at 0.5 + 1.0 * (1.0 - 0.5) = 0.75.
+    EXPECT_NEAR(sample.getRProperty(), 64, 3);
+    EXPECT_NEAR(sample.getGProperty(), 32, 3);
+    EXPECT_NEAR(sample.getBProperty(), 16, 3);
+    EXPECT_NEAR(sample.getAProperty(), 191, 3);
 }
 
 TEST(DecalPassTest, ADecalWhoseBoxReachesNeitherSurfacePaintsNothing)

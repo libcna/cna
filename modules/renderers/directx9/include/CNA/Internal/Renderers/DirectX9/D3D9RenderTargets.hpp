@@ -109,6 +109,8 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         /// Real depth-stencil surface, or null if no depth format was requested (CNAEXT).
         [[nodiscard]] IDirect3DSurface9* GetDepthStencilSurfaceEXT() const { return depthStencilSurface_.Get(); }
+        /** @brief Returns the XNA depth format used for this target's depth-stencil surface. */
+        [[nodiscard]] int GetDepthStencilFormatEXT() const { return depthFormatOrdinal_; }
 
         /// D9-40/D9-53: releases the D3DPOOL_DEFAULT color texture/MSAA surface/depth-stencil
         /// surface before a device Reset(). Lazily recreated on the next BindAsRenderTarget() call.
@@ -161,6 +163,8 @@ namespace CNA::Internal::Renderers::DirectX9
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        /** @brief Returns the XNA depth format used for this target's depth-stencil surface. */
+        [[nodiscard]] int GetDepthStencilFormatEXT() const { return depthFormatOrdinal_; }
 
         /// Real IDirect3DCubeTexture9 (CNAEXT).
         [[nodiscard]] IDirect3DCubeTexture9* GetTextureEXT() const { return texture_.Get(); }

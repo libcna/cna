@@ -1,0 +1,362 @@
+{
+ "sample": "SAMPLE-141-Riemers",
+ "runner": "scripts/Xna4AssetProbe.cs",
+ "guid": "29F37637-48C9-4B72-93E9-737825C14100",
+ "comment": "Five series, each a non-recursive Directory.GetFiles over its own source root, sorted ordinal-ignore-case, classified by extension. Every asset gets an OutputDirectory of its own -- xna4-diagnostic\\Content\\<series>\\<assetName> -- which is why each reference is <series>/<stem>/<stem>.xnb and why each series is its own output root here. Windows, CompressContent false, RebuildAll true. The runner also sets processor parameters as plain MSBuild metadata for the 2d-shooters series only, and every one of them is the processor's own default measured in tests/reference/xna40/graphics/graphics-content-oracle.json -- ColorKeyColor 255,0,255,255, ColorKeyEnabled True, GenerateMipmaps False, PremultiplyAlpha True, ResizeToPowerOfTwo False, TextureFormat Color for TextureProcessor, Quality Best for SoundEffectProcessor -- so whether BuildContent reads unprefixed metadata as a parameter cannot change what was built. MakeSquare, and the FontDescriptionProcessor's PremultiplyAlpha and TextureFormat, are not XNA 4.0 properties at all. No parameters are written for that reason.",
+ "units": [
+  {
+   "project": "2d-shooters.contentproj",
+   "sourceRoot": "expanded/2d-shooters/Content",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "outputDirectory": "{stem}"
+    }
+   ]
+  },
+  {
+   "project": "3d-series-1-terrain.contentproj",
+   "sourceRoot": "expanded/3d-series-1-terrain/Series 1",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "HiDef",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "outputDirectory": "{stem}"
+    }
+   ]
+  },
+  {
+   "project": "3d-series-2-flightsim.contentproj",
+   "sourceRoot": "expanded/3d-series-2-flightsim/Series 2",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "HiDef",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "outputDirectory": "{stem}"
+    }
+   ]
+  },
+  {
+   "project": "3d-series-3-hlsl-intro.contentproj",
+   "sourceRoot": "expanded/3d-series-3-hlsl-intro/Series 3",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "HiDef",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "outputDirectory": "{stem}"
+    }
+   ],
+   "skip": [
+    "streettexture.dds"
+   ],
+   "skipComment": "`streettexture.dds` and `streettexture.jpg` share a stem, so both would be the asset `streettexture/streettexture`. The runner builds one asset per `BuildContent` call with `RebuildAll`, so it never saw a collision -- it simply wrote the second over the first, and its loop is sorted ordinal-ignore-case, which puts `.dds` first and lets `.jpg` win. The corpus agrees: the reference is 1,048,763 bytes, which is 512x512 in `Color` and not a compressed surface. A single project cannot express 'build both, keep the last', so the loser is skipped by name."
+  },
+  {
+   "project": "3d-series-4-advanced-terrain.contentproj",
+   "sourceRoot": "expanded/3d-series-4-advanced-terrain/Series 4",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "HiDef",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "outputDirectory": "{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "outputDirectory": "{stem}"
+    }
+   ]
+  }
+ ]
+}

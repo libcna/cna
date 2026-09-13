@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:Pipeline="Microsoft.Xna.Framework.Content.Pipeline" xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="Pipeline:OpaqueDataDictionary">
+    <Data Key="Count" Type="int">3</Data>
+    <Data Key="Name">wall</Data>
+    <Data Key="Scale" Type="Framework:Vector3">1 2 3</Data>
+  </Asset>
+</XnaContent>

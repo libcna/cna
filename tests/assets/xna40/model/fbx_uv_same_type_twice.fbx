@@ -1,0 +1,206 @@
+; FBX 6.1.0 project file
+; Written by tools/xna-pipeline-oracle/model/make_uv2_probes.py for this repository.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+Definitions:  {
+	Version: 100
+	Count: 4
+	ObjectType: "Model" {
+		Count: 1
+	}
+	ObjectType: "Material" {
+		Count: 1
+	}
+	ObjectType: "Texture" {
+		Count: 1
+	}
+	ObjectType: "Video" {
+		Count: 1
+	}
+}
+
+Objects:  {
+	Model: "Model::fbx_uv_same_type_twice", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: 0,0,0,1,0,0,1,1,0,0,1,0
+		PolygonVertexIndex: 0,1,-3,0,2,-4
+		GeometryVersion: 124
+		LayerElementNormal: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "ByVertice"
+			ReferenceInformationType: "Direct"
+			Normals: 0,0,1,0,0,1,0,0,1,0,0,1
+		}
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: 0
+		}
+		LayerElementUV: 0 {
+			Version: 101
+			Name: "UVChannel_DIFFUSE0"
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "IndexToDirect"
+			UV: 0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8
+			UVIndex: 0,1,2,0,2,3
+		}
+		LayerElementTransparentUV: 0 {
+			Version: 101
+			Name: "UVChannel_TRANSPARENT0"
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "IndexToDirect"
+			UV: 0.11,0.22,0.33,0.44,0.55,0.66,0.77,0.88
+			UVIndex: 0,1,2,0,2,3
+		}
+		LayerElementTransparentUV: 1 {
+			Version: 101
+			Name: "UVChannel_TRANSPARENT1"
+			MappingInformationType: "ByPolygonVertex"
+			ReferenceInformationType: "IndexToDirect"
+			UV: 0.111,0.222,0.333,0.444,0.555,0.666,0.777,0.888
+			UVIndex: 0,1,2,0,2,3
+		}
+		LayerElementTexture: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			BlendMode: "Translucent"
+			TextureAlpha: 1
+			TextureId: 0
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementNormal"
+				TypedIndex: 0
+			}
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+			LayerElement:  {
+				Type: "LayerElementTexture"
+				TypedIndex: 0
+			}
+			LayerElement:  {
+				Type: "LayerElementUV"
+				TypedIndex: 0
+			}
+			LayerElement:  {
+				Type: "LayerElementTransparentUV"
+				TypedIndex: 0
+			}
+			LayerElement:  {
+				Type: "LayerElementTransparentUV"
+				TypedIndex: 1
+			}
+		}
+	}
+	Material: "Material::Probe", "" {
+		Version: 102
+		ShadingModel: "phong"
+		MultiLayer: 0
+		Properties60:  {
+			Property: "ShadingModel", "KString", "", "phong"
+			Property: "DiffuseColor", "Color", "A+",0.8,0.8,0.8
+			Property: "SpecularColor", "Color", "A+",0.2,0.2,0.2
+			Property: "EmissiveColor", "Color", "A+",0,0,0
+			Property: "Opacity", "double", "",1
+			Property: "Shininess", "double", "",8
+		}
+	}
+	Texture: "Texture::MapA", "TextureVideoClip" {
+		Type: "TextureVideoClip"
+		Version: 202
+		TextureName: "Texture::MapA"
+		Properties60:  {
+			Property: "Translation", "Vector", "A+",0,0,0
+			Property: "Rotation", "Vector", "A+",0,0,0
+			Property: "Scaling", "Vector", "A+",1,1,1
+			Property: "Texture alpha", "Number", "A+",1
+			Property: "TextureTypeUse", "enum", "",0
+			Property: "CurrentTextureBlendMode", "enum", "",1
+			Property: "UseMaterial", "bool", "",1
+			Property: "UseMipMap", "bool", "",0
+			Property: "CurrentMappingType", "enum", "",0
+			Property: "UVSwap", "bool", "",0
+			Property: "WrapModeU", "enum", "",0
+			Property: "WrapModeV", "enum", "",0
+			Property: "TextureRotationPivot", "Vector3D", "",0,0,0
+			Property: "TextureScalingPivot", "Vector3D", "",0,0,0
+			Property: "VideoProperty", "object", ""
+		}
+		Media: "Video::MapA"
+		FileName: "probe_0.dds"
+		RelativeFilename: "probe_0.dds"
+		ModelUVTranslation: 0,0
+		ModelUVScaling: 1,1
+		Texture_Alpha_Source: "None"
+		Cropping: 0,0,0,0
+	}
+	Video: "Video::MapA", "Clip" {
+		Type: "Clip"
+		Properties60:  {
+			Property: "Path", "charptr", "", "probe_0.dds"
+		}
+		UseMipMap: 0
+		Filename: "probe_0.dds"
+		RelativeFilename: "probe_0.dds"
+	}
+}
+
+Relations:  {
+	Model: "Model::fbx_uv_same_type_twice", "Mesh" {
+	}
+	Material: "Material::Probe", "" {
+	}
+	Texture: "Texture::MapA", "TextureVideoClip" {
+	}
+	Video: "Video::MapA", "Clip" {
+	}
+}
+
+Connections:  {
+	Connect: "OO", "Model::fbx_uv_same_type_twice", "Model::Scene"
+	Connect: "OO", "Material::Probe", "Model::fbx_uv_same_type_twice"
+	Connect: "OO", "Texture::MapA", "Model::fbx_uv_same_type_twice"
+	Connect: "OO", "Video::MapA", "Texture::MapA"
+}
+
+Version5:  {
+	AmbientRenderSettings:  {
+		Version: 101
+		AmbientLightColor: 0.0,0.0,0.0,0
+	}
+}

@@ -1,0 +1,271 @@
+; FBX 6.1.0 project file
+; Written by tools/xna-pipeline-oracle/model/make_pivot_probe.py for
+; plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176.
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+Definitions:  {
+	Version: 100
+	Count: 10
+	ObjectType: "Model" {
+		Count: 10
+	}
+}
+
+Objects:  {
+	Model: "Model::N000_0", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",-90,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",1
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N000_1", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,-90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",0
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N001_0", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,90.0000839233398,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,-90
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",1
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N001_1", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,-90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",0
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N002_0", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",-90,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",1
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N002_1", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",3,4,5
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",0
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N003_0", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,-90
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",1
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N003_1", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,-90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",0
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N004_0", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,-90
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",1
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::N004_1", "Null" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,-90.0000839233398
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "RotationOrder", "enum", "",0
+			Property: "PreRotation", "Vector3D", "",0,0,0
+			Property: "PostRotation", "Vector3D", "",0,0,0
+			Property: "RotationPivot", "Vector3D", "",0,0,0
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "RotationOffset", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",0,0,0
+			Property: "RotationActive", "bool", "",0
+			Property: "InheritType", "enum", "",0
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+}
+
+Relations:  {
+	Model: "Model::N000_0", "Null" {
+	}
+	Model: "Model::N000_1", "Null" {
+	}
+	Model: "Model::N001_0", "Null" {
+	}
+	Model: "Model::N001_1", "Null" {
+	}
+	Model: "Model::N002_0", "Null" {
+	}
+	Model: "Model::N002_1", "Null" {
+	}
+	Model: "Model::N003_0", "Null" {
+	}
+	Model: "Model::N003_1", "Null" {
+	}
+	Model: "Model::N004_0", "Null" {
+	}
+	Model: "Model::N004_1", "Null" {
+	}
+}
+
+Connections:  {
+	Connect: "OO", "Model::N000_0", "Model::Scene"
+	Connect: "OO", "Model::N000_1", "Model::N000_0"
+	Connect: "OO", "Model::N001_0", "Model::Scene"
+	Connect: "OO", "Model::N001_1", "Model::N001_0"
+	Connect: "OO", "Model::N002_0", "Model::Scene"
+	Connect: "OO", "Model::N002_1", "Model::N002_0"
+	Connect: "OO", "Model::N003_0", "Model::Scene"
+	Connect: "OO", "Model::N003_1", "Model::N003_0"
+	Connect: "OO", "Model::N004_0", "Model::Scene"
+	Connect: "OO", "Model::N004_1", "Model::N004_0"
+}
+
+Takes:  {
+	Current: ""
+}

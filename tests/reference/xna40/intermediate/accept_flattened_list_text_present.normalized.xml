@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:Attributes">
+    <PublicProperty>2</PublicProperty>
+    <GetOnlyList>11 12</GetOnlyList>
+    <Renamed>1</Renamed>
+    <OptionalPresent>here</OptionalPresent>
+    <OptionalDefault>0</OptionalDefault>
+    <NeverNull>v</NeverNull>
+    <Name>f</Name>
+    <Value>2</Value>1 2<RenamedItems>3 4</RenamedItems>5 6<Named>7 8</Named></Asset>
+</XnaContent>

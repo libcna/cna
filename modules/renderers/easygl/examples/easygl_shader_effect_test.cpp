@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 132: EasyGL integration test — ShaderEffect (GLSL) with SpriteBatch.
 //
-// Renders a white 1×1 texture through a custom GLSL ShaderEffect that outputs
-// only the red channel of the sampled texel, producing a red-tinted sprite
-// over a green background.
+// Renders a white 1×1 texture through the GLSL ES variant of the generated
+// portable tint package, producing a red-tinted sprite over a green background.
 //
 // Vertex shader matches the SpriteBatch attribute layout exactly:
 //   location 0 = vec2 aPos      (pixel coords)
@@ -12,11 +11,12 @@
 //   uniform mat4 projection     (set by SpriteBatch on the compiled program)
 //
 // Fragment shader:
-//   FragColor = vec4(texture(texture1, TexCoord).r, 0.0, 0.0, 1.0)
-//   → white texel → red output  (verifies custom GLSL replaces the built-in shader)
+//   FragColor = texture(texture1, TexCoord) * Color * uColor
+//   → white texel × red uniform → red output
 //
-// The sampler2D 'texture1' uniform defaults to texture unit 0, which is where
-// SpriteBatch binds the sprite texture, so no explicit uniform-integer set is needed.
+// The sampler2D 'texture1' uniform defaults to texture unit 0, where SpriteBatch
+// binds the sprite texture. The package source and Vulkan bytecode share the same
+// observable tint contract even though their renderer integration differs.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -29,6 +29,10 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
+#include "common/PortableTintShaderPackage.generated.hpp"
+#include "common/PortableTintShaderPackage.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -38,46 +42,19 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-// ---------------------------------------------------------------------------
-// GLSL ES 3.0 shaders — attribute layout matches EasyGLSpriteBatchRenderer.
-// ---------------------------------------------------------------------------
+// The checked-in package is generated from the adjacent declared GLSL source files.
+static constexpr const char* kVertSrc =
+    CNA::Examples::PortableTint::kEasyGlVertexSource.data();
+static constexpr const char* kFragSrc =
+    CNA::Examples::PortableTint::kEasyGlFragmentSource.data();
 
-static const char* kVertSrc = R"(#version 300 es
-precision highp float;
-
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-
-out vec2 TexCoord;
-out vec4 Color;
-
-uniform mat4 projection;
-
-void main()
-{
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-    Color = aColor;
-}
-)";
-
-// Red-tint fragment: output only the red channel of the sampled texel.
-// White texture (r=1) → red output (1, 0, 0, 1).
-static const char* kFragSrc = R"(#version 300 es
+static const char* kBrokenFragSrc = R"(#version 300 es
 precision mediump float;
 
-in vec2 TexCoord;
-in vec4 Color;
-
 out vec4 FragColor;
-
-uniform sampler2D texture1;
-
 void main()
 {
-    vec4 t = texture(texture1, TexCoord);
-    FragColor = vec4(t.r, 0.0, 0.0, t.a);
+    FragColor = definitely_not_a_declared_value;
 }
 )";
 
@@ -93,6 +70,60 @@ protected:
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
+
+        const auto dialect = device.GetShaderDialectEXT();
+        const bool dialectOk = dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslEs;
+        const bool graphicsLanguageOk = device.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex)
+            && device.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment);
+        const bool computeLanguageOk = device.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute)
+            == device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders);
+        const bool refusalOk = !device.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment)
+            && !device.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::Unknown, CNA::ShaderStageEXT::Vertex)
+            && !device.SupportsShaderLanguageEXT(
+                static_cast<CNA::ShaderLanguageEXT>(999), CNA::ShaderStageEXT::Fragment)
+            && !device.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::GlslEs, static_cast<CNA::ShaderStageEXT>(999));
+        if (!dialectOk || !graphicsLanguageOk || !computeLanguageOk || !refusalOk)
+        {
+            std::printf("[FAIL] EasyGLShaderEffect: shader language contract mismatch "
+                        "(dialect=%d, graphics=%d, compute=%d, refusal=%d)\n",
+                        static_cast<int>(dialect), graphicsLanguageOk, computeLanguageOk,
+                        refusalOk);
+            done_ = true;
+            Exit();
+            return;
+        }
+        std::printf("[PASS] EasyGLShaderEffect: GLSL language/stage contract\n");
+
+        ShaderEffect broken(device, kVertSrc, kBrokenFragSrc);
+        const auto diagnostics = broken.GetShaderDiagnosticsEXT();
+        const bool brokenDiagnosticOk = !broken.IsEffectValid() && !diagnostics.empty()
+            && diagnostics.front().getSeverity()
+                == CNA::ShaderDiagnosticSeverityEXT::Error
+            && diagnostics.front().getStage() == CNA::ShaderStageEXT::Fragment
+            && diagnostics.front().getSourceLabel().empty()
+            && diagnostics.front().getLine() == 7
+            && diagnostics.front().getColumn() >= 0
+            && !diagnostics.front().getMessage().empty();
+        if (!brokenDiagnosticOk)
+        {
+            std::printf("[FAIL] EasyGLShaderEffect: broken GLSL diagnostic was not structured "
+                        "(count=%zu, stage=%d, line=%d)\n",
+                        diagnostics.size(),
+                        diagnostics.empty() ? -1
+                            : static_cast<int>(diagnostics.front().getStage()),
+                        diagnostics.empty() ? -1 : diagnostics.front().getLine());
+            done_ = true;
+            Exit();
+            return;
+        }
+        std::printf("[PASS] EasyGLShaderEffect: broken GLSL diagnostic stage=fragment line=7\n");
+
         sb_ = std::make_unique<SpriteBatch>(device);
 
         // 1×1 solid-white texture — the red-tint shader will colourise it.
@@ -110,7 +141,25 @@ protected:
         const int W = vp.getWidthProperty();
         const int H = vp.getHeightProperty();
 
-        ShaderEffect fx(device, kVertSrc, kFragSrc);
+        bool packageSelectionOk = true;
+        std::unique_ptr<ShaderEffect> ownedEffect;
+#ifdef CNA_CNAEXT
+        const auto package = CNA::Examples::PortableTint::CreatePackage();
+        const auto selection = package.selectFor(device);
+        ownedEffect = std::make_unique<ShaderEffect>(device, package);
+        packageSelectionOk = selection.isUsable()
+            && selection.getLanguage() == CNA::ShaderLanguageEXT::GlslEs
+            && ownedEffect->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::GlslEs
+            && selection.findStage(CNA::ShaderStageEXT::Vertex) != nullptr
+            && selection.findStage(CNA::ShaderStageEXT::Fragment) != nullptr;
+        std::printf("[%s] MOD-2217: portable package selected GLSL ES on EasyGL\n",
+                    packageSelectionOk ? "PASS" : "FAIL");
+#else
+        // The legacy constructor keeps this renderer test usable in the intentional CNAEXT-off
+        // configuration; MOD-2217's package-selection leg runs in the CNAEXT-on configuration.
+        ownedEffect = std::make_unique<ShaderEffect>(device, kVertSrc, kFragSrc);
+#endif
+        ShaderEffect& fx = *ownedEffect;
 
         if (!fx.IsEffectValid())
         {
@@ -118,6 +167,9 @@ protected:
             Exit();
             return;
         }
+
+        fx.Apply();
+        fx.SetUniformVec4("uColor", 1.0f, 0.0f, 0.0f, 1.0f);
 
         device.Clear(Color(0, 255, 0, 255)); // green background
         device.SetDepthTestEnabled(false);
@@ -142,7 +194,7 @@ protected:
         const bool centOk = (centPx.getRProperty() >= 200 && centPx.getGProperty() <= 50);
         const bool bgOk   = (bgPx.getGProperty()   >= 200 && bgPx.getRProperty()   <= 50);
 
-        if (centOk && bgOk)
+        if (centOk && bgOk && packageSelectionOk)
         {
             std::printf("[PASS] EasyGLShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),

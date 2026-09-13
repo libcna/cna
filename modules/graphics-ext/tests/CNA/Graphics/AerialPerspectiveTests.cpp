@@ -314,7 +314,6 @@ TEST(AerialPerspectiveTest, NearGeometryIsUntouchedAndDistantGeometryIsNot)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     RenderTarget2D destination(gd, kSize, kSize);
@@ -352,7 +351,6 @@ TEST(AerialPerspectiveTest, TheSkyItselfIsLeftAloneBecauseItAlreadyCarriesTheAtm
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 120);
     // The prepass clears depth to white: nothing was drawn.
@@ -367,6 +365,47 @@ TEST(AerialPerspectiveTest, TheSkyItselfIsLeftAloneBecauseItAlreadyCarriesTheAtm
     EXPECT_NEAR(static_cast<int>(CentrePixel(destination).getRProperty()), 120, 2);
 }
 
+TEST(AerialPerspectiveTest, LookingUpCrossesLessAirOnTheSameScreenSideOnEveryBackend)
+{
+    // A flat image is deliberate: the only vertical signal comes from camera-ray reconstruction.
+    // The low GetData rows are the upper screen (+Y in the XNA camera). At 100 km the upper ray is
+    // capped by the atmosphere above it while the lower ray still crosses many columns of air, so
+    // transmittance alone must leave the upper row brighter. Reversing the Vulkan texture-UV to
+    // camera-NDC bridge reverses this inequality while every centre-pixel assertion still passes.
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto scene = MakeFlatScene(gd, 255);
+    auto depth = MakeFlatDepth(gd, 100000.0f);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    AerialPerspectivePass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the aerial-perspective shader package";
+    pass.setIntensity(0.0f);
+    pass.setTurbidity(2.5f);
+    pass.setScaleHeight(kScaleHeight);
+
+    PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);
+    pass.apply(context);
+    ASSERT_TRUE(pass.getFallbackReason().empty()) << pass.getFallbackReason();
+
+    std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color::Black);
+    destination.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const Color& upper = pixels[static_cast<std::size_t>(4) * kSize + kSize / 2];
+    const Color& lower = pixels[static_cast<std::size_t>(kSize - 5) * kSize + kSize / 2];
+
+    std::printf("    white at 100 km: upper (%d, %d, %d), lower (%d, %d, %d)\n",
+                upper.getRProperty(), upper.getGProperty(), upper.getBProperty(),
+                lower.getRProperty(), lower.getGProperty(), lower.getBProperty());
+    EXPECT_GT(static_cast<int>(upper.getRProperty()),
+              static_cast<int>(lower.getRProperty()) + 30)
+        << "the atmospheric gradient is on the wrong vertical screen side";
+    EXPECT_GT(static_cast<int>(upper.getBProperty()),
+              static_cast<int>(lower.getBProperty()) + 20);
+}
+
 TEST(AerialPerspectiveTest, FarEnoughAwayBlueIsReplacedByTheSkyItself)
 {
     // MOD-2140's real claim, and what makes this a model rather than a distance tint: where the air
@@ -378,7 +417,6 @@ TEST(AerialPerspectiveTest, FarEnoughAwayBlueIsReplacedByTheSkyItself)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     RenderTarget2D destination(gd, kSize, kSize);
     // Past 38 air masses the cap is in force, which is the state the sky itself is in.
@@ -458,7 +496,6 @@ TEST(AerialPerspectiveTest, HazierAirTakesMoreOfADistantSurface)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 255);
     auto depth = MakeFlatDepth(gd, 20000.0f);
@@ -490,7 +527,6 @@ TEST(AerialPerspectiveTest, TheScaleHeightIsWhereAGamesWorldScaleEnters)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeFlatDepth(gd, 500.0f);

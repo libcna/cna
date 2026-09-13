@@ -1,0 +1,12 @@
+{
+  "format": "CNA.ContentPipeline.Config",
+  "version": 1,
+  "assets": {
+    "dawn.quest": {
+      "parameters": {
+        "Repeats": { "type": "i64", "value": "3" },
+        "Reward": { "type": "string", "value": "reward.quest" }
+      }
+    }
+  }
+}

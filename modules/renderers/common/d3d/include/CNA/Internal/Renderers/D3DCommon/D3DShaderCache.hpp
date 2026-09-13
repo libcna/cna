@@ -17,8 +17,7 @@ namespace CNA::Internal::Renderers::D3DCommon
 {
     using Microsoft::WRL::ComPtr;
 
-    /// Identifies one of the stock HLSL shader variants ported in DX-13-hlsl and compiled to DXBC
-    /// in DX-14-compile (hlsl_shaders.hpp) -- originally 10, plus AlphaTestColored3d (DX-136).
+    /// Identifies one of the stock HLSL shader variants compiled into hlsl_shaders.hpp.
     /// Mirrors the .hlsl source filenames.
     enum class D3DShaderVariant
     {
@@ -26,21 +25,46 @@ namespace CNA::Internal::Renderers::D3DCommon
         Textured3d,
         ColoredTextured3d,
         LitTextured3d,
+        /// BasicEffect's per-pixel-lit vertex-color family.
+        LitTextured3dColored,
+        /// BasicEffect Position+Normal input variant. It shares LitTextured3d's pixel shader but
+        /// does not require UV or Color inputs from the caller's declaration.
+        LitUntextured3d,
         AlphaTest3d,
+        /// AlphaTestEffect with a white fallback texture and Position-only input.
+        AlphaTestUntextured3d,
         DualTexture3d,
+        /// DualTextureEffect with independent TEXCOORD0 and TEXCOORD1 inputs.
+        DualTextureDualUv3d,
+        /// DualTextureEffect with a packed COLOR0 input and one shared texture coordinate.
+        DualTextureColored3d,
+        /// DualTextureEffect with packed COLOR0 and independent TEXCOORD0/TEXCOORD1 inputs.
+        DualTextureColoredDualUv3d,
         EnvMap3d,
         Skinned3d,
+        /// Skinned3d with a floating-point BLENDINDICES input.
+        Skinned3dFloatIndices,
         Sprite2d,
         Instanced3d,
+        /// Instanced3d with BasicEffect's COLOR0 multiplier input.
+        InstancedColored3d,
         /// plans/plan_dx.md DX-136: alpha_test3d's stride-24 (VertexPositionColorTexture) sibling --
         /// gives AlphaTestEffect.VertexColorEnabled a real vertex-color attribute to multiply
         /// against, which plain AlphaTest3d (stride 20, Position+UV only) never carries.
         AlphaTestColored3d,
+        /// AlphaTestEffect with a white fallback texture and Position+Color input.
+        AlphaTestUntexturedColored3d,
         /// plans/plan_graphics.md Phase 80 (Task 1106/1107): real per-vertex-lit siblings of
         /// LitTextured3d/Skinned3d, selected when GpuDrawParams::preferPerPixelLighting is false
         /// (XNA's real default) -- identical Blinn-Phong math, evaluated in the vertex stage.
         LitTextured3dVertexLit,
+        /// BasicEffect's default per-vertex-lit vertex-color family.
+        LitTextured3dVertexLitColored,
+        /// Per-vertex-lit counterpart of LitUntextured3d.
+        LitUntextured3dVertexLit,
         Skinned3dVertexLit,
+        /// Skinned3dVertexLit with a floating-point BLENDINDICES input.
+        Skinned3dVertexLitFloatIndices,
         /// plans/plan_cnj.md CNB-58 follow-up: PbrEffect's metallic-roughness BRDF (unskinned), HLSL
         /// port of EasyGLRenderer::EnsurePbrProgram(). Stride 48
         /// (VertexPositionNormalTangentTexture).
@@ -60,9 +84,13 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// Color attribute (SkinnedEffect::VertexColorEnabled), HLSL port of
         /// EasyGLRenderer::EnsureSkinnedProgram()'s vertex-color wiring.
         Skinned3dColored,
+        /// Skinned3dColored with a floating-point BLENDINDICES input.
+        Skinned3dColoredFloatIndices,
         /// plans/plan_cnj.md CNB-67 follow-up: Skinned3dVertexLit's own stride-56 vertex-color sibling,
         /// HLSL port of EasyGLRenderer::EnsureSkinnedVertexLitProgram()'s vertex-color wiring.
         Skinned3dVertexLitColored,
+        /// Skinned3dVertexLitColored with a floating-point BLENDINDICES input.
+        Skinned3dVertexLitColoredFloatIndices,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.

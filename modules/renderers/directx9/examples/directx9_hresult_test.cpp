@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -267,7 +268,7 @@ int main()
     try
     {
         GraphicsRendererCreateArgs args;
-        args.surface.windowId = SDL_GetWindowID(window);
+        args.surface = CNA::Examples::SdlTestSurface(window);
         args.virtualWidth = 64;
         args.virtualHeight = 64;
         args.depthStencilFormat = static_cast<int>(DepthFormat::Depth24Stencil8);

@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/ColorGradePass.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #ifdef CNA_CNAEXT
 
-#include "CNA/Graphics/EngineException.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "PostProcessShaderPackages.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -21,205 +24,52 @@ namespace CNA::Graphics {
 
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
     using Microsoft::Xna::Framework::Graphics::Texture3D;
 
     namespace {
 
-        constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-}
-)";
-
-        // The strip lookup, and every term in it is about staying off the edges of a texel. A 3D
-        // table sampled as a 2D strip has no filtering across slices -- the neighbouring slice is
-        // half a table away in u -- so blue is interpolated by hand between two lookups while red
-        // and green ride the sampler's own bilinear filtering inside a slice.
-        constexpr const char* kFragmentSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uLutSampler;
-uniform float uLutSize;
-uniform float uStrength;
-
-vec3 cnaSampleSlice(vec3 colour, float slice) {
-    float sliceWidth = 1.0 / uLutSize;              // one slice, in u
-    float texelWidth = sliceWidth / uLutSize;       // one texel of that slice, in u
-    // Half a texel in from each end: sampling the outermost texel centres is what keeps the first
-    // and last entries of the table from being averaged with their neighbours.
-    float u = slice * sliceWidth + 0.5 * texelWidth + colour.r * texelWidth * (uLutSize - 1.0);
-    float v = 0.5 / uLutSize + colour.g * (uLutSize - 1.0) / uLutSize;
-    return texture(uLutSampler, vec2(u, v)).rgb;
-}
-
-void main() {
-    vec4 source = texture(texture1, TexCoord);
-    vec3 colour = clamp(source.rgb, 0.0, 1.0);
-
-    float blue = colour.b * (uLutSize - 1.0);
-    float lower = floor(blue);
-    float upper = min(lower + 1.0, uLutSize - 1.0);
-
-    vec3 graded = mix(cnaSampleSlice(colour, lower),
-                      cnaSampleSlice(colour, upper),
-                      blue - lower);
-
-    FragColor = vec4(mix(source.rgb, graded, uStrength), source.a);
-}
-)";
-
-        // MOD-2131. Both interpolations, written once and given to each layout with its own
-        // `cnaLutFetch`. Every read here is a `texelFetch`: an exact entry, no filtering, no
-        // half-texel arithmetic -- which is what makes the two comparable, since a difference
-        // between them must then be the interpolation rather than the sampler.
-        // Declared ahead of the fetch snippet, which uses `uLutSize` to address the strip. GLSL has
-        // no forward declarations for uniforms, so a fetch written above them compiles to
-        // "undeclared" -- and because a failed compile makes this pass copy its input through, the
-        // symptom is an ungraded frame rather than an error.
-        constexpr const char* kLutUniformsGlsl = R"(
-uniform float uLutSize;
-uniform int   uTetrahedral;
-)";
-
-        constexpr const char* kInterpolationGlsl = R"(
-vec3 cnaLutTrilinear(vec3 colour) {
-    float last = uLutSize - 1.0;
-    vec3 p = clamp(colour, 0.0, 1.0) * last;
-    ivec3 i0 = ivec3(floor(p));
-    ivec3 i1 = min(i0 + ivec3(1), ivec3(int(last)));
-    vec3 f = p - vec3(i0);
-
-    vec3 c000 = cnaLutFetch(ivec3(i0.x, i0.y, i0.z));
-    vec3 c100 = cnaLutFetch(ivec3(i1.x, i0.y, i0.z));
-    vec3 c010 = cnaLutFetch(ivec3(i0.x, i1.y, i0.z));
-    vec3 c110 = cnaLutFetch(ivec3(i1.x, i1.y, i0.z));
-    vec3 c001 = cnaLutFetch(ivec3(i0.x, i0.y, i1.z));
-    vec3 c101 = cnaLutFetch(ivec3(i1.x, i0.y, i1.z));
-    vec3 c011 = cnaLutFetch(ivec3(i0.x, i1.y, i1.z));
-    vec3 c111 = cnaLutFetch(ivec3(i1.x, i1.y, i1.z));
-
-    return mix(mix(mix(c000, c100, f.x), mix(c010, c110, f.x), f.y),
-               mix(mix(c001, c101, f.x), mix(c011, c111, f.x), f.y), f.z);
-}
-
-vec3 cnaLutTetrahedral(vec3 colour) {
-    float last = uLutSize - 1.0;
-    vec3 p = clamp(colour, 0.0, 1.0) * last;
-    ivec3 i0 = ivec3(floor(p));
-    ivec3 i1 = min(i0 + ivec3(1), ivec3(int(last)));
-    vec3 f = p - vec3(i0);
-
-    // The cell's two neutral corners. A colour with fr == fg == fb lies on the edge between them,
-    // and every branch below reduces to exactly that mix -- which is why a grey stays grey here and
-    // does not in the trilinear form, where the six coloured corners still carry weight.
-    vec3 c000 = cnaLutFetch(ivec3(i0.x, i0.y, i0.z));
-    vec3 c111 = cnaLutFetch(ivec3(i1.x, i1.y, i1.z));
-
-    if (f.x > f.y) {
-        if (f.y > f.z) {
-            vec3 c100 = cnaLutFetch(ivec3(i1.x, i0.y, i0.z));
-            vec3 c110 = cnaLutFetch(ivec3(i1.x, i1.y, i0.z));
-            return c000 + f.x * (c100 - c000) + f.y * (c110 - c100) + f.z * (c111 - c110);
-        } else if (f.x > f.z) {
-            vec3 c100 = cnaLutFetch(ivec3(i1.x, i0.y, i0.z));
-            vec3 c101 = cnaLutFetch(ivec3(i1.x, i0.y, i1.z));
-            return c000 + f.x * (c100 - c000) + f.z * (c101 - c100) + f.y * (c111 - c101);
-        } else {
-            vec3 c001 = cnaLutFetch(ivec3(i0.x, i0.y, i1.z));
-            vec3 c101 = cnaLutFetch(ivec3(i1.x, i0.y, i1.z));
-            return c000 + f.z * (c001 - c000) + f.x * (c101 - c001) + f.y * (c111 - c101);
-        }
-    } else {
-        if (f.z > f.y) {
-            vec3 c001 = cnaLutFetch(ivec3(i0.x, i0.y, i1.z));
-            vec3 c011 = cnaLutFetch(ivec3(i0.x, i1.y, i1.z));
-            return c000 + f.z * (c001 - c000) + f.y * (c011 - c001) + f.x * (c111 - c011);
-        } else if (f.z > f.x) {
-            vec3 c010 = cnaLutFetch(ivec3(i0.x, i1.y, i0.z));
-            vec3 c011 = cnaLutFetch(ivec3(i0.x, i1.y, i1.z));
-            return c000 + f.y * (c010 - c000) + f.z * (c011 - c010) + f.x * (c111 - c011);
-        } else {
-            vec3 c010 = cnaLutFetch(ivec3(i0.x, i1.y, i0.z));
-            vec3 c110 = cnaLutFetch(ivec3(i1.x, i1.y, i0.z));
-            return c000 + f.y * (c010 - c000) + f.x * (c110 - c010) + f.z * (c111 - c110);
-        }
-    }
-}
-
-vec3 cnaLutLookup(vec3 colour) {
-    return uTetrahedral != 0 ? cnaLutTetrahedral(colour) : cnaLutTrilinear(colour);
-}
-)";
-
-        // The strip, addressed as a grid. The slice index rides in x alongside the red index, which
-        // is the whole strip layout in one line.
-        constexpr const char* kStripFetchGlsl = R"(
-uniform sampler2D uLutSampler;
-vec3 cnaLutFetch(ivec3 index) {
-    int slices = int(uLutSize);
-    return texelFetch(uLutSampler, ivec2(index.z * slices + index.x, index.y), 0).rgb;
-}
-)";
-
-        constexpr const char* kVolumeFetchGlsl = R"(
-uniform sampler3D uLutVolume;
-vec3 cnaLutFetch(ivec3 index) {
-    return texelFetch(uLutVolume, index, 0).rgb;
-}
-)";
-
-        constexpr const char* kLookupMainGlsl = R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform float uStrength;
-
-void main() {
-    vec4 source = texture(texture1, TexCoord);
-    vec3 graded = cnaLutLookup(clamp(source.rgb, 0.0, 1.0));
-    FragColor = vec4(mix(source.rgb, graded, uStrength), source.a);
-}
-)";
-
-        std::string BuildSource(const char* fetch)
+        class ScopedSamplerStateOverride final
         {
-            // GLSL ES 3.00 has no default precision for sampler3D -- unlike sampler2D, which gets
-            // one from the fragment stage. Stated here for both programs; it costs the strip
-            // program nothing and is the difference between the volume program compiling and not.
-            std::string source =
-                "#version 300 es\nprecision highp float;\nprecision highp sampler3D;\n";
-            source += kLutUniformsGlsl;
-            source += fetch;
-            source += kInterpolationGlsl;
-            source += kLookupMainGlsl;
-            return source;
-        }
+        public:
+            ScopedSamplerStateOverride(GraphicsDevice& device, const int slot,
+                                       const SamplerState& replacement)
+                : device_(device), slot_(slot), previous_(device.getSamplerStatesProperty()[slot])
+            {
+                device_.getSamplerStatesProperty()[slot_] = replacement;
+            }
+
+            ~ScopedSamplerStateOverride()
+            {
+                device_.getSamplerStatesProperty()[slot_] = previous_;
+            }
+
+            ScopedSamplerStateOverride(const ScopedSamplerStateOverride&) = delete;
+            ScopedSamplerStateOverride& operator=(const ScopedSamplerStateOverride&) = delete;
+
+        private:
+            GraphicsDevice& device_;
+            int slot_;
+            SamplerState previous_;
+        };
 
     } // namespace
 
     ColorGradePass::ColorGradePass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kFragmentSource);
-        // MOD-2131: the tetrahedral path needs individual entries, which the strip's filtered
-        // lookup cannot give it, so it is a second program rather than a branch in the first. The
-        // original filtered strip shader stays the default and is untouched -- its output is what
-        // every frame graded so far looks like.
+        const auto makeEffect = [&device](const ShaderPackageEXT& package) {
+            return package.selectFor(device).isUsable()
+                ? std::make_unique<ShaderEffect>(device, package)
+                : nullptr;
+        };
+        effect_ = makeEffect(detail::CreateColorGradeStripShaderPackage());
         tetrahedralStripEffect_ =
-            std::make_unique<ShaderEffect>(device, kVertexSource, BuildSource(kStripFetchGlsl));
-        volumeEffect_ =
-            std::make_unique<ShaderEffect>(device, kVertexSource, BuildSource(kVolumeFetchGlsl));
+            makeEffect(detail::CreateColorGradeInterpolatedStripShaderPackage());
+        volumeEffect_ = makeEffect(detail::CreateColorGradeVolumeShaderPackage());
+
         bool logged = false;
         detail::reportShaderCompileFailure(device, "ColorGradePass", effect_.get(), logged);
         detail::reportShaderCompileFailure(device, "ColorGradePass (tetrahedral strip)",
@@ -246,7 +96,7 @@ void main() {
                 "2 and 64 -- a table smaller than two entries cannot interpolate, and one larger "
                 "than 64 needs a strip wider than 4096 texels");
 
-        const int width  = size * size;
+        const int width = size * size;
         auto texture = std::make_unique<Texture2D>(device, width, size);
 
         std::vector<Color> texels;
@@ -255,13 +105,13 @@ void main() {
         for (int y = 0; y < size; ++y)
             for (int x = 0; x < width; ++x)
             {
-                const int slice  = x / size;
-                const int red    = x % size;
-                const int green  = y;
-                texels.emplace_back(static_cast<int>(static_cast<float>(red) / last * 255.0f + 0.5f),
-                                    static_cast<int>(static_cast<float>(green) / last * 255.0f + 0.5f),
-                                    static_cast<int>(static_cast<float>(slice) / last * 255.0f + 0.5f),
-                                    255);
+                const int slice = x / size;
+                const int red = x % size;
+                const int green = y;
+                texels.emplace_back(
+                    static_cast<int>(static_cast<float>(red) / last * 255.0f + 0.5f),
+                    static_cast<int>(static_cast<float>(green) / last * 255.0f + 0.5f),
+                    static_cast<int>(static_cast<float>(slice) / last * 255.0f + 0.5f), 255);
             }
         texture->SetData(texels.data(), static_cast<int>(texels.size()));
         return texture;
@@ -283,10 +133,10 @@ void main() {
                                       && tetrahedralStripEffect_->IsEffectValid();
 
         ShaderEffect* chosen = nullptr;
-        if (useVolume)                   chosen = volumeEffect_.get();
-        else if (useTetrahedralStrip)    chosen = tetrahedralStripEffect_.get();
+        if (useVolume) chosen = volumeEffect_.get();
+        else if (useTetrahedralStrip) chosen = tetrahedralStripEffect_.get();
         else if (lut_ != nullptr && effect_ != nullptr && effect_->IsEffectValid())
-                                         chosen = effect_.get();
+            chosen = effect_.get();
 
         if (chosen == nullptr || strength <= 0.0f)
         {
@@ -295,23 +145,28 @@ void main() {
             return;
         }
 
+        // The filtered strip requires linear sampling inside each red/green slice. Exact strip and
+        // volume paths use texelFetch, but point-clamp still states their no-cross-cell contract and
+        // prevents the application's secondary sampler state from becoming part of this pass.
+        const SamplerState& lutSampler =
+            chosen == effect_.get() ? SamplerState::LinearClamp : SamplerState::PointClamp;
+        ScopedSamplerStateOverride samplerScope(
+            *chosen->getGraphicsDeviceProperty(), 1, lutSampler);
+
         chosen->Apply();
+        const float lutSize = static_cast<float>(useVolume ? volumeLutSize_ : lutSize_);
+        const float tetrahedral = interpolation_ == LutInterpolation::Tetrahedral ? 1.0f : 0.0f;
+        chosen->SetUniformVec4("uColorGradeParams", lutSize, strength, tetrahedral, 0.0f);
         if (useVolume)
         {
             chosen->SetUniformInt("uLutVolume", 1);
             chosen->SetTexture(1, *volumeLut_);
-            chosen->SetUniformFloat("uLutSize", static_cast<float>(volumeLutSize_));
         }
         else
         {
             chosen->SetUniformInt("uLutSampler", 1);
             chosen->SetTexture(1, *lut_);
-            chosen->SetUniformFloat("uLutSize", static_cast<float>(lutSize_));
         }
-        if (chosen != effect_.get())
-            chosen->SetUniformInt("uTetrahedral",
-                                  interpolation_ == LutInterpolation::Tetrahedral ? 1 : 0);
-        chosen->SetUniformFloat("uStrength", strength);
 
         fullscreen_->draw(context.source, context.destination, chosen,
                           context.width, context.height);
@@ -325,7 +180,8 @@ void main() {
 
     bool ColorGradePass::isSupported(GraphicsDevice& device) const
     {
-        return PostProcessPass::isSupported(device) && effect_ && effect_->IsEffectValid();
+        return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+            && effect_ && effect_->IsEffectValid();
     }
 
     Texture2D* ColorGradePass::getLut() const { return lut_; }
@@ -362,9 +218,9 @@ void main() {
             return;
         }
 
-        const int width  = lut->getWidthProperty();
+        const int width = lut->getWidthProperty();
         const int height = lut->getHeightProperty();
-        const int depth  = lut->getDepthProperty();
+        const int depth = lut->getDepthProperty();
         if (width != height || width != depth)
             throw std::invalid_argument(
                 "CNA::Graphics::ColorGradePass::setVolumeLut: a lookup volume must be a cube -- "
@@ -380,10 +236,14 @@ void main() {
 
     LutInterpolation ColorGradePass::getInterpolation() const { return interpolation_; }
 
-    void ColorGradePass::setInterpolation(const LutInterpolation value) { interpolation_ = value; }
+    void ColorGradePass::setInterpolation(const LutInterpolation value)
+    {
+        interpolation_ = value;
+    }
 
     float ColorGradePass::getStrength() const { return strength_; }
-    void  ColorGradePass::setStrength(const float value)
+
+    void ColorGradePass::setStrength(const float value)
     {
         strength_ = std::clamp(value, 0.0f, 1.0f);
     }

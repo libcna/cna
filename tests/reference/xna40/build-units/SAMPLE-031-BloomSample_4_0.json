@@ -1,0 +1,23 @@
+{
+ "sample": "SAMPLE-031-BloomSample_4_0",
+ "runner": "scripts/DiagPipelineRunner.cs",
+ "guid": "D82A1C97-4FF3-440C-A58F-A1CB9135D0AD",
+ "comment": "Two fonts the sample's own project does not name. DiagPipelineRunner.cs builds them beside the sample's own output, into xna4-build/bin-diag/Content, from xna4-diag/Content -- they differ from hudFont.spritefont only in <Spacing>, so the first-glyph advance rule can be measured with a non-zero spacing as well as with zero. FontDescriptionImporter/FontDescriptionProcessor, the file's stem as the name, Windows/Reach, CompressContent false, BuildConfiguration Debug. Recorded 2026-09-10 (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-163).",
+ "units": [
+  {
+   "project": "BloomDiagFonts.contentproj",
+   "sourceRoot": "xna4-diag/Content",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor"
+    }
+   ]
+  }
+ ]
+}

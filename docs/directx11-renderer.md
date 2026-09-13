@@ -8,18 +8,35 @@ real Windows hardware verification is a separate, still-open gate, see "Known li
 it with:
 
 ```bash
-cmake -S . -B cmake-build-d3d11 \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-  -DCNA_GRAPHICS_RENDERER=D3D11 \
-  -DCNA_BUILD_TESTS=ON
+cmake -S . -B cmake-build-d3d11 -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchains/mingw-w64.cmake" \
+  -DCNA_GRAPHICS_RENDERER=DIRECTX11 \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_SHARP_RUNTIME_ROOT="$PWD/../sharp-runtimenext"
 cmake --build cmake-build-d3d11 -j
 ```
 
+Add `-DCNA_DIRECTX11_COMPILED_EFFECTS=ON` to execute compiled XNA Effect Framework bytecode through
+MojoShader's D3D11 adapter. The option is off by default so the ordinary renderer keeps its
+dependency-free build.
+
+Three corrections to that command, all found by running it (`plans/plan_dx.md` `DX-249`):
+
+* the renderer identity is **`DIRECTX11`**, not `D3D11` — `D3D11` is not one of the 49 accepted
+  values and fails configuration;
+* the toolchain file must be an **absolute** path. The vendored-SDL prebuild runs its own
+  sub-configure from a different working directory, and a relative toolchain path fails there with
+  `Could not find toolchain file`, several minutes into the configure;
+* `CNA_SHARP_RUNTIME_ROOT` must name a sharp-runtime checkout that has the required module set. The
+  verified DirectX build uses the sibling `sharp-runtimenext`; the older `sharp-runtime` sibling is
+  not interchangeable with it for these measurements.
+
 `D3D11` is hard-gated to `CMAKE_SYSTEM_NAME=Windows` at configure time — attempting it on a native
 Linux/macOS configure fails fast with `FATAL_ERROR`, pointing at the MinGW-w64 toolchain file above.
-No extra CMake dependency is fetched: `d3d11`/`dxgi`/`d3dcompiler` are all provided by the Windows
-SDK (MSVC) or MinGW-w64's own headers/import libraries (this dev machine's actual path — see
-`plans/plan_dx.md` `DX-1`).
+The default build fetches no extra dependency: `d3d11`/`dxgi`/`d3dcompiler` are all provided by the
+Windows SDK (MSVC) or MinGW-w64's own headers/import libraries (this dev machine's actual path — see
+`plans/plan_dx.md` `DX-1`). The compiled-effect opt-in additionally builds the MojoShader revision
+pinned by FNA3D.
 
 ## What this renderer is for (and isn't)
 
@@ -32,18 +49,35 @@ control over the exact Direct3D calls made, matching `CLAUDE.md`'s "preserve XNA
 using modern C++23 internals" mandate more directly than routing through a third abstraction layer.
 
 **What it proves**: a real `ID3D11Device`/`ID3D11DeviceContext` executing CNA's XNA-shaped
-`IGraphicsRenderer` contract — real buffers, textures, render targets (including MSAA/MRT), state
-objects, all 10 stock HLSL shader variants (colored/textured/lit/alpha-test/dual-texture/env-map/
-skinned/sprite/instanced), a real SpriteBatch, and a runtime-`D3DCompile()`-backed custom
-`ShaderEffect` path — all pixel-verified via real GPU readback, not just "the API call returned
-`S_OK`."
+`IGraphicsRenderer` contract. Buffers, all core-XNA texture formats, render targets including
+MSAA/MRT, state objects, SpriteBatch/SpriteFont, all stock effects, models/content, runtime HLSL
+`ShaderEffect`, queries, presentation and deterministic device recovery are exercised through
+public `GraphicsDevice` fixtures with GPU readback. With the compiled-effect option enabled, the
+same public path also executes XNA/FNA `.fxb` reflection, passes, primitive/instanced/multi-stream
+draws, SpriteBatch, sampler state, and 2D/cube/volume sampling. Renderer-internal cache/device
+invariants remain in the deliberately small smoke binary rather than standing in for public
+behavior.
 
-**What it is not (yet)**: verified on real Windows. Every check above ran through Wine+DXVK on this
-Debian machine's real GPU (an AMD Radeon 780M/RADV, translated by DXVK 2.6.0) — this proves the
-renderer's *logic* (call sequencing, resource lifetime, HLSL correctness, pixel math), the same
-"Wine proves the logic, not real-hardware parity" bar this project already established for
-`SDL_RENDERER`. Real DXGI present/tearing behavior, real device-lost recovery, WARP fallback, and
-MSVC-vs-MinGW ABI parity are still open — see `plans/plan_dx.md` `DX-90`/`DX-91`.
+**Measured state, 2026-09-09 (`plans/plan_dx.md` Phase DX17 and `plans/plan_fx.md` `FX-063`).** With
+`CNA_DIRECTX11_COMPILED_EFFECTS=ON`, `ctest -L DIRECTX11` passes **267/267**, with no CTest skips,
+the 18-test compiled-effect suite passes without a GoogleTest skip, and `DirectX11_Smoke` passes
+**21/21** retained internal checks.
+The shared registration inventory contains **265 declarations: 262 renderer-neutral fixtures, two
+reasoned D3D11-native exceptions and one D3D12-native exception**. The D3D11 label adds its smoke and
+DXVK gate to the applicable inventory. This result used the fixed `sharp-runtimenext` checkout,
+Wine+DXVK 2.6 and private virtual Xwayland `:4`; no physical display was used.
+
+Two XNA-specific conversions are measured rather than guessed. XNA's stock 3D path follows D3D9
+integer pixel centers while SpriteBatch follows half-integer centers (`DX-253`), so D3DCommon
+applies the viewport-derived correction only to stock/instanced 3D matrices. XNA `DepthBias` is a
+normalized depth offset (`DX-256`), converted to the active D16/D24 native integer units. Both
+contracts pass on D3D11, D3D12 and EasyGL. `DX-244` additionally proves 16 consecutive loss/restore
+cycles preserve the same public texture, vertex/index buffers, render target and loaded model.
+
+**What it is not yet**: verified against a genuine device-removal event or a vendor Windows driver.
+Wine proves the renderer logic, not native-driver parity. Real present/tearing behavior, WARP,
+MSVC execution and the native removal trigger remain in `DX-90`/`DX-91`; the deterministic recovery
+path itself is implemented and tested.
 
 ## Development environment: Wine + DXVK dev-loop
 
@@ -82,23 +116,18 @@ To reproduce this locally:
 scripts/run-wine-dxvk.sh cmake-build-d3d11/examples/directx11_smoke_test.exe
 ```
 
-CTest wires this in automatically — `ctest --test-dir cmake-build-d3d11 -R D3D11` runs every D3D11
-test through the same wrapper.
+CTest wires this in automatically — `ctest --test-dir cmake-build-d3d11 -L DIRECTX11` runs the
+complete D3D11 label through the appropriate DXVK wrapper.
 
 ## Writing a D3D11 test
 
-D3D11 tests are **not** ordinary `Game`-subclass examples like most other renderers' tests — this
-renderer is still missing the full `IShaderRenderer`/`Effect`-driven high-level draw path for every
-XNA-level entry point (custom `ShaderEffect` and the public `SpriteBatch`/`Texture2D` API are
-real and tested; some lower-level XNA convenience paths are not yet exercised — see "Known
-limitations"). Most D3D11 correctness tests instead talk to the real `ID3D11Device`/
-`ID3D11DeviceContext` fairly directly, going through `DirectX11Renderer::GetDeviceEXT()` (a
-`CNAEXT` accessor added specifically so tests/`D3DCommon` callers can reach the real device without
-duplicating its creation path) and `D3DCommon`'s shader/input-layout/constant-buffer helpers. See
-`modules/renderers/directx11/examples/directx11_smoke_test.cpp` (`DirectX11_Smoke` CTest, the primary GPU-facing pixel-correctness
-suite — Checks A through AC as of `DX-85`) and `modules/renderers/directx11/examples/directx11_common_test.cpp` (`DirectX11_Common`
-CTest, pure-function format/state/vertex-layout mapping-table checks, no GPU/device needed) for the
-two established patterns. The general pixel-readback shape:
+Renderer-neutral behavior belongs in a public `Game`/`GraphicsDevice` fixture and is declared once
+with `cna_d3d_parity_fixture()` in `cmake/DirectXParityTests.cmake`; it then runs on D3D11 and D3D12.
+A one-renderer exception requires a human-readable reason. Use a native D3D11 executable only for
+an invariant that cannot be observed through the public API, such as input-layout or state-object
+cache identity. `DirectX11_Smoke` is intentionally limited to those internals and
+`DirectX11_Common` owns pure mapping-table checks. A native pixel diagnostic should follow this
+shape:
 
 ```cpp
 // 1. Create (or reuse) a real device via DirectX11Renderer::GetDeviceEXT(), or construct one
@@ -118,59 +147,26 @@ two established patterns. The general pixel-readback shape:
 mapping-table/logic check rather than a rendering-correctness one (format/state enum mapping,
 vertex-stride inference, cbuffer `static_assert` layout checks already caught at compile time).
 
-## Known limitations (2026-07-14)
+## Known limitations (2026-09-09)
 
-- **Not verified on real Windows hardware** — `plans/plan_dx.md` `DX-90` (MSVC build, real DXGI
-  present/tearing, full device-lost recovery, WARP fallback, debug-layer-missing fallback on a
-  machine that should have it) and `DX-91` (Intel/AMD/NVIDIA driver-specific spot checks) are both
-  explicitly `needs_human`/best-effort — no such machine is available in this dev environment. Every
-  claim above is proven through Wine+DXVK on one real AMD/RADV GPU, not multi-vendor real-hardware
-  parity.
-- **Device-lost/removed recovery is detection-only.** `DX-27`'s `CheckDeviceRemoved()` logic exists
-  and is wired into `Present()`/`EnsureSwapChainSize()`'s failure paths, but has never actually
-  fired — no real device removal occurred during Wine+DXVK testing. Full recovery (recreating all
-  three resource-lifetime groups per design decision 11) is unverified.
+- **Native Windows remains a separate gate.** `DX-90` covers MSVC execution, real DXGI
+  present/tearing, WARP and a genuine device-removal trigger; `DX-91` is optional multi-vendor
+  coverage. The device/resource reconstruction behind that trigger is no longer missing:
+  `DX-244` executes it deterministically for 16 cycles, including events and long-lived resources.
 - **The D3D11 debug-layer-missing fallback path (`DX-21`) is unexercised.** This dev machine's
   Wine+DXVK setup always satisfies `D3D11_CREATE_DEVICE_DEBUG`, so the
   `DXGI_ERROR_SDK_COMPONENT_MISSING` → retry-without-debug-layer branch has never actually run.
-- **The 5 combo `Clear*` variants** (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/
-  `ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`) are implemented
-  (real `ClearDepthStencilView` calls with the right flag combinations) but not yet exercised by a
-  dedicated pixel test — only plain `Clear(r,g,b,a)` has a dedicated round-trip check (`DX-25`).
-- **Specular highlights are not pixel-verified.** `lit_textured3d`'s lit-branch pixel test
-  deliberately zeroes specular for determinism (a CPU-side, non-GPU-replicated Blinn-Phong
-  comparison would otherwise need floating-point-tolerant matching); the specular term itself is
-  implemented in the HLSL but has no dedicated discriminating pixel test yet.
-- **`SkinnedEffect`/`EnvironmentMapEffect`'s `DirectionalLight1`/`DirectionalLight2`/
-  `EmissiveColor`** are wired through the same `D3DLightingConstants` buffer `lit_textured3d` uses,
-  but have no variant-specific dedicated pixel test distinguishing multi-light contributions from a
-  single-light case.
-- **Mip-chain generation/sampling and per-instance `DepthStencilFormat` fidelity** are not
-  separately pixel-tested (texture upload/readback is tested at mip level 0 only).
-- **`Model`/`SpriteFont`** have not been separately exercised against this renderer this session —
-  they build on already-tested `Texture2D`/`SpriteBatch`/`VertexBuffer` primitives, but have no
-  D3D11-specific test coverage yet.
-- **`cna_reference_dump`'s `undefined reference to Effect::Apply()` link failure is fixed** (found
-  during `plans/plan_dx.md` `DX-81`'s coverage audit; root cause was a genuine, honest circular
-  dependency — `D3D11SpriteBatch.cpp` (in `cna_renderer_directx11`) calls back into
-  `Effect::Apply()` (defined in `CNA` itself), and MinGW's single-pass archive resolution never
-  revisited `libCNA.a` once `libcna_renderer_directx11.a` created the need. Fixed by declaring
-  the cycle explicitly in `CMakeLists.txt` (`target_link_libraries(${RENDERER_TARGET} PRIVATE CNA)`
-  for `D3D11`/`D3D12`) — CMake's documented static-library-cycle support then repeats the archives
-  on the final link line automatically. `cna_demo_2d`'s separate `SDL3/SDL.h`-not-found compile
-  failure (found while verifying the fix above; `Game1.cpp` called raw SDL directly for
-  minimize/restore/resize with no XNA equivalent, and never linked `SDL3::SDL3` itself — native
-  Linux builds never noticed since a system-wide SDL3 install covered it there) **is also fixed**,
-  at the root rather than by adding a link dependency: two new `GameWindow` CNAEXT methods,
-  `MinimizeEXT()`/`RestoreEXT()` (mirroring the existing `IsBorderlessEXT` pattern), plus switching
-  the resize call to the existing XNA `EndScreenDeviceChange()` API — `Game1.cpp` no longer includes
-  `<SDL3/SDL.h>` at all. Verified via real `cna_reference_dump.exe`/`cna_demo_2d.exe` links under
-  both D3D11 and D3D12, the full `D3D11`/`D3D12` CTest suites, and the EasyGL `GameWindowTest.*`
-  suite (14/14, including 3 new cases) — no regression anywhere.
-- **Direct3D 12 does not exist as a renderer.** `plans/plan_dx.md` Phase DX12 is written up in full but
-  requires its own separate authorization (design decision 9) — `CNA_GRAPHICS_RENDERER=D3D12` is not
-  a recognized CMake value.
+- **Compiled XNA `Effect` bytecode is an opt-in.** With
+  `CNA_DIRECTX11_COMPILED_EFFECTS=ON`, `SupportsCompiledEffects()` is true and the complete
+  `FX-063` public-path suite passes. With it off, the renderer keeps the explicit unsupported
+  capability/refusal and does not build MojoShader. D3D12's separate implementation owner is
+  `plans/plan_fx.md` `FX-134`. Runtime-source `ShaderEffect` and every stock effect remain separate
+  working paths.
+- **`SetDataOptions` is implemented and differentially proven.** D3D11 maps `Discard` and
+  `NoOverwrite` to the matching D3D11 map modes. The renderer-neutral 62-frame dynamic-buffer
+  oracle passes all 187 checks on D3D11 and EasyGL and distinguishes all three options without
+  state leakage; `plans/plan_dx.md` `DX-238` records the cross-renderer evidence.
 
-See `plans/plan_dx.md` for the full task-by-task status (`DX-1` through `DX-98`) and design rationale, and
+See `plans/plan_dx.md` for the authoritative task-by-task status and design rationale, and
 `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other established
 renderers.

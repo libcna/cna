@@ -2,13 +2,13 @@
 // plans/plan_sdlgpu.md SDLGPU-26..30: end-to-end 3D vertex-format proof for the SDL_GPU graphics
 // renderer -- colored3d, textured3d, colored_textured3d, and lit_textured3d (BasicEffect), all
 // drawn through the real public XNA API (VertexBuffer/BasicEffect/GraphicsDevice.DrawPrimitives),
-// exercising DrawPrimitivesEx's real GpuDrawParams dispatch by vertex stride, plus a real
+// exercising DrawPrimitivesEx's real GpuDrawParams dispatch by declaration semantics, plus a real
 // depth-test proof (a nearer quad drawn BEFORE a farther one still occludes it -- proves the
 // depth buffer is real, not just "didn't throw").
 //
-// No pixel-level readback exists yet on this renderer (plans/plan_sdlgpu.md Phase SDLGPU-8/39), so this
-// test proves correctness via a real screenshot (same bar as sdlgpu_2d_test.cpp's own
-// SpriteBatch verification), not automated pixel assertions.
+// The dedicated renderer-neutral parity fixtures provide exact readback coverage for reordered,
+// padded, lit-colour and independent-UV declarations. This smoke additionally guards the legacy
+// paths and the diagnostic for a declaration missing mandatory POSITION0.
 //
 // Check A -- a colored3d triangle (VertexPositionColor, BasicEffect.VertexColorEnabled=true)
 //   draws with no exception.
@@ -35,6 +35,10 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
@@ -320,6 +324,35 @@ protected:
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
                 check(true, "lit_textured3d quad draws with no exception");
 
+                stage = "missing POSITION0 declaration";
+                bool rejectedMissingPosition = false;
+                bool preciseMissingPosition = false;
+                try
+                {
+                    const VertexDeclaration missingPosition(
+                        4, {VertexElement(0, VertexElementFormat::Color,
+                                          VertexElementUsage::Color, 0)});
+                    const std::array<std::uint32_t, 3> colors{
+                        Color::Red.getPackedValueProperty(),
+                        Color::Green.getPackedValueProperty(),
+                        Color::Blue.getPackedValueProperty()};
+                    VertexBuffer invalid(dev, missingPosition, 3, BufferUsage::None);
+                    invalid.SetDataRaw(colors.data(), 3, 4);
+                    BasicEffect invalidFx(dev);
+                    invalidFx.setVertexColorEnabledProperty(true);
+                    invalidFx.Apply();
+                    dev.SetVertexBuffer(&invalid);
+                    dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+                }
+                catch (const std::exception& e)
+                {
+                    rejectedMissingPosition = true;
+                    preciseMissingPosition = std::string(e.what()).find("POSITION0") != std::string::npos;
+                }
+                dev.SetVertexBuffer(nullptr);
+                check(rejectedMissingPosition && preciseMissingPosition,
+                      "a declaration missing required POSITION0 is rejected with a precise diagnostic");
+
                 dev.SetVertexBuffer(nullptr);
             }
             catch (const std::exception& e)
@@ -337,8 +370,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             check(true, "120 frames of the full 3D scene render with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 6);
-            result_ = (passCount_ == 6) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, 7);
+            result_ = (passCount_ == 7) ? 0 : 1;
             Exit();
         }
     }

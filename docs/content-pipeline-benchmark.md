@@ -157,3 +157,41 @@ costs on one core. A project whose textures are all `DxtCompressed` should expec
 compression to dominate its content build, and should expect the incremental manifest to make that
 cost appear once rather than every build. A project with one very large model should expect that
 model to set its wall clock, because no worker count divides a single asset.
+
+## XNAPP-301: the XNA routes at size
+
+> Measured 2026-09-07 on this machine, `cmake-build-debug` (a debug build), one asset per run
+> unless the row says otherwise, the fastest of three. `XnaRouteScalingTests.cpp` runs the same
+> four measurements on every build and fails if four times the input costs more than eight times
+> the time, which is the shape a quadratic route has. The numbers below are what those runs
+> printed; they are evidence, not a threshold.
+
+| Route | Small | Large | Small | Large | Ratio for 4x the input |
+|---|---|---|---:|---:|---:|
+| `.tga` → `Texture2D` | 512x512 | 1024x1024 | 384 ms | 1258 ms | **3.3x** |
+| `.wav` → `SoundEffect` | 5 s | 20 s | 144 ms | 410 ms | **2.8x** |
+| `.xml` → `List<string>` | 25 000 | 100 000 elements | 355 ms | 1289 ms | **3.6x** |
+| whole tree | 400 | 1600 assets | 613 ms | 3887 ms | **6.3x** |
+
+The three single-asset routes are linear or better than linear in their input, which is what the
+row asked. A ratio below four is not a surprise: process start, the manifest and the staging
+directory are a fixed cost the small build pays in full.
+
+The fourth row is the one worth writing down. The coordinator's cost per asset is not flat — it
+rises from about 1.6 ms at 400 assets to 2.5 ms at 1600 and 4.1 ms at 3200:
+
+| Assets | 100 | 200 | 400 | 800 | 1600 | 3200 |
+|---|---:|---:|---:|---:|---:|---:|
+| build | 210 ms | 358 ms | 709 ms | 1623 ms | 4282 ms | 13 215 ms |
+| per asset | 2.10 ms | 1.79 ms | 1.77 ms | 2.03 ms | 2.68 ms | 4.13 ms |
+| exponent over the previous row | — | 0.77 | 0.99 | 1.19 | 1.40 | 1.63 |
+
+Three things are known about it and are worth keeping together, because each rules something out.
+It is **not in any route**: an all-skip rebuild, which runs no importer, processor or writer at
+all, has the same shape (542 ms at 400, 3769 ms at 1600). It is **not the source directory's
+size**: splitting the same assets into subdirectories of fifty changes nothing (1.69 ms and
+2.60 ms per asset against the flat tree's 1.59 and 2.48). And it **parallelizes** -- 1600 assets
+take 5068 ms at one worker and 2332 ms at three -- so it is per-node work rather than serial
+coordination. It stays sub-quadratic across every size measured, which is what the test asserts;
+what it is exactly has not been chased, because no project in the corpus is near this size and a
+guess would be worse than a recorded measurement.

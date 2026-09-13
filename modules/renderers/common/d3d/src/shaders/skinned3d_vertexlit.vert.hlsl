@@ -5,7 +5,7 @@
 // stage instead, interpolated across the triangle rather than recomputed per pixel. Only selected
 // when lighting is already known enabled (see each renderer's own dispatch site), so -- like
 // lit_textured3d_vertexlit.vert.hlsl -- this shader is unconditionally lit.
-// Stride 52: VertexPositionNormalTextureSkinned.
+// Accepts either Byte4 or Vector4 BLENDINDICES through the translated vertex declaration.
 
 cbuffer PerDraw : register(b0)
 {
@@ -47,7 +47,11 @@ struct VSInput
     float3 Normal       : NORMAL0;
     float2 UV           : TEXCOORD0;
     float4 BoneWeights  : BLENDWEIGHT0;
+#ifdef CNA_SKINNED_FLOAT_INDICES
+    float4 BoneIndices  : BLENDINDICES0;
+#else
     uint4  BoneIndices  : BLENDINDICES0;
+#endif
 };
 
 struct VSOutput
@@ -72,22 +76,33 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0, c1, c2) / det;
 }
 
+float3 TransformSkinNormal(float3 normal, float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    float3 transformed = mul(normal, float3x3(c0, c1, c2));
+    return abs(det) > 1e-6 ? transformed * sign(det) : mul(normal, m);
+}
+
 VSOutput main(VSInput input)
 {
     VSOutput output;
 
     float weightsPerVertex = EyePosPad.w;
-    float4x4 skinMat = Bones[input.BoneIndices.x] * input.BoneWeights.x;
-    if (weightsPerVertex >= 2.0) skinMat += Bones[input.BoneIndices.y] * input.BoneWeights.y;
-    if (weightsPerVertex >= 4.0) skinMat += Bones[input.BoneIndices.z] * input.BoneWeights.z
-                                           + Bones[input.BoneIndices.w] * input.BoneWeights.w;
+    float4x4 skinMat = Bones[(uint)input.BoneIndices.x] * input.BoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += Bones[(uint)input.BoneIndices.y] * input.BoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += Bones[(uint)input.BoneIndices.z] * input.BoneWeights.z
+                                           + Bones[(uint)input.BoneIndices.w] * input.BoneWeights.w;
     float4 skinnedPos = mul(float4(input.Position, 1.0), skinMat);
     output.Position = mul(skinnedPos, Mvp);
     output.UV = input.UV;
 
     // REMED-GFX-006: compose the bone-skin 3x3 with the outer World inverse-transpose normal
     // matrix (was skin-only). Matches the corrected Vulkan skinned3d.vert.glsl exactly.
-    float3 N = normalize(mul(mul(input.Normal, (float3x3)skinMat), InverseTranspose3x3((float3x3)World)));
+    float3 N = normalize(mul(TransformSkinNormal(input.Normal, (float3x3)skinMat),
+                             InverseTranspose3x3((float3x3)World)));
     float3 worldPos = mul(skinnedPos, World).xyz;
     float3 E = normalize(EyePosPad.xyz - worldPos);
 
@@ -97,14 +112,17 @@ VSOutput main(VSInput input)
     float3 lightSum = Light0Diffuse * NdotL0
                      + Light1DiffPad.xyz * NdotL1
                      + Light2DiffPad.xyz * NdotL2;
-    output.LitRGB = lightSum * DiffuseColor.rgb + EmissiveColor.rgb;
+    // XNA's D3D9 COLOR outputs clamp before interpolation. These TEXCOORD outputs need the
+    // equivalent explicit clamp on newer D3D shader models.
+    output.LitRGB = saturate(lightSum * DiffuseColor.rgb + EmissiveColor.rgb);
 
     float specularPower = SpecularColorPower.w;
     float3 h0 = normalize(E - normalize(Light0Dir));        float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);
     float3 h1 = normalize(E - normalize(Light1DirPad.xyz)); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, specularPower);
     float3 h2 = normalize(E - normalize(Light2DirPad.xyz)); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, specularPower);
-    output.SpecularRGB = (spec0 * Light0SpecPad.xyz + spec1 * Light1SpecPad.xyz
-                          + spec2 * Light2SpecPad.xyz) * SpecularColorPower.xyz;
+    output.SpecularRGB = saturate(
+        (spec0 * Light0SpecPad.xyz + spec1 * Light1SpecPad.xyz
+         + spec2 * Light2SpecPad.xyz) * SpecularColorPower.xyz);
 
     output.Alpha = DiffuseColor.a;
     // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector

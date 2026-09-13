@@ -8,6 +8,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
+#include <functional>
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/EventArgs.hpp"
@@ -210,6 +211,21 @@ namespace Microsoft::Xna::Framework
         void SetSupportedOrientations(DisplayOrientation orientations);
 
         /**
+         * @brief Supplies the size of the surface the game draws into, for deciding orientation.
+         *
+         * @note CNAEXT — CNA extension, not XNA API. Orientation was derived from the platform
+         * window's client bounds, which is wrong wherever a virtual resolution is in effect: the
+         * game does not draw into those bounds, it draws into a logical surface that
+         * `GraphicsDevice` letterboxes inside them. Widening a window past its own height then
+         * reported landscape at a portrait surface, and a game that believes the report lays itself
+         * out for a shape it does not have (SAMPLE-077, `misc/known_bugs.md`).
+         *
+         * @param provider Fills width/height and returns true when it can answer; an empty
+         *                 provider, or one that declines, falls back to the client bounds.
+         */
+        CNAEXT void SetLogicalSizeProviderEXT(std::function<bool(int&, int&)> provider);
+
+        /**
          * @brief Applies the title to the native window.
          * @param title The title string to apply.
          */
@@ -225,6 +241,7 @@ namespace Microsoft::Xna::Framework
         Rectangle clientBounds_;
         DisplayOrientation currentOrientation_;
         DisplayOrientation supportedOrientations_;
+        std::function<bool(int&, int&)> logicalSizeProvider_;
         bool allowUserResizing_;
         bool isBorderless_;
         bool pendingFullScreen_;

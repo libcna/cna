@@ -30,11 +30,9 @@
 //
 // Fence safety. A descriptor referenced by a submitted command list must stay valid until the GPU
 // has finished with it, and a heap object must outlive every command list that bound it. Both
-// allocators stamp a freed index (and a retired heap) with the fence value of the last submission
-// that could possibly reference it, and only recycle/release once the shared fence has passed that
-// value. This renderer currently submits synchronously (ExecuteCommandListAndWaitEXT), so in
-// practice the stamp is always already complete -- the machinery is written to the real D3D12 rule
-// rather than to that simplification, so it stays correct if submission ever becomes asynchronous.
+// allocators stamp a freed index (and a retired heap) with the fence value of the last submission or
+// the fence reserved by an open frame list that could reference it, and only recycle/release once the
+// shared fence has passed that value.
 //
 // Nothing here waits, idles the device, submits, or allocates a heap per draw: growth is driven only
 // by simultaneous live demand that the free list cannot satisfy.
@@ -42,6 +40,7 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -66,6 +65,14 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief The highest fence value signalled so far -- the newest submission that could
          *  still be referencing a descriptor freed right now. */
         std::uint64_t lastSubmitted = 0;
+        /** @brief Fence value reserved for the currently open, not-yet-submitted frame list. */
+        std::uint64_t recordingFence = 0;
+
+        /** @brief Latest fence that can protect a descriptor freed or heap retired right now. */
+        [[nodiscard]] std::uint64_t ProtectUntil() const
+        {
+            return std::max(lastSubmitted, recordingFence);
+        }
 
         /** @brief The highest fence value the GPU has actually reached, or lastSubmitted when there
          *  is no fence (an uninitialised or already-torn-down device), so teardown never blocks. */
@@ -352,7 +359,11 @@ namespace CNA::Internal::Renderers::DirectX12
         void OnSubmittedEXT(std::uint64_t fenceValue)
         {
             if (fenceValue > clock.lastSubmitted) clock.lastSubmitted = fenceValue;
+            if (clock.recordingFence == fenceValue) clock.recordingFence = 0;
         }
+
+        /** @brief Protects descriptors referenced by an open frame list until its reserved fence. */
+        void OnRecordingEXT(std::uint64_t fenceValue) { clock.recordingFence = fenceValue; }
     };
 
     /** @brief True when CNA_D3D12_DESCRIPTOR_TRACE is set to something other than "0" -- read once

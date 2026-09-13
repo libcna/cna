@@ -2,16 +2,29 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
+#endif
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "System/InvalidOperationException.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -33,9 +46,9 @@ namespace CNA::Internal::Renderers::DirectX12
             return buf;
         }
 
-        /// Same single-concrete-type SRV resolution as DirectX12Renderer.cpp's own (private,
+        /// Same two-concrete-type SRV resolution as DirectX12Renderer.cpp's own (private,
         /// not exported) GetSrvGpuHandleForTextureEXT -- duplicated rather than factored into a
-        /// shared header for a few lines of logic, matching D3D11SpriteBatch.cpp's own established
+        /// shared header for a few lines of logic, matching D3D11SpriteBatch.cpp's established
         /// precedent of duplicating GetSrvForTextureEXT locally rather than sharing it.
         D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandle(const ITextureRenderer* tex)
         {
@@ -43,6 +56,8 @@ namespace CNA::Internal::Renderers::DirectX12
             if (tex == nullptr) return handle;
             if (const auto* t = dynamic_cast<const D3D12TextureRenderer*>(tex))
                 return t->GetShaderResourceViewGpuHandleEXT();
+            if (const auto* rt = dynamic_cast<const D3D12RenderTargetRenderer*>(tex))
+                return rt->GetShaderResourceViewGpuHandleEXT();
             return handle;
         }
 
@@ -50,15 +65,52 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     D3D12SpriteBatchRenderer::D3D12SpriteBatchRenderer(DirectX12Renderer* owner)
-        : owner_(owner)
+        : owner_(owner, owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                 "D3D12SpriteBatchRenderer")
         , device_(owner_->GetDeviceEXT())
-        , vb_(owner_, 256)
-        , ib_(owner_, 384, /*thirtyTwoBit=*/false)
+        , vb_(owner_.Get(), 256)
+        , ib_(owner_.Get(), 384, /*thirtyTwoBit=*/false)
     {
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(Sprite2DVertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, x)),
+                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+        vb_.SetVertexDeclaration(kSpriteDeclaration);
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = std::make_unique<D3D12CompiledEffect>(
+            *owner_.Get(), bytes, sizeof(bytes));
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: embedded SpriteEffect has no MatrixTransform parameter.");
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
     }
+
+    D3D12SpriteBatchRenderer::~D3D12SpriteBatchRenderer() = default;
 
     void D3D12SpriteBatchRenderer::Begin()
     {
+        (void) owner_.Get();
         if (begun_) return;
         begun_ = true;
     }
@@ -94,14 +146,28 @@ namespace CNA::Internal::Renderers::DirectX12
         pendingAddressV_ = addressV;
     }
 
+    void D3D12SpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
+    void D3D12SpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
     ID3D12PipelineState* D3D12SpriteBatchRenderer::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
     {
-        const SpritePsoKey key{
-            owner_->currentColorSrcBlend_, owner_->currentAlphaSrcBlend_,
-            owner_->currentColorDstBlend_, owner_->currentAlphaDstBlend_,
-            owner_->currentColorBlendFunc_, owner_->currentAlphaBlendFunc_,
-            owner_->currentColorWriteMask_, owner_->currentSampleMask_,
-            static_cast<unsigned int>(owner_->GetBoundColorFormatEXT())};
+        // plans/plan_dx.md DX-210: the whole tracked pipeline state, not a hand-copied subset of it. This
+        // used to list blend and write-mask fields only, which is why the depth and stencil halves
+        // were silently absent from both the key AND the descriptor below.
+        D3D12PipelineStateDesc state;
+        owner_->FillPsoStateFromCurrentEXT(state);
+        state.variant = D3DShaderVariant::Sprite2d;
+        state.strideInBytes = sizeof(Sprite2DVertex);
+        state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+        const SpritePsoKey key = state.AsCacheKeyEXT();
         if (const auto it = sprite2DPsos_.find(key); it != sprite2DPsos_.end())
             return it->second.Get();
 
@@ -129,8 +195,8 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.InputLayout = {kElements, static_cast<UINT>(std::size(kElements))};
         desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
         desc.PrimitiveTopologyType = kSpriteTopologyType;
-        desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = 1;
+        desc.SampleMask = state.sampleMask;
+        desc.SampleDesc.Count = state.sampleCount; // plans/plan_dx.md DX-207
         desc.NodeMask = 0;
 
         desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
@@ -138,27 +204,70 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.RasterizerState.FrontCounterClockwise = FALSE;
         desc.RasterizerState.DepthClipEnable = TRUE;
 
-        D3D12_RENDER_TARGET_BLEND_DESC& rt0 = desc.BlendState.RenderTarget[0];
         const bool colorOpaque = owner_->currentColorSrcBlend_ == 0 && owner_->currentColorDstBlend_ == 1;
         const bool alphaOpaque = owner_->currentAlphaSrcBlend_ == 0 && owner_->currentAlphaDstBlend_ == 1;
-        rt0.BlendEnable = !(colorOpaque && alphaOpaque);
-        rt0.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorSrcBlend_));
-        rt0.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorDstBlend_));
-        rt0.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentColorBlendFunc_));
-        rt0.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaSrcBlend_));
-        rt0.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaDstBlend_));
-        rt0.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentAlphaBlendFunc_));
-        rt0.LogicOpEnable = FALSE;
-        rt0.LogicOp = D3D12_LOGIC_OP_NOOP;
-        rt0.RenderTargetWriteMask = static_cast<UINT8>(owner_->currentColorWriteMask_ & 0xF);
+        desc.BlendState.IndependentBlendEnable =
+            (state.colorWriteMasks[1] != state.colorWriteMasks[0]
+             || state.colorWriteMasks[2] != state.colorWriteMasks[0]
+             || state.colorWriteMasks[3] != state.colorWriteMasks[0]) ? TRUE : FALSE;
+        D3D12_RENDER_TARGET_BLEND_DESC rtTemplate{};
+        rtTemplate.BlendEnable = !(colorOpaque && alphaOpaque);
+        rtTemplate.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorSrcBlend_));
+        rtTemplate.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorDstBlend_));
+        rtTemplate.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentColorBlendFunc_));
+        rtTemplate.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaSrcBlend_));
+        rtTemplate.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaDstBlend_));
+        rtTemplate.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentAlphaBlendFunc_));
+        rtTemplate.LogicOpEnable = FALSE;
+        rtTemplate.LogicOp = D3D12_LOGIC_OP_NOOP;
+        for (std::size_t i = 0; i < std::size(desc.BlendState.RenderTarget); ++i)
+        {
+            desc.BlendState.RenderTarget[i] = rtTemplate;
+            desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
+                static_cast<UINT8>(state.colorWriteMasks[std::min<std::size_t>(i, 3)] & 0xF);
+        }
         desc.SampleMask = owner_->currentSampleMask_;
 
-        desc.DepthStencilState.DepthEnable = FALSE;
-        desc.DepthStencilState.StencilEnable = FALSE;
+        // plans/plan_dx.md DX-210: the device's real DepthStencilState, not a hardcoded "off". XNA's
+        // SpriteBatch::Begin takes a DepthStencilState, and SpriteSortMode::FrontToBack with
+        // DepthStencilState::Default plus stencil-masked sprite UI are ordinary uses of it; both
+        // silently lost depth and stencil here. D3D11's sprite path issues no depth state of its
+        // own, so whatever GraphicsDevice last applied is in force -- this reaches the same place by
+        // building the pipeline state from the same tracked fields. SpriteBatch's own default is
+        // DepthStencilState::None, which GraphicsDevice applies before the first sprite draw, so a
+        // batch that does not ask for depth still gets none.
+        D3D12_DEPTH_STENCIL_DESC& sds = desc.DepthStencilState;
+        sds.DepthEnable = state.depthEnable ? TRUE : FALSE;
+        sds.DepthWriteMask = state.depthWriteEnable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+        sds.DepthFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.depthFunc));
+        sds.StencilEnable = state.stencilEnable ? TRUE : FALSE;
+        sds.StencilReadMask = static_cast<UINT8>(state.stencilMask);
+        sds.StencilWriteMask = static_cast<UINT8>(state.stencilWriteMask);
+        sds.FrontFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.stencilFunc));
+        sds.FrontFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilPass));
+        sds.FrontFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilFail));
+        sds.FrontFace.StencilDepthFailOp =
+            static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilDepthFail));
+        if (state.twoSidedStencilMode)
+        {
+            sds.BackFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.ccwStencilFunc));
+            sds.BackFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilPass));
+            sds.BackFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilFail));
+            sds.BackFace.StencilDepthFailOp =
+                static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilDepthFail));
+        }
+        else
+        {
+            sds.BackFace = sds.FrontFace;
+        }
 
-        desc.NumRenderTargets = 1;
-        desc.RTVFormats[0] = owner_->GetBoundColorFormatEXT();
-        desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        desc.NumRenderTargets = std::min<UINT>(
+            state.renderTargetCount, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
+        for (UINT i = 0; i < desc.NumRenderTargets; ++i)
+            desc.RTVFormats[i] = state.renderTargetFormats[i];
+        // DX-210: a pipeline state that uses depth or stencil must name the format of the view it
+        // will be used with; DXGI_FORMAT_UNKNOWN here is legal only when neither is enabled.
+        desc.DSVFormat = state.depthStencilFormat;
 
         ComPtr<ID3D12PipelineState> pso;
         HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
@@ -169,40 +278,17 @@ namespace CNA::Internal::Renderers::DirectX12
         return result;
     }
 
-    ID3D12Resource* D3D12SpriteBatchRenderer::GetOrCreatePerDrawConstantBuffer()
-    {
-        if (perDrawConstantBuffer_)
-            return perDrawConstantBuffer_.Get();
-
-        D3D12_HEAP_PROPERTIES heapProps{};
-        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-        D3D12_RESOURCE_DESC desc{};
-        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        desc.Width = sizeof(D3DSprite2DConstants);
-        desc.Height = 1;
-        desc.DepthOrArraySize = 1;
-        desc.MipLevels = 1;
-        desc.Format = DXGI_FORMAT_UNKNOWN;
-        desc.SampleDesc.Count = 1;
-        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        HRESULT hr = device_->CreateCommittedResource(
-            &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(perDrawConstantBuffer_.ReleaseAndGetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer: constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr));
-
-        const D3D12_RANGE readRange{0, 0};
-        hr = perDrawConstantBuffer_->Map(0, &readRange, &perDrawConstantBufferMapped_);
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer: constant buffer Map failed, hr=" + FormatHr(hr));
-        return perDrawConstantBuffer_.Get();
-    }
-
     void D3D12SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
+
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            FlushBatchWithCompiledEffect();
+            return;
+        }
+#endif
 
         if (!owner_->HasBoundColorTargetEXT())
         {
@@ -226,72 +312,119 @@ namespace CNA::Internal::Renderers::DirectX12
         // projection stayed full-target, squishing the sprite into the sub-region. The default
         // full-target viewport keeps vpW/vpH == the target size, byte-identical to the prior behavior.
         const D3D12_VIEWPORT effectiveViewport = owner_->GetEffectiveViewportEXT();
-        const int vpW = static_cast<int>(effectiveViewport.Width);
-        const int vpH = static_cast<int>(effectiveViewport.Height);
+        float logicalViewportWidth = 0.0f;
+        float logicalViewportHeight = 0.0f;
+        owner_->GetSpriteViewportSizeEXT(logicalViewportWidth, logicalViewportHeight);
+        const int vpW = static_cast<int>(std::lround(logicalViewportWidth));
+        const int vpH = static_cast<int>(std::lround(logicalViewportHeight));
 
-        auto rootSig = owner_->GetRootSignatureCacheEXT().GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/1, /*numSamplers=*/1);
-        if (!rootSig)
-            throw std::runtime_error("D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
-
-        // DX-121: a valid custom Effect (SpriteBatch::Begin(effect)) draws through its own
-        // real, compiled PSO+constant-buffer instead of the stock sprite2d pipeline -- both share
-        // the exact same (1,1,1) root signature above (D3D12RootSignatureCache caches by shape),
-        // so every root-signature-relative binding below (CBV@0/SRV table@1/sampler table@2) stays
-        // correct regardless of which path supplied pso/cb.
         D3D12EffectRenderer* customRenderer = nullptr;
         if (customEffect_)
             customRenderer = dynamic_cast<D3D12EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
+        ComPtr<ID3D12RootSignature> stockRootSignature;
+        ID3D12RootSignature* rootSignature = nullptr;
         ID3D12PipelineState* pso = nullptr;
-        ID3D12Resource* cb = nullptr;
+        D3DSprite2DConstants stockConstants{};
+        bool useStockConstants = false;
+        int constantBufferCount = 1;
+        int shaderResourceCount = 1;
+        int samplerCount = 1;
 
         if (customRenderer && customRenderer->IsValid())
         {
-            // DX-121: vpSize is set here, once per flush, mirroring D3D11EffectRenderer's own
-            // "set automatically by the sprite-batch runtime" convention -- the game/effect
-            // author never calls SetViewportSizeEXT() itself.
             customRenderer->SetViewportSizeEXT(static_cast<float>(vpW), static_cast<float>(vpH));
             customEffect_->Apply();
-            customRenderer->Bind();
-            pso = customRenderer->GetPipelineStateEXT();
-            cb = customRenderer->GetConstantBufferEXT();
-            if (!pso || !cb)
-                throw std::runtime_error("D3D12SpriteBatchRenderer: custom Effect's D3D12EffectRenderer is not valid");
+
+            using Microsoft::Xna::Framework::Graphics::VertexElement;
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            D3D12PipelineStateDesc state;
+            owner_->FillPsoStateFromCurrentEXT(state);
+            state.strideInBytes = sizeof(Sprite2DVertex);
+            state.vertexInputElements = {
+                {VertexElement(0, VertexElementFormat::Vector2,
+                               VertexElementUsage::Position, 0), 0, 0, false},
+                {VertexElement(8, VertexElementFormat::Vector2,
+                               VertexElementUsage::TextureCoordinate, 0), 0, 0, false},
+                {VertexElement(16, VertexElementFormat::Vector4,
+                               VertexElementUsage::Color, 0), 0, 0, false},
+            };
+            state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+            // Preserve the established SpriteBatch rasterizer contract while the custom shader
+            // uses the same blend/depth/stencil state as the stock sprite PSO.
+            state.cullMode = 0;
+            state.fillMode = 0;
+            state.depthBias = 0;
+            state.slopeScaleDepthBias = 0.0f;
+            pso = customRenderer->GetOrCreatePipelineStateEXT(std::move(state));
+            rootSignature = customRenderer->GetRootSignatureEXT();
+            constantBufferCount = customRenderer->GetConstantBufferCountEXT();
+            shaderResourceCount = customRenderer->GetShaderResourceCountEXT();
+            samplerCount = customRenderer->GetSamplerCountEXT();
+            if (!pso || !rootSignature)
+                throw std::runtime_error(
+                    "D3D12SpriteBatchRenderer: custom ShaderEffect PSO creation failed");
         }
         else
         {
-            pso = GetOrCreateSprite2DPso(rootSig.Get());
-            D3DSprite2DConstants c{};
-            c.ViewportSize[0] = static_cast<float>(vpW);
-            c.ViewportSize[1] = static_cast<float>(vpH);
-            cb = GetOrCreatePerDrawConstantBuffer();
-            std::memcpy(perDrawConstantBufferMapped_, &c, sizeof(c));
+            stockRootSignature = owner_->GetRootSignatureCacheEXT().GetOrCreate(
+                device_.Get(), 1, 1, 1);
+            rootSignature = stockRootSignature.Get();
+            if (!rootSignature)
+                throw std::runtime_error(
+                    "D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
+            pso = GetOrCreateSprite2DPso(rootSignature);
+            stockConstants.ViewportSize[0] = static_cast<float>(vpW);
+            stockConstants.ViewportSize[1] = static_cast<float>(vpH);
+            useStockConstants = true;
         }
 
-        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(Sprite2DVertex));
-        ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
+        // SpriteBatch replaces both transient streams on every flush. Discard gives each update a
+        // fresh range in DX-238's frame-owned upload ring without a submit or fence wait.
+        vb_.SetDataWithOptions(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+                               sizeof(Sprite2DVertex), SetDataOptions::Discard);
+        ib_.SetData16WithOptions(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()),
+                                 SetDataOptions::Discard);
 
-        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, pso);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetFrameCommandListEXT();
+        owner_->RetainFrameObjectEXT(vb_.GetResourceEXT());
+        owner_->RetainFrameObjectEXT(ib_.GetResourceEXT());
+        owner_->RetainFrameObjectEXT(rootSignature);
+        owner_->RetainFrameObjectEXT(pso);
+        if (const auto* texture = dynamic_cast<const D3D12TextureRenderer*>(currentTexture_))
+            owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
+        else if (const auto* target = dynamic_cast<const D3D12RenderTargetRenderer*>(currentTexture_))
+            owner_->RetainFrameObjectEXT(target->GetSampleableColorResourceEXT());
 
-        owner_->GetResourceStateTrackerEXT().TransitionTo(cmdList, owner_->GetBoundColorResourceEXT(),
-                                                           D3D12_RESOURCE_STATE_RENDER_TARGET);
-        D3D12_CPU_DESCRIPTOR_HANDLE rtv = owner_->GetBoundColorRtvEXT();
-        cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+        const D3D12_GPU_VIRTUAL_ADDRESS stockConstantAddress = useStockConstants
+            ? owner_->AllocateFrameConstantDataEXT(&stockConstants, sizeof(stockConstants)) : 0;
+
+        owner_->TransitionAndBindRenderTargetsEXT(cmdList);
 
         // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws (the GPU viewport
         // rectangle). REMED-GFX-072: the SAME effective viewport now also drives the ViewportSize
-        // projection basis above, so sprite coordinates are viewport-relative. The scissor stays at
-        // the full bound target (sprites are clipped to the viewport by the NDC->viewport transform,
-        // matching D3D11's sprite path which sets no viewport-specific scissor).
-        D3D12_RECT scissor{0, 0, targetW, targetH};
+        // projection basis above, so sprite coordinates are viewport-relative.
+        // plans/plan_dx.md DX-201: the scissor is the device's effective one, not a hardcoded full-target
+        // rectangle. SpriteBatch::Begin(..., RasterizerState with ScissorTestEnable) is the ordinary
+        // XNA way to clip a HUD or a pane, and D3D11's sprite path gets the same clipping from its
+        // persistent RSSetScissorRects state; hardcoding the full target here is what made it a
+        // no-op on D3D12. When no scissor is set, or the test is off, GetEffectiveScissorEXT()
+        // returns exactly the full-target rectangle this replaces.
+        D3D12_RECT scissor = owner_->GetEffectiveScissorEXT();
+        (void)targetW; (void)targetH;
         cmdList->RSSetViewports(1, &effectiveViewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
-        cmdList->SetGraphicsRootSignature(rootSig.Get());
+        cmdList->SetGraphicsRootSignature(rootSignature);
         cmdList->SetPipelineState(pso);
+        // plans/plan_dx.md DX-204: SpriteBatch::Begin(..., BlendState) can select Blend::BlendFactor just as
+        // a 3D draw can, so the sprite path records the same device constant.
+        cmdList->OMSetBlendFactor(owner_->GetBlendFactorEXT());
+        // plans/plan_dx.md DX-210/DX-203: and the stencil reference, for the same reason -- without it a
+        // stencil-gated sprite compares against 0 rather than the game's ReferenceStencil, so a
+        // stencil-EQUAL mask rejects the whole sprite instead of clipping it. Found exactly that way.
+        cmdList->OMSetStencilRef(static_cast<UINT>(owner_->GetReferenceStencilEXT()));
         cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = vb_.GetViewEXT();
@@ -299,7 +432,21 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_INDEX_BUFFER_VIEW ibView = ib_.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
 
-        cmdList->SetGraphicsRootConstantBufferView(0, cb->GetGPUVirtualAddress());
+        if (customRenderer)
+        {
+            for (int slot = 0; slot < constantBufferCount; ++slot)
+            {
+                const D3D12_GPU_VIRTUAL_ADDRESS address =
+                    customRenderer->GetConstantBufferGpuAddressEXT(slot);
+                if (address != 0)
+                    cmdList->SetGraphicsRootConstantBufferView(
+                        static_cast<UINT>(slot), address);
+            }
+        }
+        else
+        {
+            cmdList->SetGraphicsRootConstantBufferView(0, stockConstantAddress);
+        }
 
         // DX-133: pendingFilter_/pendingAddressU_/pendingAddressV_ (set via SetSamplerFilter()/
         // SetSamplerAddressMode(), i.e. the SamplerState passed to SpriteBatch::Begin()) now
@@ -310,27 +457,129 @@ namespace CNA::Internal::Renderers::DirectX12
         // own pre-DX-119 LINEAR/WRAP fallback if nothing had ever called ApplySamplerState) instead
         // of the SamplerState the game's own SpriteBatch::Begin() call actually requested.
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
+        std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
+                   D3DCommon::D3DProgramReflection::kMaxSamplers> samplerHandles{};
+        for (int slot = 0; slot < samplerCount; ++slot)
+            (void) owner_->GetSamplerGpuHandleEXT(slot);
+        // Allocating a later descriptor may grow and replace the shader-visible heap. Resolve
+        // every handle only after all requested descriptors exist in the final heap.
+        for (int slot = 0; slot < samplerCount; ++slot)
+            samplerHandles[static_cast<std::size_t>(slot)] = owner_->GetSamplerGpuHandleEXT(slot);
 
-        // DX-119: SpriteBatch always samples XNA texture slot 0 (GraphicsDevice.Textures[0]/
-        // SamplerStates[0]) -- real, runtime-settable SamplerState, not a hardcoded default,
-        // bound at root parameter index 2 (root sig shape (1,1,1): CBV@0, SRV table@1, sampler
-        // table@2, D3D12RootSignatureCache's own real parameter ordering).
-        ID3D12DescriptorHeap* heaps[] = {owner_->GetCbvSrvUavHeapEXT(), owner_->GetSamplerHeapEXT()};
-        cmdList->SetDescriptorHeaps(2, heaps);
-        cmdList->SetGraphicsRootDescriptorTable(1, GetSrvGpuHandle(currentTexture_));
-        cmdList->SetGraphicsRootDescriptorTable(2, owner_->GetSamplerGpuHandleEXT(0));
+        ID3D12DescriptorHeap* heaps[2]{};
+        UINT heapCount = 0;
+        if (shaderResourceCount > 0)
+            heaps[heapCount++] = owner_->GetCbvSrvUavHeapEXT();
+        if (samplerCount > 0)
+            heaps[heapCount++] = owner_->GetSamplerHeapEXT();
+        if (heapCount > 0)
+            cmdList->SetDescriptorHeaps(heapCount, heaps);
+
+        for (int slot = 0; slot < shaderResourceCount; ++slot)
+        {
+            D3D12_GPU_DESCRIPTOR_HANDLE textureHandle{};
+            if (customRenderer && customRenderer->HasTextureBindingEXT(slot))
+                textureHandle = customRenderer->GetTextureGpuHandleEXT(slot);
+            else if (slot == 0)
+                textureHandle = GetSrvGpuHandle(currentTexture_);
+            if (textureHandle.ptr != 0)
+                cmdList->SetGraphicsRootDescriptorTable(
+                    static_cast<UINT>(constantBufferCount + slot), textureHandle);
+        }
+        for (int slot = 0; slot < samplerCount; ++slot)
+        {
+            const auto handle = samplerHandles[static_cast<std::size_t>(slot)];
+            if (handle.ptr != 0)
+                cmdList->SetGraphicsRootDescriptorTable(
+                    static_cast<UINT>(constantBufferCount + shaderResourceCount + slot), handle);
+        }
 
         cmdList->DrawIndexedInstanced(static_cast<UINT>(pendingIndices_.size()), 1, 0, 0, 0);
-
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer::FlushBatch: command list Close failed, hr=" + FormatHr(hr));
-        owner_->ExecuteCommandListAndWaitEXT(cmdList);
 
         pendingVertices_.clear();
         pendingIndices_.clear();
         currentTexture_ = nullptr;
     }
+
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+    void D3D12SpriteBatchRenderer::ApplyCompiledSpriteVertexShader(
+        float viewportWidth, float viewportHeight)
+    {
+        if (!spriteCompiledEffect_ || customEffect_ == nullptr ||
+            viewportWidth <= 0.0f || viewportHeight <= 0.0f)
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: compiled stock vertex effect is unavailable.");
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, -1.0f);
+        float values[16];
+        projection.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+    }
+
+    void D3D12SpriteBatchRenderer::FlushBatchWithCompiledEffect()
+    {
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        if (runtime == nullptr || currentTexture_ == nullptr)
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: compiled-effect batch state is incomplete.");
+        if (!owner_->HasBoundColorTargetEXT())
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: no render target is bound.");
+
+        vb_.SetDataWithOptions(
+            pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+            sizeof(Sprite2DVertex), SetDataOptions::Discard);
+        ib_.SetData16WithOptions(
+            pendingIndices_.data(), static_cast<int>(pendingIndices_.size()),
+            SetDataOptions::Discard);
+
+        float viewportWidth = 0.0f;
+        float viewportHeight = 0.0f;
+        owner_->GetSpriteViewportSizeEXT(viewportWidth, viewportHeight);
+        owner_->ApplySamplerState(
+            0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
+
+        auto* technique = customEffect_->getCurrentTechniqueProperty();
+        const int passCount = technique != nullptr
+            ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+            throw System::InvalidOperationException(
+                "DirectX12 SpriteBatch: compiled Effect needs a technique with a pass.");
+
+        ApplyCompiledSpriteVertexShader(viewportWidth, viewportHeight);
+        const auto& textures =
+            customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+        GpuDrawParams params;
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            owner_->RecordCompiledEffectDrawEXT(
+                vb_, &ib_, PrimitiveType::TriangleList,
+                static_cast<int>(pendingIndices_.size() / 3), 1, params, *runtime,
+                currentTexture_, &textures);
+        }
+
+        pendingVertices_.clear();
+        pendingIndices_.clear();
+        currentTexture_ = nullptr;
+    }
+#endif
 
     void D3D12SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {

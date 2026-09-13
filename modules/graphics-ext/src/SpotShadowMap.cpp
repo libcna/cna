@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/SpotShadowMap.hpp"
+#include "ShadowCasterShaderPackages.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -32,32 +33,6 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     namespace {
-
-        /// Distance over range, same as the cube caster, so a receiver applies one rule to both.
-        constexpr const char* kCasterVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPosition;
-uniform mat4 uLightViewProjection;
-uniform mat4 uWorld;
-out vec3 vWorldPos;
-void main() {
-    vec4 world = uWorld * vec4(aPosition, 1.0);
-    vWorldPos = world.xyz;
-    gl_Position = uLightViewProjection * world;
-}
-)";
-
-        constexpr const char* kCasterFragmentSource = R"(#version 300 es
-precision highp float;
-in vec3 vWorldPos;
-uniform vec3 uLightPosition;
-uniform float uLightRange;
-out vec4 FragColor;
-void main() {
-    float distance = clamp(length(vWorldPos - uLightPosition) / uLightRange, 0.0, 1.0);
-    FragColor = vec4(distance, distance, distance, 1.0);
-}
-)";
 
         Vector3 Normalized(const Vector3& value)
         {
@@ -104,15 +79,11 @@ void main() {
                                                     DepthFormat::Depth24);
 
         const bool canRaster  = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-        // Two questions, not one (plans/plan_modern.md `MOD-1699`): `CustomEffects` only means the
-        // renderer *accepts* an effect. SOFTWARE and HEADLESS accept any shader source and go
-        // on rendering with their own fixed path, so a caster that believed them would report
-        // a working shadow map while writing depth nothing had shaded.
+        const ShaderPackageEXT casterPackage = detail::CreateSpotShadowCasterPackage();
         const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
-                             && device.ExecutesShaderEffectSourceEXT();
+                             && casterPackage.selectFor(device).isUsable();
         if (canRaster && canCompile)
-            casterEffect_ = std::make_unique<ShaderEffect>(device, kCasterVertexSource,
-                                                           kCasterFragmentSource);
+            casterEffect_ = std::make_unique<ShaderEffect>(device, casterPackage);
         supported_ = casterEffect_ != nullptr && casterEffect_->IsEffectValid();
         if (!supported_)
         {

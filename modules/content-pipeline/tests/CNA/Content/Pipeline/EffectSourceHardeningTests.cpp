@@ -447,7 +447,7 @@ namespace
         {
             ADD_FAILURE() << "RunHostProcess did not return within 60 seconds for: " << script;
             std::cerr.flush();
-            std::quick_exit(1);
+            ::_Exit(1);
         }
         pending.get();
         return result;

@@ -102,11 +102,11 @@ namespace CNA::Graphics {
         void setIntensity(float value);
 
         /**
-         * @brief The scattering model as GLSL, for a pass that needs the same air on geometry.
+         * @brief The scattering model as GLSL for source-executing effects that need the same air.
          *
-         * plans/plan_modern.md `MOD-2141`. Emitted rather than duplicated, for the reason `MOD-2035`
-         * charged this layer for: two copies of one model agree until somebody edits one of them,
-         * and the symptom is a frame that looks slightly wrong with nothing to point at.
+         * Portable renderers use generated dialect-specific packages. Their image tests compare
+         * directly with @ref radiance so a representation that drifts from this source form fails
+         * visibly instead of producing a subtly different sky.
          *
          * The fragment declares `cnaSkyRadiance(vec3, vec3, float)`,
          * `cnaScatteringAlongPath(vec3, vec3, float, float)` — the same integral with the view path

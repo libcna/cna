@@ -7,8 +7,10 @@
 // PreserveContents — SetRenderTarget does NOT clear on re-bind.
 //   A green fill written before unbinding must survive the re-bind unchanged.
 //
-// Verification: the target is unbound/resolved and its inherited Texture2D::GetData API reads
-// the stored attachment. XNA rejects both GetData and SetData while a render target is active.
+// Verification: each target is unbound, then read through RenderTarget2D::GetData.
+// This is the public XNA target-readback path and does not depend on a renderer redirecting
+// GetBackBufferData to the currently bound target.
+// XNA rejects both GetData and SetData while a render target is active.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -85,7 +87,6 @@ protected:
                   "DiscardContents: contents are discarded (not red)");
             check(px.getRProperty() == 0 && px.getGProperty() == 0 && px.getBProperty() == 0,
                   "DiscardContents: cleared to black (0,0,0)");
-
         }
 
         // ── Case B: PreserveContents ─────────────────────────────────────────
@@ -109,7 +110,6 @@ protected:
                 px.getRProperty(), px.getGProperty(), px.getBProperty());
             check(colourMatch(px, Color::Green),
                   "PreserveContents: contents are preserved (green)");
-
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

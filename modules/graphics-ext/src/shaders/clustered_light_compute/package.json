@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::ClusteredLightComputeGenerated",
+  "package": "clustered_light_compute",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kAssignEsComputeSource","source":"assign.es.comp.glsl","language":"glsl-es","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kAssignDesktopComputeSource","source":"assign.desktop.comp.glsl","language":"glsl","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kAssignVulkanComputeSpirV","source":"assign.vulkan.comp.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"compute","format":"spirv","entry_point":"main"}
+  ]
+}

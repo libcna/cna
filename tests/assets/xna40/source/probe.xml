@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-021: the committed .xml source.
+
+    A list of strings is the shape XmlImporter answers with no type of its own to build: the
+    importer builds whatever the document's Asset Type names, and this one names the type the
+    serializer already knows.
+-->
+<XnaContent>
+  <Asset Type="System.Collections.Generic.List[System.String]">
+    <Item>first</Item>
+    <Item>second</Item>
+    <Item>third</Item>
+  </Asset>
+</XnaContent>

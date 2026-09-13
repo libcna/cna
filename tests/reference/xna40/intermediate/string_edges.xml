@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:StringEdges">
+    <Empty></Empty>
+    <Null Null="true" />
+    <Spaces>  padded  </Spaces>
+    <Newlines>line1
+line2
+line3</Newlines>
+    <Escapes>&lt;tag&gt; &amp; "quotes" 'apostrophes'</Escapes>
+    <Unicode>café 中文 😀</Unicode>
+    <Tab>	</Tab>
+    <Lt>&lt;</Lt>
+    <Amp>&amp;</Amp>
+    <Space> </Space>
+  </Asset>
+</XnaContent>

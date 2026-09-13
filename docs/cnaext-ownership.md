@@ -4,10 +4,12 @@
 ownership. Derived by reading every member of every public header in
 `modules/graphics-ext/include/CNA/Graphics/` on 2026-08-18; re-derive it if that set changes.
 
-## The three shapes, and nothing else
+## The three public shapes, and nothing else
 
-The layer uses exactly three ownership shapes. If a future class needs a fourth, that is a design
-decision worth arguing rather than an implementation detail.
+The layer's public API uses exactly three ownership shapes. If a future public API needs a fourth,
+that is a design decision worth arguing rather than an implementation detail. Renderer-internal
+records may use shared lifetime identity solely to retain already accepted work, as required by
+ADR 0001; no public `shared_ptr` is exposed.
 
 | Shape | Spelling | Who deletes | What it means for the caller |
 |---|---|---|---|
@@ -15,10 +17,18 @@ decision worth arguing rather than an implementation detail.
 | **Borrowed** | `T*`, settable, may be null | Nobody in this layer — the caller | The caller must keep the object alive for as long as it stays set |
 | **Attached** | `T&`, constructor-injected, never rebound | Nobody in this layer — the caller | The caller must outlive the whole object |
 
-**Attached** is always `GraphicsDevice&` in practice: every class in the layer that touches the GPU
-takes the device by reference at construction and keeps it for life. That is the single most
-important ownership fact about the layer — *a `CNA::Graphics` object must not outlive its
-`GraphicsDevice`*, and none of them try to detect it if it does.
+**Attached** is always a `GraphicsDevice` in practice: most classes retain a reference; tracked
+`GraphicsResource` subclasses retain the base class's non-owning pointer. Every GPU-facing class
+takes the device by reference at construction. That is the single most important ownership fact
+about the layer — *a `CNA::Graphics` object must not outlive its `GraphicsDevice`*. A tracked
+resource is disposed by the device, but its C++ wrapper must still be destroyed before the device
+object's storage disappears.
+
+Public ownership and in-flight native lifetime are deliberately different. A deferred renderer may
+retain an internal native resource record after a public wrapper is disposed, solely until the
+accepted command and its completion token are finished. This is required by
+`docs/adr/0001-modern-gpu-ordering-lifetime.md`; it neither makes the public object shared nor lets a
+caller keep using it after disposal.
 
 ## The owned/borrowed pair idiom
 
@@ -62,11 +72,14 @@ use. Reading the raw pointer is always correct; the `unique_ptr` only answers "m
 | `SpotShadowMap` | `RenderTarget2D`, `ShaderEffect` | — | `GraphicsDevice&` |
 | `SsaoPass` | `FullscreenPass`, 2 × `ShaderEffect`, noise `Texture2D` | — | `GraphicsDevice&` |
 | `StorageBuffer` | `IStorageBufferRenderer` | — | — (holds no device) |
+| `Texture2DArray` | shared internal `ITexture2DArrayRenderer` record | — | `GraphicsDevice*` through `GraphicsResource` (tracked) |
 | `TonemapPass` | `FullscreenPass`, `ShaderEffect` | — | `GraphicsDevice&` |
 
-Every class marked "Owns" in that table releases exactly what it owns in its destructor, and none of
-them own anything a caller can also see. There is no `shared_ptr` anywhere in the layer, and no
-class deletes something it did not create.
+Every class marked "Owns" in that table releases exactly what it owns in its destructor or
+`Dispose()` path, and none of them own anything a caller can also see. `Texture2DArray`'s shared
+record is deliberately internal: today the wrapper is its only owner; future accepted bindings may
+retain that record without retaining or dereferencing the public wrapper. There is no public
+`shared_ptr` ownership in the layer, and no class deletes something it did not create.
 
 ## Two things that are inconsistent, and why they stay
 
@@ -85,9 +98,12 @@ class deletes something it did not create.
 
 ## What a caller has to remember
 
-Three sentences, and they cover the whole layer:
+Four rules cover the whole layer:
 
 1. Nothing in `CNA::Graphics` may outlive its `GraphicsDevice`.
-2. Anything you pass in as a raw pointer, you keep alive; anything you pass as `unique_ptr`, you
+2. GPU-facing use and disposal are serialized on the device's graphics thread; the public objects
+   are not concurrently thread-safe.
+3. Anything you pass in as a raw pointer, you keep alive; anything you pass as `unique_ptr`, you
    have handed over.
-3. Nothing here is thread-safe, and nothing here is reference-counted.
+4. Public objects are not reference-counted; internal renderers may retain only the native record
+   needed by already accepted work.

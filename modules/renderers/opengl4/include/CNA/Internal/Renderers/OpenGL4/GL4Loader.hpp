@@ -170,6 +170,33 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #ifndef GL_QUERY_RESULT_AVAILABLE
 #define GL_QUERY_RESULT_AVAILABLE 0x8867
 #endif
+#ifndef GL_MAJOR_VERSION
+#define GL_MAJOR_VERSION 0x821B
+#endif
+#ifndef GL_MINOR_VERSION
+#define GL_MINOR_VERSION 0x821C
+#endif
+#ifndef GL_NUM_EXTENSIONS
+#define GL_NUM_EXTENSIONS 0x821D
+#endif
+#ifndef GL_RGBA16F
+#define GL_RGBA16F 0x881A
+#endif
+#ifndef GL_RGBA32F
+#define GL_RGBA32F 0x8814
+#endif
+#ifndef GL_INTERNALFORMAT_SUPPORTED
+#define GL_INTERNALFORMAT_SUPPORTED 0x826F
+#endif
+#ifndef GL_FRAMEBUFFER_RENDERABLE
+#define GL_FRAMEBUFFER_RENDERABLE 0x8289
+#endif
+#ifndef GL_FULL_SUPPORT
+#define GL_FULL_SUPPORT 0x82B7
+#endif
+#ifndef GL_CAVEAT_SUPPORT
+#define GL_CAVEAT_SUPPORT 0x82B8
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -278,6 +305,23 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4DRAWELEMENTSINSTANCEDPROC       = void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei);
     using PFNGL4VERTEXATTRIBDIVISORPROC         = void (*)(GLuint, GLuint);
 
+    // plans/plan_modern.md MOD-2260: optional post-4.1 entry points. These are deliberately kept
+    // out of LoadGL4Functions(): failure to resolve any of them narrows the modern subset instead
+    // of preventing creation of the renderer's portable GL 4.1/XNA path.
+    using PFNGL4GETSTRINGIPROC                   = const GLubyte* (*)(GLenum, GLuint);
+    using PFNGL4DISPATCHCOMPUTEPROC              = void (*)(GLuint, GLuint, GLuint);
+    using PFNGL4BINDBUFFERBASEPROC               = void (*)(GLenum, GLuint, GLuint);
+    using PFNGL4GETINTEGERI_VPROC                = void (*)(GLenum, GLuint, GLint*);
+    using PFNGL4BINDIMAGETEXTUREPROC             = void (*)(GLuint, GLuint, GLint, GLboolean, GLint, GLenum, GLenum);
+    using PFNGL4MEMORYBARRIERPROC                = void (*)(GLbitfield);
+    using PFNGL4DRAWARRAYSINDIRECTPROC           = void (*)(GLenum, const void*);
+    using PFNGL4DRAWELEMENTSINDIRECTPROC         = void (*)(GLenum, GLenum, const void*);
+    using PFNGL4QUERYCOUNTERPROC                 = void (*)(GLuint, GLenum);
+    using PFNGL4GETQUERYOBJECTUI64VPROC          = void (*)(GLuint, GLenum, std::uint64_t*);
+    using PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC =
+        void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei, GLint, GLuint);
+    using PFNGL4GETINTERNALFORMATIVPROC          = void (*)(GLenum, GLenum, GLenum, GLsizei, GLint*);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -365,8 +409,123 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4DRAWELEMENTSINSTANCEDPROC       gl4_glDrawElementsInstanced;
     extern PFNGL4VERTEXATTRIBDIVISORPROC         gl4_glVertexAttribDivisor;
 
+    extern PFNGL4GETSTRINGIPROC                  gl4_glGetStringi;
+    extern PFNGL4DISPATCHCOMPUTEPROC             gl4_glDispatchCompute;
+    extern PFNGL4BINDBUFFERBASEPROC              gl4_glBindBufferBase;
+    extern PFNGL4GETINTEGERI_VPROC               gl4_glGetIntegeri_v;
+    extern PFNGL4BINDIMAGETEXTUREPROC            gl4_glBindImageTexture;
+    extern PFNGL4MEMORYBARRIERPROC               gl4_glMemoryBarrier;
+    extern PFNGL4DRAWARRAYSINDIRECTPROC          gl4_glDrawArraysIndirect;
+    extern PFNGL4DRAWELEMENTSINDIRECTPROC        gl4_glDrawElementsIndirect;
+    extern PFNGL4QUERYCOUNTERPROC                gl4_glQueryCounter;
+    extern PFNGL4GETQUERYOBJECTUI64VPROC         gl4_glGetQueryObjectui64v;
+    extern PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC
+        gl4_glDrawElementsInstancedBaseVertexBaseInstance;
+    extern PFNGL4GETINTERNALFORMATIVPROC         gl4_glGetInternalformativ;
+
     /// Generic function-pointer-getter type matching the platform GL service callback.
     using GetProcAddressFn = void* (*)(const char* name);
+
+    /**
+     * @brief Raw version, extension and entry-point facts used to classify the modern GL subset.
+     *
+     * Kept separate from the classifier so the GL 4.1 floor and extension-only routes can be
+     * tested deterministically without requiring a deliberately old physical driver.
+     */
+    struct ModernCapabilityInputs
+    {
+        /** @brief Context-reported desktop OpenGL major version. */
+        int contextMajor = 0;
+        /** @brief Context-reported desktop OpenGL minor version. */
+        int contextMinor = 0;
+        /** @brief Whether `GL_ARB_compute_shader` is advertised. */
+        bool computeShaderExtension = false;
+        /** @brief Whether `GL_ARB_shader_storage_buffer_object` is advertised. */
+        bool shaderStorageBufferExtension = false;
+        /** @brief Whether `GL_ARB_shader_image_load_store` is advertised. */
+        bool imageLoadStoreExtension = false;
+        /** @brief Whether `GL_EXT_texture_array` is advertised. */
+        bool textureArrayExtension = false;
+        /** @brief Whether `GL_ARB_draw_indirect` is advertised. */
+        bool indirectDrawingExtension = false;
+        /** @brief Whether `GL_ARB_timer_query` is advertised. */
+        bool timerQueryExtension = false;
+        /** @brief Whether `GL_ARB_base_instance` is advertised. */
+        bool baseInstanceExtension = false;
+        /** @brief Whether `GL_ARB_internalformat_query2` is advertised. */
+        bool internalFormatQuery2Extension = false;
+        /** @brief Whether every entry point needed for compute dispatch resolved. */
+        bool computeEntryPoints = false;
+        /** @brief Whether every entry point needed for shader-storage binding resolved. */
+        bool shaderStorageBufferEntryPoints = false;
+        /** @brief Whether every entry point needed for storage-image use resolved. */
+        bool imageLoadStoreEntryPoints = false;
+        /** @brief Whether every entry point needed for texture-array allocation resolved. */
+        bool textureArrayEntryPoints = false;
+        /** @brief Whether both indexed and non-indexed indirect-draw entry points resolved. */
+        bool indirectDrawingEntryPoints = false;
+        /** @brief Whether every entry point needed for timestamp queries resolved. */
+        bool timerQueryEntryPoints = false;
+        /** @brief Whether the base-instance indexed draw entry point resolved. */
+        bool baseInstanceEntryPoints = false;
+        /** @brief Whether the internal-format query entry point resolved. */
+        bool internalFormatQueryEntryPoints = false;
+    };
+
+    /** @brief Independently classified native modern-feature facts for one current GL context. */
+    struct ModernCapabilities
+    {
+        /** @brief Context-reported desktop OpenGL major version. */
+        int contextMajor = 0;
+        /** @brief Context-reported desktop OpenGL minor version. */
+        int contextMinor = 0;
+        /** @brief Native compute dispatch is available; this does not imply a CNA implementation. */
+        bool computeShadersNative = false;
+        /** @brief Native shader-storage buffers are available; this does not imply CNA support. */
+        bool shaderStorageBuffersNative = false;
+        /** @brief Native image load/store is available; this does not imply CNA support. */
+        bool imageLoadStoreNative = false;
+        /** @brief Native two-dimensional texture arrays are available. */
+        bool textureArraysNative = false;
+        /** @brief Native indexed and non-indexed indirect drawing are both available. */
+        bool indirectDrawingNative = false;
+        /** @brief Native timestamp queries are available. */
+        bool gpuTimersNative = false;
+        /** @brief Native indexed base-instance drawing is available. */
+        bool baseInstanceDrawingNative = false;
+        /** @brief Full internal-format queries are available. */
+        bool internalFormatQueriesNative = false;
+        /** @brief Whether the RGBA16F renderability answer was obtained from the driver. */
+        bool rgba16FloatRenderableKnown = false;
+        /** @brief Whether the driver reports RGBA16F as a renderable texture format. */
+        bool rgba16FloatRenderable = false;
+        /** @brief Whether the RGBA32F renderability answer was obtained from the driver. */
+        bool rgba32FloatRenderableKnown = false;
+        /** @brief Whether the driver reports RGBA32F as a renderable texture format. */
+        bool rgba32FloatRenderable = false;
+    };
+
+    /**
+     * @brief Classifies modern support from independent version, extension and function facts.
+     *
+     * @param inputs Facts gathered for one current OpenGL context.
+     * @return Independently classified native capabilities; format-query results remain unknown.
+     */
+    [[nodiscard]] ModernCapabilities ClassifyModernCapabilities(
+        const ModernCapabilityInputs& inputs);
+
+    /**
+     * @brief Resolves optional functions and probes the modern subset of the current context.
+     *
+     * Missing post-4.1 functions are recorded as unavailable and never make renderer creation
+     * fail. The returned facts describe native GL availability only; renderer overrides must not
+     * advertise a CNA feature until its implementation and observable contract are complete.
+     *
+     * @param getProcAddress Function used to resolve GL entry points for the current context.
+     * @return Version, independently classified features and queried float-format support.
+     */
+    [[nodiscard]] ModernCapabilities DiscoverModernCapabilities(
+        GetProcAddressFn getProcAddress);
 
     /**
      * @brief Resolves every function pointer declared above via @p getProcAddress.

@@ -31,6 +31,8 @@
 //     D3D12 output merger instead of every sprite silently using Opaque.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
+#include "D3D12PipelineStateCache.hpp"
 #include "D3D12Buffers.hpp"
 
 #include <d3d12.h>
@@ -38,6 +40,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -46,6 +49,9 @@ namespace CNA::Internal::Renderers::DirectX12
     using Microsoft::WRL::ComPtr;
 
     class DirectX12Renderer;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+    class D3D12CompiledEffect;
+#endif
 
     /// Real D3D12 SpriteBatch renderer (plans/plan_dx.md Phase DX12, DX-111/DX-112 follow-up).
     class D3D12SpriteBatchRenderer final : public ISpriteBatchRenderer
@@ -56,6 +62,7 @@ namespace CNA::Internal::Renderers::DirectX12
         struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
 
         explicit D3D12SpriteBatchRenderer(DirectX12Renderer* owner);
+        ~D3D12SpriteBatchRenderer() override;
 
         void Begin() override;
         void End() override;
@@ -63,6 +70,8 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetCustomEffect(Microsoft::Xna::Framework::Graphics::Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -81,17 +90,22 @@ namespace CNA::Internal::Renderers::DirectX12
     private:
         void FlushBatch();
         ID3D12PipelineState* GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig);
-        ID3D12Resource* GetOrCreatePerDrawConstantBuffer();
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        void ApplyCompiledSpriteVertexShader(float viewportWidth, float viewportHeight);
+        void FlushBatchWithCompiledEffect();
+#endif
 
-        DirectX12Renderer* owner_ = nullptr;
+        D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
 
         D3D12VertexBufferRenderer vb_;
         D3D12IndexBufferRenderer ib_;
-        using SpritePsoKey = std::tuple<int, int, int, int, int, int, int, unsigned int, unsigned int>;
+        /// plans/plan_dx.md DX-210: the key is the renderer's whole tracked pipeline state
+        /// (`D3D12PipelineStateDesc::AsCacheKeyEXT()`, which includes the complete MRT/DSV format
+        /// shape). Spelling fields out again is how depth and stencil went missing originally.
+        using SpritePsoKey = decltype(
+            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT());
         std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
-        ComPtr<ID3D12Resource> perDrawConstantBuffer_;
-        void* perDrawConstantBufferMapped_ = nullptr;
 
         std::vector<Sprite2DVertex> pendingVertices_;
         std::vector<uint16_t> pendingIndices_;
@@ -100,11 +114,18 @@ namespace CNA::Internal::Renderers::DirectX12
         bool begun_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Microsoft::Xna::Framework::Graphics::Effect* customEffect_ = nullptr;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        std::unique_ptr<D3D12CompiledEffect> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+#endif
 
-        // Defaults mirror D3D11SpriteBatchRenderer's own -- stored but not yet behaviorally real,
-        // see this file's own header comment for why (no D3D12 dynamic-sampler-state system yet).
+        // Defaults mirror D3D11SpriteBatchRenderer's own and describe the complete slot-zero
+        // sampler that FlushBatch applies before each draw.
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_ = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
     };
 }

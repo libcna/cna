@@ -10,6 +10,9 @@
 
 #include <d3d9.h>
 #include <cstddef>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 namespace CNA::Internal::Renderers::DirectX9
 {
@@ -20,10 +23,8 @@ namespace CNA::Internal::Renderers::DirectX9
     /// iterating the layout's own fields; it does not need to be passed to
     /// CreateVertexDeclaration() separately, since the sentinel already marks the array's end.
     ///
-    /// Layouts (byte offsets/semantics match D3DCommon::InputElementsForStride()'s own doc
-    /// exactly for the 5 layouts D3D11/D3D12 also share, just in D3D9's Usage/UsageIndex/Type
-    /// vocabulary instead of DXGI_FORMAT + semantic name strings; stride 28 is D3D9-only, see its
-    /// own note below):
+    /// Layouts (byte offsets/semantics match the renderer-neutral declarations, just in D3D9's
+    /// Usage/UsageIndex/Type vocabulary instead of DXGI_FORMAT + semantic name strings):
     ///   16: POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12)
     ///   20: POSITION0 (FLOAT3, 0), TEXCOORD0 (FLOAT2, 12)
     ///   24: POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12), TEXCOORD0 (FLOAT2, 16)
@@ -41,16 +42,10 @@ namespace CNA::Internal::Renderers::DirectX9
     ///       VertexPositionNormalTangentTextureSkinned, CNA's own CNAEXT "PbrSkinned3D" shader
     ///       (SkinnedPbrEffect)
     ///
-    /// D9-82d found live that stride 28 (Position+TexCoord0+TexCoord1) has no equivalent in the 5
-    /// layouts D3D11/D3D12 share: `DualTextureEffect.fx`'s real, byte-identical `VSInputTx2`
-    /// genuinely needs TWO distinct texture-coordinate sets (unlike D3D11's own
-    /// `dual_texture3d.vert.hlsl`, which simplifies to a single shared UV set -- not an option here
-    /// since this renderer must draw Microsoft's unmodified compiled shader, not a CNA
-    /// reimplementation). Added as a new, D3D9-local stride (design decision 12: this table is not
-    /// a `D3DCommon` consumer, so a D3D9-only addition here does not touch any other renderer).
-    /// `DualTextureEffect`'s vertex-color variants (`VSInputTx2Vc`, 32 bytes) still collide with the
-    /// existing Position+Normal+TexCoord 32-byte layout and remain undrawable, same category as
-    /// `BasicEffect`'s own `D9-82b` gaps.
+    /// D9-82d introduced stride 28 for `DualTextureEffect.fx`'s byte-identical `VSInputTx2`, which
+    /// genuinely needs two texture-coordinate sets. D9-127 removed the stride-32 collision by
+    /// translating propagated public declarations; the stride table now remains only the fallback
+    /// for declaration-less internal buffers.
     ///
     /// COLOR0 is UBYTE4N (four bytes normalized in their EXISTING memory order), not
     /// D3DDECLTYPE_D3DCOLOR -- D9-82 found live that D3DDECLTYPE_D3DCOLOR's real contract expects
@@ -63,4 +58,13 @@ namespace CNA::Internal::Renderers::DirectX9
     /// vertex -- D3D11's own DX-70 already found and solved this exact collision; reuse that
     /// resolution when D3D9's SpriteBatch renderer lands rather than rediscovering it here.
     const D3DVERTEXELEMENT9* VertexElementsForStrideD3D9(std::size_t strideInBytes, UINT& count);
+
+    /**
+     * @brief Translates a caller-provided XNA vertex declaration to Direct3D 9 elements.
+     *
+     * @param elements The declaration elements in caller-defined order.
+     * @return The translated elements followed by the required `D3DDECL_END()` sentinel.
+     */
+    std::vector<D3DVERTEXELEMENT9> TranslateVertexElementsD3D9(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements);
 }

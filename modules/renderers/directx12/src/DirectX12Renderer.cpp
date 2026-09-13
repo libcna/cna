@@ -1,7 +1,5 @@
-// plans/plan_dx.md Phase DX12 (DX-102/DX-103/DX-104/DX-105): D3D12 device-lifetime resources -- real
-// ID3D12Device + command queue + descriptor heaps + per-frame command allocators/command list +
-// fence-based synchronization. Clear()/Present()/draw calls are still honest "not yet implemented"
-// stubs -- see DirectX12Renderer.hpp's class doc comment for exactly why and what's next.
+// plans/plan_dx.md Phase DX17: frame-scoped D3D12 command recording with persistently mapped
+// per-frame upload rings and explicit immediate-list boundaries for CPU readbacks.
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
@@ -10,12 +8,25 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
+#endif
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -45,11 +56,37 @@ namespace CNA::Internal::Renderers::DirectX12
 
     namespace
     {
+        constexpr std::size_t kDefaultFrameUploadChunkSize = 1u * 1024u * 1024u;
+
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        int ClampBackBufferMultiSampleCount(
+            ID3D12Device* device, DXGI_FORMAT format, int requestedCount)
+        {
+            if (device == nullptr || requestedCount <= 1) return 0;
+
+            int candidate = 1;
+            while (candidate <= requestedCount / 2) candidate *= 2;
+            while (candidate > 1)
+            {
+                D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS data{};
+                data.Format = format;
+                data.SampleCount = static_cast<UINT>(candidate);
+                data.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
+                if (SUCCEEDED(device->CheckFeatureSupport(
+                        D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &data, sizeof(data))) &&
+                    data.NumQualityLevels > 0)
+                {
+                    return candidate;
+                }
+                candidate >>= 1;
+            }
+            return 0;
         }
 
         /// DX-111: same per-PrimitiveType vertex-count formula DirectX11Renderer.cpp's own
@@ -63,6 +100,8 @@ namespace CNA::Internal::Renderers::DirectX12
             case PrimitiveType::TriangleStrip: return primitiveCount + 2;
             case PrimitiveType::LineList:      return primitiveCount * 2;
             case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            // plans/plan_dx.md DX-208: one vertex per point, matching every other CNA renderer's own table.
+            case PrimitiveType::PointListEXT:  return primitiveCount;
             }
             return 0;
         }
@@ -90,6 +129,93 @@ namespace CNA::Internal::Renderers::DirectX12
             view.SizeInBytes -= static_cast<UINT>(byteOffset);
         }
 
+        void BuildVertexInputLayout(
+            const GpuDrawParams& params, bool includeInstanceStreams,
+            std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& combinedElements,
+            std::vector<D3DVertexInputElement>& inputElements)
+        {
+            combinedElements.clear();
+            inputElements.clear();
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX12 multi-stream input requires every per-vertex buffer to carry "
+                        "a VertexDeclaration.");
+                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                {
+                    auto combined = source;
+                    combined.setOffsetProperty(
+                        source.getOffsetProperty() + stream.combinedByteBase);
+                    combinedElements.push_back(combined);
+                }
+            }
+
+            for (const auto& combined : combinedElements)
+            {
+                const auto mapped =
+                    MapCombinedOffsetToStream(params, combined.getOffsetProperty());
+                const auto& stream =
+                    params.vertexStreams[static_cast<std::size_t>(mapped.streamIndex)];
+                auto local = combined;
+                local.setOffsetProperty(mapped.byteOffsetInStream);
+                inputElements.push_back({local, stream.slot, 0, false});
+            }
+
+            if (!includeInstanceStreams)
+                return;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX12 instancing requires every per-instance buffer to carry a "
+                        "VertexDeclaration.");
+                for (const auto& element : buffer->GetDeclarationEXT().GetElements())
+                {
+                    inputElements.push_back(
+                        {element, stream.slot, stream.instanceFrequency, true});
+                }
+            }
+        }
+
+        void BindVertexStreams(
+            ID3D12GraphicsCommandList* commandList,
+            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params)
+        {
+            D3D12_VERTEX_BUFFER_VIEW views[kMaxVertexStreams]{};
+            if (params.vertexStreamCount == 0)
+            {
+                views[0] = fallback.GetViewEXT();
+            }
+            else
+            {
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.slot < 0 || stream.slot >= kMaxVertexStreams ||
+                        stream.buffer == nullptr)
+                        continue;
+                    const auto& buffer =
+                        *static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                    views[stream.slot] = buffer.GetViewEXT();
+                    AdvanceVertexBufferView(views[stream.slot], stream.vertexOffset);
+                }
+            }
+
+            commandList->IASetVertexBuffers(
+                0, static_cast<UINT>(kMaxVertexStreams), views);
+        }
+
         /// D3D12_PRIMITIVE_TOPOLOGY is D3D_PRIMITIVE_TOPOLOGY under the hood -- same underlying enum
         /// D3D11 uses for IASetPrimitiveTopology, just a different typedef name.
         D3D12_PRIMITIVE_TOPOLOGY ToD3D12Topology(PrimitiveType pt)
@@ -98,18 +224,31 @@ namespace CNA::Internal::Renderers::DirectX12
             {
                 case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
                 case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+                // plans/plan_dx.md DX-208: these three used to throw, because a pipeline state's
+                // PrimitiveTopologyType was hardcoded to TRIANGLE and D3D12 requires it to agree
+                // with the topology the command list sets. It is part of the PSO key now, so the
+                // refusal has nothing left to protect.
+                case PrimitiveType::LineList:      return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+                case PrimitiveType::LineStrip:     return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+                case PrimitiveType::PointListEXT:  return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+            }
+            throw std::runtime_error(
+                "DirectX12 renderer does not support the requested PrimitiveType value");
+        }
+
+        /// plans/plan_dx.md DX-208: the pipeline-state-level topology CLASS, which is a coarser thing than
+        /// the command-list topology above -- D3D12 bakes only the class into the pipeline state and
+        /// takes the exact topology at record time, which is why a strip and a list share one
+        /// pipeline state but a line and a triangle cannot.
+        D3D12_PRIMITIVE_TOPOLOGY_TYPE ToD3D12TopologyType(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+                case PrimitiveType::TriangleList:
+                case PrimitiveType::TriangleStrip: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
                 case PrimitiveType::LineList:
-                    throw std::runtime_error(
-                        "DirectX12 renderer does not support PrimitiveType::LineList: its "
-                        "pipeline-state cache is currently fixed to triangle topology");
-                case PrimitiveType::LineStrip:
-                    throw std::runtime_error(
-                        "DirectX12 renderer does not support PrimitiveType::LineStrip: its "
-                        "pipeline-state cache is currently fixed to triangle topology");
-                case PrimitiveType::PointListEXT:
-                    throw std::runtime_error(
-                        "DirectX12 renderer does not support PrimitiveType::PointListEXT: its "
-                    "pipeline-state cache is currently fixed to triangle topology");
+                case PrimitiveType::LineStrip:     return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+                case PrimitiveType::PointListEXT:  return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
             }
             throw std::runtime_error(
                 "DirectX12 renderer does not support the requested PrimitiveType value");
@@ -126,6 +265,9 @@ namespace CNA::Internal::Renderers::DirectX12
     DirectX12Renderer::DirectX12Renderer(const GraphicsRendererCreateArgs& args)
         : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
+        , requestedMultiSampleCount_(args.multiSampleCount)
+        , contextRecoveryEnabled_(args.contextRecoveryEnabled)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
         if (args.surface.windowId != 0 || CNA::Platform::HasNativeWindow(args.surface.nativeHandle))
         {
@@ -137,7 +279,8 @@ namespace CNA::Internal::Renderers::DirectX12
             hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
         }
 
-        // DX-116: mirrors DirectX11Renderer's own constructor exactly.
+        presentationMode_ = args.presentationMode;
+        swapInterval_ = args.swapInterval;
         vsyncEnabled_ = args.swapInterval > 0;
 
         // DX-119: default every tracked sampler slot to this renderer's own pre-DX-119 hardcoded
@@ -150,6 +293,9 @@ namespace CNA::Internal::Renderers::DirectX12
             currentSamplerAddressU_[i] = 0;
             currentSamplerAddressV_[i] = 0;
             currentSamplerMaxAnisotropy_[i] = 4;
+            currentSamplerAddressW_[i] = 0;      // plans/plan_dx.md DX-216
+            currentSamplerMaxMipLevel_[i] = 0;
+            currentSamplerLodBias_[i] = 0.0f;
         }
 
         CreateDeviceResources();
@@ -170,6 +316,10 @@ namespace CNA::Internal::Renderers::DirectX12
             if (swapChainAvailable_)
                 CreateWindowSizeDependentViews();
         }
+        // DX-241: no swap chain -- either no window at all (HeadlessEXT) or a swap chain that could
+        // not be created -- means this device still has a back buffer, just an off-screen one.
+        if (!swapChainAvailable_)
+            CreateOffscreenBackBufferResources();
 
         CNA::Logger::Info(
             "D3D12 device resources created; feature level " + FormatHr(featureLevel_) +
@@ -181,23 +331,71 @@ namespace CNA::Internal::Renderers::DirectX12
 
     DirectX12Renderer::~DirectX12Renderer()
     {
-        if (fence_ && fenceEvent_)
+        lifetimeToken_.reset();
+        if (commandQueue_ && fence_ && fenceEvent_)
         {
-            // Best-effort drain so the device isn't torn down mid-flight-GPU-work.
-            for (int i = 0; i < kFramesInFlight; ++i)
+            try
             {
-                if (fence_->GetCompletedValue() < frameFenceValues_[i] && frameFenceValues_[i] != 0)
-                {
-                    fence_->SetEventOnCompletion(frameFenceValues_[i], fenceEvent_);
-                    WaitForSingleObject(fenceEvent_, INFINITE);
-                }
+                WaitForGpuIdle();
+            }
+            catch (const std::exception&)
+            {
+                // A genuinely removed device may reject the final signal; teardown must continue.
             }
         }
+        for (auto& chunks : frameConstantChunks_)
+            for (auto& chunk : chunks)
+                if (chunk.resource && chunk.mapped) chunk.resource->Unmap(0, nullptr);
+        ReleaseFrameUploadChunksEXT();
         if (fenceEvent_)
         {
             CloseHandle(fenceEvent_);
             fenceEvent_ = nullptr;
         }
+    }
+
+    void DirectX12Renderer::SetContextRecoveryEnabled(bool enabled)
+    {
+        contextRecoveryEnabled_ = enabled;
+    }
+
+    void DirectX12Renderer::RegisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource)
+    {
+        if (!contextRecoveryEnabled_ || resource == nullptr)
+            return;
+        if (std::find(recoverableResources_.begin(), recoverableResources_.end(), resource) ==
+            recoverableResources_.end())
+        {
+            recoverableResources_.push_back(resource);
+        }
+    }
+
+    void DirectX12Renderer::UnregisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept
+    {
+        std::erase(recoverableResources_, resource);
+    }
+
+    void DirectX12Renderer::DebugSimulateContextLoss()
+    {
+        if (deviceLost_)
+            return;
+        deviceLost_ = true;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Lost);
+    }
+
+    void DirectX12Renderer::DebugRestoreContext()
+    {
+        if (!deviceLost_)
+            return;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Resetting);
+        RecreateDeviceEXT();
+        deviceLost_ = false;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Reset);
     }
 
     void DirectX12Renderer::CreateDeviceResources()
@@ -328,13 +526,26 @@ namespace CNA::Internal::Renderers::DirectX12
                 D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(commandAllocators_[i].ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12Device::CreateCommandAllocator failed, hr=" + FormatHr(hr));
+
+            hr = device_->CreateCommandList(
+                0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators_[i].Get(), nullptr,
+                IID_PPV_ARGS(frameCommandLists_[i].ReleaseAndGetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("ID3D12Device::CreateCommandList (frame) failed, hr=" + FormatHr(hr));
+            hr = frameCommandLists_[i]->Close();
+            if (FAILED(hr))
+                throw std::runtime_error("ID3D12GraphicsCommandList::Close (frame initial) failed, hr=" + FormatHr(hr));
+
         }
 
-        // A command list is created already-open against allocator 0 -- close it immediately since
-        // nothing is being recorded yet; every real caller (tests, and whichever future task lands
-        // actual recording) must Reset() it against the correct frame's allocator first.
-        HRESULT hr = device_->CreateCommandList(
-            0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators_[0].Get(), nullptr,
+        HRESULT hr = device_->CreateCommandAllocator(
+            D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(immediateCommandAllocator_.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error("ID3D12Device::CreateCommandAllocator (immediate) failed, hr=" + FormatHr(hr));
+
+        hr = device_->CreateCommandList(
+            0, D3D12_COMMAND_LIST_TYPE_DIRECT, immediateCommandAllocator_.Get(), nullptr,
             IID_PPV_ARGS(commandList_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("ID3D12Device::CreateCommandList failed, hr=" + FormatHr(hr));
@@ -436,8 +647,54 @@ namespace CNA::Internal::Renderers::DirectX12
             resourceStates_.TrackResource(backBufferResources_[i].Get(), D3D12_RESOURCE_STATE_PRESENT);
         }
 
+        RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+    }
+
+    ID3D12Resource* DirectX12Renderer::GetBackBufferDrawResourceEXT() const
+    {
+        return backBufferMsaaResource_ ? backBufferMsaaResource_.Get()
+                                       : GetCurrentBackBufferResourceEXT();
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetBackBufferDrawRtvEXT() const
+    {
+        if (backBufferMsaaResource_) return backBufferMsaaRtv_;
+        if (swapChainAvailable_ && swapChain_)
+            return backBufferRtvs_[swapChain_->GetCurrentBackBufferIndex()];
+        return offscreenBackBufferRtv_;
+    }
+
+    void DirectX12Renderer::RecreateDefaultRenderSurfaces(int requestedMultiSampleCount)
+    {
+        const int newSampleCount = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        ComPtr<ID3D12Resource> newMsaaResource;
+        if (newSampleCount > 0)
+        {
+            D3D12_RESOURCE_DESC colorDesc{};
+            colorDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            colorDesc.Width = static_cast<UINT64>(width_);
+            colorDesc.Height = static_cast<UINT>(height_);
+            colorDesc.DepthOrArraySize = 1;
+            colorDesc.MipLevels = 1;
+            colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            colorDesc.SampleDesc.Count = static_cast<UINT>(newSampleCount);
+            colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+            D3D12_CLEAR_VALUE colorClear{};
+            colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            const HRESULT colorHr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &colorDesc,
+                D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear,
+                IID_PPV_ARGS(newMsaaResource.GetAddressOf()));
+            if (FAILED(colorHr))
+                throw std::runtime_error(
+                    "DirectX12Renderer: back-buffer MSAA color CreateCommittedResource failed, hr=" +
+                    FormatHr(colorHr));
+        }
 
         D3D12_RESOURCE_DESC depthDesc{};
         depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -446,7 +703,9 @@ namespace CNA::Internal::Renderers::DirectX12
         depthDesc.DepthOrArraySize = 1;
         depthDesc.MipLevels = 1;
         depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // matches D3D11's own DX-24 default (DX-11-fmt)
-        depthDesc.SampleDesc.Count = 1;
+        depthDesc.SampleDesc.Count = newSampleCount > 0
+            ? static_cast<UINT>(newSampleCount)
+            : 1u;
         depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
         D3D12_CLEAR_VALUE depthClear{};
@@ -454,27 +713,119 @@ namespace CNA::Internal::Renderers::DirectX12
         depthClear.DepthStencil.Depth = 1.0f;
         depthClear.DepthStencil.Stencil = 0;
 
+        ComPtr<ID3D12Resource> newDepthResource;
         HRESULT hr = device_->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
             D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
-            IID_PPV_ARGS(depthStencilResource_.ReleaseAndGetAddressOf()));
+            IID_PPV_ARGS(newDepthResource.GetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("DirectX12Renderer: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
 
-        depthStencilViewEXT_ = AllocateDsvDescriptorEXT();
+        D3D12_CPU_DESCRIPTOR_HANDLE newMsaaRtv{};
+        if (newMsaaResource)
+        {
+            newMsaaRtv = AllocateRtvDescriptorEXT();
+            device_->CreateRenderTargetView(newMsaaResource.Get(), nullptr, newMsaaRtv);
+        }
+        const D3D12_CPU_DESCRIPTOR_HANDLE newDepthView = AllocateDsvDescriptorEXT();
         D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
         dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        device_->CreateDepthStencilView(depthStencilResource_.Get(), &dsvDesc, depthStencilViewEXT_);
-        resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        dsvDesc.ViewDimension = newSampleCount > 0
+            ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+            : D3D12_DSV_DIMENSION_TEXTURE2D;
+        device_->CreateDepthStencilView(newDepthResource.Get(), &dsvDesc, newDepthView);
 
-        // Bind the current back buffer as the default draw target -- mirrors D3D11's own
-        // CreateWindowSizeDependentViews() making the back buffer the default Clear()/draw target
-        // immediately after construction, before any custom render target is ever bound.
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        UnbindOffscreenColorTargetEXT();
+        FreeRtvDescriptorEXT(backBufferMsaaRtv_);
+        FreeDsvDescriptorEXT(depthStencilViewEXT_);
+        backBufferMsaaResource_ = std::move(newMsaaResource);
+        backBufferMsaaRtv_ = newMsaaRtv;
+        depthStencilResource_ = std::move(newDepthResource);
+        depthStencilViewEXT_ = newDepthView;
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        appliedMultiSampleCount_ = newSampleCount;
+
+        if (backBufferMsaaResource_)
+            resourceStates_.TrackResource(
+                backBufferMsaaResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        RestoreBackBufferRenderTargetEXT();
+    }
+
+    void DirectX12Renderer::ResolveBackBufferMsaaEXT()
+    {
+        if (!backBufferMsaaResource_) return;
+        ID3D12Resource* const destination = GetCurrentBackBufferResourceEXT();
+        if (destination == nullptr) return;
+
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+        RetainFrameObjectEXT(backBufferMsaaResource_.Get());
+        RetainFrameObjectEXT(destination);
+
+        const D3D12_RESOURCE_STATES sourcePrior =
+            resourceStates_.GetTrackedStateEXT(backBufferMsaaResource_.Get());
+        const D3D12_RESOURCE_STATES destinationPrior =
+            resourceStates_.GetTrackedStateEXT(destination);
+        resourceStates_.TransitionTo(
+            cmdList, backBufferMsaaResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        resourceStates_.TransitionTo(
+            cmdList, destination, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+        cmdList->ResolveSubresource(
+            destination, 0, backBufferMsaaResource_.Get(), 0,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
+        resourceStates_.TransitionTo(cmdList, backBufferMsaaResource_.Get(), sourcePrior);
+        resourceStates_.TransitionTo(cmdList, destination, destinationPrior);
+
+    }
+
+    void DirectX12Renderer::CreateOffscreenBackBufferResources()
+    {
+        // Same size resolution CreateSwapChainResources() uses for a real swap chain, minus the
+        // window: PresentationParameters' back-buffer size arrives as virtualWidth_/virtualHeight_
+        // (GraphicsDevice sets both from getBackBufferWidthProperty()/getBackBufferHeightProperty()).
+        width_ = virtualWidth_ > 0 ? virtualWidth_ : 1024;
+        height_ = virtualHeight_ > 0 ? virtualHeight_ : 768;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        desc.Width = static_cast<UINT64>(width_);
+        desc.Height = static_cast<UINT>(height_);
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        // The same format a real swap chain gets (SurfaceFormat::Color -> DXGI_FORMAT_R8G8B8A8_UNORM,
+        // DX-11-fmt), so nothing downstream -- readback, resolve, PSO RTV format -- has to special-case
+        // the implicit target.
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        D3D12_CLEAR_VALUE clearValue{};
+        clearValue.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+        HRESULT hr = device_->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue,
+            IID_PPV_ARGS(offscreenBackBufferResource_.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "DirectX12Renderer: implicit off-screen back-buffer CreateCommittedResource failed, hr=" +
+                FormatHr(hr));
+
+        offscreenBackBufferRtv_ = AllocateRtvDescriptorEXT();
+        device_->CreateRenderTargetView(offscreenBackBufferResource_.Get(), nullptr, offscreenBackBufferRtv_);
+        resourceStates_.TrackResource(offscreenBackBufferResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+
+        CNA::Logger::Info(
+            "D3D12: no swap chain, so this device uses an implicit off-screen back buffer (" +
+                std::to_string(width_) + "x" + std::to_string(height_) +
+                ", R8G8B8A8_UNORM + D24_UNORM_S8_UINT); Present() is a no-op on it "
+                "(plans/plan_dx.md DX-241)",
+            CNA::LogCategory::RENDER);
     }
 
     void DirectX12Renderer::ReleaseWindowSizeDependentViews()
@@ -488,10 +839,56 @@ namespace CNA::Internal::Renderers::DirectX12
             FreeRtvDescriptorEXT(rtv);
             rtv = D3D12_CPU_DESCRIPTOR_HANDLE{};
         }
+        resourceStates_.UntrackResource(depthStencilResource_.Get());
         FreeDsvDescriptorEXT(depthStencilViewEXT_);
         depthStencilViewEXT_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         depthStencilResource_.Reset();
-        for (auto& res : backBufferResources_) res.Reset();
+        resourceStates_.UntrackResource(backBufferMsaaResource_.Get());
+        FreeRtvDescriptorEXT(backBufferMsaaRtv_);
+        backBufferMsaaRtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        backBufferMsaaResource_.Reset();
+        appliedMultiSampleCount_ = 0;
+        for (auto& res : backBufferResources_)
+        {
+            resourceStates_.UntrackResource(res.Get());
+            res.Reset();
+        }
+        // DX-241: the implicit off-screen back buffer is exactly as device-tied as the real one,
+        // and shares the depth-stencil released just above.
+        resourceStates_.UntrackResource(offscreenBackBufferResource_.Get());
+        FreeRtvDescriptorEXT(offscreenBackBufferRtv_);
+        offscreenBackBufferRtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        offscreenBackBufferResource_.Reset();
+    }
+
+    void DirectX12Renderer::EnsureSwapChainSize()
+    {
+        if (!swapChainAvailable_ || !swapChain_ || !surface_) return;
+
+        const auto drawableSize = surface_->GetDrawableSize();
+        const int w = drawableSize.width;
+        const int h = drawableSize.height;
+        if (w <= 0 || h <= 0 || (w == width_ && h == height_)) return;
+
+        // ResizeBuffers requires every back-buffer reference to be released, and releasing any
+        // surface or descriptor while queued work still references it is invalid. Drain first,
+        // then tear down only the window-size lifetime group.
+        WaitForGpuIdle();
+        ReleaseWindowSizeDependentViews();
+
+        const UINT flags = allowTearingSupported_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+        const HRESULT hr = swapChain_->ResizeBuffers(
+            0, static_cast<UINT>(w), static_cast<UINT>(h), DXGI_FORMAT_UNKNOWN, flags);
+        if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr);
+            throw std::runtime_error(
+                "IDXGISwapChain3::ResizeBuffers failed, hr=" + FormatHr(hr));
+        }
+
+        width_ = w;
+        height_ = h;
+        CreateWindowSizeDependentViews();
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE DirectX12Renderer::AllocateRtvDescriptorEXT()
@@ -542,6 +939,9 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::uint32_t index = samplerCache_.GetOrCreateIndex(
             currentSamplerFilter_[slot], currentSamplerAddressU_[slot],
             currentSamplerAddressV_[slot], currentSamplerMaxAnisotropy_[slot],
+            // plans/plan_dx.md DX-216: the three fields the cache used to drop.
+            currentSamplerAddressW_[slot], currentSamplerMaxMipLevel_[slot],
+            currentSamplerLodBias_[slot],
             [this](const D3D12_SAMPLER_DESC& desc)
             {
                 const std::uint32_t idx = heaps_->sampler.Allocate();
@@ -560,11 +960,65 @@ namespace CNA::Internal::Renderers::DirectX12
         currentSamplerAddressU_[slot] = addressU;
         currentSamplerAddressV_[slot] = addressV;
         currentSamplerMaxAnisotropy_[slot] = maxAnisotropy;
+        // plans/plan_dx.md DX-216: XNA applies SamplerState as one object, so this is also where the W axis
+        // and the mip controls revert to their defaults unless the caller sets them again --
+        // GraphicsDevice calls ApplySamplerAddressW/ApplySamplerMipState straight after this for a
+        // state that carries non-default values. Without the reset a slot would accumulate every
+        // value ever set on it rather than holding a state.
+        currentSamplerAddressW_[slot] = addressV;
+        currentSamplerMaxMipLevel_[slot] = 0;
+        currentSamplerLodBias_[slot] = 0.0f;
+    }
+
+    void DirectX12Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        // DX-216: SamplerState.MaxMipLevel and MipMapLevelOfDetailBias, tracked per slot exactly
+        // like the fields above. The sampler descriptor itself is rebuilt lazily by
+        // GetSamplerGpuHandleEXT() on the next draw, so nothing is created here.
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        currentSamplerMaxMipLevel_[slot] = maxMipLevel;
+        currentSamplerLodBias_[slot] = lodBias;
+    }
+
+    void DirectX12Renderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        // DX-216: the third addressing axis, which decides how a Texture3D sampled by a
+        // ShaderEffect wraps on W.
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        currentSamplerAddressW_[slot] = addressW;
     }
 
     void DirectX12Renderer::ExecuteCommandListAndWaitEXT(ID3D12CommandList* commandList)
     {
+        if (activeFrameIndex_ >= 0 && commandList != frameCommandLists_[activeFrameIndex_].Get())
+            SubmitFrameCommandsEXT();
         commandQueue_->ExecuteCommandLists(1, &commandList);
+        ++immediateSubmissionCountEXT_;
+
+        const std::uint64_t valueToSignal = nextFenceValue_++;
+        HRESULT hr = commandQueue_->Signal(fence_.Get(), valueToSignal);
+        if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr);
+            throw std::runtime_error("ID3D12CommandQueue::Signal failed, hr=" + FormatHr(hr));
+        }
+        if (heaps_) heaps_->OnSubmittedEXT(valueToSignal);
+        if (fence_->GetCompletedValue() < valueToSignal)
+        {
+            hr = fence_->SetEventOnCompletion(valueToSignal, fenceEvent_);
+            if (FAILED(hr))
+                throw std::runtime_error("ID3D12Fence::SetEventOnCompletion failed, hr=" + FormatHr(hr));
+            ++gpuWaitCountEXT_;
+            WaitForSingleObject(fenceEvent_, INFINITE);
+        }
+        ReleaseCompletedFrameObjectsEXT();
+    }
+
+    void DirectX12Renderer::WaitForGpuIdle()
+    {
+        if (!commandQueue_ || !fence_ || !fenceEvent_) return;
+
+        SubmitFrameCommandsEXT();
 
         const std::uint64_t valueToSignal = nextFenceValue_++;
         HRESULT hr = commandQueue_->Signal(fence_.Get(), valueToSignal);
@@ -582,12 +1036,249 @@ namespace CNA::Internal::Renderers::DirectX12
             hr = fence_->SetEventOnCompletion(valueToSignal, fenceEvent_);
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12Fence::SetEventOnCompletion failed, hr=" + FormatHr(hr));
+            ++gpuWaitCountEXT_;
             WaitForSingleObject(fenceEvent_, INFINITE);
         }
+        ReleaseCompletedFrameObjectsEXT();
+    }
+
+    void DirectX12Renderer::ReleaseCompletedFrameObjectsEXT()
+    {
+        if (!fence_) return;
+        const std::uint64_t completed = fence_->GetCompletedValue();
+        for (int i = 0; i < kFramesInFlight; ++i)
+        {
+            if (frameFenceValues_[i] != 0 && completed >= frameFenceValues_[i] &&
+                i != activeFrameIndex_)
+            {
+                frameRetainedObjects_[i].clear();
+            }
+        }
+    }
+
+    ID3D12GraphicsCommandList* DirectX12Renderer::GetFrameCommandListEXT()
+    {
+        if (activeFrameIndex_ >= 0)
+            return frameCommandLists_[activeFrameIndex_].Get();
+
+        const int frameIndex = swapChainAvailable_ && swapChain_
+            ? static_cast<int>(swapChain_->GetCurrentBackBufferIndex())
+            : headlessFrameIndex_;
+        const std::uint64_t priorFence = frameFenceValues_[frameIndex];
+        if (priorFence != 0 && fence_->GetCompletedValue() < priorFence)
+        {
+            HRESULT hr = fence_->SetEventOnCompletion(priorFence, fenceEvent_);
+            if (FAILED(hr))
+                throw std::runtime_error("ID3D12Fence::SetEventOnCompletion failed, hr=" + FormatHr(hr));
+            ++frameFenceWaitCountEXT_;
+            ++gpuWaitCountEXT_;
+            WaitForSingleObject(fenceEvent_, INFINITE);
+        }
+
+        frameRetainedObjects_[frameIndex].clear();
+        for (auto& chunk : frameConstantChunks_[frameIndex]) chunk.cursor = 0;
+        for (auto& chunk : frameUploadChunks_[frameIndex]) chunk.cursor = 0;
+
+        HRESULT hr = commandAllocators_[frameIndex]->Reset();
+        if (FAILED(hr))
+            throw std::runtime_error("ID3D12CommandAllocator::Reset (frame) failed, hr=" + FormatHr(hr));
+        hr = frameCommandLists_[frameIndex]->Reset(commandAllocators_[frameIndex].Get(), nullptr);
+        if (FAILED(hr))
+            throw std::runtime_error("ID3D12GraphicsCommandList::Reset (frame) failed, hr=" + FormatHr(hr));
+
+        activeFrameIndex_ = frameIndex;
+        activeFrameFenceValue_ = nextFenceValue_++;
+        if (heaps_) heaps_->OnRecordingEXT(activeFrameFenceValue_);
+        return frameCommandLists_[frameIndex].Get();
+    }
+
+    ID3D12GraphicsCommandList* DirectX12Renderer::BeginImmediateCommandsEXT(
+        ID3D12PipelineState* initialState)
+    {
+        SubmitFrameCommandsEXT();
+        HRESULT hr = immediateCommandAllocator_->Reset();
+        if (FAILED(hr))
+            throw std::runtime_error("ID3D12CommandAllocator::Reset (immediate) failed, hr=" + FormatHr(hr));
+        hr = commandList_->Reset(immediateCommandAllocator_.Get(), initialState);
+        if (FAILED(hr))
+            throw std::runtime_error("ID3D12GraphicsCommandList::Reset (immediate) failed, hr=" + FormatHr(hr));
+        return commandList_.Get();
+    }
+
+    D3D12_GPU_VIRTUAL_ADDRESS DirectX12Renderer::AllocateFrameConstantDataEXT(
+        const void* data, std::size_t byteCount)
+    {
+        if (data == nullptr || byteCount == 0)
+            throw std::runtime_error("AllocateFrameConstantDataEXT requires non-empty data");
+        (void)GetFrameCommandListEXT();
+
+        constexpr std::size_t kAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+        constexpr std::size_t kDefaultChunkSize = 1024u * 1024u;
+        const std::size_t alignedSize = (byteCount + kAlignment - 1) & ~(kAlignment - 1);
+        auto& chunks = frameConstantChunks_[activeFrameIndex_];
+        auto chunkIt = std::find_if(chunks.begin(), chunks.end(), [alignedSize](const FrameConstantChunk& chunk)
+        {
+            return chunk.capacity - chunk.cursor >= alignedSize;
+        });
+        if (chunkIt == chunks.end())
+        {
+            FrameConstantChunk chunk;
+            chunk.capacity = std::max(kDefaultChunkSize, alignedSize);
+            D3D12_HEAP_PROPERTIES heapProps{};
+            heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+            D3D12_RESOURCE_DESC desc{};
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            desc.Width = chunk.capacity;
+            desc.Height = 1;
+            desc.DepthOrArraySize = 1;
+            desc.MipLevels = 1;
+            desc.Format = DXGI_FORMAT_UNKNOWN;
+            desc.SampleDesc.Count = 1;
+            desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            HRESULT hr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
+                nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("D3D12 frame constant arena creation failed, hr=" + FormatHr(hr));
+            const D3D12_RANGE noRead{0, 0};
+            hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
+            if (FAILED(hr))
+                throw std::runtime_error("D3D12 frame constant arena Map failed, hr=" + FormatHr(hr));
+            chunks.push_back(std::move(chunk));
+            chunkIt = std::prev(chunks.end());
+        }
+
+        const std::size_t offset = chunkIt->cursor;
+        std::memcpy(chunkIt->mapped + offset, data, byteCount);
+        chunkIt->cursor += alignedSize;
+        return chunkIt->resource->GetGPUVirtualAddress() + offset;
+    }
+
+    DirectX12Renderer::FrameUploadChunk& DirectX12Renderer::CreateFrameUploadChunkEXT(
+        int frameIndex, std::size_t minimumCapacity)
+    {
+        FrameUploadChunk chunk;
+        chunk.capacity = std::max(kDefaultFrameUploadChunkSize, minimumCapacity);
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = static_cast<UINT64>(chunk.capacity);
+        desc.Height = 1;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.Format = DXGI_FORMAT_UNKNOWN;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        HRESULT hr = device_->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12 frame upload ring creation failed, hr=" + FormatHr(hr));
+
+        const D3D12_RANGE noRead{0, 0};
+        hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12 frame upload ring Map failed, hr=" + FormatHr(hr));
+
+        frameUploadChunks_[frameIndex].push_back(std::move(chunk));
+        ++uploadResourceCreationCountEXT_;
+        return frameUploadChunks_[frameIndex].back();
+    }
+
+    void DirectX12Renderer::ReleaseFrameUploadChunksEXT() noexcept
+    {
+        for (auto& chunks : frameUploadChunks_)
+        {
+            for (auto& chunk : chunks)
+            {
+                if (chunk.resource && chunk.mapped)
+                    chunk.resource->Unmap(0, nullptr);
+            }
+            chunks.clear();
+        }
+    }
+
+    DirectX12Renderer::FrameUploadAllocationEXT DirectX12Renderer::AllocateFrameUploadEXT(
+        std::size_t byteCount, std::size_t alignment)
+    {
+        if (byteCount == 0)
+            throw std::runtime_error("AllocateFrameUploadEXT requires a non-empty range");
+        if (alignment == 0 || (alignment & (alignment - 1)) != 0)
+            throw std::runtime_error("AllocateFrameUploadEXT requires power-of-two alignment");
+        if (byteCount > std::numeric_limits<std::size_t>::max() - (alignment - 1))
+            throw std::runtime_error("AllocateFrameUploadEXT size exceeds addressable memory");
+
+        (void)GetFrameCommandListEXT();
+        auto& chunks = frameUploadChunks_[activeFrameIndex_];
+        for (auto& chunk : chunks)
+        {
+            const std::size_t alignedOffset = (chunk.cursor + alignment - 1) & ~(alignment - 1);
+            if (alignedOffset <= chunk.capacity && byteCount <= chunk.capacity - alignedOffset)
+            {
+                chunk.cursor = alignedOffset + byteCount;
+                ++uploadAllocationCountEXT_;
+                return {chunk.resource.Get(), chunk.mapped + alignedOffset,
+                        static_cast<UINT64>(alignedOffset), byteCount};
+            }
+        }
+
+        FrameUploadChunk& chunk = CreateFrameUploadChunkEXT(
+            activeFrameIndex_, byteCount + alignment - 1);
+        const std::size_t alignedOffset = (chunk.cursor + alignment - 1) & ~(alignment - 1);
+        chunk.cursor = alignedOffset + byteCount;
+        ++uploadAllocationCountEXT_;
+        return {chunk.resource.Get(), chunk.mapped + alignedOffset,
+                static_cast<UINT64>(alignedOffset), byteCount};
+    }
+
+    void DirectX12Renderer::RetainFrameObjectEXT(IUnknown* object)
+    {
+        if (object == nullptr) return;
+        (void)GetFrameCommandListEXT();
+        auto& retained = frameRetainedObjects_[activeFrameIndex_];
+        const auto alreadyRetained = std::find_if(retained.begin(), retained.end(), [object](const ComPtr<IUnknown>& item)
+        {
+            return item.Get() == object;
+        });
+        if (alreadyRetained == retained.end())
+        {
+            ComPtr<IUnknown> hold;
+            hold.Attach(object);
+            object->AddRef();
+            retained.push_back(std::move(hold));
+        }
+    }
+
+    std::uint64_t DirectX12Renderer::SubmitFrameCommandsEXT()
+    {
+        if (activeFrameIndex_ < 0) return 0;
+        const int frameIndex = activeFrameIndex_;
+        ID3D12GraphicsCommandList* commandList = frameCommandLists_[frameIndex].Get();
+        HRESULT hr = commandList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error("ID3D12GraphicsCommandList::Close (frame) failed, hr=" + FormatHr(hr));
+        ID3D12CommandList* submit = commandList;
+        commandQueue_->ExecuteCommandLists(1, &submit);
+        hr = commandQueue_->Signal(fence_.Get(), activeFrameFenceValue_);
+        if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr);
+            throw std::runtime_error("ID3D12CommandQueue::Signal (frame) failed, hr=" + FormatHr(hr));
+        }
+        if (heaps_) heaps_->OnSubmittedEXT(activeFrameFenceValue_);
+        frameFenceValues_[frameIndex] = activeFrameFenceValue_;
+        const std::uint64_t submittedFence = activeFrameFenceValue_;
+        activeFrameIndex_ = -1;
+        activeFrameFenceValue_ = 0;
+        ++frameSubmissionCountEXT_;
+        return submittedFence;
     }
 
     std::uint64_t DirectX12Renderer::SignalAndWaitForFrameEXT(int frameIndex)
     {
+        SubmitFrameCommandsEXT();
         const std::uint64_t valueToSignal = nextFenceValue_++;
         HRESULT hr = commandQueue_->Signal(fence_.Get(), valueToSignal);
         if (FAILED(hr))
@@ -603,6 +1294,8 @@ namespace CNA::Internal::Renderers::DirectX12
             hr = fence_->SetEventOnCompletion(previousValueForThisFrame, fenceEvent_);
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12Fence::SetEventOnCompletion failed, hr=" + FormatHr(hr));
+            ++frameFenceWaitCountEXT_;
+            ++gpuWaitCountEXT_;
             WaitForSingleObject(fenceEvent_, INFINITE);
         }
 
@@ -610,32 +1303,41 @@ namespace CNA::Internal::Renderers::DirectX12
         return valueToSignal;
     }
 
-    void DirectX12Renderer::CheckDeviceRemovedEXT(HRESULT hr) const
+    void DirectX12Renderer::CheckDeviceRemovedEXT(HRESULT hr)
     {
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D12 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            if (!deviceLost_)
+            {
+                deviceLost_ = true;
+                if (deviceEventCallback_)
+                    deviceEventCallback_(RendererDeviceEvent::Lost);
+            }
         }
     }
 
     void DirectX12Renderer::RecreateDeviceEXT()
     {
+        const auto resources = recoverableResources_;
         // Best-effort drain of anything in flight before tearing down -- mirrors the destructor's
         // own drain (it's not safe to release a fence/allocator/command list the GPU may still be
         // referencing, even on a real device-removed event, since the removal only affects future
         // submissions, not necessarily work already in the queue).
-        if (fence_ && fenceEvent_)
+        if (commandQueue_ && fence_ && fenceEvent_)
         {
-            for (int i = 0; i < kFramesInFlight; ++i)
+            try
             {
-                if (frameFenceValues_[i] != 0 && fence_->GetCompletedValue() < frameFenceValues_[i])
-                {
-                    fence_->SetEventOnCompletion(frameFenceValues_[i], fenceEvent_);
-                    WaitForSingleObject(fenceEvent_, INFINITE);
-                }
+                WaitForGpuIdle();
             }
+            catch (const std::exception&) {}
+        }
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource != nullptr)
+                resource->ReleaseDeviceResourcesEXT();
         }
 
         // Drop every ComPtr tied to the (possibly removed) device -- further calls against a
@@ -647,7 +1349,17 @@ namespace CNA::Internal::Renderers::DirectX12
         swapChain_.Reset();
         swapChainAvailable_ = false;
         commandList_.Reset();
+        immediateCommandAllocator_.Reset();
+        for (auto& list : frameCommandLists_) list.Reset();
         for (auto& allocator : commandAllocators_) allocator.Reset();
+        for (auto& retained : frameRetainedObjects_) retained.clear();
+        for (auto& chunks : frameConstantChunks_)
+        {
+            for (auto& chunk : chunks)
+                if (chunk.resource && chunk.mapped) chunk.resource->Unmap(0, nullptr);
+            chunks.clear();
+        }
+        ReleaseFrameUploadChunksEXT();
         if (fenceEvent_) { CloseHandle(fenceEvent_); fenceEvent_ = nullptr; }
         fence_.Reset();
         // REMED-GFX-177: drop this device's allocator set. Any resource created against the old
@@ -659,12 +1371,8 @@ namespace CNA::Internal::Renderers::DirectX12
         device_.Reset();
         factory_.Reset();
 
-        // DX-111: root-signature/PSO caches and the persistent colored3d constant buffers are all
-        // tied to the (possibly removed) device too -- a stale cached ID3D12RootSignature/
-        // ID3D12PipelineState/mapped ID3D12Resource from before recreation would be meaningless (and
-        // dangerous to keep calling into) against the brand-new device below, exactly the same
-        // reasoning as every ComPtr reset above. Plain member reassignment is sufficient since both
-        // caches are simple movable/copy-assignable value types, not pointers.
+        // Root signatures and pipeline states are device-tied. The frame constant arenas were
+        // unmapped and released with the command-lifetime domain above.
         rootSigCache_ = D3D12RootSignatureCache();
         psoCache_ = D3D12PipelineStateCache();
         // DX-119: the sampler cache's own GPU descriptor handles point into the (now-gone)
@@ -674,56 +1382,25 @@ namespace CNA::Internal::Renderers::DirectX12
         // survive recreation unchanged -- a device-removed event doesn't change what SamplerState
         // the game itself last set.
         samplerCache_ = D3D12SamplerCache();
-        perDrawConstantBuffer_.Reset();
-        perDrawConstantBufferMapped_ = nullptr;
-        fogConstantBuffer_.Reset();
-        fogConstantBufferMapped_ = nullptr;
-        lightingConstantBuffer_.Reset();
-        lightingConstantBufferMapped_ = nullptr;
-        alphaTestConstantBuffer_.Reset();
-        alphaTestConstantBufferMapped_ = nullptr;
-        // DX-111 (finish/closing): skinned3d's and env_map3d's own persistent constant buffers, and
-        // instanced3d's own hand-built PSO, are just as device-tied as every buffer above -- a real,
-        // pre-existing gap in this function (found while landing env_map3d) is fixed here rather than
-        // left for a later session to rediscover the same way.
-        boneConstantBuffer_.Reset();
-        boneConstantBufferMapped_ = nullptr;
-        skinnedExtraConstantBuffer_.Reset();
-        skinnedExtraConstantBufferMapped_ = nullptr;
-        envMapPerDrawConstantBuffer_.Reset();
-        envMapPerDrawConstantBufferMapped_ = nullptr;
-        envMapConstantBuffer_.Reset();
-        envMapConstantBufferMapped_ = nullptr;
-        // D3D12 PBR reconciliation follow-up: pbr3d/pbr_skinned3d's own persistent constant
-        // buffers, and the lazily-created default-texture fallbacks, are equally device-tied.
-        pbrPerDrawConstantBuffer_.Reset();
-        pbrPerDrawConstantBufferMapped_ = nullptr;
-        pbrLightsConstantBuffer_.Reset();
-        pbrLightsConstantBufferMapped_ = nullptr;
         defaultWhiteTexture_.reset();
         defaultFlatNormalTexture_.reset();
-        // REMED-GFX-123: every cached step-rate PSO is device-tied, so the whole map goes, not just
-        // the one that happened to be built last.
-        instancedPsos_.clear();
-        // The bound off-screen color target (if any) was owned by the caller and lived on the old
-        // device -- it's gone too; the caller must recreate its render target and rebind after
-        // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
+        // Any bound off-screen target has already released its old native handles through the
+        // recovery registry. Drop the binding now; the same public target object is reconstructed
+        // below and can be rebound by the caller after DeviceReset.
         UnbindOffscreenColorTargetEXT();
 
         // REMED-GFX-177: nothing to reset here any more -- heaps_ was released above and
         // CreateDescriptorHeapResources() below builds a brand-new allocator set for the new device.
         nextFenceValue_ = 1;
         for (auto& value : frameFenceValues_) value = 0;
+        activeFrameIndex_ = -1;
+        activeFrameFenceValue_ = 0;
+        headlessFrameIndex_ = 0;
         debugLayerEnabled_ = false;
         allowTearingSupported_ = false;
 
-        // Every previously-tracked resource's real D3D12 object is gone along with the removed
-        // device -- DX-109's own vertex/index buffers and textures would need to be recreated by
-        // their owning Texture2D/VertexBuffer/etc. wrapper objects (out of this renderer's own
-        // scope -- GraphicsDevice-level content-reload is a separate, larger concern XNA itself
-        // handles via GraphicsDevice::DeviceReset, not something this constructor-time recreation
-        // can or should attempt), so the tracker itself must be cleared rather than left holding
-        // stale pointers into freed memory.
+        // Every old native object was released above. Clear stale pointer identities before the
+        // registered public resources create and track their replacement objects below.
         resourceStates_.Clear();
 
         // Recreate every device-lifetime group from scratch, identical to construction.
@@ -737,6 +1414,30 @@ namespace CNA::Internal::Renderers::DirectX12
             CreateSwapChainResources();
             if (swapChainAvailable_)
                 CreateWindowSizeDependentViews();
+        }
+        if (!swapChainAvailable_)
+            CreateOffscreenBackBufferResources(); // DX-241, same rule as construction
+
+        std::vector<std::string> failures;
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource == nullptr)
+                continue;
+            try
+            {
+                resource->RecreateDeviceResourcesEXT();
+            }
+            catch (const std::exception& error)
+            {
+                failures.emplace_back(error.what());
+            }
+        }
+        if (!failures.empty())
+        {
+            throw std::runtime_error(
+                "D3D12 device recovery failed to recreate " +
+                std::to_string(failures.size()) + " resource(s); first failure: " +
+                failures.front());
         }
 
         CNA::Logger::Info(
@@ -752,7 +1453,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                                             D3D12_CPU_DESCRIPTOR_HANDLE rtv,
                                                             DXGI_FORMAT format, int width, int height,
                                                             D3D12_CPU_DESCRIPTOR_HANDLE dsv,
-                                                            DXGI_FORMAT dsvFormat)
+                                                            DXGI_FORMAT dsvFormat,
+                                                            ID3D12Resource* depthResource)
     {
         boundColorResource_ = resource;
         boundColorRtv_ = rtv;
@@ -761,6 +1463,8 @@ namespace CNA::Internal::Renderers::DirectX12
         boundColorHeight_ = height;
         boundDsv_ = dsv;
         boundDsvFormat_ = dsvFormat;
+        boundDepthResource_ = depthResource;
+        extraMrtCount_ = 0;
         // REMED-GFX-064: binding a target resets the custom Viewport to that target's full size
         // (mirrors XNA's SetRenderTarget reset; here viewportSet_=false => the full-target fallback
         // in GetEffectiveViewportEXT). In production GraphicsDevice re-sets it explicitly right
@@ -776,6 +1480,7 @@ namespace CNA::Internal::Renderers::DirectX12
         boundColorHeight_ = 0;
         boundDsv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         boundDsvFormat_ = DXGI_FORMAT_UNKNOWN;
+        boundDepthResource_ = nullptr;
         extraMrtCount_ = 0; // DX-117: MRT extras are only ever meaningful alongside a bound primary
         viewportSet_ = false; // REMED-GFX-064: target-change resets the custom Viewport
     }
@@ -783,9 +1488,9 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         // REMED-GFX-064: store only -- consumed at each RSSetViewports site via
-        // GetEffectiveViewportEXT(). D3D12 re-records every draw's command list from scratch, so
+        // GetEffectiveViewportEXT(). D3D12 records it into the active frame list at each draw, so
         // there is nothing to set immediately (unlike D3D11's persistent context, which calls
-        // RSSetViewports here); reading the stored value per draw is the correct model.
+        // RSSetViewports here).
         viewportSet_ = true;
         viewportX_ = x;
         viewportY_ = y;
@@ -812,156 +1517,173 @@ namespace CNA::Internal::Renderers::DirectX12
                               static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
     }
 
+    void DirectX12Renderer::GetSpriteViewportSizeEXT(float& width, float& height) const
+    {
+        const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
+        width = viewport.Width;
+        height = viewport.Height;
+        if (boundColorResource_ != GetBackBufferDrawResourceEXT())
+            return;
+
+        const int physicalWidth = !surface_ && !windowlessPresentationExplicit_
+            ? (virtualWidth_ > 0 ? virtualWidth_ : width_)
+            : width_;
+        const int physicalHeight = !surface_ && !windowlessPresentationExplicit_
+            ? (virtualHeight_ > 0 ? virtualHeight_ : height_)
+            : height_;
+        const auto geometry = ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight,
+            virtualWidth_, virtualHeight_, presentationMode_);
+        const int logicalWidth = static_cast<int>(std::lround(geometry.logicalWidth));
+        const int logicalHeight = static_cast<int>(std::lround(geometry.logicalHeight));
+        const int presentationWidth = static_cast<int>(std::lround(geometry.width));
+        const int presentationHeight = static_cast<int>(std::lround(geometry.height));
+        if (presentationWidth > 0 && presentationHeight > 0)
+        {
+            width = viewport.Width * static_cast<float>(logicalWidth) /
+                static_cast<float>(presentationWidth);
+            height = viewport.Height * static_cast<float>(logicalHeight) /
+                static_cast<float>(presentationHeight);
+        }
+    }
+
+    Matrix DirectX12Renderer::ApplyXnaPixelCenterEXT(const Matrix& transform) const
+    {
+        const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
+        const bool multisampledDestination =
+            boundColorResource_ != nullptr && boundColorResource_->GetDesc().SampleDesc.Count > 1;
+        return D3DCommon::ApplyXnaPixelCenter(
+            transform, viewport.Width, viewport.Height, multisampledDestination);
+    }
+
     void DirectX12Renderer::BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
                                                               const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
                                                               int count, DXGI_FORMAT format,
-                                                              int width, int height)
+                                                              int width, int height,
+                                                              D3D12_CPU_DESCRIPTOR_HANDLE dsv,
+                                                              DXGI_FORMAT dsvFormat,
+                                                              ID3D12Resource* depthResource)
     {
+        // plans/plan_dx.md DX-255: the depth-stencil view is forwarded. It used to be omitted here, and
+        // because the two trailing parameters of BindOffscreenColorTargetEXT() are defaulted, that
+        // omission was silent: every target bound through this function got a null DSV.
         BindOffscreenColorTargetEXT(count > 0 ? resources[0] : nullptr,
                                     count > 0 ? rtvs[0] : D3D12_CPU_DESCRIPTOR_HANDLE{},
-                                    format, width, height);
+                                    format, width, height, dsv, dsvFormat, depthResource);
 
         extraMrtCount_ = std::max(0, std::min(count - 1, kMaxExtraMrtTargets));
         for (int i = 0; i < extraMrtCount_; ++i)
         {
             extraMrtResources_[i] = resources[i + 1];
             extraMrtRtvs_[i] = rtvs[i + 1];
+            extraMrtFormats_[i] = resources[i + 1]->GetDesc().Format;
         }
+    }
+
+    void DirectX12Renderer::TransitionAndBindRenderTargetsEXT(
+        ID3D12GraphicsCommandList* commandList)
+    {
+        if (commandList == nullptr || boundColorResource_ == nullptr)
+            return;
+
+        std::array<D3D12_CPU_DESCRIPTOR_HANDLE,
+                   D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
+        rtvs[0] = boundColorRtv_;
+        resourceStates_.TransitionTo(
+            commandList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        RetainFrameObjectEXT(boundColorResource_);
+        for (int i = 0; i < extraMrtCount_; ++i)
+        {
+            rtvs[static_cast<std::size_t>(i + 1)] = extraMrtRtvs_[i];
+            resourceStates_.TransitionTo(
+                commandList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+            RetainFrameObjectEXT(extraMrtResources_[i]);
+        }
+        RetainFrameObjectEXT(boundDepthResource_);
+        commandList->OMSetRenderTargets(
+            static_cast<UINT>(extraMrtCount_ + 1), rtvs.data(), FALSE,
+            boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
     }
 
     void DirectX12Renderer::RestoreBackBufferRenderTargetEXT()
     {
-        if (!swapChainAvailable_)
+        UnbindOffscreenColorTargetEXT();
+        ID3D12Resource* const drawResource = GetBackBufferDrawResourceEXT();
+        if (drawResource)
+            BindOffscreenColorTargetEXT(drawResource, GetBackBufferDrawRtvEXT(),
+                                        DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                        depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
+                                        depthStencilResource_.Get());
+    }
+
+    bool DirectX12Renderer::IsRenderTargetActiveEXT(
+        const IRenderTargetRenderer* target) const noexcept
+    {
+        if (target == nullptr) return false;
+        if (currentCustomRT_ == target) return true;
+        for (int i = 0; i < currentMrtCount_; ++i)
+            if (currentMrtTargets_[i] == target) return true;
+        return false;
+    }
+
+    void DirectX12Renderer::NotifyRenderTargetDestroyedEXT(
+        IRenderTargetRenderer* target) noexcept
+    {
+        bool wasBound = currentCustomRT_ == target;
+        if (wasBound) currentCustomRT_ = nullptr;
+        for (int i = 0; i < currentMrtCount_; ++i)
         {
-            UnbindOffscreenColorTargetEXT();
-            return;
+            if (currentMrtTargets_[i] == target)
+            {
+                currentMrtTargets_[i] = nullptr;
+                wasBound = true;
+            }
         }
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        if (wasBound) UnbindOffscreenColorTargetEXT();
     }
 
-    void DirectX12Renderer::CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource,
-                                                           void*& outMapped)
+    void DirectX12Renderer::NotifyRenderTargetCubeDestroyedEXT(
+        IRenderTargetCubeRenderer* target) noexcept
     {
-        D3D12_HEAP_PROPERTIES heapProps{};
-        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-        D3D12_RESOURCE_DESC desc{};
-        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        desc.Width = byteWidth;
-        desc.Height = 1;
-        desc.DepthOrArraySize = 1;
-        desc.MipLevels = 1;
-        desc.Format = DXGI_FORMAT_UNKNOWN;
-        desc.SampleDesc.Count = 1;
-        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        HRESULT hr = device_->CreateCommittedResource(
-            &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(outResource.ReleaseAndGetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer: constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr));
-
-        const D3D12_RANGE readRange{0, 0}; // never read back on the CPU
-        hr = outResource->Map(0, &readRange, &outMapped);
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer: constant buffer Map failed, hr=" + FormatHr(hr));
+        if (currentCubeRT_ != target) return;
+        currentCubeRT_ = nullptr;
+        UnbindOffscreenColorTargetEXT();
     }
 
-    ID3D12Resource* DirectX12Renderer::GetOrCreatePerDrawConstantBufferEXT()
-    {
-        if (!perDrawConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DPerDrawConstants), perDrawConstantBuffer_, perDrawConstantBufferMapped_);
-        return perDrawConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreateFogConstantBufferEXT()
-    {
-        if (!fogConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DFogConstants), fogConstantBuffer_, fogConstantBufferMapped_);
-        return fogConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreateLightingConstantBufferEXT()
-    {
-        if (!lightingConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DLightingConstants), lightingConstantBuffer_, lightingConstantBufferMapped_);
-        return lightingConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreateAlphaTestConstantBufferEXT()
-    {
-        if (!alphaTestConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DAlphaTestConstants), alphaTestConstantBuffer_, alphaTestConstantBufferMapped_);
-        return alphaTestConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreateBoneConstantBufferEXT()
-    {
-        if (!boneConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DBoneConstants), boneConstantBuffer_, boneConstantBufferMapped_);
-        return boneConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreateSkinnedExtraConstantBufferEXT()
-    {
-        if (!skinnedExtraConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DSkinnedExtraConstants), skinnedExtraConstantBuffer_, skinnedExtraConstantBufferMapped_);
-        return skinnedExtraConstantBuffer_.Get();
-    }
-
-    D3D12_GPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetSrvGpuHandleForTextureEXT(const ITextureRenderer* tex) const
+    D3D12_GPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetSrvGpuHandleForTextureEXT(const ITextureRenderer* tex)
     {
         D3D12_GPU_DESCRIPTOR_HANDLE handle{};
         if (tex == nullptr) return handle;
         if (const auto* t = dynamic_cast<const D3D12TextureRenderer*>(tex))
+        {
+            RetainFrameObjectEXT(t->GetResourceEXT());
             return t->GetShaderResourceViewGpuHandleEXT();
+        }
         // DX-117: two-concrete-type resolution, mirroring DirectX11Renderer::GetSrvForTextureEXT
         // -- a render target used as a sampled texture (post-processing, render-to-texture effects).
         if (const auto* rt = dynamic_cast<const D3D12RenderTargetRenderer*>(tex))
+        {
+            RetainFrameObjectEXT(rt->GetSampleableColorResourceEXT());
             return rt->GetShaderResourceViewGpuHandleEXT();
+        }
         return handle;
     }
 
-    ID3D12Resource* DirectX12Renderer::GetOrCreateEnvMapPerDrawConstantBufferEXT()
-    {
-        if (!envMapPerDrawConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DEnvMapPerDrawConstants), envMapPerDrawConstantBuffer_, envMapPerDrawConstantBufferMapped_);
-        return envMapPerDrawConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreateEnvMapConstantBufferEXT()
-    {
-        if (!envMapConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DEnvMapConstants), envMapConstantBuffer_, envMapConstantBufferMapped_);
-        return envMapConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreatePbrPerDrawConstantBufferEXT()
-    {
-        if (!pbrPerDrawConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DPbrPerDrawConstants), pbrPerDrawConstantBuffer_, pbrPerDrawConstantBufferMapped_);
-        return pbrPerDrawConstantBuffer_.Get();
-    }
-
-    ID3D12Resource* DirectX12Renderer::GetOrCreatePbrLightsConstantBufferEXT()
-    {
-        if (!pbrLightsConstantBuffer_)
-            CreateUploadConstantBuffer(sizeof(D3DPbrLightConstants), pbrLightsConstantBuffer_, pbrLightsConstantBufferMapped_);
-        return pbrLightsConstantBuffer_.Get();
-    }
-
-    D3D12_GPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeRenderer* tex) const
+    D3D12_GPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeRenderer* tex)
     {
         D3D12_GPU_DESCRIPTOR_HANDLE handle{};
         if (tex == nullptr) return handle;
         if (const auto* t = dynamic_cast<const D3D12TextureCubeRenderer*>(tex))
+        {
+            RetainFrameObjectEXT(t->GetResourceEXT());
             return t->GetShaderResourceViewGpuHandleEXT();
+        }
         // DX-117: two-concrete-type resolution, mirroring GetSrvGpuHandleForTextureEXT above.
         if (const auto* rt = dynamic_cast<const D3D12RenderTargetCubeRenderer*>(tex))
+        {
+            RetainFrameObjectEXT(rt->GetSampleableColorResourceEXT());
             return rt->GetShaderResourceViewGpuHandleEXT();
+        }
         return handle;
     }
 
@@ -996,12 +1718,19 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IRenderTargetRenderer> DirectX12Renderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTarget2DEXT(w, h, depthFormat, false, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> DirectX12Renderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // DX-144: mipMap is now honored -- a real CPU box-filter downsample cascade on
         // UnbindAsRenderTarget() (see D3D12RenderTargets.hpp/.cpp's own header comment). DX-117
         // MSAA follow-up: multiSampleCount is now honored too -- device-queried and clamped to 0
         // (off) by D3D12RenderTargetRenderer's own ClampMultiSampleCount() when unsupported.
         return std::make_unique<D3D12RenderTargetRenderer>(this, device_.Get(), w, h, depthFormat, mipMap,
-                                                           multiSampleCount);
+                                                           multiSampleCount, surfaceFormat);
     }
 
     // REMED-GFX-134: a bound RenderTargetCube face was never tracked, so its
@@ -1021,6 +1750,7 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
         FlushPendingCubeResolveEXT();
+        FlushPendingMrtResolveEXT(); // DX-255
         if (!rt)
         {
             SetRenderTarget2D(nullptr);
@@ -1039,6 +1769,7 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // REMED-GFX-134: finalize a prior cube-face bind too -- see FlushPendingCubeResolveEXT.
         FlushPendingCubeResolveEXT();
+        FlushPendingMrtResolveEXT(); // DX-255
         // DX-144: unbind whatever custom target was PREVIOUSLY bound before switching -- this is
         // where D3D12RenderTargetRenderer::UnbindAsRenderTarget() (and therefore GenerateMipsEXT())
         // actually fires. Without this, SetRenderTarget2D(nullptr) blindly restored the back buffer
@@ -1060,6 +1791,14 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IRenderTargetCubeRenderer> DirectX12Renderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTargetCubeEXT(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> DirectX12Renderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // REMED-GFX-136: consumed by being deliberately unused, for the same reason
         // CreateRenderTarget2D above states -- OMSetRenderTargets has no load action, so a bound
         // cube face keeps whatever is in it until something explicitly clears or draws over it.
@@ -1069,7 +1808,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // multiSampleCount is now honored too -- device-queried and clamped to 0 (off) by
         // D3D12RenderTargetCubeRenderer's own ClampMultiSampleCount() when unsupported.
         return std::make_unique<D3D12RenderTargetCubeRenderer>(this, device_.Get(), size, depthFormat, mipMap,
-                                                               multiSampleCount);
+                                                               multiSampleCount, surfaceFormat);
     }
 
     void DirectX12Renderer::SetRenderTargets(
@@ -1083,6 +1822,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-134: and the same for a prior cube-face bind, whose own finalize was never
         // reached at all. SetRenderTargetCubeFace() below re-tracks the new one.
         FlushPendingCubeResolveEXT();
+        FlushPendingMrtResolveEXT(); // DX-255
         if (currentCustomRT_)
         {
             currentCustomRT_->UnbindAsRenderTarget();
@@ -1109,6 +1849,7 @@ namespace CNA::Internal::Renderers::DirectX12
         ID3D12Resource* resources[8];
         D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
         const int n = std::min(count, 8);
+        D3D12RenderTargetRenderer* first = nullptr;
         for (int i = 0; i < n; ++i)
         {
             auto* rt = dynamic_cast<D3D12RenderTargetRenderer*>(
@@ -1117,10 +1858,43 @@ namespace CNA::Internal::Renderers::DirectX12
                 throw std::runtime_error("DirectX12Renderer::SetRenderTargets: target is not a real D3D12RenderTargetRenderer");
             resources[i] = rt->GetColorResourceEXT();
             rtvs[i] = rt->GetRtvEXT();
+            if (i == 0) first = rt;
         }
-        BindOffscreenColorTargetsEXT(resources, rtvs, n, DXGI_FORMAT_R8G8B8A8_UNORM,
+        // plans/plan_dx.md DX-255: XNA takes the depth-stencil buffer from render target 0, exactly as
+        // DirectX11Renderer::SetRenderTargets() already does. Omitting it here is what made every
+        // RenderTarget2D bound through GraphicsDevice::SetRenderTarget -- which routes through this
+        // function even for ONE target -- silently have no depth buffer at all: no depth test, no
+        // stencil test, and ClearDepth/ClearStencil inert against it. Found by
+        // rendertarget_depthstencil_usage_test, which scored 7/29 on this renderer solely because of
+        // it, while its own C1 control ("does depth testing work at all inside a render target?")
+        // could never pass.
+        BindOffscreenColorTargetsEXT(resources, rtvs, n, resources[0]->GetDesc().Format,
                                      renderTargets[0].GetWidth(),
-                                     renderTargets[0].GetHeight());
+                                     renderTargets[0].GetHeight(),
+                                     first ? first->GetDsvEXT() : D3D12_CPU_DESCRIPTOR_HANDLE{},
+                                     first ? first->GetDsvFormatEXT() : DXGI_FORMAT_UNKNOWN,
+                                     first ? first->GetDepthResourceEXT() : nullptr);
+
+        // DX-255: and remember the set, so each target's own UnbindAsRenderTarget() (MSAA resolve,
+        // mip regeneration) runs when it is replaced. currentCustomRT_ cannot hold N targets; this
+        // mirrors D3D11's own currentMRTTargets_/FlushPendingMRTResolveEXT (DX-143), which D3D12
+        // never had -- so an MRT set's targets were never finalized here at all.
+        currentMrtCount_ = std::min(n, kMaxMrtTargets);
+        for (int i = 0; i < currentMrtCount_; ++i)
+            currentMrtTargets_[i] = renderTargets[i].GetRenderTarget2D();
+    }
+
+    void DirectX12Renderer::FlushPendingMrtResolveEXT()
+    {
+        if (currentMrtCount_ <= 0) return;
+        // Copy and clear first: UnbindAsRenderTarget() calls back into this renderer
+        // (RestoreBackBufferRenderTargetEXT), and re-entering this function must find nothing to do.
+        IRenderTargetRenderer* targets[kMaxMrtTargets] = {};
+        const int n = currentMrtCount_;
+        for (int i = 0; i < n; ++i) targets[i] = currentMrtTargets_[i];
+        currentMrtCount_ = 0;
+        for (int i = 0; i < n; ++i)
+            if (targets[i]) targets[i]->UnbindAsRenderTarget();
     }
 
     void DirectX12Renderer::Clear(float r, float g, float b, float a)
@@ -1132,41 +1906,48 @@ namespace CNA::Internal::Renderers::DirectX12
                               "DX-116, none of which is currently bound)");
         }
 
-        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+        RetainFrameObjectEXT(boundColorResource_);
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         const float clearColor[4] = {r, g, b, a};
         cmdList->ClearRenderTargetView(boundColorRtv_, clearColor, 0, nullptr);
 
-        // DX-117: real MRT -- independently transition+clear every additional bound target too
-        // (SetRenderTargets()'s own real multi-target bind), matching D3D11's own DX-46 proof
-        // shape. Draws themselves remain single-target (boundColorRtv_ only) -- no CNA shader
-        // declares more than one SV_Target output, the same honest scope boundary this project's
-        // own D3D11 MRT work already established.
+        // DX-117/DX-224: independently transition and clear every additional bound target, using
+        // the same ordered set TransitionAndBindRenderTargetsEXT supplies to every draw.
         for (int i = 0; i < extraMrtCount_; ++i)
         {
             resourceStates_.TransitionTo(cmdList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+            RetainFrameObjectEXT(extraMrtResources_[i]);
             cmdList->ClearRenderTargetView(extraMrtRtvs_[i], clearColor, 0, nullptr);
         }
-
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer::Clear: command list Close failed, hr=" + FormatHr(hr));
-        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void DirectX12Renderer::Present()
     {
         if (!swapChainAvailable_)
         {
-            NotYetImplemented("Present (no real swap chain available -- either an off-screen "
-                              "construction, or this dev loop's own documented Wine/vkd3d-proton "
-                              "swap-chain limitation, DX-100/DX-102; real windowed verification is "
-                              "scripts/run-proton-vkd3d.sh's job, DX-116)");
+            // DX-241: a device whose back buffer is the implicit off-screen one has nothing to
+            // present to, and PresentationParameters::HeadlessEXT's own documentation says so
+            // ("Present() is not meaningful without a swap chain"). A no-op is the honest answer
+            // and the established CNA one -- HeadlessRenderer::Present() is already exactly this --
+            // not a throw out of the ordinary Game loop, which is what a windowless device used to
+            // get from GraphicsDevice::Present(). It is not a fabricated success either: Present()
+            // returns void and promises nothing readable; what the frame drew is still there, in
+            // the target GetBackBufferData() reads (DX-205).
+            if (offscreenBackBufferResource_)
+            {
+                if (boundColorResource_ == GetBackBufferDrawResourceEXT())
+                    ResolveBackBufferMsaaEXT();
+                SubmitFrameCommandsEXT();
+                headlessFrameIndex_ = (headlessFrameIndex_ + 1) % kFramesInFlight;
+                return;
+            }
+            NotYetImplemented("Present (no swap chain and no implicit off-screen back buffer -- "
+                              "the device was never fully constructed)");
         }
+
+        EnsureSwapChainSize();
 
         // DX-116: transition the current back buffer to PRESENT before calling Present() -- D3D12's
         // own explicit-barrier requirement, unlike D3D11's implicit driver-managed transitions
@@ -1176,23 +1957,19 @@ namespace CNA::Internal::Renderers::DirectX12
         // something outside this renderer's own scope to guess-correct for.
         ID3D12Resource* currentBackBuffer =
             backBufferResources_[swapChain_->GetCurrentBackBufferIndex()].Get();
-        if (boundColorResource_ == currentBackBuffer)
+        if (boundColorResource_ == GetBackBufferDrawResourceEXT())
         {
-            ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-            ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-            allocator->Reset();
-            cmdList->Reset(allocator, nullptr);
+            ResolveBackBufferMsaaEXT();
+            ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+            RetainFrameObjectEXT(currentBackBuffer);
             resourceStates_.TransitionTo(cmdList, currentBackBuffer, D3D12_RESOURCE_STATE_PRESENT);
-            HRESULT hr = cmdList->Close();
-            if (FAILED(hr))
-                throw std::runtime_error("DirectX12Renderer::Present: command list Close failed, hr=" + FormatHr(hr));
-            ExecuteCommandListAndWaitEXT(cmdList);
         }
+        SubmitFrameCommandsEXT();
 
         // DX-26's own sync-interval/tearing policy, reused unchanged for D3D12.
         const bool mayTear =
             allowTearingSupported_ && allowTearingRequested_ && !vsyncEnabled_ && !exclusiveFullscreen_;
-        const UINT syncInterval = vsyncEnabled_ ? 1 : 0;
+        const UINT syncInterval = static_cast<UINT>(std::max(0, swapInterval_));
         const UINT flags = mayTear ? DXGI_PRESENT_ALLOW_TEARING : 0;
 
         HRESULT hr = swapChain_->Present(syncInterval, flags);
@@ -1202,56 +1979,190 @@ namespace CNA::Internal::Renderers::DirectX12
             return; // DX-26's own convention: log, don't throw, on a Present() failure
         }
 
-        // Re-bind the new current back buffer as the default draw target for the next frame --
-        // mirrors D3D11's own "back buffer is the default target" behavior, just re-resolved every
-        // frame since D3D12's flip-model back-buffer INDEX changes on every Present(), unlike
-        // D3D11's single always-current backBufferRTV_.
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+        // Re-bind the default draw surface for the next frame. With MSAA this remains the shared
+        // multisampled color resource; otherwise it is the newly-current flip-model back buffer.
+        BindOffscreenColorTargetEXT(GetBackBufferDrawResourceEXT(), GetBackBufferDrawRtvEXT(),
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
+                                    depthStencilResource_.Get());
+    }
+
+    ID3D12Resource* DirectX12Renderer::GetCurrentBackBufferResourceEXT() const
+    {
+        if (swapChainAvailable_ && swapChain_)
+            return backBufferResources_[swapChain_->GetCurrentBackBufferIndex()].Get();
+        return offscreenBackBufferResource_.Get();
+    }
+
+    std::vector<std::uint8_t> DirectX12Renderer::ReadbackSubresourceRGBA8EXT(
+        ID3D12Resource* resource, UINT subresource, int w, int h)
+    {
+        return ReadbackSubresourceEXT(resource, subresource, w, h, 4);
+    }
+
+    std::vector<std::uint8_t> DirectX12Renderer::ReadbackSubresourceEXT(
+        ID3D12Resource* resource, UINT subresource, int w, int h, int bytesPerTexel)
+    {
+        if (!resource || !device_ || w <= 0 || h <= 0 || bytesPerTexel <= 0) return {};
+
+        const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
+        UINT numRows = 0; UINT64 rowBytes = 0, totalBytes = 0;
+        device_->GetCopyableFootprints(&desc, subresource, 1, 0, &fp, &numRows, &rowBytes, &totalBytes);
+        if (totalBytes == 0) return {};
+
+        D3D12_HEAP_PROPERTIES rbHeap{};
+        rbHeap.Type = D3D12_HEAP_TYPE_READBACK;
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = totalBytes;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        ComPtr<ID3D12Resource> rb;
+        if (FAILED(device_->CreateCommittedResource(&rbHeap, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                                                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                                                    IID_PPV_ARGS(rb.GetAddressOf()))))
+            return {};
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = rb.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dst.PlacedFootprint = fp;
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = resource;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = subresource;
+
+        ID3D12GraphicsCommandList* cmdList = BeginImmediateCommandsEXT();
+        // The source goes back to whatever state it was tracked in, so a readback never changes
+        // what the next draw or Present() has to transition from.
+        const D3D12_RESOURCE_STATES prior = resourceStates_.GetTrackedStateEXT(resource);
+        resourceStates_.TransitionTo(cmdList, resource, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+        resourceStates_.TransitionTo(cmdList, resource, prior);
+        if (FAILED(cmdList->Close())) return {};
+        ExecuteCommandListAndWaitEXT(cmdList);
+
+        std::uint8_t* mapped = nullptr;
+        const D3D12_RANGE rr{0, static_cast<SIZE_T>(totalBytes)};
+        if (FAILED(rb->Map(0, &rr, reinterpret_cast<void**>(&mapped)))) return {};
+        const std::size_t tightRowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
+        if (rowBytes < tightRowBytes)
+        {
+            const D3D12_RANGE wr{0, 0};
+            rb->Unmap(0, &wr);
+            return {};
+        }
+        std::vector<std::uint8_t> out(tightRowBytes * static_cast<std::size_t>(h));
+        for (int row = 0; row < h; ++row)
+            std::memcpy(out.data() + static_cast<std::size_t>(row) * tightRowBytes,
+                        mapped + fp.Offset + static_cast<std::size_t>(row) * fp.Footprint.RowPitch,
+                        tightRowBytes);
+        const D3D12_RANGE wr{0, 0};
+        rb->Unmap(0, &wr);
+        return out;
+    }
+
+    void DirectX12Renderer::ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels)
+    {
+        if (!pixels || w <= 0 || h <= 0)
+            return;
+
+        ResolveBackBufferMsaaEXT();
+
+        ID3D12Resource* const source = GetCurrentBackBufferResourceEXT();
+        if (!source)
+        {
+            // DX-205: no swap chain AND no implicit off-screen back buffer means this device never
+            // finished constructing. Refuse by name instead of leaving GraphicsDevice's own
+            // zero-initialised scratch buffer to be handed to the caller as a uniformly
+            // transparent-black frame -- the fabricate-rather-than-refuse anti-pattern
+            // REMED-GFX-127 removed from the texture readbacks.
+            throw System::NotSupportedException(
+                "DirectX12Renderer::ReadBackbuffer: this device has neither a swap chain nor an "
+                "implicit off-screen back buffer, so there is nothing to read.");
+        }
+
+        const D3D12_RESOURCE_DESC desc = source->GetDesc();
+        const int srcW = static_cast<int>(desc.Width);
+        const int srcH = static_cast<int>(desc.Height);
+
+        const std::vector<std::uint8_t> full = ReadbackSubresourceRGBA8EXT(source, 0, srcW, srcH);
+        if (full.size() < static_cast<std::size_t>(srcW) * static_cast<std::size_t>(srcH) * 4)
+            throw std::runtime_error("DirectX12Renderer::ReadBackbuffer: back-buffer readback failed");
+
+        // Same out-of-range policy D3D11's own DX-28 override uses: a row or column outside the real
+        // resource is zero-filled rather than read from adjacent memory. GraphicsDevice has already
+        // rejected a rectangle outside the PresentationParameters bounds, so this only matters when
+        // the real resource is smaller than those parameters claim.
+        for (int row = 0; row < h; ++row)
+        {
+            std::uint8_t* dstRow = pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+            const int srcY = y + row;
+            if (srcY < 0 || srcY >= srcH || x >= srcW)
+            {
+                std::memset(dstRow, 0, static_cast<std::size_t>(w) * 4);
+                continue;
+            }
+            const int srcX = std::max(x, 0);
+            const int copyW = std::max(0, std::min(w, srcW - srcX));
+            std::memcpy(dstRow,
+                        full.data() + (static_cast<std::size_t>(srcY) * srcW + srcX) * 4,
+                        static_cast<std::size_t>(copyW) * 4);
+            if (copyW < w)
+                std::memset(dstRow + static_cast<std::size_t>(copyW) * 4, 0,
+                            static_cast<std::size_t>(w - copyW) * 4);
+        }
     }
 
     void DirectX12Renderer::SetSwapInterval(int interval)
     {
         // DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
         // renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
+        swapInterval_ = interval;
         vsyncEnabled_ = interval > 0;
     }
 
-    // LATENT: this renderer needs a GetDefaultViewportRect() override before it grows window
-    // resize or real presentation modes. It does NOT misbehave today, and the note is here rather
-    // than in a plan file because this method is where the trap is.
-    //
-    // The size returned here is the LOGICAL one. GraphicsDevice::UpdateViewportFromWindow() feeds
-    // it to Viewport.Width/Height, and separately applies IGraphicsRenderer::
-    // GetDefaultViewportRect() as the PHYSICAL device viewport. This renderer does not override
-    // that method, so it inherits the base default -- which returns (0, 0, GetViewportSize()),
-    // i.e. the logical size used as if it were physical pixels -- and GetEffectiveViewportEXT()
-    // then passes the stored rect straight into D3D12_VIEWPORT without rescaling it.
-    //
-    // Harmless right now only because logical and physical are the same rectangle by
-    // construction: the swap chain is created at exactly virtualWidth_ x virtualHeight_
-    // (CreateSwapChain), OnSurfaceChanged() never calls ResizeBuffers(), and SetPresentationMode()
-    // is a no-op. Break any one of those three -- resize the swap chain with the window (the gap
-    // DX-116 records as deliberately unattempted), or implement Letterbox/Overscan/
-    // FixedHeightDynamicWidth -- and the logical size stops matching the target, at which point
-    // the game renders into a sub-rectangle of the window and the rest keeps the clear colour.
-    //
-    // That is not hypothetical: it is exactly what EasyGL did, reported against galaxy-eggbert
-    // 2026-08-21 (resizing the window or F11 did not enlarge the game). The same structural gap
-    // was found and fixed in EasyGL, OpenGL4, OpenGLES1 and Magnum in the same pass; those four
-    // had already grown the window-following behaviour this one has not. Copy any of their
-    // GetDefaultViewportRect() overrides -- or OpenGL2Renderer::ComputeLogicalViewport(), the
-    // reference implementation -- when the time comes.
-    //
-    // Renderers that instead treat the pushed viewport as LOGICAL and rescale it themselves
-    // (Diligent, Sokol, LLGL, SDL_GPU, WebGPU) need no override; that is the other valid shape,
-    // and would be an equally correct answer for this renderer.
+    // DX-217: GetViewportSize is the logical half of presentation; GetDefaultViewportRect below
+    // is the physical half that GraphicsDevice maps viewport/scissor state into. Both derive from
+    // the same D3DCommon geometry, so DX-218 can resize the physical back buffer without changing
+    // the game's logical coordinate system.
     void DirectX12Renderer::GetViewportSize(int& width, int& height)
     {
-        width = virtualWidth_;
-        height = virtualHeight_;
+        if (!surface_ && !windowlessPresentationExplicit_)
+        {
+            width = virtualWidth_ > 0 ? virtualWidth_ : width_;
+            height = virtualHeight_ > 0 ? virtualHeight_ : height_;
+            return;
+        }
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        width = static_cast<int>(std::lround(geometry.logicalWidth));
+        height = static_cast<int>(std::lround(geometry.logicalHeight));
+    }
+
+    void DirectX12Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        if (!surface_ && !windowlessPresentationExplicit_)
+        {
+            x = 0;
+            y = 0;
+            width = virtualWidth_ > 0 ? virtualWidth_ : width_;
+            height = virtualHeight_ > 0 ? virtualHeight_ : height_;
+            return;
+        }
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        x = static_cast<int>(std::lround(geometry.x));
+        y = static_cast<int>(std::lround(geometry.y));
+        width = static_cast<int>(std::lround(geometry.width));
+        height = static_cast<int>(std::lround(geometry.height));
     }
 
     void DirectX12Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -1273,9 +2184,161 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+        if (!surface_)
+            windowlessPresentationExplicit_ = false;
     }
 
-    void DirectX12Renderer::SetPresentationMode(int) { /* no-op until DX-106 onward */ }
+    int DirectX12Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        const int clamped = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
+        if (clamped != appliedMultiSampleCount_ || !depthStencilResource_)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+        return appliedMultiSampleCount_;
+    }
+
+    int DirectX12Renderer::GetAppliedBackBufferFormatEXT(int requestedFormat) const
+    {
+        (void) requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    }
+
+    int DirectX12Renderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
+    {
+        (void) requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+    }
+
+    void DirectX12Renderer::SetPresentationMode(int mode)
+    {
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        if (!surface_)
+            windowlessPresentationExplicit_ = true;
+    }
+
+    bool DirectX12Renderer::TransformWindowToLogical(
+        float windowX, float windowY, float& logX, float& logY) const
+    {
+        if (!surface_)
+            return false;
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        return MapDrawableToLogical(
+            geometry, surface_->WindowToDrawable(windowX), surface_->WindowToDrawable(windowY),
+            logX, logY);
+    }
+
+    bool DirectX12Renderer::TransformLogicalToWindow(
+        float logX, float logY, float& windowX, float& windowY) const
+    {
+        if (!surface_)
+            return false;
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        float drawableX = 0.0f;
+        float drawableY = 0.0f;
+        if (!MapLogicalToDrawable(geometry, logX, logY, drawableX, drawableY))
+            return false;
+        windowX = surface_->DrawableToWindow(drawableX);
+        windowY = surface_->DrawableToWindow(drawableY);
+        return true;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+            D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
+            return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        if (!D3DCommon::IsXnaRenderTargetSurfaceFormat(surfaceFormat))
+            return format == DXGI_FORMAT_UNKNOWN
+                ? RendererFormatVerdict::Defer
+                : RendererFormatVerdict::Unsupported;
+        if (!device_) return RendererFormatVerdict::Unsupported;
+
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = format;
+        const D3D12_FORMAT_SUPPORT1 required =
+            static_cast<D3D12_FORMAT_SUPPORT1>(
+                D3D12_FORMAT_SUPPORT1_TEXTURE2D |
+                D3D12_FORMAT_SUPPORT1_RENDER_TARGET |
+                D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+        if (FAILED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) ||
+            (support.Support1 & required) != required)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Supported;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        if (surfaceFormat == 0) return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    bool DirectX12Renderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX12Renderer::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        switch (capability)
+        {
+        case CNA::GraphicsCapability::ThreeD:
+        case CNA::GraphicsCapability::DepthStencilBuffer:
+        case CNA::GraphicsCapability::MultipleRenderTargets:
+        case CNA::GraphicsCapability::AnisotropicFiltering:
+        case CNA::GraphicsCapability::WireFrame:
+        case CNA::GraphicsCapability::OcclusionQuery:
+        case CNA::GraphicsCapability::CustomEffects:
+        case CNA::GraphicsCapability::Texture3D:
+        case CNA::GraphicsCapability::MultiStreamVertexInput:
+        case CNA::GraphicsCapability::Instancing:
+        case CNA::GraphicsCapability::StencilBuffer:
+        case CNA::GraphicsCapability::AdditiveBlending:
+            return true;
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            return ClampBackBufferMultiSampleCount(
+                device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, 4) > 1;
+        case CNA::GraphicsCapability::CompiledEffects:
+            return SupportsCompiledEffects();
+        case CNA::GraphicsCapability::FloatRenderTargets:
+            return ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::Vector4)) ==
+                   RendererFormatVerdict::Supported;
+        case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            return ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::HdrBlendable)) ==
+                   RendererFormatVerdict::Supported;
+        case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+            return SupportsHalfFloatTextureLinearFilteringEXT();
+        case CNA::GraphicsCapability::ComputeShaders:
+            return SupportsComputeShadersEXT();
+        case CNA::GraphicsCapability::IndirectDraw:
+            return SupportsIndirectDrawEXT();
+        }
+        return false;
+    }
+
+    bool DirectX12Renderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX12Renderer::LoadsCompressedContentNativelyEXT() const
+    {
+        return true;
+    }
 
     std::unique_ptr<ITextureRenderer> DirectX12Renderer::CreateTexture(const ImageData& data)
     {
@@ -1333,14 +2396,12 @@ namespace CNA::Internal::Renderers::DirectX12
             NotYetImplemented(what);
         }
 
-        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
 
         if (clearColor)
         {
             resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            RetainFrameObjectEXT(boundColorResource_);
             const float rgba[4] = {r, g, b, a};
             cmdList->ClearRenderTargetView(boundColorRtv_, rgba, 0, nullptr);
 
@@ -1348,21 +2409,18 @@ namespace CNA::Internal::Renderers::DirectX12
             for (int i = 0; i < extraMrtCount_; ++i)
             {
                 resourceStates_.TransitionTo(cmdList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+                RetainFrameObjectEXT(extraMrtResources_[i]);
                 cmdList->ClearRenderTargetView(extraMrtRtvs_[i], rgba, 0, nullptr);
             }
         }
 
         if (depthStencilFlags != static_cast<D3D12_CLEAR_FLAGS>(0) && boundDsv_.ptr != 0)
         {
+            RetainFrameObjectEXT(boundDepthResource_);
             cmdList->ClearDepthStencilView(boundDsv_, depthStencilFlags, depth,
                                             static_cast<UINT8>(stencil), 0, nullptr);
         }
 
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error(std::string("DirectX12Renderer::") + what +
-                                      ": command list Close failed, hr=" + FormatHr(hr));
-        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void DirectX12Renderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -1428,42 +2486,192 @@ namespace CNA::Internal::Renderers::DirectX12
         currentAlphaDstBlend_ = alphaDstBlend;
         currentColorBlendFunc_ = colorBlendFunc;
         currentAlphaBlendFunc_ = alphaBlendFunc;
-        // REMED-GFX-077: both are STATIC PSO state, folded into the PSO cache key + desc at draw
-        // time (see the three psoDesc fill sites). D3D12 draws are single-target here, so only
-        // ColorWriteChannels slot 0 applies.
-        currentColorWriteMask_ = writeState.colorWriteChannels[0];
+        // REMED-GFX-077/DX-224: all four MRT masks are static PSO state. Tracking the complete
+        // array is required because D3D12 cannot change one attachment's mask after PSO creation.
+        for (std::size_t i = 0; i < currentColorWriteMasks_.size(); ++i)
+            currentColorWriteMasks_[i] = writeState.colorWriteChannels[i];
         currentSampleMask_ = writeState.multiSampleMask;
     }
 
     void DirectX12Renderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                                         int depthFunc,
-                                                        bool /*stencilEnable*/, int /*stencilFunc*/,
-                                                        int /*stencilPass*/, int /*stencilFail*/,
-                                                        int /*stencilDepthFail*/,
-                                                        int /*stencilMask*/, int /*stencilWriteMask*/,
-                                                        int /*referenceStencil*/,
-                                                        bool /*twoSidedStencilMode*/,
-                                                        int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
-                                                        int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+                                                        bool stencilEnable, int stencilFunc,
+                                                        int stencilPass, int stencilFail,
+                                                        int stencilDepthFail,
+                                                        int stencilMask, int stencilWriteMask,
+                                                        int referenceStencil,
+                                                        bool twoSidedStencilMode,
+                                                        int ccwStencilFunc, int ccwStencilPass,
+                                                        int ccwStencilFail, int ccwStencilDepthFail)
     {
-        // DX-118: stencil fields deliberately not threaded into the PSO cache key -- matches
-        // D3D12PipelineStateCache's own documented "stencil deliberately NOT part of this first
-        // key/desc" scope (DX-107). Depth-only for now; a real, honest follow-up gap.
+        // plans/plan_dx.md DX-202/DX-203: every field is now carried. DX-118 deliberately dropped the
+        // stencil half because D3D12PipelineStateCache had no stencil in its key; it does now, so
+        // the parameters that were named-and-discarded here are named and used. Twelve of the
+        // thirteen are pipeline state; referenceStencil is not (OMSetStencilRef at record time),
+        // which is why it is tracked alongside rather than folded into the PSO key.
         currentDepthEnable_ = depthEnable;
         currentDepthWriteEnable_ = depthWriteEnable;
         currentDepthFunc_ = depthFunc;
+        currentStencilEnable_ = stencilEnable;
+        currentStencilFunc_ = stencilFunc;
+        currentStencilPass_ = stencilPass;
+        currentStencilFail_ = stencilFail;
+        currentStencilDepthFail_ = stencilDepthFail;
+        currentStencilMask_ = stencilMask;
+        currentStencilWriteMask_ = stencilWriteMask;
+        currentTwoSidedStencilMode_ = twoSidedStencilMode;
+        currentCcwStencilFunc_ = ccwStencilFunc;
+        currentCcwStencilPass_ = ccwStencilPass;
+        currentCcwStencilFail_ = ccwStencilFail;
+        currentCcwStencilDepthFail_ = ccwStencilDepthFail;
+        // XNA applies DepthStencilState.ReferenceStencil as part of the state object, and
+        // GraphicsDevice.ReferenceStencil overrides it afterwards (DX-203); taking it here keeps the
+        // two orders consistent with D3D11, whose OMSetDepthStencilState call does the same.
+        currentReferenceStencil_ = referenceStencil;
+    }
+
+    void DirectX12Renderer::SetReferenceStencil(int referenceStencil)
+    {
+        // DX-203: no PSO involvement at all -- every draw records OMSetStencilRef() from this value,
+        // so the next draw sees it. That is what makes ReferenceStencil a standalone, immediately
+        // effective property rather than something that has to go through ApplyDepthStencilState.
+        currentReferenceStencil_ = referenceStencil;
+    }
+
+    void DirectX12Renderer::SetBlendFactor(float r, float g, float b, float a)
+    {
+        // plans/plan_dx.md DX-204: stored and recorded per draw. D3DStateMapping already mapped
+        // Blend::BlendFactor/InverseBlendFactor into the pipeline state, but nothing ever supplied
+        // the operand, so a blend using the constant read whatever the command list's default
+        // happened to be. Same command-list-state discipline as DX-203's stencil reference: this is
+        // OMSetBlendFactor, not D3D12_BLEND_DESC, so it is deliberately absent from the PSO key.
+        currentBlendFactor_[0] = r;
+        currentBlendFactor_[1] = g;
+        currentBlendFactor_[2] = b;
+        currentBlendFactor_[3] = a;
+    }
+
+    void DirectX12Renderer::FillPsoStateFromCurrentEXT(D3D12PipelineStateDesc& psoDesc) const
+    {
+        psoDesc.colorSrcBlend = currentColorSrcBlend_;
+        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
+        psoDesc.colorDstBlend = currentColorDstBlend_;
+        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
+        psoDesc.colorBlendFunc = currentColorBlendFunc_;
+        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.colorWriteMasks = currentColorWriteMasks_; // REMED-GFX-077/DX-224
+        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
+        psoDesc.depthEnable = currentDepthEnable_;
+        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
+        psoDesc.depthFunc = currentDepthFunc_;
+        // DX-202: the stencil half, which used to be dropped between ApplyDepthStencilState() and
+        // the PSO.
+        psoDesc.stencilEnable = currentStencilEnable_;
+        psoDesc.stencilFunc = currentStencilFunc_;
+        psoDesc.stencilPass = currentStencilPass_;
+        psoDesc.stencilFail = currentStencilFail_;
+        psoDesc.stencilDepthFail = currentStencilDepthFail_;
+        psoDesc.stencilMask = currentStencilMask_;
+        psoDesc.stencilWriteMask = currentStencilWriteMask_;
+        psoDesc.twoSidedStencilMode = currentTwoSidedStencilMode_;
+        psoDesc.ccwStencilFunc = currentCcwStencilFunc_;
+        psoDesc.ccwStencilPass = currentCcwStencilPass_;
+        psoDesc.ccwStencilFail = currentCcwStencilFail_;
+        psoDesc.ccwStencilDepthFail = currentCcwStencilDepthFail_;
+        psoDesc.cullMode = currentCullMode_;
+        psoDesc.fillMode = currentFillMode_;
+        // DX-256: XNA/D3D9's float is a normalized depth offset. Modern D3D stores an integer
+        // count of the bound DSV format's least-resolvable value, so conversion is per PSO/draw.
+        psoDesc.depthBias = D3DCommon::XnaDepthBiasToD3D(currentDepthBias_, boundDsvFormat_);
+        psoDesc.slopeScaleDepthBias = currentSlopeScaleDepthBias_;
+        // plans/plan_dx.md DX-207: a pipeline state's sample count must MATCH the render target it is used
+        // with -- D3D12 has no equivalent of D3D11's uncoupled model -- so it comes from the bound
+        // target rather than from a constant.
+        psoDesc.sampleCount = GetBoundColorSampleCountEXT();
+        psoDesc.renderTargetCount = boundColorResource_ == nullptr
+            ? 0u : static_cast<unsigned int>(extraMrtCount_ + 1);
+        psoDesc.renderTargetFormats.fill(DXGI_FORMAT_UNKNOWN);
+        if (boundColorResource_ != nullptr)
+        {
+            psoDesc.renderTargetFormats[0] = boundColorFormat_;
+            for (int i = 0; i < extraMrtCount_; ++i)
+                psoDesc.renderTargetFormats[static_cast<std::size_t>(i + 1)] =
+                    extraMrtFormats_[i];
+        }
+        psoDesc.depthStencilFormat = boundDsvFormat_;
     }
 
     void DirectX12Renderer::ApplyRasterizerState(int cullMode, int fillMode,
-                                                      bool /*scissorTestEnable*/,
-                                                      float /*depthBias*/,
-                                                      float /*slopeScaleDepthBias*/)
+                                                      bool scissorTestEnable,
+                                                      float depthBias,
+                                                      float slopeScaleDepthBias)
     {
-        // DX-118: scissorTestEnable/depthBias/slopeScaleDepthBias deliberately not threaded into
-        // the PSO yet -- same documented first-implementation-subset scope as the stencil fields
-        // above.
+        // plans/plan_dx.md DX-201/DX-206: all five fields are carried now. They land in two different
+        // places, and the split is a real property of D3D12 rather than a convenience: depth bias is
+        // baked into D3D12_RASTERIZER_DESC and therefore into the pipeline state, while the scissor
+        // test has no rasterizer field at all on this API (it is always on) -- so a disabled test
+        // means "the rectangle covers the whole target", which is command-list state.
         currentCullMode_ = cullMode;
         currentFillMode_ = fillMode;
+        currentScissorTestEnable_ = scissorTestEnable;
+        currentDepthBias_ = depthBias;
+        currentSlopeScaleDepthBias_ = slopeScaleDepthBias;
+    }
+
+    void DirectX12Renderer::SetScissorRect(int x, int y, int w, int h)
+    {
+        // DX-201: store only -- consumed per draw via GetEffectiveScissorEXT(), for the same reason
+        // SetViewport() stores rather than applies (this renderer re-records every command list).
+        scissorSet_ = true;
+        scissorX_ = x;
+        scissorY_ = y;
+        scissorW_ = w;
+        scissorH_ = h;
+    }
+
+    unsigned int DirectX12Renderer::GetBoundColorSampleCountEXT() const
+    {
+        // plans/plan_dx.md DX-207: read from the resource, not from a tracked copy. A tracked copy is one
+        // more thing that can disagree with the resource, and every bind site would have to remember
+        // to set it -- which is exactly the failure mode DX-255 was.
+        if (!boundColorResource_) return 1u;
+        const UINT count = boundColorResource_->GetDesc().SampleDesc.Count;
+        return count == 0 ? 1u : static_cast<unsigned int>(count);
+    }
+
+    D3D12_RECT DirectX12Renderer::GetEffectiveScissorEXT() const
+    {
+        const D3D12_RECT fullTarget{0, 0, static_cast<LONG>(boundColorWidth_),
+                                    static_cast<LONG>(boundColorHeight_)};
+        if (!currentScissorTestEnable_ || !scissorSet_)
+            return fullTarget;
+        if (scissorW_ <= 0 || scissorH_ <= 0)
+        {
+            // A degenerate rectangle rasterizes nothing -- the same answer D3D11 gives with
+            // ScissorEnable = TRUE and an empty rect, and the answer deferred_scissor_capture_test
+            // records for DIRECTX11. Vulkan/EasyGL/bgfx return the full target instead; that
+            // divergence is recorded in that fixture per renderer, and D3D12 follows its own family.
+            return D3D12_RECT{0, 0, 0, 0};
+        }
+
+        // Clamp to the bound target: D3D12 rejects a scissor rectangle that leaves the render
+        // target, where XNA simply clips. Clamping is the behaviour a game expects and is what
+        // D3D11 gets for free from ScissorEnable.
+        D3D12_RECT rect{static_cast<LONG>(scissorX_), static_cast<LONG>(scissorY_),
+                        static_cast<LONG>(scissorX_) + static_cast<LONG>(scissorW_),
+                        static_cast<LONG>(scissorY_) + static_cast<LONG>(scissorH_)};
+        rect.left = std::max<LONG>(rect.left, 0);
+        rect.top = std::max<LONG>(rect.top, 0);
+        rect.right = std::min<LONG>(rect.right, fullTarget.right);
+        rect.bottom = std::min<LONG>(rect.bottom, fullTarget.bottom);
+        if (rect.right <= rect.left || rect.bottom <= rect.top)
+        {
+            // A rectangle entirely outside the target clips everything away. Expressing that as an
+            // empty rect is exactly what the scissor test means; D3D12 accepts left==right.
+            rect.right = rect.left;
+            rect.bottom = rect.top;
+        }
+        return rect;
     }
 
     std::unique_ptr<IVertexBufferRenderer> DirectX12Renderer::CreateVertexBuffer(int vertex_capacity)
@@ -1513,6 +2721,8 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
+        psoDesc.vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable via
         // ApplyDepthStencilState/ApplyRasterizerState/ApplyBlendState (tracked in this renderer's
         // current*_ fields), fed into the PSO key here instead of hardcoded literals. Defaults
@@ -1523,27 +2733,15 @@ namespace CNA::Internal::Renderers::DirectX12
         // back-face-culled this test triangle after D3D's NDC->screen-space Y-flip, with no
         // debug-layer error available on this dev loop -- why depthEnable=false/cullMode=None
         // became this path's safe starting default in the first place.
-        psoDesc.colorSrcBlend = currentColorSrcBlend_;
-        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
-        psoDesc.colorDstBlend = currentColorDstBlend_;
-        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
-        psoDesc.colorBlendFunc = currentColorBlendFunc_;
-        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
-        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
-        psoDesc.depthEnable = currentDepthEnable_;
-        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
-        psoDesc.depthFunc = currentDepthFunc_;
-        psoDesc.cullMode = currentCullMode_;
-        psoDesc.fillMode = currentFillMode_;
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        FillPsoStateFromCurrentEXT(psoDesc);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d PSO");
 
         // Same "raw vertex color, no GpuDrawParams" legacy convention D3D11's own DrawColoredPrimitives
         // uses (diffuseColor=white, vertexColorEnabled=true, fog disabled) -- see D3DConstantBuffers.hpp.
         D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -1552,45 +2750,37 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-005/010/061: the zero-initialized FogVector authoritatively disables fog;
         // no separate enable scalar or explicit default is needed.
 
-        ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
-        ID3D12Resource* fogCB = GetOrCreateFogConstantBufferEXT();
-        std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-        std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
+        const D3D12_GPU_VIRTUAL_ADDRESS perDrawAddress =
+            AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+        const D3D12_GPU_VIRTUAL_ADDRESS fogAddress =
+            AllocateFrameConstantDataEXT(&fog, sizeof(fog));
 
-        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, pso.Get());
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+        RetainFrameObjectEXT(d3dVb.GetResourceEXT());
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
+        // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
+        // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
         cmdList->IASetVertexBuffers(0, 1, &vbView);
 
-        cmdList->SetGraphicsRootConstantBufferView(0, perDrawCB->GetGPUVirtualAddress());
-        cmdList->SetGraphicsRootConstantBufferView(1, fogCB->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(0, perDrawAddress);
+        cmdList->SetGraphicsRootConstantBufferView(1, fogAddress);
 
         const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
-
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("DrawColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
-        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void DirectX12Renderer::DrawIndexedColoredPrimitives(
@@ -1624,27 +2814,17 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
+        psoDesc.vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
-        psoDesc.colorSrcBlend = currentColorSrcBlend_;
-        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
-        psoDesc.colorDstBlend = currentColorDstBlend_;
-        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
-        psoDesc.colorBlendFunc = currentColorBlendFunc_;
-        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
-        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
-        psoDesc.depthEnable = currentDepthEnable_;
-        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
-        psoDesc.depthFunc = currentDepthFunc_;
-        psoDesc.cullMode = currentCullMode_;
-        psoDesc.fillMode = currentFillMode_;
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        FillPsoStateFromCurrentEXT(psoDesc);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d PSO");
 
         D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -1653,29 +2833,28 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-005/010/061: the zero-initialized FogVector authoritatively disables fog;
         // no separate enable scalar or explicit default is needed.
 
-        ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
-        ID3D12Resource* fogCB = GetOrCreateFogConstantBufferEXT();
-        std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-        std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
+        const D3D12_GPU_VIRTUAL_ADDRESS perDrawAddress =
+            AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+        const D3D12_GPU_VIRTUAL_ADDRESS fogAddress =
+            AllocateFrameConstantDataEXT(&fog, sizeof(fog));
 
-        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, pso.Get());
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+        RetainFrameObjectEXT(d3dVb.GetResourceEXT());
+        RetainFrameObjectEXT(d3dIb.GetResourceEXT());
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
+        // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
+        // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -1683,17 +2862,11 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
 
-        cmdList->SetGraphicsRootConstantBufferView(0, perDrawCB->GetGPUVirtualAddress());
-        cmdList->SetGraphicsRootConstantBufferView(1, fogCB->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(0, perDrawAddress);
+        cmdList->SetGraphicsRootConstantBufferView(1, fogAddress);
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         cmdList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
-
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("DrawIndexedColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
-        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     // DX-111 (continued): extends the colored3d-only pipeline above to textured3d/colored_textured3d/
@@ -1710,12 +2883,6 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
-        // REMED-GFX-DECL-GUARD: before any D3D12_INPUT_LAYOUT_DESC is built and before any draw is
-        // issued. This renderer selects that layout from the shared D3DCommon stride table
-        // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
-        // than rendered from the wrong bytes. An out-of-table stride is left to
-        // InputElementsForStrideD3D12's own established rejection.
-        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         if (!boundColorResource_)
         {
             NotYetImplemented("DrawPrimitivesEx (no off-screen color target bound -- "
@@ -1723,10 +2890,169 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
-        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const std::size_t fallbackStride =
+            d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const bool multiStream = HasMultipleVertexStreams(params);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DVertexInputElement> inputElements;
+        if (multiStream)
+            BuildVertexInputLayout(params, false, combinedElements, inputElements);
+        const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
+        const auto& vertexElements = multiStream
+            ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
 
-        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
-        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            RecordCompiledEffectDrawEXT(
+                d3dVb, ib, primitive, primitiveCount, 1, params,
+                *params.compiledEffectRuntime);
+            return;
+        }
+#endif
+
+        if (params.customEffectRequested)
+        {
+            auto* customEffect = dynamic_cast<D3D12EffectRenderer*>(params.customEffectRenderer);
+            if (customEffect == nullptr || !customEffect->IsValid())
+                throw System::NotSupportedException(
+                    "DirectX12 custom 3D drawing requires a valid D3D12 ShaderEffect.");
+
+            float worldValues[16];
+            float viewValues[16];
+            float projectionValues[16];
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            customEffect->SetUniformMat4("World", worldValues);
+            customEffect->SetUniformMat4("View", viewValues);
+            customEffect->SetUniformMat4("Projection", projectionValues);
+            customEffect->Bind();
+
+            D3D12PipelineStateDesc customState;
+            customState.strideInBytes = stride;
+            customState.vertexElements = vertexElements;
+            customState.vertexInputElements = inputElements;
+            customState.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
+            FillPsoStateFromCurrentEXT(customState);
+            ID3D12PipelineState* customPso = customEffect->GetOrCreatePipelineStateEXT(
+                std::move(customState));
+            ID3D12RootSignature* customRootSignature = customEffect->GetRootSignatureEXT();
+            if (customPso == nullptr || customRootSignature == nullptr)
+                throw System::NotSupportedException(
+                    "DirectX12 could not match the ShaderEffect vertex signature and current "
+                    "pipeline state to the bound VertexDeclaration.");
+
+            const int constantBufferCount = customEffect->GetConstantBufferCountEXT();
+            const int shaderResourceCount = customEffect->GetShaderResourceCountEXT();
+            const int samplerCount = customEffect->GetSamplerCountEXT();
+            ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+            RetainFrameObjectEXT(customPso);
+            RetainFrameObjectEXT(customRootSignature);
+            RetainFrameObjectEXT(d3dVb.GetResourceEXT());
+            for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+            {
+                const auto* buffer = static_cast<const D3D12VertexBufferRenderer*>(
+                    params.vertexStreams[static_cast<std::size_t>(stream)].buffer);
+                if (buffer) RetainFrameObjectEXT(buffer->GetResourceEXT());
+            }
+            if (ib != nullptr)
+                RetainFrameObjectEXT(
+                    static_cast<const D3D12IndexBufferRenderer&>(*ib).GetResourceEXT());
+            std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
+                       D3DCommon::D3DProgramReflection::kMaxShaderResources> textureHandles{};
+            for (int slot = 0; slot < shaderResourceCount; ++slot)
+                textureHandles[static_cast<std::size_t>(slot)] =
+                    customEffect->GetTextureGpuHandleEXT(slot);
+            std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
+                       D3DCommon::D3DProgramReflection::kMaxSamplers> samplerHandles{};
+            for (int slot = 0; slot < samplerCount; ++slot)
+                (void)GetSamplerGpuHandleEXT(slot);
+            for (int slot = 0; slot < samplerCount; ++slot)
+                samplerHandles[static_cast<std::size_t>(slot)] =
+                    GetSamplerGpuHandleEXT(slot);
+
+            TransitionAndBindRenderTargetsEXT(cmdList);
+            const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
+            const D3D12_RECT scissor = GetEffectiveScissorEXT();
+            cmdList->RSSetViewports(1, &viewport);
+            cmdList->RSSetScissorRects(1, &scissor);
+            cmdList->SetGraphicsRootSignature(customRootSignature);
+            cmdList->SetPipelineState(customPso);
+            cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+            cmdList->OMSetBlendFactor(currentBlendFactor_);
+            cmdList->IASetPrimitiveTopology(nativeTopology);
+
+            BindVertexStreams(cmdList, d3dVb, params);
+            if (ib != nullptr)
+            {
+                const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(*ib);
+                const D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
+                cmdList->IASetIndexBuffer(&ibView);
+            }
+            for (int slot = 0; slot < constantBufferCount; ++slot)
+            {
+                const D3D12_GPU_VIRTUAL_ADDRESS address =
+                    customEffect->GetConstantBufferGpuAddressEXT(slot);
+                if (address != 0)
+                    cmdList->SetGraphicsRootConstantBufferView(
+                        static_cast<UINT>(slot), address);
+            }
+
+            ID3D12DescriptorHeap* heaps[2]{};
+            UINT heapCount = 0;
+            if (shaderResourceCount > 0)
+                heaps[heapCount++] = GetCbvSrvUavHeapEXT();
+            if (samplerCount > 0)
+                heaps[heapCount++] = GetSamplerHeapEXT();
+            if (heapCount > 0)
+                cmdList->SetDescriptorHeaps(heapCount, heaps);
+            for (int slot = 0; slot < shaderResourceCount; ++slot)
+            {
+                const auto handle = textureHandles[static_cast<std::size_t>(slot)];
+                if (handle.ptr != 0)
+                    cmdList->SetGraphicsRootDescriptorTable(
+                        static_cast<UINT>(constantBufferCount + slot), handle);
+            }
+            for (int slot = 0; slot < samplerCount; ++slot)
+            {
+                const auto handle = samplerHandles[static_cast<std::size_t>(slot)];
+                if (handle.ptr != 0)
+                    cmdList->SetGraphicsRootDescriptorTable(
+                        static_cast<UINT>(constantBufferCount + shaderResourceCount + slot),
+                        handle);
+            }
+
+            const UINT elementCount = static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount));
+            if (ib != nullptr)
+                cmdList->DrawIndexedInstanced(
+                    elementCount, 1, static_cast<UINT>(params.startIndex),
+                    static_cast<INT>(params.baseVertex), 0);
+            else
+                cmdList->DrawInstanced(
+                    elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
+
+            return;
+        }
+
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        const bool hasDeclaration = !vertexElements.empty();
+        const auto hasElement = [&](VertexElementUsage usage, int usageIndex = 0)
+        {
+            return D3DCommon::DeclarationHasElement(vertexElements, usage, usageIndex);
+        };
+        const bool hasNormal = hasDeclaration ? hasElement(VertexElementUsage::Normal)
+                                              : stride == 32;
+        const bool hasColor = hasDeclaration ? hasElement(VertexElementUsage::Color)
+                                             : stride == 16 || stride == 24;
+        const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
+                                                : stride == 20 || stride == 24 || stride == 32;
+        const bool hasTexCoord1 = hasDeclaration &&
+                                  hasElement(VertexElementUsage::TextureCoordinate, 1);
+
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there.
         const bool needsPbr = params.pbr;
         const bool needsAlphaTest = !needsPbr &&
                                     (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
@@ -1740,10 +3066,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // dual-texture/env-map remain mutually exclusive effect families chosen afterwards.
         const bool needsSkinned = params.skinned && !needsPbr
                                  && !needsAlphaTest && !needsDualTex && !needsEnvMap;
-        // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
-        // or not -- the shader itself branches on LightingEnabled), unless a higher-priority effect
-        // claims the draw first -- same priority D3D11's own DrawPrimitivesExImpl uses.
-        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
+        // A declared normal selects BasicEffect's lit family regardless of the record's byte size.
+        // The stride-only rule remains solely for internal buffers that carry no declaration.
+        const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
 
         // env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes), same as lit_textured3d.
@@ -1751,30 +3076,37 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) requires "
                 "stride 32 (VertexPositionNormalTexture)");
-        // dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes), same as D3D11's own
-        // DX-65 finding -- dual_texture_colored3d was never ported (DX-13-hlsl's own row notes).
-        if (needsDualTex && stride != 20)
+        if (needsDualTex && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
-                "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
-                "(plans/plan_dx.md DX-13-hlsl)");
-        // skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes);
-        // plans/plan_cnj.md CNB-67 follow-up's own stride-56 sibling (skinned_colored3d) appends a
-        // per-vertex Color, mirrors D3D11's own DrawPrimitivesExImpl exactly.
-        if (needsSkinned && stride != 52 && stride != 56)
+                "DirectX12Renderer::DrawPrimitivesEx: DualTextureEffect requires TEXCOORD0");
+        // A declared skinned stream is identified by semantics, not by one packed record size:
+        // XNA content may legally spell BLENDINDICES as either Byte4 (stride 52) or Vector4
+        // (stride 64). Keep the legacy stride rule only for declaration-less internal buffers.
+        bool usesFloatBoneIndices = false;
+        bool hasSupportedBoneIndices = false;
+        for (const auto& element : vertexElements)
+        {
+            if (element.getVertexElementUsageProperty() != VertexElementUsage::BlendIndices
+                || element.getUsageIndexProperty() != 0)
+                continue;
+
+            const auto format = element.getVertexElementFormatProperty();
+            usesFloatBoneIndices = format == VertexElementFormat::Vector4;
+            hasSupportedBoneIndices = usesFloatBoneIndices || format == VertexElementFormat::Byte4;
+            break;
+        }
+        const bool hasSkinnedElements = hasElement(VertexElementUsage::Position) && hasNormal && hasTexCoord
+            && hasElement(VertexElementUsage::BlendWeight)
+            && hasSupportedBoneIndices;
+        if (needsSkinned && ((hasDeclaration && !hasSkinnedElements)
+                            || (!hasDeclaration && stride != 52 && stride != 56)))
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
-                "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
-                "plans/plan_cnj.md CNB-67)");
-        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
-        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
-        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
-        // strides this effect supports, same as D3D11's own DrawPrimitivesExImpl.
-        if (needsAlphaTest && stride != 20 && stride != 24)
+                "DirectX12Renderer::DrawPrimitivesEx: SkinnedEffect requires POSITION0, NORMAL0, "
+                "TEXCOORD0, BLENDWEIGHT0 and Byte4 or Vector4 BLENDINDICES0");
+        if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
-                "supports stride 20 (VertexPositionTexture) or 24 "
-                "(VertexPositionColorTexture, plans/plan_dx.md DX-136)");
+                "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect requires TEXCOORD0 when "
+                "a real texture is bound");
         // plans/plan_cnj.md CNB-58/GLTF-386 follow-up: PBR accepts the canonical single-UV layouts and
         // their TEXCOORD_1 suffix variants, mirroring D3D11's DrawPrimitivesExImpl exactly.
         if (needsPbr && !params.skinned && stride != 48 && stride != 60)
@@ -1793,14 +3125,22 @@ namespace CNA::Internal::Renderers::DirectX12
         int numSrvs = 0;
         if (needsAlphaTest)
         {
-            variant = (stride == 24) ? D3DShaderVariant::AlphaTestColored3d : D3DShaderVariant::AlphaTest3d;
+            variant = hasColor
+                ? (hasTexCoord ? D3DShaderVariant::AlphaTestColored3d
+                               : D3DShaderVariant::AlphaTestUntexturedColored3d)
+                : (hasTexCoord ? D3DShaderVariant::AlphaTest3d
+                               : D3DShaderVariant::AlphaTestUntextured3d);
             hasTexture = true;
             numCbvs = 1; // alpha_test3d's own single combined PerDraw (b0) -- no separate FogParams cbuffer.
             numSrvs = 1;
         }
         else if (needsDualTex)
         {
-            variant = D3DShaderVariant::DualTexture3d;
+            variant = hasColor
+                ? (hasTexCoord1 ? D3DShaderVariant::DualTextureColoredDualUv3d
+                                : D3DShaderVariant::DualTextureColored3d)
+                : (hasTexCoord1 ? D3DShaderVariant::DualTextureDualUv3d
+                                : D3DShaderVariant::DualTexture3d);
             hasTexture = true;
             // DX-13-hlsl's own note: dual_texture3d's FogParams cbuffer lives at register(b2), not
             // (b1) -- t0/s0 and t1/s1 already occupy the "next free slot" a single-texture variant
@@ -1846,15 +3186,22 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             // plans/plan_graphics.md Phase 80 (Task 1107): real XNA renders SkinnedEffect's lit path
             // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. plans/plan_cnj.md
-            // CNB-67 follow-up: stride 56 (per-vertex Color present) routes to the *Colored
-            // siblings instead, mirroring D3D11's own needsSkinned branch exactly.
-            variant = (stride == 56)
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
-                        ? D3DShaderVariant::Skinned3dVertexLitColored
-                        : D3DShaderVariant::Skinned3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
-                        ? D3DShaderVariant::Skinned3dVertexLit
-                        : D3DShaderVariant::Skinned3d);
+            // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
+            // Declaration-less legacy buffers retain the canonical stride-56 fallback.
+            const bool colored = hasDeclaration ? hasColor : stride == 56;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            if (usesFloatBoneIndices)
+                variant = colored
+                    ? (vertexLit ? D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
+                                 : D3DShaderVariant::Skinned3dColoredFloatIndices)
+                    : (vertexLit ? D3DShaderVariant::Skinned3dVertexLitFloatIndices
+                                 : D3DShaderVariant::Skinned3dFloatIndices);
+            else
+                variant = colored
+                    ? (vertexLit ? D3DShaderVariant::Skinned3dVertexLitColored
+                                 : D3DShaderVariant::Skinned3dColored)
+                    : (vertexLit ? D3DShaderVariant::Skinned3dVertexLit
+                                 : D3DShaderVariant::Skinned3d);
             hasTexture = true;
             numCbvs = 3; // PerDraw (b0) + BoneBlock (b1) + skinned3d's own FogParams-equivalent (b2).
             numSrvs = 1;
@@ -1862,28 +3209,36 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (needsLitTextured)
         {
             // Same real-default fix for BasicEffect's lit-textured bucket.
-            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
-                    ? D3DShaderVariant::LitTextured3dVertexLit
-                    : D3DShaderVariant::LitTextured3d;
+            variant = hasTexCoord
+                ? (hasColor
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DShaderVariant::LitTextured3dVertexLitColored
+                        : D3DShaderVariant::LitTextured3dColored)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DShaderVariant::LitTextured3dVertexLit
+                        : D3DShaderVariant::LitTextured3d))
+                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DShaderVariant::LitUntextured3dVertexLit
+                    : D3DShaderVariant::LitUntextured3d);
             hasTexture = true;
             numCbvs = 2; // PerDraw (b0) + LitLightParams (b1).
             numSrvs = 1;
         }
         else
         {
-            hasTexture = (stride != 16);
+            hasTexture = hasTexCoord;
             numCbvs = 2; // PerDraw (b0) + FogParams (b1) -- including the stride-16 (colored3d) case.
             numSrvs = hasTexture ? 1 : 0;
-            switch (stride)
-            {
-            case 16: variant = D3DShaderVariant::Colored3d; break;
-            case 20: variant = D3DShaderVariant::Textured3d; break;
-            case 24: variant = D3DShaderVariant::ColoredTextured3d; break;
-            default:
+            if (hasTexCoord && hasColor)
+                variant = D3DShaderVariant::ColoredTextured3d;
+            else if (hasTexCoord)
+                variant = D3DShaderVariant::Textured3d;
+            else if (hasColor || hasDeclaration)
+                variant = D3DShaderVariant::Colored3d;
+            else
                 throw std::runtime_error(
                     "DirectX12Renderer::DrawPrimitivesEx: unsupported vertex stride " +
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-111)");
-            }
         }
 
         const int numSamplers = numSrvs; // DX-119: one real, runtime-settable sampler descriptor
@@ -1896,26 +3251,17 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = variant;
         psoDesc.strideInBytes = stride;
+        psoDesc.vertexElements = vertexElements;
+        psoDesc.vertexInputElements = inputElements;
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
-        psoDesc.colorSrcBlend = currentColorSrcBlend_;
-        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
-        psoDesc.colorDstBlend = currentColorDstBlend_;
-        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
-        psoDesc.colorBlendFunc = currentColorBlendFunc_;
-        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
-        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
-        psoDesc.depthEnable = currentDepthEnable_;
-        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
-        psoDesc.depthFunc = currentDepthFunc_;
-        psoDesc.cullMode = currentCullMode_;
-        psoDesc.fillMode = currentFillMode_;
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        FillPsoStateFromCurrentEXT(psoDesc);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawPrimitivesEx: failed to create PSO for the selected variant");
 
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
 
         // cbAddresses[i] is bound to root CBV parameter i (b0, b1, ...) -- see each branch below for
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
@@ -1951,9 +3297,11 @@ namespace CNA::Internal::Renderers::DirectX12
             c.FogColor[1] = params.fogColor[1];
             c.FogColor[2] = params.fogColor[2];
 
-            ID3D12Resource* cb = GetOrCreateAlphaTestConstantBufferEXT();
-            std::memcpy(alphaTestConstantBufferMapped_, &c, sizeof(c));
-            cbAddresses[0] = cb->GetGPUVirtualAddress();
+            srvTextures[0] = params.texture0 != nullptr
+                ? params.texture0
+                : GetOrCreateDefaultWhiteTextureEXT();
+
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&c, sizeof(c));
         }
         else if (needsDualTex)
         {
@@ -1980,19 +3328,21 @@ namespace CNA::Internal::Renderers::DirectX12
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
 
-            ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
-            ID3D12Resource* fogCB     = GetOrCreateFogConstantBufferEXT();
-            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-            std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
-            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+            const D3D12_GPU_VIRTUAL_ADDRESS fogAddress =
+                AllocateFrameConstantDataEXT(&fog, sizeof(fog));
             // b1 goes unused by dual_texture3d's own HLSL, but the root signature still declares 3
             // contiguous CBV slots for this variant (see numCbvs=3 above) -- bind a valid (harmless,
             // unread) address rather than leaving a root descriptor unset.
-            cbAddresses[1] = perDrawCB->GetGPUVirtualAddress();
-            cbAddresses[2] = fogCB->GetGPUVirtualAddress();
+            cbAddresses[1] = cbAddresses[0];
+            cbAddresses[2] = fogAddress;
 
-            srvTextures[0] = params.texture0;
-            srvTextures[1] = params.texture1;
+            srvTextures[0] = params.texture0 != nullptr
+                ? params.texture0
+                : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[1] = params.texture1 != nullptr
+                ? params.texture1
+                : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsEnvMap)
         {
@@ -2050,15 +3400,13 @@ namespace CNA::Internal::Renderers::DirectX12
             c.Light2Diffuse[1] = params.light2Diffuse[1];
             c.Light2Diffuse[2] = params.light2Diffuse[2];
 
-            ID3D12Resource* perDrawCB = GetOrCreateEnvMapPerDrawConstantBufferEXT();
-            ID3D12Resource* envCB     = GetOrCreateEnvMapConstantBufferEXT();
-            std::memcpy(envMapPerDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-            std::memcpy(envMapConstantBufferMapped_, &c, sizeof(c));
-            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+            const D3D12_GPU_VIRTUAL_ADDRESS envAddress =
+                AllocateFrameConstantDataEXT(&c, sizeof(c));
             // b1 goes unused by env_map3d's own HLSL -- same dummy-but-valid-address convention
             // needsDualTex's own branch above already established.
-            cbAddresses[1] = perDrawCB->GetGPUVirtualAddress();
-            cbAddresses[2] = envCB->GetGPUVirtualAddress();
+            cbAddresses[1] = cbAddresses[0];
+            cbAddresses[2] = envAddress;
 
             srvTextures[0] = params.texture0;
             srvCubeTexture = params.envMap;
@@ -2070,6 +3418,18 @@ namespace CNA::Internal::Renderers::DirectX12
             // material constants. PbrLights lives at (b1) for the unskinned Pbr3d variant, or (b2)
             // for PbrSkinned3d (BoneBlock claims b1 there instead), matching skinned3d's own "next
             // free slot" precedent.
+
+            // Resolve lazy fallback resources before allocating frame constants. Creating either
+            // fallback performs a synchronous texture upload, which submits the current frame
+            // segment; allocating first would let the resumed segment reset and reuse those ranges.
+            srvTextures[0] = params.texture0;
+            srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
+            srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[5] = params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();
+
             D3DPbrPerDrawConstants perDraw{};
             wvp.ToColumnMajor(perDraw.Mvp);
             world.ToColumnMajor(perDraw.World);
@@ -2150,11 +3510,9 @@ namespace CNA::Internal::Renderers::DirectX12
             lights.FogVector[2] = params.fogVector[2];
             lights.FogVector[3] = params.fogVector[3];
 
-            ID3D12Resource* perDrawCB = GetOrCreatePbrPerDrawConstantBufferEXT();
-            ID3D12Resource* lightsCB  = GetOrCreatePbrLightsConstantBufferEXT();
-            std::memcpy(pbrPerDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-            std::memcpy(pbrLightsConstantBufferMapped_, &lights, sizeof(lights));
-            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+            const D3D12_GPU_VIRTUAL_ADDRESS lightsAddress =
+                AllocateFrameConstantDataEXT(&lights, sizeof(lights));
             if (params.skinned)
             {
                 // PbrSkinned3d: BoneBlock at (b1) -- reuses the same D3DBoneConstants shape/buffer
@@ -2164,14 +3522,12 @@ namespace CNA::Internal::Renderers::DirectX12
                 if (boneCount > 0)
                     std::memcpy(bones.Bones, params.boneTransforms,
                                static_cast<std::size_t>(boneCount) * 16u * sizeof(float));
-                ID3D12Resource* boneCB = GetOrCreateBoneConstantBufferEXT();
-                std::memcpy(boneConstantBufferMapped_, &bones, sizeof(bones));
-                cbAddresses[1] = boneCB->GetGPUVirtualAddress();
-                cbAddresses[2] = lightsCB->GetGPUVirtualAddress();
+                cbAddresses[1] = AllocateFrameConstantDataEXT(&bones, sizeof(bones));
+                cbAddresses[2] = lightsAddress;
             }
             else
             {
-                cbAddresses[1] = lightsCB->GetGPUVirtualAddress();
+                cbAddresses[1] = lightsAddress;
             }
 
             // Real default/fallback textures for every unbound optional PBR map -- flat tangent-
@@ -2183,13 +3539,6 @@ namespace CNA::Internal::Renderers::DirectX12
             // (no fallback) -- same as every other variant's srvTextures[0] in this function; a
             // null base color texture leaves t0 unbound, matching D3D11's own GetSrvForTextureEXT
             // null-handling exactly rather than inventing a new deviation here.
-            srvTextures[0] = params.texture0;
-            srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
-            srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
-            srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
-            srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();
-            srvTextures[5] = params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT();
-            srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsSkinned)
         {
@@ -2275,15 +3624,9 @@ namespace CNA::Internal::Renderers::DirectX12
             extra.EmissiveColor[1] = params.emissiveColor[1];
             extra.EmissiveColor[2] = params.emissiveColor[2];
 
-            ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
-            ID3D12Resource* boneCB    = GetOrCreateBoneConstantBufferEXT();
-            ID3D12Resource* extraCB   = GetOrCreateSkinnedExtraConstantBufferEXT();
-            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-            std::memcpy(boneConstantBufferMapped_, &bones, sizeof(bones));
-            std::memcpy(skinnedExtraConstantBufferMapped_, &extra, sizeof(extra));
-            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
-            cbAddresses[1] = boneCB->GetGPUVirtualAddress();
-            cbAddresses[2] = extraCB->GetGPUVirtualAddress();
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+            cbAddresses[1] = AllocateFrameConstantDataEXT(&bones, sizeof(bones));
+            cbAddresses[2] = AllocateFrameConstantDataEXT(&extra, sizeof(extra));
         }
         else if (needsLitTextured)
         {
@@ -2349,12 +3692,8 @@ namespace CNA::Internal::Renderers::DirectX12
             lighting.FogVector[2] = params.fogVector[2];
             lighting.FogVector[3] = params.fogVector[3];
 
-            ID3D12Resource* perDrawCB  = GetOrCreatePerDrawConstantBufferEXT();
-            ID3D12Resource* lightingCB = GetOrCreateLightingConstantBufferEXT();
-            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-            std::memcpy(lightingConstantBufferMapped_, &lighting, sizeof(lighting));
-            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
-            cbAddresses[1] = lightingCB->GetGPUVirtualAddress();
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+            cbAddresses[1] = AllocateFrameConstantDataEXT(&lighting, sizeof(lighting));
         }
         else
         {
@@ -2380,12 +3719,8 @@ namespace CNA::Internal::Renderers::DirectX12
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
 
-            ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
-            ID3D12Resource* fogCB     = GetOrCreateFogConstantBufferEXT();
-            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
-            std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
-            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
-            cbAddresses[1] = fogCB->GetGPUVirtualAddress();
+            cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
+            cbAddresses[1] = AllocateFrameConstantDataEXT(&fog, sizeof(fog));
         }
 
         // DX-111 (dual_texture3d): each texture register (t0, t1, ...) is its own single-descriptor
@@ -2407,28 +3742,34 @@ namespace CNA::Internal::Renderers::DirectX12
                 : GetSrvGpuHandleForTextureEXT(srvTextures[i]);
         }
 
-        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, pso.Get());
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+        RetainFrameObjectEXT(d3dVb.GetResourceEXT());
+        for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+        {
+            const auto* buffer = static_cast<const D3D12VertexBufferRenderer*>(
+                params.vertexStreams[static_cast<std::size_t>(stream)].buffer);
+            if (buffer) RetainFrameObjectEXT(buffer->GetResourceEXT());
+        }
+        if (ib != nullptr)
+            RetainFrameObjectEXT(
+                static_cast<const D3D12IndexBufferRenderer&>(*ib).GetResourceEXT());
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
+        // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
+        // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
-        D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
-        cmdList->IASetVertexBuffers(0, 1, &vbView);
+        BindVertexStreams(cmdList, d3dVb, params);
         if (ib != nullptr)
         {
             const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(*ib);
@@ -2449,14 +3790,21 @@ namespace CNA::Internal::Renderers::DirectX12
             // (GraphicsDevice.SamplerStates[i]), not a hardcoded default. Both the CBV_SRV_UAV heap
             // and the SAMPLER heap are bound together -- D3D12 allows up to 2 shader-visible heaps
             // simultaneously, one per heap type.
-            // REMED-GFX-177: resolved per draw, so a heap that grew between draws is picked up
-            // here and every root table below points into the heap actually being bound.
+            // Resolve once to create every missing descriptor before reading the heap object. A
+            // later slot can grow and replace the heap, invalidating both its old object and every
+            // GPU handle obtained from it, so resolve all handles again after allocation settles.
+            D3D12_GPU_DESCRIPTOR_HANDLE samplerHandles[7]{};
+            for (int i = 0; i < numSrvs; ++i)
+                (void)GetSamplerGpuHandleEXT(i);
+            for (int i = 0; i < numSrvs; ++i)
+                samplerHandles[i] = GetSamplerGpuHandleEXT(i);
+
             ID3D12DescriptorHeap* heaps[] = {GetCbvSrvUavHeapEXT(), GetSamplerHeapEXT()};
             cmdList->SetDescriptorHeaps(2, heaps);
             for (int i = 0; i < numSrvs; ++i)
                 cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]);
             for (int i = 0; i < numSrvs; ++i)
-                cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, GetSamplerGpuHandleEXT(i));
+                cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, samplerHandles[i]);
         }
 
         if (ib != nullptr)
@@ -2479,11 +3827,6 @@ namespace CNA::Internal::Renderers::DirectX12
             cmdList->DrawInstanced(vertexCount, 1, static_cast<UINT>(params.vertexStart), 0);
         }
 
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("DrawPrimitivesEx: command list Close failed, hr=" + FormatHr(hr));
-        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void DirectX12Renderer::DrawPrimitivesEx(
@@ -2499,80 +3842,6 @@ namespace CNA::Internal::Renderers::DirectX12
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-    }
-
-    ID3D12PipelineState* DirectX12Renderer::GetOrCreateInstancedPsoEXT(
-        ID3D12RootSignature* rootSig, UINT instanceStepRate)
-    {
-        auto cached = instancedPsos_.find(instanceStepRate);
-        if (cached != instancedPsos_.end())
-            return cached->second.Get();
-
-        const uint8_t* vsBytes = nullptr; std::size_t vsSize = 0;
-        const uint8_t* psBytes = nullptr; std::size_t psSize = 0;
-        GetVertexShaderBytecode(D3DShaderVariant::Instanced3d, vsBytes, vsSize);
-        GetPixelShaderBytecode(D3DShaderVariant::Instanced3d, psBytes, psSize);
-        if (!vsBytes || !psBytes)
-            throw std::runtime_error("DirectX12Renderer: missing instanced3d DXBC bytecode");
-
-        // Mirrors DirectX11Renderer::GetOrCreateInstancedInputLayoutEXT()'s own element list
-        // exactly -- POSITION0 (per-vertex, slot 0) + INSTANCEWORLD0-3 (per-instance, slot 1).
-        // REMED-GFX-123: InstanceDataStepRate carries the public
-        // VertexBufferBinding.InstanceFrequency instead of a hardcoded 1, same as D3D11.
-        const D3D12_INPUT_ELEMENT_DESC kElements[] = {
-            { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,   0 },
-            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-        };
-
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
-        desc.pRootSignature = rootSig;
-        desc.VS = {vsBytes, vsSize};
-        desc.PS = {psBytes, psSize};
-        desc.InputLayout = {kElements, static_cast<UINT>(std::size(kElements))};
-        desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-        desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        // REMED-GFX-077: this instanced-3d PSO is created ONCE and cached in instancedPso_ (it also
-        // hardcodes opaque BlendEnable=FALSE, ignoring the current BlendState entirely). Honouring a
-        // dynamic ColorWriteChannels/MultiSampleMask here would require keying it like the main PSO
-        // cache — a documented gap for the instanced fast path, consistent with its existing opaque
-        // hardcode, not a silent drop.
-        desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = 1;
-        desc.NodeMask = 0;
-
-        // Same honest hardcoded-defaults simplification every other D3D12 draw uses today (no
-        // D3D12 Phase-DX7-equivalent state-object cache exists yet).
-        desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-        desc.RasterizerState.FrontCounterClockwise = FALSE;
-        desc.RasterizerState.DepthClipEnable = TRUE;
-
-        D3D12_RENDER_TARGET_BLEND_DESC& rt0 = desc.BlendState.RenderTarget[0];
-        rt0.BlendEnable = FALSE;
-        rt0.SrcBlend = D3D12_BLEND_ONE;
-        rt0.DestBlend = D3D12_BLEND_ZERO;
-        rt0.BlendOp = D3D12_BLEND_OP_ADD;
-        rt0.SrcBlendAlpha = D3D12_BLEND_ONE;
-        rt0.DestBlendAlpha = D3D12_BLEND_ZERO;
-        rt0.BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        rt0.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-
-        desc.DepthStencilState.DepthEnable = FALSE;
-        desc.DepthStencilState.StencilEnable = FALSE;
-
-        desc.NumRenderTargets = 1;
-        desc.RTVFormats[0] = boundColorFormat_;
-        desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
-
-        ComPtr<ID3D12PipelineState> pso;
-        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer: instanced3d CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
-        auto inserted = instancedPsos_.emplace(instanceStepRate, std::move(pso));
-        return inserted.first->second.Get();
     }
 
     void DirectX12Renderer::DrawInstancedPrimitivesEx(
@@ -2592,31 +3861,46 @@ namespace CNA::Internal::Renderers::DirectX12
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // REMED-GFX-202: one stream of each rate (REMED-GFX-207 tracks widening it); a wider array
-        // is rejected rather than truncated.
-        RejectUnsupportedStreamCombination(params, "The D3D12 renderer");
-        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
-        RequireFaithfulDeclarationEXT(vb, "instanced");
-        const auto* perVertexStream = FirstPerVertexStream(params);
         if (!boundColorResource_)
         {
             NotYetImplemented("DrawInstancedPrimitivesEx (no off-screen color target bound -- "
                               "BindOffscreenColorTargetEXT; see Clear()'s own note)");
         }
 
-        const auto& d3dVb     = static_cast<const D3D12VertexBufferRenderer&>(vb);
-        const auto& d3dIb     = static_cast<const D3D12IndexBufferRenderer&>(ib);
-        const auto& d3dInstVb =
-            static_cast<const D3D12VertexBufferRenderer&>(*instanceStream->buffer);
+        const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
+        const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(ib);
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            RecordCompiledEffectDrawEXT(
+                d3dVb, &d3dIb, primitive, primitiveCount, instanceCount, params,
+                *params.compiledEffectRuntime);
+            return;
+        }
+#endif
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DVertexInputElement> inputElements;
+        BuildVertexInputLayout(params, true, combinedElements, inputElements);
+        const bool hasColor = DeclarationHasElement(
+            combinedElements,
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        const auto variant = hasColor
+            ? D3DShaderVariant::InstancedColored3d
+            : D3DShaderVariant::Instanced3d;
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/0, /*numSamplers=*/0);
         if (!rootSig)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create root signature");
-        // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
-        // the no-instance-stream fallback above already took that case.
-        const UINT instanceStepRate =
-            static_cast<UINT>(std::max(1, instanceStream->instanceFrequency));
-        ID3D12PipelineState* pso = GetOrCreateInstancedPsoEXT(rootSig.Get(), instanceStepRate);
+
+        D3D12PipelineStateDesc psoDesc;
+        psoDesc.variant = variant;
+        psoDesc.strideInBytes = CombinedVertexStrideOr(
+            params, d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16);
+        psoDesc.vertexElements = combinedElements;
+        psoDesc.vertexInputElements = inputElements;
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
+        FillPsoStateFromCurrentEXT(psoDesc);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d PSO");
 
@@ -2624,51 +3908,45 @@ namespace CNA::Internal::Renderers::DirectX12
         // field is named "Vp" (view*projection only, world comes from the per-instance buffer
         // instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DPerDrawConstants perDraw{};
-        const Matrix vp = view * projection;
+        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];
         perDraw.DiffuseColor[2] = params.diffuseColor[2];
         perDraw.DiffuseColor[3] = params.diffuseColor[3];
+        perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
 
-        ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
-        std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+        const D3D12_GPU_VIRTUAL_ADDRESS perDrawAddress =
+            AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
 
-        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, pso);
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
+        ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+        RetainFrameObjectEXT(d3dVb.GetResourceEXT());
+        RetainFrameObjectEXT(d3dIb.GetResourceEXT());
+        for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+        {
+            const auto* buffer = static_cast<const D3D12VertexBufferRenderer*>(
+                params.vertexStreams[static_cast<std::size_t>(stream)].buffer);
+            if (buffer) RetainFrameObjectEXT(buffer->GetResourceEXT());
+        }
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
-        cmdList->SetPipelineState(pso);
+        cmdList->SetPipelineState(pso.Get());
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_)); // DX-203
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
-        // REMED-GFX-123: a D3D12 vertex-buffer view has no separate offset field, so the public
-        // VertexBufferBinding.VertexOffset -- an ELEMENT offset -- has to move BufferLocation and
-        // shrink SizeInBytes by the same byte count, converted with that stream's own stride
-        // exactly once. The per-vertex stream's offset stays independent of BaseVertexLocation
-        // below: the IA adds the base vertex to the decoded index and then fetches at
-        // `BufferLocation + index * stride`, so both apply once.
-        D3D12_VERTEX_BUFFER_VIEW vbViews[2] = { d3dVb.GetViewEXT(), d3dInstVb.GetViewEXT() };
-        AdvanceVertexBufferView(
-            vbViews[0], perVertexStream != nullptr ? perVertexStream->vertexOffset : 0);
-        AdvanceVertexBufferView(vbViews[1], instanceStream->vertexOffset);
-        cmdList->IASetVertexBuffers(0, 2, vbViews);
+        BindVertexStreams(cmdList, d3dVb, params);
         D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
 
-        cmdList->SetGraphicsRootConstantBufferView(0, perDrawCB->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(0, perDrawAddress);
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
@@ -2680,11 +3958,6 @@ namespace CNA::Internal::Renderers::DirectX12
                                       static_cast<UINT>(params.startIndex),
                                       static_cast<INT>(params.baseVertex), 0);
 
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("DrawInstancedPrimitivesEx: command list Close failed, hr=" + FormatHr(hr));
-        ExecuteCommandListAndWaitEXT(cmdList);
     }
 }
 

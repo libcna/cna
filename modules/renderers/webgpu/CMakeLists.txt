@@ -6,6 +6,13 @@ target_link_libraries(${RENDERER_TARGET} PRIVATE WebGPU::WebGPU)
 if(APPLE)
     target_link_libraries(${RENDERER_TARGET} PRIVATE "-framework AppKit" "-framework QuartzCore")
 endif()
+# plans/plan_webgpu.md WEBGPU-167: compiled XNA effects go through MojoShader's portable SPIR-V
+# profile plus the translation shared with every other compiled-effect backend. Opt-in, because
+# MojoShader is a fetched dependency this renderer does not otherwise need.
+if(CNA_WEBGPU_COMPILED_EFFECTS)
+    target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
+endif()
+
 if(CNA_WEBGPU_RUNTIME_LIBRARY)
     add_custom_command(TARGET ${RENDERER_TARGET} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

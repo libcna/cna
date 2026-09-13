@@ -1,0 +1,122 @@
+{
+ "sample": "SAMPLES-DEC-007-Win7-SongProcessor",
+ "runner": "export/build-win7-songprocessor.cmd",
+ "guid": "774F9295-26C9-46A8-AF7A-9132EE79B3F6",
+ "comment": "Not a sample of its own: the Windows 7 virtual machine ran five OTHER samples' own .contentproj files through MSBuild and copied one song out of each, which is why the reference sits here and its source sits in the sample that owns it (sourceSample). export/build-win7-songprocessor.cmd names every project, its platform and its profile, and export/build-win7-sample060-windows.cmd the Windows repeat of SAMPLE-060's. The asset names are the ones each project declares. Recorded 2026-09-10 (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-163). The export flattens: xcopy copies Content\\Sounds\\X.* into EXPORT\\SAMPLE-NNN\\, so the reference's own name is the file's stem and not the Sounds/X the project built. Each unit's sourceRoot is therefore the Sounds directory itself, which changes no byte -- a SongReader records its media path relative to the .xnb that names it, and the media sits beside it either way.",
+ "units": [
+  {
+   "project": "SAMPLE_060.contentproj",
+   "sourceSample": "SAMPLE-060-SoundAndMusic_4_0",
+   "sourceRoot": "xna4-original/SoundAndMusicSample/SoundAndMusicSampleContent/Sounds",
+   "recurse": false,
+   "platform": "WindowsPhone",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "Music.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "Music"
+    }
+   ]
+  },
+  {
+   "project": "SAMPLE_060_Windows.contentproj",
+   "sourceSample": "SAMPLE-060-SoundAndMusic_4_0",
+   "sourceRoot": "xna4-original/SoundAndMusicSample/SoundAndMusicSampleContent/Sounds",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "Music.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "Music"
+    }
+   ]
+  },
+  {
+   "project": "SAMPLE_062.contentproj",
+   "sourceSample": "SAMPLE-062-NetRumble_4_0",
+   "sourceRoot": "xna4-original/NetRumble/Content",
+   "recurse": true,
+   "platform": "Windows",
+   "profile": "HiDef",
+   "compress": false,
+   "items": [
+    {
+     "match": "One Step Beyond.wma",
+     "importer": "WmaImporter",
+     "processor": "SongProcessor",
+     "assetName": "One Step Beyond"
+    }
+   ]
+  },
+  {
+   "project": "SAMPLE_063.contentproj",
+   "sourceSample": "SAMPLE-063-HoneycombRush_4_0",
+   "sourceRoot": "xna4-original/Sources/EX2_PolishAndMenus/HoneycombRush/HoneycombRushContent/Sounds",
+   "recurse": false,
+   "platform": "WindowsPhone",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "InGameSong_Loop.wav",
+     "importer": "WavImporter",
+     "processor": "SongProcessor",
+     "assetName": "InGameSong_Loop"
+    },
+    {
+     "match": "MenuMusic_Loop.wav",
+     "importer": "WavImporter",
+     "processor": "SongProcessor",
+     "assetName": "MenuMusic_Loop"
+    }
+   ]
+  },
+  {
+   "project": "SAMPLE_064.contentproj",
+   "sourceSample": "SAMPLE-064-HoneycombRushTrainingKit_4_0",
+   "sourceRoot": "xna4-original/Sources/Ex2 - Xbox Version/HoneycombRush/HoneycombRushContentHD/Sounds",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "HiDef",
+   "compress": false,
+   "items": [
+    {
+     "match": "InGameSong_Loop.wav",
+     "importer": "WavImporter",
+     "processor": "SongProcessor",
+     "assetName": "InGameSong_Loop"
+    },
+    {
+     "match": "MenuMusic_Loop.wav",
+     "importer": "WavImporter",
+     "processor": "SongProcessor",
+     "assetName": "MenuMusic_Loop"
+    }
+   ]
+  },
+  {
+   "project": "SAMPLE_065.contentproj",
+   "sourceSample": "SAMPLE-065-NinjAcademy_4_0",
+   "sourceRoot": "xna4-original/NinjAcademy/NinjAcademyContent/Sounds",
+   "recurse": false,
+   "platform": "WindowsPhone",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "NinjAcademy_Music.wav",
+     "importer": "WavImporter",
+     "processor": "SongProcessor",
+     "assetName": "NinjAcademy_Music"
+    }
+   ]
+  }
+ ]
+}

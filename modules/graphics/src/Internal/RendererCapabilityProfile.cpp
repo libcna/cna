@@ -42,7 +42,9 @@ namespace CNA
             RendererFeature::ShaderDialectGlslVulkan,
             RendererFeature::ShaderDialectHlsl,
             RendererFeature::ShaderDialectMsl,
-            RendererFeature::ShaderDialectWgsl
+            RendererFeature::ShaderDialectWgsl,
+            RendererFeature::Texture3DSampling,
+            RendererFeature::BaseInstanceDrawing
         };
 
         constexpr std::array<RendererLimit, LimitCount> Limits = {
@@ -55,7 +57,19 @@ namespace CNA
             RendererLimit::MaxComputeWorkGroupSizeY,
             RendererLimit::MaxComputeWorkGroupSizeZ,
             RendererLimit::MaxComputeWorkGroupInvocations,
-            RendererLimit::MaxVertexShaderStorageBlocks
+            RendererLimit::MaxVertexShaderStorageBlocks,
+            RendererLimit::MaxStorageBufferBytes,
+            RendererLimit::MaxUniformBufferBytes,
+            RendererLimit::MaxComputeStorageBufferBindings,
+            RendererLimit::MaxTextureArrayLayers,
+            RendererLimit::MaxSampledTexturesPerShaderStage,
+            RendererLimit::MaxStorageImagesPerShaderStage,
+            RendererLimit::MaxVertexInputBindings,
+            RendererLimit::MaxVertexInputAttributes,
+            RendererLimit::MaxColorAttachments,
+            RendererLimit::MinStorageBufferOffsetAlignment,
+            RendererLimit::MinUniformBufferOffsetAlignment,
+            RendererLimit::TimestampPeriodPicoseconds
         };
 
         [[nodiscard]] constexpr bool ValidFeature(const RendererFeature feature)
@@ -178,7 +192,7 @@ namespace CNA
         std::ostringstream out;
         out << "Renderer capability report\n"
             << "Renderer: " << (rendererName_.empty() ? "UNKNOWN" : rendererName_) << "\n"
-            << "Profile schema: 1\n\n"
+            << "Profile schema: 2\n\n"
             << "Detailed features\n";
 
         for (const RendererFeature feature : Features)
@@ -278,6 +292,8 @@ namespace CNA
             case RendererFeature::ShaderDialectHlsl: return "ShaderDialectHlsl";
             case RendererFeature::ShaderDialectMsl: return "ShaderDialectMsl";
             case RendererFeature::ShaderDialectWgsl: return "ShaderDialectWgsl";
+            case RendererFeature::Texture3DSampling: return "Texture3DSampling";
+            case RendererFeature::BaseInstanceDrawing: return "BaseInstanceDrawing";
             case RendererFeature::Count: break;
         }
         return "UnknownRendererFeature";
@@ -347,6 +363,11 @@ namespace CNA
                 return "ShaderEffect consumes Metal Shading Language source.";
             case RendererFeature::ShaderDialectWgsl:
                 return "ShaderEffect consumes WebGPU Shading Language source.";
+            case RendererFeature::Texture3DSampling:
+                return "A Texture3D bound to a custom effect is read by that shader, with the "
+                       "slot's SamplerState governing it.";
+            case RendererFeature::BaseInstanceDrawing:
+                return "An instanced indexed draw can begin at a caller-selected logical instance.";
             case RendererFeature::Count: break;
         }
         return "Invalid detailed renderer feature identity.";
@@ -373,6 +394,24 @@ namespace CNA
                 return "MaxComputeWorkGroupInvocations";
             case RendererLimit::MaxVertexShaderStorageBlocks:
                 return "MaxVertexShaderStorageBlocks";
+            case RendererLimit::MaxStorageBufferBytes: return "MaxStorageBufferBytes";
+            case RendererLimit::MaxUniformBufferBytes: return "MaxUniformBufferBytes";
+            case RendererLimit::MaxComputeStorageBufferBindings:
+                return "MaxComputeStorageBufferBindings";
+            case RendererLimit::MaxTextureArrayLayers: return "MaxTextureArrayLayers";
+            case RendererLimit::MaxSampledTexturesPerShaderStage:
+                return "MaxSampledTexturesPerShaderStage";
+            case RendererLimit::MaxStorageImagesPerShaderStage:
+                return "MaxStorageImagesPerShaderStage";
+            case RendererLimit::MaxVertexInputBindings: return "MaxVertexInputBindings";
+            case RendererLimit::MaxVertexInputAttributes: return "MaxVertexInputAttributes";
+            case RendererLimit::MaxColorAttachments: return "MaxColorAttachments";
+            case RendererLimit::MinStorageBufferOffsetAlignment:
+                return "MinStorageBufferOffsetAlignment";
+            case RendererLimit::MinUniformBufferOffsetAlignment:
+                return "MinUniformBufferOffsetAlignment";
+            case RendererLimit::TimestampPeriodPicoseconds:
+                return "TimestampPeriodPicoseconds";
             case RendererLimit::Count: break;
         }
         return "UnknownRendererLimit";

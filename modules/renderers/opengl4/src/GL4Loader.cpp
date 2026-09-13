@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/OpenGL4/GL4Loader.hpp"
 
 #include <cstdio>
+#include <cstring>
 
 namespace CNA::Internal::Renderers::OpenGL4::GL4
 {
@@ -91,6 +92,20 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     PFNGL4DRAWELEMENTSINSTANCEDPROC       gl4_glDrawElementsInstanced       = nullptr;
     PFNGL4VERTEXATTRIBDIVISORPROC         gl4_glVertexAttribDivisor         = nullptr;
 
+    PFNGL4GETSTRINGIPROC                  gl4_glGetStringi                  = nullptr;
+    PFNGL4DISPATCHCOMPUTEPROC             gl4_glDispatchCompute            = nullptr;
+    PFNGL4BINDBUFFERBASEPROC              gl4_glBindBufferBase              = nullptr;
+    PFNGL4GETINTEGERI_VPROC               gl4_glGetIntegeri_v               = nullptr;
+    PFNGL4BINDIMAGETEXTUREPROC            gl4_glBindImageTexture            = nullptr;
+    PFNGL4MEMORYBARRIERPROC               gl4_glMemoryBarrier               = nullptr;
+    PFNGL4DRAWARRAYSINDIRECTPROC          gl4_glDrawArraysIndirect          = nullptr;
+    PFNGL4DRAWELEMENTSINDIRECTPROC        gl4_glDrawElementsIndirect        = nullptr;
+    PFNGL4QUERYCOUNTERPROC                gl4_glQueryCounter                = nullptr;
+    PFNGL4GETQUERYOBJECTUI64VPROC         gl4_glGetQueryObjectui64v         = nullptr;
+    PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC
+        gl4_glDrawElementsInstancedBaseVertexBaseInstance = nullptr;
+    PFNGL4GETINTERNALFORMATIVPROC         gl4_glGetInternalformativ         = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -105,6 +120,145 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
             out = reinterpret_cast<Fn>(p);
             return true;
         }
+
+        template <typename Fn>
+        void ResolveOptional(GetProcAddressFn getProcAddress, const char* name, Fn& out)
+        {
+            out = reinterpret_cast<Fn>(getProcAddress(name));
+        }
+
+        [[nodiscard]] bool VersionAtLeast(const int major, const int minor,
+                                          const int requiredMajor, const int requiredMinor)
+        {
+            return major > requiredMajor ||
+                   (major == requiredMajor && minor >= requiredMinor);
+        }
+
+        [[nodiscard]] bool QueryFloatRenderability(const GLenum internalFormat, bool& supported)
+        {
+            while (glGetError() != GL_NO_ERROR) {}
+            GLint available = GL_FALSE;
+            GLint renderable = GL_NONE;
+            gl4_glGetInternalformativ(GL_TEXTURE_2D, internalFormat,
+                                      GL_INTERNALFORMAT_SUPPORTED, 1, &available);
+            gl4_glGetInternalformativ(GL_TEXTURE_2D, internalFormat,
+                                      GL_FRAMEBUFFER_RENDERABLE, 1, &renderable);
+            if (glGetError() != GL_NO_ERROR)
+                return false;
+            supported = available == GL_TRUE &&
+                        (renderable == GL_FULL_SUPPORT || renderable == GL_CAVEAT_SUPPORT);
+            return true;
+        }
+    }
+
+    ModernCapabilities ClassifyModernCapabilities(const ModernCapabilityInputs& inputs)
+    {
+        ModernCapabilities result;
+        result.contextMajor = inputs.contextMajor;
+        result.contextMinor = inputs.contextMinor;
+
+        const bool core43 = VersionAtLeast(inputs.contextMajor, inputs.contextMinor, 4, 3);
+        result.computeShadersNative =
+            (core43 || inputs.computeShaderExtension) && inputs.computeEntryPoints;
+        result.shaderStorageBuffersNative =
+            (core43 || inputs.shaderStorageBufferExtension) &&
+            inputs.shaderStorageBufferEntryPoints;
+        result.imageLoadStoreNative =
+            (core43 || inputs.imageLoadStoreExtension) && inputs.imageLoadStoreEntryPoints;
+        result.textureArraysNative =
+            (VersionAtLeast(inputs.contextMajor, inputs.contextMinor, 3, 0) ||
+             inputs.textureArrayExtension) && inputs.textureArrayEntryPoints;
+        result.indirectDrawingNative =
+            (VersionAtLeast(inputs.contextMajor, inputs.contextMinor, 4, 0) ||
+             inputs.indirectDrawingExtension) && inputs.indirectDrawingEntryPoints;
+        result.gpuTimersNative =
+            (VersionAtLeast(inputs.contextMajor, inputs.contextMinor, 3, 3) ||
+             inputs.timerQueryExtension) && inputs.timerQueryEntryPoints;
+        result.baseInstanceDrawingNative =
+            (VersionAtLeast(inputs.contextMajor, inputs.contextMinor, 4, 2) ||
+             inputs.baseInstanceExtension) && inputs.baseInstanceEntryPoints;
+        result.internalFormatQueriesNative =
+            (core43 || inputs.internalFormatQuery2Extension) &&
+            inputs.internalFormatQueryEntryPoints;
+        return result;
+    }
+
+    ModernCapabilities DiscoverModernCapabilities(const GetProcAddressFn getProcAddress)
+    {
+        ResolveOptional(getProcAddress, "glGetStringi", gl4_glGetStringi);
+        ResolveOptional(getProcAddress, "glDispatchCompute", gl4_glDispatchCompute);
+        ResolveOptional(getProcAddress, "glBindBufferBase", gl4_glBindBufferBase);
+        ResolveOptional(getProcAddress, "glGetIntegeri_v", gl4_glGetIntegeri_v);
+        ResolveOptional(getProcAddress, "glBindImageTexture", gl4_glBindImageTexture);
+        ResolveOptional(getProcAddress, "glMemoryBarrier", gl4_glMemoryBarrier);
+        ResolveOptional(getProcAddress, "glDrawArraysIndirect", gl4_glDrawArraysIndirect);
+        ResolveOptional(getProcAddress, "glDrawElementsIndirect", gl4_glDrawElementsIndirect);
+        ResolveOptional(getProcAddress, "glQueryCounter", gl4_glQueryCounter);
+        ResolveOptional(getProcAddress, "glGetQueryObjectui64v", gl4_glGetQueryObjectui64v);
+        ResolveOptional(getProcAddress, "glDrawElementsInstancedBaseVertexBaseInstance",
+                        gl4_glDrawElementsInstancedBaseVertexBaseInstance);
+        ResolveOptional(getProcAddress, "glGetInternalformativ", gl4_glGetInternalformativ);
+
+        ModernCapabilityInputs inputs;
+        glGetIntegerv(GL_MAJOR_VERSION, &inputs.contextMajor);
+        glGetIntegerv(GL_MINOR_VERSION, &inputs.contextMinor);
+        if (inputs.contextMajor <= 0)
+        {
+            const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+            if (version != nullptr)
+                std::sscanf(version, "%d.%d", &inputs.contextMajor, &inputs.contextMinor);
+        }
+
+        const auto hasExtension = [](const char* requested) {
+            if (gl4_glGetStringi == nullptr)
+                return false;
+            GLint count = 0;
+            glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+            for (GLint index = 0; index < count; ++index)
+            {
+                const auto* extension = reinterpret_cast<const char*>(
+                    gl4_glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(index)));
+                if (extension != nullptr && std::strcmp(extension, requested) == 0)
+                    return true;
+            }
+            return false;
+        };
+
+        inputs.computeShaderExtension = hasExtension("GL_ARB_compute_shader");
+        inputs.shaderStorageBufferExtension =
+            hasExtension("GL_ARB_shader_storage_buffer_object");
+        inputs.imageLoadStoreExtension = hasExtension("GL_ARB_shader_image_load_store");
+        inputs.textureArrayExtension = hasExtension("GL_EXT_texture_array");
+        inputs.indirectDrawingExtension = hasExtension("GL_ARB_draw_indirect");
+        inputs.timerQueryExtension = hasExtension("GL_ARB_timer_query");
+        inputs.baseInstanceExtension = hasExtension("GL_ARB_base_instance");
+        inputs.internalFormatQuery2Extension = hasExtension("GL_ARB_internalformat_query2");
+
+        inputs.computeEntryPoints = gl4_glDispatchCompute != nullptr;
+        inputs.shaderStorageBufferEntryPoints =
+            gl4_glBindBufferBase != nullptr && gl4_glGetIntegeri_v != nullptr;
+        inputs.imageLoadStoreEntryPoints =
+            gl4_glBindImageTexture != nullptr && gl4_glMemoryBarrier != nullptr;
+        inputs.textureArrayEntryPoints =
+            gl4_glTexImage3D != nullptr && gl4_glTexSubImage3D != nullptr &&
+            gl4_glFramebufferTextureLayer != nullptr;
+        inputs.indirectDrawingEntryPoints =
+            gl4_glDrawArraysIndirect != nullptr && gl4_glDrawElementsIndirect != nullptr;
+        inputs.timerQueryEntryPoints =
+            gl4_glQueryCounter != nullptr && gl4_glGetQueryObjectui64v != nullptr;
+        inputs.baseInstanceEntryPoints =
+            gl4_glDrawElementsInstancedBaseVertexBaseInstance != nullptr;
+        inputs.internalFormatQueryEntryPoints = gl4_glGetInternalformativ != nullptr;
+
+        ModernCapabilities result = ClassifyModernCapabilities(inputs);
+        if (result.internalFormatQueriesNative)
+        {
+            result.rgba16FloatRenderableKnown =
+                QueryFloatRenderability(GL_RGBA16F, result.rgba16FloatRenderable);
+            result.rgba32FloatRenderableKnown =
+                QueryFloatRenderability(GL_RGBA32F, result.rgba32FloatRenderable);
+        }
+        return result;
     }
 
     bool LoadGL4Functions(GetProcAddressFn getProcAddress)

@@ -194,6 +194,14 @@ class Cursor:
             self.fail(f"{what} count {count} is out of range")
         return count
 
+    def u16_be(self) -> int:
+        """An unsigned 16-bit field written most-significant byte first (Xbox 360)."""
+        return struct.unpack(">H", self.take(2))[0]
+
+    def u32_be(self) -> int:
+        """An unsigned 32-bit field written most-significant byte first (Xbox 360)."""
+        return struct.unpack(">I", self.take(4))[0]
+
     def vector3(self):
         return [self.f32(), self.f32(), self.f32()]
 
@@ -664,11 +672,19 @@ def level_byte_size(surface: str, width: int, height: int, depth: int) -> int:
 class Reader:
     """Decodes one object graph, dispatching through the file's reader table."""
 
-    def __init__(self, cursor: Cursor, table, version: int, shared_count: int) -> None:
+    def __init__(self, cursor: Cursor, table, version: int, shared_count: int,
+                 platform: str = "w") -> None:
         self.cursor = cursor
         self.table = table
         self.version = version
         self.shared_count = shared_count
+        self.keep_payloads = False
+        # The Xbox 360 is big-endian, and the one payload in XNA 4.0 that carries multi-byte
+        # fields outside the object graph's own little-endian encoding is the SoundEffect's
+        # WAVEFORMATEX block. Reading it the wrong way round makes a well-formed file look
+        # malformed (measured: audio_wav_soundeffect_xbox360.xnb, whose block only validates its
+        # own cbSize when read big-endian).
+        self.platform = platform
 
     def reader_reference(self, expected=None, optional=False):
         index = self.cursor.seven_bit_int()
@@ -730,12 +746,28 @@ class Reader:
                         f"mip level {level} carries {len(payload)} bytes but {lw}x{lh}x{ld} "
                         f"{surface} needs {expected}")
                 levels.append(payload)
-        return {
+        report = {
             "kind": kind, "surfaceFormat": surface, "width": width, "height": height,
             "depth": depth, "faceCount": faces, "mipCount": mips,
             "levelByteSizes": [len(level) for level in levels],
             "levelDigests": [_digest(level) for level in levels],
         }
+        # A digest says two files differ; it does not say *how*, and for a cube or a volume the
+        # interesting way to be wrong is an ordering one -- faces read in another order, or a depth
+        # collapsed to one slice. So the first texel of each face, and of each slice, is reported
+        # too: it is the smallest thing that tells those apart, and it is what the interoperability
+        # expectations are written against (plans/plan_xnapipeline_parity.md XNAPP-281).
+        if surface == "Color":
+            if kind == "TextureCube":
+                report["size"] = width
+                report["faceFirstTexels"] = [list(level[0:4]) for level in levels[:faces]]
+            elif kind == "Texture3D" and mips >= 1 and levels:
+                sliceBytes = width * height * 4
+                first = levels[0]
+                report["firstTexel"] = list(first[0:4])
+                if depth > 1 and len(first) >= sliceBytes + 4:
+                    report["secondSliceFirstTexel"] = list(first[sliceBytes:sliceBytes + 4])
+        return report
 
     def value_list(self, expected_reader: str, element):
         self.reader_reference(expected_reader)
@@ -771,13 +803,18 @@ class Reader:
         format_length = self.cursor.u32()
         if format_length < 16 or format_length > MAX_STRING_BYTES:
             self.cursor.fail(f"WAVEFORMATEX block length {format_length} is out of range")
+        # The block's own length stays little-endian, as every length in the container is; the
+        # fields inside it follow the target's byte order.
+        big = self.platform == "x"
+        u16 = self.cursor.u16_be if big else self.cursor.u16
+        u32 = self.cursor.u32_be if big else self.cursor.u32
         result = {
-            "formatTag": self.cursor.u16(), "channels": self.cursor.u16(),
-            "sampleRate": self.cursor.u32(), "averageBytesPerSecond": self.cursor.u32(),
-            "blockAlign": self.cursor.u16(), "bitsPerSample": self.cursor.u16(),
+            "formatTag": u16(), "channels": u16(),
+            "sampleRate": u32(), "averageBytesPerSecond": u32(),
+            "blockAlign": u16(), "bitsPerSample": u16(),
         }
         if format_length > 16:
-            declared = self.cursor.u16()
+            declared = u16()
             remaining = format_length - 18
             if remaining < 0:
                 self.cursor.fail("WAVEFORMATEX block is too small for its cbSize field")
@@ -855,8 +892,14 @@ class Reader:
             self.cursor.fail(f"bone count {bone_count} is out of range")
         bones = []
         for _ in range(bone_count):
-            self.reader_reference("Microsoft.Xna.Framework.Content.StringReader")
-            bones.append({"name": self.cursor.string(), "transform": self.cursor.matrix()})
+            # A bone's name is written as an object, and XNA writes it null when the source node
+            # had no name -- a `.x` file's unnamed root frame is the ordinary case, not a corner
+            # one (measured: tests/reference/xna40/differential/model_x_bare_mesh.xnb, whose bone 0
+            # carries a null name while every bone of model_x_hierarchy.xnb is named).
+            named = self.reader_reference(
+                "Microsoft.Xna.Framework.Content.StringReader", optional=True)
+            bones.append({"name": self.cursor.string() if named is not None else None,
+                          "transform": self.cursor.matrix()})
         for bone in bones:
             bone["parent"] = self.bone_reference(bone_count)
             children = self.cursor.u32()
@@ -866,9 +909,10 @@ class Reader:
 
         meshes = []
         for _ in range(self.cursor.collection_count("meshes")):
-            self.reader_reference("Microsoft.Xna.Framework.Content.StringReader")
+            named = self.reader_reference(
+                "Microsoft.Xna.Framework.Content.StringReader", optional=True)
             mesh = {
-                "name": self.cursor.string(),
+                "name": self.cursor.string() if named is not None else None,
                 "parentBone": self.bone_reference(bone_count),
                 "boundingSphere": [self.cursor.f32() for _ in range(4)],
             }
@@ -945,16 +989,26 @@ class Reader:
             declaration = self.vertex_declaration()
             count = self.cursor.u32()
             payload = self.cursor.take(count * declaration["stride"])
-            return {"reader": name, "declaration": declaration, "vertexCount": count,
-                    "byteCount": len(payload), "digest": _digest(payload)}
+            record = {"reader": name, "declaration": declaration, "vertexCount": count,
+                      "byteCount": len(payload), "digest": _digest(payload)}
+            # Opt-in, because a payload is not a measurement and every comparison of two parses
+            # would otherwise be comparing megabytes. A caller that has already found two digests
+            # differing asks for them to read what actually differs
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-210`).
+            if self.keep_payloads:
+                record["payload"] = payload
+            return record
         if name == "Microsoft.Xna.Framework.Content.IndexBufferReader":
             sixteen = self.cursor.boolean()
             payload = self.cursor.blob()
             width = 2 if sixteen else 4
             if len(payload) % width != 0:
                 self.cursor.fail("index payload is not a whole number of indices")
-            return {"reader": name, "indexElementSize": width,
-                    "indexCount": len(payload) // width, "digest": _digest(payload)}
+            record = {"reader": name, "indexElementSize": width,
+                      "indexCount": len(payload) // width, "digest": _digest(payload)}
+            if self.keep_payloads:
+                record["payload"] = payload
+            return record
         if name == "Microsoft.Xna.Framework.Content.BasicEffectReader":
             return {"reader": name, "texture": self.cursor.string(),
                     "diffuse": self.cursor.vector3(), "emissive": self.cursor.vector3(),
@@ -1040,6 +1094,8 @@ class Reader:
             return {"bytecodeByteCount": len(payload), "digest": _digest(payload)}
         if name.startswith("Microsoft.Xna.Framework.Content.ListReader`1[["):
             return self.generic_list(name)
+        if name.startswith("Microsoft.Xna.Framework.Content.DictionaryReader`2[["):
+            return self.generic_dictionary(name)
         raise XnbError(f"{self.cursor.origin}: no decoder for root reader '{name}'")
 
     def generic_list(self, name: str):
@@ -1054,6 +1110,29 @@ class Reader:
                     argument.rsplit(".", 1)[-1] + "Reader")
             items.append(self.value_of(argument))
         return items
+
+    def generic_dictionary(self, name: str):
+        """``Dictionary<TKey,TValue>``: a count, then that many key/value pairs.
+
+        Entries come back sorted by key, because .NET's own ``Dictionary<,>`` promises no order
+        and two writers that disagree about it have not disagreed about the content.
+        """
+        inner = name[len("Microsoft.Xna.Framework.Content.DictionaryReader`2[["):-2]
+        key_type, value_type = [part.strip() for part in inner.split("],[", 1)]
+        count = self.cursor.collection_count("dictionary")
+        entries = []
+        for _ in range(count):
+            key = self.element(key_type)
+            entries.append((key, self.element(value_type)))
+        entries.sort(key=lambda pair: repr(pair[0]))
+        return [{"key": key, "value": value} for key, value in entries]
+
+    def element(self, type_name: str):
+        """One collection element: a reference type is preceded by its own reader reference."""
+        if type_name in ("System.String", "System.Object"):
+            self.reader_reference(
+                "Microsoft.Xna.Framework.Content." + type_name.rsplit(".", 1)[-1] + "Reader")
+        return self.value_of(type_name)
 
     def value_of(self, type_name: str):
         decoders = {
@@ -1077,8 +1156,15 @@ def _digest(data: bytes) -> str:
     return f"{value:016x}"
 
 
-def parse(path: str) -> dict:
-    """Parses one `.xnb` file completely and returns a structured report."""
+def parse(path: str, keep_payloads: bool = False) -> dict:
+    """Parses one `.xnb` file completely and returns a structured report.
+
+    @param path The container to read.
+    @param keep_payloads Keeps each vertex and index buffer's raw bytes in its record under
+           `payload`, so a caller that has found two digests differing can read what differs.
+           Off by default: a payload is not a measurement, and carrying one makes every
+           comparison of two reports compare megabytes.
+    """
     size = os.path.getsize(path)
     if size > MAX_FILE_BYTES:
         raise XnbError(f"{path}: {size} bytes exceeds this parser's ceiling")
@@ -1167,7 +1253,8 @@ def parse(path: str) -> dict:
         raise XnbError(f"{path}: shared-resource count {shared_count} is out of range")
     report["sharedResourceCount"] = shared_count
 
-    reader = Reader(cursor, table, version, shared_count)
+    reader = Reader(cursor, table, version, shared_count, platform)
+    reader.keep_payloads = keep_payloads
     root_entry = reader.reader_reference()
     report["rootReader"] = root_entry["canonical"]
     report["root"] = reader.root(root_entry)

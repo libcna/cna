@@ -267,7 +267,7 @@ jobs:
       # DX-90/DX-114's own "shader-generation check" -- only needs to run once (the HLSL sources
       # and hlsl_compiler_tool.cpp are shared D3DCommon content, not renderer-specific), so gated to
       # the D3D11 matrix leg to avoid doing it twice.
-      - name: Verify all 20 HLSL shaders against a real D3DCOMPILER_47.dll
+      - name: Verify every checked-in HLSL shader against a real D3DCOMPILER_47.dll
         if: matrix.renderer == 'DIRECTX11'
         working-directory: cna_graphics
         run: python scripts/verify_hlsl_shaders_native_msvc.py

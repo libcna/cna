@@ -21,23 +21,46 @@ re-measured.
 ## What this plan is not
 
 It is not a list of places where CNA differs from Microsoft XNA. Several of the strongest
-binding findings are exactly that, and they are **decisions for the project owner rather
-than defects**, because `CLAUDE.md` makes FNA the authoritative behavioural reference and
-CNA matches FNA faithfully in each case:
+binding findings were exactly that, and they were recorded here as **decisions for the
+project owner rather than defects**, because `CLAUDE.md` then made FNA the authoritative
+behavioural reference and CNA matched FNA faithfully in each case.
 
-- **`GraphicsAdapter::getIsWideScreenProperty()`** compares the aspect ratio against
-  `4.0f / 3.0f`. `cna-ruby` read the pinned XNA IL and found `1.6f`. CNA's implementation
-  is a byte-for-byte match of `FNA/src/Graphics/GraphicsAdapter.cs:71-83`, comment
-  included. Every mode between 1.334 and 1.6 is reported widescreen by CNA and not by XNA,
-  and 16:10 by CNA and not by XNA's strict `>`.
-- **`Microphone::setBufferDurationProperty()`** reads `getMillisecondsProperty()`, the
-  sub-second component, so the documented `> 1000` branch is unreachable and
-  `set(get())` fails at 1000 ms. That is `FNA/src/Audio/Microphone.cs:57-60` exactly,
-  `value.Milliseconds` and all. XNA's IL reads `get_TotalMilliseconds`. CNA's own comment
-  already records the unreachable branch.
-- **`SoundEffectInstance::Apply3D`** refusing more than one listener, which
-  `_bindings/fixcna-analysis.md` §2 already identified as a scope decision rather than a
-  bug for the same reason.
+**All four are now closed, in CNA's favour of XNA.** The owner made XNA the tie-break on
+2026-09-04 and restated it on 2026-09-09 — *CNA should follow XNA faithfully, and FNA only
+after it*. This section is kept because the reasoning is worth having, not because anything
+here is open.
+
+| divergence | what it was | closed by |
+|---|---|---|
+| `GraphicsAdapter::getIsWideScreenProperty()` | compared the aspect ratio against FNA's `4.0f/3.0f` (`FNA/src/Graphics/GraphicsAdapter.cs:71-83`, comment included); `cna-ruby` read the pinned XNA IL and found `1.6f`. Every mode between them — 3:2, 14:9 — was widescreen to FNA and is not to XNA, and 16:10 sits exactly on XNA's strictly-greater limit | `fb62662c9`, 2026-09-04 (`BINDFIX-033`) |
+| `Microphone::setBufferDurationProperty()` | read `getMillisecondsProperty()`, the sub-second component, exactly as `FNA/src/Audio/Microphone.cs:57-60` does. That made the documented `> 1000` branch unreachable and refused 1000 ms — the value the property itself *reports* on an unconfigured microphone, so `mic.BufferDuration = mic.BufferDuration` threw, while 1100, 1500 and 2500 ms were accepted. XNA's IL reads `get_TotalMilliseconds` | `fb62662c9`, 2026-09-04 (`BINDFIX-032`) |
+| `SoundEffectInstance::Apply3D` | refused any listener count but one, as FNA does. XNA copies every listener into a native array and hands XACT the whole thing; there is no count restriction in `UnsafeApply3D` | `0345f2471`, 2026-08-26 (`CABI-6`) |
+| `Microphone::All` / `Default` | carried a synthetic `"Default Device"` entry that FNA prepends (`SDL3_FNAPlatform.cs:1699,1707`) and XNA does not have, so `Default` was not a real device and `All` was one longer than the machine's device list | `30bd6cf60`, 2026-09-09 |
+
+The fourth was found by the sample campaign rather than by a binding, and is the only one
+backed by a side-by-side capture of both runtimes on this machine rather than by reading
+IL: SAMPLE-098's whole HUD is `Microphone.Name`, and the unchanged XNA executable drew
+`PulseAudio Input is Stopped` where CNA drew `Default Device is Stopped`.
+
+**A note for whoever reads this next.** On 2026-09-09 the first three were reported to the
+owner as still open, on the strength of the prose that used to stand here, without being
+re-measured against the tree. All three had been fixed weeks or days earlier. That is the
+mistake this document's own header warns about — *"every row must be re-measured before it
+is worked on"* — so the rows above now name the commit that closed each one, and the
+behaviours are pinned by tests rather than only by comments:
+
+- `GraphicsAdapterTest.IsWideScreenUsesXnasLimitOfOnePointSixExclusive` — the property
+  reads whatever display the host has, so it could never pin the constant; the rule is now
+  reachable through `GraphicsAdapter::IsWideScreenAspectRatioEXT` and asserted on both
+  sides of 1.6, including 16:10 sitting exactly on it.
+- `MicrophoneTest.BufferDurationUsesTotalMillisecondsAsXnaDoes` — `set(get())` at 1000 ms,
+  and the three values FNA's reading wrongly accepted.
+- `SoundEffectInstanceTest.Apply3DArrayOverload` and
+  `Apply3DMultiListenerNearestListenerDominates` already pinned the third, and the second
+  of those is written so that a "listeners[0] decides" implementation fails it.
+- `MicrophoneTest.AllContainsOnlyRealDevicesWithNoInventedDefaultEntry` and
+  `Sdl3AudioRecordingDeviceTests.ProviderEnumeratesOnlyRealDevicesSortedById` for the
+  fourth.
 - **Display modes carrying a hardcoded `SurfaceFormat::Color`**, which `cna-ruby` and
   `cna-swift` both recorded. `SurfaceFormat.Color // FIXME: Assumption!` is what FNA writes,
   four times over, in `SDL3_FNAPlatform.cs` and `SDL2_FNAPlatform.cs`.
@@ -51,6 +74,60 @@ CNA matches FNA faithfully in each case:
 Each of these is a real observable divergence from XNA that a binding has measured and
 pinned. Fixing them means deciding that XNA's IL outranks FNA where the two disagree,
 which is a change to the project's governing rule and not a change to a function.
+
+That rule has since been decided: `CLAUDE.md` now makes XNA the tie-break where a measured
+Microsoft XNA 4.0 behaviour and FNA's implementation disagree, and requires each divergence
+taken on those grounds to be recorded here. The rows above are still owner decisions, because
+none of them has been re-measured against the runtime itself; **XNAPACK-001** below is the first
+one that has.
+
+---
+
+## XNAPACK-001 — every float channel XNA packs is rounded, ties to even, and CNA truncated
+
+**Fixed 2026-09-05** in `modules/math/src/Color.cpp`, the fourteen headers under
+`modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/` that turn a float
+channel into an integer one (the three half-float types have no rounding rule of their own),
+and the new shared helper `modules/core/include/CNA/Internal/PackedRounding.hpp`.
+
+Measured on the XNA 4.0 runtime itself, not read from anyone's source: the driver is
+`tools/xna-pipeline-oracle/framework/FrameworkPackingOracle.cs`, run by
+`run-framework-oracle.sh` under Wine against the installed XNA Game Studio 4.0 assemblies, and
+its 68 measurements are committed as
+`tests/reference/xna40/framework/framework-packing-oracle.json`. CNA reproduces all of them in
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/PackedVector/XnaFrameworkPackingTests.cpp`,
+which also fails if a measured case gains no reproduction.
+
+The rule XNA follows, everywhere a float channel becomes an integer one:
+
+| finding | source | repro |
+|---|---|---|
+| `Color(Vector4)` rounds; it does not truncate | `color/vector4_quarters` | `new Color(new Vector4(0.25f, 0.5f, 0.75f, 1))` is `{64, 128, 191, 255}`; CNA gave `{63, 127, 191, 255}` |
+| the tie goes to the even neighbour, not away from zero | `color/vector4_tie_even`, `packed/Byte4/ties` | `126.5, 127.5, 128.5, 129.5` byte units pack as `126, 128, 128, 130`; `new Byte4(0.5f, 1.5f, 2.5f, 3.5f)` is `0x04020200` |
+| the same rule holds for the normalized types, which CNA rounded away from zero (`std::lroundf`) | `packed/NormalizedByte4/ties`, `packed/NormalizedShort4/ties` | `0.5f/127, 1.5f/127, 2.5f/127, 3.5f/127` packs as `0, 2, 2, 4` |
+| and for the colour layouts, which CNA rounded with `+ 0.5f` then truncated | `packed/Alpha8/ties`, `packed/Bgr565/ties`, `packed/Rg32/ties`, `packed/Rgba1010102/ties` | `new Alpha8(0.5f/255)` is `0x00`, not `0x01` |
+| `Color.PackFromVector4` saturates and rounds exactly like the constructor | `color/packfromvector4_out_of_range` | `(2, -1, 0.5, 1)` packs as `{255, 0, 128, 255}`; CNA wrapped to `{254, 1, 127, 255}` |
+| a NaN channel packs as 0, and the infinities saturate | `color/vector4_nan`, `packed/Byte4/nan_and_infinities` | `new Byte4(NaN, +inf, -inf, 1e30f)` is `0xFF00FF00` |
+| `Color.Lerp` and `Color.Multiply` are the exception: they truncate, and `Lerp` clamps its amount | `color/lerp_half`, `color/multiply_odd_ties`, `color/lerp_amount_above_one` | `Lerp(black, white, 0.5f)` is `127`, not `128` |
+
+FNA truncates in the constructors (`R = (byte) MathHelper.Clamp(color.X * 255, Byte.MinValue,
+Byte.MaxValue);`, `Color.cs`) and neither clamps nor rounds in `PackFromVector4`, which is what
+CNA reproduced and what `REMED-CORE-004` pinned. XNA wins, so those pins were rewritten against
+the measurements rather than deleted.
+
+Two consequences worth naming. The old `+ 0.5f then cast` and `std::clamp` paths let a NaN
+channel reach an integer cast, which is undefined behaviour in C++ where C# merely leaves the
+value unspecified; the shared helper closes that for every type at once. And the change is
+visible in output, not only in edge cases: it is what made the content pipeline's
+`VectorConverter` tables agree with XNA
+(`plans/plan_xnapipeline_parity.md` XNAPP-090..092).
+
+**Still open, measured in the same pass:** XNA's packed-vector structs all override `ToString()`
+to print their packed value as hex (`packed/Byte4/tostring` is `04030201`,
+`packed/Short2/tostring` is `00020001`). CNA implements `ToString()` on none of the seventeen
+types. That is a missing member of the XNA surface rather than a packing difference, so it is
+recorded here and left to the graphics module's own parity work; the two cases are listed as
+unreproduced in the test above rather than silently skipped.
 
 ---
 

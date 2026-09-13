@@ -82,7 +82,7 @@ namespace
 
 class DepthStencilStateCompareFunctionTest : public Game
 {
-    std::unique_ptr<GraphicsDeviceManager> graphics_;
+    GraphicsDeviceManager graphics_{this};
     bool done_   = false;
     int  result_ = 1;
 
@@ -164,9 +164,8 @@ protected:
 public:
     DepthStencilStateCompareFunctionTest()
     {
-        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
-        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
-        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+        graphics_.setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        graphics_.setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
     }
 
     int getResult() const { return result_; }

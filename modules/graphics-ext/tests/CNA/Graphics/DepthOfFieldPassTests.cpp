@@ -200,7 +200,8 @@ TEST(DepthOfFieldTest, TheFocusedHalfKeepsItsDetailAndTheOtherLosesIt)
     // lens on the near half, the near checkerboard keeps its contrast and the far one loses it.
     GraphicsDevice gd;
     DepthOfFieldPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeSplitDepth(gd);
@@ -237,7 +238,8 @@ TEST(DepthOfFieldTest, MovingTheFocusMovesWhichHalfIsSharp)
     // being misread -- this fails.
     GraphicsDevice gd;
     DepthOfFieldPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeSplitDepth(gd);
@@ -274,7 +276,8 @@ TEST(DepthOfFieldTest, AFocusedSubjectDoesNotSmearIntoTheBlurredHalf)
     // step and asks whether they still look like their own half.
     GraphicsDevice gd;
     DepthOfFieldPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth = MakeSplitDepth(gd);
@@ -315,7 +318,8 @@ TEST(DepthOfFieldTest, TheShaderMatchesTheCpuReference)
     // radius. If that point is where the CPU formula says it is, the two agree.
     GraphicsDevice gd;
     DepthOfFieldPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeSplitDepth(gd);
@@ -362,7 +366,8 @@ TEST(DepthOfFieldTest, TheSettingsBagWinsOverThePassLocalDefaults)
     // applied a preset is not overruled by a default nobody set.
     GraphicsDevice gd;
     DepthOfFieldPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeSplitDepth(gd);

@@ -9803,7 +9803,8 @@ namespace CNA::TestSupport
             // bound, and its whole job is to differ from the primary program's output colour.
             const std::vector<std::uint8_t> alternate = BuildSyntheticPixelShader(
                 options.samplerRegister, /*breakSymbolBinding=*/false, /*includeSampler=*/false,
-                /*samplesTexture=*/false, /*swizzleTint=*/true);
+                /*samplesTexture=*/false, /*swizzleTint=*/true,
+                SyntheticSamplerKind::Sampler2D, options.pixelShaderWritesMrt);
             AppendUInt32(bytes, altPixelShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(alternate.size()));
             bytes.insert(bytes.end(), alternate.begin(), alternate.end());
@@ -9852,6 +9853,19 @@ namespace CNA::TestSupport
         options.includeDrawableProgram = true;
         options.pixelShaderWritesMrt = true;
         return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief SDLGPU-75 fixture whose ordinary compiled pixel shader writes distinct MRT outputs.
+     *
+     * `StatePass` writes `Tint` to `oC0` and `Tint.yzxw` to `oC1`; unlike ShaderEffect this uses
+     * the XNA Effect Framework bytecode path exposed by the ordinary `Effect` constructor.
+     *
+     * @return The complete effect bytecode.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticMrtDrawableEffect()
+    {
+        return BuildSyntheticMrtEffect();
     }
 
     /**

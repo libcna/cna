@@ -4,9 +4,11 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 
 namespace CNA::Content::Pipeline
 {
@@ -43,8 +45,82 @@ namespace CNA::Content::Pipeline
          */
         std::filesystem::path effectCompilerLauncher;
 
-        /** @brief Compares both fields. */
-        bool operator==(const ContentCompilerOptions& other) const = default;
+        /**
+         * @brief Explicit XMA encoder executable, or empty for none.
+         *
+         * Discovery order, first hit wins: this field; the `CNA_XMA_ENCODER` environment variable;
+         * the path baked in by CMake's `CNA_XMA_ENCODER_EXECUTABLE`. There is deliberately no
+         * search of `PATH` -- an encoder for the Xbox 360's codec is something a user attaches on
+         * purpose (plans/plan_xnapipeline_parity.md `XNAPP-262`).
+         */
+        std::filesystem::path xmaEncoderExecutable;
+
+        /**
+         * @brief Program to run the XMA encoder *through* (`wine`), or empty to run it directly.
+         *
+         * Discovery order matches @ref xmaEncoderExecutable: this field, then
+         * `CNA_XMA_ENCODER_LAUNCHER`, then CMake's `CNA_XMA_ENCODER_LAUNCHER`.
+         */
+        std::filesystem::path xmaEncoderLauncher;
+
+        /**
+         * @brief The encoder's argument template, or empty for `{input} {output}`.
+         *
+         * Each entry is one argument, with `{input}`, `{output}`, `{quality}`, `{loopStart}` and
+         * `{loopLength}` substituted.
+         */
+        std::vector<std::string> xmaEncoderArguments;
+
+        /**
+         * @brief Directories added to the `.spritefont` font search, ahead of the platform's own.
+         *
+         * `<FontName>` names a font *family*, which XNA resolves through Windows. A build machine
+         * that is not the artist's has neither those families installed nor any way to say where
+         * they are, so this is that way; `CNA_FONT_PATH` in the environment says the same thing
+         * and is read after these (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+         */
+        std::vector<std::filesystem::path> fontDirectories;
+
+        /**
+         * @brief The build configuration, as MSBuild's `$(Configuration)`.
+         *
+         * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows it, so it decides
+         * whether an effect that names no debug mode is compiled with debug information and
+         * without optimization (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         */
+        std::string buildConfiguration = "Release";
+
+        /**
+         * @brief The container options this invocation selected.
+         *
+         * Informational, and the reason it exists is a third party's writers. A caller's registry
+         * factory can register writers of its own -- `RegisterXnaXnbOutput` does exactly that for
+         * an XNA-shaped route -- and those writers have to be bound to the same platform, version,
+         * profile and compression the built-in ones are, or a `--xnb-platform windowsphone` build
+         * silently produces a project where the game's own types went to a Windows container and
+         * everything else did not. The coordinator fills this in before calling the factory
+         * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+         */
+        CNA::Internal::Xnb::XnbFileOptions xnbContainer{};
+
+        /**
+         * @brief Compares the two build-time *services* a factory has to construct.
+         *
+         * Deliberately not the container options: those are something the coordinator applies to
+         * its own writers whatever the factory did, so a registry that was built before this
+         * command line existed is still usable with them. What such a registry cannot apply is an
+         * effect compiler or an XMA encoder, and that is what the inequality is asked about.
+         */
+        bool operator==(const ContentCompilerOptions& other) const
+        {
+            return effectCompilerExecutable == other.effectCompilerExecutable &&
+                   effectCompilerLauncher == other.effectCompilerLauncher &&
+                   xmaEncoderExecutable == other.xmaEncoderExecutable &&
+                   xmaEncoderLauncher == other.xmaEncoderLauncher &&
+                   xmaEncoderArguments == other.xmaEncoderArguments &&
+                   fontDirectories == other.fontDirectories &&
+                   buildConfiguration == other.buildConfiguration;
+        }
     };
 
     /**

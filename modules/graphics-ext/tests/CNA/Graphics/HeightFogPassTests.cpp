@@ -75,12 +75,13 @@ std::unique_ptr<RenderTarget2D> MakeSplitDepth(GraphicsDevice& gd, const float n
     });
 }
 
-PostProcessContext MakeContext(RenderTarget2D& source, RenderTarget2D& destination)
+PostProcessContext MakeContext(RenderTarget2D& source, RenderTarget2D& destination,
+                               const float cameraHeight = 2.0f)
 {
     const Matrix projection =
         Matrix::CreatePerspectiveFieldOfView(0.7853982f, 1.0f, 1.0f, kFarPlane);
-    const Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 2.0f, 0.0f),
-                                             Vector3(0.0f, 2.0f, -1.0f), Vector3::Up);
+    const Matrix view = Matrix::CreateLookAt(Vector3(0.0f, cameraHeight, 0.0f),
+                                             Vector3(0.0f, cameraHeight, -1.0f), Vector3::Up);
     PostProcessContext context;
     context.source            = &source;
     context.destination       = &destination;
@@ -153,7 +154,8 @@ TEST(HeightFogTest, TheFurtherHalfOfTheFrameIsFoggedMore)
 {
     GraphicsDevice gd;
     HeightFogPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable height-fog shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeSplitDepth(gd, 5.0f, 80.0f);
@@ -174,6 +176,36 @@ TEST(HeightFogTest, TheFurtherHalfOfTheFrameIsFoggedMore)
     EXPECT_GT(farHalf, nearHalf + 20)
         << "distance did not thicken the fog: near " << nearHalf << ", far " << farHalf;
     EXPECT_GT(farHalf, 20) << "the far half was not fogged at all";
+}
+
+TEST(HeightFogTest, RaisingTheCameraAboveTheLayerReducesFog)
+{
+    GraphicsDevice gd;
+    HeightFogPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable height-fog shader package";
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth = MakeSplitDepth(gd, 50.0f, 50.0f);
+    auto source = MakeImage(gd, [](int, int) { return Color(20, 20, 20, 255); });
+    RenderTarget2D destination(gd, kSize, kSize);
+    pass.setColor(Vector3(1.0f, 1.0f, 1.0f));
+    pass.setDensity(0.08f);
+    pass.setFalloff(0.2f);
+
+    PostProcessContext lowContext = MakeContext(*source, destination, 0.0f);
+    lowContext.sourceDepth = depth.get();
+    pass.apply(lowContext);
+    const int low = ReadTarget(destination)[Centre(kSize / 2)].getRProperty();
+
+    PostProcessContext highContext = MakeContext(*source, destination, 20.0f);
+    highContext.sourceDepth = depth.get();
+    pass.apply(highContext);
+    const int high = ReadTarget(destination)[Centre(kSize / 2)].getRProperty();
+
+    EXPECT_GT(low, high + 100)
+        << "the inverse-view matrix did not move the camera out of the fog layer: low "
+        << low << ", high " << high;
 }
 
 TEST(HeightFogTest, ZeroDensityLeavesTheFrameAlone)

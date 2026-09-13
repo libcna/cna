@@ -222,7 +222,9 @@ namespace Microsoft::Xna::Framework
         /**
          * @brief Returns a string representation of all 16 fields.
          *
-         * @return String representation of this matrix.
+         * @return `{ {M11:… M12:… M13:… M14:…} {M21:…} {M31:…} {M41:…} }`, which is the form the
+         *         genuine XNA `Matrix` answers -- four brace-wrapped rows inside one more pair,
+         *         with a space after the opening brace and before the closing one.
          */
         [[nodiscard]] std::string ToString() const;
 

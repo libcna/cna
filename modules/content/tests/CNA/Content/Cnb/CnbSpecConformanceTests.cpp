@@ -153,7 +153,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     ExpectSpecContains(spec,
                        "That does not make a compressed file inspectable without the codec.");
     ExpectSpecContains(spec, "| 5 | `Model` | **versions 1 and 2**");
-    ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 1**");
+    ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 2**");
     ExpectSpecContains(spec, "| 9 | `Song` | **version 1**");
     ExpectSpecContains(spec, "| 10 | `Video` | **version 1**");
     ExpectSpecContains(spec, "| 6 | `AnimationClip` | **version 1**");

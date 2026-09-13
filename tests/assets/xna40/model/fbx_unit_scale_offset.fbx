@@ -1,0 +1,90 @@
+; FBX 6.1.0 project file
+; Written by tools/xna-pipeline-oracle/model/make_fbx_fixtures.py for this repository.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+Definitions:  {
+	Version: 100
+	Count: 2
+	ObjectType: "Model" {
+		Count: 1
+	}
+	ObjectType: "Material" {
+		Count: 0
+	}
+	ObjectType: "Deformer" {
+		Count: 0
+	}
+	ObjectType: "GlobalSettings" {
+		Count: 1
+	}
+}
+
+Objects:  {
+	Model: "Model::UnitOffset", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",0.01,0.01,0.01
+			Property: "ScalingPivot", "Vector3D", "",0,0,0
+			Property: "ScalingOffset", "Vector3D", "",7,8,9
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: 0,0,0,10,0,0,0,10,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+	}
+	GlobalSettings:  {
+		Version: 1000
+		Properties60:  {
+			Property: "UpAxis", "int", "",1
+			Property: "UpAxisSign", "int", "",1
+			Property: "FrontAxis", "int", "",2
+			Property: "FrontAxisSign", "int", "",1
+			Property: "CoordAxis", "int", "",0
+			Property: "CoordAxisSign", "int", "",1
+			Property: "UnitScaleFactor", "double", "",100
+		}
+	}
+}
+
+Relations:  {
+	Model: "Model::UnitOffset", "Mesh" {
+	}
+}
+
+Connections:  {
+	Connect: "OO", "Model::UnitOffset", "Model::Scene"
+}
+
+Takes:  {
+	Current: ""
+}
+
+Version5:  {
+	AmbientRenderSettings:  {
+		Version: 101
+		AmbientLightColor: 0,0,0,0
+	}
+}

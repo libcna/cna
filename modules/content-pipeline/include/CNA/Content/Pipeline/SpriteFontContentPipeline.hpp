@@ -127,8 +127,65 @@ namespace CNA::Content::Pipeline
      * @throws std::runtime_error when the font cannot be opened, a glyph is missing, the atlas
      *         would exceed the maximum texture size, or this build has no rasterizer.
      */
+    /**
+     * @brief Searches the font directories for a family, then for a file of that name.
+     *
+     * `<FontName>` is a font *family* name -- XNA resolves it through Windows -- and the family is
+     * looked for first, by reading each candidate's own family table and choosing the face whose
+     * style answers @p style. The file-name match remains as the fallback, and is all a build with
+     * no rasterizer can do.
+     *
+     * @param fontName The font name as authored.
+     * @param style The style the description asked for.
+     * @return The chosen path in a deterministic walk, or an empty path.
+     */
+    [[nodiscard]] std::filesystem::path FindSystemFontFile(
+        const std::string& fontName, FontDescriptionStyle style = FontDescriptionStyle::Regular);
+
+    /**
+     * @brief Looks for a font family among the font files directly inside one directory.
+     *
+     * @param directory The directory to look in; not searched recursively.
+     * @param fontName The family name as authored.
+     * @param style The style the description asked for.
+     * @return The chosen path, or an empty path.
+     */
+    [[nodiscard]] std::filesystem::path FindFontFamilyBeside(
+        const std::filesystem::path& directory, const std::string& fontName,
+        FontDescriptionStyle style = FontDescriptionStyle::Regular);
+
+    /**
+     * @brief Sets the directories a build adds to the font search, ahead of the platform's own.
+     *
+     * A game whose fonts ship with it rather than being installed -- which is every game built on
+     * a machine that is not the artist's -- needs a way to say where they are. `CNA_FONT_PATH` in
+     * the environment says the same thing, and is read after these.
+     *
+     * @param directories The directories, in the order they are to be searched.
+     */
+    void SetFontSearchDirectoriesEXT(std::vector<std::filesystem::path> directories);
+
+    /** @brief The directories a build added to the font search. */
+    [[nodiscard]] const std::vector<std::filesystem::path>& FontSearchDirectoriesEXT() noexcept;
+
+    /**
+     * @brief Rasterizes a resolved font description into a sprite-font atlas.
+     *
+     * @param description The description, with its font file already resolved.
+     * @param warnings Receives every warning the rasterization produced.
+     * @param strictness Whether a character the font has no glyph for refuses the build or is
+     *        drawn with the font's own `.notdef` and warned about, which is what XNA does
+     *        (plans/plan_xnapipeline_parity.md XNAPP-267).
+     * @param profile The graphics profile the atlas must suit: Reach rounds its height up to a
+     *        power of two, HiDef up to four (measured, plans/plan_xna_sample_xnb_sweep.md
+     *        XNASWEEP-104).
+     * @return The atlas and its glyph table.
+     */
     [[nodiscard]] Cnb::CnbSpriteFontData RasterizeFontDescription(
-        const FontDescription& description, std::vector<std::string>& warnings);
+        const FontDescription& description, std::vector<std::string>& warnings,
+        ContentStrictness strictness = ContentStrictness::Strict,
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile profile =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach);
 
     /** @brief Reads a `.spritefont` and resolves the font file it names. */
     class FontDescriptionImporter final : public ContentImporter
@@ -180,6 +237,77 @@ namespace CNA::Content::Pipeline
          *
          * @param input FontDescription value.
          * @param context Call-scoped processor context, used to report approximations.
+         * @return Canonical CnbSpriteFontData boxed as ProcessedSpriteFontType.
+         */
+        [[nodiscard]] ContentValue Process(const ContentValue& input,
+                                           ContentProcessorContext& context) const override;
+    };
+
+    /**
+     * @brief The character the first glyph of a font sheet is; `FontTextureProcessor`'s own
+     *        `FirstCharacter`, whose XNA default is the space.
+     */
+    inline constexpr const char* FontTextureFirstCharacterParameter = "firstCharacter";
+
+    /**
+     * @brief Builds a sprite font out of a sheet of glyph images.
+     *
+     * XNA's `FontTextureProcessor` reads a texture whose glyphs are separated by **magenta**
+     * (255, 0, 255) -- measured, and it is that colour and not the sheet's own top-left texel: a
+     * sheet bordered in transparent black is refused with the same sentence an empty one is. Each
+     * non-magenta rectangle is one glyph, taken in reading order, and the characters run
+     * consecutively from `firstCharacter`. Everything else follows from the glyphs: the line
+     * spacing is the tallest of them, the spacing is zero, each cropping rectangle is the glyph's
+     * own size at the origin, and each kerning triple is `(0, width, 0)` -- all four measured from
+     * genuine builds of three sheets (`tools/xna-pipeline-oracle/differential/fonttexture.json`,
+     * plans/plan_xnapipeline_parity.md `XNAPP-139`).
+     *
+     * @param width Sheet width in texels.
+     * @param height Sheet height in texels.
+     * @param rgba Sheet pixels, R, G, B, A per texel.
+     * @param firstCharacter The character the first glyph is.
+     * @param origin Path named in a refusal.
+     * @param profile The graphics profile the atlas must suit: Reach rounds its height up to a
+     *        power of two, HiDef to a multiple of four.
+     * @return The packed font.
+     * @throws InvalidContentException when the sheet holds no glyph, in XNA's own words.
+     */
+    [[nodiscard]] Cnb::CnbSpriteFontData BuildFontFromTextureSheet(
+        std::uint32_t width, std::uint32_t height, const std::vector<std::uint8_t>& rgba,
+        SharpRuntime::charcs firstCharacter, const std::string& origin,
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile profile =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach);
+
+    /**
+     * @brief Turns a sheet of glyph images into canonical SpriteFont data.
+     *
+     * Registered against the same imported type the texture route takes, and
+     * @ref ContentProcessor::SelectedByNameOnly so it never competes with it: a `.png` builds as a
+     * texture unless a project names this processor, which is exactly what XNA does.
+     */
+    class FontTextureProcessor final : public ContentProcessor
+    {
+    public:
+        /** @brief Returns the stable built-in processor identity. */
+        [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /** @brief Returns ImportedImageType. */
+        [[nodiscard]] std::string InputType() const override;
+
+        /** @brief Returns ProcessedSpriteFontType. */
+        [[nodiscard]] std::string OutputType() const override;
+
+        /** @brief Accepts `firstCharacter`, `premultiplyAlpha` and `textureFormat`. */
+        void ValidateParameters(const ContentProcessorParameters& parameters) const override;
+
+        /** @brief Never chosen for an imported image unless a build names it. */
+        [[nodiscard]] bool SelectedByNameOnly() const override { return true; }
+
+        /**
+         * @brief Finds the glyphs, packs them and answers the font.
+         *
+         * @param input ImportedImage value.
+         * @param context Call-scoped processor context.
          * @return Canonical CnbSpriteFontData boxed as ProcessedSpriteFontType.
          */
         [[nodiscard]] ContentValue Process(const ContentValue& input,

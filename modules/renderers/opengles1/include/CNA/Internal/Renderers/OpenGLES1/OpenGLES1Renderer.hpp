@@ -856,7 +856,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
 
         // GL_OES_blend_subtract / GL_OES_blend_func_separate -- both widely-supported ES1.1

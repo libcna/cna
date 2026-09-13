@@ -10,6 +10,11 @@ namespace CNA::Internal::Renderers::DirectX12
         states_[resource] = initialState;
     }
 
+    void D3D12ResourceStateTracker::UntrackResource(ID3D12Resource* resource)
+    {
+        if (resource != nullptr) states_.erase(resource);
+    }
+
     bool D3D12ResourceStateTracker::TransitionTo(ID3D12GraphicsCommandList* commandList, ID3D12Resource* resource,
                                                   D3D12_RESOURCE_STATES desiredState)
     {

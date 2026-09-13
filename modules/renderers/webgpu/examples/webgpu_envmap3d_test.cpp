@@ -28,19 +28,32 @@
 // The cube map below paints all 6 faces distinct solid colours, with NegativeZ = cyan (0,255,255)
 // -- Check A's expected pixel is exactly that colour, proving the reflection vector direction is
 // really computed and really samples the correct face, not just "some texture, some colour".
-// Also: dot(E,N) = dot((0,0,-1),(0,0,-1)) = 1 exactly (a genuine head-on viewing angle), so
-// Check B's Fresnel term collapses to pow(max(1-|1|,0),f) = pow(0,f) = 0 for any f>0 -- a real,
-// independently-derived closed-form value, not a guess.
+// WEBGPU-176 CORRECTED THE DERIVATION BELOW, and with it Check B's expected colour. XNA evaluates
+// ComputeFresnelFactor in the VERTEX shader (EnvironmentMapEffect.fx's ComputeEnvMapVSOutput) and
+// Gouraud-interpolates the scalar; it does NOT recompute it per fragment from an interpolated
+// normal. This file previously derived the Fresnel term "at the quad's centre" -- which is the
+// per-fragment model, and was true only because this renderer was the one CNA backend computing it
+// per fragment. The quad's VERTICES are not head-on at all: with corners at (+-1,+-1,0.5) and the
+// eye at the origin,
+//   E(corner)      = normalize(-(+-1,+-1,0.5)) , |(+-1,+-1,0.5)| = 1.5
+//   dot(E,N)       = (-0.5/1.5) * -1 = 1/3   -- the SAME at all four corners
+//   fresnel        = pow(1 - |1/3|, 1) * EnvironmentMapAmount(1) = 2/3
+// and since all four vertices carry 2/3, the interpolated weight is a constant 2/3 across the
+// quad. So Check B's centre is mix(black, cyan, 2/3) = (0,170,170), not black. That value is still
+// a real differential proof against Check A's full cyan (0,255,255) -- Fresnel demonstrably gates
+// the blend -- and it is now the gate XNA actually applies rather than the one a per-fragment
+// shader applies. dot(E,N) does equal 1 at the quad's CENTRE, which is what the old derivation
+// used; that number simply never reaches the shader under XNA's rule.
 //
 // Check A -- FresnelFactor=0 (disables Fresnel weighting -> flat EnvironmentMapAmount blend),
 //   EnvironmentMapAmount=1: renders cyan (the NegativeZ face colour) -- proves the cube map is
 //   genuinely sampled along the correct reflection direction and the flat blend path works.
 // Check B -- FresnelFactor=1 (Fresnel enabled, EnvironmentMapEffect's own real default),
-//   EnvironmentMapAmount=1, same exact scene as Check A: renders black, not cyan -- proves the
-//   Fresnel edge-weighting term genuinely gates the blend (a head-on angle suppresses the env-map
-//   contribution entirely), not just "present but inert". This is the same reflection direction
-//   and the same bound cube map as Check A -- only FresnelFactor differs, so this is a real
-//   differential proof, not two independently-plausible-looking results.
+//   EnvironmentMapAmount=1, same exact scene as Check A: renders two thirds of cyan (0,170,170),
+//   not the full cyan -- proves the Fresnel edge-weighting term genuinely gates the blend, at the
+//   exact per-vertex weight derived above, not just "present but inert". This is the same
+//   reflection direction and the same bound cube map as Check A -- only FresnelFactor differs, so
+//   this is a real differential proof, not two independently-plausible-looking results.
 // Check C -- FresnelFactor=0 (flat blend, same as Check A) but EnvironmentMapAmount=0: renders
 //   black -- proves EnvironmentMapAmount genuinely scales/gates the blend independently of Fresnel
 //   (distinct code path from Check B's suppression).
@@ -219,9 +232,10 @@ protected:
                   "Fresnel disabled + EnvironmentMapAmount=1 samples the correct cube face (cyan)");
         }
 
-        // Check B: same exact scene, Fresnel enabled (EnvironmentMapEffect's own real default) --
-        // a genuinely head-on viewing angle (dot(E,N)=1) collapses the Fresnel term to exactly 0,
-        // fully suppressing the env-map contribution -> black, not cyan.
+        // Check B: same exact scene, Fresnel enabled (EnvironmentMapEffect's own real default).
+        // WEBGPU-176: the weight is XNA's per-VERTEX one, a constant 2/3 across this quad (see the
+        // derivation at the top of the file), so the centre is two thirds of the way from the
+        // unlit black base to the cyan face -- gated, but not to zero.
         {
             dev.Clear(Color::Black);
             VertexBuffer vb = MakeFacingQuad(dev);
@@ -233,8 +247,15 @@ protected:
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             dev.SetVertexBuffer(nullptr);
-            check(colorNear(readCenter(dev), Color::Black),
-                  "Fresnel enabled at a head-on viewing angle fully suppresses the env-map blend (black)");
+            const Color measured = readCenter(dev);
+            const Color twoThirdsCyan(0, 170, 170, 255);
+            std::printf("[info] Fresnel-weighted centre = (%d,%d,%d), expected (%d,%d,%d)\n",
+                        measured.getRProperty(), measured.getGProperty(), measured.getBProperty(),
+                        twoThirdsCyan.getRProperty(), twoThirdsCyan.getGProperty(),
+                        twoThirdsCyan.getBProperty());
+            check(colorNear(measured, twoThirdsCyan, 6),
+                  "Fresnel gates the env-map blend at XNA's per-VERTEX weight of 2/3 (0,170,170), "
+                  "measurably below Check A's full cyan");
         }
 
         // Check C: Fresnel disabled again (flat blend path) but EnvironmentMapAmount=0 -- proves

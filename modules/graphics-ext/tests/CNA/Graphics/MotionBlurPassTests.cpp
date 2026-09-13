@@ -133,7 +133,8 @@ TEST(MotionBlurTest, AStationaryCameraLeavesTheFrameAlone)
     // motion.
     GraphicsDevice gd;
     MotionBlurPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeFlatDepth(gd);
@@ -157,7 +158,8 @@ TEST(MotionBlurTest, APanningCameraSmearsAlongThePan)
     // pure horizontal contrast -- lose it.
     GraphicsDevice gd;
     MotionBlurPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeFlatDepth(gd);
@@ -182,7 +184,8 @@ TEST(MotionBlurTest, TheFirstFrameHasNoHistoryAndIsLeftAlone)
     // every scene along an arbitrary direction, which looks like a one-frame glitch on every cut.
     GraphicsDevice gd;
     MotionBlurPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeFlatDepth(gd);
@@ -207,7 +210,8 @@ TEST(MotionBlurTest, TheMaxDistanceCapsWhatOneSlowFrameCanDo)
     // smearing the whole image, so it has to bite on a movement far larger than a normal one.
     GraphicsDevice gd;
     MotionBlurPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth  = MakeFlatDepth(gd);
@@ -227,6 +231,42 @@ TEST(MotionBlurTest, TheMaxDistanceCapsWhatOneSlowFrameCanDo)
     const double looseCap = contrastWithCap(0.25f);
     EXPECT_GT(tightCap, looseCap * 1.5)
         << "the cap did not limit the smear: " << tightCap << " against " << looseCap;
+}
+
+TEST(MotionBlurTest, AStoredVelocityOverridesAStationaryCameraOnlyWhereItWasWritten)
+{
+    // This isolates the pass's optional binding from DepthNormalPrepass. A portable blur shader can
+    // therefore prove unit/binding 2 and the inverted coverage flag even on a renderer whose
+    // geometry prepass is still source-only.
+    GraphicsDevice gd;
+    MotionBlurPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth  = MakeFlatDepth(gd);
+    auto source = MakeVerticalStripes(gd);
+    auto absentVelocity = MakeImage(gd, [](int, int) { return Color(128, 128, 0, 255); });
+    // R=159 decodes to about +0.247 screen widths; alpha below 0.5 marks the texel as written.
+    auto writtenVelocity = MakeImage(gd, [](int, int) { return Color(159, 128, 0, 0); });
+    RenderTarget2D destination(gd, kSize, kSize);
+    pass.setStrength(1.0f);
+    pass.setMaxDistance(0.25f);
+
+    const auto contrastWithVelocity = [&](Texture2D& velocity) {
+        PostProcessContext context = MakeContext(*source, destination, 0.0f, 0.0f);
+        context.sourceDepth = depth.get();
+        context.sourceVelocity = &velocity;
+        pass.apply(context);
+        return ContrastAcross(ReadTarget(destination));
+    };
+
+    const double noCoverage = contrastWithVelocity(*absentVelocity);
+    const double moved = contrastWithVelocity(*writtenVelocity);
+    EXPECT_GT(noCoverage, 60.0) << "an unwritten velocity texel did not fall back to the camera";
+    EXPECT_LT(moved, noCoverage * 0.7)
+        << "the stored +X velocity did not smear horizontal contrast: " << moved
+        << " against " << noCoverage;
 }
 
 TEST(MotionBlurTest, WithoutDepthOrACameraTheFrameIsPassedThrough)

@@ -1,0 +1,147 @@
+diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
+index 02f09ab..2577339 100644
+--- a/profiles/mojoshader_profile_spirv.c
++++ b/profiles/mojoshader_profile_spirv.c
+@@ -2548,6 +2548,32 @@ static void spv_emit_uniform_constant_array(Context *ctx,
+     *dst_location_offset = spv_output_location(ctx, id_var, ~0u);
+ } // spv_emit_uniform_constant_array
+ 
++/* Appends one <id> to an OpEntryPoint interface list, ignoring an <id> already in it.
++ * SPIR-V requires the interface to name each variable exactly once, and more than one of
++ * MojoShader's own bookkeeping lists can reach the same variable. -CNA */
++static void spv_add_interface_id(Context *ctx, uint32 id, uint32 *ids, uint32 *count,
++                                 uint32 max)
++{
++    uint32 i;
++
++    if (id == 0)
++        return;
++
++    for (i = 0; i < *count; i++)
++    {
++        if (ids[i] == id)
++            return;
++    } // for
++
++    if (*count >= max)
++    {
++        fail(ctx, "BUG: entry point interface is larger than its own upper bound");
++        return;
++    } // if
++
++    ids[(*count)++] = id;
++} // spv_add_interface_id
++
+ void emit_SPIRV_finalize(Context *ctx)
+ {
+     size_t i, j, k, max;
+@@ -2706,30 +2732,25 @@ void emit_SPIRV_finalize(Context *ctx)
+     if (shader_is_pixel(ctx))
+         model = SpvExecutionModelFragment;
+ 
+-    /* 3 is for opcode + exec. model + idmain */
+-    uint32 inoutcount = ctx->spirv.inoutcount;
+-
+-    uint32 implicit_input_count = sizeof(ctx->spirv.id_implicit_input) / sizeof(uint32);
+-    if (shader_is_pixel(ctx))
++    /* OpEntryPoint's interface must name each Input/Output variable of the entry point exactly
++     * once -- a repeated <id> is two arguments at one Location to a consumer, and is rejected.
++     *
++     * A Shader Model 1.x pixel shader's texture registers can be reached by TWO bookkeeping
++     * paths: ctx->attributes, and ctx->spirv.id_implicit_input[]. The interface used to be
++     * counted from one path and emitted from both, so whenever a t# register was in the
++     * attribute list it appeared twice. Gather the ids first, drop repeats, then emit -- which
++     * makes the count and the contents the same list by construction rather than by agreement
++     * between two loops. -CNA */
++    uint32 implicit_input_count = STATICARRAYLEN(ctx->spirv.id_implicit_input);
++    uint32 interface_max = ctx->spirv.inoutcount + implicit_input_count + 1;
++    uint32 *interface_ids = (uint32 *) Malloc(ctx, interface_max * sizeof (uint32));
++    uint32 interface_count = 0;
++    if (interface_ids == NULL)
+     {
+-        if (!shader_version_atleast(ctx, 1, 4))
+-        {
+-            for (uint32 i = 0; i < implicit_input_count; i++)
+-            {
+-                if (ctx->spirv.id_implicit_input[i])
+-                    inoutcount += 1;
+-            } // for
+-        } // if
+-
+-        if (!shader_version_atleast(ctx, 2, 0))
+-            inoutcount += 1;
++        pop_output(ctx);
++        return;  // Malloc() already recorded the out-of-memory.
+     } // if
+ 
+-    spv_emit_part(ctx, 3 + spv_strlen(ctx->mainfn) + inoutcount, 3, SpvOpEntryPoint,
+-        model, ctx->spirv.idmain
+-    );
+-    spv_emit_str(ctx, ctx->mainfn);
+-
+     RegisterList *p = &ctx->attributes, *r = NULL;
+     // !!! FIXME: The first element of the list is always empty and I don't know why!
+     p = p->next;
+@@ -2739,13 +2760,17 @@ void emit_SPIRV_finalize(Context *ctx)
+         if (r)
+         {
+             if (r->spirv.iddecl == ctx->spirv.id_var_vpos)
+-                spv_emit_word(ctx, ctx->spirv.id_var_fragcoord);
++                spv_add_interface_id(ctx, ctx->spirv.id_var_fragcoord,
++                                     interface_ids, &interface_count, interface_max);
+             else if (r->spirv.iddecl == ctx->spirv.id_var_vface)
+-                spv_emit_word(ctx, ctx->spirv.id_var_frontfacing);
++                spv_add_interface_id(ctx, ctx->spirv.id_var_frontfacing,
++                                     interface_ids, &interface_count, interface_max);
+             else if (r->spirv.iddecl == ctx->spirv.id_var_texcoord0_private)
+-                spv_emit_word(ctx, ctx->spirv.id_var_texcoord0_input);
++                spv_add_interface_id(ctx, ctx->spirv.id_var_texcoord0_input,
++                                     interface_ids, &interface_count, interface_max);
+             else
+-                spv_emit_word(ctx, r->spirv.iddecl);
++                spv_add_interface_id(ctx, r->spirv.iddecl,
++                                     interface_ids, &interface_count, interface_max);
+         } // if
+         else
+         {
+@@ -2765,11 +2790,14 @@ void emit_SPIRV_finalize(Context *ctx)
+     {
+         if (!shader_version_atleast(ctx, 1, 4))
+         {
++            /* The implicit inputs a ps_1_x texture register creates. A register the attribute
++             * list already named is skipped by spv_add_interface_id(), not counted twice. */
+             for (uint32 i = 0; i < implicit_input_count; i++)
+             {
+                 uint32 id = ctx->spirv.id_implicit_input[i];
+                 if (id)
+-                    spv_emit_word(ctx, id);
++                    spv_add_interface_id(ctx, id, interface_ids, &interface_count,
++                                         interface_max);
+             } // for
+         } // if
+ 
+@@ -2777,9 +2805,23 @@ void emit_SPIRV_finalize(Context *ctx)
+         {
+             // r0 is used as color output.
+             r = spv_getreg(ctx, REG_TYPE_TEMP, 0);
+-            spv_emit_word(ctx, r->spirv.iddecl);
++            spv_add_interface_id(ctx, r->spirv.iddecl, interface_ids, &interface_count,
++                                 interface_max);
+         } // if
++    } // if
+ 
++    /* 3 is for opcode + exec. model + idmain */
++    spv_emit_part(ctx, 3 + spv_strlen(ctx->mainfn) + interface_count, 3, SpvOpEntryPoint,
++        model, ctx->spirv.idmain
++    );
++    spv_emit_str(ctx, ctx->mainfn);
++    for (uint32 i = 0; i < interface_count; i++)
++        spv_emit_word(ctx, interface_ids[i]);
++    Free(ctx, interface_ids);
++
++    // only applies to pixel shaders
++    if (shader_is_pixel(ctx))
++    {
+         // vk semantics = default origin is upper left
+         // gl semantics = default origin is lower left
+         spv_emit(ctx, 3, SpvOpExecutionMode, ctx->spirv.idmain, SpvExecutionModeOriginUpperLeft);

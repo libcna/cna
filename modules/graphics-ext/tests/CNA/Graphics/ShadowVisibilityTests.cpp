@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -43,6 +44,10 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 
@@ -76,6 +81,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -84,6 +90,10 @@ using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
+using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexElement;
+using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 constexpr int kFrame = 64;
 
@@ -237,14 +247,9 @@ protected:
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
             GTEST_SKIP() << "this renderer does not raster 3D triangles";
-        // CustomEffects, not CompiledEffects: the caster is GLSL source compiled at run time by
-        // ShaderEffect, which is a different facility from the Effect Framework bytecode
-        // CompiledEffects names.
-        CNA_SKIP_WITHOUT_SHADER_EXECUTION(device);
-        // MOD-1699: compiling the caster's shader is not the same promise as SAMPLING the shadow.
-        // The Vulkan renderer answers true to the first (its ShaderEffect exists) and false to the
-        // second (its lit shaders ignore the state), so without this the cascade case did not skip
-        // there -- it failed, describing a feature that renderer never claimed to have.
+        // MOD-2237: casters select a portable package rather than requiring runtime GLSL source.
+        // Shadow sampling is now the exact capability boundary; a renderer that advertises it but
+        // cannot execute the matching caster is broken and must fail these end-to-end tests.
         if (!device.SupportsShadowSamplingEXT())
             GTEST_SKIP() << "this renderer's lit shaders do not sample shadow maps";
     }
@@ -391,6 +396,18 @@ struct GpuSkinnedVertex
     std::uint8_t i0, i1, i2, i3;
 };
 static_assert(sizeof(GpuSkinnedVertex) == 52, "the skinned program requires a stride of 52");
+
+VertexDeclaration SkinnedVertexDeclaration()
+{
+    return VertexDeclaration(52, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+        VertexElement(24, VertexElementFormat::Vector2,
+                      VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+        VertexElement(48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
+    });
+}
 
 /// The stream the PBR program declares: position, normal, tangent, uv.
 struct GpuPbrVertex
@@ -921,7 +938,7 @@ TEST_F(ShadowVisibilityTest, ASkinnedCasterCastsThePoseItIsIn)
     effect.setShadowsEnabledEXT(true);
 
     const auto ground = Quad(0.0f, kGroundHalfExtent);
-    VertexBuffer casterBuffer(device, 6);
+    VertexBuffer casterBuffer(device, SkinnedVertexDeclaration(), 6, BufferUsage::None);
     casterBuffer.SetDataRaw(caster.data(), 6, static_cast<int>(sizeof(GpuSkinnedVertex)));
 
     for (int pass = 0; pass < 2; ++pass)
@@ -1006,7 +1023,7 @@ TEST_F(ShadowVisibilityTest, ASkinnedMeshShadowsItself)
                                        1.0f, 0.0f, 0.0f, 0.0f, 1, 0, 0, 0};
     }
 
-    VertexBuffer meshBuffer(device, 12);
+    VertexBuffer meshBuffer(device, SkinnedVertexDeclaration(), 12, BufferUsage::None);
     meshBuffer.SetDataRaw(mesh.data(), 12, static_cast<int>(sizeof(GpuSkinnedVertex)));
 
     SkinnedEffect effect(device);

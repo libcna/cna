@@ -1,16 +1,16 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12: D3D12 renderer. DX-101 landed CMake wiring + an honest all-stub skeleton.
-// DX-102/DX-103/DX-104/DX-105 (this revision) make the device-lifetime group real: ID3D12Device +
-// command queue + descriptor heaps (RTV/DSV/CBV_SRV_UAV) + per-frame command allocators/command
-// list + fence-based frame synchronization. Clear()/Present()/draw calls are STILL honest
-// "not yet implemented" stubs -- those need DX-106 (resource barriers), DX-107 (PSOs), DX-108
-// (root signatures) and DX-109 (resources) first, none of which exist yet.
+// plans/plan_dx.md Phase DX17: production D3D12 renderer. DX-237 records clears, draws, resolves,
+// SpriteBatch flushes and per-draw constants into one command list per frame slot, retaining every
+// referenced COM object until that slot's fence completes. DX-238 routes uploads through
+// persistently mapped per-frame rings; CPU readbacks remain explicit immediate synchronization
+// boundaries.
 //
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_RENDERER=D3D12).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
@@ -22,34 +22,31 @@
 #include <dxgi1_5.h>
 #include <wrl/client.h>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <vector>
 #include <memory>
-#include <unordered_map>
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
 
 namespace CNA::Internal::Renderers::DirectX12
 {
+    struct D3D12MojoShaderContextEXT;
+    class D3D12CompiledEffect;
     using Microsoft::WRL::ComPtr;
 
     /**
-     * D3D12 graphics renderer (plans/plan_dx.md Phase DX12). DX-100's own spike (real Wine+vkd3d-proton
-     * run) found `D3D12CreateDevice`/`CreateCommandQueue`/descriptor-heap/fence/command-allocator/
-     * command-list calls all work genuinely well locally (feature level 12_1, DXR 1.1, SM 6.8 on
-     * the real GPU), but `CreateSwapChainForHwnd` with `DXGI_SWAP_EFFECT_FLIP_DISCARD` crashes
-     * inside vanilla Wine's own `dxgi.dll` -- confirmed again by this revision's own real attempt
-     * (see `DX-102`'s plan row). Consequently:
-     *   - Device-lifetime resources (device_/factory_/commandQueue_/descriptor heaps/command
-     *     allocators+list/fence) are created unconditionally and are the real, Wine-provable part
-     *     of this renderer today.
-     *   - Swap-chain creation is attempted for real (`CreateSwapChainResources()`), matching
-     *     D3D11's own `FLIP_DISCARD` production convention, but ONLY when a window is supplied,
-     *     and a failure there is caught (HRESULT-level) and downgraded to `swapChainAvailable_ =
-     *     false` rather than throwing -- so constructing this renderer off-screen (no window) never
-     *     touches the crash-prone path at all, and the primary D3D12 CTest suite stays
-     *     off-screen/swap-chain-free per DX-100's own recommendation.
-     *   - `Clear()`/`Present()`/draw calls remain honest "not yet implemented" stubs -- DX-106
-     *     (resource barriers), DX-107 (PSOs), DX-108 (root signatures), DX-109 (resources) are all
-     *     still unstarted follow-up work.
+     * @brief D3D12 graphics renderer with two frame slots and explicit resource synchronization.
+     *
+     * Windowed devices use the swap-chain back-buffer index; headless devices rotate the same two
+     * slots at Present(). Each slot owns its allocator, command list, constant arena and retained
+     * resource set and persistently mapped upload ring. CPU readbacks remain explicit
+     * synchronization boundaries.
      */
     class DirectX12Renderer final : public IGraphicsRenderer
     {
@@ -65,23 +62,162 @@ namespace CNA::Internal::Renderers::DirectX12
         DirectX12Renderer(const DirectX12Renderer&) = delete;
         DirectX12Renderer& operator=(const DirectX12Renderer&) = delete;
 
-        // ---- IGraphicsRenderer: honest "not yet implemented" stubs (DX-106 onward) ----
         void Clear(float r, float g, float b, float a) override;
-        /// DX-116: real Present() -- transitions the currently-bound back buffer to PRESENT,
-        /// calls IDXGISwapChain3::Present() for real, then re-binds the (new) current back buffer
-        /// as the default draw target for the next frame. Throws (NotYetImplemented) if no real
-        /// swap chain is available (e.g. off-screen construction, or this dev loop's own
-        /// documented Wine/vkd3d-proton swap-chain limitation -- see DX-100/DX-102).
+        /// DX-116/DX-237: submits the current frame and presents a real swap chain when available;
+        /// a headless device rotates frame slots without attempting presentation.
         void Present() override;
+        /// plans/plan_dx.md DX-203: GraphicsDevice.ReferenceStencil, which XNA exposes as a standalone
+        /// property rather than as part of DepthStencilState. On D3D12 it is not pipeline state at
+        /// all -- it is OMSetStencilRef() on the command list -- so setting it only records the
+        /// value here and every subsequent draw applies it, with no PSO rebuild and no cache entry.
+        void SetReferenceStencil(int referenceStencil) override;
+        /// plans/plan_dx.md DX-204: GraphicsDevice.BlendFactor -- the constant `Blend::BlendFactor` and
+        /// `Blend::InverseBlendFactor` sample. Like the stencil reference, it is command-list state
+        /// on D3D12 (`OMSetBlendFactor`), not part of the pipeline state, so setting it costs no PSO
+        /// rebuild and adds no cache entry; every subsequent draw records it.
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        /// plans/plan_dx.md DX-201: GraphicsDevice.ScissorRectangle. Stored only -- consumed at each
+        /// RSSetScissorRects site through GetEffectiveScissorEXT(), for the same reason SetViewport()
+        /// stores rather than applies: each draw records the effective value into the active frame
+        /// command list, so there is no persistent immediate context to update here.
+        void SetScissorRect(int x, int y, int w, int h) override;
+        /// plans/plan_dx.md DX-205: real GPU->CPU readback of this device's back buffer, the same
+        /// contract D3D11's own DX-28 override implements. The source is the swap chain's current
+        /// back buffer when there is a swap chain, and DX-241's implicit off-screen back buffer
+        /// otherwise, so a windowless device reads what it drew instead of throwing
+        /// IGraphicsRenderer's "not implemented in this renderer". @p x / @p y are top-left in
+        /// back-buffer pixels and @p pixels must hold w*h*4 RGBA8 bytes; GraphicsDevice has already
+        /// validated the rectangle against PresentationParameters, and rows/columns that still fall
+        /// outside the real resource are zero-filled exactly as D3D11 zero-fills them.
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        /// plans/plan_dx.md DX-212: TRUE, because the source handed to CreateEffectRenderer() genuinely
+        /// determines the pixels here. The default is FALSE, which means "this renderer ACCEPTS an
+        /// effect and keeps rendering with its own fixed path" -- the SOFTWARE/HEADLESS answer, and
+        /// the reason a caller is told to ask this IN ADDITION to GraphicsCapability::CustomEffects.
+        /// D3D12EffectRenderer::CompileProgram() runs a real D3DCompile() on the caller's HLSL and binds the resulting shader
+        /// objects, so a post-process pass that believes its shader ran is right.
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /**
+         * @brief Reports the complete runtime-backed D3D12 capability surface.
+         *
+         * @param capability Capability to query.
+         * @return true only when this renderer and its current device implement the capability.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical back-buffer rectangle used for logical presentation.
+         * @param x Receives the rectangle's left edge in drawable pixels.
+         * @param y Receives the rectangle's top edge in drawable pixels.
+         * @param width Receives the rectangle's width in drawable pixels.
+         * @param height Receives the rectangle's height in drawable pixels.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
+        /**
+         * @brief Rebuilds the default back-buffer render surface with a device-supported sample count.
+         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
+         * @return The sample count actually applied, or zero when multisampling is disabled.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /** @brief Returns the sample count actually used by the default render surface. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
+        /**
+         * @brief Maps a requested sample count to the count currently applied by this renderer.
+         * @param requestedMultiSampleCount The caller's requested count.
+         * @return The current device-clamped count.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void) requestedMultiSampleCount;
+            return appliedMultiSampleCount_;
+        }
+        /**
+         * @brief Reports the fixed XNA surface format of the DXGI back-buffer destination.
+         * @param requestedFormat The caller's requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color, matching the actual R8G8B8A8_UNORM resource.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reports the fixed XNA depth format of the default D3D12 depth resource.
+         * @param requestedFormat The caller's requested DepthFormat ordinal.
+         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
         /// renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
         void SetSwapInterval(int interval) override;
+        /** @brief Enables registration of subsequently-created resources for device recovery. */
+        void SetContextRecoveryEnabled(bool enabled) override;
+        /** @brief Reports whether the renderer currently accepts drawing commands. */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /** @brief Enters the deterministic lost-device state used by lifecycle tests. */
+        void DebugSimulateContextLoss() override;
+        /** @brief Recreates the device and registered resources after a simulated loss. */
+        void DebugRestoreContext() override;
+        /**
+         * @brief Returns the most recently requested DXGI presentation interval.
+         * @return The exact interval most recently passed to SetSwapInterval.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+        /**
+         * @brief Maps a platform-window point into the current logical presentation.
+         * @param windowX Window-space X coordinate.
+         * @param windowY Window-space Y coordinate.
+         * @param logX Receives the logical X coordinate.
+         * @param logY Receives the logical Y coordinate.
+         * @return true when the point lies inside the presented image.
+         */
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        /**
+         * @brief Maps a logical point into platform-window coordinates.
+         * @param logX Logical X coordinate.
+         * @param logY Logical Y coordinate.
+         * @param windowX Receives the window-space X coordinate.
+         * @param windowY Receives the window-space Y coordinate.
+         * @return true when presentation geometry is available.
+         */
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
 
+        /** @brief Classifies core XNA surface formats backed by native D3D12 storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies XNA render-target formats using actual D3D12 device support.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported only when the format is an XNA render-target format that this device
+         *         can render to and sample.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /** @brief Restricts Color-shaped transfers to actual Color storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether D3D12 transfers the specified surface format as compressed blocks.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the core XNA Dxt1, Dxt3, and Dxt5 formats.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether D3D12 accepts compressed block transfers for cube faces.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the core XNA Dxt1, Dxt3, and Dxt5 formats.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Keeps supported compressed content in its native block-compressed form.
+         *
+         * @return true because D3D12 uploads XNA DXT blocks without CPU decompression.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         /// DX-111 (closing env_map3d): real D3D12TextureCubeRenderer, no longer the inherited
         /// default (IGraphicsRenderer::CreateTextureCube() -> nullptr).
@@ -97,18 +233,66 @@ namespace CNA::Internal::Renderers::DirectX12
         /// (the caller checks IsValid()/GetCompileError()).
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        /** @brief Creates a compiled XNA effect through CNA's MojoShader HLSL backend. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+        /** @brief Reports compiled effects only in the fully conformance-gated opt-in build. */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+        /** @brief Returns the renderer-wide compiled-effect shader/register context. */
+        CNAEXT D3D12MojoShaderContextEXT* GetMojoShaderContextEXT();
+        /** @brief Records one draw using the currently applied compiled-effect pass. */
+        CNAEXT void RecordCompiledEffectDrawEXT(
+            const IVertexBufferRenderer& fallback,
+            const IIndexBufferRenderer* indexBuffer,
+            PrimitiveType primitive,
+            int primitiveCount,
+            int instanceCount,
+            const GpuDrawParams& params,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
+#endif
 
         /// DX-117: real D3D12RenderTargetRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a D3D12 2D render target in the requested XNA surface format.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat DepthFormat ordinal.
+         * @param preserveContents Whether previous contents should be preserved.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The native D3D12 render target.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         /// DX-117: real D3D12RenderTargetCubeRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat,
                                                                           bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a D3D12 cube render target in the requested XNA surface format.
+         * @param size Face width and height in pixels.
+         * @param depthFormat DepthFormat ordinal.
+         * @param preserveContents Whether previous contents should be preserved.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The native D3D12 cube render target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         /// DX-117: real MRT -- binds every target's own RTV (up to 8, D3D12's own
         /// D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT, though this project's shared GraphicsDevice
         /// code already caps at 4, MAX_RENDERTARGET_BINDINGS). Draws themselves remain
@@ -181,11 +365,16 @@ namespace CNA::Internal::Renderers::DirectX12
         /// (harmless, no-op) but never consumed by any draw.
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
+        /// plans/plan_dx.md DX-216: SamplerState.MaxMipLevel (XNA's MOST DETAILED level index, i.e. D3D's
+        /// MinLOD) and MipMapLevelOfDetailBias (MipLODBias), tracked per slot; the sampler
+        /// descriptor is rebuilt lazily by GetSamplerGpuHandleEXT() on the next draw.
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        /// DX-216: SamplerState.AddressW -- previously mirrored from AddressV, which the interface
+        /// documentation names as the one thing a renderer without W support must not do.
+        void ApplySamplerAddressW(int slot, int addressW) override;
         /// REMED-GFX-064: real, runtime-settable GraphicsDevice.Viewport. Stores the sub-region
-        /// viewport rect + depth range; every draw path re-records its own command list fresh
-        /// (immediate-per-draw model), so each RSSetViewports site simply reads the stored value
-        /// back through GetEffectiveViewportEXT() -- no capture/replay is needed (unlike the
-        /// deferred GPU renderers). Before this task D3D12 never overrode the no-op base
+        /// viewport rect + depth range; each draw records it into the shared active frame list via
+        /// GetEffectiveViewportEXT(). Before this task D3D12 never overrode the no-op base
         /// SetViewport and hardcoded a full-target D3D12_VIEWPORT at all four RSSetViewports sites
         /// (+ the sprite path), so a custom Viewport was a total no-op on backbuffer and RT alike.
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
@@ -195,6 +384,12 @@ namespace CNA::Internal::Renderers::DirectX12
         /// byte-identical to the pre-fix hardcode). Shared by the 4 renderer draw paths and the
         /// D3D12 SpriteBatch flush (which reads it via owner_).
         [[nodiscard]] D3D12_VIEWPORT GetEffectiveViewportEXT() const;
+        /**
+         * @brief Returns the active SpriteBatch projection size in logical viewport units.
+         * @param width Receives the logical viewport width.
+         * @param height Receives the logical viewport height.
+         */
+        CNAEXT void GetSpriteViewportSizeEXT(float& width, float& height) const;
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
@@ -228,11 +423,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
-        /// DX-111 (finish): real instanced3d dispatch -- mirrors
-        /// DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback (no per-instance VB means
-        /// this isn't really an instanced draw) and hand-built dual-vertex-stream PSO/input-layout
-        /// shape (POSITION @ slot 0 per-vertex, INSTANCEWORLD0-3 @ slot 1 per-instance) -- see
-        /// GetOrCreateInstancedPsoEXT's own doc comment for why this bypasses D3D12PipelineStateCache.
+        /// DX-111/DX-222: real instanced3d dispatch. Every bound declaration, input slot,
+        /// instance step rate and stream-local offset enters the shared pipeline-state cache.
         void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
@@ -255,6 +447,45 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Whether CreateSwapChainResources() actually produced a usable swap chain --
          *  false on this Wine dev loop today (see class-level doc comment), by design not a throw. */
         [[nodiscard]] bool IsSwapChainAvailableEXT() const { return swapChainAvailable_; }
+        /// plans/plan_dx.md DX-201: the scissor rectangle every draw and clear actually records. D3D12 has
+        /// no ScissorEnable in D3D12_RASTERIZER_DESC -- the scissor test is always on -- so
+        /// "RasterizerState.ScissorTestEnable == false" means exactly "the rectangle is the whole
+        /// bound target", which is why this is not part of the pipeline-state key. An unset or
+        /// degenerate rectangle also falls back to the full target, byte-identical to the hardcoded
+        /// D3D12_RECT{0, 0, boundColorWidth_, boundColorHeight_} it replaces.
+        [[nodiscard]] D3D12_RECT GetEffectiveScissorEXT() const;
+        /// plans/plan_dx.md DX-207: the sample count of the currently bound colour target, read from the
+        /// resource itself rather than tracked alongside it -- a tracked copy is one more thing that
+        /// can disagree with reality, and every bind site would have to remember to set it. Returns
+        /// 1 when nothing is bound, which is what a single-sample pipeline state wants.
+        [[nodiscard]] unsigned int GetBoundColorSampleCountEXT() const;
+        /// DX-204: the four floats OMSetBlendFactor takes, for the sprite path, which records its
+        /// own command lists.
+        [[nodiscard]] const float* GetBlendFactorEXT() const { return currentBlendFactor_; }
+        /// DX-210: the value OMSetStencilRef takes, for the sprite path.
+        [[nodiscard]] int GetReferenceStencilEXT() const { return currentReferenceStencil_; }
+        /// The resource this device's back buffer currently lives in: the swap chain's current
+        /// buffer, or DX-241's implicit off-screen one when there is no swap chain. Null only if
+        /// the device was never fully constructed.
+        [[nodiscard]] ID3D12Resource* GetCurrentBackBufferResourceEXT() const;
+        /// Reads one subresource of @p resource back as a tightly packed @p w x @p h RGBA8 buffer,
+        /// via a READBACK-heap CopyTextureRegion and a full GPU wait. Returns an empty vector on
+        /// any failure -- an honest bail-out, never a fabricated frame. Lives here rather than in
+        /// D3D12RenderTargets.cpp (its original home) because ReadBackbuffer() needs the same
+        /// mechanism against a resource that is not a render target.
+        [[nodiscard]] std::vector<std::uint8_t> ReadbackSubresourceRGBA8EXT(
+            ID3D12Resource* resource, UINT subresource, int w, int h);
+        /**
+         * @brief Reads one texture subresource into tightly packed format-native rows.
+         * @param resource Source texture resource.
+         * @param subresource Source subresource index.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param bytesPerTexel Native byte count for one texel.
+         * @return Tightly packed rows, or an empty vector if the synchronous readback failed.
+         */
+        [[nodiscard]] std::vector<std::uint8_t> ReadbackSubresourceEXT(
+            ID3D12Resource* resource, UINT subresource, int w, int h, int bytesPerTexel);
         /** @brief Real swap chain, or null if IsSwapChainAvailableEXT() is false. */
         [[nodiscard]] IDXGISwapChain3* GetSwapChainEXT() const { return swapChain_.Get(); }
 
@@ -324,16 +555,99 @@ namespace CNA::Internal::Renderers::DirectX12
          *  D3D12 resource (buffers, textures -- DX-109) registers with and transitions through, so
          *  barrier correctness is enforced in one place rather than ad-hoc per call site. */
         [[nodiscard]] D3D12ResourceStateTracker& GetResourceStateTrackerEXT() { return resourceStates_; }
+        /** @brief Registers a live resource for D3D12 device recreation. */
+        void RegisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource);
+        /** @brief Removes a live resource from the D3D12 recovery registry. */
+        void UnregisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept;
+        /** @brief Returns the number of resources currently tracked for recovery. */
+        [[nodiscard]] std::size_t GetRecoverableResourceCountEXT() const noexcept
+        {
+            return recoverableResources_.size();
+        }
 
         /** @brief Real per-frame command allocator for @p frameIndex (0..kFramesInFlight-1). */
         [[nodiscard]] ID3D12CommandAllocator* GetCommandAllocatorEXT(int frameIndex) const
         {
             return commandAllocators_[frameIndex].Get();
         }
-        /** @brief The single, reused direct command list (DX-104) -- callers must Reset() it
-         *  against the correct frame's allocator (GetCommandAllocatorEXT()) before recording, and
-         *  Close() it before ExecuteCommandLists(). Created already-Close()'d. */
+        /** @brief The synchronous immediate direct command list used by native tests. */
         [[nodiscard]] ID3D12GraphicsCommandList* GetCommandListEXT() const { return commandList_.Get(); }
+
+        /** @brief One non-overlapping range in the current frame slot's mapped upload ring. */
+        struct FrameUploadAllocationEXT
+        {
+            ID3D12Resource* resource = nullptr;
+            std::uint8_t* mapped = nullptr;
+            UINT64 offset = 0;
+            std::size_t size = 0;
+        };
+
+        /** @brief Returns the open command list for the current frame, beginning one if necessary. */
+        ID3D12GraphicsCommandList* GetFrameCommandListEXT();
+        /** @brief Flushes an open frame segment, then resets and returns the synchronous immediate list. */
+        ID3D12GraphicsCommandList* BeginImmediateCommandsEXT(
+            ID3D12PipelineState* initialState = nullptr);
+        /** @brief Allocates and copies one 256-byte-aligned constant range owned by the current frame. */
+        D3D12_GPU_VIRTUAL_ADDRESS AllocateFrameConstantDataEXT(
+            const void* data, std::size_t byteCount);
+        /** @brief Allocates a non-overlapping persistently mapped upload range for this frame.
+         *
+         * @param byteCount Number of writable bytes requested.
+         * @param alignment Required power-of-two offset alignment.
+         * @return The upload resource, mapped CPU pointer and aligned resource offset.
+         */
+        FrameUploadAllocationEXT AllocateFrameUploadEXT(
+            std::size_t byteCount, std::size_t alignment);
+        /** @brief Retains a COM object until the current frame slot's fence has completed. */
+        void RetainFrameObjectEXT(IUnknown* object);
+        /** @brief Submits the currently open frame list without waiting for its new fence. */
+        std::uint64_t SubmitFrameCommandsEXT();
+        /** @brief Returns the fence value reserved for the open frame list, or zero if none is open.
+         *
+         * @return The monotonically increasing value that submission of the current list will signal.
+         */
+        [[nodiscard]] std::uint64_t GetActiveFrameFenceValueEXT() const noexcept
+        {
+            return activeFrameFenceValue_;
+        }
+        /** @brief Submits all pending work and waits for the shared GPU fence to complete. */
+        void WaitForGpuIdleEXT() { WaitForGpuIdle(); }
+        /** @brief Number of actual waits required before a busy frame slot could be reused. */
+        [[nodiscard]] std::uint64_t GetFrameFenceWaitCountEXT() const noexcept
+        {
+            return frameFenceWaitCountEXT_;
+        }
+        /** @brief Number of all actual fence-event waits, including synchronous upload/readback. */
+        [[nodiscard]] std::uint64_t GetGpuWaitCountEXT() const noexcept { return gpuWaitCountEXT_; }
+        /** @brief Number of submitted frame command-list segments. */
+        [[nodiscard]] std::uint64_t GetFrameSubmissionCountEXT() const noexcept
+        {
+            return frameSubmissionCountEXT_;
+        }
+        /** @brief Number of synchronously submitted immediate command lists. */
+        [[nodiscard]] std::uint64_t GetImmediateSubmissionCountEXT() const noexcept
+        {
+            return immediateSubmissionCountEXT_;
+        }
+        /** @brief Total lazily allocated upload-ring resources created over this renderer lifetime. */
+        [[nodiscard]] std::uint64_t GetUploadResourceCreationCountEXT() const noexcept
+        {
+            return uploadResourceCreationCountEXT_;
+        }
+        /** @brief Number of upload-ring ranges allocated since the diagnostic counters were reset. */
+        [[nodiscard]] std::uint64_t GetUploadAllocationCountEXT() const noexcept
+        {
+            return uploadAllocationCountEXT_;
+        }
+        /** @brief Resets the synchronization counters used by focused performance contracts. */
+        void ResetSynchronizationCountersEXT() noexcept
+        {
+            frameFenceWaitCountEXT_ = 0;
+            gpuWaitCountEXT_ = 0;
+            frameSubmissionCountEXT_ = 0;
+            immediateSubmissionCountEXT_ = 0;
+            uploadAllocationCountEXT_ = 0;
+        }
 
         /** @brief Real shared fence object (DX-105). */
         [[nodiscard]] ID3D12Fence* GetFenceEXT() const { return fence_.Get(); }
@@ -351,26 +665,21 @@ namespace CNA::Internal::Renderers::DirectX12
          *  just signaled (for tests to assert against GetCompletedValue()). */
         std::uint64_t SignalAndWaitForFrameEXT(int frameIndex);
 
-        /** @brief DX-110: logs (does not throw or recover) when @p hr is
+        /** @brief Routes a device-removed result into the shared lost-device state when @p hr is
          *  DXGI_ERROR_DEVICE_REMOVED/DXGI_ERROR_DEVICE_RESET, including the real
-         *  GetDeviceRemovedReason() -- mirrors DirectX11Renderer::CheckDeviceRemoved's own
-         *  detection-only convention exactly (design decision 12's "never assume, always check"
-         *  discipline applied to device loss too). Called from ExecuteCommandListAndWaitEXT()/
-         *  SignalAndWaitForFrameEXT() whenever ID3D12CommandQueue::Signal() itself fails. */
-        void CheckDeviceRemovedEXT(HRESULT hr) const;
+         *  GetDeviceRemovedReason(). Called from ExecuteCommandListAndWaitEXT()/
+         *  SignalAndWaitForFrameEXT() whenever ID3D12CommandQueue::Signal() itself fails. The
+         *  deterministic restore half is separately executable through DebugRestoreContext(). */
+        void CheckDeviceRemovedEXT(HRESULT hr);
 
-        /** @brief DX-110: the real recovery path -- unlike D3D11's own DX-27 (detection+logging
-         *  only, full recovery deferred to DX-90's real hardware), D3D12 documentation treats
-         *  device-removed recovery as expected to handle from the start, so this genuinely tears
-         *  down and recreates every device-lifetime resource DX-102 through DX-105 built (device,
-         *  factory, command queue, all 3 descriptor heaps with their bump allocators reset to 0,
-         *  every per-frame command allocator + the shared command list, the fence + its counters),
-         *  clears the shared D3D12ResourceStateTracker (every previously-tracked resource's D3D12
-         *  object is gone along with the removed device), and re-attempts the swap chain if a
-         *  window was supplied. Honest scope boundary: this recreation logic is real and directly
-         *  callable/testable (see modules/renderers/directx12/examples/directx12_smoke_test.cpp), but this dev loop cannot trigger
-         *  a genuine DXGI_ERROR_DEVICE_REMOVED to prove the *trigger* path -- only DX-90/DX-114's
-         *  real hardware can. CNAEXT -- not part of any IGraphicsRenderer contract. */
+        /** @brief Tears down and recreates the complete D3D12 device domain.
+         *
+         * Rebuilds the factory, device, queue, descriptor heaps, command allocators/list, fence,
+         * presentation resources and every registered long-lived buffer, texture and render
+         * target. The shared state tracker is cleared between the old and replacement domains.
+         * This environment executes the deterministic simulated path; proving that a genuine
+         * DXGI_ERROR_DEVICE_REMOVED reaches it remains DX-90/DX-114's native-hardware gate.
+         */
         void RecreateDeviceEXT();
 
         /** @brief DX-111: binds an off-screen color target for Clear()/DrawColoredPrimitives()/
@@ -392,16 +701,20 @@ namespace CNA::Internal::Renderers::DirectX12
         void BindOffscreenColorTargetEXT(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
                                          DXGI_FORMAT format, int width, int height,
                                          D3D12_CPU_DESCRIPTOR_HANDLE dsv = D3D12_CPU_DESCRIPTOR_HANDLE{},
-                                         DXGI_FORMAT dsvFormat = DXGI_FORMAT_UNKNOWN);
+                                         DXGI_FORMAT dsvFormat = DXGI_FORMAT_UNKNOWN,
+                                         ID3D12Resource* depthResource = nullptr);
         /** @brief DX-117: real MRT bind -- @p resources[0]/@p rtvs[0] become the primary bound
          *  target via BindOffscreenColorTargetEXT() (so every existing single-target draw path is
          *  completely unaffected), and @p resources[1..count-1]/@p rtvs[1..count-1] (up to 7 more)
-         *  are recorded as additional targets Clear() also independently clears. Every resource
-         *  must already be registered with GetResourceStateTrackerEXT() by its owner (same
+         *  are recorded as additional targets every clear and draw binds in the same order. Every
+         *  resource must already be registered with GetResourceStateTrackerEXT() by its owner (same
          *  convention BindOffscreenColorTargetEXT() itself documents). CNAEXT. */
         void BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
                                           const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
-                                          int count, DXGI_FORMAT format, int width, int height);
+                                          int count, DXGI_FORMAT format, int width, int height,
+                                          D3D12_CPU_DESCRIPTOR_HANDLE dsv = D3D12_CPU_DESCRIPTOR_HANDLE{},
+                                          DXGI_FORMAT dsvFormat = DXGI_FORMAT_UNKNOWN,
+                                          ID3D12Resource* depthResource = nullptr);
         /** @brief Clears the off-screen binding set by BindOffscreenColorTargetEXT() -- subsequent
          *  Clear()/draw calls fall back to the honest "not yet implemented" throw. CNAEXT. */
         void UnbindOffscreenColorTargetEXT();
@@ -413,6 +726,18 @@ namespace CNA::Internal::Renderers::DirectX12
          *  D3D12RenderTargetCubeRenderer's own UnbindAsRenderTarget(), mirroring
          *  DirectX11Renderer::RestoreBackBufferRenderTargetEXT(). CNAEXT. */
         void RestoreBackBufferRenderTargetEXT();
+        /** @brief Detaches a dying 2D target from every non-owning current-binding slot. */
+        void NotifyRenderTargetDestroyedEXT(IRenderTargetRenderer* target) noexcept;
+        /** @brief Detaches a dying cube target from the non-owning current cube binding. */
+        void NotifyRenderTargetCubeDestroyedEXT(IRenderTargetCubeRenderer* target) noexcept;
+        /** @brief Reports whether a 2D target occupies the active single-target or MRT binding. */
+        [[nodiscard]] bool IsRenderTargetActiveEXT(
+            const IRenderTargetRenderer* target) const noexcept;
+        /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
+        [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
+        {
+            return lifetimeToken_;
+        }
         /** @brief Whether an off-screen color target is currently bound (CNAEXT diagnostics/tests). */
         [[nodiscard]] bool HasBoundColorTargetEXT() const { return boundColorResource_ != nullptr; }
         /** @brief The currently bound off-screen color resource, or nullptr (CNAEXT --
@@ -423,6 +748,16 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief The currently bound off-screen color target's DXGI_FORMAT (CNAEXT -- PSO creation
          *  bakes RTV format in, D3D12SpriteBatchRenderer's own PSO needs this). */
         [[nodiscard]] DXGI_FORMAT GetBoundColorFormatEXT() const { return boundColorFormat_; }
+        /// plans/plan_dx.md DX-210: the bound depth-stencil view and its format, for the sprite path,
+        /// which records its own command lists and builds its own pipeline states. Both are
+        /// zero/UNKNOWN when nothing with a depth buffer is bound.
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBoundDsvEXT() const { return boundDsv_; }
+        [[nodiscard]] DXGI_FORMAT GetBoundDsvFormatEXT() const { return boundDsvFormat_; }
+        /** @brief Returns the actual default depth-stencil resource for diagnostics and tests. */
+        [[nodiscard]] ID3D12Resource* GetDefaultDepthStencilResourceEXT() const
+        {
+            return depthStencilResource_.Get();
+        }
         /** @brief The currently bound off-screen color target's width/height in pixels (CNAEXT --
          *  D3D12SpriteBatchRenderer uses this as sprite2d's ViewportSize, and for the D3D12_VIEWPORT/
          *  D3D12_RECT it must set up itself, exactly mirroring how DrawPrimitivesExImpl does it). */
@@ -433,17 +768,16 @@ namespace CNA::Internal::Renderers::DirectX12
          *  needs: 1 CBV @ b0, 1 SRV @ t0, 1 static sampler @ s0). */
         [[nodiscard]] D3D12RootSignatureCache& GetRootSignatureCacheEXT() { return rootSigCache_; }
 
-        /** @brief DX-120 CNAEXT: sets/clears the currently-active occlusion query heap (slot 0)
-         *  that every draw-recording method (DrawColoredPrimitives/DrawIndexedColoredPrimitives/
-         *  DrawPrimitivesExImpl/DrawInstancedPrimitivesEx) brackets its own single command-list
-         *  recording with (BeginQuery right after Reset(), EndQuery right before Close()) -- a
-         *  real Vulkan/vkd3d-proton constraint that BeginQuery/EndQuery must share one command-list
-         *  submission with the draw(s) they bracket, which this renderer's own per-draw-call
-         *  self-submission architecture doesn't naturally satisfy otherwise. Pass nullptr to clear. */
-        void SetActiveOcclusionQueryEXT(ID3D12QueryHeap* heap) { activeOcclusionQueryHeap_ = heap; }
-
     private:
+        std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+        bool contextRecoveryEnabled_ = true;
+        bool deviceLost_ = false;
+        std::function<void(RendererDeviceEvent)> deviceEventCallback_;
+        std::vector<D3DCommon::ID3DDeviceRecoverableEXT*> recoverableResources_;
+
         friend class D3D12SpriteBatchRenderer;
+        friend class D3D12EffectRenderer;
+        friend class D3D12CompiledEffect;
 
         [[noreturn]] static void NotYetImplemented(const char* what);
 
@@ -464,73 +798,45 @@ namespace CNA::Internal::Renderers::DirectX12
         /// DX-116: acquires each of the kFramesInFlight real back-buffer resources (GetBuffer()) +
         /// their RTVs, registers each with the shared D3D12ResourceStateTracker (DX-106) in its
         /// real starting state (D3D12_RESOURCE_STATE_PRESENT), creates a back-buffer-sized
-        /// depth-stencil resource+DSV (mirrors D3D11's own DX-24 default, though not yet wired
-        /// into any OMSetRenderTargets call -- every draw path still hardcodes a null DSV,
-        /// DX-107/DX-111's own documented depthEnable=false simplification; created here for
-        /// parity/completeness, real depth-test support is DX-118's job), and binds the current
+        /// depth-stencil resource+DSV (mirrors D3D11's own DX-24 default), and binds the current
         /// back buffer as the default Clear()/draw target -- mirrors D3D11's own
         /// CreateWindowSizeDependentViews() making the back buffer the default target immediately
         /// after construction. Only called when CreateSwapChainResources() actually succeeded
         /// (swapChainAvailable_ == true).
         void CreateWindowSizeDependentViews();
-        /// DX-116: releases every window-size-dependent resource CreateWindowSizeDependentViews()
-        /// created -- back-buffer resources/RTV handles and the depth-stencil resource/DSV handle
-        /// (RTV/DSV heap slot *indices* are not reclaimed, matching DX-103's own documented
-        /// no-free-list-yet bump-allocator simplification). Used by RecreateDeviceEXT() (DX-110)
-        /// before tearing down the whole device; window resize (D3D11's own DX-29 equivalent) is
-        /// real, scoped follow-up work this task does not attempt.
+        /// plans/plan_dx.md DX-241: the implicit off-screen back buffer of a device that has no swap
+        /// chain -- either because no window was supplied at all
+        /// (PresentationParameters::HeadlessEXT, the mode GraphicsDevice names this renderer as the
+        /// intended user of) or because CreateSwapChainResources() downgraded to
+        /// swapChainAvailable_ = false. It is a real committed R8G8B8A8_UNORM render target plus the
+        /// same D24_UNORM_S8_UINT depth-stencil a windowed device gets, sized from the
+        /// PresentationParameters back-buffer size the renderer was constructed with, bound as the
+        /// default target exactly as CreateWindowSizeDependentViews() binds the real back buffer.
+        /// Without it, Clear() and every draw threw for a headless device until the game bound a
+        /// RenderTarget2D of its own, and SetRenderTarget2D(nullptr) put it straight back into that
+        /// state -- neither of which is what a "render off-screen and read the result back" mode can
+        /// mean. EasyGL always has framebuffer 0 and D3D11 always has a swap chain; this is D3D12's
+        /// equivalent of the target that is simply always there.
+        void CreateOffscreenBackBufferResources();
+        /** @brief Resizes a live swap chain to the latest platform drawable size when needed. */
+        void EnsureSwapChainSize();
+        /// Rebuilds the default multisampled colour surface and matching depth-stencil resource,
+        /// then binds that colour surface (or the single-sample destination when MSAA is off).
+        void RecreateDefaultRenderSurfaces(int requestedMultiSampleCount);
+        /// Resolves the multisampled default colour surface into the current single-sample
+        /// swap-chain/off-screen destination. A no-op when back-buffer MSAA is disabled.
+        void ResolveBackBufferMsaaEXT();
+        [[nodiscard]] ID3D12Resource* GetBackBufferDrawResourceEXT() const;
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDrawRtvEXT() const;
+
+        [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
+        /// DX-116/DX-218: releases every window-size-dependent resource and returns its RTV/DSV
+        /// descriptors to the fence-safe allocators. Used by resize and device recreation.
         void ReleaseWindowSizeDependentViews();
 
-        /// DX-111: lazily creates (once) an UPLOAD-heap, persistently-mapped constant buffer of
-        /// exactly @p byteWidth bytes -- the standard D3D12 dynamic-CB idiom (map once at creation,
-        /// never Unmap, just memcpy new contents in before each draw; safe here because every draw
-        /// in this renderer still submits synchronously via ExecuteCommandListAndWaitEXT(), so there
-        /// is no in-flight GPU access for a new memcpy to race with -- same honest scope note
-        /// D3D12Buffers.hpp's own file comment already makes for SetDataOptions).
-        void CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource, void*& outMapped);
-        ID3D12Resource* GetOrCreatePerDrawConstantBufferEXT();
-        ID3D12Resource* GetOrCreateFogConstantBufferEXT();
-        /// DX-111 (continued): LitLightParams (b1) for lit_textured3d -- see D3DLightingConstants.
-        ID3D12Resource* GetOrCreateLightingConstantBufferEXT();
-        /// DX-111 (continued): alpha_test3d's own single combined PerDraw (b0) -- see
-        /// D3DAlphaTestConstants's own doc comment for why this isn't D3DPerDrawConstants.
-        ID3D12Resource* GetOrCreateAlphaTestConstantBufferEXT();
-        /// DX-111 (finish): skinned3d's BoneBlock (b1, D3DBoneConstants, DX-60a) -- the 72-matrix array.
-        ID3D12Resource* GetOrCreateBoneConstantBufferEXT();
-        /// DX-111 (finish): skinned3d's own FogParams-equivalent (b2, D3DSkinnedExtraConstants) --
-        /// fog + DirectionalLight1/2 + World + EyePosition + specular (mirrors D3D11's own
-        /// GetOrCreateSkinnedExtraConstantBufferEXT, same reasoning D3DSkinnedExtraConstants's own
-        /// doc comment already gives: PerDraw's 128 bytes have no spare room for these fields).
-        ID3D12Resource* GetOrCreateSkinnedExtraConstantBufferEXT();
-        /// DX-111 (closing env_map3d): env_map3d's own PerDraw (b0, D3DEnvMapPerDrawConstants --
-        /// Mvp+World only, a genuinely different shape from D3DPerDrawConstants).
-        ID3D12Resource* GetOrCreateEnvMapPerDrawConstantBufferEXT();
-        /// DX-111 (closing env_map3d): EnvMapParams (b2, D3DEnvMapConstants) -- material/lighting/
-        /// fog/Fresnel fields, mirrors D3D11's own GetOrCreateEnvMapConstantBufferEXT.
-        ID3D12Resource* GetOrCreateEnvMapConstantBufferEXT();
-        /// D3D12 PBR/skinned-vertex-color reconciliation follow-up: pbr3d.vert.hlsl/.frag.hlsl's
-        /// and pbr_skinned3d.vert.hlsl/.frag.hlsl's shared PerDraw (b0, D3DPbrPerDrawConstants) --
-        /// same "map once, reused every draw" convention as every other GetOrCreate*ConstantBufferEXT
-        /// above, mirrors D3D11's own GetOrCreatePbrPerDrawConstantBufferEXT.
-        ID3D12Resource* GetOrCreatePbrPerDrawConstantBufferEXT();
-        /// D3D12 PBR reconciliation follow-up: pbr3d/pbr_skinned3d's shared PbrLights cbuffer
-        /// (register(b1) for the unskinned Pbr3d variant, (b2) for PbrSkinned3d since BoneBlock
-        /// claims (b1) there instead, D3DPbrLightConstants) -- one shared buffer object; which root
-        /// CBV slot it's bound to is decided per-draw by DrawPrimitivesExImpl, mirrors D3D11's own
-        /// GetOrCreatePbrLightsConstantBufferEXT.
-        ID3D12Resource* GetOrCreatePbrLightsConstantBufferEXT();
-
-        /// DX-111 (finish): instanced3d's own hand-built PSO -- deliberately NOT resolved via
-        /// D3D12PipelineStateCache/D3DVertexFormatHelper::InputElementsForStrideD3D12 (which only
-        /// covers a single per-vertex stream), since instanced3d needs a genuinely different
-        /// 2-input-slot layout: POSITION0 (12 bytes, per-vertex, slot 0) + INSTANCEWORLD0-3 (4 x
-        /// float4 rows, per-instance, slot 1) -- mirrors DirectX11Renderer's own
-        /// GetOrCreateInstancedInputLayoutEXT() element list exactly, and D3D12SpriteBatchRenderer's
-        /// own precedent for hand-building a PSO when the stride-keyed cache's assumptions don't fit
-        /// (this file's own instancedPsos_ use the (1,0,0) root-signature shape -- PerDraw@b0 only,
-        /// no texture -- matching instanced3d.frag.hlsl's own real (textureless) declaration).
-        ID3D12PipelineState* GetOrCreateInstancedPsoEXT(ID3D12RootSignature* rootSig,
-                                                       UINT instanceStepRate);
+        /** @brief Submits any open frame work, then blocks until all prior work has completed. */
+        void WaitForGpuIdle();
+        void ReleaseCompletedFrameObjectsEXT();
 
         /// DX-111 (continued): resolves the real SRV GPU descriptor handle to bind for a
         /// GpuDrawParams texture slot -- mirrors DirectX11Renderer's own GetSrvForTextureEXT,
@@ -539,13 +845,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /// DX-109's own honest scope note) -- a single dynamic_cast is sufficient today, not a
         /// gap, just not yet a two-type resolution like D3D11's. Returns a zero-initialized handle
         /// (ptr==0) if @p tex is null or the cast fails.
-        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureEXT(const ITextureRenderer* tex) const;
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureEXT(const ITextureRenderer* tex);
 
         /// DX-111 (closing env_map3d): same convention as GetSrvGpuHandleForTextureEXT, for
         /// env_map3d's 2nd texture slot (a TextureCube, not a Texture2D) -- mirrors D3D11's own
         /// GetSrvForTextureCubeEXT. Returns a zero-initialized handle if @p tex is null or the
         /// dynamic_cast to D3D12TextureCubeRenderer fails.
-        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeRenderer* tex) const;
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeRenderer* tex);
 
         /// D3D12 PBR reconciliation follow-up: lazily creates (once) a 1x1 opaque-white
         /// (255,255,255,255) texture -- the fallback bound for PbrEffect/SkinnedPbrEffect's
@@ -571,6 +877,20 @@ namespace CNA::Internal::Renderers::DirectX12
         void DrawPrimitivesExImpl(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+
+        /// plans/plan_dx.md DX-202: copies every tracked XNA render-state ordinal into @p psoDesc. This used
+        /// to be the same thirteen assignments written out at each of the three draw sites, which is
+        /// how the stencil half stayed missing from all three at once. A single function is also
+        /// what keeps a *new* PSO field from being wired into two sites and forgotten in the third --
+        /// a mistake whose only symptom would be one draw route silently using another's state.
+        /// The variant and vertex layout stay per-site; the complete bound RTV/DSV format set is
+        /// copied here because D3D12 bakes it into the PSO.
+        void FillPsoStateFromCurrentEXT(D3D12PipelineStateDesc& psoDesc) const;
+
+        /// DX-224: transitions every active colour target and binds the complete ordered RTV set
+        /// with target zero's depth-stencil view. Every draw path uses this one operation so PSO
+        /// target shape and output-merger binding cannot diverge.
+        void TransitionAndBindRenderTargetsEXT(ID3D12GraphicsCommandList* commandList);
 
         std::unique_ptr<PlatformRendererSurfaceState> surface_;
         HWND hwnd_ = nullptr;
@@ -611,14 +931,51 @@ namespace CNA::Internal::Renderers::DirectX12
         // never had ApplySamplerState() called on it behaves identically to before this task.
         static constexpr int kMaxSamplerSlots = 16;
         D3D12SamplerCache samplerCache_;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        std::shared_ptr<D3D12MojoShaderContextEXT> mojoShaderContext_;
+#endif
         int currentSamplerFilter_[kMaxSamplerSlots];
         int currentSamplerAddressU_[kMaxSamplerSlots];
         int currentSamplerAddressV_[kMaxSamplerSlots];
         int currentSamplerMaxAnisotropy_[kMaxSamplerSlots];
+        // plans/plan_dx.md DX-216: the three SamplerState fields the cache used to drop. Defaults match
+        // XNA's own -- MaxMipLevel 0 is the most detailed level and bias 0 is no shift; AddressW
+        // starts at Wrap, the same value AddressU/AddressV start at.
+        int currentSamplerAddressW_[kMaxSamplerSlots];
+        int currentSamplerMaxMipLevel_[kMaxSamplerSlots];
+        float currentSamplerLodBias_[kMaxSamplerSlots];
 
-        // DX-104: per-frame command allocators + one reused direct command list.
+        struct FrameConstantChunk
+        {
+            ComPtr<ID3D12Resource> resource;
+            std::uint8_t* mapped = nullptr;
+            std::size_t capacity = 0;
+            std::size_t cursor = 0;
+        };
+
+        struct FrameUploadChunk
+        {
+            ComPtr<ID3D12Resource> resource;
+            std::uint8_t* mapped = nullptr;
+            std::size_t capacity = 0;
+            std::size_t cursor = 0;
+        };
+
+        FrameUploadChunk& CreateFrameUploadChunkEXT(int frameIndex, std::size_t minimumCapacity);
+        void ReleaseFrameUploadChunksEXT() noexcept;
+
+        // DX-237/DX-238: one allocator/list, lifetime domain and upload ring per frame slot.
+        // commandList_ and immediateCommandAllocator_ are reserved for synchronous readback work.
         ComPtr<ID3D12CommandAllocator> commandAllocators_[kFramesInFlight];
+        ComPtr<ID3D12GraphicsCommandList> frameCommandLists_[kFramesInFlight];
+        ComPtr<ID3D12CommandAllocator> immediateCommandAllocator_;
         ComPtr<ID3D12GraphicsCommandList> commandList_;
+        std::vector<FrameConstantChunk> frameConstantChunks_[kFramesInFlight];
+        std::vector<FrameUploadChunk> frameUploadChunks_[kFramesInFlight];
+        std::vector<ComPtr<IUnknown>> frameRetainedObjects_[kFramesInFlight];
+        int activeFrameIndex_ = -1;
+        int headlessFrameIndex_ = 0;
+        std::uint64_t activeFrameFenceValue_ = 0;
 
         // DX-105: single shared fence + monotonically increasing counter + the fence value last
         // recorded for each frame index (the actual N-frames-in-flight back-pressure state).
@@ -626,6 +983,12 @@ namespace CNA::Internal::Renderers::DirectX12
         HANDLE fenceEvent_ = nullptr;
         std::uint64_t nextFenceValue_ = 1;
         std::uint64_t frameFenceValues_[kFramesInFlight] = {};
+        std::uint64_t frameFenceWaitCountEXT_ = 0;
+        std::uint64_t gpuWaitCountEXT_ = 0;
+        std::uint64_t frameSubmissionCountEXT_ = 0;
+        std::uint64_t immediateSubmissionCountEXT_ = 0;
+        std::uint64_t uploadResourceCreationCountEXT_ = 0;
+        std::uint64_t uploadAllocationCountEXT_ = 0;
 
         // Swap-chain lifetime (DX-102) -- see class-level doc comment for why this is allowed to
         // fail gracefully instead of throwing.
@@ -640,13 +1003,29 @@ namespace CNA::Internal::Renderers::DirectX12
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;
         bool exclusiveFullscreen_ = false;
+        int swapInterval_ = 1;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        // GraphicsDeviceManager reapplies its default mode before every Reset. A windowless
+        // renderer keeps legacy local-pixel behavior until a caller explicitly selects a mode
+        // after setting the virtual resolution.
+        bool windowlessPresentationExplicit_ = false;
 
         // DX-116: window-size-lifetime resources -- real back-buffer RTVs (one per
         // kFramesInFlight) + a shared depth-stencil buffer, mirroring D3D11's own DX-24 group.
         ComPtr<ID3D12Resource> backBufferResources_[kFramesInFlight];
         D3D12_CPU_DESCRIPTOR_HANDLE backBufferRtvs_[kFramesInFlight]{};
+        // DX-241: the implicit off-screen back buffer, present exactly when swapChainAvailable_ is
+        // false. It is the resource ReadBackbuffer() reads (DX-205) and the one
+        // RestoreBackBufferRenderTargetEXT() rebinds, so a windowless device behaves like a device
+        // with a back buffer in every respect except putting pixels on a screen.
+        ComPtr<ID3D12Resource> offscreenBackBufferResource_;
+        D3D12_CPU_DESCRIPTOR_HANDLE offscreenBackBufferRtv_{};
+        ComPtr<ID3D12Resource> backBufferMsaaResource_;
+        D3D12_CPU_DESCRIPTOR_HANDLE backBufferMsaaRtv_{};
         ComPtr<ID3D12Resource> depthStencilResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
+        int requestedMultiSampleCount_ = 0;
+        int appliedMultiSampleCount_ = 0;
 
         // DX-144: tracks the currently-bound custom (non-back-buffer) render target, mirroring
         // DirectX11Renderer's own currentCustomRT_ exactly -- SetRenderTarget2D(nullptr) needs
@@ -664,57 +1043,25 @@ namespace CNA::Internal::Renderers::DirectX12
         IRenderTargetCubeRenderer* currentCubeRT_ = nullptr;
         /// REMED-GFX-134: finalizes and forgets the currently tracked cube target, if any.
         void FlushPendingCubeResolveEXT();
+        /// DX-255: finalizes a previously bound MRT set (or single target bound through
+        /// SetRenderTargets) by calling UnbindAsRenderTarget() on each of its targets, then clears
+        /// the tracking. Idempotent; a no-op when nothing was bound that way.
+        void FlushPendingMrtResolveEXT();
 
         // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
         // real D3D12 resource this renderer creates (vertex/index buffers, textures -- DX-109).
         D3D12ResourceStateTracker resourceStates_;
 
-        // DX-111: root-signature/PSO caches (shared across every draw call) and the colored3d
-        // constant buffers -- same "persistent, reused across draws" convention D3D11's own
-        // perDrawConstantBuffer_/fogConstantBuffer_ established.
+        // Root-signature/PSO caches are shared across draws. DX-237 moved all draw constants into
+        // frame-owned ranges above; one mutable mapped resource per constant kind is not in-flight safe.
         D3D12RootSignatureCache rootSigCache_;
         D3D12PipelineStateCache psoCache_;
-        ComPtr<ID3D12Resource> perDrawConstantBuffer_;
-        void* perDrawConstantBufferMapped_ = nullptr;
-        ComPtr<ID3D12Resource> fogConstantBuffer_;
-        void* fogConstantBufferMapped_ = nullptr;
-        // DX-111 (continued): textured3d/colored_textured3d/lit_textured3d/alpha_test3d's own
-        // persistent constant buffers, same "map once, reused every draw" convention as above.
-        ComPtr<ID3D12Resource> lightingConstantBuffer_;
-        void* lightingConstantBufferMapped_ = nullptr;
-        ComPtr<ID3D12Resource> alphaTestConstantBuffer_;
-        void* alphaTestConstantBufferMapped_ = nullptr;
-        // DX-111 (finish): skinned3d's own persistent constant buffers -- same convention as above.
-        ComPtr<ID3D12Resource> boneConstantBuffer_;
-        void* boneConstantBufferMapped_ = nullptr;
-        ComPtr<ID3D12Resource> skinnedExtraConstantBuffer_;
-        void* skinnedExtraConstantBufferMapped_ = nullptr;
-        // DX-111 (closing env_map3d): env_map3d's own persistent constant buffers -- same
-        // "map once, reused every draw" convention as above.
-        ComPtr<ID3D12Resource> envMapPerDrawConstantBuffer_;
-        void* envMapPerDrawConstantBufferMapped_ = nullptr;
-        ComPtr<ID3D12Resource> envMapConstantBuffer_;
-        void* envMapConstantBufferMapped_ = nullptr;
-        // D3D12 PBR reconciliation follow-up: pbr3d/pbr_skinned3d's own persistent constant
-        // buffers -- same "map once, reused every draw" convention as above.
-        ComPtr<ID3D12Resource> pbrPerDrawConstantBuffer_;
-        void* pbrPerDrawConstantBufferMapped_ = nullptr;
-        ComPtr<ID3D12Resource> pbrLightsConstantBuffer_;
-        void* pbrLightsConstantBufferMapped_ = nullptr;
         // D3D12 PBR reconciliation follow-up: lazily-created 1x1 fallback textures for PbrEffect/
         // SkinnedPbrEffect's optional map slots (see GetOrCreateDefaultWhiteTextureEXT()/
         // GetOrCreateDefaultFlatNormalTextureEXT()'s own doc comments) -- owned here, reused
         // across every draw that needs a fallback.
         std::unique_ptr<ITextureRenderer> defaultWhiteTexture_;
         std::unique_ptr<ITextureRenderer> defaultFlatNormalTexture_;
-        // DX-111 (finish): instanced3d's own hand-built PSO (see GetOrCreateInstancedPsoEXT's doc
-        // comment) -- reused across DrawInstancedPrimitivesEx calls.
-        // REMED-GFX-123: keyed by InstanceDataStepRate. The rate is baked into the PSO's input
-        // layout, so a single cached PSO would silently reuse the previous draw's
-        // VertexBufferBinding.InstanceFrequency. One entry per distinct rate (one or two in
-        // practice), so alternating frequencies never build a PSO per draw.
-        std::unordered_map<UINT, ComPtr<ID3D12PipelineState>> instancedPsos_;
-
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
         ID3D12Resource* boundColorResource_ = nullptr;
@@ -739,6 +1086,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // matching every draw path's pre-DX-118 "null DSV" behavior exactly when nothing sets one.
         D3D12_CPU_DESCRIPTOR_HANDLE boundDsv_{};
         DXGI_FORMAT boundDsvFormat_ = DXGI_FORMAT_UNKNOWN;
+        ID3D12Resource* boundDepthResource_ = nullptr;
 
         // DX-118: currently-applied XNA-level state (updated by ApplyBlendState/
         // ApplyDepthStencilState/ApplyRasterizerState), fed into every psoCache_.GetOrCreate() call
@@ -753,34 +1101,68 @@ namespace CNA::Internal::Renderers::DirectX12
         int currentAlphaDstBlend_ = 1;   // Blend::Zero
         int currentColorBlendFunc_ = 0;  // BlendFunction::Add
         int currentAlphaBlendFunc_ = 0;  // BlendFunction::Add
-        // REMED-GFX-077: BlendState output-merger write state, folded into the PSO cache key/desc.
-        int currentColorWriteMask_ = 15;              // ColorWriteChannels.All (bit0=R..bit3=A)
+        // REMED-GFX-077/DX-224: all four XNA MRT output masks, folded into the PSO key/desc.
+        std::array<int, 4> currentColorWriteMasks_{15, 15, 15, 15};
         unsigned int currentSampleMask_ = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
         bool currentDepthEnable_ = false;
         bool currentDepthWriteEnable_ = false;
         int currentDepthFunc_ = 3;       // CompareFunction::LessEqual (real XNA ordinal)
+        // DX-202/DX-203: the stencil half of DepthStencilState, tracked exactly like the depth half
+        // above and defaulting to XNA's own DepthStencilState.Default (stencil off,
+        // CompareFunction::Always, StencilOperation::Keep, full masks, single-sided, reference 0).
+        // currentReferenceStencil_ is deliberately NOT a PSO field: D3D12 takes it through
+        // OMSetStencilRef() at record time, which is why GraphicsDevice.ReferenceStencil can change
+        // between draws without rebuilding a pipeline state.
+        bool currentStencilEnable_ = false;
+        int currentStencilFunc_ = 0;
+        int currentStencilPass_ = 0;
+        int currentStencilFail_ = 0;
+        int currentStencilDepthFail_ = 0;
+        int currentStencilMask_ = 0xFF;
+        int currentStencilWriteMask_ = 0xFF;
+        bool currentTwoSidedStencilMode_ = false;
+        int currentCcwStencilFunc_ = 0;
+        int currentCcwStencilPass_ = 0;
+        int currentCcwStencilFail_ = 0;
+        int currentCcwStencilDepthFail_ = 0;
+        int currentReferenceStencil_ = 0;
+        // DX-204: GraphicsDevice.BlendFactor. XNA's default is Color.White (1,1,1,1), which is also
+        // D3D12's own default blend factor, so a game that never sets it is unaffected.
+        float currentBlendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         int currentCullMode_ = 0;        // CullMode::None
         int currentFillMode_ = 0;        // FillMode::Solid
+        // DX-201: RasterizerState.ScissorTestEnable plus GraphicsDevice.ScissorRectangle. Not PSO
+        // state on D3D12 (see GetEffectiveScissorEXT), so no cache key entry and no PSO rebuild when
+        // a game moves the rectangle between draws.
+        bool currentScissorTestEnable_ = false;
+        bool scissorSet_ = false;
+        int scissorX_ = 0;
+        int scissorY_ = 0;
+        int scissorW_ = 0;
+        int scissorH_ = 0;
+        // DX-206: RasterizerState.DepthBias / SlopeScaleDepthBias. These ARE pipeline state
+        // (D3D12_RASTERIZER_DESC::DepthBias / SlopeScaledDepthBias), so they join the PSO key.
+        float currentDepthBias_ = 0.0f;
+        float currentSlopeScaleDepthBias_ = 0.0f;
 
-        // DX-117: additional MRT targets beyond the primary (index 0, tracked by boundColor*_
-        // above) -- Clear() independently transitions+clears each; draws remain single-target
-        // (boundColorRtv_ only), see BindOffscreenColorTargetsEXT's own doc comment for why.
+        // DX-117/DX-224: additional MRT targets beyond the primary (index 0, tracked by
+        // boundColor*_ above). Clear and every draw transition and bind the complete ordered set.
         static constexpr int kMaxExtraMrtTargets = 7; // 8 total (D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT) - 1 primary
         ID3D12Resource* extraMrtResources_[kMaxExtraMrtTargets] = {};
         D3D12_CPU_DESCRIPTOR_HANDLE extraMrtRtvs_[kMaxExtraMrtTargets]{};
+        DXGI_FORMAT extraMrtFormats_[kMaxExtraMrtTargets]{};
         int extraMrtCount_ = 0;
 
-        // DX-120: the currently-active occlusion query heap (non-owning, nullptr when no query is
-        // active), always slot 0. Real, non-obvious constraint discovered while landing DX-120:
-        // BeginQuery()/EndQuery() must be recorded within the SAME command-list submission as the
-        // draw(s) they bracket (a Vulkan/vkd3d-proton requirement this renderer's own per-draw-call
-        // self-submission architecture doesn't naturally satisfy) -- so every draw-recording method
-        // (DrawColoredPrimitives/DrawIndexedColoredPrimitives/DrawPrimitivesExImpl/
-        // DrawInstancedPrimitivesEx) checks this field and, when set, wraps its own single
-        // command-list recording with BeginQuery right after Reset() and EndQuery right before
-        // Close() -- correct for exactly one draw call between Begin()/End() (this design's own
-        // honest scope boundary; see D3D12OcclusionQueryRenderer's own header doc comment for the
-        // multi-draw-accumulation gap this does not attempt to solve).
-        ID3D12QueryHeap* activeOcclusionQueryHeap_ = nullptr;
+        /// plans/plan_dx.md DX-255: the render targets a SetRenderTargets() call bound, so each one's own
+        /// UnbindAsRenderTarget() -- where the per-target MSAA resolve and mip regeneration live --
+        /// runs when the set is replaced. `currentCustomRT_` is a single pointer and cannot
+        /// represent N targets; this is the same split DirectX11Renderer's own
+        /// currentMRTTargets_/FlushPendingMRTResolveEXT() already uses (DX-143), which D3D12 never
+        /// got. The first entry is also tracked here rather than in currentCustomRT_, so exactly one
+        /// of the two mechanisms owns a given bind.
+        static constexpr int kMaxMrtTargets = kMaxExtraMrtTargets + 1;
+        IRenderTargetRenderer* currentMrtTargets_[kMaxMrtTargets] = {};
+        int currentMrtCount_ = 0;
+
     };
 }

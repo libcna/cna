@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Examples::ComputeParticlesGenerated",
+  "package": "compute_particles_example",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kIntegratorEsComputeSource","source":"integrate.es.comp.glsl","language":"glsl-es","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kIntegratorDesktopComputeSource","source":"integrate.desktop.comp.glsl","language":"glsl","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kIntegratorVulkanComputeSpirV","source":"integrate.vulkan.comp.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"compute","format":"spirv","entry_point":"main"}
+  ]
+}

@@ -159,3 +159,32 @@ TEST(GraphicsDeviceManagerTest, RepeatedDisposeDoesNotReraiseDeviceDisposing)
 
     EXPECT_EQ(disposingCount, 1);
 }
+
+// XNA's GraphicsDevice.Viewport is the backbuffer, whatever shape the window is; the presentation
+// scales it. CNA's four other presentation modes are extensions, and one of them --
+// FixedHeightDynamicWidth -- widens the LOGICAL width to the window's aspect, which changes the
+// coordinate space a game reads back from Viewport.Width. It was the default until 2026-09-08 and
+// put Yacht's phone-shaped 480x800 layout at a reported viewport of 1067x800 on an 800x600
+// window, sending every right-anchored element outside the frame the rest of the game drew.
+TEST(GraphicsDeviceManagerTest, DefaultPresentationModeIsLetterboxSoTheViewportIsTheBackbuffer)
+{
+    OneFrameGame game;
+    GraphicsDeviceManager gdm(&game);
+
+    EXPECT_EQ(gdm.getPreferredPresentationModeProperty(), PresentationMode::Letterbox);
+}
+
+TEST(GraphicsDeviceManagerTest, PresentationModeRoundTripsSoTheExtensionsStayReachable)
+{
+    OneFrameGame game;
+    GraphicsDeviceManager gdm(&game);
+
+    for (const PresentationMode mode : {PresentationMode::Overscan, PresentationMode::Stretch,
+                                        PresentationMode::NativeBackBuffer,
+                                        PresentationMode::FixedHeightDynamicWidth,
+                                        PresentationMode::Letterbox})
+    {
+        gdm.setPreferredPresentationModeProperty(mode);
+        EXPECT_EQ(gdm.getPreferredPresentationModeProperty(), mode);
+    }
+}

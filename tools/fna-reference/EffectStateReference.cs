@@ -30,6 +30,9 @@ namespace CNA.FnaReference
 		[DllImport("FNA3D", CallingConvention = CallingConvention.Cdecl)]
 		private static extern uint FNA3D_PrepareWindowAttributes();
 
+		[DllImport("FNA3D", CallingConvention = CallingConvention.Cdecl)]
+		private static extern uint FNA3D_LinkedVersion();
+
 		[DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
 		private static extern int SDL_Init(uint flags);
 
@@ -57,6 +60,17 @@ namespace CNA.FnaReference
 			{
 				Console.Error.WriteLine("no such directory: " + effectDirectory);
 				return 2;
+			}
+
+			uint expectedVersion = ExpectedFna3DVersion();
+			uint linkedVersion = FNA3D_LinkedVersion();
+			if (linkedVersion != expectedVersion)
+			{
+				Console.Error.WriteLine(
+					"FNA/FNA3D version mismatch: FNA " +
+					typeof(Vector3).Assembly.GetName().Version + " requires FNA3D " +
+					expectedVersion + ", but the loaded library reports " + linkedVersion);
+				return 3;
 			}
 
 			if (SDL_Init(SDL_INIT_VIDEO) == 0)
@@ -125,6 +139,13 @@ namespace CNA.FnaReference
 			SDL_DestroyWindow(window);
 			SDL_Quit();
 			return 0;
+		}
+
+		/// <summary>Converts FNA's assembly version to FNA3D's packed version integer.</summary>
+		private static uint ExpectedFna3DVersion()
+		{
+			Version version = typeof(Vector3).Assembly.GetName().Version;
+			return (uint) (version.Major * 10000 + version.Minor * 100 + version.Build);
 		}
 
 		/// <summary>Applies each pass in order and records the resulting device state.</summary>

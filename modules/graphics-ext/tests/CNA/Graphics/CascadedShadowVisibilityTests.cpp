@@ -223,11 +223,8 @@ protected:
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
             GTEST_SKIP() << "this renderer does not raster 3D triangles";
-        CNA_SKIP_WITHOUT_SHADER_EXECUTION(device);
-        // MOD-1699: compiling the caster's shader is not the same promise as SAMPLING the shadow.
-        // The Vulkan renderer answers true to the first (its ShaderEffect exists) and false to the
-        // second (its lit shaders ignore the state), so without this the cascade case did not skip
-        // there -- it failed, describing a feature that renderer never claimed to have.
+        // MOD-2237: exact portable-package selection replaced the runtime-source requirement.
+        // A sampling-capable renderer must now execute its matching caster representation.
         if (!device.SupportsShadowSamplingEXT())
             GTEST_SKIP() << "this renderer's lit shaders do not sample shadow maps";
     }

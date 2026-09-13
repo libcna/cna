@@ -1,5 +1,6 @@
 // plans/plan_dx.md Phase DIRECTX5 (DX-30/DX-31).
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
+#include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -34,9 +35,21 @@ namespace CNA::Internal::Renderers::DirectX11
     // -------------------------------------------------------------------------
 
     D3D11VertexBufferRenderer::D3D11VertexBufferRenderer(
-        ID3D11Device* device, ID3D11DeviceContext* context, int vertex_capacity)
-        : device_(device), context_(context), capacity_(vertex_capacity)
+        DirectX11Renderer* owner, int vertex_capacity)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(owner ? owner->GetDeviceEXT() : nullptr)
+        , context_(owner ? owner->GetContextEXT() : nullptr)
+        , capacity_(vertex_capacity)
     {
+        if (owner_)
+            owner_->RegisterRecoverableResourceEXT(this);
+    }
+
+    D3D11VertexBufferRenderer::~D3D11VertexBufferRenderer()
+    {
+        if (owner_ && !ownerLifetime_.expired())
+            owner_->UnregisterRecoverableResourceEXT(this);
     }
 
     void D3D11VertexBufferRenderer::EnsureCapacity(std::size_t requiredBytes)
@@ -91,7 +104,27 @@ namespace CNA::Internal::Renderers::DirectX11
         const std::size_t byteCount = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
         EnsureCapacity(byteCount);
         Upload(data, byteCount, options);
+        cpuData_.assign(static_cast<const std::uint8_t*>(data),
+                        static_cast<const std::uint8_t*>(data) + byteCount);
         vertexCount_ = vertex_count;
+    }
+
+    void D3D11VertexBufferRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        buffer_.Reset();
+        context_.Reset();
+        device_.Reset();
+        byteWidth_ = 0;
+    }
+
+    void D3D11VertexBufferRenderer::RecreateDeviceResourcesEXT()
+    {
+        device_ = owner_->GetDeviceEXT();
+        context_ = owner_->GetContextEXT();
+        if (cpuData_.empty())
+            return;
+        EnsureCapacity(cpuData_.size());
+        Upload(cpuData_.data(), cpuData_.size(), SetDataOptions::None);
     }
 
     // -------------------------------------------------------------------------
@@ -99,9 +132,22 @@ namespace CNA::Internal::Renderers::DirectX11
     // -------------------------------------------------------------------------
 
     D3D11IndexBufferRenderer::D3D11IndexBufferRenderer(
-        ID3D11Device* device, ID3D11DeviceContext* context, int index_capacity, bool thirtyTwoBit)
-        : device_(device), context_(context), capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit)
+        DirectX11Renderer* owner, int index_capacity, bool thirtyTwoBit)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(owner ? owner->GetDeviceEXT() : nullptr)
+        , context_(owner ? owner->GetContextEXT() : nullptr)
+        , capacity_(index_capacity)
+        , thirtyTwoBit_(thirtyTwoBit)
     {
+        if (owner_)
+            owner_->RegisterRecoverableResourceEXT(this);
+    }
+
+    D3D11IndexBufferRenderer::~D3D11IndexBufferRenderer()
+    {
+        if (owner_ && !ownerLifetime_.expired())
+            owner_->UnregisterRecoverableResourceEXT(this);
     }
 
     DXGI_FORMAT D3D11IndexBufferRenderer::GetFormatEXT() const
@@ -157,6 +203,24 @@ namespace CNA::Internal::Renderers::DirectX11
         indexCount_ = static_cast<int>(byteCount / (dataIsThirtyTwoBit ? sizeof(std::uint32_t) : sizeof(std::uint16_t)));
     }
 
+    void D3D11IndexBufferRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        buffer_.Reset();
+        context_.Reset();
+        device_.Reset();
+        byteWidth_ = 0;
+    }
+
+    void D3D11IndexBufferRenderer::RecreateDeviceResourcesEXT()
+    {
+        device_ = owner_->GetDeviceEXT();
+        context_ = owner_->GetContextEXT();
+        if (cpuData_.empty())
+            return;
+        EnsureCapacity(cpuData_.size());
+        Upload(cpuData_.data(), cpuData_.size(), SetDataOptions::None, thirtyTwoBit_);
+    }
+
     void D3D11IndexBufferRenderer::SetData16(const void* data, int index_count)
     {
         SetData16WithOptions(data, index_count, SetDataOptions::None);
@@ -169,11 +233,17 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void D3D11IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count, SetDataOptions options)
     {
-        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint16_t), options, false);
+        const std::size_t byteCount = static_cast<std::size_t>(index_count) * sizeof(std::uint16_t);
+        Upload(data, byteCount, options, false);
+        cpuData_.assign(static_cast<const std::uint8_t*>(data),
+                        static_cast<const std::uint8_t*>(data) + byteCount);
     }
 
     void D3D11IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count, SetDataOptions options)
     {
-        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint32_t), options, true);
+        const std::size_t byteCount = static_cast<std::size_t>(index_count) * sizeof(std::uint32_t);
+        Upload(data, byteCount, options, true);
+        cpuData_.assign(static_cast<const std::uint8_t*>(data),
+                        static_cast<const std::uint8_t*>(data) + byteCount);
     }
 }

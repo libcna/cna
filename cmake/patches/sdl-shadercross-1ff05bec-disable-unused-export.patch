@@ -1,0 +1,15 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fa3e92b..6093bcd 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -231,7 +231,9 @@ if(SDLSHADERCROSS_STATIC)
+ 	target_link_libraries(SDL3_shadercross-static PUBLIC
+ 		SDL3::Headers
+ 	)
+-	export(TARGETS SDL3_shadercross-static NAMESPACE "SDL3_shadercross::" FILE "SDL3_shadercross-static-targets.cmake")
++	if(SDLSHADERCROSS_INSTALL)
++		export(TARGETS SDL3_shadercross-static NAMESPACE "SDL3_shadercross::" FILE "SDL3_shadercross-static-targets.cmake")
++	endif()
+ endif()
+ 
+ # Copy dependencies of SDL3_shadercross-config.cmake to build directory.

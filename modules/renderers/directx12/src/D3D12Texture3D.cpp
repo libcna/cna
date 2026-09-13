@@ -1,6 +1,9 @@
 // plans/plan_dx.md Phase DX13 (DX-122).
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -45,14 +48,65 @@ namespace CNA::Internal::Renderers::DirectX12
             static_cast<D3D12_RESOURCE_STATES>(
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+
+        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel,
+                                  bool& compressed, int& bytesPerBlock)
+        {
+            using namespace D3DCommon;
+            dxgiFormat = SurfaceFormatToDxgi(surfaceFormat);
+            bytesPerTexel = SurfaceFormatBytesPerTexel(surfaceFormat);
+            compressed = IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+            bytesPerBlock = SurfaceFormatBytesPerBlock(surfaceFormat);
+            if ((!IsXnaUncompressedSurfaceFormat(surfaceFormat) && !compressed) ||
+                dxgiFormat == DXGI_FORMAT_UNKNOWN ||
+                (compressed ? bytesPerBlock == 0 : bytesPerTexel == 0))
+            {
+                throw std::invalid_argument(
+                    "D3D12Texture3DRenderer: unsupported SurfaceFormat::" +
+                    std::string(SurfaceFormatName(surfaceFormat)) + " (ordinal " +
+                    std::to_string(surfaceFormat) + ").");
+            }
+        }
+
+        std::size_t CompressedVolumeLevelByteCount(
+            int width, int height, int depth, int bytesPerBlock)
+        {
+            return static_cast<std::size_t>((width + 3) / 4) *
+                   static_cast<std::size_t>((height + 3) / 4) *
+                   static_cast<std::size_t>(depth) *
+                   static_cast<std::size_t>(bytesPerBlock);
+        }
+
+        std::vector<std::uint8_t> DecompressLevel(
+            int surfaceFormat, const std::uint8_t* blocks, std::size_t byteCount,
+            int width, int height)
+        {
+            using CNA::Internal::Graphics::DxtUtil;
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            switch (static_cast<SurfaceFormat>(surfaceFormat))
+            {
+                case SurfaceFormat::Dxt1:
+                    return DxtUtil::DecompressDxt1(blocks, byteCount, width, height);
+                case SurfaceFormat::Dxt3:
+                    return DxtUtil::DecompressDxt3(blocks, byteCount, width, height);
+                case SurfaceFormat::Dxt5:
+                    return DxtUtil::DecompressDxt5(blocks, byteCount, width, height);
+                default:
+                    return {};
+            }
+        }
     }
 
     D3D12Texture3DRenderer::D3D12Texture3DRenderer(DirectX12Renderer* renderer,
-                                                  int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
-        : renderer_(renderer)
+                                                  int w, int h, int depth, bool mipMap, int surfaceFormat)
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12Texture3DRenderer")
         , width_(w), height_(h), depth_(depth)
         , mipLevels_(mipMap ? CalculateMipLevels(w, h, depth) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
+        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,
+                             bytesPerBlock_);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -62,7 +116,7 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.Height = static_cast<UINT>(height_);
         desc.DepthOrArraySize = static_cast<UINT16>(depth_); // TEXTURE3D's own "depth" meaning, not an array
         desc.MipLevels = static_cast<UINT16>(mipLevels_);
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = dxgiFormat_;
         desc.SampleDesc.Count = 1;
         desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
@@ -75,7 +129,7 @@ namespace CNA::Internal::Renderers::DirectX12
         renderer_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.Format = dxgiFormat_;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture3D.MipLevels = static_cast<UINT>(mipLevels_);
@@ -86,6 +140,19 @@ namespace CNA::Internal::Renderers::DirectX12
             {
                 renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
             });
+
+        if (compressed_)
+        {
+            compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            for (int level = 0; level < mipLevels_; ++level)
+            {
+                compressedLevels_[static_cast<std::size_t>(level)].assign(
+                    CompressedVolumeLevelByteCount(
+                        std::max(1, width_ >> level), std::max(1, height_ >> level),
+                        std::max(1, depth_ >> level), bytesPerBlock_),
+                    0);
+            }
+        }
 
         // No initial pixel data (ITexture3DRenderer's own construction contract, unlike
         // D3D12TextureRenderer's ImageData-driven level-0 upload) -- transition straight to the
@@ -102,17 +169,10 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12Texture3DRenderer::TransitionToShaderReadableEXT()
     {
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
 
         renderer_->GetResourceStateTrackerEXT().TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
-
-        const HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12Texture3DRenderer: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     bool D3D12Texture3DRenderer::SetData(int level, int x, int y, int z, int w, int h, int depth,
@@ -127,60 +187,71 @@ namespace CNA::Internal::Renderers::DirectX12
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
-        if (dataLength < w * h * depth * 4) return false;
+        if (compressed_ && ((x % 4) != 0 || (y % 4) != 0 ||
+                            ((w % 4) != 0 && x + w != levelW) ||
+                            ((h % 4) != 0 && y + h != levelH)))
+            return false;
+        const int rowCount = compressed_ ? (h + 3) / 4 : h;
+        const std::size_t rowBytes = compressed_
+            ? static_cast<std::size_t>((w + 3) / 4) * bytesPerBlock_
+            : static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t tightSliceBytes = rowBytes * static_cast<std::size_t>(rowCount);
+        const std::size_t required = tightSliceBytes * static_cast<std::size_t>(depth);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+
+        if (compressed_)
+        {
+            const int levelBlockCols = (levelW + 3) / 4;
+            const int levelBlockRows = (levelH + 3) / 4;
+            const std::size_t levelRowBytes =
+                static_cast<std::size_t>(levelBlockCols) * bytesPerBlock_;
+            const std::size_t levelSliceBytes =
+                levelRowBytes * static_cast<std::size_t>(levelBlockRows);
+            auto& levelBlocks = compressedLevels_[static_cast<std::size_t>(level)];
+            for (int slice = 0; slice < depth; ++slice)
+            {
+                for (int row = 0; row < rowCount; ++row)
+                {
+                    std::memcpy(
+                        levelBlocks.data() +
+                            static_cast<std::size_t>(z + slice) * levelSliceBytes +
+                            static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                            static_cast<std::size_t>(x / 4) * bytesPerBlock_,
+                        static_cast<const std::uint8_t*>(data) +
+                            static_cast<std::size_t>(slice) * tightSliceBytes +
+                            static_cast<std::size_t>(row) * rowBytes,
+                        rowBytes);
+                }
+            }
+        }
 
         // Row-pitch-aligned staging BUFFER, one slice-pitch-sized region per Z slice -- same
         // discipline D3D12TextureRenderer::UploadRegion already established for its own 2D case,
         // extended with a depth loop (D3D12_TEXTURE_DATA_PITCH_ALIGNMENT governs row pitch only;
         // there is no separate per-slice alignment requirement for an UPLOAD-heap staging buffer,
         // unlike the resource's own internal tiled layout).
-        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-        const UINT slicePitch = rowPitch * static_cast<UINT>(h);
+        const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT slicePitch = rowPitch * static_cast<UINT>(rowCount);
         const UINT64 uploadBufferSize = static_cast<UINT64>(slicePitch) * static_cast<UINT64>(depth);
 
-        D3D12_HEAP_PROPERTIES uploadHeapProps{};
-        uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+        auto upload = renderer_->AllocateFrameUploadEXT(
+            static_cast<std::size_t>(uploadBufferSize), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
 
-        D3D12_RESOURCE_DESC bufDesc{};
-        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufDesc.Width = uploadBufferSize;
-        bufDesc.Height = 1;
-        bufDesc.DepthOrArraySize = 1;
-        bufDesc.MipLevels = 1;
-        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
-        bufDesc.SampleDesc.Count = 1;
-        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        ComPtr<ID3D12Resource> staging;
-        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
-            &uploadHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12Texture3DRenderer: staging CreateCommittedResource failed, hr=" + FormatHr(hr));
-
-        uint8_t* mapped = nullptr;
-        const D3D12_RANGE readRange{0, 0};
-        hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12Texture3DRenderer: staging Map failed, hr=" + FormatHr(hr));
-
-        // Source data is tightly packed (ITexture3DRenderer::SetData's own contract, matching
-        // D3D11Texture3DRenderer's identical assumption): row stride = w*4, slice stride = w*h*4.
+        // Source data is tightly packed in the texture's native SurfaceFormat.
         const uint8_t* src = static_cast<const uint8_t*>(data);
         for (int slice = 0; slice < depth; ++slice)
         {
-            for (int row = 0; row < h; ++row)
+            for (int row = 0; row < rowCount; ++row)
             {
                 const uint8_t* srcRow = src
-                    + static_cast<std::size_t>(slice) * static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4
-                    + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
-                uint8_t* dstRow = mapped
+                    + static_cast<std::size_t>(slice) * tightSliceBytes
+                    + static_cast<std::size_t>(row) * rowBytes;
+                uint8_t* dstRow = upload.mapped
                     + static_cast<std::size_t>(slice) * slicePitch
                     + static_cast<std::size_t>(row) * rowPitch;
-                std::memcpy(dstRow, srcRow, static_cast<std::size_t>(w) * 4);
+                std::memcpy(dstRow, srcRow, rowBytes);
             }
         }
-        staging->Unmap(0, nullptr);
 
         // A TEXTURE3D resource has no array dimension -- the subresource index is unconditionally
         // just the mip level (unlike D3D12TextureRenderer's own array-size-1 TEXTURE2D case, which
@@ -192,19 +263,17 @@ namespace CNA::Internal::Renderers::DirectX12
         dst.SubresourceIndex = static_cast<UINT>(level);
 
         D3D12_TEXTURE_COPY_LOCATION srcLoc{};
-        srcLoc.pResource = staging.Get();
+        srcLoc.pResource = upload.resource;
         srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-        srcLoc.PlacedFootprint.Offset = 0;
-        srcLoc.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srcLoc.PlacedFootprint.Offset = upload.offset;
+        srcLoc.PlacedFootprint.Footprint.Format = dxgiFormat_;
         srcLoc.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
         srcLoc.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
         srcLoc.PlacedFootprint.Footprint.Depth = static_cast<UINT>(depth);
         srcLoc.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
@@ -212,10 +281,6 @@ namespace CNA::Internal::Renderers::DirectX12
                                    &srcLoc, nullptr);
         tracker.TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
 
-        hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12Texture3DRenderer::SetData: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
         return true;
     }
 
@@ -225,9 +290,46 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-130: each silent `return` here became a complete transparent-black volume once
         // the shared layer converted its own zeroed scratch buffer regardless.
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
-        if (data == nullptr || dataLength < w * h * depth * 4) return false;
+        if (data == nullptr) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (compressed_)
+        {
+            const std::size_t required = static_cast<std::size_t>(w) * h * depth * 4u;
+            if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+            const int levelBlockRows = (levelH + 3) / 4;
+            const std::size_t levelSliceBytes =
+                static_cast<std::size_t>((levelW + 3) / 4) * levelBlockRows * bytesPerBlock_;
+            const auto& levelBlocks = compressedLevels_[static_cast<std::size_t>(level)];
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (int slice = 0; slice < depth; ++slice)
+            {
+                const std::uint8_t* sliceBlocks = levelBlocks.data() +
+                    static_cast<std::size_t>(z + slice) * levelSliceBytes;
+                const auto rgba = DecompressLevel(
+                    surfaceFormat_, sliceBlocks, levelSliceBytes, levelW, levelH);
+                if (rgba.size() < static_cast<std::size_t>(levelW) * levelH * 4u) return false;
+                for (int row = 0; row < h; ++row)
+                {
+                    std::memcpy(
+                        destination +
+                            (static_cast<std::size_t>(slice) * h + row) * w * 4u,
+                        rgba.data() +
+                            (static_cast<std::size_t>(y + row) * levelW + x) * 4u,
+                        static_cast<std::size_t>(w) * 4u);
+                }
+            }
+            return true;
+        }
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t tightSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        const std::size_t required = tightSliceBytes * static_cast<std::size_t>(depth);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
-        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT slicePitch = rowPitch * static_cast<UINT>(h);
         const UINT64 readbackBufferSize = static_cast<UINT64>(slicePitch) * static_cast<UINT64>(depth);
 
@@ -254,7 +356,7 @@ namespace CNA::Internal::Renderers::DirectX12
         dst.pResource = readback.Get();
         dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         dst.PlacedFootprint.Offset = 0;
-        dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dst.PlacedFootprint.Footprint.Format = dxgiFormat_;
         dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
         dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
         dst.PlacedFootprint.Footprint.Depth = static_cast<UINT>(depth);
@@ -273,10 +375,7 @@ namespace CNA::Internal::Renderers::DirectX12
         srcBox.bottom = static_cast<UINT>(y + h);
         srcBox.back = static_cast<UINT>(z + depth);
 
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(texture_.Get());
@@ -301,9 +400,9 @@ namespace CNA::Internal::Renderers::DirectX12
                     + static_cast<std::size_t>(slice) * slicePitch
                     + static_cast<std::size_t>(row) * rowPitch;
                 uint8_t* dstRow = out
-                    + static_cast<std::size_t>(slice) * static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4
-                    + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
-                std::memcpy(dstRow, srcRow, static_cast<std::size_t>(w) * 4);
+                    + static_cast<std::size_t>(slice) * tightSliceBytes
+                    + static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(dstRow, srcRow, rowBytes);
             }
         }
         const D3D12_RANGE writtenRange{0, 0};

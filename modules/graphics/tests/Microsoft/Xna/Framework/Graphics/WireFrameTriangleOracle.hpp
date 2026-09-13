@@ -75,6 +75,13 @@ namespace CnaTest::WireFrameOracle
     // Measured to render a genuine wireframe: edges lit, interior empty. The answer is a runtime
     // capability because SOFTWARE-178 makes EasyGL conditional on the active context's native
     // polygon-mode API (desktop core, GL_NV_polygon_mode or WEBGL_polygon_mode).
+    //
+    // plans/plan_webgpu.md WEBGPU-153: WebGPU used to be excluded here, on the grounds that it "has
+    // no polygon-mode API at all and now refuses the request outright (WEBGPU-115)". The first half
+    // was beside the point and the second is no longer true: a wireframe never needed a polygon
+    // mode -- the reference renderer has always produced one by expanding triangle edges into a
+    // line list -- and WebGPU now does exactly that, on every 3D route. It is measured by this
+    // oracle like every other renderer.
     /** @brief Whether the active renderer draws a genuine wireframe: edges lit, interior empty. */
     [[nodiscard]] inline bool RendersEdges(
         const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)

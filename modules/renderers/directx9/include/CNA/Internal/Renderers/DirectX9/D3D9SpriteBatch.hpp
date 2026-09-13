@@ -33,6 +33,7 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace CNA::Internal::Renderers::DirectX9
@@ -40,6 +41,9 @@ namespace CNA::Internal::Renderers::DirectX9
     using Microsoft::WRL::ComPtr;
 
     class DirectX9Renderer;
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+    class D3D9CompiledEffect;
+#endif
 
     /// Real D3D9 SpriteBatch renderer (plans/plan_dx9.md Phase D9-9).
     class D3D9SpriteBatchRenderer final : public ISpriteBatchRenderer
@@ -56,6 +60,7 @@ namespace CNA::Internal::Renderers::DirectX9
         };
 
         explicit D3D9SpriteBatchRenderer(DirectX9Renderer* owner);
+        ~D3D9SpriteBatchRenderer() override;
 
         void Begin() override;
         void End() override;
@@ -63,6 +68,8 @@ namespace CNA::Internal::Renderers::DirectX9
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -86,6 +93,10 @@ namespace CNA::Internal::Renderers::DirectX9
         /// Real MatrixTransform = SpriteBatch's own transform * (D3D9 half-pixel-corrected
         /// orthographic projection) -- see D3D9SpriteBatch.cpp for the derivation.
         Matrix BuildMatrixTransformEXT(float viewportWidth, float viewportHeight) const;
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        void ApplyCompiledSpriteVertexShaderEXT(float viewportWidth, float viewportHeight);
+        void FlushBatchWithCompiledEffectEXT();
+#endif
 
         DirectX9Renderer* owner_ = nullptr;
         ComPtr<IDirect3DDevice9> device_;
@@ -109,6 +120,11 @@ namespace CNA::Internal::Renderers::DirectX9
         /// lifetime, matching D3D11SpriteBatchRenderer's own identical convention.
         Effect* customEffect_ = nullptr;
 
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        std::unique_ptr<D3D9CompiledEffect> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+#endif
+
         // Defaults mirror D3D11SpriteBatchRenderer's own: Linear filter, Clamp address -- a
         // SpriteBatch that never calls SetSamplerFilter/SetSamplerAddressMode behaves exactly as
         // if the game had never touched sampler state. In practice SpriteBatch::Begin() (the
@@ -117,5 +133,8 @@ namespace CNA::Internal::Renderers::DirectX9
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_ = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
     };
 }

@@ -15,6 +15,7 @@
 // The colours are chosen to survive RGB565 exactly: 31/31 expands back to precisely 255, so the
 // comparison below is exact and no tolerance can hide a channel swap.
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -89,6 +90,20 @@ class DxtFormatTest final : public Game
 
     void RunLeg(GraphicsDevice& dev, const char* name, SurfaceFormat format)
     {
+        // plan_vulkan.md VULKAN-172. This source is registered by more than one renderer now, and
+        // block-compressed storage is not universal: CNA's Vulkan renderer claims BC1/BC2/BC3 only
+        // on a device whose VkPhysicalDeviceFeatures.textureCompressionBC is true (and whose
+        // VkFormatProperties back the individual format), and refuses them by name where it is
+        // not. EasyGL claims all three on every profile, because its fallback decodes.
+        //
+        // The gate is the RENDERER'S OWN CLAIM, never a renderer name and never a silent skip: a
+        // claimed format must pass the pixel check below, an unclaimed one must refuse. So this
+        // cannot hide a regression in either direction.
+        using CNA::Internal::Renderers::RendererFormatVerdict;
+        const bool claimed =
+            dev.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+            RendererFormatVerdict::Supported;
+
         std::unique_ptr<Texture2D> texture;
         try
         {
@@ -96,7 +111,15 @@ class DxtFormatTest final : public Game
         }
         catch (const std::exception& e)
         {
-            check(false, std::string(name) + ": construction threw: " + e.what());
+            check(!claimed, std::string(name) +
+                                ": a format the renderer does not claim is refused by name, and "
+                                "one it claims must construct [" + e.what() + "]");
+            return;
+        }
+        if (!claimed)
+        {
+            check(false, std::string(name) +
+                             ": constructed a block-compressed format the renderer does not claim");
             return;
         }
 

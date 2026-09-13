@@ -25,7 +25,7 @@ namespace CNA::Content::Cnb
         /** @brief Signed 16-bit little-endian PCM: the portable baseline and CNA's native form. */
         Pcm16 = 1u,
 
-        /** @brief Unsigned 8-bit PCM. Identifier reserved; no v1 codec. */
+        /** @brief Unsigned 8-bit PCM, as WAV and WAVEFORMATEX store it. Schema 2 and later. */
         Pcm8 = 2u,
 
         /** @brief 32-bit float PCM. Identifier reserved; no v1 codec. */
@@ -51,8 +51,28 @@ namespace CNA::Content::Cnb
         inline constexpr CnbChunkId Data = MakeChunkId('A', 'U', 'D', 'D');
     }
 
-    /** @brief Highest `SoundEffect` schema version this build understands. */
-    inline constexpr std::uint32_t CnbSoundEffectSchemaVersion = 1u;
+    /**
+     * @brief Highest `SoundEffect` schema version this build understands, and the one it writes.
+     *
+     * Version 2 activates `CnbAudioFormat::Pcm8`, which version 1 already had an identifier for.
+     * **The physical header is unchanged**: `AUDH` is the same 28 bytes in the same order, and the
+     * only difference is which `format` identifiers a file of that version may declare. Version 1
+     * still means Pcm16 and nothing else -- a version-1 file declaring Pcm8 is refused, so no
+     * historical file changes meaning -- and a version-1 file already on disk still reads.
+     *
+     * The width has to survive the pipeline because the genuine XNA one preserves it: an 8-bit
+     * source comes out of `SoundEffectProcessor` 8-bit, and CNB was the reason CNA's did not
+     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+     */
+    inline constexpr std::uint32_t CnbSoundEffectSchemaVersion = 2u;
+
+    /**
+     * @brief The lowest `SoundEffect` schema version that can express a sample format.
+     *
+     * @param format The sample encoding.
+     * @return 1 for `Pcm16`, 2 for `Pcm8`, and 0 for a format no schema version can write.
+     */
+    [[nodiscard]] std::uint32_t CnbSoundEffectSchemaVersionForFormat(CnbAudioFormat format);
 
     /** @brief Bytes the `AUDH` chunk occupies. */
     inline constexpr std::uint32_t CnbSoundEffectHeaderStride = 28u;
@@ -69,7 +89,7 @@ namespace CNA::Content::Cnb
      */
     struct CnbSoundEffectData
     {
-        /** @brief The sample encoding. Schema 1 writes CnbAudioFormat::Pcm16. */
+        /** @brief The sample encoding: `Pcm16` (schema 1 and 2) or `Pcm8` (schema 2). */
         CnbAudioFormat format = CnbAudioFormat::Pcm16;
 
         /** @brief Sample rate in Hz; 1…384000. */
@@ -107,6 +127,22 @@ namespace CNA::Content::Cnb
      * @return The format's name, or `"unknown"` plus its value.
      */
     [[nodiscard]] std::string CnbAudioFormatToString(CnbAudioFormat format);
+
+    /**
+     * @brief The sound's samples as signed 16-bit little-endian PCM.
+     *
+     * The one place a width has to be given up rather than preserved: CNA's `SoundEffect` takes a
+     * raw 16-bit PCM buffer, so a `Pcm8` file is widened when it is *loaded*, not when it is
+     * built. `(sample - 128) * 256` is exact -- nothing is rounded and nothing clips -- so a
+     * round trip through the runtime loses no information either.
+     *
+     * @param data The decoded sound.
+     * @return The samples in `Pcm16`, copied unchanged when the sound already is.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the format is one with
+     *         no codec in this build.
+     */
+    [[nodiscard]] std::vector<std::uint8_t> CnbSoundEffectSamplesAsPcm16(
+        const CnbSoundEffectData& data);
 
     /**
      * @brief Encodes a `SoundEffect` as a complete `.cnb` byte image.

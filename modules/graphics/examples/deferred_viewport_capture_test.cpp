@@ -152,9 +152,9 @@ namespace
     // outcome so the declaration is falsifiable in both directions.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true, true, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
-    // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
-    // render-target oracle still answers every render-target question in this file.
-    constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true, true, true, false};
+    // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
+    // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
+    constexpr Contract kContract{"SDL_GPU", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     // `depthRangeApplies` true: measured, not assumed. The software rasterizer's depth COMPARE is a
     // fixed LessEqual (REMED-GFX-083's documented boundary), but it does remap the interpolated
@@ -166,6 +166,8 @@ namespace
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true, true, true, false};
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_LLGL)

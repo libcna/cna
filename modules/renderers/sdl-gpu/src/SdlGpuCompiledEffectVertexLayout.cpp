@@ -5,6 +5,7 @@
 
 #include "System/NotSupportedException.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
@@ -170,6 +171,74 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         return attributes;
+    }
+
+    SdlGpuCompiledEffectVertexLayoutEXT BuildCompiledEffectVertexLayoutEXT(
+        const MOJOSHADER_parseData& vertexParseData,
+        const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams)
+    {
+        SdlGpuCompiledEffectVertexLayoutEXT layout;
+        if (vertexParseData.attribute_count <= 0 || vertexParseData.attributes == nullptr)
+            return layout;
+        layout.attributes.reserve(static_cast<std::size_t>(vertexParseData.attribute_count));
+
+        for (int i = 0; i < vertexParseData.attribute_count; ++i)
+        {
+            const MOJOSHADER_attribute& shaderInput = vertexParseData.attributes[i];
+            const VertexElement* match = nullptr;
+            std::size_t sourceIndex = 0;
+            for (; sourceIndex < streams.size() && match == nullptr; ++sourceIndex)
+            {
+                if (streams[sourceIndex].elements == nullptr) continue;
+                for (const VertexElement& element : *streams[sourceIndex].elements)
+                {
+                    if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) == shaderInput.usage &&
+                        element.getUsageIndexProperty() == shaderInput.index)
+                    {
+                        match = &element;
+                        break;
+                    }
+                }
+                if (match != nullptr) break;
+            }
+            if (match == nullptr)
+            {
+                const char* name = shaderInput.name != nullptr ? shaderInput.name : "<unnamed>";
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this compiled effect's vertex shader requires attribute '" +
+                    std::string(name) + "' (usage " +
+                    std::to_string(static_cast<int>(shaderInput.usage)) + ", index " +
+                    std::to_string(shaderInput.index) +
+                    "), but none of the VertexDeclarations supplied to this draw declares an "
+                    "element with that usage and usage index.");
+            }
+
+            Uint32 denseSlot = 0;
+            auto used = std::find(layout.sourceIndices.begin(), layout.sourceIndices.end(), sourceIndex);
+            if (used == layout.sourceIndices.end())
+            {
+                denseSlot = static_cast<Uint32>(layout.sourceIndices.size());
+                layout.sourceIndices.push_back(sourceIndex);
+                SDL_GPUVertexBufferDescription buffer{};
+                buffer.slot = denseSlot;
+                buffer.pitch = streams[sourceIndex].stride;
+                buffer.input_rate = streams[sourceIndex].inputRate;
+                layout.buffers.push_back(buffer);
+            }
+            else
+            {
+                denseSlot = static_cast<Uint32>(used - layout.sourceIndices.begin());
+            }
+
+            SDL_GPUVertexAttribute attribute{};
+            attribute.location = static_cast<Uint32>(i);
+            attribute.buffer_slot = denseSlot;
+            attribute.format = ToSdlGpuVertexElementFormat(match->getVertexElementFormatProperty());
+            attribute.offset = static_cast<Uint32>(match->getOffsetProperty());
+            layout.attributes.push_back(attribute);
+        }
+
+        return layout;
     }
 }
 

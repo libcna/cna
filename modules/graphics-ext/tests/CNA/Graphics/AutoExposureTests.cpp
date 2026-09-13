@@ -15,6 +15,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <cmath>
@@ -23,6 +24,7 @@
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using CNA::Graphics::AutoExposureEXT;
 using CNA::Graphics::RenderPipelineSettings;
@@ -89,6 +91,19 @@ TEST_F(AutoExposureTest, ASplitFrameMeasuresTheGeometricMeanNotTheArithmeticOne)
     EXPECT_NEAR(exposure.measureAverageLuminance(texture), geometric, 0.01f);
     EXPECT_LT(exposure.measureAverageLuminance(texture), 0.5f)
         << "the reduction is behaving like an arithmetic mean";
+}
+
+TEST_F(AutoExposureTest, ARenderedSceneCanBeMeasuredWithoutACpuRoundTrip)
+{
+    if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    AutoExposureEXT exposure(gd);
+
+    RenderTarget2D scene(gd, 64, 64);
+    gd.SetRenderTarget(&scene);
+    gd.Clear(Color(64, 64, 64, 255));
+    gd.SetRenderTarget(nullptr);
+
+    EXPECT_NEAR(exposure.measureAverageLuminance(scene), 64.0f / 255.0f, 0.01f);
 }
 
 TEST_F(AutoExposureTest, TheExposureAimsTheFrameAtTheKeyValue)

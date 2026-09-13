@@ -23,9 +23,13 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include "common/PixelTestGame.hpp"
 
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -33,6 +37,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::Renderers::RendererFormatVerdict;
+using CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer;
+using CNA::Internal::Renderers::SdlGpu::SdlGpuTexture3DRenderer;
 
 namespace
 {
@@ -137,6 +144,51 @@ protected:
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
+        auto& renderer = dynamic_cast<SdlGpuRenderer&>(device.GetRenderer());
+
+        Check(renderer.ClassifyTexture3DFormatEXT(static_cast<int>(SurfaceFormat::Color)) ==
+                  RendererFormatVerdict::Supported,
+              "Texture3D classifier explicitly supports Color");
+        const std::array unsupported{
+            SurfaceFormat::Bgr565,
+            SurfaceFormat::Bgra5551,
+            SurfaceFormat::Bgra4444,
+            SurfaceFormat::Dxt1,
+            SurfaceFormat::Dxt3,
+            SurfaceFormat::Dxt5,
+            SurfaceFormat::NormalizedByte2,
+            SurfaceFormat::NormalizedByte4,
+            SurfaceFormat::Rgba1010102,
+            SurfaceFormat::Rg32,
+            SurfaceFormat::Rgba64,
+            SurfaceFormat::Alpha8,
+            SurfaceFormat::Single,
+            SurfaceFormat::Vector2,
+            SurfaceFormat::Vector4,
+            SurfaceFormat::HalfSingle,
+            SurfaceFormat::HalfVector2,
+            SurfaceFormat::HalfVector4,
+            SurfaceFormat::HdrBlendable,
+        };
+        bool unsupportedExact = true;
+        bool publicRefusalExact = true;
+        for (const SurfaceFormat format : unsupported)
+        {
+            unsupportedExact &= renderer.ClassifyTexture3DFormatEXT(
+                static_cast<int>(format)) == RendererFormatVerdict::Unsupported;
+            try
+            {
+                Texture3D invalid(device, 2, 2, 2, false, format);
+                publicRefusalExact = false;
+            }
+            catch (const System::NotSupportedException&)
+            {
+            }
+        }
+        Check(unsupportedExact,
+              "Texture3D classifier explicitly refuses all 19 non-Color classic formats");
+        Check(publicRefusalExact,
+              "public Texture3D construction gives a named refusal for every unsupported format");
 
         const Color red    (255,   0,   0, 255);
         const Color green  (  0, 255,   0, 255);
@@ -155,8 +207,10 @@ protected:
               && single.getHeightProperty() == 4
               && single.getDepthProperty() == 4
               && single.getLevelCountProperty() == 1
-              && single.getFormatProperty() == SurfaceFormat::Color,
-              "one-mip 4x4x4 public properties");
+              && single.getFormatProperty() == SurfaceFormat::Color
+              && dynamic_cast<const SdlGpuTexture3DRenderer&>(single.GetRenderer())
+                     .GetSurfaceFormatEXT() == static_cast<int>(SurfaceFormat::Color),
+              "one-mip 4x4x4 public properties and forwarded renderer format");
 
         const auto planes = DepthPlanePattern(4, 4, {red, green, blue, yellow});
         single.SetData(planes.data(), static_cast<int>(planes.size()));

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- plans/plan_xnapipeline_parity.md XNAPP-260: a generic dictionary, keys and values. -->
+<XnaContent xmlns:Generic="System.Collections.Generic">
+  <Asset Type="Generic:Dictionary[string,int]">
+    <Item><Key>alpha</Key><Value>1</Value></Item>
+    <Item><Key>beta</Key><Value>2</Value></Item>
+    <Item><Key>gamma</Key><Value>3</Value></Item>
+  </Asset>
+</XnaContent>

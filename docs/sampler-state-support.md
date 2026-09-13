@@ -119,12 +119,60 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
 |---|---|---|
 | FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDL_GPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
-| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented** — `mip_lod_bias` |
+| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field |
 | EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS` at all |
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
 | EasyGL `AddressW` | **implemented on the ES 3 and desktop profiles** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R`; not representable on the ES 2 profiles, which have neither sampler objects nor volume textures | — |
+| WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field at all, so both are shader emulations |
+| WebGPU `AddressW` | **implemented** (`WEBGPU-160`) — `WGPUSamplerDescriptor::addressModeW`, through the same ordinal table U and V use | — |
+| Direct3D 11 | **implemented** — `D3D11_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D11_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
+| Direct3D 12 | **implemented** — `D3D12_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D12_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
 | every other renderer | default no-op | default no-op |
+
+### WebGPU's LOD bias is a SHADER emulation, and its boundary is named
+
+`WGPUSamplerDescriptor` carries `addressModeU/V/W`, `magFilter`, `minFilter`, `mipmapFilter`,
+`lodMinClamp`, `lodMaxClamp`, `compare` and `maxAnisotropy` — and nothing else. That absence was
+once taken as proof the state had to stay unsupported; `WEBGPU-205` rejected that reasoning as the
+same argument already disproved for `FillMode::WireFrame`, because an absent *state field* is not an
+absent *capability*. WGSL's `textureSampleBias(t, s, coords, bias)` applies exactly XNA's semantic —
+a bias added to the computed level of detail — in the fragment stage, which is where every one of
+that renderer's sampling calls already sits. The value travels in the per-draw uniform block
+(widened 160→176 bytes for it, as `WEBGPU-149` widened it for fog).
+
+Two things a caller needs to know, and both are reported through
+`GetAdditionalLimitationsTextEXT()` rather than left to be discovered from pixels:
+
+* **WGSL clamps a sample bias to roughly [-16, +16)**, so a larger magnitude saturates rather than
+  extrapolating. CNA clamps to that range on the way in instead of leaving the edges
+  implementation-defined.
+* **Two routes do not apply it**: a custom CNAEXT `ShaderEffect`, which supplies its own WGSL and
+  therefore its own sampling calls; and the
+  metallic-roughness `PbrEffect`/`SkinnedPbrEffect` families, which are the glTF route rather than
+  an XNA stock effect.
+
+**Compiled XNA Effects apply it too, since `WEBGPU-208` (2026-09-06).** They were a fourth route on
+that list for one day. A compiled pass's sampling call comes from MojoShader, not from a shader CNA
+writes, so the emulation moves one level down: `MojoShaderEffect::InjectSamplerLodBias` rewrites the
+normalized SPIR-V so each implicit sample carries a `Bias` image operand fed from **its own D3D9
+sampler register's** slot in a small renderer-owned uniform block. Because the rewrite happens
+before the native and browser routes diverge, both targets execute the same semantic -- natively
+naga lowers the SPIR-V operand, and in a browser `SpirvToWgsl` renders it as `textureSampleBias`
+for Tint. The shared compiled-effect sampler pixel contract runs on both routes with
+`supportsLodBias` true.
+
+**`SpriteBatch` carries the complete state since SDLGPU-64 (2026-09-09).** The common
+`ISpriteBatchRenderer::SetSamplerState` hook now carries filter, U/V/W addressing, anisotropy,
+`MaxMipLevel` and `MipMapLevelOfDetailBias`. `SpriteBatch::Begin` also assigns the resolved state to
+`GraphicsDevice.SamplerStates[0]`, matching FNA's observable `PrepRenderState` behavior. EasyGL,
+SDL GPU and WebGPU consume the complete hook. The shared `parity_sprite_sampler_state` oracle now
+requires bias +1 and -2 to select deliberately different mip colours, checks every retained device
+property, passes on all three renderers, and remains byte-identical between EasyGL and WebGPU.
+
+Note this makes WebGPU's coverage *broader* than the reference renderer's, which implements the bias
+only on desktop core (`GL_TEXTURE_LOD_BIAS` does not exist in OpenGL ES at all). The shared parity
+fixture `parity_sampler_lod_bias` therefore compares against the `OPENGL33` profile.
 
 Why `GL_TEXTURE_MIN_LOD` rather than FNA3D's `GL_TEXTURE_BASE_LEVEL`: base level is texture-object
 state, and CNA's contract is per **slot**. Two slots sampling one texture with different
@@ -132,11 +180,29 @@ state, and CNA's contract is per **slot**. Two slots sampling one texture with d
 exactly "never resolve a level more detailed than this" and is per slot. It is also the mapping
 FNA3D's own SDL_GPU driver makes (`samplerCreateInfo.min_lod = samplerState->maxMipLevel`).
 
-**Known remaining gap.** On SDL_GPU the two states reach the GPU through the **compiled-effect**
-draw route. The stock 3D draw families capture only filter/addressing/anisotropy into their own
-deferred command structs, so a game assigning `GraphicsDevice.SamplerStates[0].MaxMipLevel` and
-then drawing with `BasicEffect` still gets `min_lod = 0`. Closing that means adding the two fields
-to each family's command struct; it is a stock-draw sampler task, not a compiled-effect one.
+**SDL GPU stock routes are complete since SDLGPU-121 (2026-09-11).** SDLGPU-64 established that
+every stock deferred command captures all seven sampler properties per slot. `MaxMipLevel`, filter,
+addressing and anisotropy remain native sampler state. The bias is deliberately different: SDL's
+vendored `SDL_gpu.h` states that `SDL_GPUSamplerCreateInfo::mip_lod_bias` is a no-op on Metal and
+must be applied in the shader. Every stock 2D/cube sample now uses SPIR-V's Bias operand supplied by
+an eight-slot per-draw fragment uniform, while its native sampler bias is zero to prevent a double
+application on Vulkan/D3D12. The same exact mip-colour fixture passes on real Vulkan and cross-
+compiled D3D12, and the SpriteBatch variant verifies its independent state path. AddressW reaches
+`SDL_GPUSamplerCreateInfo::address_mode_w`; its volume-pixel proof remains coupled to the separate
+Texture3D/compiled-effect volume work tracked by `SDLGPU-71`/`SDLGPU-79`.
+
+**Compiled XNA Effects are complete since SDLGPU-122 (2026-09-11).** The pinned MojoShader adapter
+now exposes one bounded callback after SPIR-V linking and before native shader creation. CNA uses it
+to apply the shared `InjectSamplerLodBias` rewrite directly to MojoShader's combined samplers,
+placing one vec4 per D3D9 sampler register in SDL_GPU fragment-uniform set 3/binding 1. Replay
+snapshots and pushes those values at fragment UBO slot 1 and deliberately zeros the corresponding
+native sampler bias, preventing double application on Vulkan/D3D12. On Apple, the statically linked
+ShaderCross configuration now consumes the same transformed SPIR-V and translates it to Metal's
+native shader format rather than bypassing the transform through MojoShader's direct MSL profile.
+The shared authored-mip pixel contract passes on Vulkan and headless D3D12 while a test hook rejects
+every nonzero native bias; a 27-pass structural corpus additionally proves each combined and split
+sample reads its own register. A real Metal execution remains platform-validation work, not an
+unimplemented sampler semantic.
 
 ### 6b.1 Sampler identity and state lifetime (plans/plan_fx.md FX-091, FX-092, 2026-08-18)
 
@@ -165,6 +231,11 @@ cannot.
 EasyGL also adopted `ApplySamplerAddressW` in the same pass, so its `GL_TEXTURE_WRAP_R` row above is
 no longer "not adopted".
 
+Direct3D 11 and Direct3D 12 adopted all three fields in DX-216. DX-257 then added the shared
+`SamplerLodAddressWContract`: nine differential pixel checks prove level-zero and level-one mip
+selection, positive LOD bias and reset, independent V/W Clamp and Wrap behavior, and state reset.
+The same fixture passes 9/9 on Direct3D 11, Direct3D 12 and EasyGL `OPENGL33`.
+
 ## 7. Anisotropic filtering (Task 299, EasyGL row updated 2026-07-11 per Task 918)
 
 | Renderer | Status |
@@ -190,6 +261,98 @@ clamped to each texture's real level count, so a single-level texture no longer 
 GL-incomplete under `Anisotropic`/`Mip*` filters.
 
 ---
+
+## 8. The half of Task 293 that a `SpriteBatch` frame never reached (`plans/plan_vulkan.md` VULKAN-166, 2026-09-07)
+
+Task 293 above fixed `GraphicsDevice.SamplerStates[u]` for the **3D** draw entry points, by adding
+the missing `applySamplerStatesToRenderer()` calls to the eighteen `DrawUserPrimitives` overloads
+that lacked them. That is where it stopped, and the gap it left is exact: **that method runs from
+the draw entry points only**, so in a frame whose only drawing is a `SpriteBatch`, nothing ever
+pushed slots 1–15 to any renderer at all. The renderer kept whatever those slots held from an
+earlier 3D draw, or the state it was constructed with.
+
+Invisible for years, because a stock sprite draw uses exactly one texture and the batch carries its
+sampler down its own path (`ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`, and
+since VULKAN-164 `SetSamplerAddressModeWEXT`). It becomes decisive the moment a **custom effect**
+binds a second texture to the same batch: XNA governs the texture at sampler register *u* with
+`SamplerStates[u]`, and CNA gave every unit slot 0's state.
+
+**Fixed in the shared layer**, where FNA puts it: `SpriteBatch` now publishes the device's sampler
+states from the two places FNA's `PrepRenderState` runs — `Begin()` for `SpriteSortMode::Immediate`
+(which never reaches a batch flush) and the flush otherwise. One narrower difference remains and is
+worth stating rather than implying parity: XNA re-applies device state at every draw call, and
+CNA's sprite path does not go through the device's draw entry points, so a `SamplerStates[u]`
+assigned *between* `Begin()` and a `Draw()` reaches a `Deferred` batch (published at its flush) but
+not an `Immediate` one.
+
+**It publishes from slot 1 upward, deliberately.** Slot 0 already has a writer — the batch's own
+sampler, down the `ISpriteBatchRenderer` path — and giving one slot two writers with no ordering
+between them across twelve renderer families is the exact shape of the bug Task 293 fixed and of
+VULKAN-164's second defect. That is still true, and it is still slot 1 upward that gets *pushed to
+the renderer* from the sprite path.
+
+## 9. What a `SpriteBatch` leaves behind in `SamplerStates[0]` (`plans/plan_vulkan.md` VULKAN-194, 2026-09-07)
+
+§8 left one divergence open on purpose: `GraphicsDevice.SamplerStates[0]` did not hold the batch's
+`SamplerState` afterwards, where XNA's `PrepRenderState` assigns it (`SpriteBatch.cs:1426`). It does
+now, and **when** it happens is not what FNA's source reads like.
+
+Measured on the shipped XNA 4.0 runtime (`spikes/xna-spritebatch-sampler0-spike/`), with
+`SamplerStates[0]` set to `PointClamp` and a `Deferred` batch begun with `PointWrap`:
+
+```
+before Begin: SamplerStates[0] = PointClamp
+after  Begin: SamplerStates[0] = PointClamp     <- not published yet
+after  End  : SamplerStates[0] = PointWrap      <- published at the flush
+3D draw after the batch, sampled at u = 1.25 -> red, i.e. the batch's Wrap
+```
+
+So the assignment happens where `PrepRenderState` runs, which for a `Deferred` batch is the
+**flush** and not `Begin()` — the same two points §8's publication already uses. CNA now assigns
+there, and only the *device collection* is written: the push to the renderer stays where it was,
+in `GraphicsDevice`'s draw entry points, so the batch's state reaches the sampler on the **next
+draw**. That is XNA's ordering, and it keeps slot 0 to one renderer-side writer.
+
+**What this changes for a game:** a 3D draw issued after a `SpriteBatch` now samples with the
+batch's `SamplerState`, not with whatever the game last assigned. This is XNA behaviour and it is
+CNA-wide, not renderer-specific. A game that relied on the old behaviour should assign
+`SamplerStates[0]` explicitly after `End()` — which is what it would have had to do on XNA too.
+
+Asserted by `modules/graphics/examples/spritebatch_sampler0_publication_test.cpp`, registered on
+Vulkan and EasyGL.
+
+## 10. The W axis reaches EasyGL too (`plans/plan_vulkan.md` VULKAN-206, 2026-09-07)
+
+`VULKAN-164` gave `ISpriteBatchRenderer` a `SetSamplerAddressModeWEXT` hook, additive with a no-op
+default, because `SpriteBatch` was forwarding a batch sampler's filter and its U and V axes and
+dropping W — invisible to 2D sampling, which never consults W, and decisive for a `sampler3D`.
+Vulkan was the only renderer that took it.
+
+EasyGL takes it now. `EasyGLRenderer::ApplySamplerState` derives `WrapR` from `addressU`, which is
+correct for every XNA 4.0 preset — `PointClamp`, `LinearWrap` and the rest set all three axes alike
+— and wrong for a `SamplerState` that set W on its own. The sprite flush applies the batch's own W
+after it, at both flush sites (the stock one and the compiled-effect one), and only when the batch
+supplied one: `-1` keeps the old derivation for any caller that flushes sprites without going
+through `Begin()`.
+
+**Why one override is enough here.** On this renderer `ShaderEffect::SetTexture(0, volume)` binds
+`GL_TEXTURE_3D` on GL unit 0 while the sprite's own texture occupies `GL_TEXTURE_2D` on the same
+unit, and a single GL sampler object at that unit governs both — so the batch's slot-0 sampler is
+exactly what addresses the volume. Vulkan numbers this differently (a bound effect texture lives in
+descriptor set 1), which is why the two renderers have sibling tests rather than one shared file.
+
+Asserted by `modules/renderers/easygl/examples/easygl_texture3d_addressw_test.cpp`
+(`EasyGL_Texture3DAddressW`), the sibling of `Vulkan_Texture3DAddressW`.
+
+**Still unmeasured:** Magnum, IGL, OpenGL2, OpenGL4 and Sokol all implement `BindTexture3D` and all
+report `false` from `SupportsTexture3DSamplingEXT()`. They under-claim rather than over-claim until
+someone runs a volume through each; tracked as `plans/plan_vulkan.md` VULKAN-167.
+
+Pixel-proven on Vulkan by `Vulkan_ShaderEffect_PerUnitSampler`
+(`modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp`): two 1×1×2
+volumes bound to units 0 and 1 of one `ShaderEffect`, sampled at `W = 1.25`, with `AddressW = Wrap`
+on one unit and `Clamp` on the other. One pixel separates all four possible worlds, and the test
+carries both mutations that produced them.
 
 ## Summary: what actually works today, per renderer
 

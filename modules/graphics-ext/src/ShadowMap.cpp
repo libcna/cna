@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/ShadowMap.hpp"
+#include "ShadowCasterShaderPackages.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -34,66 +35,6 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     namespace {
-
-        /// The caster shader. It writes normalized light-space distance, which is what makes the
-        /// map readable as an ordinary colour texture on every renderer -- see the class comment
-        /// for why a real depth attachment is not an option here.
-        constexpr const char* kCasterVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPosition;
-uniform mat4 uLightViewProjection;
-uniform mat4 uWorld;
-out float vDistance;
-void main() {
-    vec4 lightSpace = uLightViewProjection * uWorld * vec4(aPosition, 1.0);
-    gl_Position = lightSpace;
-    // Normalized device depth mapped to [0,1]: the same value the receiver will compute for a
-    // point it wants to test, so the comparison needs no further transform.
-    vDistance = lightSpace.z / lightSpace.w * 0.5 + 0.5;
-}
-)";
-
-        /// The skinned caster (MOD-810). Same output as the rigid one; the difference is that the
-        /// position is blended through the bone palette first, so the silhouette recorded in the
-        /// map is the pose the mesh is actually in. Attribute locations follow the custom-effect
-        /// convention -- location N is the Nth element of the vertex declaration -- which for the
-        /// skinned stride is position, normal, uv, weights, indices.
-        constexpr const char* kSkinnedCasterVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-layout(location = 3) in vec4 aBoneWeights;
-// FX-127: a float vec4, matching the stock skinned programs -- XNA's BLENDINDICES is a
-// float4 register whether the declaration spelled the bytes Byte4 or Vector4, so EasyGL
-// binds both as floats and no shader may read the attribute as an integer.
-layout(location = 4) in vec4 aBoneIndices;
-uniform mat4 uLightViewProjection;
-uniform mat4 uWorld;
-uniform mat4 uBones[72];
-uniform int uWeightsPerVertex;
-out float vDistance;
-void main() {
-    // Only the first uWeightsPerVertex pairs contribute, matching SkinnedEffect: a mesh authored
-    // with one weight per vertex has undefined values in the other three slots.
-    mat4 skin = uBones[int(aBoneIndices.x)] * aBoneWeights.x;
-    if (uWeightsPerVertex >= 2) skin += uBones[int(aBoneIndices.y)] * aBoneWeights.y;
-    if (uWeightsPerVertex >= 4) skin += uBones[int(aBoneIndices.z)] * aBoneWeights.z
-                                      + uBones[int(aBoneIndices.w)] * aBoneWeights.w;
-    vec4 lightSpace = uLightViewProjection * uWorld * skin * vec4(aPosition, 1.0);
-    gl_Position = lightSpace;
-    vDistance = lightSpace.z / lightSpace.w * 0.5 + 0.5;
-}
-)";
-
-        constexpr const char* kCasterFragmentSource = R"(#version 300 es
-precision highp float;
-in float vDistance;
-out vec4 FragColor;
-void main() {
-    FragColor = vec4(vDistance, vDistance, vDistance, 1.0);
-}
-)";
 
         Vector3 Normalized(const Vector3& value)
         {
@@ -162,18 +103,19 @@ void main() {
         // names which one is missing rather than reporting "shadows unavailable" and leaving the
         // reader to guess.
         const bool canRaster = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-        // Two questions, not one (plans/plan_modern.md `MOD-1699`): `CustomEffects` only means the
-        // renderer *accepts* an effect. SOFTWARE and HEADLESS accept any shader source and go
-        // on rendering with their own fixed path, so a caster that believed them would report
-        // a working shadow map while writing depth nothing had shaded.
+        // MOD-2237 replaces the old source-only gate with exact package selection. This keeps
+        // SOFTWARE/HEADLESS out (they advertise no executable shader language), preserves GLSL ES
+        // and desktop GLSL, and selects checked-in SPIR-V on Vulkan.
+        const ShaderPackageEXT rigidPackage = detail::CreateDirectionalShadowCasterPackage();
+        const ShaderPackageEXT skinnedPackage =
+            detail::CreateSkinnedDirectionalShadowCasterPackage();
         const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
-                             && device.ExecutesShaderEffectSourceEXT();
+                             && rigidPackage.selectFor(device).isUsable()
+                             && skinnedPackage.selectFor(device).isUsable();
         if (canRaster && canCompile)
         {
-            casterEffect_ = std::make_unique<ShaderEffect>(device, kCasterVertexSource,
-                                                           kCasterFragmentSource);
-            skinnedCasterEffect_ = std::make_unique<ShaderEffect>(
-                device, kSkinnedCasterVertexSource, kCasterFragmentSource);
+            casterEffect_ = std::make_unique<ShaderEffect>(device, rigidPackage);
+            skinnedCasterEffect_ = std::make_unique<ShaderEffect>(device, skinnedPackage);
         }
         // Compilation can still fail on a renderer that claims the capability, so the answer is
         // the effect that actually exists and links, not the promise that one could.

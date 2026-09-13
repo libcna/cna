@@ -84,12 +84,12 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **995** |
-| Files referencing SDL (all) | **337** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1037** |
+| Files referencing SDL (all) | **341** |
 | Production files (`src/` + `include/`) referencing SDL | **60** |
 | …of which are renderer production files | **16** |
-| Test/example files referencing SDL | **277** |
-| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **8** |
+| Test/example files referencing SDL | **281** |
+| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
 Production SDL surface per module (`src/` + `include/` only):
@@ -106,6 +106,7 @@ The native-window properties actually consumed today — these define the minimu
 ```text
 SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER
 SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
+SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING
 SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER
 SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER
 SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER

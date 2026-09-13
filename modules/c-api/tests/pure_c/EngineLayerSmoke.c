@@ -5032,6 +5032,9 @@ static int validate_screen_space_passes(const CNA_Handle graphics_device)
     float scalar = -1.0F;
     int32_t number = -1;
     int ok = 1;
+    /* The two occlusion sources are compared by CONTENT, not by length -- see below. */
+    static char unpacked_glsl[65536];
+    static char packed_glsl[65536];
 
     if (cna_ssr_pass_create(graphics_device, &ssr) != CNA_RESULT_SUCCESS ||
         cna_ssao_pass_create(graphics_device, &ssao) != CNA_RESULT_SUCCESS ||
@@ -5182,7 +5185,20 @@ static int validate_screen_space_passes(const CNA_Handle graphics_device)
     ok = ok && cna_ssao_pass_copy_occlusion_glsl(CNA_FALSE, 0, UINT64_C(0), &bytes) ==
         CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
     ok = ok && cna_ssao_pass_copy_occlusion_glsl(CNA_TRUE, 0, UINT64_C(0), &count) ==
-        CNA_RESULT_BUFFER_TOO_SMALL && count != bytes;
+        CNA_RESULT_BUFFER_TOO_SMALL && count > UINT64_C(0);
+    /* This used to assert `count != bytes`, using the two sources' LENGTHS as a proxy for "the
+       flag changed something". plans/plan_modern.md MOD-2239k made that proxy false without making
+       the flag ineffective: SsaoPass::getOcclusionGlsl substitutes "1.0" or "0.0" for the same
+       token, so the two sources differ in CONTENT while being byte-for-byte the same LENGTH.
+       Comparing the bytes states the intended property directly and cannot be defeated by a
+       future substitution that happens to preserve length either. Corrected when the `vulkan`
+       branch merged into `next` (2026-09-11); before that, equal lengths made this fail. */
+    ok = ok && bytes < sizeof(unpacked_glsl) && count < sizeof(packed_glsl);
+    ok = ok && cna_ssao_pass_copy_occlusion_glsl(
+        CNA_FALSE, unpacked_glsl, (uint64_t)sizeof(unpacked_glsl), &bytes) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_copy_occlusion_glsl(
+        CNA_TRUE, packed_glsl, (uint64_t)sizeof(packed_glsl), &count) == CNA_RESULT_SUCCESS;
+    ok = ok && memcmp(unpacked_glsl, packed_glsl, (size_t)bytes) != 0;
     ok = ok && cna_ssao_pass_copy_occlusion_glsl(UINT8_C(2), 0, UINT64_C(0), &bytes) ==
         CNA_RESULT_INVALID_ARGUMENT;
     /* Low and Ultra must not ask for the same sample count, or the preset does nothing. */

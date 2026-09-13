@@ -1,0 +1,223 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-022: every black-box fixture in this directory, with where it came from. The prose beside this file explains what each one is for; this is the machine-readable half, and tools/provenance/provenance_gate.py fails when a file here has no row or a row names a file that is not here. `thirdParty` true would need a `license` beside it; nothing here is.",
+  "directory": "tests/assets/xna40/source",
+  "summary": "Text sources with no binary format -- .spritefont, .fx/.fxh and .xml -- written for this repository. Nothing here was taken from a sample, a tutorial or another project.",
+  "files": [
+    {
+      "file": "broken.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "buildable.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "control_font.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "cyclic_include.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "font_regions.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "font_size10.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "font_size18.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "font_size24.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "font_size32.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "font_spacing.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_common.fxh",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_include.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_initializer.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_macro.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_minimal.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_register.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_plain.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_state_only.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_one_textured.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_pass_split.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_state_blend.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_state_blend_wide.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_state_depth.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_state_depth_wide.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_state_raster.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_state_raster_wide.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_two_passes.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_two_samplers.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_two_techniques.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "malformed.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "missing_glyph.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "shader_model_3.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "unknown_type.spritefont",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "xml_curve.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "xml_dictionary.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "xml_dictionary_order.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "xml_int.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "xml_rectangles.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "xml_vector3.xml",
+      "origin": "authored",
+      "thirdParty": false
+    }
+  ]
+}

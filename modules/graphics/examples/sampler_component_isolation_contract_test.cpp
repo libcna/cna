@@ -81,6 +81,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
@@ -203,6 +207,18 @@ namespace
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
 
+    /// DualTextureEffect input with independent TextureCoordinate0/1 channels.
+    struct VtxDualPT { float px, py, pz; float u0, v0; float u1, v1; };
+    static_assert(sizeof(VtxDualPT) == 28, "stride 28");
+
+    const VertexDeclaration kDualDeclaration(
+        28,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+
     /// A full-viewport quad in NDC with identity matrices, so destination pixel (x,y) reads
     /// ((x+0.5)/W * uvMax, (y+0.5)/H * uvMax) with no projection to reason about.
     std::vector<VtxPT> MakeQuad(float uvMax)
@@ -214,6 +230,17 @@ namespace
         place(br,  1.0f, -1.0f); br.u = uvMax; br.v = uvMax;
         place(tr,  1.0f,  1.0f); tr.u = uvMax; tr.v = 0.0f;
         return { tl, bl, br, tl, br, tr };
+    }
+
+    std::vector<VtxDualPT> MakeDualQuad(float uvMax)
+    {
+        std::vector<VtxDualPT> out;
+        for (const VtxPT& source : MakeQuad(uvMax))
+        {
+            out.push_back({source.px, source.py, source.pz,
+                           source.u, source.v, source.u, source.v});
+        }
+        return out;
     }
 }
 
@@ -276,6 +303,16 @@ class SamplerComponentIsolationTest : public Game
     {
         VertexBuffer vb(dev, static_cast<int>(verts.size()));
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(VtxPT)));
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+    }
+
+    static void DrawDualQuad(GraphicsDevice& dev, const std::vector<VtxDualPT>& verts)
+    {
+        VertexBuffer vb(dev, kDualDeclaration, static_cast<int>(verts.size()), BufferUsage::None);
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()),
+                      static_cast<int>(sizeof(VtxDualPT)));
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         dev.SetVertexBuffer(nullptr);
@@ -666,7 +703,7 @@ class SamplerComponentIsolationTest : public Game
                     fx.setTextureProperty(&tex8x4_);
                     fx.setTexture2Property(&white_);
                     fx.Apply();
-                    DrawQuad(d, MakeQuad(1.0f));
+                    DrawDualQuad(d, MakeDualQuad(1.0f));
                 });
             };
             const std::vector<Color> withAniso = dual(TextureFilter::Anisotropic, 16);

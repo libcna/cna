@@ -2,7 +2,9 @@
 // PbrEffect proof for the SDL_GPU graphics renderer (SdlGpuRenderer::CreatePbrResources()/
 // GetOrCreatePipelinePbr3D(), pbr3d.vert.glsl/pbr3d.frag.glsl) -- proves the stride-48
 // VertexPositionNormalTangentTexture layout, TBN construction, and the metallic-roughness BRDF
-// itself all work end-to-end via a real GPU draw.
+// itself all work end-to-end via a real GPU draw. The projection translates clip Z by +1: the
+// BRDF still sees the deliberately chosen world-space z=-0.5, while the rasterizer sees z=+0.5
+// inside XNA's 0..W clip volume.
 //
 // Unlike easygl_pbreffect_golden_test.cpp's own scene (View=Identity places the eye exactly
 // inside the quad's own z=0 plane, a genuinely degenerate grazing-angle view direction that
@@ -163,7 +165,7 @@ protected:
         fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
-        fx.setProjectionProperty(Matrix::getIdentityProperty());
+        fx.setProjectionProperty(Matrix::CreateTranslation(0.0f, 0.0f, 1.0f));
         // Straight-on key light: Direction=(0,0,-1) means light travels toward -Z, so the
         // surface-to-light vector L=-Direction=(0,0,1) exactly matches the quad's (0,0,1) normal
         // and the (0,0,1) eye-to-surface view direction this scene's geometry produces --

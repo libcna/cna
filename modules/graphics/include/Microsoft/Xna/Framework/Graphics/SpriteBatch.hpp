@@ -63,6 +63,8 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
         BlendState blendState_;
+        // The batch's resolved sampler is retained because XNA publishes it into
+        // GraphicsDevice.SamplerStates[0] at the flush rather than at deferred Begin().
         SamplerState samplerState_;
         DepthStencilState depthStencilState_;
         RasterizerState rasterizerState_;

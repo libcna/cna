@@ -88,10 +88,10 @@ namespace CNA::Graphics {
      * and compares them, which is the only way to know they are one simulation and not two.
      *
      * **Nothing is read back.** The GPU path never brings particles to the CPU to draw them -- the
-     * vertex shader reads the same buffer the compute shader wrote, indexed by `gl_InstanceID`, and
-     * the whole system is one instanced draw. That needs a storage buffer readable from a vertex
-     * shader, which GL ES 3.1 permits a device to lack; where it is missing the system falls back
-     * to the CPU simulation, which draws from an array it already holds.
+     * vertex shader reads the same buffer the compute shader wrote, indexed by its native instance
+     * index, and the whole system is one instanced draw. That needs a storage buffer readable from
+     * a vertex shader, which GL ES 3.1 permits a device to lack; where it is missing the system
+     * falls back to the CPU simulation, which draws from an array it already holds.
      *
      * **Falling back is right here, unlike `GpuInstanceCuller`.** The CPU path produces the same
      * particles, only more slowly -- so a device without compute gets a correct effect rather than
@@ -274,6 +274,10 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the GLSL a vertex shader includes to read a particle.
          *
+         * This is a convenience for source-capable GLSL renderers. Other shader languages declare
+         * the equivalent read-only storage buffer at @ref kParticleBinding in their portable
+         * package variant.
+         *
          * @return The buffer declaration and the accessors, for a `#version 310 es` shader.
          */
         [[nodiscard]] static std::string getParticleLookupGlsl();
@@ -285,6 +289,7 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<ComputeShader> program_;
         std::unique_ptr<StorageBuffer> buffer_;
+        std::unique_ptr<StorageBuffer> computeParameters_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::BasicEffect> fallbackEffect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> quad_;

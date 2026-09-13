@@ -180,16 +180,22 @@ namespace Microsoft::Xna::Framework::Graphics
         // SpriteBatch sampler channel from the retained payload immediately before drawing.
         if (renderer_ != nullptr)
         {
-            renderer_->SetSamplerFilter(NormalizeXnaTextureFilterOrdinal(
-                static_cast<int>(samplerState_.getFilterProperty())));
-            renderer_->SetSamplerMaxAnisotropy(samplerState_.getMaxAnisotropyProperty());
-            renderer_->SetSamplerMipState(samplerState_.getMaxMipLevelProperty(),
-                                          samplerState_.getMipMapLevelOfDetailBiasProperty());
-            renderer_->SetSamplerAddressMode(
-                NormalizeXnaTextureAddressModeOrdinal(
+            renderer_->SetSamplerState(
+                CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                    static_cast<int>(samplerState_.getFilterProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
                     static_cast<int>(samplerState_.getAddressUProperty())),
-                NormalizeXnaTextureAddressModeOrdinal(
-                    static_cast<int>(samplerState_.getAddressVProperty())));
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressVProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressWProperty())),
+                samplerState_.getMaxAnisotropyProperty(),
+                samplerState_.getMaxMipLevelProperty(),
+                samplerState_.getMipMapLevelOfDetailBiasProperty());
+        }
+        if (graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->applySamplerStatesToRenderer(1);
         }
     }
 
@@ -318,16 +324,29 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                renderer_->SetSamplerFilter(NormalizeXnaTextureFilterOrdinal(
-                    static_cast<int>(samplerState_.getFilterProperty())));
-                renderer_->SetSamplerMaxAnisotropy(samplerState_.getMaxAnisotropyProperty());
-                renderer_->SetSamplerMipState(samplerState_.getMaxMipLevelProperty(),
-                                              samplerState_.getMipMapLevelOfDetailBiasProperty());
-                renderer_->SetSamplerAddressMode(
-                    NormalizeXnaTextureAddressModeOrdinal(
+                // ONE call carrying all seven SamplerState properties. Three hooks for this job met
+                // when `next` merged into `sdlgpu` (2026-09-11): sdlgpu's complete-state
+                // SetSamplerState, the dx branch's SetSamplerAddressW + SetSamplerMipState, and the
+                // vulkan branch's SetSamplerAddressModeWEXT. All three have implementors, so the
+                // fan-out lives in IGraphicsRenderer::SetSamplerState's default body rather than
+                // here -- a renderer that overrides the complete hook gets everything directly, one
+                // that overrides only the older names keeps being told exactly as before, and this
+                // layer no longer has to know which family implements which spelling.
+                //
+                // maxAnisotropy reaches a renderer for the first time here; only sdlgpu's hook
+                // ever carried it.
+                renderer_->SetSamplerState(
+                    CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                        static_cast<int>(samplerState_.getFilterProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
                         static_cast<int>(samplerState_.getAddressUProperty())),
-                    NormalizeXnaTextureAddressModeOrdinal(
-                        static_cast<int>(samplerState_.getAddressVProperty())));
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressVProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressWProperty())),
+                    samplerState_.getMaxAnisotropyProperty(),
+                    samplerState_.getMaxMipLevelProperty(),
+                    samplerState_.getMipMapLevelOfDetailBiasProperty());
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
             }

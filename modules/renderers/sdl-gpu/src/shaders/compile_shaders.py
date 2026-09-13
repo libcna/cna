@@ -143,6 +143,7 @@ def main():
         ("sprite2d.frag.glsl", FRAGMENT_SHADER, "kSprite2dFragSpv"),
         ("colored3d.vert.glsl", VERTEX_SHADER,   "kColored3dVertSpv"),
         ("colored3d.frag.glsl", FRAGMENT_SHADER, "kColored3dFragSpv"),
+        ("instanced3d.vert.glsl", VERTEX_SHADER, "kInstanced3dVertSpv"),
         ("textured3d.vert.glsl", VERTEX_SHADER,   "kTextured3dVertSpv"),
         ("textured3d.frag.glsl", FRAGMENT_SHADER, "kTextured3dFragSpv"),
         ("colored_textured3d.vert.glsl", VERTEX_SHADER, "kColoredTextured3dVertSpv"),

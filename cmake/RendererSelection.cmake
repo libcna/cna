@@ -768,6 +768,25 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_WEBGPU")
     include(cmake/ThirdPartyWebGPU.cmake)
     cna_configure_webgpu()
+    # plans/plan_webgpu.md WEBGPU-167: compiled XNA Effect bytecode through MojoShader's portable
+    # SPIR-V profile plus the combined-image-sampler split WebGPU's shading model needs. Off by
+    # default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS, CNA_SDL_GPU_COMPILED_EFFECTS
+    # and CNA_VULKAN_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched
+    # dependency this renderer does not otherwise need. Like Vulkan there is no MojoShader-provided
+    # adapter -- the nine-function effect backend is CNA's own.
+    option(CNA_WEBGPU_COMPILED_EFFECTS
+           "Build WebGPU support for compiled XNA Effect bytecode (plans/plan_webgpu.md WEBGPU-167)" OFF)
+    if(CNA_WEBGPU_COMPILED_EFFECTS)
+        # WEBGPU-203/204: browser WebGPU still ingests WGSL and nothing else -- emdawnwebgpu's own
+        # createShaderModule switch has a single case, ShaderSourceWGSL. What changed on 2026-09-06
+        # is that CNA now TRANSLATES the SPIR-V this route emits into WGSL
+        # (modules/renderers/common/mojoshader/src/SpirvToWgsl.cpp), so the Emscripten build no
+        # longer has to be refused here. The option is buildable on every target; the shader-module
+        # representation is the only thing that differs, and under Emscripten it is fixed at WGSL.
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_WEBGPU_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
     message(STATUS "CNA: Using MAGNUM graphics renderer")
     set(RENDERER_DIR "modules/renderers/magnum")
@@ -810,12 +829,30 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     set(RENDERER_TARGET "cna_renderer_directx11")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX11)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX11")
+    # plans/plan_fx.md FX-063: MojoShader ships a native D3D11 adapter, but remains an optional
+    # dependency for builds that do not execute compiled XNA Effect Framework bytecode.
+    option(CNA_DIRECTX11_COMPILED_EFFECTS
+           "Build DirectX 11 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-063)" OFF)
+    if(CNA_DIRECTX11_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX11_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     message(STATUS "CNA: Using DIRECTX12 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx12")
     set(RENDERER_TARGET "cna_renderer_directx12")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX12)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX12")
+    # plans/plan_fx.md FX-134: D3D12 has no MojoShader adapter, so CNA supplies the backend while
+    # keeping the dependency absent from ordinary D3D12 builds.
+    option(CNA_DIRECTX12_COMPILED_EFFECTS
+           "Build DirectX 12 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-134)" OFF)
+    if(CNA_DIRECTX12_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX12_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     message(STATUS "CNA: Using DIRECT2D graphics renderer (Windows-only, 2D-only)")
     set(RENDERER_DIR "modules/renderers/direct2d")
@@ -854,6 +891,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     set(RENDERER_TARGET "cna_renderer_directx9")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX9)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX9")
+    # plans/plan_fx.md FX-070: compiled XNA effects already contain native D3D9 tokens;
+    # MojoShader is optional and is used only for the container runtime and reflection.
+    option(CNA_DIRECTX9_COMPILED_EFFECTS
+           "Build DirectX 9 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-070)" OFF)
+    if(CNA_DIRECTX9_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX9_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
     message(STATUS "CNA: Using DIRECTX1 (real DirectDraw v1) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx1")
@@ -923,6 +969,22 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
     list(APPEND _cna_identity_defines CNA_RENDERER_SDL_GPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
+    # plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes CNA's committed SPIR-V stock shaders
+    # directly. D3D12 and Metal require SDL_shadercross to translate those same blobs to DXBC or
+    # MSL. Keep Linux/Android's already-native route dependency-free by default, while making the
+    # dependency the default on the platforms that cannot construct the renderer without it.
+    if(WIN32 OR APPLE)
+        set(_cna_sdl_gpu_shadercross_default ON)
+    else()
+        set(_cna_sdl_gpu_shadercross_default OFF)
+    endif()
+    option(CNA_SDL_GPU_SHADERCROSS
+           "Enable portable SPIR-V stock shaders through SDL_shadercross"
+           ${_cna_sdl_gpu_shadercross_default})
+    if(CNA_SDL_GPU_SHADERCROSS)
+        include(cmake/ThirdPartySDLShaderCross.cmake)
+        cna_configure_sdl_shadercross()
+    endif()
     # plans/plan_fx.md FX-061: compiled XNA effects on this renderer go through MojoShader's own SDL_GPU
     # adapter, which emits SPIR-V -- the format this renderer already builds its pipelines from.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
@@ -932,6 +994,9 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     if(CNA_SDL_GPU_COMPILED_EFFECTS)
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()
+        if(CNA_SDL_GPU_SHADERCROSS)
+            cna_enable_mojoshader_sdl_gpu_shadercross()
+        endif()
         add_compile_definitions(CNA_SDL_GPU_COMPILED_EFFECTS)
     endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES1")

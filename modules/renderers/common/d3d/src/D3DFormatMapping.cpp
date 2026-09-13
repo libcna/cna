@@ -44,6 +44,147 @@ namespace CNA::Internal::Renderers::D3DCommon
         }
     }
 
+    bool IsXnaUncompressedSurfaceFormat(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsXnaBlockCompressedSurfaceFormat(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsXnaRenderTargetSurfaceFormat(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    int SurfaceFormatBytesPerTexel(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Alpha8:
+                return 1;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::HalfSingle:
+                return 2;
+            case SurfaceFormat::Color:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::HalfVector2:
+                return 4;
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return 8;
+            case SurfaceFormat::Vector4:
+                return 16;
+            default:
+                return 0;
+        }
+    }
+
+    int SurfaceFormatBytesPerBlock(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Dxt1:
+                return 8;
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+                return 16;
+            default:
+                return 0;
+        }
+    }
+
+    const char* SurfaceFormatName(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color: return "Color";
+            case SurfaceFormat::Bgr565: return "Bgr565";
+            case SurfaceFormat::Bgra5551: return "Bgra5551";
+            case SurfaceFormat::Bgra4444: return "Bgra4444";
+            case SurfaceFormat::Dxt1: return "Dxt1";
+            case SurfaceFormat::Dxt3: return "Dxt3";
+            case SurfaceFormat::Dxt5: return "Dxt5";
+            case SurfaceFormat::NormalizedByte2: return "NormalizedByte2";
+            case SurfaceFormat::NormalizedByte4: return "NormalizedByte4";
+            case SurfaceFormat::Rgba1010102: return "Rgba1010102";
+            case SurfaceFormat::Rg32: return "Rg32";
+            case SurfaceFormat::Rgba64: return "Rgba64";
+            case SurfaceFormat::Alpha8: return "Alpha8";
+            case SurfaceFormat::Single: return "Single";
+            case SurfaceFormat::Vector2: return "Vector2";
+            case SurfaceFormat::Vector4: return "Vector4";
+            case SurfaceFormat::HalfSingle: return "HalfSingle";
+            case SurfaceFormat::HalfVector2: return "HalfVector2";
+            case SurfaceFormat::HalfVector4: return "HalfVector4";
+            case SurfaceFormat::HdrBlendable: return "HdrBlendable";
+            case SurfaceFormat::ColorBgraEXT: return "ColorBgraEXT";
+            case SurfaceFormat::ColorSrgbEXT: return "ColorSrgbEXT";
+            case SurfaceFormat::Dxt5SrgbEXT: return "Dxt5SrgbEXT";
+            case SurfaceFormat::Bc7EXT: return "Bc7EXT";
+            case SurfaceFormat::Bc7SrgbEXT: return "Bc7SrgbEXT";
+            case SurfaceFormat::ByteEXT: return "ByteEXT";
+            case SurfaceFormat::UShortEXT: return "UShortEXT";
+            default: return "Unknown";
+        }
+    }
+
     DXGI_FORMAT DepthFormatToDxgi(int depthFormat)
     {
         switch (static_cast<DepthFormat>(depthFormat))

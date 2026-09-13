@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/DecalPass.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
-#include "LensPassVertexSource.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -13,13 +13,13 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "PostProcessShaderPackages.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
-#include <string>
 
 namespace CNA::Graphics {
 
@@ -32,72 +32,19 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
     using Microsoft::Xna::Framework::Graphics::SpriteBatch;
     using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
-    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
 
-    namespace {
-
-        constexpr const char* kVertexSource = detail::kLensVertexSource;
-
-        constexpr const char* kFragmentBody = R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;        // the prepass depth
-uniform sampler2D uDecalSampler;
-uniform sampler2D uNormalSampler;
-uniform mat4  uInverseProjection;
-uniform mat4  uViewToDecal;
-uniform vec3  uDecalAxisView;
-uniform vec3  uTint;
-uniform float uFarPlane;
-uniform float uOpacity;
-uniform float uMinFacing;
-uniform float uHasNormals;
-
-void main() {
-    float depth = cnaDecodeLinearDepth(texture(texture1, TexCoord));
-    // Nothing was drawn here, so there is no surface to glue anything to. Painting the far plane
-    // is how a decal ends up floating in the sky.
-    if (depth >= 0.999) discard;
-
-    vec3 viewPosition = cnaViewPositionFromDepth(TexCoord, depth, uInverseProjection) * uFarPlane;
-    vec3 local = (uViewToDecal * vec4(viewPosition, 1.0)).xyz;
-
-    // The box IS the test. A surface behind the decal's far face is outside it, which is what
-    // keeps a decal off the wall behind the crate it was meant for.
-    if (any(greaterThan(abs(local), vec3(0.5)))) discard;
-
-    if (uHasNormals > 0.5) {
-        vec3 normal = normalize(texture(uNormalSampler, TexCoord).xyz * 2.0 - 1.0);
-        // The decal projects along its own +Z, so a surface facing it has a normal pointing back
-        // along that axis. A surface nearly parallel to the axis is the smear case, and is dropped.
-        if (dot(normal, -uDecalAxisView) < uMinFacing) discard;
-    }
-
-    vec4 decal = texture(uDecalSampler, local.xy + 0.5);
-    FragColor = vec4(decal.rgb * uTint, decal.a * uOpacity);
-}
-)";
-
-        std::string MakeFragmentSource(const bool packedDepth)
-        {
-            std::string source = "#version 300 es\nprecision highp float;\n";
-            source += DepthNormalPrepass::getDepthDecodeGlsl(packedDepth);
-            source += kFragmentBody;
-            return source;
-        }
-
-    } // namespace
-
     DecalPass::DecalPass(GraphicsDevice& device)
-        : device_(device), spriteBatch_(std::make_unique<SpriteBatch>(device))
+        : spriteBatch_(std::make_unique<SpriteBatch>(device))
+        , packedDepth_(DepthNormalPrepass::usesPackedDepthEXT(device))
     {
-        const bool packed = DepthNormalPrepass::usesPackedDepthEXT(device);
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, MakeFragmentSource(packed));
+        const ShaderPackageEXT package = detail::CreateDecalShaderPackage();
+        if (package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
         bool logged = false;
         detail::reportShaderCompileFailure(device, "DecalPass", effect_.get(), logged);
-        supported_ = effect_ != nullptr && effect_->IsEffectValid() &&
-                     device.ExecutesShaderEffectSourceEXT();
+        supported_ = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+                  && effect_ != nullptr && effect_->IsEffectValid();
     }
 
     DecalPass::~DecalPass() = default;
@@ -154,14 +101,24 @@ void main() {
             effect_->SetUniformInt("uNormalSampler", 2);
             effect_->SetTexture(2, *normals_);
         }
-        effect_->SetUniformMat4("uInverseProjection", &inverseProjection_.M11);
-        effect_->SetUniformMat4("uViewToDecal", &viewToDecal.M11);
-        effect_->SetUniformVec3("uDecalAxisView", axis.X, axis.Y, axis.Z);
-        effect_->SetUniformVec3("uTint", tint_.X, tint_.Y, tint_.Z);
-        effect_->SetUniformFloat("uFarPlane", farPlane_);
-        effect_->SetUniformFloat("uOpacity", opacity_);
-        effect_->SetUniformFloat("uMinFacing", std::cos(maxSlopeAngle_));
-        effect_->SetUniformFloat("uHasNormals", normals_ != nullptr ? 1.0f : 0.0f);
+        std::array<float, 32> matrices{};
+        inverseProjection_.ToColumnMajor(matrices.data());
+        viewToDecal.ToColumnMajor(matrices.data() + 16);
+        const std::array vectors{
+            axis.X, axis.Y, axis.Z,
+            tint_.X, tint_.Y, tint_.Z,
+        };
+        const std::array scalars{
+            farPlane_,
+            opacity_,
+            std::cos(maxSlopeAngle_),
+            normals_ != nullptr ? 1.0f : 0.0f,
+            packedDepth_ ? 1.0f : 0.0f,
+        };
+        effect_->SetUniformMat4Array("uDecalMatrices", matrices.data(), 2);
+        effect_->SetUniformVec3Array("uDecalVectors", vectors.data(), 2);
+        effect_->SetUniformFloatArray("uDecalScalars", scalars.data(),
+                                      static_cast<int>(scalars.size()));
 
         // NonPremultiplied, and not the Opaque every post-process pass uses: a decal composites
         // onto the frame rather than replacing it, and its own alpha is the mask that decides

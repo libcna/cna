@@ -21,7 +21,9 @@ struct VSInput
 {
     float3 Position : POSITION0;
     float4 Color    : COLOR0;    // normalized UNORM R8G8B8A8
+#ifndef CNA_ALPHA_TEST_UNTEXTURED_INPUT
     float2 UV       : TEXCOORD0;
+#endif
 };
 
 struct VSOutput
@@ -38,7 +40,11 @@ VSOutput main(VSInput input)
 
     float4 pos = mul(float4(input.Position, 1.0), Mvp);
     output.Position = pos;
+#ifdef CNA_ALPHA_TEST_UNTEXTURED_INPUT
+    output.UV = float2(0.0, 0.0);
+#else
     output.UV = input.UV;
+#endif
 
     // Mix vertex color and diffuse based on VertexColorEnabled flag (matches
     // colored_textured3d.vert.hlsl's own established pattern).

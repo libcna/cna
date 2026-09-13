@@ -182,11 +182,11 @@ fixed from the descriptor's own request.
 |---|---|
 | Custom `ShaderEffect` (GLSL/HLSL source) | `CreateEffectRenderer` returns null; `CustomEffects` is false. FNA3D compiles no shader source. |
 | `DrawMeshEXT` | Inherits the shared refusal — that is Skia's bounded `SkVertices` ABI. |
-| Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA exposes no texture arrays and FNA3D's binding has no slice field. |
+| Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA's sampled `Texture2DArray` extension is not a render target, and FNA3D's binding has no slice field. |
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
 | Instanced stock-effect drawing | `DrawInstancedPrimitivesEx` throws because stock shaders declare no instance input. A compatible compiled effect uses native instancing when the driver reports it. |
-| Compiled FX on non-FNA3D renderers | Outside this renderer. SDL_GPU and the EasyGL/OpenGL family have since passed the same shared contract and report true behind their own build options (`plans/plan_fx.md` FX-061/FX-062/FX-080-FX-090); every other backend reports `CompiledEffects == false` until it does. |
+| Compiled FX on non-FNA3D renderers | Outside this renderer. SDL_GPU, EasyGL/OpenGL, Vulkan, and DirectX 11 have since passed the same shared contract and report true behind their own build options (`plans/plan_fx.md` FX-061/FX-062/FX-063/FX-065/FX-080-FX-112); unsupported backends continue to report `CompiledEffects == false`. |
 | Multiple simultaneous devices on one thread | Not claimed. FNA3D's OpenGL driver does not make each device's context current around commands/teardown; the plan tracks the required contract decision or upstream fix as FNA3D-51. Sequential replacement devices are covered. |
 | Context-loss simulation | Not implemented; FNA3D exposes no device-loss surface, and the shared `DebugSimulateContextLoss` default is a no-op. |
 | Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDL_GPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |

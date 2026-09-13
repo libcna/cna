@@ -89,7 +89,8 @@ TEST(ChromaticAberrationTest, TheCentreIsUntouchedAndTheCornersFringe)
     // separate at every radius.
     GraphicsDevice gd;
     ChromaticAberrationPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable chromatic-aberration shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](const int x, int) {
@@ -134,14 +135,17 @@ TEST(ChromaticAberrationTest, ZeroStrengthLeavesTheFrameAlone)
         return x < kSize / 2 ? Color(255, 255, 255, 255) : Color(0, 0, 0, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);
+    const std::vector<Color> expected = ReadTarget(*source);
 
     PostProcessContext context = MakeContext(*source, destination);
     pass.apply(context);
 
     const std::vector<Color> pixels = ReadTarget(destination);
-    const Color corner = pixels[At(4, 4)];
-    EXPECT_EQ(corner.getRProperty(), corner.getBProperty())
-        << "a disabled pass still fringed the frame";
+    ASSERT_EQ(pixels.size(), expected.size());
+    for (std::size_t index = 0; index < pixels.size(); ++index)
+        EXPECT_EQ(pixels[index].getPackedValueProperty(),
+                  expected[index].getPackedValueProperty())
+            << "a disabled pass changed pixel " << index;
 }
 
 TEST(ChromaticAberrationTest, TheStrengthIsClampedAndTheNameIsStable)
@@ -166,7 +170,8 @@ TEST(FilmGrainTest, TheGrainIsDeterministicForAGivenTime)
     // not. Two applications at the same time must agree exactly.
     GraphicsDevice gd;
     FilmGrainPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable film-grain shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(128, 128, 128, 255); });
@@ -200,12 +205,14 @@ TEST(FilmGrainTest, TheMidtonesCarryMoreGrainThanTheBlacks)
     // highlights; uniform noise across the range reads as a broken sensor.
     GraphicsDevice gd;
     FilmGrainPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable film-grain shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    // Top half near black, bottom half mid grey.
-    auto source = MakeImage(gd, [](int, const int y) {
-        const int value = y < kSize / 2 ? 4 : 128;
+    // Left half near black, right half mid grey. A left/right split keeps this property test
+    // independent of the render-target Y orientation used by the backend.
+    auto source = MakeImage(gd, [](const int x, int) {
+        const int value = x < kSize / 2 ? 4 : 128;
         return Color(value, value, value, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);
@@ -216,11 +223,11 @@ TEST(FilmGrainTest, TheMidtonesCarryMoreGrainThanTheBlacks)
     pass.apply(context);
 
     const std::vector<Color> pixels = ReadTarget(destination);
-    const auto spreadOver = [&](const int firstRow, const int lastRow) {
+    const auto spreadOver = [&](const int firstColumn, const int lastColumn) {
         double sum = 0.0, sumSquares = 0.0;
         int count = 0;
-        for (int y = firstRow; y <= lastRow; ++y)
-            for (int x = 0; x < kSize; ++x)
+        for (int y = 0; y < kSize; ++y)
+            for (int x = firstColumn; x <= lastColumn; ++x)
             {
                 const double v = pixels[At(x, y)].getRProperty();
                 sum += v; sumSquares += v * v; ++count;
@@ -276,12 +283,14 @@ TEST(LensFlareTest, TheGhostsLandOnTheOppositeSideOfTheCentre)
     // that stepped the other way would pile the ghosts on top of the light that made them.
     GraphicsDevice gd;
     LensFlarePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable lens-flare shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    // A bright block in the top-left quadrant, on an otherwise black frame.
+    // A bright block left of the optical axis, vertically centred so backend Y orientation cannot
+    // change which side of the axis the assertion calls opposite.
     auto source = MakeImage(gd, [](const int x, const int y) {
-        const bool bright = x >= 8 && x < 16 && y >= 8 && y < 16;
+        const bool bright = x >= 8 && x < 16 && y >= 24 && y < 40;
         return bright ? Color(255, 255, 255, 255) : Color(0, 0, 0, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);
@@ -303,13 +312,13 @@ TEST(LensFlareTest, TheGhostsLandOnTheOppositeSideOfTheCentre)
         return best;
     };
 
-    // The opposite quadrant was black in the source and must not be now.
-    const int opposite = brightestIn(kSize / 2, kSize / 2, kSize, kSize);
+    // The opposite half was black in the source and must not be now.
+    const int opposite = brightestIn(kSize / 2, 0, kSize, kSize);
     EXPECT_GT(opposite, 30) << "no ghost reached the far side of the centre";
 
-    // And the quadrant *beyond* the light, away from the centre, must have stayed black: that is
+    // And the strip *beyond* the light, away from the centre, must have stayed black: that is
     // where the ghosts would be if the step ran the wrong way.
-    const int behindTheLight = brightestIn(0, 0, 8, 8);
+    const int behindTheLight = brightestIn(0, 0, 8, kSize);
     EXPECT_LT(behindTheLight, opposite)
         << "the ghosts landed on the light's own side of the frame";
 }
@@ -320,7 +329,8 @@ TEST(LensFlareTest, AFrameBelowTheThresholdIsUnchanged)
     // the frame throws ghosts and the image turns to soup.
     GraphicsDevice gd;
     LensFlarePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable lens-flare shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(90, 90, 90, 255); });
@@ -343,7 +353,7 @@ TEST(LensFlareTest, ZeroIntensityLeavesTheFrameAlone)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](const int x, const int y) {
-        const bool bright = x >= 8 && x < 16 && y >= 8 && y < 16;
+        const bool bright = x >= 8 && x < 16 && y >= 24 && y < 40;
         return bright ? Color(255, 255, 255, 255) : Color(0, 0, 0, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);

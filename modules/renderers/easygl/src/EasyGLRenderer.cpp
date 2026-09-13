@@ -2,6 +2,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -594,6 +595,19 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA::Platform::GlContextHandle context_ = nullptr;
     };
 
+    class EasyGLThreadContextLeaseControl
+    {
+    public:
+        explicit EasyGLThreadContextLeaseControl(
+            std::shared_ptr<EasyGLPlatformContext> platformContext)
+            : platformContext(std::move(platformContext))
+        {
+        }
+
+        std::shared_ptr<EasyGLPlatformContext> platformContext;
+        std::recursive_mutex mutex;
+    };
+
     namespace
     {
         class EasyGLThreadContextLease final : public IRendererThreadContextLease
@@ -621,12 +635,50 @@ namespace CNA::Internal::Renderers::EasyGL
                 RendererThreadContextLeaseRelease::RestorePreviousBinding;
         };
 
-        std::unordered_map<const EasyGLRenderer*, EasyGLThreadContextLeaseState>&
+        std::unordered_map<const EasyGLThreadContextLeaseControl*, EasyGLThreadContextLeaseState>&
         ThreadContextLeaseStates()
         {
-            static thread_local std::unordered_map<const EasyGLRenderer*,
+            static thread_local std::unordered_map<const EasyGLThreadContextLeaseControl*,
                                                    EasyGLThreadContextLeaseState> states;
             return states;
+        }
+
+        void ReleaseThreadContextLease(
+            const std::shared_ptr<EasyGLThreadContextLeaseControl>& control) noexcept
+        {
+            auto& states = ThreadContextLeaseStates();
+            const auto it = states.find(control.get());
+            if (it == states.end() || it->second.depth == 0)
+            {
+                CNA::Logger::Error(
+                    "EasyGL renderer context lease released without matching acquisition",
+                    CNA::LogCategory::RENDER);
+                return;
+            }
+
+            --it->second.depth;
+            if (it->second.depth == 0)
+            {
+#if !defined(__EMSCRIPTEN__)
+                // Web: nothing to restore. The context is current on the browser thread for every
+                // thread, so there is no per-thread binding that was captured on acquire, and
+                // restoring or clearing one would unbind the context the next frame needs. The
+                // mutual exclusion below is still released on every platform.
+                try
+                {
+                    control->platformContext->RestoreBinding(
+                        it->second.previousBinding, it->second.release);
+                }
+                catch (const std::exception& error)
+                {
+                    CNA::Logger::Error(
+                        std::string("Failed to release EasyGL context ownership: ") + error.what(),
+                        CNA::LogCategory::RENDER);
+                }
+#endif
+                states.erase(it);
+            }
+            control->mutex.unlock();
         }
     }
 
@@ -678,7 +730,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int clientWidth = 0;
         int clientHeight = 0;
         GetClientSize(clientWidth, clientHeight);
-        if (virtualHeight_ <= 0)
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
+            virtualHeight_ <= 0)
         {
             width = clientWidth;
             height = clientHeight;
@@ -790,7 +843,10 @@ namespace CNA::Internal::Renderers::EasyGL
             static_cast<float>(logicalWidth) / clientViewportWidth;
         logicalY = (windowY - clientViewportY) *
             static_cast<float>(logicalHeight) / clientViewportHeight;
-        return true;
+        return windowX >= clientViewportX &&
+               windowX < clientViewportX + clientViewportWidth &&
+               windowY >= clientViewportY &&
+               windowY < clientViewportY + clientViewportHeight;
     }
 
     bool EasyGLSurfaceState::LogicalToWindow(const float logicalX, const float logicalY,
@@ -2840,13 +2896,23 @@ if (ProfileIsEs2ApiGeneration())
     // ---------------------------------------------------------------------------------------
     // plans/plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
 
-    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(const std::size_t byteSize)
+    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
         : byteSize_(byteSize)
+        , usage_(usage)
+        , cpuAccess_(cpuAccess)
     {
+        if (byteSize_ == 0)
+            throw std::invalid_argument("EasyGL buffer: byte size must be positive");
+        if (usage_ == 0 || (usage_ & ~UINT32_C(0x7F)) != 0)
+            throw std::invalid_argument("EasyGL buffer: usage mask is invalid");
+        if ((cpuAccess_ & ~UINT32_C(0x03)) != 0)
+            throw std::invalid_argument("EasyGL buffer: CPU-access mask is invalid");
         buffer_.create();
-        // Allocated once with no initial data; DynamicDraw because the whole point of a storage
-        // buffer is that something writes it repeatedly -- usually the GPU itself.
-        buffer_.set_data(::easygl::BufferTarget::ShaderStorage, nullptr, byteSize_,
+        // GL buffer objects are target-agnostic. Choosing DrawIndirect for a command-only buffer
+        // is what keeps allocation valid on desktop GL 4.0-4.2, where SSBO targets do not exist.
+        buffer_.set_data(TransferTarget(), nullptr, byteSize_,
                          ::easygl::BufferUsage::DynamicDraw);
     }
 
@@ -2854,28 +2920,98 @@ if (ProfileIsEs2ApiGeneration())
 
     void EasyGLStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
     {
-        if (data == nullptr || byteSize == 0) return;
-        buffer_.set_sub_data(::easygl::BufferTarget::ShaderStorage, data,
-                             byteSize > byteSize_ ? byteSize_ : byteSize, 0);
+        (void)SetDataRangeEXT(0, data, byteSize);
     }
 
     void EasyGLStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
     {
-        if (out == nullptr || byteSize == 0) return;
-        const std::size_t bytes = byteSize > byteSize_ ? byteSize_ : byteSize;
+        (void)GetDataRangeEXT(0, out, byteSize);
+    }
+
+    bool EasyGLStorageBufferRenderer::SetDataRangeEXT(
+        const std::size_t byteOffset, const void* data, const std::size_t byteSize)
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer upload range exceeds allocation");
+        if (data == nullptr && byteSize != 0)
+            throw std::invalid_argument("EasyGL storage-buffer upload source is null");
+        if (byteSize == 0) return true;
+        buffer_.set_sub_data(TransferTarget(), data, byteSize, byteOffset);
+        return true;
+    }
+
+    bool EasyGLStorageBufferRenderer::GetDataRangeEXT(
+        const std::size_t byteOffset, void* out, const std::size_t byteSize) const
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer read range exceeds allocation");
+        if (out == nullptr && byteSize != 0)
+            throw std::invalid_argument("EasyGL storage-buffer read destination is null");
+        if (byteSize == 0) return true;
+        if ((usage_ & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
         // glGetBufferSubData is desktop-only; mapping for read is the portable form and is what
         // the GL ES 3.1 contexts this renderer usually holds actually provide.
-        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage, 0,
-                                         static_cast<std::ptrdiff_t>(bytes),
+        const ::easygl::BufferTarget target = TransferTarget();
+        void* mapped = buffer_.map_range(target,
+                                         static_cast<std::ptrdiff_t>(byteOffset),
+                                         static_cast<std::ptrdiff_t>(byteSize),
                                          ::metagl::MapBufferAccessMask::Read);
-        if (mapped == nullptr) return;
-        std::memcpy(out, mapped, bytes);
-        buffer_.unmap(::easygl::BufferTarget::ShaderStorage);
+        if (mapped == nullptr) return false;
+        std::memcpy(out, mapped, byteSize);
+        buffer_.unmap(target);
+        return true;
+    }
+
+    bool EasyGLStorageBufferRenderer::CopyToEXT(
+        IStorageBufferRenderer& destination, const std::size_t sourceByteOffset,
+        const std::size_t destinationByteOffset, const std::size_t byteSize)
+    {
+        auto* target = dynamic_cast<EasyGLStorageBufferRenderer*>(&destination);
+        if (target == nullptr) return false;
+        if (sourceByteOffset > byteSize_ || byteSize > byteSize_ - sourceByteOffset ||
+            destinationByteOffset > target->byteSize_ ||
+            byteSize > target->byteSize_ - destinationByteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer copy range exceeds allocation");
+        if (target == this && byteSize != 0 &&
+            sourceByteOffset < destinationByteOffset + byteSize &&
+            destinationByteOffset < sourceByteOffset + byteSize)
+            throw std::invalid_argument("EasyGL storage-buffer copy ranges overlap");
+        if (byteSize == 0) return true;
+        if (((usage_ | target->usage_) & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        buffer_.bind(::easygl::BufferTarget::CopyRead);
+        target->buffer_.bind(::easygl::BufferTarget::CopyWrite);
+        ::metagl::glCopyBufferSubData(
+            ::metagl::BufferTarget::CopyRead, ::metagl::BufferTarget::CopyWrite,
+            static_cast<std::ptrdiff_t>(sourceByteOffset),
+            static_cast<std::ptrdiff_t>(destinationByteOffset),
+            static_cast<std::ptrdiff_t>(byteSize));
+        if (((usage_ | target->usage_) & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        return true;
+    }
+
+    ::easygl::BufferTarget EasyGLStorageBufferRenderer::TransferTarget() const
+    {
+        if ((usage_ & UINT32_C(1)) != 0)
+            return ::easygl::BufferTarget::ShaderStorage;
+        if ((usage_ & (UINT32_C(1) << 3)) != 0)
+            return ::easygl::BufferTarget::DrawIndirect;
+        if ((usage_ & (UINT32_C(1) << 6)) != 0)
+            return ::easygl::BufferTarget::Uniform;
+        return ::easygl::BufferTarget::CopyWrite;
     }
 
     void EasyGLStorageBufferRenderer::BindBase(const int binding) const
     {
         buffer_.bind_base(::easygl::BufferTarget::ShaderStorage,
+                          static_cast<unsigned int>(binding));
+    }
+
+    void EasyGLStorageBufferRenderer::BindUniformBase(const int binding) const
+    {
+        buffer_.bind_base(::easygl::BufferTarget::Uniform,
                           static_cast<unsigned int>(binding));
     }
 
@@ -2941,6 +3077,32 @@ if (ProfileIsEs2ApiGeneration())
     {
         if (buffer == nullptr) return;
         static_cast<EasyGLStorageBufferRenderer*>(buffer)->BindBase(binding);
+    }
+
+    bool EasyGLComputeShaderRenderer::BindConstantBufferEXT(
+        const int binding, IStorageBufferRenderer* buffer)
+    {
+        if (binding < 0) return false;
+        GLint stageBindings = 0;
+        GLint totalBindings = 0;
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::MaxComputeUniformBlocks, &stageBindings);
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::MaxUniformBufferBindings, &totalBindings);
+        if (binding >= stageBindings || binding >= totalBindings) return false;
+        if (buffer == nullptr)
+        {
+            ::metagl::glBindBufferBase(
+                ::metagl::BufferTarget::Uniform,
+                static_cast<GLuint>(binding), ::metagl::BufferId{0});
+            return true;
+        }
+        auto* native = dynamic_cast<EasyGLStorageBufferRenderer*>(buffer);
+        if (native == nullptr ||
+            (native->GetUsageEXT() & (UINT32_C(1) << 6)) == 0)
+            return false;
+        native->BindUniformBase(binding);
+        return true;
     }
 
     void EasyGLComputeShaderRenderer::BindImageTexture(const int unit, ITextureRenderer* texture,
@@ -5403,6 +5565,19 @@ if (ProfileUsesGlslEs100())
         pendingAddressV_ = addressV;
     }
 
+    void EasyGLSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
+                                                     int addressW, int maxAnisotropy,
+                                                     int maxMipLevel, float lodBias)
+    {
+        pendingFilter_ = textureFilter;
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
+        pendingAddressW_ = addressW;
+        pendingMaxAnisotropy_ = maxAnisotropy;
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
     void EasyGLSpriteBatchRenderer::End()
     {
         FlushBatch();
@@ -5461,8 +5636,31 @@ if (ProfileUsesGlslEs100())
         int fullW = 0, fullH = 0;
         if (haveRt) { fullW = rtW; fullH = rtH; }
         else if (graphicsRenderer_) graphicsRenderer_->getPhysicalSize(fullW, fullH);
-        const bool customVp = curVw > 0 && curVh > 0 && fullW > 0 && fullH > 0
-                              && (curVx != 0 || curVy != 0 || curVw != fullW || curVh != fullH);
+
+        // The DEFAULT viewport is the presentation rectangle, and under Letterbox or Overscan that
+        // is NOT the whole drawable. Asking "does the GL viewport differ from the full target"
+        // therefore answered yes for the default viewport as soon as bars existed, and the branch
+        // below then sized the sprite projection to the rectangle's PHYSICAL extent instead of the
+        // logical one -- putting a sprite that covers the whole logical area into a corner of the
+        // box. That is PresentationRectangleTest.ALetterboxedDefaultViewportIsNotACustomSubViewport,
+        // and it is what broke SAMPLE-077 in any window whose size is not exactly the sample's
+        // 480x800 back buffer once Letterbox became the default presentation mode.
+        //
+        // Compare against the presentation rectangle instead. GetDefaultViewportRect() answers in
+        // top-left-origin coordinates and GL's viewport origin is bottom-left, so the Y needs the
+        // same flip SetViewport() itself applies.
+        int defX = 0, defY = 0, defW = fullW, defH = fullH;
+        if (!haveRt && graphicsRenderer_)
+            graphicsRenderer_->GetDefaultViewportRect(defX, defY, defW, defH);
+        const int defGlY = (fullH > 0) ? (fullH - defY - defH) : defY;
+
+        // Ask the renderer's own record rather than comparing live GL state: a window resize moves
+        // the presentation rectangle, and the GL viewport still holds the previous one until the
+        // next SetViewport(). Comparing here would read that stale rectangle as a game-set
+        // sub-viewport and then keep it -- which is precisely what left SAMPLE-077 drawing its menu
+        // at the old rectangle's origin after a resize.
+        const bool customVp = graphicsRenderer_ != nullptr
+                              && !graphicsRenderer_->ViewportIsDefaultEXT();
 
         // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
         // and orthographic projection to that RT, not the window -- getPhysicalSize()/
@@ -5470,9 +5668,24 @@ if (ProfileUsesGlslEs100())
         // test because those tests' RTs all coincidentally matched the window size.
         if (customVp)
         {
-            // Keep the custom GL viewport (do NOT reset to the full target); project by Viewport.W/H.
-            logW = curVw;
-            logH = curVh;
+            // A genuine sub-viewport: keep the GL viewport GraphicsDevice already mapped, and
+            // project by its size in LOGICAL units, because XNA builds the sprite ortho from
+            // Viewport.Width/Height and CNA's public Viewport is logical. The presentation
+            // rectangle carries the logical-to-physical scale, so dividing by it converts back.
+            int logicalW = 0, logicalH = 0;
+            if (!haveRt && graphicsRenderer_) graphicsRenderer_->getLogicalSize(logicalW, logicalH);
+            if (!haveRt && logicalW > 0 && logicalH > 0 && defW > 0 && defH > 0)
+            {
+                logW = static_cast<int>(std::lround(
+                    static_cast<double>(curVw) * logicalW / defW));
+                logH = static_cast<int>(std::lround(
+                    static_cast<double>(curVh) * logicalH / defH));
+            }
+            else
+            {
+                logW = curVw;
+                logH = curVh;
+            }
         }
         else if (haveRt)
         {
@@ -5482,10 +5695,11 @@ if (ProfileUsesGlslEs100())
         }
         else if (graphicsRenderer_)
         {
-            int physW = 0, physH = 0;
-            graphicsRenderer_->getPhysicalSize(physW, physH);
-            if (physW > 0 && physH > 0)
-                device_.set_viewport(0, 0, physW, physH);
+            // The default viewport IS the presentation rectangle, so re-assert the CURRENT one --
+            // that both keeps the letterbox bars (resetting to the full drawable is what discarded
+            // them) and repairs a rectangle the last resize left stale.
+            if (defW > 0 && defH > 0)
+                device_.set_viewport(defX, defGlY, defW, defH);
             graphicsRenderer_->getLogicalSize(logW, logH);
         }
         if (logW <= 0 || logH <= 0)
@@ -5499,6 +5713,16 @@ if (ProfileUsesGlslEs100())
         // FNA's inlined SpriteBatch matrix preserves POSITION.Z as layerDepth. The equivalent
         // XNA matrix uses near=0/far=-1; the built-in shader then performs the D3D-to-GL clip-depth
         // conversion, while a CNAEXT custom GLSL effect remains responsible for its native output.
+        if (std::getenv("CNA_EASYGL_SPRITE_VIEWPORT_DEBUG") != nullptr)
+        {
+            int gx = 0, gy = 0, gw = 0, gh = 0;
+            device_.get_viewport(gx, gy, gw, gh);
+            std::fprintf(stderr,
+                "[spritevp] entry=(%d,%d,%dx%d) def=(%d,%d,%dx%d) defGlY=%d custom=%d "
+                "full=(%dx%d) log=(%dx%d) atDraw=(%d,%d,%dx%d) haveRt=%d\n",
+                curVx, curVy, curVw, curVh, defX, defY, defW, defH, defGlY,
+                customVp ? 1 : 0, fullW, fullH, logW, logH, gx, gy, gw, gh, haveRt ? 1 : 0);
+        }
         const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
             0.0f, static_cast<float>(logW),
             static_cast<float>(logH), 0.0f,
@@ -5515,8 +5739,11 @@ if (ProfileUsesGlslEs100())
         if (graphicsRenderer_)
         {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
-                                                 pendingMaxAnisotropy_);
+                                                pendingMaxAnisotropy_);
             graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+            // VULKAN-167: ApplySamplerState sets W = U, which is right for every XNA preset and
+            // wrong for a state that set W on its own. The batch's own W, when it supplied one, wins.
+            if (pendingAddressW_ >= 0) graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
         }
 
         vbo_.bind(::easygl::BufferTarget::Array);
@@ -5689,8 +5916,12 @@ if (ProfileUsesGlslEs100())
             if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
             graphicsRenderer_->getLogicalSize(logicalWidth, logicalHeight);
         }
-        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
-                                             pendingAddressV_, pendingMaxAnisotropy_);
+        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
+                                             pendingMaxAnisotropy_);
+        graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        // VULKAN-167: same as the stock flush above -- the batch's W overrides the W-follows-U
+        // default. This is the compiled-effect path, which a custom `sampler3D` reaches too.
+        if (pendingAddressW_ >= 0) graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;
@@ -5937,8 +6168,10 @@ if (ProfileUsesGlslEs100())
         const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
         const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval,
         const GlProfile profile, const int depthStencilFormat)
-        : platformContext_(std::make_unique<EasyGLPlatformContext>(
+        : platformContext_(std::make_shared<EasyGLPlatformContext>(
               glContext, RequireEasyGlWindowId(surface), RequestedGlContext(profile)))
+        , threadContextLeaseControl_(
+              std::make_shared<EasyGLThreadContextLeaseControl>(platformContext_))
         , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
@@ -6173,6 +6406,56 @@ if (ProfileUsesGlslEs100())
         msaaStorageDepthFormat_ = backBufferDepthFormat_;
     }
 
+    int EasyGLRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        EnsureCallingThreadContext();
+        if (metagl::IsContextLost()) return GetMultiSampleCount();
+
+        int newSampleCount = 1;
+        if (!ProfileIsEs2ApiGeneration() && requestedMultiSampleCount > 1)
+        {
+            GLint maxSamples = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+            int candidate = 1;
+            while (candidate <= requestedMultiSampleCount / 2) candidate *= 2;
+            if (maxSamples > 1)
+                newSampleCount = std::min(candidate, static_cast<int>(maxSamples));
+        }
+
+        if (newSampleCount == sampleCount_)
+        {
+            if (bound_->height == 0) BindDefaultFramebuffer();
+            return GetMultiSampleCount();
+        }
+
+        sampleCount_ = newSampleCount;
+        msaaFbo_.destroy();
+        msaaColorRbo_.destroy();
+        msaaDepthRbo_.destroy();
+        msaaW_ = 0;
+        msaaH_ = 0;
+        msaaStorageDepthFormat_ = -1;
+
+        if (bound_->height == 0)
+        {
+            if (sampleCount_ > 1)
+            {
+                int physW = 0;
+                int physH = 0;
+                surfaceState_.GetDrawableSize(physW, physH);
+                CreateMsaaBuffers(physW, physH);
+                msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+            }
+            else
+            {
+                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+            }
+        }
+
+        ApplyCurrentDepthStencilAvailability();
+        return GetMultiSampleCount();
+    }
+
     void EasyGLRenderer::BindDefaultFramebuffer()
     {
         if (sampleCount_ > 1)
@@ -6221,11 +6504,27 @@ if (ProfileUsesGlslEs100())
         // Must run here, in the destructor body, rather than relying on member destruction order:
         // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
         // still current, which platformContext_ (destroyed after this body returns) still owns.
-        if (mojoShaderContext_ != nullptr)
+        //
+        // Release the registered compiled effects FIRST, and through the same path context loss
+        // uses. A compiled effect can outlive this renderer: the CNAEXT engine layer holds its
+        // post-process passes by shared_ptr, and CNA::Graphics::SsrPass -> FullscreenPass owns a
+        // SpriteBatch whose EasyGL sprite renderer owns an EasyGLCompiledEffect. When that chain
+        // finally releases, ~EasyGLCompiledEffect calls MOJOSHADER_deleteEffect ->
+        // MOJOSHADER_glDeleteShader, which addresses the context destroyed below -- a segfault, not
+        // a leak. ReleaseForContextLossEXT deletes each native effect while the context is still
+        // current and nulls its pointers, so the later destructor finds nothing to free.
+        //
+        // Neither branch could see this alone: the effects are owned by SpriteBatch's renderer
+        // because of plans/plan_fx.md FX-129/FX-130/FX-131 on `next`, and the passes that outlive
+        // the renderer come from the engine-layer work on `vulkan`. It appeared when they met
+        // (2026-09-11), as CApi_EngineLayerSmoke crashing in teardown.
+        //
+        // The function's log line says "context recovery" because that is its other caller; the
+        // work it does -- release every effect, then destroy the MojoShader context -- is exactly
+        // what teardown needs, and duplicating it here would be a second copy to keep in step.
+        if (mojoShaderContext_ != nullptr || !compiledEffects_.empty())
         {
-            MOJOSHADER_glMakeContextCurrent(nullptr);
-            MOJOSHADER_glDestroyContext(mojoShaderContext_);
-            mojoShaderContext_ = nullptr;
+            ReleaseCompiledEffectsForContextLossEXT();
         }
 #endif
         // platformContext_ is the first-declared member and therefore dies last, after every GL
@@ -6482,13 +6781,14 @@ if (!ProfileIsEs2ApiGeneration())
 }
         }
 
-        // Use the render-target's own height for the Y-flip when an RT is bound;
-        // fall back to the window/viewport height for the default framebuffer.
+        // Use the render target's own height when one is bound and the drawable's
+        // physical height for the default framebuffer. The logical presentation
+        // height can differ and cannot invert a physical glReadPixels rectangle.
         int fbH = bound_->height;
         if (fbH == 0)
         {
-            int vpW;
-            GetViewportSize(vpW, fbH);
+            int physicalWidth = 0;
+            getPhysicalSize(physicalWidth, fbH);
         }
 
         // OpenGL origin is bottom-left; flip y so caller gets top-left origin.
@@ -6556,60 +6856,6 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::SetPresentationMode(int mode)
     {
         surfaceState_.SetPresentationMode(static_cast<CnaPresentationMode>(mode));
-    }
-
-    int EasyGLRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
-    {
-        if (metagl::IsContextLost()) return GetMultiSampleCount();
-
-        int applied = requestedMultiSampleCount > 1 ? requestedMultiSampleCount : 1;
-        if (ProfileIsEs2ApiGeneration())
-        {
-            applied = 1;
-        }
-        else if (applied > 1)
-        {
-            GLint maxSamples = 0;
-            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
-            applied = std::min(applied, static_cast<int>(maxSamples));
-            if (applied < 2) applied = 1;
-        }
-
-        if (applied == sampleCount_)
-        {
-            if (bound_->height == 0) BindDefaultFramebuffer();
-            return GetMultiSampleCount();
-        }
-
-        sampleCount_ = applied;
-        if (sampleCount_ > 1)
-        {
-            // A target-bound Reset is unusual but legal to reach through CNA's public surface.
-            // Defer replacing the default destination until it is selected again rather than
-            // stealing the active render-target binding here.
-            if (bound_->height == 0)
-            {
-                int width = 0;
-                int height = 0;
-                surfaceState_.GetDrawableSize(width, height);
-                CreateMsaaBuffers(width, height);
-                msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
-            }
-        }
-        else
-        {
-            if (bound_->height == 0)
-                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
-            msaaFbo_.destroy();
-            msaaColorRbo_.destroy();
-            msaaDepthRbo_.destroy();
-            msaaW_ = 0;
-            msaaH_ = 0;
-            msaaStorageDepthFormat_ = -1;
-        }
-
-        ApplyCurrentDepthStencilAvailability();
-        return GetMultiSampleCount();
     }
 
     void EasyGLRenderer::SetSwapInterval(int interval)
@@ -6727,17 +6973,18 @@ if (!ProfileIsEs2ApiGeneration())
         // as a different subset of background-loaded textures rendering black in 2 of 5 Firefox
         // and 1 of 5 Chrome runs, with no GL error reported anywhere.
         //
-        // What stays platform-specific is only the BINDING handover below: on the web the context
-        // is current on the browser thread for everyone, so there is no per-thread binding to
-        // capture and restoring or clearing one would unbind the context the next frame needs.
-        threadContextMutex_.lock();
+        // What stays platform-specific is only the BINDING handover: on the web the context is
+        // current on the browser thread for everyone, so there is no per-thread binding to
+        // capture, and restoring or clearing one would unbind the context the next frame needs.
+        const auto control = threadContextLeaseControl_;
+        control->mutex.lock();
         try
         {
-            auto& state = ThreadContextLeaseStates()[this];
+            auto& state = ThreadContextLeaseStates()[control.get()];
             if (state.depth == 0)
             {
 #if !defined(__EMSCRIPTEN__)
-                state.previousBinding = platformContext_->GetCurrentBinding();
+                state.previousBinding = control->platformContext->GetCurrentBinding();
                 state.release = release;
 #else
                 (void)release;
@@ -6748,54 +6995,21 @@ if (!ProfileIsEs2ApiGeneration())
         }
         catch (...)
         {
-            ThreadContextLeaseStates().erase(this);
-            threadContextMutex_.unlock();
+            ThreadContextLeaseStates().erase(control.get());
+            control->mutex.unlock();
             throw;
         }
 
         try
         {
             return std::make_unique<EasyGLThreadContextLease>(
-                [this]() { ReleaseCallingThreadContextLease(); });
+                [control]() { ReleaseThreadContextLease(control); });
         }
         catch (...)
         {
-            ReleaseCallingThreadContextLease();
+            ReleaseThreadContextLease(control);
             throw;
         }
-    }
-
-    void EasyGLRenderer::ReleaseCallingThreadContextLease() noexcept
-    {
-        auto& states = ThreadContextLeaseStates();
-        const auto it = states.find(this);
-        if (it == states.end() || it->second.depth == 0)
-        {
-            CNA::Logger::Error(
-                "EasyGL renderer context lease released without matching acquisition",
-                CNA::LogCategory::RENDER);
-            return;
-        }
-
-        --it->second.depth;
-        if (it->second.depth == 0)
-        {
-#if !defined(__EMSCRIPTEN__)
-            try
-            {
-                platformContext_->RestoreBinding(
-                    it->second.previousBinding, it->second.release);
-            }
-            catch (const std::exception& error)
-            {
-                CNA::Logger::Error(
-                    std::string("Failed to release EasyGL context ownership: ") + error.what(),
-                    CNA::LogCategory::RENDER);
-            }
-#endif
-            states.erase(it);
-        }
-        threadContextMutex_.unlock();
     }
 
     std::unique_ptr<ITextureRenderer> EasyGLRenderer::CreateTexture(const ImageData& data)
@@ -7038,6 +7252,32 @@ if (!ProfileIsEs2ApiGeneration())
             : RendererFormatVerdict::Unsupported;
     }
 
+    ShaderDialectEXT EasyGLRenderer::GetShaderDialectEXT() const
+    {
+        return IsDesktopCoreProfile(profile_) ? ShaderDialectEXT::GlslDesktop
+                                              : ShaderDialectEXT::GlslEs;
+    }
+
+    bool EasyGLRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        const auto expectedLanguage = IsDesktopCoreProfile(profile_)
+            ? CNA::ShaderLanguageEXT::GlslDesktop
+            : CNA::ShaderLanguageEXT::GlslEs;
+        if (language != static_cast<int>(expectedLanguage)) return false;
+        switch (static_cast<CNA::ShaderStageEXT>(stage))
+        {
+            case CNA::ShaderStageEXT::Vertex:
+            case CNA::ShaderStageEXT::Fragment:
+                return true;
+            case CNA::ShaderStageEXT::Compute:
+                return SupportsComputeShadersEXT();
+            case CNA::ShaderStageEXT::Unknown:
+            case CNA::ShaderStageEXT::Count:
+                return false;
+        }
+        return false;
+    }
+
     bool EasyGLRenderer::SupportsComputeShadersEXT() const
     {
         // The runtime context decides, not the compile-time profile: this renderer asks for ES 3.0
@@ -7139,6 +7379,37 @@ if (!ProfileIsEs2ApiGeneration())
         return static_cast<int>(value);
     }
 
+    std::uint64_t EasyGLRenderer::GetMaxStorageBufferBytesEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint64 value = 0;
+        ::metagl::glGetInteger64v(::metagl::GetParameter::MaxShaderStorageBlockSize, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
+    std::uint64_t EasyGLRenderer::GetMaxUniformBufferBytesEXT() const
+    {
+        const auto& capabilities = device.capabilities();
+        const bool available = capabilities.is_webgl()
+            ? ProfileIs(GlProfile::WebGL2)
+            : (capabilities.is_opengles()
+                ? capabilities.is_at_least(3, 0)
+                : capabilities.is_opengl() && capabilities.is_at_least(3, 1));
+        if (!available) return 0;
+        GLint64 value = 0;
+        ::metagl::glGetInteger64v(::metagl::GetParameter::MaxUniformBlockSize, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
+    std::uint64_t EasyGLRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        if (GetMaxUniformBufferBytesEXT() == 0) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::UniformBufferOffsetAlignment, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
     void EasyGLRenderer::BindStorageBufferForDrawEXT(const int binding,
                                                      const IStorageBufferRenderer& buffer)
     {
@@ -7166,6 +7437,27 @@ if (!ProfileIsEs2ApiGeneration())
         EnsureCallingThreadContext();
         if (!SupportsComputeShadersEXT() || byteSize == 0) return nullptr;
         return std::make_unique<EasyGLStorageBufferRenderer>(byteSize);
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> EasyGLRenderer::CreateStorageBufferEXT(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
+    {
+        EnsureCallingThreadContext();
+        constexpr std::uint32_t Storage = UINT32_C(1) << 0;
+        constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
+        constexpr std::uint32_t Constant = UINT32_C(1) << 6;
+        if (byteSize == 0 || usage == 0 || (usage & ~UINT32_C(0x7F)) != 0 ||
+            (cpuAccess & ~UINT32_C(0x03)) != 0)
+            return nullptr;
+        if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
+        if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
+        if ((usage & Constant) != 0) {
+            const std::uint64_t maximum = GetMaxUniformBufferBytesEXT();
+            if (maximum == 0 || static_cast<std::uint64_t>(byteSize) > maximum)
+                return nullptr;
+        }
+        return std::make_unique<EasyGLStorageBufferRenderer>(byteSize, usage, cpuAccess);
     }
 
     void EasyGLRenderer::DispatchCompute(IComputeShaderRenderer* shader, const int groupsX,
@@ -8238,6 +8530,21 @@ if (!ProfileIsEs2ApiGeneration())
         }
         device.set_viewport(x, fbH - y - h, w, h);
         device.set_depth_range(minDepth, maxDepth);
+        // Record whether this is the default viewport while the presentation rectangle is still
+        // the one this call was derived from.
+        if (bound_ == nullptr || bound_->height == 0)
+        {
+            int defX = 0, defY = 0, defW = 0, defH = 0;
+            GetDefaultViewportRect(defX, defY, defW, defH);
+            viewportIsDefault_ = (defW > 0 && defH > 0 && x == defX && y == defY
+                                  && w == defW && h == defH);
+        }
+        else
+        {
+            viewportIsDefault_ = (x == 0 && y == 0 && w == bound_->width && h == bound_->height);
+        }
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
     }
 
     void EasyGLRenderer::ApplySamplerState(int slot, int filter,
@@ -11400,18 +11707,26 @@ CNA_GL_PUNCTUAL_DECL
         const GpuDrawParams& params)
     {
         using CNA::Internal::Graphics::StockProgramInput;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-        static constexpr StockProgramInput kPos{VertexElementUsage::Position, 0, "aPos"};
-        static constexpr StockProgramInput kColor{VertexElementUsage::Color, 0, "aColor"};
-        static constexpr StockProgramInput kUv{VertexElementUsage::TextureCoordinate, 0, "aUV"};
-        static constexpr StockProgramInput kUv1{VertexElementUsage::TextureCoordinate, 1, "aUV1"};
-        static constexpr StockProgramInput kNormal{VertexElementUsage::Normal, 0, "aNormal"};
-        static constexpr StockProgramInput kTangent{VertexElementUsage::Tangent, 0, "aTangent"};
+        static constexpr StockProgramInput kPos{
+            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
+        static constexpr StockProgramInput kColor{
+            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
+        static constexpr StockProgramInput kUv{
+            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
+        static constexpr StockProgramInput kNormal{
+            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
+        static constexpr StockProgramInput kTangent{
+            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
         static constexpr StockProgramInput kWeights{
-            VertexElementUsage::BlendWeight, 0, "aBoneWeights"};
+            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
         static constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, "aBoneIndices"};
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
+            VertexElementFormat::Vector4};
 
         static constexpr StockProgramInput kColored[]        = {kPos, kColor};
         static constexpr StockProgramInput kTextured[]       = {kPos, kUv};
@@ -11508,21 +11823,29 @@ CNA_GL_PUNCTUAL_DECL
         const GpuDrawParams& params)
     {
         using CNA::Internal::Graphics::StockProgramInput;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
         const std::vector<VertexElement>& primaryDeclaration = buffer.GetDeclarationElements();
         if (primaryDeclaration.empty()) return false;
 
-        static constexpr StockProgramInput kPos{VertexElementUsage::Position, 0, "aPos"};
-        static constexpr StockProgramInput kColor{VertexElementUsage::Color, 0, "aColor"};
-        static constexpr StockProgramInput kUv{VertexElementUsage::TextureCoordinate, 0, "aUV"};
-        static constexpr StockProgramInput kUv1{VertexElementUsage::TextureCoordinate, 1, "aUV1"};
-        static constexpr StockProgramInput kNormal{VertexElementUsage::Normal, 0, "aNormal"};
-        static constexpr StockProgramInput kTangent{VertexElementUsage::Tangent, 0, "aTangent"};
+        static constexpr StockProgramInput kPos{
+            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
+        static constexpr StockProgramInput kColor{
+            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
+        static constexpr StockProgramInput kUv{
+            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
+        static constexpr StockProgramInput kNormal{
+            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
+        static constexpr StockProgramInput kTangent{
+            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
         static constexpr StockProgramInput kWeights{
-            VertexElementUsage::BlendWeight, 0, "aBoneWeights"};
+            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
         static constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, "aBoneIndices"};
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
+            VertexElementFormat::Vector4};
 
         static constexpr StockProgramInput kColored[] = {kPos, kColor};
         static constexpr StockProgramInput kTextured[] = {kPos, kUv};

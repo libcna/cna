@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:Generic="System.Collections.Generic" xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="Generic:Dictionary[string,Framework:Vector2]">
+    <Item>
+      <Key>a</Key>
+      <Value>1 2</Value>
+    </Item>
+  </Asset>
+</XnaContent>

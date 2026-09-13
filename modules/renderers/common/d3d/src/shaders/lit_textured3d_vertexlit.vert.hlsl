@@ -42,7 +42,12 @@ struct VSInput
 {
     float3 Position : POSITION0;
     float3 Normal   : NORMAL0;
+#ifndef CNA_LIT_UNTEXTURED_INPUT
     float2 UV       : TEXCOORD0;
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    float4 Color    : COLOR0;
+#endif
+#endif
 };
 
 struct VSOutput
@@ -72,8 +77,19 @@ VSOutput main(VSInput input)
 
     float4 pos = mul(float4(input.Position, 1.0), Mvp);
     output.Position = pos;
+#ifdef CNA_LIT_UNTEXTURED_INPUT
+    output.UV = float2(0.0, 0.0);
+#else
     output.UV = input.UV;
-    output.Tint = DiffuseColor;
+#endif
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    const float4 vertexColor = (VertexColorEnabled > 0.5)
+        ? input.Color
+        : float4(1.0, 1.0, 1.0, 1.0);
+#else
+    const float4 vertexColor = float4(1.0, 1.0, 1.0, 1.0);
+#endif
+    output.Tint = float4(DiffuseColor.rgb, DiffuseColor.a * vertexColor.a);
 
     float3x3 normalMatrix = InverseTranspose3x3((float3x3)World);
     float3 N = normalize(mul(input.Normal, normalMatrix));
@@ -92,10 +108,14 @@ VSOutput main(VSInput input)
     float3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, SpecularColorPower.w);
     float3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, SpecularColorPower.w);
     float3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, SpecularColorPower.w);
-    output.SpecularRGB = (spec0 * Light0SpecularPad.xyz + spec1 * Light1SpecularPad.xyz
-                          + spec2 * Light2SpecularPad.xyz) * SpecularColorPower.xyz;
+    output.SpecularRGB = saturate(
+        (spec0 * Light0SpecularPad.xyz + spec1 * Light1SpecularPad.xyz
+         + spec2 * Light2SpecularPad.xyz) * SpecularColorPower.xyz);
 
-    output.LitRGB = lightSum * DiffuseColor.rgb + EmissiveColorPad.xyz;
+    // XNA's D3D9 COLOR outputs clamp before interpolation. These TEXCOORD outputs need the
+    // equivalent explicit clamp on newer D3D shader models.
+    output.LitRGB = saturate(
+        (lightSum * DiffuseColor.rgb + EmissiveColorPad.xyz) * vertexColor.rgb);
 
     // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the

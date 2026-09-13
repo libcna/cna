@@ -347,12 +347,16 @@ TEST(SpotShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
     SpotShadowMap spot(gd, ShadowQuality::Low);
     CubeShadowMap cube(gd, ShadowQuality::Low);
 
-    const bool canRaster  = gd.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-    const bool canCompile = CnaTest::EngineLayer::RunsShaderSource(gd);
-    const bool expected = canRaster && canCompile;
-
-    EXPECT_EQ(spot.isSupported(), expected ? spot.getCasterEffect() != nullptr : false);
-    EXPECT_EQ(cube.isSupported(), expected ? cube.getCasterEffect() != nullptr : false);
+    // MOD-2237: support follows the selected multi-language shader package, not runtime GLSL
+    // source compilation. Vulkan selects the checked-in SPIR-V payload and is therefore supported
+    // even though RunsShaderSource deliberately returns false there.
+    EXPECT_EQ(spot.isSupported(), spot.getCasterEffect() != nullptr);
+    EXPECT_EQ(cube.isSupported(), cube.getCasterEffect() != nullptr);
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        EXPECT_FALSE(spot.isSupported());
+        EXPECT_FALSE(cube.isSupported());
+    }
 
     // Whatever the answer, a pass opens and closes -- a game may switch these on without asking.
     SpotLightEXT light;

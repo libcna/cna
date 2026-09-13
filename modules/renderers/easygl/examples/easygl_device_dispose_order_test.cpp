@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/IDisposable.hpp"
@@ -52,10 +53,12 @@ protected:
         auto* vb  = new VertexBuffer(dev, 8);
         auto* ib  = new IndexBuffer(dev, 8);
         auto* tex = new Texture2D(dev, 4, 4);
+        auto* rt  = new RenderTarget2D(dev, 4, 4);
 
         check(vb->HasRenderer(),  "VB has renderer before device dispose");
         check(ib->HasRenderer(),  "IB has renderer before device dispose");
         check(tex->HasRenderer(), "Tex has renderer before device dispose");
+        check(rt->HasRenderer(),  "RT has renderer before device dispose");
 
         // Dispose the device — must dispose resources first, then destroy renderer.
         dev.Dispose();
@@ -64,10 +67,12 @@ protected:
         check(vb->getIsDisposedProperty(),  "VB disposed by device.Dispose()");
         check(ib->getIsDisposedProperty(),  "IB disposed by device.Dispose()");
         check(tex->getIsDisposedProperty(), "Tex disposed by device.Dispose()");
+        check(rt->getIsDisposedProperty(),  "RT disposed by device.Dispose()");
 
         check(!vb->HasRenderer(),  "VB renderer freed by device.Dispose()");
         check(!ib->HasRenderer(),  "IB renderer freed by device.Dispose()");
         check(!tex->HasRenderer(), "Tex renderer freed by device.Dispose()");
+        check(!rt->HasRenderer(),  "RT renderer freed by device.Dispose()");
 
         // ── 2. Calling Dispose() on already-disposed resources is a no-op ─
         bool noThrow = true;
@@ -76,6 +81,7 @@ protected:
             disposeVia(*vb);
             disposeVia(*ib);
             disposeVia(*tex);
+            disposeVia(*rt);
         }
         catch (...) { noThrow = false; }
         check(noThrow, "Disposing already-disposed resources does not throw");
@@ -83,6 +89,7 @@ protected:
         delete vb;
         delete ib;
         delete tex;
+        delete rt;
 
         // ── 3. Resource explicitly disposed before device is not re-disposed
         {

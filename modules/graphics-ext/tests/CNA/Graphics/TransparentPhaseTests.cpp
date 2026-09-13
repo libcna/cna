@@ -17,6 +17,7 @@
 #include "CNA/Graphics/TransparencyMode.hpp"
 #include "CNA/Graphics/WeightedBlendedTransparency.hpp"
 #include "EngineTestSupport.hpp"
+#include "TransparencyShaderTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -63,15 +64,6 @@ struct Frame
     }
 };
 
-constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPos;
-uniform mat4 World;
-uniform mat4 View;
-uniform mat4 Projection;
-void main() { gl_Position = vec4(aPos, 1.0); }
-)";
-
 /// A quad over the left half of the frame, at a chosen clip depth.
 std::array<VertexPositionColor, 6> LeftHalf(const float z)
 {
@@ -84,12 +76,8 @@ std::array<VertexPositionColor, 6> LeftHalf(const float z)
 
 std::unique_ptr<ShaderEffect> MakeFlat(GraphicsDevice& device)
 {
-    return std::make_unique<ShaderEffect>(device, kVertexSource, R"(#version 300 es
-precision highp float;
-out vec4 FragColor;
-uniform vec4 uColour;
-void main() { FragColor = uColour; }
-)");
+    return std::make_unique<ShaderEffect>(
+        device, CNA::Tests::Transparency::CreateFlatPackage());
 }
 
 Frame BackBuffer(GraphicsDevice& device)
@@ -106,7 +94,8 @@ void DrawQuad(GraphicsDevice& device, ShaderEffect& effect, const float z, const
               const float alpha)
 {
     effect.Apply();
-    effect.SetUniformVec4("uColour", colour.getRProperty() / 255.0f, colour.getGProperty() / 255.0f,
+    effect.SetUniformVec4("uEffectParams", colour.getRProperty() / 255.0f,
+                          colour.getGProperty() / 255.0f,
                           colour.getBProperty() / 255.0f, alpha);
     const auto quad = LeftHalf(z);
     device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
@@ -235,13 +224,7 @@ TEST(TransparentPhaseTest, TheOrderIndependentPathKeepsTheOpaqueFrame)
     WeightedBlendedTransparency probe(device, 4, 4);
     if (!probe.isSupported()) GTEST_SKIP() << probe.getUnsupportedReason();
 
-    std::string source = "#version 300 es\nprecision highp float;\n";
-    source += WeightedBlendedTransparency::getAccumulationGlsl();
-    source += R"(
-uniform vec4 uColour;
-void main() { cnaOitEmit(uColour.rgb, uColour.a, 10.0); }
-)";
-    ShaderEffect emitter(device, kVertexSource, source);
+    ShaderEffect emitter(device, CNA::Tests::Transparency::CreateEmitterPackage());
     ASSERT_TRUE(emitter.IsEffectValid());
 
     pipeline.getSettings().setTransparencyMode(TransparencyMode::OrderIndependent);
@@ -249,8 +232,8 @@ void main() { cnaOitEmit(uColour.rgb, uColour.a, 10.0); }
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.SetVertexBuffer(nullptr);
         emitter.Apply();
-        emitter.SetUniformVec4("uColour", 1.0f, 0.0f, 0.0f, 0.5f);
-        emitter.SetUniformFloat("uCnaOitFarPlane", 100.0f);
+        emitter.SetUniformVec4("uEffectParams", 1.0f, 0.0f, 0.0f, 0.5f);
+        emitter.SetUniformFloat("uScalar", 0.1f);
         const auto quad = LeftHalf(0.0f);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
     });

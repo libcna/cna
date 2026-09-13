@@ -1,0 +1,15 @@
+{
+ "cases": [
+  {
+   "case": "effect/fx_sampler_plain",
+   "importer": "EffectImporter",
+   "platform": "Windows",
+   "processor": "EffectProcessor",
+   "profile": "HiDef",
+   "source": "source/fx_sampler_plain.fx"
+  }
+ ],
+ "comment": "plans/plan_xna_sample_xnb_sweep.md XNASWEEP-225: one effect case alone. Built against `effects.json`'s run of the same case it shows that the padding `d3dx9` leaves after an aligned string is a function of what the *process* compiled before, not of the source: five bytes of `fx_sampler_plain` move and nothing else does.",
+ "format": "CNA.XnaDifferential.Corpus",
+ "version": 1
+}

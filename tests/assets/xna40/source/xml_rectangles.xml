@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-260: a list of a framework value type. An element type
+    that serializes as space-separated text is written packed, one run of tokens for the whole
+    list, rather than as <Item> elements.
+-->
+<XnaContent xmlns:Generic="System.Collections.Generic" xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="Generic:List[Framework:Rectangle]">0 0 16 16 16 0 8 8 24 8 32 4</Asset>
+</XnaContent>

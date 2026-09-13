@@ -12,6 +12,7 @@ layout(location = 1) out vec3 fragNormal;    // world-space
 layout(location = 2) out vec3 fragWorldPos;
 layout(location = 3) out vec4 fragTint;
 layout(location = 4) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 5) out float fragFresnel;
 
 layout(set = 1, binding = 0) uniform PC {
     mat4 mvp;
@@ -48,6 +49,21 @@ void main() {
     fragNormal = normalize(normalMatrix * inNormal);
     fragWorldPos = (ep.world * vec4(inPos, 1.0)).xyz;
     fragTint = pc.diffuseColor;
+    // SDLGPU-81: XNA's EnvironmentMapEffect computes the Fresnel term per VERTEX and carries it
+    // through COLOR1. Recomputing from interpolated+renormalized N/E in the fragment shader is a
+    // different function for a surface whose vertices have different normals. D3D9 saturates the
+    // COLOR output before interpolation, so clamp here as EasyGL does, not after interpolation.
+    vec3 eyeDelta = ep.eyePos_fresnelEnabled.xyz - fragWorldPos;
+    float eyeLengthSquared = dot(eyeDelta, eyeDelta);
+    vec3 eyeVector = eyeLengthSquared > 0.0
+        ? eyeDelta * inversesqrt(eyeLengthSquared) : vec3(0.0);
+    float viewAngle = dot(eyeVector, fragNormal);
+    fragFresnel = clamp(
+        ep.eyePos_fresnelEnabled.w > 0.5
+            ? pow(max(1.0 - abs(viewAngle), 0.0), ep.light0Dir_fresnelFactor.w)
+                * pc.emissiveAmount.w
+            : pc.emissiveAmount.w,
+        0.0, 1.0);
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="Framework:BoundingSphere">
+    <Center>0 0 0</Center>
+    <Radius>2</Radius>
+  </Asset>
+</XnaContent>

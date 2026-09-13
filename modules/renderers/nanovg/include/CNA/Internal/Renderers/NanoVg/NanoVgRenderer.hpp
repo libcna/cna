@@ -283,7 +283,7 @@ namespace CNA::Internal::Renderers::NanoVg
         NVGcontext* nvg_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         bool blendEnabled_ = true;
         /// BlendState.AlphaBlend's own factors (One, InverseSourceAlpha on both channels), which is
         /// what a GraphicsDevice starts with before any SpriteBatch.Begin() applies its own.

@@ -767,7 +767,7 @@ namespace CNA::Internal::Renderers::Direct2D
         HWND hwnd_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
         bool contextRecoveryEnabled_ = true;
         std::function<void(RendererDeviceEvent)> deviceEventCallback_;

@@ -21,4 +21,4 @@ Control run note (pristine binary, recorded 2026-08-09): the full unshuffled `Cn
 repeated real-GL device creation — pre-existing behavior of the pristine tree in this
 environment, consistent with the previous campaign's practice of validating the full portable
 suite on HEADLESS and OPENGLES via smoke/corpus subsets. The pristine binary is preserved at
-`/media/robertvokac/claude/tmp/cna/CnaTests-pristine-opengles` for A/B parity runs.
+`build-probe/CnaTests-pristine-opengles` for A/B parity runs.

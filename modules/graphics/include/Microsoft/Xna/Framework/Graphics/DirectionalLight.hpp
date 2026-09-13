@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    class EffectParameter;
+
     /**
      * @brief Represents a directional light source used by stock effects such as BasicEffect.
      *
@@ -15,7 +18,20 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Constructs a disabled white diffuse light pointing down with no specular contribution. */
-        DirectionalLight();
+        CNAEXT DirectionalLight();
+
+        /**
+         * @brief Constructs a directional light bound to effect parameters.
+         *
+         * @param directionParameter Parameter that receives the light direction, or null.
+         * @param diffuseColorParameter Parameter that receives the enabled diffuse color, or null.
+         * @param specularColorParameter Parameter that receives the enabled specular color, or null.
+         * @param cloneSource Light whose cached values are copied, or null for XNA defaults.
+         */
+        DirectionalLight(EffectParameter* directionParameter,
+                         EffectParameter* diffuseColorParameter,
+                         EffectParameter* specularColorParameter,
+                         const DirectionalLight* cloneSource);
 
         /**
          * @brief Gets the diffuse color contribution of this light.
@@ -74,6 +90,9 @@ namespace Microsoft::Xna::Framework::Graphics
         void setEnabledProperty(bool value);
 
     private:
+        EffectParameter* diffuseColorParameter_ = nullptr;
+        EffectParameter* directionParameter_ = nullptr;
+        EffectParameter* specularColorParameter_ = nullptr;
         Vector3 diffuseColor_;
         Vector3 direction_;
         Vector3 specularColor_;
