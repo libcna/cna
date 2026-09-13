@@ -25,8 +25,6 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
-#include "System/NotSupportedException.hpp"
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -214,21 +212,16 @@ protected:
             VertexPositionTexture(Vector3(-0.75f, -0.75f, 0.0f), Vector2::Zero),
             VertexPositionTexture(Vector3(0.75f, -0.75f, 0.0f), Vector2::Zero),
             VertexPositionTexture(Vector3(0.0f, 0.75f, 0.0f), Vector2::Zero)};
-        bool missingSemanticRejected = false;
+        effect.setDiffuseColorProperty(Vector3::One);
+        effect.setFogEnabledProperty(false);
+        device.Clear(Color::Black);
         effect.Apply();
-        try
-        {
-            device.DrawUserPrimitives(
-                PrimitiveType::TriangleList,
-                missingSecondCoordinates.data(), 0, 1);
-        }
-        catch (const System::NotSupportedException&)
-        {
-            missingSemanticRejected = true;
-        }
-        Check(
-            missingSemanticRejected,
-            "DualTextureEffect rejects a declaration without TextureCoordinate1");
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList,
+            missingSecondCoordinates.data(), 0, 1);
+        ExpectPixel(
+            "DualTextureEffect uses the default zero coordinate when TextureCoordinate1 is absent",
+            center, Color(0, 0, 200, 255), 2);
 
         BasicEffect basic(device);
         basic.setWorldProperty(identity);

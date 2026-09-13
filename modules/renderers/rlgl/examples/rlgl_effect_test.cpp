@@ -21,8 +21,6 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
-#include "System/NotSupportedException.hpp"
-
 #include "common/PixelTestGame.hpp"
 
 #include <array>
@@ -215,19 +213,13 @@ protected:
 
         basic.setFogEnabledProperty(false);
         basic.setLightingEnabledProperty(true);
+        device.Clear(Color::Black);
         basic.Apply();
-        bool lightingRejected = false;
-        try
-        {
-            device.DrawUserPrimitives(
-                PrimitiveType::TriangleList, textured.data(), 0, 1);
-        }
-        catch (const System::NotSupportedException&)
-        {
-            lightingRejected = true;
-        }
-        Check(lightingRejected,
-              "lit BasicEffect rejects a vertex declaration without Normal0");
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, textured.data(), 0, 1);
+        ExpectPixel(
+            "BasicEffect selects its unlit path when the declaration has no Normal0",
+            center, Color::Red);
     }
 
 private:
