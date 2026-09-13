@@ -3991,6 +3991,12 @@ namespace
             Probe::Pixel30UndefinedLabel,
             Probe::Pixel30DuplicateLabel,
             Probe::Pixel30MissingReturn,
+            Probe::Pixel30CallLabelNegate,
+            Probe::Pixel30CallLabelSwizzle,
+            Probe::Pixel30CallNzLabelNegate,
+            Probe::Pixel30CallNzLabelSwizzle,
+            Probe::Pixel30LabelDefinitionNegate,
+            Probe::Pixel30LabelDefinitionSwizzle,
             Probe::Vertex20Depth2,
             Probe::Vertex2xDepth5,
             Probe::Vertex30Depth5,
@@ -3999,6 +4005,12 @@ namespace
             Probe::Vertex30UndefinedLabel,
             Probe::Vertex30DuplicateLabel,
             Probe::Vertex30MissingReturn,
+            Probe::Vertex30CallLabelNegate,
+            Probe::Vertex30CallLabelSwizzle,
+            Probe::Vertex30CallNzLabelNegate,
+            Probe::Vertex30CallNzLabelSwizzle,
+            Probe::Vertex30LabelDefinitionNegate,
+            Probe::Vertex30LabelDefinitionSwizzle,
         };
         for (const Probe probe : invalidProbes)
         {
@@ -4015,7 +4027,9 @@ namespace
             {
                 rejected = true;
             }
-            Check(rejected, "compiled Effect parser accepted an invalid subroutine call graph");
+            Check(rejected,
+                  "compiled Effect parser accepted an invalid subroutine call graph or label "
+                  "operand " + std::to_string(static_cast<int>(probe)));
         }
 
         constexpr std::array validProbes{
@@ -4026,8 +4040,10 @@ namespace
             Probe::Vertex30Depth4,
             Probe::Pixel30Label16,
             Probe::Pixel30Label2047,
+            Probe::Pixel30PlainLabelOperands,
             Probe::Vertex30Label16,
             Probe::Vertex30Label2047,
+            Probe::Vertex30PlainLabelOperands,
         };
         for (const Probe probe : validProbes)
         {
@@ -4036,15 +4052,19 @@ namespace
             options.callGraphProbe = probe;
             const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
             bool accepted = true;
+            std::string errorMessage;
             try
             {
                 static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
             }
-            catch (const std::runtime_error&)
+            catch (const std::runtime_error& error)
             {
                 accepted = false;
+                errorMessage = error.what();
             }
-            Check(accepted, "compiled Effect parser rejected a legal subroutine call graph");
+            Check(accepted,
+                  "compiled Effect parser rejected a legal subroutine call graph or label "
+                  "operand " + std::to_string(static_cast<int>(probe)) + ": " + errorMessage);
         }
     }
 

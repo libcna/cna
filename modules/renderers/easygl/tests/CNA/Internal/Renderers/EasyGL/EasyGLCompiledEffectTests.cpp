@@ -1964,7 +1964,7 @@ class EasyGLCompiledEffectInvalidCallGraphTest :
 {
 };
 
-TEST_P(EasyGLCompiledEffectInvalidCallGraphTest, RejectsBackwardOrOverDepthCalls)
+TEST_P(EasyGLCompiledEffectInvalidCallGraphTest, RejectsInvalidCallGraphsOrLabelOperands)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -1987,6 +1987,12 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30UndefinedLabel,
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30DuplicateLabel,
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30MissingReturn,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallNzLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallNzLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30LabelDefinitionNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30LabelDefinitionSwizzle,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth2,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth5,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth5,
@@ -1994,14 +2000,20 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCallNz,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30UndefinedLabel,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30DuplicateLabel,
-        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30MissingReturn));
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30MissingReturn,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallNzLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallNzLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30LabelDefinitionNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30LabelDefinitionSwizzle));
 
 class EasyGLCompiledEffectValidCallGraphTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>
 {
 };
 
-TEST_P(EasyGLCompiledEffectValidCallGraphTest, AcceptsForwardCallsAtBoundaryDepth)
+TEST_P(EasyGLCompiledEffectValidCallGraphTest, AcceptsForwardCallsAndPlainLabelOperands)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -2024,8 +2036,10 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth4,
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Label16,
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Label2047,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30PlainLabelOperands,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label16,
-        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label2047));
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label2047,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30PlainLabelOperands));
 
 class EasyGLCompiledEffectMatrixOperandTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>

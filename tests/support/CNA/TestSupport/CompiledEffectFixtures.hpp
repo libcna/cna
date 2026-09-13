@@ -696,6 +696,20 @@ namespace CNA::TestSupport
         Pixel30Label16,
         /** @brief Call the maximum Shader Model 3 label. */
         Pixel30Label2047,
+        /** @brief Negate the label source of a pixel Shader Model 3 `CALL`. */
+        Pixel30CallLabelNegate,
+        /** @brief Swizzle the label source of a pixel Shader Model 3 `CALL`. */
+        Pixel30CallLabelSwizzle,
+        /** @brief Negate the label source of a pixel Shader Model 3 `CALLNZ`. */
+        Pixel30CallNzLabelNegate,
+        /** @brief Swizzle the label source of a pixel Shader Model 3 `CALLNZ`. */
+        Pixel30CallNzLabelSwizzle,
+        /** @brief Negate a pixel Shader Model 3 `LABEL` definition source. */
+        Pixel30LabelDefinitionNegate,
+        /** @brief Swizzle a pixel Shader Model 3 `LABEL` definition source. */
+        Pixel30LabelDefinitionSwizzle,
+        /** @brief Use plain label sources for pixel Shader Model 3 subroutine opcodes. */
+        Pixel30PlainLabelOperands,
         /** @brief Emit one legal call in an exact vertex Shader Model 2.0 program. */
         Vertex20Depth1,
         /** @brief Emit two nested calls in an exact vertex Shader Model 2.0 program. */
@@ -722,6 +736,20 @@ namespace CNA::TestSupport
         Vertex30Label16,
         /** @brief Call the maximum vertex Shader Model 3 label. */
         Vertex30Label2047,
+        /** @brief Negate the label source of a vertex Shader Model 3 `CALL`. */
+        Vertex30CallLabelNegate,
+        /** @brief Swizzle the label source of a vertex Shader Model 3 `CALL`. */
+        Vertex30CallLabelSwizzle,
+        /** @brief Negate the label source of a vertex Shader Model 3 `CALLNZ`. */
+        Vertex30CallNzLabelNegate,
+        /** @brief Swizzle the label source of a vertex Shader Model 3 `CALLNZ`. */
+        Vertex30CallNzLabelSwizzle,
+        /** @brief Negate a vertex Shader Model 3 `LABEL` definition source. */
+        Vertex30LabelDefinitionNegate,
+        /** @brief Swizzle a vertex Shader Model 3 `LABEL` definition source. */
+        Vertex30LabelDefinitionSwizzle,
+        /** @brief Use plain label sources for vertex Shader Model 3 subroutine opcodes. */
+        Vertex30PlainLabelOperands,
     };
 
     /** @brief Invalid source/destination relationship deliberately emitted for a matrix opcode. */
@@ -2681,10 +2709,13 @@ namespace CNA::TestSupport
             flowControlProbe <= SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY;
         const bool probesPixelCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
-            callGraphProbe <= SyntheticCallGraphProbe::Pixel30Label2047;
+            callGraphProbe <= SyntheticCallGraphProbe::Pixel30PlainLabelOperands;
         const bool probesPixel2xCallGraph =
             callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth4 ||
             callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth5;
+        const bool probesPixelLabelOperand =
+            callGraphProbe >= SyntheticCallGraphProbe::Pixel30CallLabelNegate &&
+            callGraphProbe <= SyntheticCallGraphProbe::Pixel30PlainLabelOperands;
         const bool probesPixelTextureSourceModifier =
             textureSourceModifierProbe >=
                 SyntheticTextureSourceModifierProbe::PixelTexlddCoordinate &&
@@ -5614,6 +5645,67 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regTemp, 0));
             }
         }
+        else if (probesPixelLabelOperand)
+        {
+            const bool callNz =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30CallNzLabelNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30CallNzLabelSwizzle;
+            const bool labelDefinition =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30LabelDefinitionNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30LabelDefinitionSwizzle;
+            const bool plainOperands =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30PlainLabelOperands;
+            const bool negate =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30CallLabelNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30CallNzLabelNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30LabelDefinitionNegate;
+            const bool swizzle =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30CallLabelSwizzle ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30CallNzLabelSwizzle ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30LabelDefinitionSwizzle;
+            const auto labelSource = [&](std::uint32_t number, bool malformed) {
+                return source(regLabel, number,
+                              malformed && swizzle ? 0x00u : 0xE4u,
+                              malformed && negate ? 1u : 0u);
+            };
+
+            if (callNz || plainOperands)
+            {
+                AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+                AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
+                AppendUInt32(shader, 1u);
+            }
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            if (callNz)
+            {
+                AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l0, b0
+                AppendUInt32(shader, labelSource(0, true));
+                AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0
+                AppendUInt32(shader, labelSource(0, !plainOperands && !labelDefinition));
+                if (plainOperands)
+                {
+                    AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l1, b0
+                    AppendUInt32(shader, labelSource(1, false));
+                    AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                }
+            }
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+            AppendUInt32(shader, labelSource(0, labelDefinition));
+            AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            if (plainOperands)
+            {
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l1
+                AppendUInt32(shader, labelSource(1, false));
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
+        }
         else if (probesPixelCallGraph)
         {
             const bool backward =
@@ -6835,7 +6927,7 @@ namespace CNA::TestSupport
                 SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY;
         const bool probesVertexCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
-            callGraphProbe <= SyntheticCallGraphProbe::Vertex30Label2047;
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
         const bool probesVertex2xCallGraph =
             callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth4 ||
             callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth5;
@@ -6857,7 +6949,10 @@ namespace CNA::TestSupport
             SyntheticTexldlDestinationModifierProbe::VertexSaturate;
         const bool probesVertex30CallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex30Depth4 &&
-            callGraphProbe <= SyntheticCallGraphProbe::Vertex30Label2047;
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
+        const bool probesVertexLabelOperand =
+            callGraphProbe >= SyntheticCallGraphProbe::Vertex30CallLabelNegate &&
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture || probesVertexTextureSourceModifier ||
             probesVertexTexldlDestinationModifier ||
@@ -8320,6 +8415,68 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x0000001Cu); // ret from main
                 AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
                 AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
+        }
+        else if (probesVertexLabelOperand)
+        {
+            const bool callNz =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30CallNzLabelNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30CallNzLabelSwizzle;
+            const bool labelDefinition =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30LabelDefinitionNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30LabelDefinitionSwizzle;
+            const bool plainOperands =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
+            const bool negate =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30CallLabelNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30CallNzLabelNegate ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30LabelDefinitionNegate;
+            const bool swizzle =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30CallLabelSwizzle ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30CallNzLabelSwizzle ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30LabelDefinitionSwizzle;
+            const auto labelSource = [&](std::uint32_t number, bool malformed) {
+                return source(regLabel, number,
+                              malformed && swizzle ? 0x00u : 0xE4u,
+                              malformed && negate ? 1u : 0u);
+            };
+
+            if (callNz || plainOperands)
+            {
+                AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+                AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
+                AppendUInt32(shader, 1u);
+            }
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+            if (callNz)
+            {
+                AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l0, b0
+                AppendUInt32(shader, labelSource(0, true));
+                AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0
+                AppendUInt32(shader, labelSource(0, !plainOperands && !labelDefinition));
+                if (plainOperands)
+                {
+                    AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l1, b0
+                    AppendUInt32(shader, labelSource(1, false));
+                    AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                }
+            }
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+            AppendUInt32(shader, labelSource(0, labelDefinition));
+            AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            if (plainOperands)
+            {
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l1
+                AppendUInt32(shader, labelSource(1, false));
                 AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
             }
         }
