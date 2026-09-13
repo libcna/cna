@@ -446,6 +446,11 @@ namespace CNA::Platform::Win32 {
         rawPointerCapture_ = enabled;
         if (enabled)
         {
+            // Raw Input registration above is the load-bearing check, and it is the one whose
+            // failure refuses the mode: without it there are no deltas, which is the thing
+            // relative mode exists to deliver. Confinement and cursor hiding below are
+            // best-effort by comparison -- a pointer that escapes a window is a degradation the
+            // caller can see, not a silent claim to be delivering motion it is not.
             RECT client{};
             if (GetClientRect(hwnd_, &client) != FALSE)
             {
@@ -553,6 +558,11 @@ namespace CNA::Platform::Win32 {
         RECT frame{0, 0, width, height};
         (void) Win32DpiSupport::Get().AdjustWindowRect(frame, static_cast<DWORD>(style),
                                                        static_cast<DWORD>(exStyle), false, dpi);
+        // SetWindowPos's result is deliberately not turned into an exception. The contract models
+        // SetSize as a *request* whose effect becomes observable through Sync() -- a window manager
+        // is entitled to clamp or refuse it -- so a caller learns the outcome by reading the
+        // bounds back, which is exactly what PlatformWindowConformance.SizeChangeLandsAfterSync
+        // does. Throwing here would make a clamped resize a hard error on the platforms that clamp.
         SetWindowPos(hwnd_, nullptr, 0, 0, frame.right - frame.left, frame.bottom - frame.top,
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }

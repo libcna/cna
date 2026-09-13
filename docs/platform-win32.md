@@ -54,7 +54,7 @@ It is built with MSVC and with mingw-w64. Nothing in it is MSVC-only.
 | `textInput` | ✅ | `WM_CHAR` with surrogate pairing → UTF-8 |
 | `exactKeyboardState` | ✅ | Every press has a real release; focus loss flushes held keys |
 | `pixelAccurateMouse` | ✅ | Client-space pixels straight from `lParam` |
-| `relativeMouse` | ✅ | Raw Input + `ClipCursor` + `SetCapture`; refuses rather than half-enabling |
+| `relativeMouse` | ✅ | Raw Input + `ClipCursor` + `SetCapture`. Registration failing refuses the mode outright; confinement and cursor hiding are best-effort on top of it |
 | `cursorShapes` | ✅ | `LoadCursorW` shapes and `CreateIconIndirect` image cursors |
 | `globalPointer` | ✅ | `GetCursorPos` / `SetCursorPos` / `SetCapture` |
 | `inputDeviceEnumeration` | ✅ | `GetRawInputDeviceList` for keyboards and pointers |
