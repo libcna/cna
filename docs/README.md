@@ -1,6 +1,6 @@
 # docs/ index
 
-216 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+217 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -36,7 +36,8 @@ on it) rather than assuming either way.
   the pre-implementation probe in `../tinygl-spike/README.md`.
 - **[`rlgl-renderer.md`](rlgl-renderer.md)** — current verified boundary, build/update/debug guide,
   and platform status for the experimental standalone-rlgl OpenGL 3.3 renderer; the authoritative
-  EasyGL-parity ledger is `../plans/plan_rlgl.md`.
+  EasyGL-parity ledger is `../plans/plan_rlgl.md`, with systematic comparison evidence in
+  [`rlgl-parity-campaign.md`](rlgl-parity-campaign.md).
 - **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
   **41** possible future renderer identities, screened against the live registry and against the
   "no alias identities" rule, plus the list of things that must *not* become identities. A

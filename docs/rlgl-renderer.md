@@ -7,7 +7,8 @@ link, initialize, or otherwise use the raylib application framework.
 
 The authoritative implementation ledger and EasyGL capability matrix are in
 [`../plans/plan_rlgl.md`](../plans/plan_rlgl.md). This document describes only the capability that
-has actually been validated. RLGL is not yet suitable for normal CNA games.
+has actually been validated. The systematic shared-test and golden comparison is recorded in
+[`rlgl-parity-campaign.md`](rlgl-parity-campaign.md). RLGL is not yet suitable for normal CNA games.
 
 ## Architecture and ownership
 
@@ -62,7 +63,7 @@ success.
 | Primitive and user draw calls | ✅ | Every point/line/triangle list/strip topology passed indexed and non-indexed pixels, exact 16/32-bit index dispatch, declaration semantic/type mapping, offsets, WVP transforms, public user routes, and SpriteBatch-to-primitive rebinding in `RLGL-031` |
 | Multi-stream vertex input | ✅ | Up to sixteen per-vertex or per-instance streams retain independent VBOs, declarations, strides, public slots, element offsets, and instance frequencies. Ordinary non-indexed/indexed draws passed `RLGL-032`; stock-effect instancing passed `RLGL-016`; reflected compiled effects passed the same multi-stream/instancing matrix in `RLGL-049`, including exact divisors, both index widths, every topology, start/base offsets, and ordinary/instanced transitions |
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
-| DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
+| DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, absent-UV1 default behavior, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, wrong-format diagnostics, and stock-effect state transitions passed `RLGL-035`/`059` |
 | EnvironmentMapEffect | ✅ | Base Texture2D plus TextureCube sampling, all six reflection faces, inverse-transpose world normals, derived eye position, three-light diffuse and emissive/ambient terms, amount saturation, D3D9-style per-vertex Fresnel, alpha-scaled lerp/specular terms, fog, slot-0/slot-1 sampler isolation, plain/mipmapped/render-target cubes, every public primitive route, and state/lifetime transitions passed 178 gates in `RLGL-036` |
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
 | Plain `TextureCube` | ✅ | `Color` and DXT1/DXT3/DXT5 cover every transfer shape exposed by CNA's current cube API. Exact faces/mips/regions, native-or-decoded DXT storage, content loading, cube-unit binding, state restoration, and Color readback passed `RLGL-044`/`RLGL-045`; the other 16 classic labels are refused because CNA exposes no format-native transfer route for them |
@@ -79,7 +80,8 @@ success.
 
 `SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling.
 `DepthStencilBuffer` and `StencilBuffer` follow the planes actually granted by the platform context;
-`MultiSampleAntiAliasing` follows the live `GL_MAX_SAMPLES` limit used to clamp render targets.
+`MultiSampleAntiAliasing` follows the live `GL_MAX_SAMPLES` limit used to clamp the renderer-owned
+backbuffer and render targets.
 `MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
 so it is false for Reach and true for a validated HiDef device with sufficient GL limits.
 `ThreeD` and `WireFrame` are true after the representative workload and pixel gates passed.

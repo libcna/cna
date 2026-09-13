@@ -500,6 +500,47 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         endif()
     endforeach()
 
+    # RLGL-019: run the complete renderer-neutral classic-XNA parity corpus through the central
+    # registry. This deliberately keeps the same source and pass/fail oracle as EasyGL instead of
+    # maintaining an RLGL-specific copy of the campaign.
+    macro(cna_rlgl_parity_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+
+    # The classic-XNA EasyGL golden-image corpus is renderer-neutral too. EnvironmentMapEffect's
+    # golden source is already part of RLGL_ENVIRONMENT_MAP_EFFECT_TESTS above.
+    set(RLGL_CLASSIC_GOLDEN_TESTS
+        basiceffect
+        spritebatch_rotation
+        texture_filter_linear
+        blendstate_additive
+        depthstencilstate_write_enable
+        rasterizerstate_cullmode
+        alphatesteffect
+        dualtextureeffect
+        skinnedeffect)
+    foreach(test_name IN LISTS RLGL_CLASSIC_GOLDEN_TESTS)
+        add_executable(cna_test_rlgl_golden_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_${test_name}_golden_test.cpp")
+        target_link_libraries(cna_test_rlgl_golden_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_golden_${test_name} PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+    add_executable(cna_test_rlgl_golden_rendertarget
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget2d_golden_test.cpp")
+    target_link_libraries(cna_test_rlgl_golden_rendertarget
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_golden_rendertarget PRIVATE SDL3::SDL3main)
+    endif()
+
     if(CNA_RLGL_COMPILED_EFFECTS)
         add_executable(cna_test_rlgl_compiled_effect_runtime
             rlgl_compiled_effect_runtime_test.cpp)
@@ -524,6 +565,12 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
 
     if(CNA_BUILD_TESTS)
         enable_testing()
+        cna_register_parity_fixtures(
+            BUILDER cna_rlgl_parity_test
+            TARGET_SUFFIX rlgl
+            TEST_PREFIX Rlgl
+            LABELS "GraphicsParity;Parity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
             TIMEOUT 60 LABELS "GraphicsSmoke;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
@@ -760,6 +807,8 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endforeach()
+        set_tests_properties(Rlgl_EnvironmentMapEffect_golden PROPERTIES
+            LABELS "Graphics3D;GraphicsEffect;GraphicsParity;GraphicsGolden;Rlgl")
         cna_register_renderer_test(
             NAME Rlgl_EnvironmentMapEffect_amount_clamp
             COMMAND cna_test_rlgl_environment_map_amount_clamp
@@ -806,6 +855,22 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 LABELS "Graphics3D;GraphicsModel;GraphicsWorkload;GraphicsParity;Rlgl"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endforeach()
+        foreach(test_name IN LISTS RLGL_CLASSIC_GOLDEN_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_Golden_${test_name}
+                COMMAND cna_test_rlgl_golden_${test_name}
+                TIMEOUT 60
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                LABELS "GraphicsGolden;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_Golden_rendertarget
+            COMMAND cna_test_rlgl_golden_rendertarget
+            TIMEOUT 60
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            LABELS "GraphicsGolden;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         if(CNA_RLGL_COMPILED_EFFECTS)
             cna_register_renderer_test(
                 NAME Rlgl_CompiledEffect_runtime
