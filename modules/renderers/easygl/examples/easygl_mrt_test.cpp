@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -41,7 +42,9 @@
 #include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
 
-#if defined(CNA_RENDERER_EASYGL)
+// Reusers set this fixture-local macro to select the GL source/error path without claiming the
+// EasyGL renderer identity in their translation unit.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
 #include <SDL3/SDL.h>
 #endif
 
@@ -64,7 +67,7 @@ namespace
     const Color kBaseB(40, 180, 220, 160);
     const Color kBaseC(230, 60, 140, 200);
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
     const char* kMrtVertexShader = R"GLSL(#version 300 es
 precision highp float;
 layout(location = 0) in vec3 aPosition;
@@ -98,7 +101,7 @@ float4 main(VSIn input) : SV_Position
 )HLSL";
 #endif
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
     const char* kMrtFragmentShader = R"GLSL(#version 300 es
 precision highp float;
 layout(location = 0) out vec4 outTarget0;
@@ -142,7 +145,7 @@ PSOut main()
     // gl_SampleMask/SV_Coverage selects exactly sample 0. A full-screen draw therefore resolves
     // to 1/N of its source on a real N-sample attachment, but remains fully opaque if a renderer
     // silently substituted a single-sample texture.
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
     const char* kMsaaVertexShader = R"GLSL(#version 320 es
 precision highp float;
 layout(location = 0) in vec3 aPosition;
@@ -158,7 +161,7 @@ void main()
     const char* kMsaaVertexShader = kMrtVertexShader;
 #endif
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
     const char* kMsaaFragmentShader = R"GLSL(#version 320 es
 precision highp float;
 layout(location = 0) out vec4 outTarget0;
@@ -640,7 +643,7 @@ class MrtTest final : public Game
               "mixed applied sample counts reject deterministically without changing active state");
     }
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
     void CheckNativeGlErrors()
     {
         using GetError = unsigned int (*)();
@@ -658,7 +661,7 @@ class MrtTest final : public Game
         for (unsigned int error : errors)
             std::printf("[GL-ERROR] 0x%04X\n", error);
         Check(getError != nullptr && errors.empty(),
-              "complete native GL error drain reports no EasyGL MRT errors");
+              "complete native GL error drain reports no MRT errors");
     }
 #endif
 
@@ -691,7 +694,7 @@ protected:
             TestUsageAndCompatibility();
             TestMsaa();
         }
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_MRT_ORACLE_GL_SOURCE)
         CheckNativeGlErrors();
 #endif
 
@@ -707,6 +710,7 @@ public:
         graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(96);
         graphics_->setPreferredBackBufferHeightProperty(72);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return result_; }

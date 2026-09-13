@@ -80,7 +80,17 @@ const Color kBlue (0,   0,   255, 255);
 const Color kGreen(0,   255, 0,   255);
 const Color kWhite(255, 255, 255, 255);
 
-const char* kVertSrc = R"(#version 300 es
+const char* kVertSrc =
+#if defined(CNA_RLGL_TEST)
+R"(#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+layout(location = 2) in vec4 aColor;
+uniform mat4 projection;
+void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); }
+)";
+#else
+R"(#version 300 es
 precision highp float;
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aTexCoord;
@@ -88,10 +98,20 @@ layout(location = 2) in vec4 aColor;
 uniform mat4 projection;
 void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); }
 )";
+#endif
 
 // The sprite's own 2D texture is deliberately never read: every pixel comes from the volume, so a
 // leg that reads white would mean the sampler3D produced nothing rather than the wrong slice.
-const char* kFragSrc = R"(#version 300 es
+const char* kFragSrc =
+#if defined(CNA_RLGL_TEST)
+R"(#version 330 core
+out vec4 FragColor;
+uniform sampler3D VolumeSampler;
+uniform vec3 coord;
+void main() { FragColor = vec4(texture(VolumeSampler, coord).rgb, 1.0); }
+)";
+#else
+R"(#version 300 es
 precision highp float;
 precision highp sampler3D;
 out vec4 FragColor;
@@ -99,6 +119,7 @@ uniform sampler3D VolumeSampler;
 uniform vec3 coord;
 void main() { FragColor = vec4(texture(VolumeSampler, coord).rgb, 1.0); }
 )";
+#endif
 
 } // namespace
 
@@ -240,6 +261,7 @@ public:
     EasyGLTexture3DAddressWTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kN);
         gdm_->setPreferredBackBufferHeightProperty(kN);
     }

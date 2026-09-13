@@ -103,6 +103,42 @@ namespace CNA::Internal::Renderers
         /** @brief Re-establishes this context as current after another GL consumer changed it. */
         void MakeCurrent() { service_.MakeCurrent(window_, context_); }
 
+        /** @brief Clears the calling thread's current GL context binding. */
+        void ClearCurrent() { service_.MakeCurrent(window_, nullptr); }
+
+        /**
+         * @brief Returns the GL binding active on the calling thread.
+         * @return The current platform window/context pair, or an empty binding.
+         */
+        [[nodiscard]] CNA::Platform::GlContextBinding GetCurrentBinding() const
+        {
+            return service_.GetCurrentBinding();
+        }
+
+        /**
+         * @brief Restores a binding captured before a renderer-owned bounded operation.
+         * @param binding Binding that was current before the operation.
+         * @param release Whether an earlier binding of this owner's context is restored or released.
+         */
+        void RestoreBinding(
+            const CNA::Platform::GlContextBinding& binding,
+            const RendererThreadContextLeaseRelease release)
+        {
+            if (binding.context == context_ &&
+                release == RendererThreadContextLeaseRelease::ReleaseRendererBinding)
+            {
+                ClearCurrent();
+            }
+            else if (binding.context != nullptr)
+            {
+                service_.MakeCurrent(binding.window, binding.context);
+            }
+            else
+            {
+                ClearCurrent();
+            }
+        }
+
         /** @brief Applies a swap interval to the current context. */
         bool SetSwapInterval(const int interval) { return service_.SetSwapInterval(interval); }
 

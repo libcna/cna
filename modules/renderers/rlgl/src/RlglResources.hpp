@@ -1,0 +1,416 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include "CNA/Internal/Graphics/ImageData.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Rlgl/RlglResourceLifetime.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+namespace CNA::Internal::Renderers::Rlgl
+{
+    class RlglRenderer;
+
+    /** @brief Common native-texture identity shared by sampled RLGL resources. */
+    class IRlglTextureResource
+    {
+    public:
+        /** @brief Releases the renderer-local texture identity interface. */
+        virtual ~IRlglTextureResource() = default;
+
+        /** @brief Returns the rlgl-owned OpenGL texture name. */
+        [[nodiscard]] virtual unsigned int NativeTextureId() const noexcept = 0;
+
+        /** @brief Returns true when rasterization stored the texture rows bottom-up. */
+        [[nodiscard]] virtual bool SampledRowsAreBottomUp() const noexcept = 0;
+    };
+
+    /**
+     * @brief Creates the current RLGL two-dimensional texture implementation.
+     * @param data Dimensions, format, mip count, and level-zero bytes.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned texture record.
+     */
+    [[nodiscard]] std::unique_ptr<ITextureRenderer> CreateTextureRenderer(
+        const CNA::Internal::Graphics::ImageData& data,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /** @brief Complete Texture2D recovery state exposed to focused validation. */
+    struct Texture2DResourceSnapshot
+    {
+        /** @brief Current native texture name. */
+        unsigned int texture = 0;
+        /** @brief Base width in texels. */
+        int width = 0;
+        /** @brief Base height in texels. */
+        int height = 0;
+        /** @brief Number of allocated mip levels. */
+        int levelCount = 1;
+        /** @brief Raw XNA SurfaceFormat ordinal. */
+        int surfaceFormat = 0;
+        /** @brief Whether the live context stores compressed blocks natively. */
+        bool nativeCompressed = false;
+        /** @brief Whether this resource joined its device's recovery registry. */
+        bool recoveryRegistered = false;
+        /** @brief Exact mask of mip levels whose retained contents are defined. */
+        std::vector<bool> definedLevels;
+        /** @brief Full format-native bytes retained for each defined mip level. */
+        std::vector<std::vector<std::uint8_t>> recoveryLevels;
+    };
+
+    /**
+     * @brief Captures Texture2D recovery state for focused validation.
+     * @param resource RLGL two-dimensional texture resource.
+     * @return Native identity, creation description, defined mask, and retained bytes.
+     */
+    [[nodiscard]] Texture2DResourceSnapshot GetTexture2DResourceSnapshotForTesting(
+        const ITextureRenderer& resource);
+
+    /** @brief Complete Texture3D recovery state exposed to focused validation. */
+    struct Texture3DResourceSnapshot
+    {
+        /** @brief Current native volume texture name. */
+        unsigned int texture = 0;
+        /** @brief Level-zero width in texels. */
+        int width = 0;
+        /** @brief Level-zero height in texels. */
+        int height = 0;
+        /** @brief Level-zero depth in texels. */
+        int depth = 0;
+        /** @brief Number of allocated mip levels. */
+        int levelCount = 1;
+        /** @brief Raw XNA SurfaceFormat ordinal. */
+        int surfaceFormat = 0;
+        /** @brief Whether this resource joined its device's recovery registry. */
+        bool recoveryRegistered = false;
+        /** @brief Exact mask of mip levels with defined retained contents. */
+        std::vector<bool> definedLevels;
+        /** @brief Full RGBA8 volume bytes retained for each defined mip level. */
+        std::vector<std::vector<std::uint8_t>> recoveryLevels;
+    };
+
+    /**
+     * @brief Creates a Color Texture3D with complete mip storage.
+     * @param width Level-zero width.
+     * @param height Level-zero height.
+     * @param depth Level-zero depth.
+     * @param mipMap Whether to allocate the complete width/height-derived mip chain.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal; currently Color only.
+     * @param lifetime Owning device registry for context-current disposal and recovery.
+     * @return Renderer-owned volume resource.
+     */
+    [[nodiscard]] std::unique_ptr<ITexture3DRenderer> CreateTexture3DRenderer(
+        int width, int height, int depth, bool mipMap, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Captures Texture3D native identity and retained recovery data.
+     * @param resource RLGL volume resource.
+     * @return Exact creation description and level-major recovery shadows.
+     */
+    [[nodiscard]] Texture3DResourceSnapshot GetTexture3DResourceSnapshotForTesting(
+        const ITexture3DRenderer& resource);
+
+    /** @brief Complete renderer/native TextureCube facts exposed to focused validation. */
+    struct TextureCubeResourceSnapshot
+    {
+        /** @brief Current native cube texture name. */
+        unsigned int texture = 0;
+        /** @brief Width and height of each face at level zero. */
+        int size = 0;
+        /** @brief Number of allocated levels per face. */
+        int levelCount = 1;
+        /** @brief Raw XNA SurfaceFormat ordinal. */
+        int surfaceFormat = 0;
+        /** @brief Whether the live context stores compressed blocks natively. */
+        bool nativeCompressed = false;
+        /** @brief Whether this resource joined its device's recovery registry. */
+        bool recoveryRegistered = false;
+        /** @brief Face-major mask of defined face/level subresources. */
+        std::vector<bool> definedSubresources;
+        /** @brief Face-major full format-native bytes for every defined subresource. */
+        std::vector<std::vector<std::uint8_t>> recoverySubresources;
+    };
+
+    /**
+     * @brief Creates the current RLGL plain cube texture implementation.
+     * @param size Width and height of every cube face.
+     * @param mipMap Whether to allocate a complete mip chain.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned cube resource.
+     */
+    [[nodiscard]] std::unique_ptr<ITextureCubeRenderer> CreateTextureCubeRenderer(
+        int size, bool mipMap, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Captures TextureCube resource state for focused validation.
+     * @param resource RLGL cube resource.
+     * @return Native identity and applied creation parameters.
+     */
+    [[nodiscard]] TextureCubeResourceSnapshot GetTextureCubeResourceSnapshotForTesting(
+        const ITextureCubeRenderer& resource);
+
+    /** @brief Complete renderer/native RenderTarget2D facts exposed to focused validation. */
+    struct RenderTargetResourceSnapshot
+    {
+        unsigned int framebuffer = 0;
+        unsigned int resolveFramebuffer = 0;
+        unsigned int colorTexture = 0;
+        unsigned int multisampleColorRenderbuffer = 0;
+        unsigned int depthStencilRenderbuffer = 0;
+        int width = 0;
+        int height = 0;
+        int depthFormat = 0;
+        int surfaceFormat = 0;
+        int levelCount = 1;
+        int multiSampleCount = 0;
+        bool preserveContents = false;
+    };
+
+    /**
+     * @brief Creates a Color RenderTarget2D resource with optional multisampling.
+     * @param width Width in pixels.
+     * @param height Height in pixels.
+     * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @param preserveContents Whether target contents must survive target switches.
+     * @param mipMap Whether to allocate and regenerate a full mip chain.
+     * @param multiSampleCount Requested sample count, clamped to the live device limit.
+     * @param surfaceFormat Raw supported XNA render-target SurfaceFormat ordinal.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned framebuffer resource.
+     */
+    [[nodiscard]] std::unique_ptr<IRenderTargetRenderer> CreateRenderTargetRenderer(
+        int width, int height, int depthFormat, bool preserveContents,
+        bool mipMap, int multiSampleCount, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Captures RenderTarget2D resource state for focused validation.
+     * @param resource RLGL render-target resource.
+     * @return Native identities and applied creation parameters.
+     */
+    [[nodiscard]] RenderTargetResourceSnapshot GetRenderTargetResourceSnapshotForTesting(
+        const IRenderTargetRenderer& resource);
+
+    /** @brief Complete renderer/native RenderTargetCube facts for focused validation. */
+    struct RenderTargetCubeResourceSnapshot
+    {
+        unsigned int framebuffer = 0;
+        unsigned int resolveFramebuffer = 0;
+        unsigned int colorTexture = 0;
+        std::array<unsigned int, 6> multisampleColorRenderbuffers{};
+        unsigned int depthStencilRenderbuffer = 0;
+        int size = 0;
+        int depthFormat = 0;
+        int surfaceFormat = 0;
+        int levelCount = 1;
+        int multiSampleCount = 0;
+        int activeFace = 0;
+        bool preserveContents = false;
+    };
+
+    /**
+     * @brief Creates an exact face-addressable RLGL RenderTargetCube resource.
+     * @param size Width and height of all six faces.
+     * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @param preserveContents Whether face contents must survive target switches.
+     * @param mipMap Whether to allocate and regenerate a complete mip chain.
+     * @param multiSampleCount Requested sample count.
+     * @param surfaceFormat Raw classic render-target SurfaceFormat ordinal.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned cube target.
+     */
+    [[nodiscard]] std::unique_ptr<IRenderTargetCubeRenderer>
+    CreateRenderTargetCubeRenderer(
+        int size, int depthFormat, bool preserveContents,
+        bool mipMap, int multiSampleCount, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Captures RenderTargetCube resource state for focused validation.
+     * @param resource RLGL cube target.
+     * @return Native identities and applied creation parameters.
+     */
+    [[nodiscard]] RenderTargetCubeResourceSnapshot
+    GetRenderTargetCubeResourceSnapshotForTesting(
+        const IRenderTargetCubeRenderer& resource);
+
+    /**
+     * @brief Finalizes one rendered cube face without losing its subresource identity.
+     * @param resource RLGL cube target.
+     * @param face XNA cube face ordinal.
+     */
+    void FinalizeRenderTargetCubeFace(
+        IRenderTargetCubeRenderer& resource, int face);
+
+    /**
+     * @brief Creates the production low-level SpriteBatch implementation.
+     * @param renderer Owning device used for viewport and sampler application.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned sprite scheduler.
+     */
+    [[nodiscard]] std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatchRenderer(
+        RlglRenderer& renderer,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Creates a precise desktop OpenGL occlusion-query resource.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned query object using `GL_SAMPLES_PASSED`.
+     */
+    [[nodiscard]] std::unique_ptr<IOcclusionQueryRenderer>
+    CreateOcclusionQueryRenderer(const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /** @brief Complete renderer/native buffer facts exposed to focused validation. */
+    struct BufferResourceSnapshot
+    {
+        unsigned int id = 0;
+        int capacity = 0;
+        int count = 0;
+        std::size_t stride = 0;
+        bool indexBuffer = false;
+        bool thirtyTwoBit = false;
+        int nativeByteSize = 0;
+        int nativeUsage = 0;
+        int ordinaryUploadCount = 0;
+        int discardUploadCount = 0;
+        int noOverwriteUploadCount = 0;
+        bool recoveryRegistered = false;
+        std::vector<std::uint8_t> cpuBytes;
+        std::vector<std::uint8_t> nativeBytes;
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> declaration;
+    };
+
+    /** @brief One GL-compatible attribute binding derived from an XNA vertex element. */
+    struct VertexAttributeBinding
+    {
+        unsigned int vertexBuffer = 0;
+        std::uint64_t vertexBufferIdentity = 0;
+        unsigned int location = 0;
+        int componentCount = 0;
+        int scalarType = 0;
+        bool normalized = false;
+        int stride = 0;
+        int offset = 0;
+        int divisor = 0;
+    };
+
+    /**
+     * @brief Creates a declaration-aware fixed-capacity vertex resource.
+     * @param vertexCapacity Maximum vertex count.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned resource; native allocation occurs when its stride is known.
+     */
+    [[nodiscard]] std::unique_ptr<IVertexBufferRenderer> CreateVertexBufferRenderer(
+        int vertexCapacity, const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Creates a fixed-capacity index resource.
+     * @param indexCapacity Maximum index count.
+     * @param thirtyTwoBit True for 32-bit indices and false for 16-bit indices.
+     * @param lifetime Owning device registry for context-current native disposal.
+     * @return Renderer-owned resource with native storage allocated immediately.
+     */
+    [[nodiscard]] std::unique_ptr<IIndexBufferRenderer> CreateIndexBufferRenderer(
+        int indexCapacity, bool thirtyTwoBit,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Captures vertex-resource and native-storage state for focused validation.
+     * @param resource RLGL vertex resource.
+     * @return Complete resource snapshot.
+     */
+    [[nodiscard]] BufferResourceSnapshot GetBufferResourceSnapshotForTesting(
+        const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Captures index-resource and native-storage state for focused validation.
+     * @param resource RLGL index resource.
+     * @return Complete resource snapshot.
+     */
+    [[nodiscard]] BufferResourceSnapshot GetBufferResourceSnapshotForTesting(
+        const IIndexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the native texture name of an RLGL Texture2D resource.
+     * @param resource RLGL texture resource.
+     * @return Non-zero native texture name.
+     */
+    [[nodiscard]] unsigned int GetNativeTextureId(const ITextureRenderer& resource);
+
+    /**
+     * @brief Reports whether a sampled resource was populated by GL rasterization.
+     * @param resource RLGL texture or RenderTarget2D resource.
+     * @return True for render targets and false for CPU-uploaded Texture2D resources.
+     */
+    [[nodiscard]] bool SampledRowsAreBottomUp(const ITextureRenderer& resource);
+
+    /**
+     * @brief Returns the native buffer name of an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Non-zero native name once storage has been allocated.
+     */
+    [[nodiscard]] unsigned int GetNativeBufferId(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns a process-unique identity for one RLGL vertex resource lifetime.
+     * @param resource RLGL vertex resource.
+     * @return Non-zero identity that is not reused when GL recycles a native buffer name.
+     */
+    [[nodiscard]] std::uint64_t GetVertexBufferIdentity(
+        const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the native buffer name of an RLGL index resource.
+     * @param resource RLGL index resource.
+     * @return Non-zero native name.
+     */
+    [[nodiscard]] unsigned int GetNativeBufferId(const IIndexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the uploaded stride of an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Vertex stride in bytes.
+     */
+    [[nodiscard]] std::size_t GetVertexStride(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the fixed logical capacity of an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Capacity in vertices.
+     */
+    [[nodiscard]] int GetBufferCapacity(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the fixed logical capacity of an RLGL index resource.
+     * @param resource RLGL index resource.
+     * @return Capacity in indices.
+     */
+    [[nodiscard]] int GetBufferCapacity(const IIndexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the declaration retained by an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Stable declaration element reference.
+     */
+    [[nodiscard]] const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>&
+    GetVertexDeclaration(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Maps an XNA element format to the generic rlgl attribute description.
+     * @param element Source declaration element.
+     * @param location Shader attribute location selected by its semantic.
+     * @param stride Complete vertex record size.
+     * @param baseOffset Additional byte offset for the bound stream.
+     * @return Attribute shape accepted by rlgl's generic pointer API.
+     */
+    [[nodiscard]] VertexAttributeBinding DescribeVertexAttribute(
+        const Microsoft::Xna::Framework::Graphics::VertexElement& element,
+        unsigned int location, int stride, int baseOffset = 0);
+}

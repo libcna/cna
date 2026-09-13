@@ -83,6 +83,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -144,6 +145,8 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr const char* kRendererName = "RLGL";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
@@ -1638,6 +1641,11 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
+#if defined(CNA_RENDERER_RLGL)
+        // RLGL enforces XNA's Reach ceiling of one simultaneous target; exercise the native MRT
+        // path under the profile that exposes XNA's four-slot contract.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+#endif
     }
 
     /** @brief 0 when every check passed, 1 otherwise. */

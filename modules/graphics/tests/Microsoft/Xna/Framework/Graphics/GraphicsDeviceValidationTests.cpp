@@ -511,6 +511,13 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
     }
+    else if (CNA_RENDERER_IS(Rlgl))
+    {
+        // RLGL supports four native MRT slots in HiDef, but this default device is Reach. The
+        // shared profile guard rejects the binding with the XNA-facing exception before the
+        // renderer sees it; RLGL's focused HiDef fixtures validate the successful four-slot path.
+        EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+    }
     else if (CNA_RENDERER_IS(Stub, OpenVg, NanoVg))
     {
     // plans/plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr

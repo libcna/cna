@@ -21,9 +21,9 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**49 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**50 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp` and `cmake/RendererSelection.cmake`
-(`OK: 49 public renderer identities preserved in both registries`). Selected at configure time via
+(`OK: 50 public renderer identities preserved in the enum, selection list and runtime registry`). Selected at configure time via
 `-DCNA_GRAPHICS_RENDERER=<selector>`; implementations live in `modules/renderers/<family>/`.
 
 The 48 (this table's own count, pre-existing drift from the registry's true 50 -- IGL/PIXIJS are
@@ -100,7 +100,7 @@ also strengthen CI.
 
 | # | Identity | Upstream | Class | Proves what nothing else proves | Effort | Risk | License |
 |---:|---|---|---|---|---|---|---|
-| B1 | `RAYLIB` | raysan5/raylib (rlgl) | 2D + basic 3D | The most widely used "simple game library" as a CNA host; rlgl's batching model differs from every current path. | S | low | zlib |
+| B1 | `RLGL` | raysan5/raylib (`rlgl.h` only) | Low-level OpenGL abstraction | **IN PROGRESS 2026-09-12.** CNA retains its own platform/framework ownership and drives standalone rlgl's low-level resource wrappers rather than becoming a raylib application or forcing XNA semantics through rlgl's default batch. See `../plans/plan_rlgl.md`. | L | high | zlib |
 | B2 | `SFML` | SFML `Graphics` | 2D | Classic RAII C++ 2D API as a renderer host; view/transform model unlike `SDL_RENDERER`. | S | low | zlib |
 | B3 | `ALLEGRO` | Allegro 5 | 2D | Another mature 2D game library with its own bitmap/target model. | S | low | zlib-like |
 | B4 | `OGRE` | Ogre-Next / Ogre 14 | Engine RenderSystem | A **scene-graph engine's** RenderSystem driven by an immediate XNA API — the hardest structural mismatch to prove, and the most valuable if it works. | L | high | MIT |

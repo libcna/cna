@@ -139,7 +139,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Software);
+                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Software, Rlgl);
 }
 
 namespace

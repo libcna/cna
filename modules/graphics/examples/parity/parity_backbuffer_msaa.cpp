@@ -136,7 +136,7 @@ int main(int argc, char** argv)
     parameters.setBackBufferHeightProperty(kSize);
     parameters.setMultiSampleCountProperty(4);
     GraphicsDevice device(
-        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
 
     BasicEffect effect(device);
     effect.setVertexColorEnabledProperty(true);

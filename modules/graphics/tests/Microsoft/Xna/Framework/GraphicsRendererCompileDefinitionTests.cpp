@@ -187,6 +187,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_NANOVG
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_RLGL
+    ++enabled;
+#endif
 
     // plans/plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
     //
@@ -253,6 +256,14 @@ TEST(GraphicsRendererCompileDefinitionsTest, NanoVgMacroMatchesPublicRendererIde
 {
     EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::NanoVg);
     EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "NANOVG");
+}
+#endif
+
+#ifdef CNA_RENDERER_RLGL
+TEST(GraphicsRendererCompileDefinitionsTest, RlglMacroMatchesPublicRendererIdentity)
+{
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Rlgl);
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "RLGL");
 }
 #endif
 

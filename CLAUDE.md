@@ -523,7 +523,7 @@ Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 `HTML_DOM` | `NANOVG` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL` | `IGL` | `PIXIJS`). These are exactly 49
+`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL` | `IGL` | `PIXIJS` | `RLGL`). These are exactly 50
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
@@ -548,6 +548,10 @@ window's render intent must be decided before the renderer exists -- see `plans/
 `NANOVG` is a 2D-only renderer that puts `SpriteBatch` output through NanoVG's own compiled GLSL
 vector-rasterization pipeline (memononen/nanovg, GL2 backend) on a desktop OpenGL context it
 creates itself; see `docs/nanovg-renderer.md` and `plans/plan_nanovg.md`.
+`RLGL` is the experimental standalone-rlgl renderer on a CNA-owned desktop OpenGL 3.3 core
+context. Its device/clear/readback/present/resize slice is runtime-validated on Linux; texture,
+draw, effect and render-target work remains explicit and unavailable. See `docs/rlgl-renderer.md`
+and `plans/plan_rlgl.md`.
 The `SKIA` identity was retired on 2026-08-30 and is the one renderer NOT restored on 2026-09-04;
 its identity number stays a permanent gap in the C ABI range. See `docs/removed-renderers.md`.
 `PIXIJS` is the newest renderer, Emscripten-only and 2D-only in its v1 scope, rendering

@@ -160,7 +160,10 @@ namespace CNA
         /** @brief NanoVG (memononen/nanovg, 2D-only): SpriteBatch output rendered through
          * NanoVG's own compiled GLSL vector-rasterization pipeline (GL2 backend) on top of a
          * real desktop OpenGL context this renderer creates itself. */
-        NanoVg
+        NanoVg,
+
+        /** @brief Standalone rlgl low-level rendering on a CNA-owned OpenGL 3.3 core context. */
+        Rlgl
     };
 
     /**
@@ -278,6 +281,8 @@ namespace CNA
         return GraphicsRendererType::PixiJs;
 #elif defined(CNA_RENDERER_NANOVG)
         return GraphicsRendererType::NanoVg;
+#elif defined(CNA_RENDERER_RLGL)
+        return GraphicsRendererType::Rlgl;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -351,6 +356,7 @@ namespace CNA
             case GraphicsRendererType::Igl:           return "IGL";
             case GraphicsRendererType::PixiJs:        return "PIXIJS";
             case GraphicsRendererType::NanoVg:        return "NANOVG";
+            case GraphicsRendererType::Rlgl:          return "RLGL";
         }
         return "UNKNOWN";
     }
@@ -384,7 +390,7 @@ namespace CNA
             return true;
         };
 
-        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::NanoVg); ++ordinal)
+        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::Rlgl); ++ordinal)
         {
             const auto candidate = static_cast<GraphicsRendererType>(ordinal);
             if (equalsIgnoreCase(getGraphicsRendererName(candidate), name))

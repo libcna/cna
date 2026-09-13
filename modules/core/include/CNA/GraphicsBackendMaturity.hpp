@@ -56,9 +56,9 @@ namespace CNA
     /**
      * @brief Returns how confidently CNA recommends the given graphics renderer for real use.
      *
-     * Callable for any of the 47 public GraphicsRendererType identities, not only the one
+     * Callable for any of the 50 public GraphicsRendererType identities, not only the one
      * compiled into the current build -- e.g. to list every backend's maturity in a launcher or
-     * editor UI without compiling all 47 renderer variants.
+     * editor UI without compiling all 50 renderer variants.
      *
      * @param type The renderer identity to classify.
      * @return The renderer's maturity.
@@ -109,6 +109,7 @@ namespace CNA
             case GraphicsRendererType::TinyGL:
             case GraphicsRendererType::PixiJs:
             case GraphicsRendererType::NanoVg:
+            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

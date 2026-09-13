@@ -5341,14 +5341,25 @@ namespace CNA::TestSupport
         // --- A volume texture, one solid colour per depth slice ---------------------------------
         {
             const Color sliceColors[2] = {Color(255, 0, 0, 255), Color(0, 0, 255, 255)};
-            Texture3D volume(device, 2, 2, 2, /*mipMap=*/false, SurfaceFormat::Color);
             const Color texels[8] = {
                 sliceColors[0], sliceColors[0], sliceColors[0], sliceColors[0],
                 sliceColors[1], sliceColors[1], sliceColors[1], sliceColors[1],
             };
-            volume.SetData(texels, 8);
+            std::unique_ptr<Texture3D> volume;
+            try
+            {
+                volume = std::make_unique<Texture3D>(
+                    device, 2, 2, 2, /*mipMap=*/false, SurfaceFormat::Color);
+                volume->SetData(texels, 8);
+            }
+            catch (const std::exception& error)
+            {
+                EXPECT_FALSE(std::string(error.what()).empty())
+                    << "a volume-resource refusal must name what it could not do";
+                GTEST_SKIP() << "this renderer refuses volume textures: " << error.what();
+            }
             const auto bindVolume = [&](Effect& e) {
-                e.getParametersProperty()["FxTexture"]->SetValue(&volume);
+                e.getParametersProperty()["FxTexture"]->SetValue(volume.get());
             };
 
             std::string refusal;

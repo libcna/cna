@@ -2,7 +2,12 @@
 
 ## ABI identity
 
-The ABI is `0.26.0`. It appends **one detailed renderer-feature identity**,
+The ABI is `0.27.0`. It appends the `CNA_GRAPHICS_RENDERER_RLGL` renderer identity at value `51`
+and moves `CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `51`. Existing renderer values are
+unchanged; value `19` remains retired. The minor increments because the closed enumerable renderer
+range changed, allowing consumers to require the first ABI that can select and report RLGL.
+
+`0.26.0` appended **one detailed renderer-feature identity**,
 `CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING` (`31`). The answer is supported only when the
 renderer consumes a caller-selected first logical instance through the CNAEXT instanced-draw
 route; older renderers inherit the explicit unsupported default. Existing feature identities keep

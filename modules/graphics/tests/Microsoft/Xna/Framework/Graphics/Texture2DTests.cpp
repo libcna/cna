@@ -787,7 +787,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // (Vulkan_NormalizedByteFormat), which is the only thing that distinguishes SNORM storage from
     // UNORM storage of the same bytes.
     // Software retains the signed values in its canonical CPU sampling plane.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -800,7 +800,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -817,7 +817,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field -- core 1.0, no extension. Verified by a real
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, Rlgl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -1206,6 +1206,10 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // not an alternative to it.
         const bool profileAllows =
             Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
+        // RLGL-011: all twenty classic XNA Texture2D formats have exact transfer and sampled-pixel
+        // evidence. Extension formats appended after HdrBlendable retain their separate verdicts.
+        const bool rlglClassic = CNA_RENDERER_IS(Rlgl) &&
+            static_cast<int>(format) <= static_cast<int>(SurfaceFormat::HdrBlendable);
         // WEBGPU-144/SDLGPU-69: block-compressed support is a runtime storage decision. WebGPU and
         // SDL GPU may upload native BC blocks; SDL GPU can instead decode them into RGBA8 while
         // preserving the public compressed-transfer contract.
@@ -1217,6 +1221,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool rendererBlockCompressed =
             gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
         const bool supported = profileAllows && (format == SurfaceFormat::Color
+            || rlglClassic
             || rendererBlockCompressed
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))

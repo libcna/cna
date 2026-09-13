@@ -156,6 +156,32 @@ namespace
         EXPECT_EQ(service.GetCurrentBinding().context, otherContext);
     }
 
+    TEST(PlatformGlContextOwnerTests, RestoresOrReleasesTheCapturedBindingExactly)
+    {
+        FakeGlContext service;
+        const auto otherContext = reinterpret_cast<GlContextHandle>(0x999);
+        PlatformGlContextOwner owner(service, 77, {});
+        const GlContextBinding rendererBinding = owner.GetCurrentBinding();
+
+        owner.RestoreBinding(
+            rendererBinding, RendererThreadContextLeaseRelease::ReleaseRendererBinding);
+        EXPECT_EQ(service.GetCurrentBinding().context, nullptr);
+
+        service.MakeCurrent(88, otherContext);
+        const GlContextBinding otherBinding = owner.GetCurrentBinding();
+        owner.MakeCurrent();
+        owner.RestoreBinding(
+            otherBinding, RendererThreadContextLeaseRelease::ReleaseRendererBinding);
+        EXPECT_EQ(service.GetCurrentBinding().window, 88u);
+        EXPECT_EQ(service.GetCurrentBinding().context, otherContext);
+
+        owner.MakeCurrent();
+        owner.RestoreBinding(
+            rendererBinding, RendererThreadContextLeaseRelease::RestorePreviousBinding);
+        EXPECT_EQ(service.GetCurrentBinding().window, 77u);
+        EXPECT_EQ(service.GetCurrentBinding().context, rendererBinding.context);
+    }
+
     TEST(PlatformGlSurfaceStateTests, SeparatesDrawablePixelsFromLogicalWindowUnits)
     {
         PlatformGlSurfaceState surface(Surface(42, 600, 300, 1.5f));

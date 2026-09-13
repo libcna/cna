@@ -56,7 +56,7 @@ namespace CNA
     /**
      * @brief Returns the implementation-technology category of the given graphics renderer.
      *
-     * Callable for any of the 47 public GraphicsRendererType identities, not only the one
+     * Callable for any of the 50 public GraphicsRendererType identities, not only the one
      * compiled into the current build.
      *
      * @param type The renderer identity to classify.
@@ -105,6 +105,7 @@ namespace CNA
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::NanoVg:
+            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:

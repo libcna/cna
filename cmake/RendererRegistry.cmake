@@ -75,7 +75,8 @@ function(_cna_renderer_identity_map out_var)
         TINYGL       TinyGL
         IGL          Igl
         PIXIJS       PixiJs
-        NANOVG       NanoVg)
+        NANOVG       NanoVg
+        RLGL         Rlgl)
 
     set(${out_var} "${_map}" PARENT_SCOPE)
 endfunction()

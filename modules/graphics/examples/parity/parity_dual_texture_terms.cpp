@@ -25,15 +25,10 @@
 //                               under an opaque blend where the alpha channel is thrown away. A
 //                               renderer that routed `Alpha` to the alpha channel alone is caught.
 //
-// Row 1 is the two null-texture fallbacks and the full composition:
-//   * a null `Texture`  -- layer 0 falls back to opaque white, so `2 * white * overlay`;
-//   * a null `Texture2` -- layer 1 falls back to opaque white, so `2 * base * white`.
-//     These two use DIFFERENT, channel-reversed texels ((100,90,60) against (60,90,100)) precisely
-//     because the formula is symmetric in the two layers: with the same texel they would produce
-//     the same pixel and a renderer that applied the fallback to the WRONG layer would pass. With
-//     these, it does not.
-//   * both null -- the control that pins the fallback as WHITE rather than black or transparent:
-//     `2 * 1 * 1` saturates to (255,255,255). If either fallback were black this cell is black.
+// Row 1 is the two null-texture cases and the full composition:
+//   * a null `Texture` or `Texture2` samples opaque black, as measured from Microsoft XNA by
+//     SOFTWARE-302; the other, deliberately non-black layer cannot leak through either case;
+//   * both null remains opaque black rather than retaining either previously bound texture;
 //   * everything at once -- all four factors on the same draw, landing on (118,32,22), a value no
 //     dropped factor reaches.
 
@@ -80,8 +75,8 @@ namespace
     /// The base layer. Unsaturated so the `*2` is visible, and three different channels so a
     /// luminance collapse or a channel swizzle matches nothing in the table.
     const Color kBase(100, 90, 60, 255);
-    /// The base layer's channel reversal, used only by the null-`Texture2` cell so that cell cannot
-    /// be confused with the null-`Texture` one.
+    /// The base layer's channel reversal, used by the null-`Texture2` cell to prove that its
+    /// non-null peer cannot leak through the opaque-black null sample.
     const Color kBaseReversed(60, 90, 100, 255);
     /// The overlay. Its blue is 255 on purpose: `2 * base.b * 1.0` still lands at 120, well inside
     /// range, so the doubling stays visible even on the channel the overlay leaves alone.
@@ -164,12 +159,12 @@ protected:
             {"Alpha 0.75 darkens RGB under an opaque blend", &base, &white, Vector3::One, kAlpha,
              Color(150, 135, 90, 255)},
             // Row 1 -- the fallbacks, and the whole chain.
-            {"null Texture: 2 * white * base", nullptr, &base, Vector3::One, 1.0f,
-             Color(200, 180, 120, 255)},
-            {"null Texture2: 2 * reversed base * white", &baseReversed, nullptr, Vector3::One, 1.0f,
-             Color(120, 180, 200, 255)},
-            {"both null: 2 * white * white saturates", nullptr, nullptr, Vector3::One, 1.0f,
-             Color(255, 255, 255, 255)},
+            {"null Texture samples XNA opaque black", nullptr, &base, Vector3::One, 1.0f,
+             Color::Black},
+            {"null Texture2 samples XNA opaque black", &baseReversed, nullptr, Vector3::One, 1.0f,
+             Color::Black},
+            {"both null remain opaque black", nullptr, nullptr, Vector3::One, 1.0f,
+             Color::Black},
             {"all four factors at once", &base, &overlay, kDiffuseColor, kAlpha,
              Color(118, 32, 22, 255)},
         }};
@@ -222,11 +217,6 @@ protected:
         Require(Average(grid.Interior(0, 0)).getRProperty() > kBase.getRProperty() + 60,
                 "the `color.rgb *= 2` doubling actually happened -- the isolated base layer is far "
                 "brighter than its own texel, which a renderer missing the *2 cannot be");
-        // And the two fallbacks really are distinguishable, so the pair of null cells is a test
-        // rather than two spellings of one.
-        ExpectDistinct("the null-Texture and null-Texture2 cells differ -- the fallback lands on "
-                       "the layer that is actually missing",
-                       grid.Interior(0, 1), grid.Interior(1, 1), 40);
     }
 };
 

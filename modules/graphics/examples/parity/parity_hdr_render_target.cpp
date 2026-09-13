@@ -67,6 +67,7 @@ protected:
     void RunFixture() override
     {
         auto& device = getGraphicsDeviceProperty();
+        device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
         const CNA::Parity::ParityGrid grid{kWidth, kHeight, kColumns, 1};
 
         Require(device.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets),
@@ -91,7 +92,8 @@ protected:
         device.Clear(kClearColor);
         {
             SpriteBatch batch(device);
-            batch.Begin();
+            batch.Begin(SpriteSortMode::Deferred, &BlendState::AlphaBlend,
+                        &SamplerState::PointClamp, nullptr, nullptr);
             const auto cell = grid.getCellWidthProperty();
             batch.Draw(above, Rectangle(2, 2, cell - 4, kHeight - 4),
                        Rectangle(0, 0, kTargetSize, kTargetSize), kHalfTint);

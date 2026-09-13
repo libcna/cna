@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <optional>
 
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
@@ -45,6 +46,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
 using CNA::Internal::Renderers::DummyTextureRenderer;
 using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
+using namespace CNA::Testing::Renderers; // NOLINT(google-build-using-namespace)
 
 namespace
 {
@@ -188,6 +190,17 @@ TEST(SpriteBatchTest, BeginWithoutRendererDoesNotThrow)
 {
     SpriteBatch batch;
     EXPECT_NO_THROW(batch.Begin());
+}
+
+TEST(SpriteBatchTest, RepeatedDisposeRejectsBeginAndEnd)
+{
+    SpriteBatch batch;
+    batch.Begin();
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_TRUE(batch.getIsDisposedProperty());
+    EXPECT_THROW(batch.Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
 }
 
 TEST(SpriteBatchTest, BeginSortBlendWithoutRendererDoesNotThrow)
@@ -2233,6 +2246,9 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndStaysUsable)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        GTEST_SKIP() << "rlgl 6.0 has process-global state and permits only one live RLGL device";
+
     GraphicsDevice owning;
     GraphicsDevice other;
     Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);
@@ -2252,6 +2268,9 @@ TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndSta
 
 TEST(SpriteBatchCrossDeviceTest, DeferredRefusesAtDrawRatherThanWedgingTheBatchAtEnd)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        GTEST_SKIP() << "rlgl 6.0 has process-global state and permits only one live RLGL device";
+
     GraphicsDevice owning;
     GraphicsDevice other;
     Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);

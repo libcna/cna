@@ -139,6 +139,14 @@ namespace CNA::Platform::Sdl3 {
                               "GlContext::CreateContext");
         SetGlAttributeOrThrow(SDL_GL_CONTEXT_PROFILE_MASK, ToSdlGlProfile(description.profile),
                               "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_RED_SIZE, description.redBits,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_GREEN_SIZE, description.greenBits,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_BLUE_SIZE, description.blueBits,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_ALPHA_SIZE, description.alphaBits,
+                              "GlContext::CreateContext");
         SetGlAttributeOrThrow(SDL_GL_DEPTH_SIZE, description.depthBits,
                               "GlContext::CreateContext");
         SetGlAttributeOrThrow(SDL_GL_STENCIL_SIZE, description.stencilBits,
@@ -149,6 +157,14 @@ namespace CNA::Platform::Sdl3 {
                               "GlContext::CreateContext");
         SetGlAttributeOrThrow(SDL_GL_DOUBLEBUFFER, description.doubleBuffer ? 1 : 0,
                               "GlContext::CreateContext");
+        SetGlAttributeOrThrow(
+            SDL_GL_CONTEXT_FLAGS,
+            description.robustAccess ? SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG : 0,
+            "GlContext::CreateContext");
+        SetGlAttributeOrThrow(
+            SDL_GL_CONTEXT_RESET_NOTIFICATION,
+            description.loseContextOnReset ? SDL_GL_CONTEXT_RESET_LOSE_CONTEXT : 0,
+            "GlContext::CreateContext");
 
         SDL_GLContext context = SDL_GL_CreateContext(nativeWindow);
         if (context == nullptr)
@@ -246,11 +262,23 @@ namespace CNA::Platform::Sdl3 {
 
         if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &value)) { granted.majorVersion = value; }
         if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &value)) { granted.minorVersion = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_RED_SIZE, &value)) { granted.redBits = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_GREEN_SIZE, &value)) { granted.greenBits = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_BLUE_SIZE, &value)) { granted.blueBits = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_ALPHA_SIZE, &value)) { granted.alphaBits = value; }
         if (SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &value)) { granted.depthBits = value; }
         if (SDL_GL_GetAttribute(SDL_GL_STENCIL_SIZE, &value)) { granted.stencilBits = value; }
         if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &value)) { granted.multisampleBuffers = value; }
         if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &value)) { granted.multisampleSamples = value; }
         if (SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER, &value)) { granted.doubleBuffer = value != 0; }
+        if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_FLAGS, &value))
+        {
+            granted.robustAccess = (value & SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG) != 0;
+        }
+        if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_RESET_NOTIFICATION, &value))
+        {
+            granted.loseContextOnReset = value == SDL_GL_CONTEXT_RESET_LOSE_CONTEXT;
+        }
 
         if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &value))
         {

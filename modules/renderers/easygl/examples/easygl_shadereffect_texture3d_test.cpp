@@ -51,6 +51,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -79,7 +80,17 @@ namespace
         f << text;
     }
 
-    const char* kVertSrc = R"(#version 300 es
+    const char* kVertSrc =
+#if defined(CNA_RLGL_TEST)
+R"(#version 330 core
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec2 aTexCoord;
+void main() {
+    gl_Position = vec4(aPosition, 1.0);
+}
+)";
+#else
+R"(#version 300 es
 precision highp float;
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec2 aTexCoord;
@@ -87,8 +98,20 @@ void main() {
     gl_Position = vec4(aPosition, 1.0);
 }
 )";
+#endif
 
-    const char* kFragSrc = R"(#version 300 es
+    const char* kFragSrc =
+#if defined(CNA_RLGL_TEST)
+R"(#version 330 core
+out vec4 FragColor;
+uniform sampler3D VolumeSampler;
+uniform vec3 coord;
+void main() {
+    FragColor = texture(VolumeSampler, coord);
+}
+)";
+#else
+R"(#version 300 es
 precision highp float;
 precision highp sampler3D;
 out vec4 FragColor;
@@ -98,6 +121,7 @@ void main() {
     FragColor = texture(VolumeSampler, coord);
 }
 )";
+#endif
 }
 
 class EasyGLTexture3DShaderTest : public Game
@@ -139,7 +163,9 @@ protected:
             { Vector3( 1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f) },
             { Vector3( 1.0f,  1.0f, 0.0f), Vector2(1.0f, 0.0f) },
         };
-        vb_ = std::make_unique<VertexBuffer>(device, 4);
+        vb_ = std::make_unique<VertexBuffer>(
+            device, VertexPositionTexture::getVertexDeclarationStatic(),
+            4, BufferUsage::None);
         vb_->SetData(verts, 4);
 
         const std::uint16_t indices[6] = { 0, 1, 2, 0, 2, 3 };

@@ -131,6 +131,9 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr const char* kRendererName = "RLGL";
+    constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;

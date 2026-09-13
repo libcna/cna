@@ -67,6 +67,9 @@
 #if defined(CNA_RENDERER_DIRECTX12)
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #endif
+#if defined(CNA_RENDERER_RLGL)
+#include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
+#endif
 
 #include <array>
 #include <cmath>
@@ -248,6 +251,17 @@ class GraphicsRendererBenchmark : public Game
     }
 #endif
 
+#if defined(CNA_RENDERER_RLGL)
+    CNA::Internal::Renderers::Rlgl::RlglRenderer& GetRlglRenderer()
+    {
+        auto* renderer = dynamic_cast<CNA::Internal::Renderers::Rlgl::RlglRenderer*>(
+            &getGraphicsDeviceProperty().GetRenderer());
+        if (renderer == nullptr)
+            throw std::runtime_error("RLGL benchmark did not receive RlglRenderer");
+        return *renderer;
+    }
+#endif
+
     // plans/plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
     // renderer's own documented sweet spot on the position side regardless of workload). `churnTint`
     // selects which of the two workloads this call belongs to: false = "stable tint" (per-sprite
@@ -341,6 +355,10 @@ protected:
             uploadResourceBaseline_ = renderer.GetUploadResourceCreationCountEXT();
         }
 #endif
+#if defined(CNA_RENDERER_RLGL)
+        if (frame_ == kWarmupFrames + 1)
+            GetRlglRenderer().ResetPerformanceCountersForTesting();
+#endif
 
         const double subT0 = (inStablePhase || inChurnPhase) ? JsNow() : 0.0;
         DrawSprites(/*churnTint=*/inChurnPhase);
@@ -424,6 +442,51 @@ protected:
             if (meshDrawCount_ >= 50 && uploadResources != 0)
                 throw std::runtime_error(
                     "DX-238 failed: upload ring created a resource after warm-up");
+#endif
+#if defined(CNA_RENDERER_RLGL)
+            const auto performance = GetRlglRenderer().GetPerformanceSnapshotForTesting();
+            const std::uint64_t measuredFrames = static_cast<std::uint64_t>(2 * phaseFrames_);
+            const std::uint64_t measuredMeshDraws = measuredFrames *
+                static_cast<std::uint64_t>(meshDrawCount_);
+            std::printf(
+                "    RLGL work  : draws=%llu states=%llu programs=%llu textures=%llu "
+                "uploads=%llu framebuffer_transitions=%llu flush_requests=%llu "
+                "batch_flushes=%llu uniforms=%llu attribute_changes=%llu "
+                "attribute_scratch=%llu attribute_heap_allocations=%llu "
+                "matrix_conversions=%llu semantic_lookups=%llu\n",
+                static_cast<unsigned long long>(performance.drawCalls),
+                static_cast<unsigned long long>(performance.stateApplications),
+                static_cast<unsigned long long>(performance.programBinds),
+                static_cast<unsigned long long>(performance.textureBinds),
+                static_cast<unsigned long long>(performance.bufferUploads),
+                static_cast<unsigned long long>(performance.framebufferTransitions),
+                static_cast<unsigned long long>(performance.flushRequests),
+                static_cast<unsigned long long>(performance.batchFlushes),
+                static_cast<unsigned long long>(performance.uniformUploads),
+                static_cast<unsigned long long>(performance.vertexAttributeChanges),
+                static_cast<unsigned long long>(performance.attributeScratchBuilds),
+                static_cast<unsigned long long>(performance.attributeHeapAllocations),
+                static_cast<unsigned long long>(performance.matrixConversions),
+                static_cast<unsigned long long>(performance.semanticLookups));
+            if (meshDrawCount_ >= 50 && performance.attributeHeapAllocations != 0)
+                throw std::runtime_error(
+                    "RLGL-020 failed: stock attribute preparation allocated per draw");
+            if (meshDrawCount_ >= 50 && performance.batchFlushes != 0)
+                throw std::runtime_error(
+                    "RLGL-020 failed: CNA-owned draws flushed a non-empty rlgl batch");
+            if (meshDrawCount_ >= 50 &&
+                performance.attributeScratchBuilds != measuredMeshDraws)
+            {
+                throw std::runtime_error(
+                    "RLGL-020 failed: stock draws bypassed fixed attribute scratch");
+            }
+            if (meshDrawCount_ >= 50 &&
+                performance.uniformUploads > measuredFrames *
+                    static_cast<std::uint64_t>(2 + 4 * meshDrawCount_))
+            {
+                throw std::runtime_error(
+                    "RLGL-020 failed: steady stock draws re-uploaded invariant uniforms");
+            }
 #endif
             std::fflush(stdout);
 

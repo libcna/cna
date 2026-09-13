@@ -115,7 +115,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColor()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
+                           DirectX9, DirectX11, DirectX12, SdlGpu, Software, Rlgl);
 }
 
 // The renderers whose instanced route this file has measured, and which therefore carry a contract
@@ -125,7 +125,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu, Software);
+                           DirectX11, DirectX12, SdlGpu, Software, Rlgl);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
@@ -148,7 +148,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx,
-                           DirectX11, DirectX12, SdlGpu, Software);
+                           DirectX11, DirectX12, SdlGpu, Software, Rlgl);
 }
 
 

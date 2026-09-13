@@ -221,7 +221,7 @@ namespace
         // SOFTWARE-119 writes into the same CPU face/mip storage its rasterizer and GetData use;
         // the shared set-data contract asserts the exact round trip rather than mere acceptance.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, Magnum, OpenGL4, Wicked, Igl);
+                               Software, Magnum, OpenGL4, Wicked, Igl, Rlgl);
     }
 }
 

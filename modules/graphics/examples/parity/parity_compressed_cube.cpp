@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_webgpu.md WEBGPU-206 (harness: WEBGPU-207): a block-compressed `TextureCube` stores
-// blocks, reads back decoded, and SAMPLES like the uncompressed cube it encodes.
+// blocks, reads back those exact blocks, and SAMPLES like the uncompressed cube it encodes.
 //
 // WHY THE COMPARISON IS AGAINST A SECOND CUBE, not against a hand-derived reflection vector. What
 // this fixture has to prove is that a BC cube reaches the shader as the same content an RGBA8 cube
@@ -163,17 +163,15 @@ protected:
         const Color whiteTexel = Color::White;
         white.SetData(&whiteTexel, 1);
 
-        // Leg 1, before anything is drawn: the blocks read back DECODED, matching the oracle. This
-        // is the half a rendered comparison cannot isolate -- two columns could agree because both
-        // cubes are wrong in the same way.
+        // Leg 1, before anything is drawn: compressed GetData preserves the exact block payload.
+        // This is the half a rendered comparison cannot isolate -- two columns could agree because
+        // both cubes are wrong in the same way.
         {
-            std::array<Color, kCubeSize * kCubeSize> readBack{};
+            std::array<std::uint8_t, 8> readBack{};
             compressed.GetData(CubeMapFace::NegativeZ, readBack.data(),
                                static_cast<int>(readBack.size()));
-            bool exact = true;
-            for (const Color& texel : readBack)
-                if (texel != kFaces[5].decoded) exact = false;
-            Require(exact, "a DXT1 face reads back as the colour its blocks encode");
+            Require(readBack == SolidDxt1Block(kFaces[5].packed565),
+                    "a DXT1 face reads back the exact block payload supplied to it");
         }
 
         SamplerState pointClamp;

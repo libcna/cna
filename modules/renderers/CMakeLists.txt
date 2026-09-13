@@ -4,9 +4,9 @@
 # builds the selected ${RENDERER_TARGET} per configuration (RendererSelection.cmake resolves
 # the public identity to RENDERER_DIR = modules/renderers/<family>). The public renderer
 # identities live in RendererSelection.cmake + GraphicsRendererType.hpp and are pinned by
-# scripts/check_renderer_identities.py -- 49 of them today, over 45 families, since one family may
-# serve several identities. Deliberately not restated as a number anywhere a reader could trust it
-# instead of the script: this comment carried "47" for two identities longer than it was true.
+# scripts/check_renderer_identities.py, since one family may serve several identities. Deliberately
+# not restated as a number here: this comment carried "47" for two identities longer than it was
+# true.
 # Families and helper targets here are implementation structure, not identities.
 # =====================================================================================
 

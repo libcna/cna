@@ -486,6 +486,14 @@ namespace CNA::Platform::Sdl2 {
                           "GlContext::CreateContext");
         RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, ToSdlGlProfile(description.profile)),
                           "GlContext::CreateContext");
+        RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_RED_SIZE, description.redBits),
+                          "GlContext::CreateContext");
+        RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, description.greenBits),
+                          "GlContext::CreateContext");
+        RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, description.blueBits),
+                          "GlContext::CreateContext");
+        RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, description.alphaBits),
+                          "GlContext::CreateContext");
         RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, description.depthBits),
                           "GlContext::CreateContext");
         RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, description.stencilBits),
@@ -495,6 +503,15 @@ namespace CNA::Platform::Sdl2 {
         RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, description.multisampleSamples),
                           "GlContext::CreateContext");
         RequireSdlSuccess(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, description.doubleBuffer ? 1 : 0),
+                          "GlContext::CreateContext");
+        RequireSdlSuccess(SDL_GL_SetAttribute(
+                              SDL_GL_CONTEXT_FLAGS,
+                              description.robustAccess ? SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG : 0),
+                          "GlContext::CreateContext");
+        RequireSdlSuccess(SDL_GL_SetAttribute(
+                              SDL_GL_CONTEXT_RESET_NOTIFICATION,
+                              description.loseContextOnReset
+                                  ? SDL_GL_CONTEXT_RESET_LOSE_CONTEXT : 0),
                           "GlContext::CreateContext");
         SDL_GLContext context = SDL_GL_CreateContext(RequireWindow(window, "GlContext::CreateContext"));
         if (context == nullptr) { throw PlatformException("GlContext::CreateContext", SDL_GetError()); }
@@ -541,11 +558,23 @@ namespace CNA::Platform::Sdl2 {
         int value = 0;
         if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &value) == 0) { granted.majorVersion = value; }
         if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &value) == 0) { granted.minorVersion = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_RED_SIZE, &value) == 0) { granted.redBits = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_GREEN_SIZE, &value) == 0) { granted.greenBits = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_BLUE_SIZE, &value) == 0) { granted.blueBits = value; }
+        if (SDL_GL_GetAttribute(SDL_GL_ALPHA_SIZE, &value) == 0) { granted.alphaBits = value; }
         if (SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &value) == 0) { granted.depthBits = value; }
         if (SDL_GL_GetAttribute(SDL_GL_STENCIL_SIZE, &value) == 0) { granted.stencilBits = value; }
         if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &value) == 0) { granted.multisampleBuffers = value; }
         if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &value) == 0) { granted.multisampleSamples = value; }
         if (SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER, &value) == 0) { granted.doubleBuffer = value != 0; }
+        if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_FLAGS, &value) == 0)
+        {
+            granted.robustAccess = (value & SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG) != 0;
+        }
+        if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_RESET_NOTIFICATION, &value) == 0)
+        {
+            granted.loseContextOnReset = value == SDL_GL_CONTEXT_RESET_LOSE_CONTEXT;
+        }
         if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &value) == 0)
         {
             granted.profile = value == SDL_GL_CONTEXT_PROFILE_ES ? GlProfile::Es

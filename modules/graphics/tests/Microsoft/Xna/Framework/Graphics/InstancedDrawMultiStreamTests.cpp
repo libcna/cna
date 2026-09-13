@@ -156,7 +156,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Magnum, SdlGpu, Software);
+                           DirectX9, DirectX11, DirectX12, Magnum, SdlGpu, Software, Rlgl);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
@@ -176,7 +176,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
-                           Vulkan, Bgfx, WebGPU, Magnum, SdlGpu, Software);
+                           Vulkan, Bgfx, WebGPU, Magnum, SdlGpu, Software, Rlgl);
 }
 
 namespace
@@ -2247,7 +2247,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
            "produce the stream's own colour on the ORDINARY route";
 
     if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                        DirectX11, DirectX12))
+                        DirectX11, DirectX12, Rlgl))
     {
         // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
         // is why the measured-defect arm this leg used to carry for those two is gone. It carried one

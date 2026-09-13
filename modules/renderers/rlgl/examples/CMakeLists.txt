@@ -1,0 +1,956 @@
+# plans/plan_rlgl.md RLGL-007: runtime vertical-slice validation needs a real window and GL 3.3
+# context. The executable is available even when CNA_BUILD_TESTS is off so dependency-constrained
+# developer builds can run it directly under Xvfb; CTest registration remains opt-in with the
+# repository's ordinary test switch.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
+
+if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL3)
+    add_executable(cna_test_rlgl_smoke rlgl_smoke_test.cpp)
+    target_link_libraries(cna_test_rlgl_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_smoke PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_thread_context_lease_binding
+        rlgl_thread_context_lease_binding_test.cpp)
+    target_link_libraries(cna_test_rlgl_thread_context_lease_binding
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_thread_context_lease_binding PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_thread_context_lease_exclusion
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_thread_context_lease_exclusion_test.cpp")
+    target_link_libraries(cna_test_rlgl_thread_context_lease_exclusion
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_thread_context_lease_exclusion PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_background_content_context
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_background_content_context_test.cpp")
+    target_link_libraries(cna_test_rlgl_background_content_context
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_background_content_context PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_resource_lifetime rlgl_resource_lifetime_test.cpp)
+    target_include_directories(cna_test_rlgl_resource_lifetime
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_resource_lifetime
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_resource_lifetime PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_resource_recovery_shadow
+        rlgl_resource_recovery_shadow_test.cpp)
+    target_include_directories(cna_test_rlgl_resource_recovery_shadow
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_resource_recovery_shadow
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_resource_recovery_shadow PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_context_recreate rlgl_context_recreate_test.cpp)
+    target_include_directories(cna_test_rlgl_context_recreate
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_context_recreate
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_context_recreate PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_resource_recreate rlgl_resource_recreate_test.cpp)
+    target_include_directories(cna_test_rlgl_resource_recreate
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CNA_SOURCE_DIR}/tests/support")
+    target_link_libraries(cna_test_rlgl_resource_recreate
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_resource_recreate PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_lifecycle_matrix rlgl_lifecycle_matrix_test.cpp)
+    target_include_directories(cna_test_rlgl_lifecycle_matrix
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_lifecycle_matrix
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_lifecycle_matrix PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture rlgl_texture_test.cpp)
+    target_include_directories(cna_test_rlgl_texture PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_texture PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture_cube rlgl_texture_cube_test.cpp)
+    target_include_directories(cna_test_rlgl_texture_cube PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_texture_cube PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture_cube PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture_cube_oracle
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../opengl4/examples/opengl4_texturecube_test.cpp")
+    target_link_libraries(cna_test_rlgl_texture_cube_oracle
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture_cube_oracle PRIVATE SDL3::SDL3main)
+    endif()
+
+    foreach(texture3d_contract IN ITEMS slices mip partial_box partial_box_readback)
+        add_executable(cna_test_rlgl_texture3d_${texture3d_contract}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_texture3d_${texture3d_contract}_test.cpp")
+        target_link_libraries(cna_test_rlgl_texture3d_${texture3d_contract}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_texture3d_${texture3d_contract}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    add_executable(cna_test_rlgl_shadereffect_texture3d
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_shadereffect_texture3d_test.cpp")
+    target_compile_definitions(cna_test_rlgl_shadereffect_texture3d PRIVATE CNA_RLGL_TEST=1)
+    target_link_libraries(cna_test_rlgl_shadereffect_texture3d
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_shadereffect_texture3d PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture3d_addressw
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_texture3d_addressw_test.cpp")
+    target_compile_definitions(cna_test_rlgl_texture3d_addressw PRIVATE CNA_RLGL_TEST=1)
+    target_link_libraries(cna_test_rlgl_texture3d_addressw
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture3d_addressw PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture3d_recovery rlgl_texture3d_recovery_test.cpp)
+    target_include_directories(cna_test_rlgl_texture3d_recovery
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_texture3d_recovery
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture3d_recovery PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_sampler rlgl_sampler_test.cpp)
+    target_include_directories(cna_test_rlgl_sampler PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_sampler PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_sampler PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_state rlgl_state_test.cpp)
+    target_include_directories(cna_test_rlgl_state PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_state PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_state PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_spritebatch rlgl_spritebatch_test.cpp)
+    target_link_libraries(cna_test_rlgl_spritebatch PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_spritebatch PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_render_target_orientation
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_render_target_test.cpp")
+    target_link_libraries(cna_test_rlgl_render_target_orientation
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target_orientation PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_render_target rlgl_render_target_test.cpp)
+    target_include_directories(cna_test_rlgl_render_target
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_render_target PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_render_target_formats rlgl_render_target_format_test.cpp)
+    target_link_libraries(cna_test_rlgl_render_target_formats
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target_formats PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_mrt rlgl_mrt_test.cpp)
+    target_include_directories(cna_test_rlgl_mrt
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_mrt PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_mrt PRIVATE SDL3::SDL3main)
+    endif()
+
+    # RLGL-043: reuse the EasyGL MRT oracle. Select its shared GL-source/native-error branch while
+    # retaining the target's one truthful renderer identity.
+    add_executable(cna_test_rlgl_mrt_oracle
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_mrt_test.cpp")
+    target_compile_definitions(cna_test_rlgl_mrt_oracle PRIVATE CNA_MRT_ORACLE_GL_SOURCE)
+    target_link_libraries(cna_test_rlgl_mrt_oracle PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_mrt_oracle PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_render_target_full
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../opengl4/examples/opengl4_rendertarget2d_test.cpp")
+    target_link_libraries(cna_test_rlgl_render_target_full
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target_full PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_render_target_cube rlgl_render_target_cube_test.cpp)
+    target_include_directories(cna_test_rlgl_render_target_cube
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_render_target_cube
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target_cube PRIVATE SDL3::SDL3main)
+    endif()
+
+    set(RLGL_RENDER_TARGET_CUBE_CONTRACTS
+        getdata_contract
+        usage
+        msaa_face
+        plural_binding)
+    foreach(contract IN LISTS RLGL_RENDER_TARGET_CUBE_CONTRACTS)
+        add_executable(cna_test_rlgl_rendertargetcube_${contract}
+            "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_${contract}_test.cpp")
+        target_link_libraries(cna_test_rlgl_rendertargetcube_${contract}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_rendertargetcube_${contract}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+    target_compile_definitions(cna_test_rlgl_rendertargetcube_plural_binding
+        PRIVATE CNA_GFX096_CUBE_GETDATA=1)
+
+    add_executable(cna_test_rlgl_msaa_first_readback
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp")
+    target_link_libraries(cna_test_rlgl_msaa_first_readback
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_msaa_first_readback PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_msaa_mip_readback
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp")
+    target_link_libraries(cna_test_rlgl_msaa_mip_readback
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_msaa_mip_readback PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_buffer rlgl_buffer_test.cpp)
+    target_include_directories(cna_test_rlgl_buffer PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_buffer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_buffer PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_primitive rlgl_primitive_test.cpp)
+    target_include_directories(cna_test_rlgl_primitive PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_primitive PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_primitive PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_multi_stream
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_multi_stream_split.cpp")
+    target_link_libraries(cna_test_rlgl_multi_stream PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_multi_stream PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_instanced_parity
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_instanced_draw.cpp")
+    target_link_libraries(cna_test_rlgl_instanced_parity PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_instanced_parity PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/occlusion_query_test.cpp")
+    target_link_libraries(cna_test_rlgl_occlusion_query PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query_visible
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_occlusion_query_visible_quad_test.cpp")
+    target_link_libraries(cna_test_rlgl_occlusion_query_visible
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query_visible PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query_occluded
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_occlusion_query_occluded_quad_test.cpp")
+    target_link_libraries(cna_test_rlgl_occlusion_query_occluded
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query_occluded PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query_lifetime
+        rlgl_occlusion_query_lifetime_test.cpp)
+    target_link_libraries(cna_test_rlgl_occlusion_query_lifetime
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query_lifetime PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_effect rlgl_effect_test.cpp)
+    target_link_libraries(cna_test_rlgl_effect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_effect PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_shader_effect rlgl_shader_effect_test.cpp)
+    target_link_libraries(cna_test_rlgl_shader_effect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_shader_effect PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_xna_pixel_center
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp")
+    target_link_libraries(cna_test_rlgl_xna_pixel_center PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_xna_pixel_center PRIVATE SDL3::SDL3main)
+    endif()
+
+    set(RLGL_BASIC_EFFECT_TESTS
+        one_light
+        multilight_emissive
+        specular
+        preferperpixellighting
+        lit_vertex_color
+        vertex_color_clamp
+        world_scale_precision)
+    foreach(test_name IN LISTS RLGL_BASIC_EFFECT_TESTS)
+        add_executable(cna_test_rlgl_basiceffect_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_basiceffect_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_basiceffect_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_basiceffect_${test_name} PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    add_executable(cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/basiceffect_lit_vertex_color_perpixel_test.cpp")
+    target_link_libraries(cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_basiceffect_normal_transform
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../bgfx/examples/bgfx_basiceffect_normaltransform_test.cpp")
+    target_link_libraries(cna_test_rlgl_basiceffect_normal_transform
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_basiceffect_normal_transform PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_basiceffect_lighting rlgl_basic_effect_lighting_test.cpp)
+    target_link_libraries(cna_test_rlgl_basiceffect_lighting
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_basiceffect_lighting PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_dual_texture_effect rlgl_dual_texture_effect_test.cpp)
+    target_link_libraries(cna_test_rlgl_dual_texture_effect
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_dual_texture_effect PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_dual_texture_independent_uv
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_dualtextureeffect_independent_uv_test.cpp")
+    target_link_libraries(cna_test_rlgl_dual_texture_independent_uv
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_dual_texture_independent_uv PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../opengl4/examples/opengl4_environmentmapeffect_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map_terms
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_env_map_terms.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_terms
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_terms PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map_alpha_scaled_lerp
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/environmentmapeffect_alphascaledlerp_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_alpha_scaled_lerp
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_alpha_scaled_lerp
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map_fog
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_environmentmapeffect_fog_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_fog
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_fog PRIVATE SDL3::SDL3main)
+    endif()
+
+    set(RLGL_ENVIRONMENT_MAP_EFFECT_TESTS
+        golden
+        amount_zero
+        amount_one
+        specular
+        fresnel
+        fresnel_gradient
+        eyeposition
+        worldtransform
+        combined
+        multilight)
+    foreach(test_name IN LISTS RLGL_ENVIRONMENT_MAP_EFFECT_TESTS)
+        add_executable(cna_test_rlgl_environmentmapeffect_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_environmentmapeffect_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_environmentmapeffect_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_environmentmapeffect_${test_name}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    add_executable(cna_test_rlgl_environment_map_amount_clamp
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/environmentmapeffect_amount_clamp_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_amount_clamp
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_amount_clamp
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map_sampler_contract
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_contract_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_sampler_contract
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_sampler_contract
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map_sampler_state
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_sampler_state
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_sampler_state
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_environment_map_render_target_cube
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_effect_source_test.cpp")
+    target_link_libraries(cna_test_rlgl_environment_map_render_target_cube
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_environment_map_render_target_cube
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_skinned_terms
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_skinned_terms.cpp")
+    target_link_libraries(cna_test_rlgl_skinned_terms
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_skinned_terms PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_skinned_effect rlgl_skinned_effect_test.cpp)
+    target_include_directories(cna_test_rlgl_skinned_effect
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_skinned_effect
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_skinned_effect PRIVATE SDL3::SDL3main)
+    endif()
+
+    set(RLGL_SKINNED_EFFECT_TESTS
+        identity_bones
+        translation_bone
+        twobone_blend
+        vector4_bone_indices
+        weightspervertex
+        multilight
+        specular
+        vertexcolor
+        preferperpixellighting
+        fog
+        world_normal
+        combined)
+    foreach(test_name IN LISTS RLGL_SKINNED_EFFECT_TESTS)
+        add_executable(cna_test_rlgl_skinnedeffect_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_skinnedeffect_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_skinnedeffect_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_skinnedeffect_${test_name}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    # RLGL-018: representative Model-level workloads reused without renderer-specific copies.
+    set(RLGL_MODEL_WORKLOAD_TESTS
+        model_draw
+        model_json_reader_texture
+        model_two_meshes_effects
+        model_hierarchy_child_mesh
+        model_skinned_animation_playback)
+    foreach(test_name IN LISTS RLGL_MODEL_WORKLOAD_TESTS)
+        add_executable(cna_test_rlgl_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_${test_name} PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    # RLGL-019: run the complete renderer-neutral classic-XNA parity corpus through the central
+    # registry. This deliberately keeps the same source and pass/fail oracle as EasyGL instead of
+    # maintaining an RLGL-specific copy of the campaign.
+    macro(cna_rlgl_parity_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+
+    # The classic-XNA EasyGL golden-image corpus is renderer-neutral too. EnvironmentMapEffect's
+    # golden source is already part of RLGL_ENVIRONMENT_MAP_EFFECT_TESTS above.
+    set(RLGL_CLASSIC_GOLDEN_TESTS
+        basiceffect
+        spritebatch_rotation
+        texture_filter_linear
+        blendstate_additive
+        depthstencilstate_write_enable
+        rasterizerstate_cullmode
+        alphatesteffect
+        dualtextureeffect
+        skinnedeffect)
+    foreach(test_name IN LISTS RLGL_CLASSIC_GOLDEN_TESTS)
+        add_executable(cna_test_rlgl_golden_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_${test_name}_golden_test.cpp")
+        target_link_libraries(cna_test_rlgl_golden_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_golden_${test_name} PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+    add_executable(cna_test_rlgl_golden_rendertarget
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget2d_golden_test.cpp")
+    target_link_libraries(cna_test_rlgl_golden_rendertarget
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_golden_rendertarget PRIVATE SDL3::SDL3main)
+    endif()
+
+    if(CNA_RLGL_COMPILED_EFFECTS)
+        add_executable(cna_test_rlgl_compiled_effect_runtime
+            rlgl_compiled_effect_runtime_test.cpp)
+        target_compile_definitions(cna_test_rlgl_compiled_effect_runtime
+            PRIVATE CNA_RLGL_SOURCE_DIR="${CNA_SOURCE_DIR}")
+        target_link_libraries(cna_test_rlgl_compiled_effect_runtime
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_compiled_effect_runtime PRIVATE SDL3::SDL3main)
+        endif()
+
+        add_executable(cna_test_rlgl_compiled_effect_draw
+            rlgl_compiled_effect_draw_test.cpp)
+        target_include_directories(cna_test_rlgl_compiled_effect_draw
+            PRIVATE "${CNA_SOURCE_DIR}/tests/support")
+        target_link_libraries(cna_test_rlgl_compiled_effect_draw
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_compiled_effect_draw PRIVATE SDL3::SDL3main)
+        endif()
+    endif()
+
+    if(CNA_BUILD_TESTS)
+        enable_testing()
+        cna_register_parity_fixtures(
+            BUILDER cna_rlgl_parity_test
+            TARGET_SUFFIX rlgl
+            TEST_PREFIX Rlgl
+            LABELS "GraphicsParity;Parity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
+            TIMEOUT 60 LABELS "GraphicsSmoke;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ThreadContextLeaseBinding
+            COMMAND cna_test_rlgl_thread_context_lease_binding
+            TIMEOUT 60 LABELS "GraphicsLifetime;GraphicsThreading;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ThreadContextLeaseExclusion
+            COMMAND cna_test_rlgl_thread_context_lease_exclusion
+            TIMEOUT 60 LABELS "GraphicsLifetime;GraphicsThreading;Rlgl"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_BackgroundContentContext
+            COMMAND cna_test_rlgl_background_content_context
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsThreading;GraphicsContent;Rlgl"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ResourceLifetime
+            COMMAND cna_test_rlgl_resource_lifetime
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ResourceRecoveryShadow
+            COMMAND cna_test_rlgl_resource_recovery_shadow
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ResourceRecoveryShadow_dxt_fallback
+            COMMAND cna_test_rlgl_resource_recovery_shadow
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
+            ENVIRONMENT
+                "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1;CNA_RLGL_FORCE_DXT_FALLBACK=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ContextRecreate
+            COMMAND cna_test_rlgl_context_recreate
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsDevice;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ResourceRecreate
+            COMMAND cna_test_rlgl_resource_recreate
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_LifecycleMatrix
+            COMMAND cna_test_rlgl_lifecycle_matrix
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsDevice;GraphicsResource;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Texture COMMAND cna_test_rlgl_texture
+            TIMEOUT 60 LABELS "GraphicsTexture;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_TextureCube COMMAND cna_test_rlgl_texture_cube
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_TextureCube_dxt_fallback
+            COMMAND cna_test_rlgl_texture_cube
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT
+                "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1;CNA_RLGL_FORCE_DXT_FALLBACK=1")
+        cna_register_renderer_test(
+            NAME Rlgl_TextureCube_oracle
+            COMMAND cna_test_rlgl_texture_cube_oracle
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(texture3d_contract IN ITEMS slices mip partial_box partial_box_readback)
+            cna_register_renderer_test(
+                NAME Rlgl_Texture3D_${texture3d_contract}
+                COMMAND cna_test_rlgl_texture3d_${texture3d_contract}
+                TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_ShaderEffect_Texture3D
+            COMMAND cna_test_rlgl_shadereffect_texture3d
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Texture3D_AddressW
+            COMMAND cna_test_rlgl_texture3d_addressw
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsSampler;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Texture3D_Recovery
+            COMMAND cna_test_rlgl_texture3d_recovery
+            TIMEOUT 120 LABELS "GraphicsTexture;GraphicsLifetime;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Sampler COMMAND cna_test_rlgl_sampler
+            TIMEOUT 60 LABELS "GraphicsSampler;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_State COMMAND cna_test_rlgl_state
+            TIMEOUT 60 LABELS "GraphicsState;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_SpriteBatch COMMAND cna_test_rlgl_spritebatch
+            TIMEOUT 60 LABELS "Graphics2D;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTarget_orientation
+            COMMAND cna_test_rlgl_render_target_orientation
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTarget
+            COMMAND cna_test_rlgl_render_target
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTarget_formats
+            COMMAND cna_test_rlgl_render_target_formats
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Mrt
+            COMMAND cna_test_rlgl_mrt
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Mrt_oracle
+            COMMAND cna_test_rlgl_mrt_oracle
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTarget_full
+            COMMAND cna_test_rlgl_render_target_full
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTargetCube
+            COMMAND cna_test_rlgl_render_target_cube
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(contract IN LISTS RLGL_RENDER_TARGET_CUBE_CONTRACTS)
+            cna_register_renderer_test(
+                NAME Rlgl_RenderTargetCube_${contract}
+                COMMAND cna_test_rlgl_rendertargetcube_${contract}
+                TIMEOUT 180 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_MsaaFirstReadback
+            COMMAND cna_test_rlgl_msaa_first_readback
+            TIMEOUT 900 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_MsaaMipReadback
+            COMMAND cna_test_rlgl_msaa_mip_readback
+            TIMEOUT 1200 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Buffer COMMAND cna_test_rlgl_buffer
+            TIMEOUT 60 LABELS "GraphicsBuffer;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Primitive COMMAND cna_test_rlgl_primitive
+            TIMEOUT 60 LABELS "Graphics3D;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_MultiStream COMMAND cna_test_rlgl_multi_stream
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_InstancedParity
+            COMMAND cna_test_rlgl_instanced_parity
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Cycle
+            COMMAND cna_test_rlgl_occlusion_query
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Visible
+            COMMAND cna_test_rlgl_occlusion_query_visible
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Occluded
+            COMMAND cna_test_rlgl_occlusion_query_occluded
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Lifetime
+            COMMAND cna_test_rlgl_occlusion_query_lifetime
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;GraphicsLifetime;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Effect COMMAND cna_test_rlgl_effect
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ShaderEffect
+            COMMAND cna_test_rlgl_shader_effect
+            TIMEOUT 120 LABELS "Graphics2D;Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_XnaPixelCenter COMMAND cna_test_rlgl_xna_pixel_center
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsContract;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(test_name IN LISTS RLGL_BASIC_EFFECT_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_BasicEffect_${test_name}
+                COMMAND cna_test_rlgl_basiceffect_${test_name}
+                TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_BasicEffect_lit_vertex_color_perpixel
+            COMMAND cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_BasicEffect_normal_transform
+            COMMAND cna_test_rlgl_basiceffect_normal_transform
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_BasicEffect_lighting
+            COMMAND cna_test_rlgl_basiceffect_lighting
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_DualTextureEffect
+            COMMAND cna_test_rlgl_dual_texture_effect
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsSampler;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_DualTextureEffect_independent_uv
+            COMMAND cna_test_rlgl_dual_texture_independent_uv
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect
+            COMMAND cna_test_rlgl_environment_map
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_terms
+            COMMAND cna_test_rlgl_environment_map_terms
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_alpha_scaled_lerp
+            COMMAND cna_test_rlgl_environment_map_alpha_scaled_lerp
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_fog
+            COMMAND cna_test_rlgl_environment_map_fog
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(test_name IN LISTS RLGL_ENVIRONMENT_MAP_EFFECT_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_EnvironmentMapEffect_${test_name}
+                COMMAND cna_test_rlgl_environmentmapeffect_${test_name}
+                TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        set_tests_properties(Rlgl_EnvironmentMapEffect_golden PROPERTIES
+            LABELS "Graphics3D;GraphicsEffect;GraphicsParity;GraphicsGolden;Rlgl")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_amount_clamp
+            COMMAND cna_test_rlgl_environment_map_amount_clamp
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_sampler_contract
+            COMMAND cna_test_rlgl_environment_map_sampler_contract
+            TIMEOUT 300 LABELS "Graphics3D;GraphicsEffect;GraphicsSampler;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_sampler_state
+            COMMAND cna_test_rlgl_environment_map_sampler_state
+            TIMEOUT 180 LABELS "Graphics3D;GraphicsEffect;GraphicsSampler;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_EnvironmentMapEffect_render_target_cube
+            COMMAND cna_test_rlgl_environment_map_render_target_cube --leg=L1
+            TIMEOUT 180 LABELS "Graphics3D;GraphicsEffect;GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_SkinnedEffect_terms
+            COMMAND cna_test_rlgl_skinned_terms
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_SkinnedEffect
+            COMMAND cna_test_rlgl_skinned_effect
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(test_name IN LISTS RLGL_SKINNED_EFFECT_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_SkinnedEffect_${test_name}
+                COMMAND cna_test_rlgl_skinnedeffect_${test_name}
+                TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        foreach(test_name IN LISTS RLGL_MODEL_WORKLOAD_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_Workload_${test_name}
+                COMMAND cna_test_rlgl_${test_name}
+                TIMEOUT 60
+                LABELS "Graphics3D;GraphicsModel;GraphicsWorkload;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        foreach(test_name IN LISTS RLGL_CLASSIC_GOLDEN_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_Golden_${test_name}
+                COMMAND cna_test_rlgl_golden_${test_name}
+                TIMEOUT 60
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                LABELS "GraphicsGolden;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_Golden_rendertarget
+            COMMAND cna_test_rlgl_golden_rendertarget
+            TIMEOUT 60
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            LABELS "GraphicsGolden;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        if(CNA_RLGL_COMPILED_EFFECTS)
+            cna_register_renderer_test(
+                NAME Rlgl_CompiledEffect_runtime
+                COMMAND cna_test_rlgl_compiled_effect_runtime
+                TIMEOUT 120 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+            cna_register_renderer_test(
+                NAME Rlgl_CompiledEffect_draw
+                COMMAND cna_test_rlgl_compiled_effect_draw
+                TIMEOUT 120 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endif()
+    endif()
+
+    # RLGL-021: one drift-free build target for every executable owned by this directory. With
+    # CNA_BUILD_TESTS=ON this includes the central parity corpus, whose targets are created while
+    # registering CTest above; CI can therefore build exactly the complete `Rlgl` label inventory
+    # without maintaining a second handwritten executable list.
+    get_property(_cna_rlgl_runtime_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    add_custom_target(cna_test_rlgl_all DEPENDS ${_cna_rlgl_runtime_targets})
+endif()
+
+cna_apply_skip_convention()
