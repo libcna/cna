@@ -93,6 +93,48 @@ bool FocusFromAnotherClient(const std::uintptr_t xid)
     return true;
 }
 
+/// Asks for a window to be activated the way a pager or a taskbar does, from a separate X
+/// connection. Under a window manager that is the request that moves focus -- a compositing one
+/// applies focus-stealing prevention to a newly mapped window -- and on a bare server, where no
+/// one would act on it, focus is set directly instead.
+bool ActivateFromAnotherClient(const std::uintptr_t xid)
+{
+    ::Display* other = XOpenDisplay(nullptr);
+    if (other == nullptr)
+    {
+        return false;
+    }
+    Atom type = 0;
+    int format = 0;
+    unsigned long count = 0;
+    unsigned long remaining = 0;
+    unsigned char* data = nullptr;
+    XGetWindowProperty(other, DefaultRootWindow(other),
+                       XInternAtom(other, "_NET_SUPPORTING_WM_CHECK", kXFalse), 0, 1, kXFalse,
+                       XA_WINDOW, &type, &format, &count, &remaining, &data);
+    const bool windowManager = data != nullptr && count == 1;
+    if (data != nullptr) { XFree(data); }
+    if (windowManager)
+    {
+        XEvent event{};
+        event.xclient.type = ClientMessage;
+        event.xclient.window = static_cast<::Window>(xid);
+        event.xclient.message_type = XInternAtom(other, "_NET_ACTIVE_WINDOW", kXFalse);
+        event.xclient.format = 32;
+        event.xclient.data.l[0] = 2; // source indication: a pager
+        event.xclient.data.l[1] = static_cast<long>(kCurrentTime);
+        XSendEvent(other, DefaultRootWindow(other), kXFalse,
+                   SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    }
+    else
+    {
+        XSetInputFocus(other, static_cast<::Window>(xid), RevertToParent, kCurrentTime);
+    }
+    XSync(other, kXFalse);
+    XCloseDisplay(other);
+    return true;
+}
+
 /// A CLIPBOARD owner on its own X connection and thread that serves its text through INCR in
 /// small chunks and waits after each of the requestor's deletes before writing the next one.
 ///
@@ -1246,10 +1288,25 @@ TEST_F(X11Live, RelativeMotionCarriesFractionsInsteadOfTruncatingEachReport)
     {
         GTEST_SKIP() << "pointer grab unavailable here: " << error.what();
     }
-    // No window manager on a bare server, so a viewable window is enough to hold the grab.
-    ASSERT_TRUE(PumpUntil([mouse](const std::vector<PlatformEvent>&) {
+    // On a bare server a viewable window is enough to hold the grab. Under a window manager it
+    // is held only while the window has focus (NPV-0109), which a newly mapped window need not
+    // get on its own, so the test asks for it as a pager would.
+    const auto held = [mouse](const std::vector<PlatformEvent>&) {
         return mouse->IsRelativeGrabHeld();
-    }));
+    };
+    if (!PumpUntil(held, std::chrono::milliseconds(300)))
+    {
+        ASSERT_TRUE(ActivateFromAnotherClient(window_->GetWindowHandle()));
+        if (!PumpUntil(held, std::chrono::milliseconds(3000)))
+        {
+            if (!window_->HasFocus())
+            {
+                GTEST_SKIP() << "the window manager never gave the test window focus, and "
+                                "relative mode holds the pointer only while it has it";
+            }
+            FAIL() << "the window has focus, but the relative grab was not taken";
+        }
+    }
     (void) mouse->ConsumeRelativeDelta();
 
     for (int report = 0; report < 8; ++report)
@@ -1265,15 +1322,21 @@ TEST_F(X11Live, RelativeMotionCarriesFractionsInsteadOfTruncatingEachReport)
 TEST_F(X11Live, PointerCaptureIsSymmetric)
 {
     window_ = MakeWindow();
+    const WindowId id = window_->GetId();
     window_->Show();
-    window_->Sync();
+    // A pointer grab needs a viewable window (GrabNotViewable otherwise), and under a window
+    // manager the map is a request that takes a round trip through it.
+    ASSERT_TRUE(PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, id, WindowEventKind::Exposed);
+    }));
     IPlatformMouse* mouse = platform_->GetMouse();
     ASSERT_NE(mouse, nullptr);
     mouse->Update();
 
     if (!mouse->SetCapture(true))
     {
-        GTEST_SKIP() << "another client holds the pointer grab on this server";
+        GTEST_SKIP() << "the X server refused the pointer grab (another client holds one, or "
+                        "this server grants grabs only to the focused client)";
     }
     EXPECT_TRUE(mouse->SetCapture(false));
     // Releasing a capture that is not held is a no-op, not a failure.
