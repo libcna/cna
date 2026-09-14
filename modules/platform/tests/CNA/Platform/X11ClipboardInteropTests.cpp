@@ -19,10 +19,13 @@
 
 #include <array>
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <future>
 #include <memory>
 #include <string>
+#include <sys/types.h>
 #include <thread>
 
 namespace {
@@ -57,6 +60,24 @@ std::string Capture(const std::string& command)
         output += buffer.data();
     }
     return output;
+}
+
+/// Starts xclip serving @p text as the CLIPBOARD owner, in the background, and returns its PID so
+/// the test can stop exactly that process -- never every xclip on the machine, which is what a
+/// pattern kill does to other tests and to a developer's own session.
+pid_t StartExternalOwner(const std::string& text)
+{
+    const std::string command = "printf '%s' '" + text +
+                                "' | xclip -quiet -selection clipboard -i >/dev/null 2>&1 & echo $!";
+    return static_cast<pid_t>(std::atol(Capture(command).c_str()));
+}
+
+void StopExternalOwner(const pid_t pid)
+{
+    if (pid > 0)
+    {
+        ::kill(pid, SIGTERM);
+    }
 }
 
 class X11ClipboardInterop : public ::testing::Test
@@ -96,21 +117,25 @@ protected:
         platform_.reset();
     }
 
-    /// Pumps CNA's event loop for a while.
+    /// Runs an external reader and pumps CNA's events until it has finished.
     ///
-    /// This is not a delay dressed up as a helper. CNA's clipboard is a *selection owner*: the
-    /// data lives in this process, and an external paste arrives as a `SelectionRequest` event
-    /// that only the event pump can answer. A test that copied and then slept would hang xclip
-    /// until its own timeout and then report an empty paste.
-    void PumpFor(const std::chrono::milliseconds duration)
+    /// CNA's clipboard is a *selection owner*: the data lives in this process, and an external
+    /// paste arrives as a `SelectionRequest` that only the event pump can answer, so the pump
+    /// has to run for as long as the reader does. Pumping for a fixed time and then waiting for the reader hung whenever the transfer took
+    /// longer -- a loaded machine, a large INCR paste -- because nothing answered xclip's next
+    /// request any more (plans/plan_native_platform_validation.md NPV-0120). The reader runs under
+    /// `timeout`, so a transfer that never completes fails the test instead of hanging it.
+    std::string ReadWhilePumping(const std::string& command, const int budgetSeconds = 20)
     {
-        const auto deadline = std::chrono::steady_clock::now() + duration;
+        auto reader = std::async(std::launch::async, [command, budgetSeconds] {
+            return Capture("timeout " + std::to_string(budgetSeconds) + " " + command);
+        });
         std::vector<PlatformEvent> batch;
-        while (std::chrono::steady_clock::now() < deadline)
+        while (reader.wait_for(std::chrono::milliseconds(2)) != std::future_status::ready)
         {
             platform_->PollEvents(batch);
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
+        return reader.get();
     }
 
     std::unique_ptr<IPlatform> platform_;
@@ -126,12 +151,7 @@ TEST_F(X11ClipboardInterop, AnExternalClientPastesWhatCnaCopied)
     // xclip runs concurrently and sends a SelectionRequest that only CNA's pump can answer, so
     // the pump has to be running while it asks. A background read plus a pumping foreground is
     // the shape the real interaction has.
-    std::string pasted;
-    std::thread reader([&pasted] {
-        pasted = Capture("xclip -selection clipboard -o 2>/dev/null");
-    });
-    PumpFor(std::chrono::milliseconds(1500));
-    reader.join();
+    const std::string pasted = ReadWhilePumping("xclip -selection clipboard -o 2>/dev/null");
 
     EXPECT_EQ(pasted, text);
 }
@@ -141,9 +161,8 @@ TEST_F(X11ClipboardInterop, CnaPastesWhatAnExternalClientCopied)
     const std::string text = "copied by xclip \xE2\x86\x90 pasted by CNA";
     // xclip -i must keep running to serve the selection it owns, so it is started detached and
     // stopped afterwards. Its own -quiet mode does exactly this.
-    const std::string command =
-        "printf '%s' '" + text + "' | xclip -quiet -selection clipboard -i >/dev/null 2>&1 &";
-    ASSERT_EQ(std::system(command.c_str()), 0);
+    const pid_t owner = StartExternalOwner(text);
+    ASSERT_GT(owner, 0);
 
     // Give the external owner a moment to take the selection, then ask for it. The wait is on
     // ownership, not on a fixed duration.
@@ -160,7 +179,7 @@ TEST_F(X11ClipboardInterop, CnaPastesWhatAnExternalClientCopied)
     }
     EXPECT_TRUE(sawIt) << "CNA read: '" << clipboard_->GetText() << "'";
 
-    (void) std::system("pkill -f 'xclip -quiet' >/dev/null 2>&1");
+    StopExternalOwner(owner);
 }
 
 TEST_F(X11ClipboardInterop, ALargeSelectionTransfersThroughIncrToAnExternalClient)
@@ -176,12 +195,7 @@ TEST_F(X11ClipboardInterop, ALargeSelectionTransfersThroughIncrToAnExternalClien
     }
     clipboard_->SetText(large);
 
-    std::string pasted;
-    std::thread reader([&pasted] {
-        pasted = Capture("xclip -selection clipboard -o 2>/dev/null");
-    });
-    PumpFor(std::chrono::milliseconds(4000));
-    reader.join();
+    const std::string pasted = ReadWhilePumping("xclip -selection clipboard -o 2>/dev/null");
 
     EXPECT_EQ(pasted.size(), large.size());
     EXPECT_EQ(pasted, large);
@@ -191,12 +205,8 @@ TEST_F(X11ClipboardInterop, CnaAdvertisesTheTargetsAnExternalClientLooksFor)
 {
     clipboard_->SetText("targets");
 
-    std::string targets;
-    std::thread reader([&targets] {
-        targets = Capture("xclip -selection clipboard -o -t TARGETS 2>/dev/null");
-    });
-    PumpFor(std::chrono::milliseconds(1500));
-    reader.join();
+    const std::string targets =
+        ReadWhilePumping("xclip -selection clipboard -o -t TARGETS 2>/dev/null");
 
     // TARGETS must list itself -- a requestor asks "what can you give me" and then picks, and
     // omitting TARGETS from its own answer makes well-behaved clients conclude we offer nothing.
@@ -210,10 +220,8 @@ TEST_F(X11ClipboardInterop, LosingOwnershipToAnotherClientClearsCnasCopy)
     clipboard_->SetText("CNA owns this");
     ASSERT_TRUE(clipboard_->HasText());
 
-    const std::string command =
-        "printf '%s' 'someone else owns this' | xclip -quiet -selection clipboard -i "
-        ">/dev/null 2>&1 &";
-    ASSERT_EQ(std::system(command.c_str()), 0);
+    const pid_t owner = StartExternalOwner("someone else owns this");
+    ASSERT_GT(owner, 0);
 
     // SelectionClear arrives through the pump. Keeping the old text would make HasText()/GetText()
     // answer from a stale copy of what the user copied several applications ago.
@@ -232,7 +240,7 @@ TEST_F(X11ClipboardInterop, LosingOwnershipToAnotherClientClearsCnasCopy)
     }
     EXPECT_TRUE(changed) << "CNA still reports: '" << clipboard_->GetText() << "'";
 
-    (void) std::system("pkill -f 'xclip -quiet' >/dev/null 2>&1");
+    StopExternalOwner(owner);
 }
 
 } // namespace

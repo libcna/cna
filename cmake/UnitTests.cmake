@@ -1194,14 +1194,28 @@ if(CNA_BUILD_TESTS)
     # whole-suite inventory found all 20 of its messages here, in MetalResourceHealth's own
     # device-outliving test. gtest_discover_tests(PROPERTIES ...) is the only hook that reaches
     # them, and it is applied only where a VkDevice can exist at all.
+    # plans/plan_native_platform_validation.md NPV-0120: the X11 suites that need an X server of
+    # their own run through CnaX11IntegrationTests and CnaX11WindowManagerTests below, each on a
+    # private server. Discovered one by one they ran a second time, eight at a time, on whatever
+    # DISPLAY the shell had -- a shared Xvfb, or a developer's own desktop -- taking its clipboard,
+    # its focus and its window manager from each other: a paste test waited forever on an INCR
+    # transfer another test had interrupted.
+    set(_cna_unit_tests_discovery_filter)
+    if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+        set(_cna_unit_tests_discovery_filter
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*")
+    endif()
     cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
     if(_cna_unit_tests_vk_gate)
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ${_cna_unit_tests_discovery_filter}
             PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]")
     else()
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ${_cna_unit_tests_discovery_filter})
     endif()
+    unset(_cna_unit_tests_discovery_filter)
 
     # D2D-118/D2D-119: a stable label and one explicit runner make the renderer's device-free
     # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
