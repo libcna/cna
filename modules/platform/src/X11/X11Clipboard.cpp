@@ -355,9 +355,14 @@ namespace CNA::Platform::X11 {
                 // Another client took the clipboard. Dropping the text is not optional
                 // bookkeeping: keeping it would make HasText()/GetText() answer from a stale copy
                 // of what the user copied several applications ago.
+                //
+                // INCR transfers already under way are NOT dropped. The requestor asked while CNA
+                // owned the selection and is waiting for the rest; abandoning it left it waiting
+                // forever -- xclip has no timeout -- because a new owner does not take over a
+                // transfer it never started (plans/plan_native_platform_validation.md NPV-0119).
+                // Each transfer carries its own copy, so it finishes without ownedText_.
                 ownsSelection_ = false;
                 ownedText_.clear();
-                incrementalSends_.clear();
                 return true;
             }
             case PropertyNotify:
@@ -377,12 +382,12 @@ namespace CNA::Platform::X11 {
 
                 IncrementalSend& send = found->second;
                 const std::size_t chunkSize = MaximumChunkBytes();
-                const std::size_t remaining = ownedText_.size() - std::min(send.offset,
-                                                                          ownedText_.size());
+                const std::size_t remaining = send.text.size() - std::min(send.offset,
+                                                                          send.text.size());
                 const std::size_t length = std::min(chunkSize, remaining);
                 XChangeProperty(display, send.requestor, send.property, send.type, 8,
                                 PropModeReplace,
-                                reinterpret_cast<const unsigned char*>(ownedText_.data() +
+                                reinterpret_cast<const unsigned char*>(send.text.data() +
                                                                        send.offset),
                                 static_cast<int>(length));
                 send.offset += length;
@@ -471,7 +476,8 @@ namespace CNA::Platform::X11 {
         send.property = property;
         send.type = type;
         send.offset = 0;
-        incrementalSends_[request.requestor] = send;
+        send.text = ownedText_;
+        incrementalSends_[request.requestor] = std::move(send);
         SendSelectionNotify(request, property);
     }
 

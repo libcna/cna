@@ -97,6 +97,9 @@ namespace CNA::Platform::X11 {
             Atom property = 0;
             Atom type = 0;
             std::size_t offset = 0;
+            // The transfer's own copy. A transfer that has started is finished with the text it
+            // started with, whatever happens to the clipboard meanwhile (NPV-0119).
+            std::string text;
         };
 
         void EnsureOwnerWindow();

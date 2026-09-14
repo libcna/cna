@@ -256,6 +256,118 @@ private:
     std::thread thread_;
 };
 
+/// An external CLIPBOARD reader on its own X connection and thread that pulls a selection through
+/// INCR one chunk at a time, calling @p afterFirstChunk once the transfer is under way.
+class IncrementalRequestor
+{
+public:
+    explicit IncrementalRequestor(std::function<void()> afterFirstChunk)
+        : afterFirstChunk_(std::move(afterFirstChunk))
+    {
+    }
+
+    ~IncrementalRequestor()
+    {
+        if (thread_.joinable()) { thread_.join(); }
+    }
+
+    IncrementalRequestor(const IncrementalRequestor&) = delete;
+    IncrementalRequestor& operator=(const IncrementalRequestor&) = delete;
+
+    void Start() { thread_ = std::thread([this] { Run(); }); }
+    [[nodiscard]] bool Done() const { return done_; }
+    [[nodiscard]] bool SawIncr() const { return sawIncr_; }
+    [[nodiscard]] const std::string& Text() const { return text_; }
+
+private:
+    void Run()
+    {
+        ::Display* display = XOpenDisplay(nullptr);
+        if (display == nullptr) { done_ = true; return; }
+        const Atom clipboard = XInternAtom(display, "CLIPBOARD", kXFalse);
+        const Atom utf8 = XInternAtom(display, "UTF8_STRING", kXFalse);
+        const Atom incr = XInternAtom(display, "INCR", kXFalse);
+        const Atom property = XInternAtom(display, "CNA_TEST_INCR_PASTE", kXFalse);
+        const ::Window window =
+            XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
+        XSelectInput(display, window, PropertyChangeMask);
+        XConvertSelection(display, clipboard, utf8, property, window, kCurrentTime);
+        XFlush(display);
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        const auto readProperty = [&](Atom& type, std::string& chunk) {
+            int format = 0;
+            unsigned long count = 0;
+            unsigned long remaining = 0;
+            unsigned char* data = nullptr;
+            chunk.clear();
+            if (XGetWindowProperty(display, window, property, 0, 0x7FFFFFFF, kXFalse,
+                                   AnyPropertyType, &type, &format, &count, &remaining,
+                                   &data) != 0)
+            {
+                return false;
+            }
+            if (data != nullptr)
+            {
+                if (format == 8) { chunk.assign(reinterpret_cast<const char*>(data), count); }
+                XFree(data);
+            }
+            return type != 0;
+        };
+
+        bool notified = false;
+        while (!notified && std::chrono::steady_clock::now() < deadline)
+        {
+            XEvent event;
+            if (XCheckTypedWindowEvent(display, window, SelectionNotify, &event) == kXFalse)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+            notified = event.xselection.property != 0;
+            if (!notified) { break; }
+        }
+        Atom type = 0;
+        std::string chunk;
+        if (notified && readProperty(type, chunk) && type == incr)
+        {
+            sawIncr_ = true;
+            XDeleteProperty(display, window, property);
+            XFlush(display);
+            bool first = true;
+            while (std::chrono::steady_clock::now() < deadline)
+            {
+                XEvent event;
+                if (XCheckTypedWindowEvent(display, window, PropertyNotify, &event) == kXFalse ||
+                    event.xproperty.atom != property || event.xproperty.state != PropertyNewValue)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
+                if (!readProperty(type, chunk)) { continue; }
+                XDeleteProperty(display, window, property);
+                XFlush(display);
+                if (chunk.empty()) { break; }
+                text_ += chunk;
+                if (first)
+                {
+                    first = false;
+                    afterFirstChunk_();
+                }
+            }
+        }
+        XDestroyWindow(display, window);
+        XCloseDisplay(display);
+        done_ = true;
+    }
+
+    std::function<void()> afterFirstChunk_;
+    std::thread thread_;
+    std::string text_;
+    std::atomic<bool> done_{false};
+    std::atomic<bool> sawIncr_{false};
+};
+
 /// A scripted window manager, on its own X connection and thread, that iconifies the way mutter
 /// (GNOME) does: the window stays MAPPED and only gains _NET_WM_STATE_HIDDEN and WM_STATE
 /// IconicState, and nothing but an activation request (_NET_ACTIVE_WINDOW) brings it back.
@@ -1449,6 +1561,75 @@ TEST_F(X11Live, ASelectionClearQueuedBeforeCopyingAgainDoesNotDropTheNewText)
 
     XDestroyWindow(other, otherWindow);
     XCloseDisplay(other);
+}
+
+// plans/plan_native_platform_validation.md NPV-0119: an INCR transfer already under way was
+// abandoned the moment CNA lost the clipboard (the requestor waited forever for its next chunk --
+// xclip has no timeout), and continued from the same offset in the NEW text when the application
+// copied again. Qt and GTK finish a transfer they started from their own copy of the data.
+std::string LargeClipboardText(const char seed)
+{
+    std::string text;
+    text.reserve(400 * 1024);
+    while (text.size() < 400u * 1024u)
+    {
+        text += seed;
+        text += " INCR transfer under way, \xC5\x99\xC3\xAD\xC5\xA1 0123456789;";
+    }
+    return text;
+}
+
+TEST_F(X11Live, AnIncrementalTransferUnderWayFinishesAfterAnotherClientTakesTheClipboard)
+{
+    IPlatformClipboard* clipboard = platform_->GetClipboard();
+    ASSERT_NE(clipboard, nullptr);
+    const std::string text = LargeClipboardText('a');
+    clipboard->SetText(text);
+
+    IncrementalRequestor requestor([] {
+        ::Display* thief = XOpenDisplay(nullptr);
+        if (thief == nullptr) { return; }
+        const ::Window owner =
+            XCreateSimpleWindow(thief, DefaultRootWindow(thief), 0, 0, 1, 1, 0, 0, 0);
+        XSetSelectionOwner(thief, XInternAtom(thief, "CLIPBOARD", kXFalse), owner, kCurrentTime);
+        XSync(thief, kXFalse);
+        XCloseDisplay(thief);
+    });
+    requestor.Start();
+    ASSERT_TRUE(PumpUntil([&](const std::vector<PlatformEvent>&) { return requestor.Done(); },
+                          std::chrono::milliseconds(20000)));
+    ASSERT_TRUE(requestor.SawIncr()) << "the payload did not go through INCR";
+    EXPECT_EQ(requestor.Text().size(), text.size());
+    EXPECT_TRUE(requestor.Text() == text) << "the transfer was abandoned or corrupted";
+}
+
+TEST_F(X11Live, AnIncrementalTransferUnderWayKeepsTheTextItStartedWith)
+{
+    IPlatformClipboard* clipboard = platform_->GetClipboard();
+    ASSERT_NE(clipboard, nullptr);
+    const std::string text = LargeClipboardText('b');
+    clipboard->SetText(text);
+
+    // The application copies again while the paste is being transferred. Calling into CNA from
+    // the requestor's thread would race the pump, so the copy is requested and made here.
+    std::atomic<bool> copyAgain{false};
+    IncrementalRequestor requestor([&copyAgain] { copyAgain = true; });
+    requestor.Start();
+    bool copied = false;
+    ASSERT_TRUE(PumpUntil(
+        [&](const std::vector<PlatformEvent>&) {
+            if (copyAgain && !copied)
+            {
+                clipboard->SetText(LargeClipboardText('c'));
+                copied = true;
+            }
+            return requestor.Done();
+        },
+        std::chrono::milliseconds(20000)));
+    ASSERT_TRUE(requestor.SawIncr()) << "the payload did not go through INCR";
+    EXPECT_TRUE(copied);
+    EXPECT_EQ(requestor.Text().size(), text.size());
+    EXPECT_TRUE(requestor.Text() == text) << "the transfer switched to the newer text part-way";
 }
 
 TEST_F(X11Live, AClipboardPayloadTooLargeForOnePropertyStillRoundTrips)
