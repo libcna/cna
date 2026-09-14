@@ -512,6 +512,50 @@ if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11")
     target_link_libraries(cna_platform_x11_exit_harness PRIVATE cna_platform)
 endif()
 
+# --- plans/plan_native_platform_validation.md: real-desktop X11 validation harness ---
+# A standalone (non-GTest) program that drives the native X11 backend against whatever X server
+# $DISPLAY names -- a developer's real desktop, a real GPU, a real window manager -- and checks
+# the results over an independent X connection. Most of what it measures needs a person-sized
+# amount of time or hardware no CI runner has, which is why it is a tool and not a ctest.
+# docs/testing-x11-desktop.md describes every scenario.
+if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11")
+    file(GLOB _cna_x11_validation_sources CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_desktop_validation/*.cpp")
+    add_executable(cna_x11_desktop_validation ${_cna_x11_validation_sources})
+    target_link_libraries(cna_x11_desktop_validation
+        PRIVATE
+        cna_platform
+        ${CNA_X11_LIBRARIES}
+        ${CMAKE_DL_LIBS}
+    )
+    if(CNA_X11_INCLUDE_DIRS)
+        target_include_directories(cna_x11_desktop_validation PRIVATE ${CNA_X11_INCLUDE_DIRS})
+    endif()
+    if(CNA_X11_DEFINITIONS)
+        target_compile_definitions(cna_x11_desktop_validation PRIVATE ${CNA_X11_DEFINITIONS})
+    endif()
+    # Optional verification helpers: X-Resource counts a client's server-side resources (leak
+    # detection) and XTest is the X-server-level injection path. Each is used only when present.
+    find_library(CNA_X11_VALIDATION_XRES_LIBRARY NAMES XRes)
+    find_path(CNA_X11_VALIDATION_XRES_INCLUDE X11/extensions/XRes.h)
+    if(CNA_X11_VALIDATION_XRES_LIBRARY AND CNA_X11_VALIDATION_XRES_INCLUDE)
+        target_link_libraries(cna_x11_desktop_validation PRIVATE ${CNA_X11_VALIDATION_XRES_LIBRARY})
+        target_compile_definitions(cna_x11_desktop_validation PRIVATE CNA_X11_VALIDATION_HAVE_XRES)
+    endif()
+    find_library(CNA_X11_VALIDATION_XTEST_LIBRARY NAMES Xtst)
+    find_path(CNA_X11_VALIDATION_XTEST_INCLUDE X11/extensions/XTest.h)
+    if(CNA_X11_VALIDATION_XTEST_LIBRARY AND CNA_X11_VALIDATION_XTEST_INCLUDE)
+        target_link_libraries(cna_x11_desktop_validation PRIVATE ${CNA_X11_VALIDATION_XTEST_LIBRARY})
+        target_compile_definitions(cna_x11_desktop_validation PRIVATE CNA_X11_VALIDATION_HAVE_XTEST)
+    endif()
+    # Vulkan is headers-only here, as it is in the backend: the loader is dlopen()ed at run time.
+    find_path(CNA_X11_VALIDATION_VULKAN_INCLUDE vulkan/vulkan.h)
+    if(CNA_X11_VALIDATION_VULKAN_INCLUDE)
+        target_include_directories(cna_x11_desktop_validation PRIVATE ${CNA_X11_VALIDATION_VULKAN_INCLUDE})
+        target_compile_definitions(cna_x11_desktop_validation PRIVATE CNA_X11_VALIDATION_HAVE_VULKAN)
+    endif()
+endif()
+
 # --- plans/plan_xnapipeline.md XNAP-A5: fake external effect compiler ---
 # A standalone (non-GTest) program that stands in for Microsoft's legacy `fxc` on the other side of
 # a real process boundary, so the `.fx` product route is proven as one chain -- command line,
