@@ -115,6 +115,18 @@ namespace CNA::Platform::X11 {
         // Services before the connection, and the window registry before either: a service holds
         // raw pointers into windows the application owns, and closing the display first would
         // make every subsequent XFree* in a service destructor a use-after-free.
+        //
+        // A window still registered here outlived the platform, which PlatformFactory's contract
+        // does not allow; detaching at least keeps its destructor from calling back into this
+        // object once it is gone.
+        for (const auto& [id, window] : windows_)
+        {
+            (void) id;
+            if (window != nullptr)
+            {
+                window->DetachHost();
+            }
+        }
         windows_.clear();
         CloseConnection();
     }
@@ -282,6 +294,19 @@ namespace CNA::Platform::X11 {
         RegisterWindowWithServices(id, nullptr);
     }
 
+    void X11Platform::OnWindowDestroyed(X11Window& window)
+    {
+        // Identity, not id: only the wrapper the registry actually holds may unregister it. A
+        // window the server already destroyed was forgotten at its DestroyNotify, and finding
+        // nothing here is then the correct outcome rather than an error.
+        const auto found = windows_.find(window.GetId());
+        if (found == windows_.end() || found->second != &window)
+        {
+            return;
+        }
+        ForgetWindow(window.GetId());
+    }
+
     X11Window* X11Platform::FindWindow(const WindowId id) const
     {
         const auto found = windows_.find(id);
@@ -391,6 +416,7 @@ namespace CNA::Platform::X11 {
         const WindowId id = nextWindowId_++;
         auto window = std::make_unique<X11Window>(connection, xWindow, id, colormap, visual, depth,
                                                    true);
+        window->SetHost(this);
         window->SetGlFbConfig(fbConfig);
         window->SetResizableFlag(description.resizable);
         window->SetBorderlessFlag(description.borderless);
@@ -822,6 +848,14 @@ namespace CNA::Platform::X11 {
             {
                 if (event.xclient.message_type != atoms.wmProtocols ||
                     static_cast<Atom>(event.xclient.data.l[0]) != atoms.wmDeleteWindow)
+                {
+                    return;
+                }
+                // A request still queued for a window the application has already destroyed --
+                // a second click on the close button, typically. There is no window left to ask,
+                // and treating it as "the last window closing" would end an application whose
+                // other windows are still open.
+                if (window == nullptr)
                 {
                     return;
                 }

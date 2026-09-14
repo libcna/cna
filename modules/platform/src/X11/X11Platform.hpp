@@ -12,6 +12,7 @@
 #include "X11Keyboard.hpp"
 #include "X11Mouse.hpp"
 #include "X11TextInput.hpp"
+#include "X11Window.hpp"
 
 #include <chrono>
 #include <map>
@@ -20,8 +21,6 @@
 #include <vector>
 
 namespace CNA::Platform::X11 {
-
-    class X11Window;
 
     /**
      * @brief The native X11 implementation of the CNA platform contract.
@@ -52,7 +51,7 @@ namespace CNA::Platform::X11 {
      * No signal handler is installed, no environment variable is set, and `XSetIOErrorHandler` is
      * never replaced.
      */
-    class X11Platform final : public IPlatform
+    class X11Platform final : public IPlatform, private X11WindowHost
     {
     public:
         /**
@@ -195,6 +194,10 @@ namespace CNA::Platform::X11 {
         /// Wraps a window this platform owns, for AdoptWindow. Non-owning by contract: the
         /// caller's wrapper must not destroy a window the platform's own registry still tracks.
         class BorrowedWindow;
+
+        /// X11WindowHost: drops a destroyed wrapper from the registry and from every service,
+        /// matched on identity.
+        void OnWindowDestroyed(X11Window& window) override;
 
         [[nodiscard]] PlatformCapabilities ComputeCapabilities() const;
         void OpenConnection();

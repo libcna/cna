@@ -33,6 +33,7 @@
 namespace {
 
 using namespace CNA::Platform;
+using CNA::Platform::X11::kCurrentTime;
 using CNA::Platform::X11::kXFalse;
 
 // `<X11/X.h>` declares `typedef unsigned char KeyCode` at global scope, and the using-directive
@@ -46,6 +47,57 @@ bool HasDisplay()
 {
     const char* display = std::getenv("DISPLAY");
     return display != nullptr && display[0] != '\0';
+}
+
+/// Asks for a window to be closed the way a window manager's close button does, from a separate
+/// X connection -- so the request reaches the backend through the server exactly as a real one
+/// would, rather than being injected into its own queue.
+///
+/// `XSync` on the sending connection is what makes a test built on this deterministic: once it
+/// returns, the server has processed the send and the event is already queued for the receiver.
+bool SendWmDeleteWindowFromAnotherClient(const std::uintptr_t xid)
+{
+    ::Display* other = XOpenDisplay(nullptr);
+    if (other == nullptr)
+    {
+        return false;
+    }
+    XEvent event{};
+    event.type = ClientMessage;
+    event.xclient.window = static_cast<::Window>(xid);
+    event.xclient.message_type = XInternAtom(other, "WM_PROTOCOLS", kXFalse);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = static_cast<long>(XInternAtom(other, "WM_DELETE_WINDOW", kXFalse));
+    event.xclient.data.l[1] = static_cast<long>(kCurrentTime);
+    const bool sent = XSendEvent(other, static_cast<::Window>(xid), kXFalse, NoEventMask, &event) != 0;
+    XSync(other, kXFalse);
+    XCloseDisplay(other);
+    return sent;
+}
+
+/// Moves keyboard focus to a window from a separate X connection, the way a window manager does.
+bool FocusFromAnotherClient(const std::uintptr_t xid)
+{
+    ::Display* other = XOpenDisplay(nullptr);
+    if (other == nullptr)
+    {
+        return false;
+    }
+    XSetInputFocus(other, static_cast<::Window>(xid), RevertToParent, kCurrentTime);
+    XSync(other, kXFalse);
+    XCloseDisplay(other);
+    return true;
+}
+
+[[nodiscard]] WindowId EventWindow(const PlatformEvent& event)
+{
+    if (const auto* window = std::get_if<WindowEvent>(&event)) { return window->window; }
+    if (const auto* key = std::get_if<KeyEvent>(&event)) { return key->window; }
+    if (const auto* text = std::get_if<TextInputEvent>(&event)) { return text->window; }
+    if (const auto* button = std::get_if<MouseButtonEvent>(&event)) { return button->window; }
+    if (const auto* motion = std::get_if<MouseMotionEvent>(&event)) { return motion->window; }
+    if (const auto* wheel = std::get_if<MouseWheelEvent>(&event)) { return wheel->window; }
+    return 0;
 }
 
 class X11Live : public ::testing::Test
@@ -298,6 +350,113 @@ TEST_F(X11Live, MultipleWindowsAreIndependentAndEachHasItsOwnIdAndXid)
     second->Sync();
     EXPECT_EQ(second->GetNativeHandle().windowId, survivingXid);
     EXPECT_EQ(second->GetClientBounds().width, 240);
+}
+
+TEST_F(X11Live, ADestroyedWindowLeavesThePlatformBeforeItsLastEventsArrive)
+{
+    // plans/plan_native_platform_validation.md NPV-0101. Destroying a window is the
+    // application's decision, and the X server's UnmapNotify/DestroyNotify for it are still on
+    // their way when the wrapper is gone. The platform's registry must already have forgotten
+    // it by then: the first version kept the raw pointer, so the next pump walked freed memory
+    // and the window count behind "last window closed" stayed one too high for good.
+    auto kept = MakeWindow(200, 150, "kept");
+    auto destroyed = MakeWindow(200, 150, "destroyed");
+    const WindowId keptId = kept->GetId();
+    const WindowId destroyedId = destroyed->GetId();
+    kept->Show();
+    destroyed->Show();
+    ASSERT_TRUE(PumpUntil([keptId, destroyedId](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, keptId, WindowEventKind::Exposed) &&
+               SawWindowEvent(events, destroyedId, WindowEventKind::Exposed);
+    })) << "both windows should become viewable";
+
+    destroyed.reset();
+    seen_.clear();
+    PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
+              std::chrono::milliseconds(300));
+    for (const PlatformEvent& event : seen_)
+    {
+        EXPECT_NE(EventWindow(event), destroyedId)
+            << "an event was reported for a window the application had already destroyed";
+    }
+
+    // The kept window is now the only one, so a close request for it is the application's last
+    // window closing -- which is exactly when the contract appends a QuitEvent.
+    seen_.clear();
+    ASSERT_TRUE(SendWmDeleteWindowFromAnotherClient(kept->GetWindowHandle()));
+    ASSERT_TRUE(PumpUntil([keptId](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, keptId, WindowEventKind::CloseRequested);
+    }));
+    EXPECT_TRUE(std::any_of(seen_.begin(), seen_.end(), [](const PlatformEvent& event) {
+        return std::holds_alternative<QuitEvent>(event);
+    })) << "closing the last live window must ask the application to quit";
+}
+
+TEST_F(X11Live, ACloseRequestStillQueuedForAWindowTheApplicationDestroyedIsIgnored)
+{
+    // NPV-0101. The user clicks a secondary window's close button twice. The application answers
+    // the first request by destroying the window; the second is already queued behind it for an
+    // XID nothing owns any more. It must not turn into a close request for "window 0" -- and
+    // above all not into a QuitEvent while the main window is still open.
+    auto primary = MakeWindow(200, 150, "main");
+    auto secondary = MakeWindow(200, 150, "secondary");
+    const WindowId secondaryId = secondary->GetId();
+    primary->Show();
+    secondary->Show();
+    primary->Sync();
+    secondary->Sync();
+
+    ASSERT_TRUE(SendWmDeleteWindowFromAnotherClient(secondary->GetWindowHandle()));
+    ASSERT_TRUE(PumpUntil([secondaryId](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, secondaryId, WindowEventKind::CloseRequested);
+    }));
+
+    ASSERT_TRUE(SendWmDeleteWindowFromAnotherClient(secondary->GetWindowHandle()));
+    secondary.reset();
+    seen_.clear();
+    PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
+              std::chrono::milliseconds(300));
+
+    EXPECT_FALSE(std::any_of(seen_.begin(), seen_.end(), [](const PlatformEvent& event) {
+        return std::holds_alternative<QuitEvent>(event);
+    })) << "a stale close request must not end an application whose main window is open";
+    for (const PlatformEvent& event : seen_)
+    {
+        const auto* window = std::get_if<WindowEvent>(&event);
+        EXPECT_FALSE(window != nullptr && window->kind == WindowEventKind::CloseRequested)
+            << "a close request was reported for window " << window->window
+            << ", which the application no longer has";
+    }
+    EXPECT_EQ(primary->GetTitle(), "main");
+}
+
+TEST_F(X11Live, FocusCanMoveOnAfterTheFocusedWindowWasDestroyed)
+{
+    // NPV-0101. Text input remembers which window holds focus so it can move the input method's
+    // focus with it. Destroying that window must not leave the memory behind: the next focus
+    // change would otherwise unset the input context of a window that no longer exists.
+    auto first = MakeWindow(200, 150, "first");
+    auto second = MakeWindow(200, 150, "second");
+    const WindowId firstId = first->GetId();
+    const WindowId secondId = second->GetId();
+    first->Show();
+    second->Show();
+    ASSERT_TRUE(PumpUntil([firstId, secondId](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, firstId, WindowEventKind::Exposed) &&
+               SawWindowEvent(events, secondId, WindowEventKind::Exposed);
+    }));
+
+    ASSERT_TRUE(FocusFromAnotherClient(first->GetWindowHandle()));
+    ASSERT_TRUE(PumpUntil([firstId](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, firstId, WindowEventKind::FocusGained);
+    })) << "the first window never received focus";
+
+    first.reset();
+    ASSERT_TRUE(FocusFromAnotherClient(second->GetWindowHandle()));
+    EXPECT_TRUE(PumpUntil([secondId](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, secondId, WindowEventKind::FocusGained);
+    })) << "focus did not reach the surviving window";
+    EXPECT_TRUE(second->HasFocus());
 }
 
 TEST_F(X11Live, AdoptingAWindowByIdGivesANonOwningViewOfTheSameWindow)

@@ -57,6 +57,17 @@ namespace CNA::Platform::X11 {
 
     X11Window::~X11Window()
     {
+        // The platform first, while this window is still whole. Its registry and its services
+        // hold raw pointers to this object; left in place, the next PollEvents walks freed memory
+        // and a later focus change unsets the input context of a window that no longer exists
+        // (plans/plan_native_platform_validation.md NPV-0101).
+        if (host_ != nullptr)
+        {
+            X11WindowHost* host = host_;
+            host_ = nullptr;
+            host->OnWindowDestroyed(*this);
+        }
+
         // Order matters and is not interchangeable: an XIC holds a reference to the window inside
         // the input method, and destroying the window first leaves the IM with a dangling client
         // window that it will use on the next XFilterEvent.

@@ -10,6 +10,36 @@
 namespace CNA::Platform::X11 {
 
     class X11Connection;
+    class X11Window;
+
+    /**
+     * @brief What a window needs from the platform that owns it.
+     *
+     * Narrow on purpose, like `Win32WindowHost`: a window must be able to tell the platform it is
+     * going away, and nothing else. The platform keeps raw pointers to its windows in its own
+     * registry and in its services (mouse, text input, GL, Vulkan), because the application owns
+     * the windows; this is how those pointers are dropped before they dangle.
+     */
+    class X11WindowHost
+    {
+    public:
+        /** @brief Destroys the host. */
+        virtual ~X11WindowHost() = default;
+
+        /**
+         * @brief Reports that a window wrapper is being destroyed.
+         *
+         * Called at the start of the wrapper's destructor, while its XID and input context are
+         * still valid, so a service that holds the window can release what it holds on it (an
+         * input-method focus, a pointer grab) against a live window rather than a freed one.
+         *
+         * Takes the wrapper rather than its id: an id does not identify one wrapper, so the
+         * platform matches on identity.
+         *
+         * @param window The wrapper that is going away.
+         */
+        virtual void OnWindowDestroyed(X11Window& window) = 0;
+    };
 
     /**
      * @brief A real X11 window.
@@ -289,6 +319,18 @@ namespace CNA::Platform::X11 {
         /** @brief Records the borderless flag, without talking to the server. */
         void SetBorderlessFlag(bool borderless) { borderless_ = borderless; }
 
+        /**
+         * @brief Sets the platform to notify when this wrapper is destroyed.
+         *
+         * @param host The owning platform, or null for a wrapper nothing tracks.
+         */
+        void SetHost(X11WindowHost* host) { host_ = host; }
+
+        /**
+         * @brief Forgets the owning platform, so a wrapper that outlives it notifies nothing.
+         */
+        void DetachHost() { host_ = nullptr; }
+
     private:
         void ApplyNormalHints();
         void ApplyMotifDecorations(bool decorated);
@@ -296,6 +338,7 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] bool HasNetWmState(Atom state) const;
 
         X11Connection& connection_;
+        X11WindowHost* host_ = nullptr;
         ::Window window_ = kNone;
         WindowId id_ = 0;
         Colormap colormap_ = kNone;

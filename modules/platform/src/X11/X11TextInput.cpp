@@ -94,6 +94,16 @@ namespace CNA::Platform::X11 {
     {
         if (window == nullptr)
         {
+            const auto found = windows_.find(id);
+            if (found != windows_.end() && found->second == focused_)
+            {
+                // The focused window is going away. Unregistration happens while the window is
+                // still whole (or after the server destroyed it, when its context is already
+                // gone), so releasing the input method's focus here acts on a live context -- and
+                // forgetting the pointer is what keeps the next focus change from reaching into a
+                // freed window.
+                SetFocusedWindow(nullptr);
+            }
             windows_.erase(id);
             active_.erase(id);
             return;
