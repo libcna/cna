@@ -287,7 +287,11 @@ namespace CNA::Internal::Xnb
             return static_cast<std::uint16_t>(available / (4u * channelCount) + 2u);
         }
 
-#ifdef SOUND_ENABLED
+        // Available in every build: DecodeWavToPcm16 is CNA's own decoder
+        // (modules/audio/src/Internal, compiled for every CNA_AUDIO_PLATFORM). This used to be
+        // SOUND_ENABLED-only because its predecessor was SDL3's, and the guard outlived the
+        // reason -- an SDL-free build refused float and ADPCM SoundEffects it could decode
+        // (plans/plan_native_platform_validation.md NPV-0104).
         [[nodiscard]] std::vector<std::uint8_t> DecodeWaveToPcm16(
             const XnbSoundEffectData& source, const std::string& origin,
             std::uint32_t& frameCount)
@@ -328,7 +332,6 @@ namespace CNA::Internal::Xnb
                     "'" + origin + "': headless XNB SoundEffect decode failed.", inner);
             }
         }
-#endif
 
         void ValidateSoundMetadata(const XnbSoundEffectData& source,
                                    const std::uint32_t frameCount,
@@ -1666,14 +1669,8 @@ namespace CNA::Internal::Xnb
                  (source.formatTag == WaveFormatMsAdpcm && source.bitsPerSample == 4u) ||
                  (source.formatTag == WaveFormatImaAdpcm && source.bitsPerSample == 4u))
         {
-#ifdef SOUND_ENABLED
             imported.encoding = CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian;
             imported.samples = DecodeWaveToPcm16(source, origin, imported.frameCount);
-#else
-            throw ContentLoadException(
-                "'" + origin + "': compressed/float XNB SoundEffect transcoding requires "
-                "CNA_AUDIO_PLATFORM=SDL3 because no decoder is available in this build.");
-#endif
         }
         else
         {
