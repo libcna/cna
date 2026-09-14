@@ -85,16 +85,26 @@ squash is committed once under Robert Vokac's identity with no Claude trailer.
 | NPI-0010 | Wire new decoder into WavDecoder.cpp / remove SDL dependency | done (part of NPI-0008) |
 | NPI-0011 | Prove SDL-free cna_content build + dependency inspection (Linux/X11): reproduced the pre-fix link failure (`undefined symbol: CNA::Internal::Audio::DecodeWavToPcm16`) building CnaContentPipelineTests under CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF CNA_AUDIO_PLATFORM=NULL CNA_GRAPHICS_RENDERER=HEADLESS in cmake-build-x11/, then confirmed it links and the existing MS-ADPCM round-trip test still passes after the fix. Binary dependency inspection (ldd/readelf) still pending. | in progress |
 | NPI-0012 | Prove Win32 SDL-free configure (mingw cross, compile-level only — no native Windows host) | pending |
-| NPI-0013 | Add SDL-free CI cells (Linux X11 native; Win32 compile-level) | pending |
-| NPI-0014 | AUTO/ON/OFF configuration matrix tests | pending |
-| NPI-0015 | Win32 regression matrix (mingw cross-compile + Wine where meaningful) | pending |
-| NPI-0016 | X11 regression matrix (Xvfb, Xvfb+openbox, ASan/LSan) | pending |
-| NPI-0017 | Real X11 desktop/GPU validation — SKIPPED, no real X11 desktop on this host (documented) | n/a |
-| NPI-0018 | Broad platform regression (SDL3/SDL2/HEADLESS/TERMINAL) | pending |
-| NPI-0019 | Renderer regression spot-check | pending |
+| NPI-0013 | Add SDL-free CI cells: `.github/workflows/platform-ci.yml` `x11-sdl-free` job (native X11 + Xvfb/openbox, CNA_ENABLE_SDL=OFF, NULL audio, HEADLESS renderer, builds+tests platform/audio/content, dependency-inspects the binaries with `ldd`, runs all 5 SDL containment gates) and `sdl-enable-matrix` job (AUTO/ON/OFF x platform combinations, including an expected-configure-failure cell for SDL3+OFF). Win32 already had a compile-level CI cell (`win32-cross`, mingw+Wine) from the source branch, unchanged. | done |
+| NPI-0014 | AUTO/ON/OFF configuration matrix: covered by the `sdl-enable-matrix` CI job above (4 cells: AUTO/ON with SDL3, OFF with X11 succeeding, OFF with SDL3 expected to fail with the "genuinely requires SDL" diagnostic) | done (CI-only; not re-run locally beyond the manual X11+OFF and default+AUTO configures already verified in NPI-0007/0011) |
+| NPI-0015 | Win32 regression matrix (mingw cross-compile + Wine where meaningful) | not run locally: no mingw cross-build attempted in this session (existing win32-cross CI job covers it; environment has x86_64-w64-mingw32-g++ and wine installed but this was not exercised here for time) |
+| NPI-0016 | X11 regression matrix (Xvfb, Xvfb+openbox, ASan/LSan) | partially done: CnaPlatformTests/CnaX11MappingTests/CnaX11IntegrationTests/CnaX11WindowManagerTests confirmed registered as ctest entries in cmake-build-x11/; not yet actually executed under Xvfb in this session, and ASan/LSan variants not run |
+| NPI-0017 | Real X11 desktop/GPU validation — SKIPPED, no real X11 desktop on this host (DISPLAY=:99 is Xvfb, XDG_SESSION_TYPE=wayland, no real X server) | n/a, documented gap |
+| NPI-0018 | Broad platform regression: CnaAudioTests full suite passes under both CNA_PLATFORM=X11+CNA_ENABLE_SDL=OFF (222/222, 8 hw-skipped) and default SDL3 (726/726); CnaContentTests full suite under SDL3 has 13 pre-existing failures, all in CNJ/effect/skinned-model/texture loading, none audio/platform/WAV-related, not touched by this workstream's changes (see WAV decoder commit) | partially done |
+| NPI-0019 | Renderer regression spot-check | not done this session (out of time budget; no renderer code was touched by this workstream, so risk is low, but not verified) |
 | NPI-0020 | Documentation updates | pending |
-| NPI-0021 | SDL containment audit ledger | pending |
+| NPI-0021 | SDL containment audit ledger | done: sdl_inventory/sdl_classify/renderer_sdl_audit/sdl_ratchet(--strict)/hot_path_lint/nonproduction_sdl_audit all pass; plan_platform.md §2 inventory regenerated (`python3 tools/platform/sdl_inventory.py --update`) to reflect the WavDecoder.cpp move (modules/audio production SDL files 9->8) |
 | NPI-0022 | Final git history / authorship audit | pending |
-| NPI-0023 | Push to next (only after all gates pass or gaps are honestly documented) | pending |
+| NPI-0023 | Push to next (only after all gates pass or gaps are honestly documented) | NOT started — requires explicit user go-ahead given the gaps above |
+
+## Concurrent-session note
+
+This working tree is shared with at least one other concurrent agent session: uncommitted
+modifications to `CLAUDE.md`-adjacent files were briefly seen mid-session, and unrelated
+uncommitted changes to `modules/graphics-ext/src/{TonemapPass,FullscreenPass,BloomPass,
+HeightFogPass,SsaoPass}.cpp` appeared and were left untouched throughout this work (never staged,
+never committed, not attributed to any NPI task). All commits in this plan were staged by explicit
+file path, never `git add -A`, specifically to avoid sweeping in that other session's in-progress
+work.
 
 (Updated throughout; see commit SHAs recorded per task as they land.)

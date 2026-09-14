@@ -355,3 +355,208 @@ jobs:
             exit 0
           fi
           exit "$status"
+
+  # ---------------------------------------------------------------------------------------------
+  # plans/plan_native_platforms_integration.md NPI-0013: the permanent SDL-free native-Linux cell.
+  #
+  # Every other Linux cell above configures with CNA_ENABLE_SDL left at its AUTO default, so none
+  # of them proves a genuinely SDL-free CNA build stays buildable. This one sets
+  # CNA_ENABLE_SDL=OFF explicitly, selects the native X11 platform (the one platform besides WIN32
+  # that never falls back to SDL), NULL audio, and HEADLESS as the renderer -- deliberately not a
+  # renderer that needs a GPU context, because this cell's job is proving the platform/audio/
+  # content axes stay SDL-free, not re-proving GL/Vulkan (the graphical matrix cells above already
+  # do that under SDL3/SDL2). cna_content is built and tested here specifically because
+  # DecodeWavToPcm16 (modules/audio/src/Internal/WavDecoder.cpp) is the dependency this cell exists
+  # to keep SDL-free -- see plans/plan_native_platforms_integration.md's WAV decoder section for
+  # the history of why that mattered.
+  x11-sdl-free:
+    name: X11 + Headless + Null audio (CNA_ENABLE_SDL=OFF)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone public sibling repositories
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install build and native X11 dependencies (no SDL packages needed or installed)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils openbox \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils
+
+      - name: Cache compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: platform-ccache-${{ runner.os }}-x11-sdl-free-${{ github.sha }}
+          restore-keys: |
+            platform-ccache-${{ runner.os }}-x11-sdl-free-
+
+      - name: Start an isolated X11 display (Xvfb + openbox)
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x720x24 &
+          disown
+          for i in $(seq 1 40); do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "DISPLAY=:99" >> "$GITHUB_ENV"
+              break
+            fi
+            sleep 0.5
+          done
+          DISPLAY=:99 openbox &
+          disown
+          sleep 1
+
+      - name: Configure CNA_ENABLE_SDL=OFF + X11 + Headless + Null audio
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_ENABLE_SDL=OFF \
+            -DCNA_PLATFORM=X11 \
+            -DCNA_GRAPHICS_RENDERER=HEADLESS \
+            -DCNA_AUDIO_PLATFORM=NULL \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=ON \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_USE_CCACHE=ON \
+            -DCNA_TEST_DISPLAY=:99
+
+      - name: Build the platform, audio and content test suites, and cna_content itself
+        run: cmake --build build --target CnaPlatformModuleTests CnaAudioTests CnaContentTests CnaContentPipelineTests cna_content --parallel "$(nproc)"
+
+      - name: Prove no SDL library was configured or linked
+        run: |
+          set -euo pipefail
+          if find build -iname '*SDL2*' -o -iname '*SDL3*' | grep -q .; then
+            echo "::error::An SDL artifact exists in the SDL-free build directory." >&2
+            find build -iname '*SDL2*' -o -iname '*SDL3*'
+            exit 1
+          fi
+          for exe in build/CnaPlatformModuleTests build/CnaAudioTests build/CnaContentTests build/CnaContentPipelineTests; do
+            if ldd "$exe" | grep -iq sdl; then
+              echo "::error::$exe links against SDL." >&2
+              ldd "$exe" | grep -i sdl
+              exit 1
+            fi
+          done
+
+      - name: Run platform, audio, content and WAV-decoder tests
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|IntegrationTests|WindowManagerTests))$' --output-on-failure
+          ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
+          ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'
+          ./build/CnaContentTests --gtest_filter='*Wav*:*SoundEffect*'
+
+      - name: Run SDL containment gates
+        run: |
+          python3 tools/platform/sdl_inventory.py --check
+          python3 tools/platform/sdl_classify.py --check
+          python3 tools/platform/renderer_sdl_audit.py --check
+          python3 tools/platform/sdl_ratchet.py --check --strict
+          python3 tools/platform/nonproduction_sdl_audit.py --check
+
+  # ---------------------------------------------------------------------------------------------
+  # plans/plan_native_platforms_integration.md NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.
+  #
+  # AUTO must be byte-for-byte the historical default (a plain configure with nothing set), ON
+  # must configure SDL the same way AUTO does whenever anything actually needs it, and OFF must
+  # both build successfully for a native selection and refuse loudly -- not silently fall back --
+  # for a selection that genuinely needs SDL. The fourth cell proves that refusal by asserting
+  # configure fails with the expected diagnostic; it does not build anything.
+  sdl-enable-matrix:
+    name: CNA_ENABLE_SDL=${{ matrix.value }} (${{ matrix.platform }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - value: "AUTO"
+            platform: SDL3
+            renderer: HEADLESS
+            audio: SDL3
+            expect: configure-succeeds
+          - value: "ON"
+            platform: SDL3
+            renderer: HEADLESS
+            audio: SDL3
+            expect: configure-succeeds
+          - value: "OFF"
+            platform: X11
+            renderer: HEADLESS
+            audio: "NULL"
+            expect: configure-succeeds
+          - value: "OFF"
+            platform: SDL3
+            renderer: HEADLESS
+            audio: SDL3
+            expect: configure-fails
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone public sibling repositories
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install build and native dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev
+
+      - name: Configure and check the expected outcome
+        run: |
+          set -euo pipefail
+          set +e
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_ENABLE_SDL=${{ matrix.value }} \
+            -DCNA_PLATFORM=${{ matrix.platform }} \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
+            -DCNA_AUDIO_PLATFORM=${{ matrix.audio }} \
+            -DCNA_BUILD_TESTS=OFF \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF > configure.log 2>&1
+          status=$?
+          set -e
+          cat configure.log
+          if [ "${{ matrix.expect }}" = "configure-succeeds" ]; then
+            [ "$status" -eq 0 ] || { echo "::error::Expected configure to succeed."; exit 1; }
+          else
+            [ "$status" -ne 0 ] || { echo "::error::Expected configure to fail (SDL-required selection with CNA_ENABLE_SDL=OFF)."; exit 1; }
+            grep -qi "genuinely requires SDL" configure.log || { echo "::error::Expected the SDL-required diagnostic, got something else."; exit 1; }
+          fi
