@@ -180,6 +180,27 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             cna_copy_sdl_runtime(cna_house3d_demo)
         endif()
     endif()
+
+    # plans/plan_native_platform_validation.md NPV-0118: the 3D demo on the native X11 platform,
+    # once per renderer compiled in, on a private X server. EasyGL_House3D_SmokeTest covers the
+    # SDL3 EasyGL builds, but an SDL-free X11 build skips that whole suite, so there the demo ran
+    # nowhere -- and it aborted on its first frame with every renderer but Vulkan.
+    if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11" AND NOT EMSCRIPTEN
+            AND EXISTS "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh")
+        set(_cna_house3d_renderers ${CNA_GRAPHICS_RENDERERS})
+        if(NOT _cna_house3d_renderers)
+            set(_cna_house3d_renderers ${CNA_GRAPHICS_RENDERER})
+        endif()
+        foreach(_cna_house3d_renderer IN LISTS _cna_house3d_renderers)
+            add_test(NAME X11_House3D_SmokeTest_${_cna_house3d_renderer}
+                COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        $<TARGET_FILE:cna_house3d_demo> --smoke 3)
+            set_tests_properties(X11_House3D_SmokeTest_${_cna_house3d_renderer} PROPERTIES
+                ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_house3d_renderer}"
+                TIMEOUT 120 SKIP_RETURN_CODE 77 LABELS "GraphicsSmoke;platform")
+        endforeach()
+        unset(_cna_house3d_renderers)
+    endif()
 endif()
 
 # --- plans/plan_software.md SOFTWARE-61/84: cross-renderer diagnostic comparator ---

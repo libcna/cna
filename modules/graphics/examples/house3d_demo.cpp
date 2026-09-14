@@ -39,6 +39,7 @@
  */
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -210,6 +211,15 @@ class House3DDemo final : public Game {
 public:
     House3DDemo()
     {
+        // A 3D scene with depth testing needs a depth buffer, and the XNA way to get one is to
+        // ask the GraphicsDeviceManager for it. Without one the Game's device presents with
+        // PresentationParameters' own DepthFormat::None, and since SOFTWARE-333 clearing depth
+        // there is the InvalidOperationException XNA raises -- this demo then aborted on its
+        // first frame with every renderer but Vulkan (plans/plan_native_platform_validation.md
+        // NPV-0118).
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+
         static constexpr int FPS = 60;
         Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / FPS)));
     };
@@ -1238,6 +1248,7 @@ private:
         //   After  merge: ~15 000 GL calls / 5 s   (~46x reduction)
     }
 
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
     std::unique_ptr<BasicEffect> effect_;
     std::vector<Mesh>            meshes_;
     std::vector<Mesh>            edgeMeshes_;
