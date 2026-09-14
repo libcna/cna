@@ -181,6 +181,14 @@ namespace CNA::Platform::X11 {
         const X11Atoms& atoms = connection_.GetAtoms();
 
         XDeleteProperty(display, owner_, atoms.cnaSelection);
+        XSync(display, False);
+        // Property notifications left on our window by an earlier transfer (or by the delete just
+        // made) would otherwise be mistaken for this transfer's chunks. Nothing else listens on
+        // this window, so discarding them takes nothing from the application.
+        XEvent stale{};
+        while (XCheckTypedWindowEvent(display, owner_, PropertyNotify, &stale) == True)
+        {
+        }
         XConvertSelection(display, atoms.clipboard, target, atoms.cnaSelection, owner_,
                           kCurrentTime);
         XFlush(display);
@@ -263,11 +271,20 @@ namespace CNA::Platform::X11 {
 
                 std::vector<unsigned char> chunk;
                 int chunkFormat = 0;
-                const bool read = connection_.ReadProperty(owner_, atoms.cnaSelection,
-                                                           AnyPropertyType, chunkFormat, chunk);
+                const bool present = connection_.ReadProperty(owner_, atoms.cnaSelection,
+                                                              AnyPropertyType, chunkFormat, chunk);
+                if (!present)
+                {
+                    // A NewValue with no property behind it: a notification from before this
+                    // chunk -- the INCR size announcement produces one -- whose property has
+                    // since been deleted. The chunk itself is still on its way, so this is not
+                    // the end of the transfer; only a zero-length chunk is (plans/
+                    // plan_native_platform_validation.md NPV-0112).
+                    continue;
+                }
                 XDeleteProperty(display, owner_, atoms.cnaSelection);
                 XFlush(display);
-                if (!read || chunk.empty())
+                if (chunk.empty())
                 {
                     break;
                 }

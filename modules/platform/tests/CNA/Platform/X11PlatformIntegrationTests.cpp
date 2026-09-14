@@ -22,6 +22,7 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <sys/wait.h>
@@ -90,6 +91,127 @@ bool FocusFromAnotherClient(const std::uintptr_t xid)
     XCloseDisplay(other);
     return true;
 }
+
+/// A CLIPBOARD owner on its own X connection and thread that serves its text through INCR in
+/// small chunks and waits after each of the requestor's deletes before writing the next one.
+///
+/// That pause is what real owners do under load and what xsel (4000-byte chunks) does routinely,
+/// and it is what exposes a receiver that treats a stale PropertyNotify -- the one the INCR
+/// announcement itself produced -- as "the next chunk is here".
+class SlowIncrementalOwner
+{
+public:
+    SlowIncrementalOwner(std::string text, const std::size_t chunk,
+                         const std::chrono::milliseconds pause)
+        : text_(std::move(text)), chunk_(chunk), pause_(pause)
+    {
+    }
+
+    ~SlowIncrementalOwner()
+    {
+        stop_ = true;
+        if (thread_.joinable()) { thread_.join(); }
+        if (display_ != nullptr) { XCloseDisplay(display_); }
+    }
+
+    SlowIncrementalOwner(const SlowIncrementalOwner&) = delete;
+    SlowIncrementalOwner& operator=(const SlowIncrementalOwner&) = delete;
+
+    /// Takes the CLIPBOARD and starts serving. Returns false when there is no display.
+    bool Start()
+    {
+        display_ = XOpenDisplay(nullptr);
+        if (display_ == nullptr) { return false; }
+        clipboard_ = XInternAtom(display_, "CLIPBOARD", kXFalse);
+        utf8_ = XInternAtom(display_, "UTF8_STRING", kXFalse);
+        incr_ = XInternAtom(display_, "INCR", kXFalse);
+        window_ = XCreateSimpleWindow(display_, DefaultRootWindow(display_), 0, 0, 1, 1, 0, 0, 0);
+        XSetSelectionOwner(display_, clipboard_, window_, kCurrentTime);
+        XSync(display_, kXFalse);
+        if (XGetSelectionOwner(display_, clipboard_) != window_) { return false; }
+        thread_ = std::thread([this] { Run(); });
+        return true;
+    }
+
+private:
+    void Run()
+    {
+        ::Window requestor = 0;
+        Atom property = 0;
+        std::size_t offset = 0;
+        bool sending = false;
+        while (!stop_)
+        {
+            while (XPending(display_) > 0)
+            {
+                XEvent event;
+                XNextEvent(display_, &event);
+                if (event.type == SelectionRequest && event.xselectionrequest.target == utf8_)
+                {
+                    const XSelectionRequestEvent& request = event.xselectionrequest;
+                    requestor = request.requestor;
+                    property = request.property;
+                    offset = 0;
+                    sending = true;
+                    XSelectInput(display_, requestor, PropertyChangeMask);
+                    const long total = static_cast<long>(text_.size());
+                    XChangeProperty(display_, requestor, property, incr_, 32, PropModeReplace,
+                                    reinterpret_cast<const unsigned char*>(&total), 1);
+                    XEvent notify{};
+                    notify.xselection.type = SelectionNotify;
+                    notify.xselection.requestor = requestor;
+                    notify.xselection.selection = request.selection;
+                    notify.xselection.target = request.target;
+                    notify.xselection.property = property;
+                    notify.xselection.time = request.time;
+                    XSendEvent(display_, requestor, kXFalse, NoEventMask, &notify);
+                    XFlush(display_);
+                }
+                else if (event.type == SelectionRequest)
+                {
+                    XEvent refuse{};
+                    refuse.xselection.type = SelectionNotify;
+                    refuse.xselection.requestor = event.xselectionrequest.requestor;
+                    refuse.xselection.selection = event.xselectionrequest.selection;
+                    refuse.xselection.target = event.xselectionrequest.target;
+                    refuse.xselection.property = 0;
+                    XSendEvent(display_, event.xselectionrequest.requestor, kXFalse, NoEventMask,
+                               &refuse);
+                    XFlush(display_);
+                }
+                else if (event.type == PropertyNotify && sending &&
+                         event.xproperty.window == requestor && event.xproperty.atom == property &&
+                         event.xproperty.state == PropertyDelete)
+                {
+                    std::this_thread::sleep_for(pause_);
+                    const std::size_t length = std::min(chunk_, text_.size() - offset);
+                    XChangeProperty(display_, requestor, property, utf8_, 8, PropModeReplace,
+                                    reinterpret_cast<const unsigned char*>(text_.data() + offset),
+                                    static_cast<int>(length));
+                    XFlush(display_);
+                    offset += length;
+                    if (length == 0)
+                    {
+                        sending = false;
+                        XSelectInput(display_, requestor, NoEventMask);
+                    }
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+
+    std::string text_;
+    std::size_t chunk_;
+    std::chrono::milliseconds pause_;
+    ::Display* display_ = nullptr;
+    ::Window window_ = 0;
+    Atom clipboard_ = 0;
+    Atom utf8_ = 0;
+    Atom incr_ = 0;
+    std::atomic<bool> stop_{false};
+    std::thread thread_;
+};
 
 [[nodiscard]] WindowId EventWindow(const PlatformEvent& event)
 {
@@ -986,6 +1108,30 @@ TEST_F(X11Live, AClipboardPayloadTooLargeForOnePropertyStillRoundTrips)
     EXPECT_TRUE(clipboard->HasText());
     EXPECT_EQ(clipboard->GetText().size(), large.size());
     EXPECT_EQ(clipboard->GetText(), large);
+}
+
+TEST_F(X11Live, AnIncrementalPasteFromASlowOwnerArrivesWhole)
+{
+    // NPV-0112. Reading a selection through INCR is a conversation: the receiver deletes the
+    // property, the owner writes the next chunk, a PropertyNotify(NewValue) announces it. The
+    // receiver's queue also holds notifications that announce nothing -- the one the INCR size
+    // announcement produced, above all -- and the first version took the first of those as "the
+    // next chunk is here", found the property absent, and ended the transfer: a paste from xsel
+    // (4000-byte chunks) stopped at 4000 bytes, and a large one from xclip came back empty.
+    std::string text;
+    text.reserve(160 * 1024);
+    while (text.size() < 160u * 1024u)
+    {
+        text += "slow INCR owner, \xC5\x99\xC3\xAD\xC5\xA1 0123456789;";
+    }
+    SlowIncrementalOwner owner(text, 4000, std::chrono::milliseconds(8));
+    ASSERT_TRUE(owner.Start()) << "could not take the CLIPBOARD for the test owner";
+
+    IPlatformClipboard* clipboard = platform_->GetClipboard();
+    ASSERT_NE(clipboard, nullptr);
+    const std::string pasted = clipboard->GetText();
+    EXPECT_EQ(pasted.size(), text.size());
+    EXPECT_TRUE(pasted == text) << "the transfer was cut short or corrupted";
 }
 
 // --- graphics services ---------------------------------------------------------------------------------
