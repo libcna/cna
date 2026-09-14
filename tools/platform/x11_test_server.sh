@@ -100,5 +100,9 @@ fi
 
 DISPLAY=":$DISPLAY_NUMBER"
 export DISPLAY
+# Tells a test that this server is its own, started for this run and discarded after it -- so it
+# may change server-wide state (the keymap, say) that it must never touch on a developer's desktop.
+CNA_X11_PRIVATE_TEST_SERVER=1
+export CNA_X11_PRIVATE_TEST_SERVER
 
 "$@"

@@ -694,10 +694,43 @@ namespace CNA::Platform::X11 {
         if (connection_->HasXkb() && connection_->GetXkbEventBase() >= 0 &&
             event.type == connection_->GetXkbEventBase())
         {
-            // A layout switch or a new keyboard. The physical scancode table must not change; the
-            // logical KeyCode table must. RefreshKeyboardMapping rebuilds both, which is correct
-            // and is the simplest thing that cannot drift.
-            if (keyboard_ != nullptr)
+            // A layout switch, a new keymap or a new keyboard. The physical scancode table must
+            // not change; the logical KeyCode table must. RefreshKeyboardMapping rebuilds both,
+            // which is correct and is the simplest thing that cannot drift -- and it costs
+            // several round trips, so it runs only when the layout really changed.
+            const auto& xkb = reinterpret_cast<const XkbEvent&>(event);
+            bool refresh = false;
+            switch (xkb.any.xkb_type)
+            {
+                case XkbStateNotify:
+                    refresh = (xkb.state.changed & XkbGroupStateMask) != 0 &&
+                              (keyboard_ == nullptr || xkb.state.group != keyboard_->GetGroup());
+                    break;
+                case XkbMapNotify:
+                    // Xlib answers keysym lookups from its own copy of the keymap, which stays
+                    // stale until it is told about the new one.
+                    XkbRefreshKeyboardMapping(const_cast<XkbMapNotifyEvent*>(&xkb.map));
+                    refresh = true;
+                    break;
+                case XkbNewKeyboardNotify:
+                    refresh = true;
+                    break;
+                default:
+                    break;
+            }
+            if (refresh && keyboard_ != nullptr)
+            {
+                keyboard_->RefreshKeyboardMapping();
+            }
+            return;
+        }
+
+        if (event.type == MappingNotify)
+        {
+            // The core protocol's "the keymap changed" (xmodmap, or a server without XKB). Xlib's
+            // cached core mapping has to be refreshed before anything reads it again.
+            XRefreshKeyboardMapping(const_cast<XMappingEvent*>(&event.xmapping));
+            if (event.xmapping.request != MappingPointer && keyboard_ != nullptr)
             {
                 keyboard_->RefreshKeyboardMapping();
             }

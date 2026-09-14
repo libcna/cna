@@ -295,6 +295,108 @@ namespace CNA::Platform::X11 {
         }
     }
 
+    KeyCode UsLayoutKeyCode(const Scancode scancode)
+    {
+        const auto value = static_cast<std::uint16_t>(scancode);
+        if (value >= static_cast<std::uint16_t>(Scancode::A) &&
+            value <= static_cast<std::uint16_t>(Scancode::Z))
+        {
+            return static_cast<KeyCode>(static_cast<std::uint16_t>(
+                'A' + (value - static_cast<std::uint16_t>(Scancode::A))));
+        }
+        if (value >= static_cast<std::uint16_t>(Scancode::D1) &&
+            value <= static_cast<std::uint16_t>(Scancode::D9))
+        {
+            return static_cast<KeyCode>(static_cast<std::uint16_t>(
+                '1' + (value - static_cast<std::uint16_t>(Scancode::D1))));
+        }
+        switch (scancode)
+        {
+            case Scancode::D0: return KeyCode::D0;
+            case Scancode::Minus: return KeyCode::OemMinus;
+            case Scancode::Equals: return KeyCode::OemPlus;
+            case Scancode::LeftBracket: return KeyCode::OemOpenBrackets;
+            case Scancode::RightBracket: return KeyCode::OemCloseBrackets;
+            case Scancode::Backslash: return KeyCode::OemPipe;
+            case Scancode::Semicolon: return KeyCode::OemSemicolon;
+            case Scancode::Apostrophe: return KeyCode::OemQuotes;
+            case Scancode::Grave: return KeyCode::OemTilde;
+            case Scancode::Comma: return KeyCode::OemComma;
+            case Scancode::Period: return KeyCode::OemPeriod;
+            case Scancode::Slash: return KeyCode::OemQuestion;
+            case Scancode::NonUsBackslash: return KeyCode::OemBackslash;
+            default: return KeyCode::None;
+        }
+    }
+
+    std::array<KeyCode, kX11KeycodeCount> BuildKeyCodeTable(
+        const std::array<Scancode, kX11KeycodeCount>& scancodes,
+        const std::array<X11KeySymbols, kX11KeycodeCount>& symbols)
+    {
+        const auto keycodeOf = [&scancodes](const Scancode wanted) -> int {
+            for (std::size_t keycode = 0; keycode < kX11KeycodeCount; ++keycode)
+            {
+                if (scancodes[keycode] == wanted)
+                {
+                    return static_cast<int>(keycode);
+                }
+            }
+            return -1;
+        };
+        const auto isDigit = [](const KeySym keysym) { return keysym >= XK_0 && keysym <= XK_9; };
+
+        // Latin letters: the first of A..D that has a symbol decides. A Latin-1 keysym has the
+        // same value as its code point, so "at most 0xFF" is exactly SDL3's test.
+        bool latinLetters = true;
+        for (const Scancode letter : {Scancode::A, Scancode::B, Scancode::C, Scancode::D})
+        {
+            const int keycode = keycodeOf(letter);
+            if (keycode < 0 || symbols[static_cast<std::size_t>(keycode)].unshifted == NoSymbol)
+            {
+                continue;
+            }
+            latinLetters = symbols[static_cast<std::size_t>(keycode)].unshifted <= 0xFF;
+            break;
+        }
+
+        // A number row of symbols over digits, on every one of its ten keys.
+        bool frenchNumbers = true;
+        for (std::uint16_t value = static_cast<std::uint16_t>(Scancode::D1);
+             value <= static_cast<std::uint16_t>(Scancode::D0) && frenchNumbers; ++value)
+        {
+            const int keycode = keycodeOf(static_cast<Scancode>(value));
+            frenchNumbers = keycode >= 0 &&
+                            !isDigit(symbols[static_cast<std::size_t>(keycode)].unshifted) &&
+                            isDigit(symbols[static_cast<std::size_t>(keycode)].shifted);
+        }
+
+        std::array<KeyCode, kX11KeycodeCount> table{};
+        table.fill(KeyCode::None);
+        for (std::size_t keycode = 0; keycode < kX11KeycodeCount; ++keycode)
+        {
+            const Scancode scancode = scancodes[keycode];
+            const X11KeySymbols& symbol = symbols[keycode];
+            if (!latinLetters)
+            {
+                const KeyCode us = UsLayoutKeyCode(scancode);
+                if (us != KeyCode::None)
+                {
+                    table[keycode] = us;
+                    continue;
+                }
+            }
+            const auto value = static_cast<std::uint16_t>(scancode);
+            if (frenchNumbers && value >= static_cast<std::uint16_t>(Scancode::D1) &&
+                value <= static_cast<std::uint16_t>(Scancode::D0))
+            {
+                table[keycode] = KeyCodeFromKeysym(symbol.shifted);
+                continue;
+            }
+            table[keycode] = KeyCodeFromKeysym(symbol.unshifted);
+        }
+        return table;
+    }
+
     std::uint16_t ModifiersFromXState(const unsigned int state, const unsigned int modeSwitchMask)
     {
         std::uint16_t result = 0;
@@ -321,6 +423,53 @@ namespace CNA::Platform::X11 {
         keycodes_.fill(KeyCode::None);
         held_.fill(false);
         RefreshKeyboardMapping();
+    }
+
+    KeySym X11Keyboard::KeysymAt(const XkbDescPtr description, const unsigned int keycode,
+                                 const int level) const
+    {
+        Display* display = connection_.GetDisplay();
+        if (description != nullptr)
+        {
+            // A key can define fewer groups than the keymap has -- F1 has one, a letter has as
+            // many as there are layouts -- and XKB says per key what an out-of-range group means:
+            // wrap, clamp or redirect. XkbKeycodeToKeysym does not apply that rule itself.
+            int group = group_;
+            if (keycode >= description->min_key_code && keycode <= description->max_key_code)
+            {
+                const int groups = XkbKeyNumGroups(description, keycode);
+                const unsigned char info = XkbKeyGroupInfo(description, keycode);
+                if (groups > 0 && group >= groups)
+                {
+                    switch (XkbOutOfRangeGroupAction(info))
+                    {
+                        case XkbRedirectIntoRange:
+                            group = XkbOutOfRangeGroupNumber(info);
+                            if (group >= groups) { group = 0; }
+                            break;
+                        case XkbClampIntoRange:
+                            group = groups - 1;
+                            break;
+                        default:
+                            group %= groups;
+                            break;
+                    }
+                }
+            }
+            const KeySym keysym = XkbKeycodeToKeysym(display, static_cast<::KeyCode>(keycode),
+                                                     group, level);
+            if (keysym != NoSymbol)
+            {
+                return keysym;
+            }
+        }
+        // The pre-XKB path, still correct and still needed for a server with no XKB: the core
+        // mapping's first two columns are group 1's unshifted and shifted symbols.
+        XKeyEvent probe{};
+        probe.display = display;
+        probe.keycode = keycode;
+        probe.state = 0;
+        return XLookupKeysym(&probe, level);
     }
 
     void X11Keyboard::RefreshKeyboardMapping()
@@ -351,30 +500,38 @@ namespace CNA::Platform::X11 {
             }
         }
 
-        // --- logical: group 0, level 0 keysym -------------------------------------------------
+        // --- logical: what each key means on the ACTIVE layout ----------------------------------
         //
-        // XkbKeycodeToKeysym with group 0 and level 0 is the unshifted meaning on the layout's
-        // FIRST group. Using the current group would make the mapping change when the user holds
-        // AltGr, and using the current shift level would report KeyCode::None for every capital
-        // letter, because Windows virtual keys have no shifted identity.
+        // The active layout is the effective XKB group. The first version always read group 0,
+        // so switching from "us" to "cz" (group 1) rebuilt the same US table: the layout switch
+        // this refresh exists for never reached a single key code
+        // (plans/plan_native_platform_validation.md NPV-0117). AltGr does not change the group
+        // in XKB -- it is a shift *level* -- so following the group cannot make keys move while
+        // AltGr is held.
+        group_ = 0;
+        if (connection_.HasXkb())
+        {
+            XkbStateRec state{};
+            if (XkbGetState(display, XkbUseCoreKbd, &state) == Success)
+            {
+                group_ = state.group;
+            }
+        }
+        // One request for every key's group layout, rather than one per key.
+        XkbDescPtr description =
+            connection_.HasXkb() ? XkbGetMap(display, XkbKeySymsMask, XkbUseCoreKbd) : nullptr;
+        std::array<X11KeySymbols, kKeycodeCount> symbols{};
         for (int keycode = kMinKeycode; keycode <= kMaxKeycode; ++keycode)
         {
-            KeySym keysym = NoSymbol;
-            if (connection_.HasXkb())
-            {
-                keysym = XkbKeycodeToKeysym(display, static_cast<::KeyCode>(keycode), 0, 0);
-            }
-            if (keysym == NoSymbol)
-            {
-                // The pre-XKB path, still correct and still needed for a server with no XKB:
-                // XLookupKeysym on a synthetic event with no modifier state.
-                XKeyEvent probe{};
-                probe.display = display;
-                probe.keycode = static_cast<unsigned int>(keycode);
-                probe.state = 0;
-                keysym = XLookupKeysym(&probe, 0);
-            }
-            keycodes_[static_cast<std::size_t>(keycode)] = KeyCodeFromKeysym(keysym);
+            symbols[static_cast<std::size_t>(keycode)].unshifted =
+                KeysymAt(description, static_cast<unsigned int>(keycode), 0);
+            symbols[static_cast<std::size_t>(keycode)].shifted =
+                KeysymAt(description, static_cast<unsigned int>(keycode), 1);
+        }
+        keycodes_ = BuildKeyCodeTable(scancodes_, symbols);
+        if (description != nullptr)
+        {
+            XkbFreeKeyboard(description, 0, True);
         }
 
         // --- which modifier bit is AltGr ------------------------------------------------------
@@ -527,8 +684,15 @@ namespace CNA::Platform::X11 {
             {
                 continue;
             }
-            const KeySym keysym =
-                XkbKeycodeToKeysym(display, static_cast<::KeyCode>(keycode), 0, 0);
+            // The label on the ACTIVE layout, as the contract says, so a user who switched to
+            // "cz" is shown the key they have now.
+            XkbDescPtr description =
+                connection_.HasXkb() ? XkbGetMap(display, XkbKeySymsMask, XkbUseCoreKbd) : nullptr;
+            const KeySym keysym = KeysymAt(description, static_cast<unsigned int>(keycode), 0);
+            if (description != nullptr)
+            {
+                XkbFreeKeyboard(description, 0, True);
+            }
             if (keysym == NoSymbol)
             {
                 return {};

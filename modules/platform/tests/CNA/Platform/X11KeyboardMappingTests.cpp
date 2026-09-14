@@ -20,6 +20,9 @@
 
 #include <X11/keysym.h>
 
+#include <array>
+#include <vector>
+
 namespace {
 
 using namespace CNA::Platform;
@@ -361,6 +364,206 @@ TEST(X11AutoRepeat, ADifferentKeyOrWindowIsNeverARepeatOfThisOne)
     XEvent notAPress{};
     notAPress.type = ButtonPress;
     EXPECT_FALSE(IsAutoRepeatPair(release, notAPress));
+}
+
+// --- the active layout's key code table ----------------------------------------------------------
+//
+// plans/plan_native_platform_validation.md NPV-0117. Pure: a layout is a list of (position,
+// unshifted keysym, shifted keysym), exactly the facts the backend reads from XKB, so each rule is
+// tested on real layouts' data with no server.
+
+struct LayoutKey
+{
+    Scancode position;
+    KeySym unshifted;
+    KeySym shifted;
+};
+
+class FakeLayout
+{
+public:
+    explicit FakeLayout(const std::vector<LayoutKey>& keys)
+    {
+        scancodes_.fill(Scancode::Unknown);
+        std::size_t keycode = 9;
+        for (const LayoutKey& key : keys)
+        {
+            scancodes_[keycode] = key.position;
+            symbols_[keycode].unshifted = key.unshifted;
+            symbols_[keycode].shifted = key.shifted;
+            ++keycode;
+        }
+        table_ = BuildKeyCodeTable(scancodes_, symbols_);
+    }
+
+    [[nodiscard]] KeyCode At(const Scancode position) const
+    {
+        for (std::size_t keycode = 0; keycode < kX11KeycodeCount; ++keycode)
+        {
+            if (scancodes_[keycode] == position) { return table_[keycode]; }
+        }
+        return KeyCode::None;
+    }
+
+private:
+    std::array<Scancode, kX11KeycodeCount> scancodes_{};
+    std::array<X11KeySymbols, kX11KeycodeCount> symbols_{};
+    std::array<KeyCode, kX11KeycodeCount> table_{};
+};
+
+std::vector<LayoutKey> NumberRow(const std::array<KeySym, 10>& unshifted,
+                                 const std::array<KeySym, 10>& shifted)
+{
+    std::vector<LayoutKey> keys;
+    for (int index = 0; index < 10; ++index)
+    {
+        keys.push_back({static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::D1) + index),
+                        unshifted[static_cast<std::size_t>(index)],
+                        shifted[static_cast<std::size_t>(index)]});
+    }
+    return keys;
+}
+
+std::vector<LayoutKey> LatinLetters(const char* lettersAtUsPositions)
+{
+    // lettersAtUsPositions[i] is what the key at the US position of 'a' + i types.
+    std::vector<LayoutKey> keys;
+    for (int index = 0; index < 26; ++index)
+    {
+        const char letter = lettersAtUsPositions[index];
+        const auto position = static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::A) + index);
+        if (letter >= 'a' && letter <= 'z')
+        {
+            keys.push_back({position, static_cast<KeySym>(XK_a + (letter - 'a')),
+                            static_cast<KeySym>(XK_A + (letter - 'a'))});
+        }
+        else
+        {
+            // A punctuation key in a letter position (AZERTY's comma where US has M). Latin-1
+            // keysyms equal their character.
+            keys.push_back({position, static_cast<KeySym>(letter), NoSymbol});
+        }
+    }
+    return keys;
+}
+
+std::vector<LayoutKey> Join(std::vector<LayoutKey> first, const std::vector<LayoutKey>& second)
+{
+    first.insert(first.end(), second.begin(), second.end());
+    return first;
+}
+
+const std::array<KeySym, 10> kDigits = {XK_1, XK_2, XK_3, XK_4, XK_5,
+                                        XK_6, XK_7, XK_8, XK_9, XK_0};
+
+TEST(X11KeyCodeTable, AUsLayoutMapsEachPositionToItsOwnKey)
+{
+    const FakeLayout us(Join(Join(LatinLetters("abcdefghijklmnopqrstuvwxyz"),
+                                  NumberRow(kDigits, {XK_exclam, XK_at, XK_numbersign, XK_dollar,
+                                                      XK_percent, XK_asciicircum, XK_ampersand,
+                                                      XK_asterisk, XK_parenleft, XK_parenright})),
+                             {{Scancode::Minus, XK_minus, XK_underscore},
+                              {Scancode::Escape, XK_Escape, NoSymbol}}));
+    EXPECT_EQ(us.At(Scancode::A), KeyCode::A);
+    EXPECT_EQ(us.At(Scancode::Y), KeyCode::Y);
+    EXPECT_EQ(us.At(Scancode::D1), KeyCode::D1);
+    EXPECT_EQ(us.At(Scancode::D0), KeyCode::D0);
+    EXPECT_EQ(us.At(Scancode::Minus), KeyCode::OemMinus);
+    EXPECT_EQ(us.At(Scancode::Escape), KeyCode::Escape);
+}
+
+TEST(X11KeyCodeTable, CzechQwertzReportsItsLettersAndTheDigitsOfItsNumberRow)
+{
+    // Czech: + e-caron s-caron c-caron r-caron z-caron y-acute a-acute i-acute e-acute over 1..0,
+    // and Y and Z swapped. This is what reported OemPlus for the 1 key and nothing for 2..0.
+    const FakeLayout cz(Join(LatinLetters("abcdefghijklmnopqrstuvwxzy"),
+                             NumberRow({XK_plus, XK_ecaron, XK_scaron, XK_ccaron, XK_rcaron,
+                                        XK_zcaron, XK_yacute, XK_aacute, XK_iacute, XK_eacute},
+                                       kDigits)));
+    EXPECT_EQ(cz.At(Scancode::Y), KeyCode::Z);
+    EXPECT_EQ(cz.At(Scancode::Z), KeyCode::Y);
+    EXPECT_EQ(cz.At(Scancode::D1), KeyCode::D1);
+    EXPECT_EQ(cz.At(Scancode::D2), KeyCode::D2);
+    EXPECT_EQ(cz.At(Scancode::D0), KeyCode::D0);
+}
+
+TEST(X11KeyCodeTable, FrenchAzertyReportsTheDigitsOfItsNumberRowAndItsOwnLetters)
+{
+    const FakeLayout fr(Join(LatinLetters("qbcdefghijkl,nopartsuvzxyw"),
+                             NumberRow({XK_ampersand, XK_eacute, XK_quotedbl, XK_apostrophe,
+                                        XK_parenleft, XK_minus, XK_egrave, XK_underscore,
+                                        XK_ccedilla, XK_agrave},
+                                       kDigits)));
+    EXPECT_EQ(fr.At(Scancode::A), KeyCode::Q);
+    EXPECT_EQ(fr.At(Scancode::Q), KeyCode::A);
+    EXPECT_EQ(fr.At(Scancode::W), KeyCode::Z);
+    EXPECT_EQ(fr.At(Scancode::M), KeyCode::OemComma);
+    EXPECT_EQ(fr.At(Scancode::D1), KeyCode::D1);
+    EXPECT_EQ(fr.At(Scancode::D6), KeyCode::D6);
+}
+
+TEST(X11KeyCodeTable, ANumberRowThatAlreadyTypesDigitsIsLeftAlone)
+{
+    // German: digits unshifted, symbols shifted. The digit rule must not pick the symbols.
+    const FakeLayout de(Join(LatinLetters("abcdefghijklmnopqrstuvwxzy"),
+                             NumberRow(kDigits, {XK_exclam, XK_quotedbl, XK_section, XK_dollar,
+                                                 XK_percent, XK_ampersand, XK_slash,
+                                                 XK_parenleft, XK_parenright, XK_equal})));
+    EXPECT_EQ(de.At(Scancode::D1), KeyCode::D1);
+    EXPECT_EQ(de.At(Scancode::D7), KeyCode::D7);
+    EXPECT_EQ(de.At(Scancode::Y), KeyCode::Z);
+}
+
+TEST(X11KeyCodeTable, ANumberRowOfSymbolsOnOnlySomeKeysKeepsTheUnshiftedMeaning)
+{
+    // The digit rule needs the whole row; one key typing a digit unshifted means it is not a
+    // symbols-over-digits row, exactly as in SDL3.
+    std::array<KeySym, 10> unshifted = {XK_plus, XK_ecaron, XK_scaron, XK_ccaron, XK_rcaron,
+                                        XK_zcaron, XK_yacute, XK_aacute, XK_iacute, XK_0};
+    const FakeLayout mixed(Join(LatinLetters("abcdefghijklmnopqrstuvwxyz"),
+                                NumberRow(unshifted, kDigits)));
+    EXPECT_EQ(mixed.At(Scancode::D1), KeyCode::OemPlus);
+    EXPECT_EQ(mixed.At(Scancode::D2), KeyCode::None);
+    EXPECT_EQ(mixed.At(Scancode::D0), KeyCode::D0);
+}
+
+TEST(X11KeyCodeTable, ANonLatinLayoutKeepsTheUsMeaningOfEveryCharacterPosition)
+{
+    // Russian: Cyrillic on the letter keys and on the semicolon key. A game bound to W/A/S/D, or
+    // to the semicolon key, must still find those keys.
+    std::vector<LayoutKey> keys = {
+        {Scancode::A, XK_Cyrillic_ef, XK_Cyrillic_EF},
+        {Scancode::B, XK_Cyrillic_i, XK_Cyrillic_I},
+        {Scancode::C, XK_Cyrillic_es, XK_Cyrillic_ES},
+        {Scancode::D, XK_Cyrillic_ve, XK_Cyrillic_VE},
+        {Scancode::W, XK_Cyrillic_tse, XK_Cyrillic_TSE},
+        {Scancode::Semicolon, XK_Cyrillic_zhe, XK_Cyrillic_ZHE},
+        {Scancode::Escape, XK_Escape, NoSymbol},
+        {Scancode::F1, XK_F1, NoSymbol},
+    };
+    const FakeLayout ru(Join(keys, NumberRow(kDigits, {XK_exclam, XK_quotedbl, XK_numerosign,
+                                                       XK_semicolon, XK_percent, XK_colon,
+                                                       XK_question, XK_asterisk, XK_parenleft,
+                                                       XK_parenright})));
+    EXPECT_EQ(ru.At(Scancode::A), KeyCode::A);
+    EXPECT_EQ(ru.At(Scancode::W), KeyCode::W);
+    EXPECT_EQ(ru.At(Scancode::Semicolon), KeyCode::OemSemicolon);
+    EXPECT_EQ(ru.At(Scancode::D1), KeyCode::D1);
+    EXPECT_EQ(ru.At(Scancode::Escape), KeyCode::Escape);
+    EXPECT_EQ(ru.At(Scancode::F1), KeyCode::F1);
+}
+
+TEST(X11KeyCodeTable, UsPositionsCoverEveryCharacterKeyAndNothingElse)
+{
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::A), KeyCode::A);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::Z), KeyCode::Z);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::D1), KeyCode::D1);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::D9), KeyCode::D9);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::D0), KeyCode::D0);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::Grave), KeyCode::OemTilde);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::NonUsBackslash), KeyCode::OemBackslash);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::Escape), KeyCode::None);
+    EXPECT_EQ(UsLayoutKeyCode(Scancode::F1), KeyCode::None);
 }
 
 } // namespace

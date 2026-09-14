@@ -166,12 +166,14 @@ namespace CNA::Platform::X11 {
             detectableAutoRepeat_ = granted == True;
 
             // State notifications carry layout (group) changes, which is what keeps the logical
-            // KeyCode mapping correct when the user switches layouts mid-session.
-            XkbSelectEventDetails(display_, XkbUseCoreKbd, XkbStateNotify,
-                                  XkbGroupStateMask | XkbModifierStateMask,
-                                  XkbGroupStateMask | XkbModifierStateMask);
-            XkbSelectEvents(display_, XkbUseCoreKbd, XkbNewKeyboardNotifyMask,
-                            XkbNewKeyboardNotifyMask);
+            // KeyCode mapping correct when the user switches layouts mid-session; map
+            // notifications carry a replaced keymap (setxkbmap, a desktop's input-source
+            // settings). Modifier state is deliberately not selected: nothing consumes it as an
+            // event, and every Shift press would otherwise wake the keymap refresh.
+            XkbSelectEventDetails(display_, XkbUseCoreKbd, XkbStateNotify, XkbGroupStateMask,
+                                  XkbGroupStateMask);
+            XkbSelectEvents(display_, XkbUseCoreKbd, XkbNewKeyboardNotifyMask | XkbMapNotifyMask,
+                            XkbNewKeyboardNotifyMask | XkbMapNotifyMask);
         }
 
 #if defined(CNA_X11_HAVE_XI)

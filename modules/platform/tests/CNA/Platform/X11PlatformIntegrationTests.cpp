@@ -1021,6 +1021,55 @@ TEST_F(X11Live, TheKeyboardAnswersMappingQueriesAgainstTheLiveLayout)
         << "unexpected key for the A position: " << ToString(fromPosition);
 }
 
+// plans/plan_native_platform_validation.md NPV-0117: switching layouts never reached a key code.
+// Every XKB event rebuilt the table, but always from group 0, so after "us" -> "cz" the Y
+// position still reported Y and the number row stayed whatever the first layout made it.
+TEST_F(X11Live, KeyCodesFollowALayoutSwitch)
+{
+    // setxkbmap changes the keymap of whatever server DISPLAY names; on a developer's desktop
+    // that would be their own keyboard.
+    if (std::getenv("CNA_X11_PRIVATE_TEST_SERVER") == nullptr)
+    {
+        GTEST_SKIP() << "changes the server's keymap, so it runs only on the private server "
+                        "tools/platform/x11_test_server.sh starts";
+    }
+    if (std::system("setxkbmap -layout us,cz >/dev/null 2>&1") != 0)
+    {
+        GTEST_SKIP() << "setxkbmap could not load a us,cz keymap on this server";
+    }
+    struct RestoreKeymap
+    {
+        ~RestoreKeymap() { (void) std::system("setxkbmap -layout us >/dev/null 2>&1"); }
+    } restore;
+
+    IPlatformKeyboard* keyboard = platform_->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+    ::Display* other = XOpenDisplay(nullptr);
+    ASSERT_NE(other, nullptr);
+    const auto lockGroup = [other](const unsigned int group) {
+        XkbLockGroup(other, XkbUseCoreKbd, group);
+        XSync(other, kXFalse);
+    };
+    const auto yKey = [keyboard] { return keyboard->GetKeyFromScancode(Scancode::Y); };
+
+    lockGroup(0);
+    ASSERT_TRUE(PumpUntil([&](const std::vector<PlatformEvent>&) { return yKey() == KeyCode::Y; }))
+        << "on us the Y position reports " << ToString(yKey());
+
+    lockGroup(1);
+    EXPECT_TRUE(PumpUntil([&](const std::vector<PlatformEvent>&) { return yKey() == KeyCode::Z; }))
+        << "after switching to cz the Y position still reports " << ToString(yKey());
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::Z), KeyCode::Y);
+    // Czech types e-caron over 2 on that key; the virtual key is still D2, as on Windows.
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::D2), KeyCode::D2);
+    EXPECT_EQ(keyboard->GetKeyName(Scancode::Y), "Z");
+
+    lockGroup(0);
+    EXPECT_TRUE(PumpUntil([&](const std::vector<PlatformEvent>&) { return yKey() == KeyCode::Y; }))
+        << "after switching back to us the Y position reports " << ToString(yKey());
+    XCloseDisplay(other);
+}
+
 // --- mouse ---------------------------------------------------------------------------------------
 
 TEST_F(X11Live, ThePointerCanBeReadAndMovedInDesktopCoordinates)
