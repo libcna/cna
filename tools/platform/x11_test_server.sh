@@ -67,7 +67,13 @@ fi
 
 # -nolisten tcp: this server is for one test run on this machine and must not be reachable from
 # anywhere else.
-Xvfb ":$DISPLAY_NUMBER" -screen 0 1280x1024x24 -nolisten tcp >/dev/null 2>&1 &
+#
+# -noreset: without it an X server regenerates itself every time its LAST client disconnects,
+# and a connection arriving during that regeneration is reset (XOpenDisplay fails with
+# ECONNRESET). Every X11Live test closes its connection in TearDown and the next test opens a new
+# one moments later, so on a loaded machine alternate tests were skipping as "cannot reach the X
+# server" -- which ctest reports as a pass (plans/plan_native_platform_validation.md NPV-0108).
+Xvfb ":$DISPLAY_NUMBER" -screen 0 1280x1024x24 -nolisten tcp -noreset >/dev/null 2>&1 &
 XVFB_PID=$!
 
 cleanup() {
