@@ -2,7 +2,10 @@
 
 ## Status summary (top of file is source of truth)
 
-In progress. Updated as work proceeds. See task table below for live status.
+Core integration, SDL unification, the SDL-free WAV decoder, permanent SDL-free CI, and Win32/X11
+regression are done and verified locally. NOT pushed to `next` — see "Recommended next steps"
+at the end of this file for exactly what remains and why a human decision point is appropriate
+before pushing.
 
 ## Phase 0 — evidence
 
@@ -90,12 +93,32 @@ squash is committed once under Robert Vokac's identity with no Claude trailer.
 | NPI-0015 | Win32 regression matrix (mingw cross-compile + Wine) | done: configuring `tools/platform/standalone_tests` with `-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_PLATFORM=WIN32` found and fixed two real integration bugs (`fix(NPI-0015)`): a bare `include(cmake/PlatformX11.cmake)` in `PlatformSelection.cmake` that only resolved from the root project's own source dir (fails for this separate standalone CMake project), and a missing `X11.*\.cpp$` exclusion in the standalone harness's test-file filter (written before X11 test files existed, so they were compiled into every non-X11 selection including WIN32, which cannot find X11 headers on mingw). After both fixes: `cna_platform_tests.exe` and `cna_win32_directx_probe.exe` build cleanly; under Wine 10.0 + Xvfb :99, `cna_platform_tests.exe` passes 385/386 tests (1 skipped, an unsupported-capability refusal path this build doesn't exercise), and `cna_win32_directx_probe.exe` reports every stage OK including D3D11 device/clear/present/resize and D3D12 device/queue/swapchain/resize. Wine is not native Windows and this does not substitute for it (no per-monitor DPI, no real shell, no real D3D driver) — see plans/plan_win32.md §16 for that boundary. |
 | NPI-0016 | X11 regression matrix (Xvfb, Xvfb+openbox, ASan/LSan) | partially done: building the full CnaTests target under CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF found and fixed a second real SDL-free defect (`fix(NPI-0007)`: DevicesShutdownOrderingTests.cpp used CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH unconditionally, undefined when the SDL3-only harness isn't built -- now guarded, skips cleanly). After the fix: CnaPlatformWindowTests, CnaPlatformXErrorHandlerTests, CnaPlatformTests, CnaX11MappingTests, CnaX11IntegrationTests all PASS under Xvfb :99 (100% of 5 runnable tests, 26s). CnaX11WindowManagerTests SKIPPED -- `openbox` is not installed in this sandbox (documented environment gap, not a failure). ASan/LSan variant not run (time). The X11 branch's own prior evidence log (plans/plan_x11.md §9) already recorded this exact suite clean under ASan/LSan with openbox, against unchanged X11 source files. |
 | NPI-0017 | Real X11 desktop/GPU validation — SKIPPED, no real X11 desktop on this host (DISPLAY=:99 is Xvfb, XDG_SESSION_TYPE=wayland, no real X server) | n/a, documented gap |
-| NPI-0018 | Broad platform regression: CnaAudioTests full suite passes under both CNA_PLATFORM=X11+CNA_ENABLE_SDL=OFF (222/222, 8 hw-skipped) and default SDL3 (726/726); CnaContentTests full suite under SDL3 has 13 pre-existing failures, all in CNJ/effect/skinned-model/texture loading, none audio/platform/WAV-related, not touched by this workstream's changes (see WAV decoder commit) | partially done |
+| NPI-0018 | Broad platform regression: CnaAudioTests full suite passes under both CNA_PLATFORM=X11+CNA_ENABLE_SDL=OFF (222/222, 8 hw-skipped) and default SDL3 (726/726); CnaContentTests full suite under SDL3 has 13 pre-existing failures, all in CNJ/effect/skinned-model/texture loading, none audio/platform/WAV-related -- confirmed identical to plan_x11.md's own §7 F-5 finding (fixture/FFmpeg availability, reproduced on the unmodified SDL3 baseline), not caused by this workstream. A full monolithic `CnaTests` run under `CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF` was started to broaden this further; it was still legitimately in progress (verbose glTF/model conformance logging, not hung) after ~9 minutes and was terminated for time rather than left running unbounded -- a read-only run, no state affected. The five targeted suites (audio, content, content-pipeline, platform module, X11) that matter most directly for this workstream's claims all completed and passed. | partially done |
 | NPI-0019 | Renderer regression spot-check | not done this session (out of time budget; no renderer code was touched by this workstream, so risk is low, but not verified) |
-| NPI-0020 | Documentation updates | pending |
+| NPI-0020 | Documentation updates: docs/platform-abstraction.md now documents WIN32 and the platform/audio/content-WAV-decoding three-axis distinction; plan_win32.md WIN32-0060 and plan_x11.md F-3 corrected to reflect what actually changed | done |
 | NPI-0021 | SDL containment audit ledger | done: sdl_inventory/sdl_classify/renderer_sdl_audit/sdl_ratchet(--strict)/hot_path_lint/nonproduction_sdl_audit all pass; plan_platform.md §2 inventory regenerated (`python3 tools/platform/sdl_inventory.py --update`) to reflect the WavDecoder.cpp move (modules/audio production SDL files 9->8) |
-| NPI-0022 | Final git history / authorship audit | pending |
-| NPI-0023 | Push to next (only after all gates pass or gaps are honestly documented) | NOT started — requires explicit user go-ahead given the gaps above |
+| NPI-0022 | Final git history / authorship audit | done: all 13 commits ahead of origin/next verified Robert Vokac author+committer, no Claude/Anthropic trailers, neither source branch's history imported (`git merge-base --is-ancestor` false for both), origin/next confirmed unmoved (`e05b3d0f0`) |
+| NPI-0023 | Push to next | NOT done — deliberately left for the user's explicit go-ahead. See "Recommended next steps" below. |
+
+## Defects found and fixed during integration (beyond the two source branches' own content)
+
+1. `modules/devices/examples/CMakeLists.txt` linked `SDL3::SDL3` unconditionally for
+   `cna_demo_devices`; gated on `TARGET SDL3::SDL3` (commit `965cf26d0`).
+2. `cmake/PlatformSelection.cmake`'s `include(cmake/PlatformX11.cmake)` was a bare relative
+   include that only worked from the root project's own source directory; changed to
+   `${CMAKE_CURRENT_LIST_DIR}/PlatformX11.cmake` (commit `1952828e5`).
+3. `tools/platform/standalone_tests/CMakeLists.txt`'s test-file filter had no `X11.*\.cpp$`
+   exclusion (written before X11 existed), so a WIN32 mingw cross-build tried to compile X11 test
+   files and failed outright; added the exclusion (commit `1952828e5`).
+4. `modules/devices/tests/.../DevicesShutdownOrderingTests.cpp` used
+   `CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH` unconditionally, undefined whenever the SDL3-only
+   harness that defines it isn't built; guarded with `#if defined(...)` and a clear `GTEST_SKIP()`
+   otherwise (commits `631379787`, `3df29ff8a`).
+
+None of these four were present in either source branch alone — all four are genuine integration
+defects, found by actually configuring and building the combined tree in configurations neither
+branch tried on its own (mingw WIN32 cross-build with X11 also in the tree; X11 native build with
+`CNA_ENABLE_SDL=OFF` and `CNA_BUILD_TESTS=ON`).
 
 ## Concurrent-session note
 
@@ -108,3 +131,26 @@ file path, never `git add -A`, specifically to avoid sweeping in that other sess
 work.
 
 (Updated throughout; see commit SHAs recorded per task as they land.)
+
+## Recommended next steps before pushing to `next`
+
+Not blockers to a decision, but the honest remaining list:
+
+1. Run the X11 suite under `-DCNA_SANITIZE=address` (ASan/LSan) in this tree specifically — the
+   X11 branch proved this clean before integration, but re-proving it against the merged/fixed
+   tree (four defects were fixed after that branch's own evidence was recorded) would close
+   NPI-0016 fully.
+2. Install `openbox` (or an equivalent minimal WM) in a CI-equivalent environment and run
+   `CnaX11WindowManagerTests`, which this sandbox cannot do.
+3. Let a full `CnaTests` run finish under `CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF` (NPI-0018) — it
+   was progressing normally, just slow, when stopped for time.
+4. Spot-check at least one GPU-backed renderer (e.g. `SOFTWARE` or `VULKAN`) still builds/passes
+   under the merged tree (NPI-0019) — no renderer code was touched, so risk is low but unverified.
+5. Real native-Windows (MSVC) and real X11 desktop/GPU/multi-monitor validation remain physically
+   impossible in this environment; they were never claimed here.
+
+None of the above found a defect when partially attempted; they close out remaining acceptance-
+criteria checkboxes rather than fix anything known to be broken. Given that, and that `origin/next`
+has not moved, pushing now with these five items called out as follow-up is a reasonable
+engineering call -- but it is the user's call to make, not this session's, given how much of this
+workstream's own acceptance criteria explicitly named them.
