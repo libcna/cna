@@ -361,9 +361,22 @@ namespace CNA::Platform::X11 {
         // Restore has to undo both of the states that are not "normal", and the order matters:
         // un-maximising an iconified window does nothing visible until it is de-iconified, so the
         // map comes first.
-        if (IsMinimized() || !mapped_)
+        const bool minimized = IsMinimized();
+        if (minimized || !mapped_)
         {
             XMapRaised(display, window_);
+        }
+        if (minimized && connection_.SupportsEwmhHint(atoms.netActiveWindow))
+        {
+            // Mapping is how ICCCM de-iconifies, and it only works with a window manager that
+            // UNMAPS iconified windows (openbox, xfwm4): the map becomes a MapRequest it acts on.
+            // A compositing window manager that keeps them mapped -- mutter, i.e. GNOME -- never
+            // sees a request for an already-mapped window, so the window stayed minimised there.
+            // Activation is EWMH's way to bring a window back, and what pagers and taskbars use
+            // (plans/plan_native_platform_validation.md NPV-0113). Source indication 1: an
+            // application acting on its own window.
+            connection_.SendRootClientMessage(window_, atoms.netActiveWindow, 1,
+                                              static_cast<long>(kCurrentTime), 0);
         }
         // Only when it is actually maximised. Sending an un-maximise to a window that is not
         // maximised is a second window-manager round trip that does nothing, and doing it in the

@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../../src/X11/X11Error.hpp"
 #include "../../../src/X11/X11Mouse.hpp"
 #include "../../../src/X11/X11Platform.hpp"
 #include "../../../src/X11/X11Window.hpp"
@@ -210,6 +211,153 @@ private:
     Atom utf8_ = 0;
     Atom incr_ = 0;
     std::atomic<bool> stop_{false};
+    std::thread thread_;
+};
+
+/// A scripted window manager, on its own X connection and thread, that iconifies the way mutter
+/// (GNOME) does: the window stays MAPPED and only gains _NET_WM_STATE_HIDDEN and WM_STATE
+/// IconicState, and nothing but an activation request (_NET_ACTIVE_WINDOW) brings it back.
+///
+/// openbox, which the window-manager suite runs, unmaps an iconified window instead, so a map
+/// request de-iconifies it there and a Restore() that only maps passes; this is the window
+/// manager that tells the two apart. It needs a display no other window manager holds, which is
+/// what this suite's private bare server is.
+class KeepsIconifiedWindowsMappedWm
+{
+public:
+    ~KeepsIconifiedWindowsMappedWm() { Stop(); }
+
+    KeepsIconifiedWindowsMappedWm() = default;
+    KeepsIconifiedWindowsMappedWm(const KeepsIconifiedWindowsMappedWm&) = delete;
+    KeepsIconifiedWindowsMappedWm& operator=(const KeepsIconifiedWindowsMappedWm&) = delete;
+
+    /// Becomes the window manager. False when there is no display or another one already is.
+    bool Start()
+    {
+        display_ = XOpenDisplay(nullptr);
+        if (display_ == nullptr) { return false; }
+        root_ = DefaultRootWindow(display_);
+        XWindowAttributes attributes{};
+        XGetWindowAttributes(display_, root_, &attributes);
+        if ((attributes.all_event_masks & SubstructureRedirectMask) != 0)
+        {
+            XCloseDisplay(display_);
+            display_ = nullptr;
+            return false;
+        }
+        // Without this an X error on the test's own connection reaches Xlib's default handler,
+        // which exits the process.
+        CNA::Platform::X11::X11ErrorPolicy::Register(display_);
+        netSupported_ = XInternAtom(display_, "_NET_SUPPORTED", kXFalse);
+        netSupportingWmCheck_ = XInternAtom(display_, "_NET_SUPPORTING_WM_CHECK", kXFalse);
+        netActiveWindow_ = XInternAtom(display_, "_NET_ACTIVE_WINDOW", kXFalse);
+        netWmState_ = XInternAtom(display_, "_NET_WM_STATE", kXFalse);
+        netWmStateHidden_ = XInternAtom(display_, "_NET_WM_STATE_HIDDEN", kXFalse);
+        wmState_ = XInternAtom(display_, "WM_STATE", kXFalse);
+        wmChangeState_ = XInternAtom(display_, "WM_CHANGE_STATE", kXFalse);
+
+        XSelectInput(display_, root_, SubstructureRedirectMask | SubstructureNotifyMask);
+        check_ = XCreateSimpleWindow(display_, root_, 0, 0, 1, 1, 0, 0, 0);
+        XChangeProperty(display_, check_, netSupportingWmCheck_, XA_WINDOW, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(&check_), 1);
+        XChangeProperty(display_, root_, netSupportingWmCheck_, XA_WINDOW, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(&check_), 1);
+        const long supported[] = {static_cast<long>(netActiveWindow_),
+                                  static_cast<long>(netWmState_),
+                                  static_cast<long>(netWmStateHidden_)};
+        XChangeProperty(display_, root_, netSupported_, XA_ATOM, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(supported), 3);
+        XSync(display_, kXFalse);
+        thread_ = std::thread([this] { Run(); });
+        return true;
+    }
+
+    /// Stops managing and takes the window manager's root properties with it: the test server
+    /// runs with -noreset, so they would otherwise outlive this test and mislead the next one.
+    void Stop()
+    {
+        stop_ = true;
+        if (thread_.joinable()) { thread_.join(); }
+        if (display_ == nullptr) { return; }
+        XDeleteProperty(display_, root_, netSupported_);
+        XDeleteProperty(display_, root_, netSupportingWmCheck_);
+        XDestroyWindow(display_, check_);
+        XSync(display_, kXFalse);
+        CNA::Platform::X11::X11ErrorPolicy::Unregister(display_);
+        XCloseDisplay(display_);
+        display_ = nullptr;
+    }
+
+    [[nodiscard]] int Activations() const { return activations_; }
+
+private:
+    void Run()
+    {
+        while (!stop_)
+        {
+            while (XPending(display_) > 0)
+            {
+                XEvent event;
+                XNextEvent(display_, &event);
+                if (event.type == MapRequest)
+                {
+                    XMapWindow(display_, event.xmaprequest.window);
+                    SetIconic(event.xmaprequest.window, false);
+                }
+                else if (event.type == ConfigureRequest)
+                {
+                    const XConfigureRequestEvent& request = event.xconfigurerequest;
+                    XWindowChanges changes{};
+                    changes.x = request.x;
+                    changes.y = request.y;
+                    changes.width = request.width;
+                    changes.height = request.height;
+                    changes.border_width = request.border_width;
+                    changes.sibling = request.above;
+                    changes.stack_mode = request.detail;
+                    XConfigureWindow(display_, request.window,
+                                     static_cast<unsigned>(request.value_mask), &changes);
+                }
+                else if (event.type == ClientMessage &&
+                         event.xclient.message_type == wmChangeState_ &&
+                         event.xclient.data.l[0] == IconicState)
+                {
+                    SetIconic(event.xclient.window, true);
+                }
+                else if (event.type == ClientMessage &&
+                         event.xclient.message_type == netActiveWindow_)
+                {
+                    ++activations_;
+                    SetIconic(event.xclient.window, false);
+                }
+                XFlush(display_);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+
+    void SetIconic(const ::Window window, const bool iconic)
+    {
+        const long state[] = {iconic ? IconicState : NormalState, 0};
+        XChangeProperty(display_, window, wmState_, wmState_, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(state), 2);
+        const long hidden = static_cast<long>(netWmStateHidden_);
+        XChangeProperty(display_, window, netWmState_, XA_ATOM, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(&hidden), iconic ? 1 : 0);
+    }
+
+    ::Display* display_ = nullptr;
+    ::Window root_ = 0;
+    ::Window check_ = 0;
+    Atom netSupported_ = 0;
+    Atom netSupportingWmCheck_ = 0;
+    Atom netActiveWindow_ = 0;
+    Atom netWmState_ = 0;
+    Atom netWmStateHidden_ = 0;
+    Atom wmState_ = 0;
+    Atom wmChangeState_ = 0;
+    std::atomic<bool> stop_{false};
+    std::atomic<int> activations_{0};
     std::thread thread_;
 };
 
@@ -702,6 +850,44 @@ TEST_F(X11Live, ShowAndHideAreAcceptedAndVisibilityIsObservable)
     // Hiding is not minimising: WM_STATE stays absent rather than becoming IconicState, and
     // reporting IsMinimized() true for an application's own Hide() would be wrong.
     EXPECT_FALSE(window_->IsMinimized());
+}
+
+// plans/plan_native_platform_validation.md NPV-0113: on GNOME, Restore() of a minimised window
+// left it minimised. Mapping is ICCCM's de-iconify, but mutter keeps iconified windows mapped, so
+// the map was a no-op and no request ever reached the window manager.
+TEST_F(X11Live, RestoreBringsBackAWindowFromAWindowManagerThatKeepsIconifiedWindowsMapped)
+{
+    KeepsIconifiedWindowsMappedWm windowManager;
+    if (!windowManager.Start())
+    {
+        GTEST_SKIP() << "another window manager owns this display; the scripted one needs it bare";
+    }
+    // The platform re-reads _NET_SUPPORTED when the root's properties change under it.
+    PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
+              std::chrono::milliseconds(100));
+
+    window_ = MakeWindow();
+    const WindowId id = window_->GetId();
+    window_->Show();
+    ASSERT_TRUE(PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, id, WindowEventKind::Restored);
+    })) << "the scripted window manager did not map the window";
+
+    window_->Minimize();
+    ASSERT_TRUE(PumpUntil([this, id](const std::vector<PlatformEvent>& events) {
+        return window_->IsMinimized() && SawWindowEvent(events, id, WindowEventKind::Minimized);
+    })) << "the scripted window manager did not iconify the window";
+    seen_.clear();
+
+    window_->Restore();
+    EXPECT_TRUE(PumpUntil([this, id](const std::vector<PlatformEvent>& events) {
+        return !window_->IsMinimized() && SawWindowEvent(events, id, WindowEventKind::Restored);
+    })) << "Restore() left the window minimised: with iconified windows kept mapped, only an "
+           "activation request can bring one back";
+    EXPECT_EQ(windowManager.Activations(), 1);
+
+    window_.reset();
+    windowManager.Stop();
 }
 
 // --- display scale and pixel size ------------------------------------------------------------------
