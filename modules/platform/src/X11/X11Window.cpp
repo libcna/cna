@@ -627,8 +627,14 @@ namespace CNA::Platform::X11 {
                 format == 32)
             {
                 const std::size_t count = data.size() / sizeof(long);
-                states.resize(count);
-                std::memcpy(states.data(), data.data(), count * sizeof(long));
+                // An existing but EMPTY _NET_WM_STATE (a window that has left every state) is
+                // common, and memcpy's pointers must be valid even for a zero length: both are
+                // null here, which UBSan reports and an optimiser is entitled to exploit.
+                if (count > 0)
+                {
+                    states.resize(count);
+                    std::memcpy(states.data(), data.data(), count * sizeof(long));
+                }
             }
 
             const auto apply = [&states, enabled](const Atom atom) {
