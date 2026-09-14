@@ -4,7 +4,9 @@
 // Effect), runs a few frames entirely under CNA_GRAPHICS_RENDERER=HEADLESS, and asserts:
 //
 // Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) --
-//   proves this renderer genuinely needs no display server at all, not just a hidden window.
+//   proves this renderer genuinely needs no display server at all, not just a hidden window. A
+//   build with no SDL configured (CNA_ENABLE_SDL=OFF) has no SDL to ask, and nothing to
+//   initialise, so the check exists only where SDL does.
 // Check B -- GameWindow handle returns nullptr -- no window object exists anywhere.
 // Check C -- draw-call/primitive/state-change counters after N frames match the exact expected
 //   values for the fixed sequence of calls this test issues -- proves the counters are real
@@ -38,7 +40,9 @@
 
 #include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
+#if defined(CNA_HEADLESS_TEST_HAS_SDL)
 #include <SDL3/SDL.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -67,6 +71,13 @@ class HeadlessSmokeTest : public Game
     std::unique_ptr<Texture2D> texture_;
     int frame_ = 0;
     int passCount_ = 0;
+    // Check A needs SDL to ask; everything else runs in every build. A fixed count still catches
+    // a check that silently stopped running.
+#if defined(CNA_HEADLESS_TEST_HAS_SDL)
+    static constexpr int kExpectedChecks = 10;
+#else
+    static constexpr int kExpectedChecks = 9;
+#endif
     int result_ = 1;
 
     void check(bool ok, const char* label)
@@ -93,9 +104,12 @@ protected:
         if (frame_ == 1)
         {
             // Check A/B: no real window/video subsystem anywhere.
+#if defined(CNA_HEADLESS_TEST_HAS_SDL)
             check(SDL_WasInit(SDL_INIT_VIDEO) == 0,
                   "SDL_INIT_VIDEO was never initialized under the Headless renderer");
-            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) == nullptr, "GraphicsDevice has no real window under the Headless renderer");
+#endif
+            check(getWindowProperty().getHandleProperty() == 0,
+                  "GraphicsDevice has no real window under the Headless renderer");
         }
 
         dev.Clear(Color::Black);
@@ -191,8 +205,8 @@ protected:
                 renderer.SetMode(HeadlessMode::Validation);
             }
 
-            std::printf("=== %d/%d PASS ===\n", passCount_, 10);
-            result_ = (passCount_ == 10) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
+            result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
             Exit();
         }
     }

@@ -24,6 +24,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
         # platform CNA had; it is kept where it is configured, and simply absent where it is not.
         if(TARGET SDL3::SDL3)
             target_link_libraries(${target} PRIVATE SDL3::SDL3)
+            target_compile_definitions(${target} PRIVATE CNA_HEADLESS_TEST_HAS_SDL=1)
         endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
@@ -242,37 +243,47 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     cna_register_renderer_test(NAME Headless_PresentLifecycle COMMAND cna_test_headless_present_lifecycle
         TIMEOUT 900 LABELS "Headless")
 
-    # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
-    # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
-    # production changed; this renderer is registered to show the construction was always legal
-    # and to keep it that way.
-    cna_headless_test(cna_test_headless_msaa_depth_contract
-        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_depth_contract_test.cpp)
-    cna_register_renderer_test(NAME Headless_MsaaDepthContract COMMAND cna_test_headless_msaa_depth_contract
-        TIMEOUT 900 LABELS "Headless")
+    # plans/plan_native_platform_validation.md NPV-0123: these four share
+    # common/SdlTestGraphicsServices.hpp, an SDL-backed test harness, so they cannot link in a
+    # build with no SDL configured -- a plain `cmake --build` of an SDL-free HEADLESS build
+    # failed on them. They are cross-renderer controls for SDL-era defects; without SDL they are
+    # skipped, and said so.
+    if(TARGET SDL3::SDL3)
+        # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
+        # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
+        # production changed; this renderer is registered to show the construction was always legal
+        # and to keep it that way.
+        cna_headless_test(cna_test_headless_msaa_depth_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_depth_contract_test.cpp)
+        cna_register_renderer_test(NAME Headless_MsaaDepthContract COMMAND cna_test_headless_msaa_depth_contract
+            TIMEOUT 900 LABELS "Headless")
 
-    # REMED-GFX-154 cross-renderer control: the same PUBLIC first-readback contract on this
-    # renderer. The defect was Bgfx-only and only Bgfx production changed; running the identical
-    # fixture here is what makes that claim falsifiable rather than asserted.
-    cna_headless_test(cna_test_headless_msaa_first_readback
-        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp)
-    cna_register_renderer_test(NAME Headless_MsaaFirstReadback COMMAND cna_test_headless_msaa_first_readback
-        TIMEOUT 900 LABELS "Headless")
+        # REMED-GFX-154 cross-renderer control: the same PUBLIC first-readback contract on this
+        # renderer. The defect was Bgfx-only and only Bgfx production changed; running the identical
+        # fixture here is what makes that claim falsifiable rather than asserted.
+        cna_headless_test(cna_test_headless_msaa_first_readback
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp)
+        cna_register_renderer_test(NAME Headless_MsaaFirstReadback COMMAND cna_test_headless_msaa_first_readback
+            TIMEOUT 900 LABELS "Headless")
 
-    # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
-    # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
-    # identical fixture here is what makes that claim falsifiable rather than asserted.
-    cna_headless_test(cna_test_headless_msaa_mip_readback
-        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
-    cna_register_renderer_test(NAME Headless_MsaaMipReadback COMMAND cna_test_headless_msaa_mip_readback
-        TIMEOUT 1200 LABELS "Headless")
-    # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
-    # renderer. The fabrication was Vulkan-only and only Vulkan production changed; running the
-    # identical fixture here is what makes that claim falsifiable rather than asserted.
-    cna_headless_test(cna_test_headless_invalid_mip_level
-        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_invalid_mip_level_test.cpp)
-    cna_register_renderer_test(NAME Headless_InvalidMipLevel COMMAND cna_test_headless_invalid_mip_level
-        TIMEOUT 1200 LABELS "Headless")
+        # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
+        # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+        # identical fixture here is what makes that claim falsifiable rather than asserted.
+        cna_headless_test(cna_test_headless_msaa_mip_readback
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
+        cna_register_renderer_test(NAME Headless_MsaaMipReadback COMMAND cna_test_headless_msaa_mip_readback
+            TIMEOUT 1200 LABELS "Headless")
+        # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
+        # renderer. The fabrication was Vulkan-only and only Vulkan production changed; running the
+        # identical fixture here is what makes that claim falsifiable rather than asserted.
+        cna_headless_test(cna_test_headless_invalid_mip_level
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_invalid_mip_level_test.cpp)
+        cna_register_renderer_test(NAME Headless_InvalidMipLevel COMMAND cna_test_headless_invalid_mip_level
+            TIMEOUT 1200 LABELS "Headless")
+    else()
+        message(STATUS "CNA: no SDL3 target -- skipping the SDL-harness Headless controls "
+                       "(MsaaDepthContract, MsaaFirstReadback, MsaaMipReadback, InvalidMipLevel)")
+    endif()
     # REMED-GFX-165 cross-renderer control: Headless does not rasterize, so the pixel oracle is a
     # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
     cna_headless_test(cna_test_headless_backbuffer_readback_dimension
