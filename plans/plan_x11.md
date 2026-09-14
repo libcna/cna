@@ -334,12 +334,16 @@ Reproduced with no X11 involved at all: a three-line probe compiled against
 `-DCNA_PLATFORM=HEADLESS -DCNA_AUDIO_PLATFORM=NULL` build produces exactly the same undefined
 reference.
 
-**Not fixed here, deliberately.** The decoder is a real SDL user (`SDL_LoadWAV_IO`,
-`SDL_ConvertAudioSamples`), so the fix is a native WAV/ADPCM decoder in the content or audio
-module — not a build-system adjustment, and squarely inside the "do not implement an audio
-backend" boundary this workstream was given. It costs this branch nothing: platform and audio are
-independent axes, so the X11 regression matrix runs with the default SDL3 audio, and the SDL-free
-proof is the platform-layer claim that was actually asked for.
+**Fixed by `plans/plan_native_platforms_integration.md` NPI-0007..0011**, when this backend was
+integrated alongside Win32 and hit the same finding via `CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF
+CNA_AUDIO_PLATFORM=NULL`. `DecodeWavToPcm16` is now implemented natively in
+`modules/audio/src/Internal/WavDecoder.cpp` (PCM 8/16/24/32-bit, IEEE float 32/64-bit,
+`WAVE_FORMAT_EXTENSIBLE`, MS-ADPCM and IMA-ADPCM), built on the pre-existing SDL-free
+`WavFormatReader.cpp` chunk reader and compiled unconditionally regardless of
+`CNA_AUDIO_PLATFORM`; the old SDL3Mixer implementation was removed. `cna_content`,
+`CnaContentTests` and `CnaContentPipelineTests` now build and pass under `CNA_PLATFORM=X11
+CNA_ENABLE_SDL=OFF CNA_AUDIO_PLATFORM=NULL`, confirmed with `ldd`/`readelf` showing no SDL
+reference in either binary.
 
 ### F-4 — one renderer is missing from the glTF index-width disposition table
 
