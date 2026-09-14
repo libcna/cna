@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <istream>
@@ -35,6 +36,12 @@ namespace Microsoft::Xna::Framework::Audio
         // UnregisterInstance). Not gated by SOUND_ENABLED -- this is pure object-lifecycle
         // bookkeeping, independent of the audio backend.
         std::vector<SoundEffectInstance*> instances;
+        // The length of the sample data and its rate, recorded in every build. Duration is a
+        // property of the data rather than of an output device (FNA computes it from the sample
+        // count at creation), so a NULL or SDL2 audio build -- which has no mixer to ask -- must
+        // still report it (plans/plan_native_platform_validation.md NPV-0105).
+        std::int64_t frames = 0;
+        SharpRuntime::intcs frameRate = 0;
     };
 
     void SoundEffect::RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance)
@@ -328,6 +335,13 @@ namespace Microsoft::Xna::Framework::Audio
         {
             throw System::ArgumentOutOfRangeException("count");
         }
+        // 16-bit PCM: two bytes per sample, one sample per channel per frame.
+        if (static_cast<int>(channels) > 0 && sampleRate > 0)
+        {
+            impl_->frames = static_cast<std::int64_t>(
+                cnt / (2u * static_cast<std::size_t>(static_cast<int>(channels))));
+            impl_->frameRate = sampleRate;
+        }
 
 #ifdef SOUND_ENABLED
         if (const char* sig = DetectLikelyContainerSignature(buffer.data() + off, cnt))
@@ -390,6 +404,11 @@ namespace Microsoft::Xna::Framework::Audio
             }
         }
 #endif
+        if (impl_ && impl_->frames > 0 && impl_->frameRate > 0)
+        {
+            return System::TimeSpan::FromSeconds(static_cast<double>(impl_->frames) /
+                                                 impl_->frameRate);
+        }
         return System::TimeSpan::Zero;
     }
 
