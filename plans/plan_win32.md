@@ -775,17 +775,26 @@ requirement instead of one that reads like a typo.
 
 ### 17.4 SDL independence (WIN32-0060)
 
-The root configure's decision, measured per configuration:
+**Superseded by `cmake/SdlAvailability.cmake` and `CNA_ENABLE_SDL`
+(plans/plan_native_platforms_integration.md NPI-0006).** WIN32-0060 originally added an inline
+`_cna_sdl3_required` heuristic directly in the root `CMakeLists.txt`, restated here as it measured
+at the time. Integrating the X11 backend found that branch's `CNA_ENABLE_SDL` (AUTO/ON/OFF) gate
+already subsumed this heuristic's purpose in a strictly more general form — it keys off the same
+`CNA_PLATFORM`/`CNA_AUDIO_PLATFORM`/renderer facts, verified correct against current `next` (only
+`fna3d`, `sdl-renderer`, `freedirect`, `sdl-gpu` declare `REQUIRES_PLATFORM SDL3`; the old
+heuristic's extra `LLGL` entry was stale) — so the Win32-specific heuristic was removed rather than
+kept alongside it. The table below is retained for history; the "tests on" row's old requirement no
+longer holds under the new gate, which is unconditional on `CNA_BUILD_TESTS`/`CNA_BUILD_EXAMPLES`:
 
-| Configuration | SDL3 |
-|---|---|
-| default (nothing set) | **required** — unchanged |
-| `WIN32` + `NULL` audio + `DIRECTX11`, tests/examples off | **skipped** |
-| `WIN32` + `NULL` audio + `DIRECTX12`, tests/examples off | **skipped** |
-| `HEADLESS` + `NULL` audio + `HEADLESS` renderer, tests/examples off | **skipped** |
-| `WIN32` + `NULL` audio + `SDL_RENDERER` | required — the renderer links SDL3 itself |
-| `WIN32` + `SDL3` audio + `DIRECTX11` | required — the audio axis chose it |
-| `WIN32` + `NULL` audio + `DIRECTX11`, **tests on** | required — test fixtures use it |
+| Configuration (as measured against the old inline heuristic) | SDL3 then | SDL3 now (`CNA_ENABLE_SDL=OFF`) |
+|---|---|---|
+| default (nothing set, `CNA_ENABLE_SDL` left at its `AUTO` default) | **required** — unchanged | required — unchanged |
+| `WIN32` + `NULL` audio + `DIRECTX11`, tests/examples off | **skipped** | skipped |
+| `WIN32` + `NULL` audio + `DIRECTX12`, tests/examples off | **skipped** | skipped |
+| `HEADLESS` + `NULL` audio + `HEADLESS` renderer, tests/examples off | **skipped** | skipped |
+| `WIN32` + `NULL` audio + `SDL_RENDERER` | required — the renderer links SDL3 itself | required — unchanged |
+| `WIN32` + `SDL3` audio + `DIRECTX11` | required — the audio axis chose it | required — unchanged |
+| `WIN32` + `NULL` audio + `DIRECTX11`, **tests on** | required — test fixtures used it | **skipped** — the new gate does not condition on `CNA_BUILD_TESTS`/`CNA_BUILD_EXAMPLES` at all, verified by configuring exactly this combination with `-DCNA_ENABLE_SDL=OFF -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=ON` |
 
 So the target configuration this workstream set out to make real —
 
@@ -793,11 +802,13 @@ So the target configuration this workstream set out to make real —
 CNA_PLATFORM=WIN32
 CNA_AUDIO_PLATFORM=NULL
 CNA_GRAPHICS_RENDERER=DIRECTX11   (and DIRECTX12)
+CNA_ENABLE_SDL=OFF
 ```
 
-— has no SDL in it at all: not linked, and not even built. The gate is conservative by
-construction (it runs before the selection files declare their cache defaults, so an unset axis
-reads as "not chosen" and keeps SDL3), which is why the default row above is unaffected.
+— has no SDL in it at all: not linked, and not even built, with tests and examples on. The
+explicit `CNA_ENABLE_SDL=OFF` is required now where the old heuristic inferred it implicitly from
+the other three axes plus tests/examples being off; `AUTO` (the default) always configures SDL,
+unchanged from historical behavior, so an existing build is unaffected either way.
 
 The remaining legitimate SDL dependencies, none of them in scope to remove:
 
