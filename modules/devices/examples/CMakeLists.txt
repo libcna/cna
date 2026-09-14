@@ -18,7 +18,14 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # demo_devices/android/ (docs/devices-build.md Section 4.1),
 # which compiles Main.cpp/DevicesDemo.cpp into a genuine shared library
 # ("main") via its own app/jni/src/CMakeLists.txt -- not this target.
-if(CNA_BUILD_EXAMPLES AND NOT ANDROID)
+# This demo directly includes <SDL3/SDL_main.h> in its own Main.cpp (see the link-libraries
+# comment below for why), so unlike every other example it has a genuine, unconditional source
+# dependency on SDL3 -- not merely a platform/renderer choice that happens to route through it.
+# It is therefore only ever built when SDL3 is actually configured
+# (plans/plan_native_platforms_integration.md NPI-0007): an SDL-free configuration
+# (CNA_ENABLE_SDL=OFF, or CNA_PLATFORM=WIN32/X11 with no SDL3 requested) skips it rather than
+# failing to configure over an example that was never claiming to be SDL-free.
+if(CNA_BUILD_EXAMPLES AND NOT ANDROID AND (TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static))
     add_executable(cna_demo_devices
         demo_devices/src/Main.cpp
         demo_devices/src/DevicesDemo.cpp

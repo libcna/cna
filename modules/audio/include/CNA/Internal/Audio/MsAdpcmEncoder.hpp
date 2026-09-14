@@ -28,6 +28,14 @@ namespace CNA::Internal::Audio
     [[nodiscard]] std::span<const std::pair<std::int16_t, std::int16_t>> MsAdpcmCoefficients() noexcept;
 
     /**
+     * @brief The sixteen-entry delta adaptation table every MS-ADPCM encoder and decoder shares,
+     *        indexed by the four-bit nibble a block encodes.
+     *
+     * @return The sixteen scaling values, in nibble order.
+     */
+    [[nodiscard]] std::span<const int> MsAdpcmAdaptationTable() noexcept;
+
+    /**
      * @brief Encodes interleaved PCM16 as MS-ADPCM.
      *
      * The last block is padded with its final frame rather than dropped, so the encoded length is

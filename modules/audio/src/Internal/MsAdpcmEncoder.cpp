@@ -134,6 +134,11 @@ namespace CNA::Internal::Audio
         return {Coefficients.data(), Coefficients.size()};
     }
 
+    std::span<const int> MsAdpcmAdaptationTable() noexcept
+    {
+        return {AdaptationTable.data(), AdaptationTable.size()};
+    }
+
     std::vector<std::uint8_t> MsAdpcmFormatExtension(const std::uint16_t samplesPerBlock)
     {
         std::vector<std::uint8_t> extension;

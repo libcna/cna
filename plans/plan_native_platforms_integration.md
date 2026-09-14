@@ -76,14 +76,14 @@ squash is committed once under Robert Vokac's identity with no Claude trailer.
 | NPI-0001 | Phase 0 evidence collection | done |
 | NPI-0002 | Create integration branch from origin/next | done |
 | NPI-0003 | Write this plan | done |
-| NPI-0004 | Squash-merge Win32 branch content, resolve conflicts, commit | in progress |
-| NPI-0005 | Squash-merge X11 branch content, resolve conflicts, commit | pending |
-| NPI-0006 | Unify SDL gating (adopt CNA_ENABLE_SDL, drop Win32 inline heuristic) | pending |
-| NPI-0007 | Reconcile PlatformFactory / PlatformSelection for WIN32+X11 coexistence | pending |
-| NPI-0008 | SDL-free WAV decoder implementation | pending |
-| NPI-0009 | WAV decoder regression tests (CNA_ENABLE_SDL=OFF) | pending |
-| NPI-0010 | Wire new decoder into WavDecoder.cpp / remove SDL dependency | pending |
-| NPI-0011 | Prove SDL-free cna_content build + dependency inspection (Linux/X11) | pending |
+| NPI-0004 | Squash-merge Win32 branch content, resolve conflicts, commit | done (e73c63e38) |
+| NPI-0005 | Squash-merge X11 branch content, resolve conflicts, commit | done (60623a9b7) |
+| NPI-0006 | Unify SDL gating (adopt CNA_ENABLE_SDL, drop Win32 inline heuristic) | done (part of 60623a9b7) |
+| NPI-0007 | Reconcile PlatformFactory / PlatformSelection for WIN32+X11 coexistence; fix modules/devices/examples/CMakeLists.txt unconditional SDL3 link (found via first CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF configure) | done |
+| NPI-0008 | SDL-free WAV decoder implementation: PCM 8/16/24/32, IEEE float 32/64, WAVE_FORMAT_EXTENSIBLE, MS-ADPCM (modules/audio/src/Internal/MsAdpcmDecoder.cpp, reverse of the existing MsAdpcmEncoder), IMA-ADPCM (modules/audio/src/Internal/ImaAdpcmDecoder.cpp, standard tables) -- both ADPCM formats were found to be load-bearing: an existing unconditional test (XnaAudioContentTests.cpp AdpcmRoundTripsThroughCnasOwnDecoder) exercises MS-ADPCM, and SOUND_ENABLED-gated tests exercise IMA-ADPCM. Built on the existing SDL-free modules/audio/src/Internal/WavFormatReader.cpp RIFF/WAVE chunk reader rather than reimplementing chunk parsing. Old modules/audio/src/Backend/Sdl3Mixer/WavDecoder.cpp (SDL_LoadWAV_IO-based) removed. | done |
+| NPI-0009 | WAV decoder regression tests (modules/audio/tests/CNA/Internal/Audio/WavDecoderTests.cpp): PCM8/16/24/32, float32, WAVE_FORMAT_EXTENSIBLE, MS-ADPCM, IMA-ADPCM, truncated RIFF/fmt/data, missing data chunk, empty data, invalid block alignment, zero channels, unsupported encoding, unknown ancillary chunk with odd-size padding, data-before-ancillary-chunk ordering | done, building/running now |
+| NPI-0010 | Wire new decoder into WavDecoder.cpp / remove SDL dependency | done (part of NPI-0008) |
+| NPI-0011 | Prove SDL-free cna_content build + dependency inspection (Linux/X11): reproduced the pre-fix link failure (`undefined symbol: CNA::Internal::Audio::DecodeWavToPcm16`) building CnaContentPipelineTests under CNA_PLATFORM=X11 CNA_ENABLE_SDL=OFF CNA_AUDIO_PLATFORM=NULL CNA_GRAPHICS_RENDERER=HEADLESS in cmake-build-x11/, then confirmed it links and the existing MS-ADPCM round-trip test still passes after the fix. Binary dependency inspection (ldd/readelf) still pending. | in progress |
 | NPI-0012 | Prove Win32 SDL-free configure (mingw cross, compile-level only — no native Windows host) | pending |
 | NPI-0013 | Add SDL-free CI cells (Linux X11 native; Win32 compile-level) | pending |
 | NPI-0014 | AUTO/ON/OFF configuration matrix tests | pending |
