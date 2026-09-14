@@ -1067,6 +1067,14 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(TARGET cna_platform_x11_exit_harness)
+        # plans/plan_native_platform_validation.md NPV-0102: see cmake/Harnesses.cmake.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_x11_exit_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+            CNA_PLATFORM_X11_EXIT_HARNESS_PATH="$<TARGET_FILE:cna_platform_x11_exit_harness>"
+        )
+    endif()
+
     if(TARGET cna_platform_terminal_resize_harness)
         # plans/plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
         add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_terminal_resize_harness)

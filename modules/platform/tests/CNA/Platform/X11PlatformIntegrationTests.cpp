@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <sys/wait.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -457,6 +458,28 @@ TEST_F(X11Live, FocusCanMoveOnAfterTheFocusedWindowWasDestroyed)
         return SawWindowEvent(events, secondId, WindowEventKind::FocusGained);
     })) << "focus did not reach the surviving window";
     EXPECT_TRUE(second->HasFocus());
+}
+
+TEST_F(X11Live, AProcessExitingWithTheCurrentPlatformOpenTearsDownCleanly)
+{
+    // NPV-0102. The ordinary end of every XNA-API application: main() returns while
+    // CurrentPlatform's lazily created X11 platform is still open, and exit() destroys it among
+    // the static destructors. That ran after the X11 error policy's own statics were gone, so the
+    // connection unregistered itself from freed memory. An ordinary build cannot see it;
+    // AddressSanitizer turns it into a non-zero exit status, which is what this asserts on -- the
+    // assertion that matters therefore lives in the sanitizer build.
+#if !defined(CNA_PLATFORM_X11_EXIT_HARNESS_PATH)
+    GTEST_SKIP() << "cna_platform_x11_exit_harness is not built in this configuration";
+#else
+    const int status = std::system(CNA_PLATFORM_X11_EXIT_HARNESS_PATH);
+    ASSERT_NE(status, -1);
+    ASSERT_TRUE(WIFEXITED(status)) << "the harness was killed by a signal";
+    if (WEXITSTATUS(status) == 77)
+    {
+        GTEST_SKIP() << "the harness could not reach the X server";
+    }
+    EXPECT_EQ(WEXITSTATUS(status), 0) << "exiting with the current platform open must be clean";
+#endif
 }
 
 TEST_F(X11Live, AdoptingAWindowByIdGivesANonOwningViewOfTheSameWindow)

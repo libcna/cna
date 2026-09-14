@@ -502,6 +502,16 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
     )
 endif()
 
+# --- plans/plan_native_platform_validation.md NPV-0102: X11 exit-order harness ---
+# A process that returns from main() while CurrentPlatform's lazily created X11 platform is still
+# open -- the ordinary end of every XNA-API application. The defect it guards against lives in
+# static destruction order at process exit, which no test inside a long-running test binary can
+# reach; X11PlatformIntegrationTests.cpp spawns this and asserts on its exit status.
+if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11")
+    add_executable(cna_platform_x11_exit_harness tools/platform/x11_exit_harness.cpp)
+    target_link_libraries(cna_platform_x11_exit_harness PRIVATE cna_platform)
+endif()
+
 # --- plans/plan_xnapipeline.md XNAP-A5: fake external effect compiler ---
 # A standalone (non-GTest) program that stands in for Microsoft's legacy `fxc` on the other side of
 # a real process boundary, so the `.fx` product route is proven as one chain -- command line,

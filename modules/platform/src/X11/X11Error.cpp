@@ -11,18 +11,28 @@ namespace CNA::Platform::X11 {
 
     namespace {
 
+        // The policy's state is deliberately IMMORTAL -- allocated once and never destroyed.
+        //
+        // A platform can outlive every ordinary static: CurrentPlatform keeps the lazily created
+        // default in a function-local static that is constructed BEFORE the first connection
+        // registers here, so at exit() it is destroyed AFTER this file's statics. Its
+        // ~X11Connection then called Unregister on a vector and a mutex that no longer existed --
+        // a heap-use-after-free at the end of every X11 application that used the XNA API, found
+        // by AddressSanitizer (plans/plan_native_platform_validation.md NPV-0102). Never
+        // destroying them makes Unregister valid at any point of process teardown.
+
         std::mutex& PolicyMutex()
         {
-            static std::mutex mutex;
-            return mutex;
+            static auto* const mutex = new std::mutex();
+            return *mutex;
         }
 
         /// Connections CNA opened. An error on a connection that is not in this list belongs to
         /// the host application and is forwarded to the handler CNA replaced.
         std::vector<Display*>& OwnedDisplays()
         {
-            static std::vector<Display*> displays;
-            return displays;
+            static auto* const displays = new std::vector<Display*>();
+            return *displays;
         }
 
         XErrorHandler& PreviousHandler()
