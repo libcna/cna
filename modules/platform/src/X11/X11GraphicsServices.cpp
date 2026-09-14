@@ -9,6 +9,8 @@
 #include "X11Window.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <cstring>
 #include <dlfcn.h>
 
@@ -57,35 +59,6 @@ namespace CNA::Platform::X11 {
         void* LoadGlxProcAddress(const char*) { return nullptr; }
 #endif
 
-        /// Shifts a channel into place given the visual's own mask.
-        ///
-        /// A TrueColor visual publishes red/green/blue masks and nothing else: there is no
-        /// "format" to switch on, only three bit patterns whose position and width vary by depth
-        /// and by server byte order. Deriving the shift and the width from the mask is what makes
-        /// the conversion correct on a 16-bit 5-6-5 visual and a 24-bit BGRX one without either
-        /// being special-cased.
-        unsigned long PackChannel(const unsigned long mask, const unsigned int value)
-        {
-            if (mask == 0)
-            {
-                return 0;
-            }
-            int shift = 0;
-            unsigned long probe = mask;
-            while ((probe & 1u) == 0)
-            {
-                probe >>= 1;
-                ++shift;
-            }
-            int bits = 0;
-            while ((probe & 1u) != 0)
-            {
-                probe >>= 1;
-                ++bits;
-            }
-            const unsigned long scaled = bits >= 8 ? (value << (bits - 8)) : (value >> (8 - bits));
-            return (scaled << shift) & mask;
-        }
 
         struct PresentRect
         {
@@ -710,6 +683,54 @@ namespace CNA::Platform::X11 {
         }
     }
 
+    // --- X11PixelPacker -------------------------------------------------------------------------
+
+    X11PixelPacker::X11PixelPacker(const unsigned long redMask, const unsigned long greenMask,
+                                   const unsigned long blueMask)
+        : red_(Describe(redMask)), green_(Describe(greenMask)), blue_(Describe(blueMask))
+    {
+    }
+
+    X11PixelPacker::Channel X11PixelPacker::Describe(const unsigned long mask)
+    {
+        Channel channel;
+        channel.mask = mask;
+        if (mask == 0)
+        {
+            return channel;
+        }
+        unsigned long probe = mask;
+        while ((probe & 1u) == 0)
+        {
+            probe >>= 1;
+            ++channel.shift;
+        }
+        while ((probe & 1u) != 0)
+        {
+            probe >>= 1;
+            ++channel.bits;
+        }
+        return channel;
+    }
+
+    unsigned long X11PixelPacker::Place(const Channel& channel, const unsigned int value)
+    {
+        if (channel.mask == 0)
+        {
+            return 0;
+        }
+        const unsigned long scaled = channel.bits >= 8
+                                         ? (static_cast<unsigned long>(value) << (channel.bits - 8))
+                                         : (value >> (8 - channel.bits));
+        return (scaled << channel.shift) & channel.mask;
+    }
+
+    unsigned long X11PixelPacker::Pack(const unsigned int red, const unsigned int green,
+                                       const unsigned int blue) const
+    {
+        return Place(red_, red) | Place(green_, green) | Place(blue_, blue);
+    }
+
     // --- X11SurfacePresenter --------------------------------------------------------------------
 
     X11SurfacePresenter::X11SurfacePresenter(X11Window& window) : window_(window)
@@ -899,56 +920,78 @@ namespace CNA::Platform::X11 {
         EnsureImage(rect.width, rect.height);
 
         Visual* visual = window_.GetVisual();
-        const unsigned long redMask = visual != nullptr ? visual->red_mask : 0x00FF0000uL;
-        const unsigned long greenMask = visual != nullptr ? visual->green_mask : 0x0000FF00uL;
-        const unsigned long blueMask = visual != nullptr ? visual->blue_mask : 0x000000FFuL;
+        const X11PixelPacker packer(visual != nullptr ? visual->red_mask : 0x00FF0000uL,
+                                    visual != nullptr ? visual->green_mask : 0x0000FF00uL,
+                                    visual != nullptr ? visual->blue_mask : 0x000000FFuL);
 
-        // Nearest-neighbour or box-filtered scaling in one pass, converting to the visual's own
-        // pixel format as it goes. Doing both in one loop avoids an intermediate full-size buffer,
-        // which for a 4K frame is 32 MB of traffic that would otherwise happen every frame.
+        // Everything that does not change across a frame is decided once per frame. The first
+        // version derived each channel's shift from its mask, divided to find the source column
+        // and called XPutPixel through its function pointer for every pixel: about 30 ms for a
+        // 1920x1080 frame even in an optimised build -- over a 60 Hz frame budget before the
+        // software renderer had drawn anything (plans/plan_native_platform_validation.md
+        // NPV-0116).
+        sourceColumns_.resize(static_cast<std::size_t>(rect.width));
+        for (int x = 0; x < rect.width; ++x)
+        {
+            sourceColumns_[static_cast<std::size_t>(x)] =
+                std::min(frame.width - 1, x * frame.width / std::max(1, rect.width));
+        }
+        // Downscaling with nearest neighbour drops entire source pixels, which on text or fine
+        // detail looks like noise. A 2x2 box is the cheapest averaging that removes it; upscaling
+        // is left nearest because interpolating a magnified image would blur pixel art the caller
+        // may have intended.
+        const bool box = filter_ == PresentFilter::Linear && rect.width < frame.width &&
+                         rect.height < frame.height;
+        // A 32-bit pixel in this machine's own byte order is written straight into the image --
+        // exactly the bytes XPutPixel would store. Any other layout (16 bits per pixel, 24 packed,
+        // or a display whose byte order differs from this machine's) keeps XPutPixel, which
+        // handles all of them.
+        constexpr int kHostByteOrder = std::endian::native == std::endian::little ? LSBFirst
+                                                                                   : MSBFirst;
+        const bool direct = image_->bits_per_pixel == 32 && image_->byte_order == kHostByteOrder;
+
+        // Scaling and conversion in one pass. Doing both in one loop avoids an intermediate
+        // full-size buffer, which for a 4K frame is 32 MB of traffic that would otherwise happen
+        // every frame.
         for (int y = 0; y < rect.height; ++y)
         {
             const int sourceY =
                 std::min(frame.height - 1, y * frame.height / std::max(1, rect.height));
+            const std::uint8_t* row =
+                frame.pixels + static_cast<std::size_t>(sourceY) * static_cast<std::size_t>(stride);
+            const std::uint8_t* nextRow =
+                frame.pixels + static_cast<std::size_t>(std::min(frame.height - 1, sourceY + 1)) *
+                                   static_cast<std::size_t>(stride);
+            char* line = image_->data + static_cast<std::size_t>(y) *
+                                            static_cast<std::size_t>(image_->bytes_per_line);
             for (int x = 0; x < rect.width; ++x)
             {
-                const int sourceX =
-                    std::min(frame.width - 1, x * frame.width / std::max(1, rect.width));
-                const std::uint8_t* pixel =
-                    frame.pixels + static_cast<std::size_t>(sourceY) *
-                                       static_cast<std::size_t>(stride) +
-                    static_cast<std::size_t>(sourceX) * 4u;
-
+                const int sourceX = sourceColumns_[static_cast<std::size_t>(x)];
+                const std::uint8_t* pixel = row + static_cast<std::size_t>(sourceX) * 4u;
                 unsigned int red = pixel[0];
                 unsigned int green = pixel[1];
                 unsigned int blue = pixel[2];
-
-                if (filter_ == PresentFilter::Linear && rect.width < frame.width &&
-                    rect.height < frame.height)
+                if (box)
                 {
-                    // Downscaling with nearest neighbour drops entire source pixels, which on
-                    // text or fine detail looks like noise. A 2x2 box is the cheapest averaging
-                    // that removes it; upscaling is left nearest because interpolating a
-                    // magnified image would blur pixel art the caller may have intended.
-                    const int nextX = std::min(frame.width - 1, sourceX + 1);
-                    const int nextY = std::min(frame.height - 1, sourceY + 1);
-                    const auto sample = [&](const int sx, const int sy) {
-                        return frame.pixels + static_cast<std::size_t>(sy) *
-                                                  static_cast<std::size_t>(stride) +
-                               static_cast<std::size_t>(sx) * 4u;
-                    };
-                    const std::uint8_t* p10 = sample(nextX, sourceY);
-                    const std::uint8_t* p01 = sample(sourceX, nextY);
-                    const std::uint8_t* p11 = sample(nextX, nextY);
+                    const std::size_t nextX =
+                        static_cast<std::size_t>(std::min(frame.width - 1, sourceX + 1)) * 4u;
+                    const std::uint8_t* p10 = row + nextX;
+                    const std::uint8_t* p01 = nextRow + static_cast<std::size_t>(sourceX) * 4u;
+                    const std::uint8_t* p11 = nextRow + nextX;
                     red = (red + p10[0] + p01[0] + p11[0]) / 4u;
                     green = (green + p10[1] + p01[1] + p11[1]) / 4u;
                     blue = (blue + p10[2] + p01[2] + p11[2]) / 4u;
                 }
-
-                const unsigned long value = PackChannel(redMask, red) |
-                                            PackChannel(greenMask, green) |
-                                            PackChannel(blueMask, blue);
-                XPutPixel(image_, x, y, value);
+                const unsigned long value = packer.Pack(red, green, blue);
+                if (direct)
+                {
+                    const auto word = static_cast<std::uint32_t>(value);
+                    std::memcpy(line + static_cast<std::size_t>(x) * 4u, &word, sizeof(word));
+                }
+                else
+                {
+                    XPutPixel(image_, x, y, value);
+                }
             }
         }
 

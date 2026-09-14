@@ -1440,7 +1440,7 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*
+            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*
             LABELS "platform" TIMEOUT 120)
 
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh")

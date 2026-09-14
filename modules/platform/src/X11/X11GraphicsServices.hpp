@@ -231,6 +231,58 @@ namespace CNA::Platform::X11 {
      * an optimisation and nothing depends on it: over a network connection, or on a server built
      * without it, the plain path runs.
      */
+    /**
+     * @brief Converts 8-bit red, green and blue into a TrueColor visual's pixel value.
+     *
+     * A TrueColor visual publishes red/green/blue masks and nothing else: there is no "format" to
+     * switch on, only three bit patterns whose position and width vary by depth and by server
+     * byte order. Deriving each channel's shift and width from its mask is what keeps the
+     * conversion correct on a 16-bit 5-6-5 visual and a 24-bit BGRX one without either being
+     * special-cased -- and doing it once, when the packer is built, is what keeps it out of the
+     * per-pixel loop.
+     */
+    class X11PixelPacker
+    {
+    public:
+        /**
+         * @brief Builds a packer for a visual's channel masks.
+         *
+         * @param redMask The visual's red mask.
+         * @param greenMask The visual's green mask.
+         * @param blueMask The visual's blue mask.
+         */
+        X11PixelPacker(unsigned long redMask, unsigned long greenMask, unsigned long blueMask);
+
+        /**
+         * @brief Packs one pixel.
+         *
+         * A channel narrower than 8 bits keeps its most significant bits; a wider one is shifted
+         * up. A zero mask contributes nothing.
+         *
+         * @param red Red, 0-255.
+         * @param green Green, 0-255.
+         * @param blue Blue, 0-255.
+         * @return The pixel value in the visual's format.
+         */
+        [[nodiscard]] unsigned long Pack(unsigned int red, unsigned int green,
+                                         unsigned int blue) const;
+
+    private:
+        struct Channel
+        {
+            unsigned long mask = 0;
+            int shift = 0;
+            int bits = 0;
+        };
+
+        static Channel Describe(unsigned long mask);
+        static unsigned long Place(const Channel& channel, unsigned int value);
+
+        Channel red_;
+        Channel green_;
+        Channel blue_;
+    };
+
     class X11SurfacePresenter final : public IPlatformSurfacePresenter
     {
     public:
@@ -283,6 +335,7 @@ namespace CNA::Platform::X11 {
         GC graphicsContext_ = nullptr;
         XImage* image_ = nullptr;
         std::vector<unsigned char> pixels_;
+        std::vector<int> sourceColumns_;
         int imageWidth_ = 0;
         int imageHeight_ = 0;
         PresentScaleMode scaleMode_ = PresentScaleMode::Letterbox;
