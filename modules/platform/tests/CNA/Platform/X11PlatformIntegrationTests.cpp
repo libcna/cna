@@ -1276,6 +1276,69 @@ TEST_F(X11Live, TheClipboardTakesRealSelectionOwnershipAndReadsItBack)
     EXPECT_EQ(clipboard->GetText(), text);
 }
 
+// plans/plan_native_platform_validation.md NPV-0115: pastes from CNA intermittently came back
+// empty (xsel, about one run in four). Losing the clipboard queues a SelectionClear at once; an
+// application that copied again before its next pump took the clipboard back, and the pump then
+// acted on the old SelectionClear and threw the new text away.
+TEST_F(X11Live, ASelectionClearQueuedBeforeCopyingAgainDoesNotDropTheNewText)
+{
+    IPlatformClipboard* clipboard = platform_->GetClipboard();
+    ASSERT_NE(clipboard, nullptr);
+    clipboard->SetText("first copy");
+
+    ::Display* other = XOpenDisplay(nullptr);
+    ASSERT_NE(other, nullptr);
+    const Atom clipboardAtom = XInternAtom(other, "CLIPBOARD", kXFalse);
+    const Atom utf8 = XInternAtom(other, "UTF8_STRING", kXFalse);
+    const Atom property = XInternAtom(other, "CNA_TEST_PASTE", kXFalse);
+    const ::Window otherWindow =
+        XCreateSimpleWindow(other, DefaultRootWindow(other), 0, 0, 1, 1, 0, 0, 0);
+    XSetSelectionOwner(other, clipboardAtom, otherWindow, kCurrentTime);
+    XSync(other, kXFalse);
+
+    // The application copies again before its pump has seen the SelectionClear above.
+    clipboard->SetText("second copy");
+    PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
+              std::chrono::milliseconds(100));
+    EXPECT_TRUE(clipboard->HasText());
+    EXPECT_EQ(clipboard->GetText(), "second copy");
+
+    // And another application pasting now gets it: this is what came back empty.
+    XConvertSelection(other, clipboardAtom, utf8, property, otherWindow, kCurrentTime);
+    XFlush(other);
+    std::string pasted;
+    bool answered = false;
+    PumpUntil([&](const std::vector<PlatformEvent>&) {
+        XEvent event;
+        if (XCheckTypedWindowEvent(other, otherWindow, SelectionNotify, &event) == kXFalse)
+        {
+            return false;
+        }
+        answered = true;
+        if (event.xselection.property != 0)
+        {
+            Atom type = 0;
+            int format = 0;
+            unsigned long count = 0;
+            unsigned long remaining = 0;
+            unsigned char* data = nullptr;
+            if (XGetWindowProperty(other, otherWindow, property, 0, 1024, kXFalse, AnyPropertyType,
+                                   &type, &format, &count, &remaining, &data) == 0 &&
+                data != nullptr)
+            {
+                pasted.assign(reinterpret_cast<const char*>(data), count);
+                XFree(data);
+            }
+        }
+        return true;
+    });
+    EXPECT_TRUE(answered) << "the paste request was never answered";
+    EXPECT_EQ(pasted, "second copy");
+
+    XDestroyWindow(other, otherWindow);
+    XCloseDisplay(other);
+}
+
 TEST_F(X11Live, AClipboardPayloadTooLargeForOnePropertyStillRoundTrips)
 {
     // Past the server's maximum request size, which is what forces the INCR path on any external

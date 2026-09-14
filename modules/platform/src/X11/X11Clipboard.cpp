@@ -342,6 +342,16 @@ namespace CNA::Platform::X11 {
                 {
                     return false;
                 }
+                // The server queues SelectionClear the moment another client takes the
+                // clipboard, and an application that copies again before its next pump takes it
+                // straight back -- so by the time this arrives it may describe a loss that has
+                // already been undone. Acting on it then threw the new text away and every paste
+                // came back empty (plans/plan_native_platform_validation.md NPV-0115). The server
+                // is the authority on who owns the selection now.
+                if (XGetSelectionOwner(display, atoms.clipboard) == owner_)
+                {
+                    return true;
+                }
                 // Another client took the clipboard. Dropping the text is not optional
                 // bookkeeping: keeping it would make HasText()/GetText() answer from a stale copy
                 // of what the user copied several applications ago.
