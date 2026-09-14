@@ -106,9 +106,17 @@ from XKB key names and has no equivalent without it" PARENT_SCOPE)
     # GLX backs IPlatformGlContext. Asked for through FindOpenGL's GLX component rather than
     # FindX11, because the GLX client library is part of the GL implementation (libglvnd or Mesa),
     # not of the X client libraries.
+    #
+    # HEADERS ONLY, like Vulkan below: the backend resolves its GLX entry points from libGLX (or
+    # libGL) at run time. Linking it made every X11 build -- HEADLESS and SOFTWARE included --
+    # need a GL implementation installed to start, and put a GL library into the link closure of
+    # every module above the platform (plans/plan_native_platform_validation.md NPV-0121).
     find_package(OpenGL QUIET COMPONENTS OpenGL GLX)
     if(TARGET OpenGL::GLX)
-        list(APPEND _libraries OpenGL::GLX)
+        get_target_property(_glx_includes OpenGL::GLX INTERFACE_INCLUDE_DIRECTORIES)
+        if(_glx_includes)
+            list(APPEND _includes ${_glx_includes})
+        endif()
         list(APPEND _definitions "CNA_X11_HAVE_GLX=1")
         list(APPEND _found_optional "GLX")
     else()

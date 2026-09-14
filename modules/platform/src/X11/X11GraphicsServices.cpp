@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <dlfcn.h>
+#include <type_traits>
 
 namespace CNA::Platform::X11 {
 
@@ -25,15 +26,86 @@ namespace CNA::Platform::X11 {
         using GlXSwapIntervalMesa = int (*)(int);
         using GlXSwapIntervalSgi = int (*)(int);
 
+        /// The GLX 1.3 entry points this backend calls, resolved from the GL implementation at
+        /// run time -- the way the Vulkan surface reaches the Vulkan loader -- rather than linked.
+        ///
+        /// Linking libGLX made every X11 build need a GL implementation installed just to start,
+        /// HEADLESS and SOFTWARE ones included, and put a GL library into the link closure of
+        /// every module above the platform, which the native-SDK-free module gates forbid
+        /// (plans/plan_native_platform_validation.md NPV-0121). The GLX header still types every
+        /// pointer, so a signature mismatch is a compile error rather than a crash.
+        struct GlxApi
+        {
+            bool loaded = false;
+            decltype(&::glXQueryExtension) QueryExtension = nullptr;
+            decltype(&::glXQueryVersion) QueryVersion = nullptr;
+            decltype(&::glXQueryExtensionsString) QueryExtensionsString = nullptr;
+            decltype(&::glXChooseFBConfig) ChooseFBConfig = nullptr;
+            decltype(&::glXGetVisualFromFBConfig) GetVisualFromFBConfig = nullptr;
+            decltype(&::glXGetFBConfigAttrib) GetFBConfigAttrib = nullptr;
+            decltype(&::glXCreateNewContext) CreateNewContext = nullptr;
+            decltype(&::glXDestroyContext) DestroyContext = nullptr;
+            decltype(&::glXMakeCurrent) MakeCurrent = nullptr;
+            decltype(&::glXGetCurrentContext) GetCurrentContext = nullptr;
+            decltype(&::glXGetCurrentDrawable) GetCurrentDrawable = nullptr;
+            decltype(&::glXSwapBuffers) SwapBuffers = nullptr;
+            decltype(&::glXGetProcAddressARB) GetProcAddressARB = nullptr;
+        };
+
+        const GlxApi& Glx()
+        {
+            static const GlxApi api = [] {
+                GlxApi resolved;
+                // libGLX.so.0 is libglvnd's GLX dispatcher, what a current distribution ships;
+                // libGL.so.1 is the classic library that carries the same symbols. RTLD_GLOBAL
+                // as SDL loads GL: some drivers resolve GL symbols against the global scope. The
+                // library is never closed -- GL drivers do not survive being unloaded.
+                void* library = dlopen("libGLX.so.0", RTLD_NOW | RTLD_GLOBAL);
+                if (library == nullptr)
+                {
+                    library = dlopen("libGL.so.1", RTLD_NOW | RTLD_GLOBAL);
+                }
+                if (library == nullptr)
+                {
+                    return resolved;
+                }
+                const auto resolve = [library](auto& entry, const char* name) {
+                    entry = reinterpret_cast<std::remove_reference_t<decltype(entry)>>(
+                        dlsym(library, name));
+                    return entry != nullptr;
+                };
+                resolved.loaded =
+                    resolve(resolved.QueryExtension, "glXQueryExtension") &&
+                    resolve(resolved.QueryVersion, "glXQueryVersion") &&
+                    resolve(resolved.QueryExtensionsString, "glXQueryExtensionsString") &&
+                    resolve(resolved.ChooseFBConfig, "glXChooseFBConfig") &&
+                    resolve(resolved.GetVisualFromFBConfig, "glXGetVisualFromFBConfig") &&
+                    resolve(resolved.GetFBConfigAttrib, "glXGetFBConfigAttrib") &&
+                    resolve(resolved.CreateNewContext, "glXCreateNewContext") &&
+                    resolve(resolved.DestroyContext, "glXDestroyContext") &&
+                    resolve(resolved.MakeCurrent, "glXMakeCurrent") &&
+                    resolve(resolved.GetCurrentContext, "glXGetCurrentContext") &&
+                    resolve(resolved.GetCurrentDrawable, "glXGetCurrentDrawable") &&
+                    resolve(resolved.SwapBuffers, "glXSwapBuffers") &&
+                    resolve(resolved.GetProcAddressARB, "glXGetProcAddressARB");
+                return resolved;
+            }();
+            return api;
+        }
+
         void* LoadGlxProcAddress(const char* name)
         {
+            if (!Glx().loaded)
+            {
+                return nullptr;
+            }
             return reinterpret_cast<void*>(
-                glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
+                Glx().GetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
         }
 
         bool HasGlxExtension(Display* display, const int screen, const char* extension)
         {
-            const char* extensions = glXQueryExtensionsString(display, screen);
+            const char* extensions = Glx().QueryExtensionsString(display, screen);
             if (extensions == nullptr || extension == nullptr)
             {
                 return false;
@@ -113,13 +185,15 @@ namespace CNA::Platform::X11 {
 #if defined(CNA_X11_HAVE_GLX)
         int errorBase = 0;
         int eventBase = 0;
-        if (glXQueryExtension(connection_.GetDisplay(), &errorBase, &eventBase) == True)
+        // No GL implementation installed is an answer, not an error: the capability is false.
+        if (Glx().loaded &&
+            Glx().QueryExtension(connection_.GetDisplay(), &errorBase, &eventBase) == True)
         {
             int major = 0;
             int minor = 0;
             // 1.3 is the floor because FBConfigs arrived with it. Everything below that offers
             // only XVisualInfo-based context creation, with no way to ask for a core profile.
-            if (glXQueryVersion(connection_.GetDisplay(), &major, &minor) == True &&
+            if (Glx().QueryVersion(connection_.GetDisplay(), &major, &minor) == True &&
                 (major > 1 || (major == 1 && minor >= 3)))
             {
                 available_ = true;
@@ -137,7 +211,7 @@ namespace CNA::Platform::X11 {
             (void) handle;
             if (record.glxContext != nullptr)
             {
-                glXDestroyContext(display, static_cast<GLXContext>(record.glxContext));
+                Glx().DestroyContext(display, static_cast<GLXContext>(record.glxContext));
             }
         }
 #endif
@@ -204,7 +278,7 @@ namespace CNA::Platform::X11 {
 
         int configCount = 0;
         GLXFBConfig* configs =
-            glXChooseFBConfig(display, screen, attributes.data(), &configCount);
+            Glx().ChooseFBConfig(display, screen, attributes.data(), &configCount);
         if (configs == nullptr || configCount == 0)
         {
             if (configs != nullptr) { XFree(configs); }
@@ -218,7 +292,7 @@ namespace CNA::Platform::X11 {
             return chosen;
         }
 
-        XVisualInfo* info = glXGetVisualFromFBConfig(display, configs[0]);
+        XVisualInfo* info = Glx().GetVisualFromFBConfig(display, configs[0]);
         if (info != nullptr)
         {
             chosen.visual = info->visual;
@@ -321,7 +395,7 @@ namespace CNA::Platform::X11 {
             // The driver refused the requested version or the extension is absent. A plain
             // GLX 1.3 context is the honest fallback -- GetContextAttributes reports what was
             // actually granted, so a caller that needed 4.5 still finds out.
-            context = glXCreateNewContext(display, fbConfig, GLX_RGBA_TYPE, nullptr, kXTrue);
+            context = Glx().CreateNewContext(display, fbConfig, GLX_RGBA_TYPE, nullptr, kXTrue);
         }
         trap.Sync();
         if (context == nullptr)
@@ -336,7 +410,7 @@ namespace CNA::Platform::X11 {
         record.granted = description;
         int value = 0;
         const auto readConfig = [&](const int attribute, int& destination) {
-            if (glXGetFBConfigAttrib(display, fbConfig, attribute, &value) == 0)
+            if (Glx().GetFBConfigAttrib(display, fbConfig, attribute, &value) == 0)
             {
                 destination = value;
             }
@@ -349,7 +423,7 @@ namespace CNA::Platform::X11 {
         readConfig(GLX_STENCIL_SIZE, record.granted.stencilBits);
         readConfig(GLX_SAMPLE_BUFFERS, record.granted.multisampleBuffers);
         readConfig(GLX_SAMPLES, record.granted.multisampleSamples);
-        if (glXGetFBConfigAttrib(display, fbConfig, GLX_DOUBLEBUFFER, &value) == 0)
+        if (Glx().GetFBConfigAttrib(display, fbConfig, GLX_DOUBLEBUFFER, &value) == 0)
         {
             record.granted.doubleBuffer = value != 0;
         }
@@ -373,14 +447,14 @@ namespace CNA::Platform::X11 {
             return;
         }
         Display* display = connection_.GetDisplay();
-        if (glXGetCurrentContext() == static_cast<GLXContext>(found->second.glxContext))
+        if (Glx().GetCurrentContext() == static_cast<GLXContext>(found->second.glxContext))
         {
             // Destroying the current context leaves GLX with a current-but-freed binding, and the
             // next glXMakeCurrent on that thread is undefined. Unbinding first is not optional.
-            glXMakeCurrent(display, kNone, nullptr);
+            Glx().MakeCurrent(display, kNone, nullptr);
             currentWindow_ = 0;
         }
-        glXDestroyContext(display, static_cast<GLXContext>(found->second.glxContext));
+        Glx().DestroyContext(display, static_cast<GLXContext>(found->second.glxContext));
         contexts_.erase(found);
 #else
         (void) context;
@@ -398,7 +472,7 @@ namespace CNA::Platform::X11 {
         Display* display = connection_.GetDisplay();
         if (context == nullptr)
         {
-            glXMakeCurrent(display, kNone, nullptr);
+            Glx().MakeCurrent(display, kNone, nullptr);
             currentWindow_ = 0;
             return;
         }
@@ -414,7 +488,7 @@ namespace CNA::Platform::X11 {
                                     "the context was not created by this platform");
         }
         X11ErrorTrap trap(display);
-        const XBool ok = glXMakeCurrent(display, target->GetXWindow(),
+        const XBool ok = Glx().MakeCurrent(display, target->GetXWindow(),
                                        static_cast<GLXContext>(found->second.glxContext));
         trap.Sync();
         if (ok != kXTrue)
@@ -431,7 +505,7 @@ namespace CNA::Platform::X11 {
     GlContextBinding X11GlContext::GetCurrentBinding() const
     {
 #if defined(CNA_X11_HAVE_GLX)
-        GLXContext context = glXGetCurrentContext();
+        GLXContext context = Glx().GetCurrentContext();
         if (context == nullptr)
         {
             return {};
@@ -454,7 +528,7 @@ namespace CNA::Platform::X11 {
         {
             throw PlatformException("X11GlContext::SwapBuffers", "unknown window id");
         }
-        glXSwapBuffers(connection_.GetDisplay(), target->GetXWindow());
+        Glx().SwapBuffers(connection_.GetDisplay(), target->GetXWindow());
 #endif
     }
 
@@ -475,7 +549,7 @@ namespace CNA::Platform::X11 {
             if (auto* swap = reinterpret_cast<GlXSwapIntervalExt>(
                     LoadGlxProcAddress("glXSwapIntervalEXT")))
             {
-                const GLXDrawable drawable = glXGetCurrentDrawable();
+                const GLXDrawable drawable = Glx().GetCurrentDrawable();
                 if (drawable != kNone)
                 {
                     if (interval < 0 &&
