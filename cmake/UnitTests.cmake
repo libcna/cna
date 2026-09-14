@@ -152,6 +152,17 @@ if(CNA_BUILD_TESTS)
             ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
     endif()
 
+    # plans/plan_win32.md WIN32-0004: the Win32 backend's own tests reach into
+    # CNA::Platform::Win32 -- its message translator, its scan-code table, its window -- all of
+    # which exist only when CNA_PLATFORM=WIN32 compiled src/Win32/. Under any other selection they
+    # would reference symbols that are not there and fail to link, exactly as the SDL3 and SDL2
+    # suites above would. The implementation-neutral suites (the contract, and the conformance
+    # suite parameterised over every available implementation) always build and pick Win32 up
+    # automatically wherever it is present.
+    if(NOT CNA_PLATFORM STREQUAL "WIN32")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Win32.*\\.cpp$")
+    endif()
+
     # plans/plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
     # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
     # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
@@ -1001,6 +1012,26 @@ if(CNA_BUILD_TESTS)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_devices} PRIVATE
             CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH="$<TARGET_FILE:cna_devices_shutdown_ordering_harness>"
         )
+    endif()
+
+    if(CNA_PLATFORM STREQUAL "WIN32" AND TARGET ${CNA_TEST_OBJECT_TARGET_platform})
+        # plans/plan_win32.md WIN32-0061: Win32NoSdlTests reads the backend's own sources and
+        # asserts that none of them mentions SDL, carries no unrecorded TODO, and reaches
+        # <windows.h> only through the module's one guarded entry point. It needs to be told where
+        # that tree is; without the path it skips rather than passing vacuously.
+        #
+        # Under a mingw-w64 cross-build the produced .exe runs through Wine, which reaches the
+        # host filesystem as the Z: drive -- a bare POSIX path would simply not open. The native
+        # Windows build needs no such prefix.
+        if(CMAKE_CROSSCOMPILING)
+            set(_cna_win32_source_root "Z:${CMAKE_SOURCE_DIR}/modules/platform/src/Win32")
+        else()
+            set(_cna_win32_source_root "${CMAKE_SOURCE_DIR}/modules/platform/src/Win32")
+        endif()
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+            CNA_WIN32_SOURCE_ROOT="${_cna_win32_source_root}"
+        )
+        unset(_cna_win32_source_root)
     endif()
 
     if(TARGET cna_platform_terminal_restoration_harness)

@@ -213,6 +213,10 @@
       "category": "containment-assertion",
       "max_references": 1
     },
+    "modules/platform/tests/CNA/Platform/Win32NoSdlTests.cpp": {
+      "category": "text-evidence-assertion",
+      "max_references": 2
+    },
     "modules/renderers/bgfx/examples/bgfx_gfx196_noop_reset_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6

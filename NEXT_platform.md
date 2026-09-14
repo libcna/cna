@@ -15,6 +15,43 @@
 
 ## 0. Current checkpoint (supersedes stale counts below)
 
+**2026-09-13 — a fourth desktop implementation, on branch `win32`.** Read this first.
+
+`CNA_PLATFORM=WIN32` is no longer a reserved identifier. A native Win32 backend
+(`modules/platform/src/Win32/`) now implements the whole contract on user32/gdi32/opengl32/
+ole32/shell32 with no SDL of any kind, and joins the conformance suite automatically through
+`PlatformFactory::GetAvailable()`. Its task log is **`plans/plan_win32.md`**; its capability
+boundary is **`docs/platform-win32.md`**. This campaign's own ledger is unchanged — no PLAT row
+moved — because the point is what did *not* have to change:
+
+* **no contract header was touched.** Not one interface, enum or struct needed adjusting to fit a
+  second native desktop platform. That is the strongest statement available about whether the
+  contract came out SDL3-shaped, and it is the thing §12 predicted but could not previously
+  demonstrate.
+* **no renderer was touched.** `DirectX11Renderer` and `DirectX12Renderer` already consumed a
+  generic `NativeWindowHandle` through `PlatformRendererSurfaceState` and called `TryGetWin32()`;
+  the new platform simply satisfies that. `platform != renderer` held without effort.
+* **the ratchet stayed at its 0/0 floor** and all seven gates still pass.
+
+One thing this campaign left open *did* close. PLAT's separation made SDL an exchangeable backend
+at the **link** level — no framework module outside `cna_platform` and `cna_audio` links it — but
+the root `CMakeLists.txt` still *built* vendored SDL3 unconditionally, so a fully native Windows
+configuration paid for and depended on a toolkit no target in it referenced. That was the last
+place "SDL is CNA's substrate" was still literally true, and it is now gated
+(`plans/plan_win32.md` WIN32-0060). The gate is conservative by construction and the default build
+is unaffected.
+
+Regression evidence, every selection re-run through `tools/platform/standalone_tests`:
+WIN32 386/385/1, SDL3 443/436/7, SDL2 304/303/1, HEADLESS 270/269/1, TERMINAL 270/269/1
+(tests/passed/skipped) — **zero failures**. The skips are environmental and reproduce on the
+baseline.
+
+**Next starting point for this campaign:** unchanged. The Win32 backend's own remaining work —
+IME, XInput gamepads, the notification-area tray, Media Foundation camera — is scoped in
+`plans/plan_win32.md` §15, each paired with the capability that stays false because of it.
+
+---
+
 **2026-08-17 — post-merge re-audit.** Read this before the 2026-08-13 checkpoint underneath it.
 
 The ledger is now **163 decisions: 162 implemented, PLAT-45 deliberately cut** — the original 155

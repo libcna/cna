@@ -220,3 +220,138 @@ jobs:
           python3 tools/platform/hot_path_lint.py
           python3 tools/platform/nonproduction_sdl_audit.py --check
           python3 tools/platform/check_contract.py
+
+  # ---------------------------------------------------------------------------------------------
+  # plans/plan_win32.md WIN32-0065: the native Win32 backend's CI cell.
+  #
+  # It is a separate job rather than a row in the matrix above, because it does something none of
+  # those cells does: it builds for a target that is not the runner. `CNA_PLATFORM=WIN32` is
+  # available only where the target is Windows, so this cross-compiles with mingw-w64 and executes
+  # the result under Wine on a virtual display.
+  #
+  # Wine is not Windows, and this job does not pretend otherwise -- plans/plan_win32.md section 16
+  # records exactly which behaviours it can and cannot establish. What it does establish, on every
+  # push, is the part that regresses silently: that the backend still compiles for Windows, that
+  # the whole platform contract suite still passes against it alongside Headless, and that its
+  # source tree has not grown an SDL reference. The behaviours Wine cannot reach are covered by the
+  # manual native-Windows job below.
+  #
+  # It uses tools/platform/standalone_tests rather than a full configure: the platform module
+  # depends on nothing but the C++ standard library, so this needs no sibling checkout, no vendored
+  # SDL and no renderer -- which is also what keeps a Windows cell affordable on a Linux runner.
+  win32-cross:
+    name: Win32 (mingw-w64 cross-build, executed under Wine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install the cross toolchain and Wine
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-mingw-w64-x86-64 cmake ninja-build xvfb wine64
+
+      - name: Configure the standalone platform harness for WIN32
+        run: |
+          set -euo pipefail
+          cmake -S tools/platform/standalone_tests -B build-win32 -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchains/mingw-w64.cmake" \
+            -DCNA_PLATFORM=WIN32 \
+            -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build-win32 --parallel
+
+      - name: Run the platform contract and Win32 suites under Wine
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x720x24 &
+          disown
+          sleep 3
+          export DISPLAY=:99
+          export WINEDEBUG=-all
+          export WINEPREFIX="${RUNNER_TEMP}/wineprefix"
+          # Let Wine create and settle its prefix before the run, so first-boot chatter is not
+          # mistaken for a test failure.
+          wine64 wineboot --init || true
+          wine64 build-win32/cna_platform_tests.exe
+
+      - name: Probe real Direct3D on the produced window
+        # Wine's D3D12 needs vkd3d over a Vulkan driver and its D3D11 needs a GL or Vulkan path, so
+        # a hosted runner may have neither. The probe reports that as exit status 2 -- an
+        # environment limitation, distinct from the exit 1 it uses for an actual defect -- and only
+        # the latter fails this step.
+        run: |
+          set -euo pipefail
+          export DISPLAY=:99
+          export WINEDEBUG=-all
+          export WINEPREFIX="${RUNNER_TEMP}/wineprefix"
+          set +e
+          wine64 build-win32/cna_win32_directx_probe.exe
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::notice::No Direct3D device on this runner; the handle contract was still verified."
+            exit 0
+          fi
+          exit "$status"
+
+  # ---------------------------------------------------------------------------------------------
+  # The behaviours Wine cannot establish, on a real Windows runner and a real MSVC.
+  #
+  # workflow_dispatch-only, matching the precedent d3d-windows-ci.yml set and for the same reasons
+  # recorded there: Windows runners are slower and more expensive than this project's Linux CI, and
+  # automatic Windows triggering is a deliberate exception rather than the default here.
+  #
+  # What it adds over the cross job: a second compiler (MSVC, which the backend has never been
+  # built with on this worker), a real per-monitor-DPI desktop, a real Direct3D 11 and 12 runtime,
+  # real shell dialogs and a real clipboard.
+  win32-native:
+    name: Win32 (native MSVC, windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    if: github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure the standalone platform harness for WIN32
+        run: |
+          set -euo pipefail
+          cmake -S tools/platform/standalone_tests -B build-win32 \
+            -DCNA_PLATFORM=WIN32 -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build-win32 --config Debug --parallel
+
+      - name: Run the platform contract and Win32 suites
+        run: |
+          set -euo pipefail
+          ./build-win32/Debug/cna_platform_tests.exe || ./build-win32/cna_platform_tests.exe
+
+      - name: Probe real Direct3D 11 and 12
+        run: |
+          set -euo pipefail
+          set +e
+          ./build-win32/Debug/cna_win32_directx_probe.exe || ./build-win32/cna_win32_directx_probe.exe
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::notice::No Direct3D device on this runner."
+            exit 0
+          fi
+          exit "$status"

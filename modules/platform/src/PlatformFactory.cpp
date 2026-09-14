@@ -12,6 +12,9 @@
 #if defined(CNA_PLATFORM_SDL2)
 #  include "Sdl2/Sdl2Platform.hpp"
 #endif
+#if defined(CNA_PLATFORM_WIN32)
+#  include "Win32/Win32Platform.hpp"
+#endif
 
 // Compiled on every POSIX target regardless of the selection -- see the module's CMakeLists for
 // why, and _WIN32 for why not there.
@@ -29,6 +32,8 @@ namespace CNA::Platform {
         const std::string kDefaultName = "Headless";
 #elif defined(CNA_PLATFORM_TERMINAL)
         const std::string kDefaultName = "Terminal";
+#elif defined(CNA_PLATFORM_WIN32)
+        const std::string kDefaultName = "Win32";
 #elif defined(CNA_PLATFORM_SDL2)
         const std::string kDefaultName = "SDL2";
 #else
@@ -54,6 +59,12 @@ namespace CNA::Platform {
         if (name == "SDL2")
         {
             return std::make_unique<Sdl2::Sdl2Platform>();
+        }
+#endif
+#if defined(CNA_PLATFORM_WIN32)
+        if (name == "Win32")
+        {
+            return std::make_unique<Win32::Win32Platform>();
         }
 #endif
 
@@ -96,6 +107,11 @@ namespace CNA::Platform {
 #endif
 #if defined(CNA_PLATFORM_SDL2)
         available.emplace_back("SDL2");
+#endif
+#if defined(CNA_PLATFORM_WIN32)
+        // Listing it here is also what enrols it in the implementation-neutral conformance suite:
+        // PlatformConformanceTests is parameterised over exactly this list.
+        available.emplace_back("Win32");
 #endif
         available.emplace_back("Headless");
 #if !defined(_WIN32)

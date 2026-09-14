@@ -27,10 +27,17 @@
  * platform are separate build choices. It keys off `CNA_PLATFORM_*` instead, and lives in the
  * platform module so `modules/core` no longer includes an SDL header at all.
  *
- * Under a platform that manages no entry point — `HEADLESS` and `TERMINAL` — this header is
- * empty, which is the correct answer rather than an omission. Both report the
- * `managedEntrypoint` capability as false, so the emptiness is stated in the contract too and not
- * merely implied by this file compiling to nothing.
+ * Under a platform that manages no entry point — `HEADLESS`, `TERMINAL` and the native `WIN32`
+ * backend — this header is empty, which is the correct answer rather than an omission. All three
+ * report the `managedEntrypoint` capability as false, so the emptiness is stated in the contract
+ * too and not merely implied by this file compiling to nothing.
+ *
+ * `WIN32` is worth naming explicitly, because it is the one selection where a reader might expect
+ * a rename and there deliberately is none: a Windows GUI application traditionally has `WinMain`
+ * rather than `main`, and CNA does not impose that. The backend needs nothing from the entry point
+ * — it creates its window and pumps its own messages from wherever the host calls it — so taking
+ * over `main()` would be a cost with no benefit, and would break a console or test host that has
+ * its own.
  */
 
 #include "CNA/TargetPlatform.hpp"

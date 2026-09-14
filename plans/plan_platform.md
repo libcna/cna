@@ -140,7 +140,7 @@ Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatfor
    XNA type (e.g. `GameWindow`), the XNA-side accessor is `CNAEXT`-tagged as usual.
 
 3. **Compile-time selection, runtime polymorphism.** `CNA_PLATFORM` is a CMake cache variable
-   with values `SDL3` (default), `SDL2`, `HEADLESS` and `TERMINAL`; `SDL12` / `WIN32` are reserved
+   with values `SDL3` (default), `SDL2`, `HEADLESS`, POSIX `TERMINAL` and Windows `WIN32`; `SDL12` is reserved
    identifiers and configuring with them is a hard CMake error naming this plan. Only the
    selected implementation is compiled. `IPlatform` stays virtual anyway, because `HEADLESS` and
    the conformance suite need two implementations in one binary; the `using ActivePlatform = …`
@@ -327,7 +327,7 @@ against a translation unit that has never seen an SDL header — that is the pha
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
 | PLAT-10 | Create `modules/platform` module | ✅ | `modules/platform/{CMakeLists.txt,include/CNA/Platform/,src/,tests/}`, added to `_cna_framework_modules` and composed after `math` so read order matches dependency direction. Links `cna_core_headers` (CNAEXT marker) + sharp-runtime `Core.Base`, and **no SDL**. Tests are picked up automatically by `cmake/UnitTests.cmake`'s `modules/*/tests/*.cpp` glob. |
-| PLAT-11 | `CNA_PLATFORM` CMake cache variable | ✅ | `cmake/PlatformSelection.cmake`, included from the root `CMakeLists.txt`. `SDL3` (default), `SDL2`, `HEADLESS` and POSIX `TERMINAL` are available; `SDL12`/`WIN32`/`EMSCRIPTEN` remain reserved and rejected with a `FATAL_ERROR` rather than silently falling back to SDL3. Defines `CNA_PLATFORM_<NAME>`, matching the `CNA_RENDERER_<NAME>` convention. |
+| PLAT-11 | `CNA_PLATFORM` CMake cache variable | ✅ | `cmake/PlatformSelection.cmake`, included from the root `CMakeLists.txt`. `SDL3` (default), `SDL2` and `HEADLESS` are available everywhere; `TERMINAL` on POSIX targets and `WIN32` on Windows targets (plans/plan_win32.md), each *reserved* on the host it does not support so asking for it there is the same loud refusal rather than an "unknown platform" that reads as a typo. `SDL12`/`EMSCRIPTEN` remain reserved and rejected with a `FATAL_ERROR` rather than silently falling back to SDL3. Defines `CNA_PLATFORM_<NAME>`, matching the `CNA_RENDERER_<NAME>` convention. |
 | PLAT-12 | `NativeWindowSystem` enum | ✅ | `Unknown, Win32, X11, Wayland, Cocoa, Android, Web, Headless` + `ToString()` for handle-mismatch diagnostics. `ToString()` uses an exhaustive `switch` with **no `default` arm**, so adding a system without naming it is a compiler diagnostic rather than a silent `"Unknown"`. 6 tests, all passing: per-value names, distinctness (two systems sharing a name would blur exactly the diagnostic that matters most), non-emptiness, reference stability across calls, member count, and `Unknown == 0` so a zero-initialised handle never reads as a real Win32 one. |
 | PLAT-13 | `NativeWindowHandle` struct | ✅ | `{ system, display, window, surface, windowId }` with a per-system field table in the header. **Deviates from `cnaplatform.md`'s four-field sketch by adding `windowId`**: an X11 `Window` is a 32-bit XID, not an address, so carrying it in the `void* window` field is the classic interop bug — it happens to work on LP64 and truncates or traps elsewhere, and it makes null-checking meaningless because XID `0` (`None`) looks exactly like a null pointer. X11 therefore leaves `window` null and uses `windowId`. Trivially copyable (asserted in test), owns nothing. Plus `HasNativeWindow()` and a `Describe()` that deliberately never prints pointer values. |
 | PLAT-14 | Typed native-handle accessors | ✅ | `TryGetWin32`/`TryGetX11`/`TryGetWayland`/`TryGetCocoa`/`TryGetAndroid`, each returning a validated per-system struct and each validating `system` **and** the fields that system requires. Output parameter is left untouched on failure, so a caller that ignores the return value cannot find a half-populated struct that looks usable. 18 tests, all passing, including an exhaustive cross-product asserting every accessor rejects every other system, and that an X11 handle with XID `0` is rejected even when its display is set — the case a pointer-style null check would have missed. |
@@ -802,10 +802,17 @@ reason the contract is shaped as it is — a contract designed for exactly one i
 have come out SDL3-shaped, which is the failure mode `cnaplatform.md` warns against. Each would
 need its own plan file.
 
+> **Two rows here are no longer future work**, and both are kept in place rather than deleted
+> because the point of this section is what the contract was *designed* to accommodate — moving a
+> row out once it lands would erase the evidence that the design held. `TerminalPlatform` was
+> promoted into Phase 10 of this plan; `Win32Platform` was implemented by
+> [`plans/plan_win32.md`](plan_win32.md) and needed **no change to any contract header** to fit,
+> which is the strongest statement this section can make about the abstraction.
+
 | Candidate | Rationale | Expected capability profile | Status |
 |---|---|---|---|
 | `Sdl12Platform` | Genuinely historical systems. SDL 1.2 is deprecated upstream (last release 1.2.15) and would be CNA-owned indefinitely. | Limited profile: basic window, keyboard/mouse, old joystick API, timing, basic audio, GL or software surface, basic fullscreen. Clipboard, text input, gamepad, HiDPI largely unsupported — declared unsupported, never emulated with unsafe hacks. | Future — not started |
-| `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `GDI` and `DIRECTX*` renderers. | Windows-only; no cross-platform pretence. | Future — not started |
+| `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `GDI` and `DIRECTX*` renderers. | Windows-only; no cross-platform pretence. | ✅ **Implemented** — [`plans/plan_win32.md`](plan_win32.md), [`docs/platform-win32.md`](../docs/platform-win32.md). `CNA_PLATFORM=WIN32` is a first-class selection on Windows targets and a loud refusal everywhere else. Built on user32/gdi32/opengl32/ole32/shell32 with zero SDL; joins the conformance suite through `PlatformFactory::GetAvailable()`. It also closed the last place SDL was still CNA's substrate rather than a backend: the root configure no longer *builds* vendored SDL3 for a configuration nothing in which uses it. |
 | `EmscriptenPlatform` | A direct browser platform for the web renderers. | Web-shaped: no multiple windows, no native dialogs. | Future — not started |
 | `TerminalPlatform` | Runs a game in a TTY — over SSH, in CI, in `tmux`, on any machine with no display server. **Not listed here as future work: it was analysed and promoted to Phase 10**, because it is the strongest available proof the contract is not SDL-shaped. | Cells not pixels; mouse at cell granularity; exact keyboard only under the Kitty protocol; no gamepad. | **Analysed — Phase 10** |
 | Separate gamepad module | If a second implementation shows the capability model cannot express the SDL1-joystick vs SDL2-GameController vs SDL3-Gamepad gap (design decision 8), the gamepad seam is split out then — on evidence, not in advance. | — | Future — revisit after a second implementation exists |
