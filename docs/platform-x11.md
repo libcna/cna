@@ -85,7 +85,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `exactKeyboardState` | ✅ | real `KeyRelease` events; nothing is synthesised |
 | `pixelAccurateMouse` | ✅ | X reports true pixels |
 | `cursorShapes` | ✅ | the core cursor font; Xcursor for custom ARGB images |
-| `globalPointer` | ✅ | `XQueryPointer` / `XWarpPointer` on the root window |
+| `globalPointer` | ✅ (see [Under Xwayland](#under-xwayland)) | `XQueryPointer` / `XWarpPointer` on the root window |
 | `clipboard` | ✅ | real ICCCM selection ownership, including `INCR` |
 | `highDpi` | conditional | true only when the session states an `Xft.dpi` |
 | `multipleDisplays` | conditional | true when XRandR ≥ 1.2 is present |
@@ -115,6 +115,38 @@ process with no display still constructs a platform successfully (`StorageDevice
 `AcquireSubsystem(Video)` reports the original connection error.
 
 ---
+
+## Under Xwayland
+
+On a Wayland desktop (GNOME, KDE Plasma, ...) this backend talks to **Xwayland**, the compositor's
+X server for X11 applications — not to a native Xorg. It works there, and was validated there on
+GNOME 48 with real hardware (`plans/plan_native_platform_validation.md`), but Xwayland is an X
+server whose screen belongs to someone else, and a few things behave differently:
+
+- **The pointer is only fully known over X windows.** Xwayland learns the real cursor position
+  only while the compositor's cursor is over one of its surfaces; elsewhere `XQueryPointer`
+  answers with the last position it saw. `globalPointer` is therefore exact over the
+  application's own windows and stale over native Wayland windows. Pointer input — motion,
+  buttons, wheel, and the XI2 raw events relative mode reads — likewise reaches an X client only
+  while the cursor is over one of its windows or locked to it. XTest moves only Xwayland's own
+  sprite, which is why input tests on such a desktop use a kernel-level (uinput) device.
+- **Minimised windows can stay mapped.** mutter keeps iconified windows mapped, so ICCCM's
+  map-to-de-iconify never reaches it; `Restore()` also sends the EWMH activation request, which
+  is what brings a window back there.
+- **Focus is the window manager's decision.** A newly mapped window need not get focus
+  (focus-stealing prevention), and a locked session gives focus to no application window at all.
+  Relative mouse mode holds the pointer only while its window has focus, so it engages when the
+  window is focused.
+- **Keyboard layouts are XKB groups.** The compositor hands Xwayland one keymap with every input
+  source as a group and switches layouts by locking a group; key codes follow the active group.
+- **Scaling happens in the compositor.** With fractional scaling and Xwayland not in its native
+  scaling mode, X clients see the logical size and are upscaled; `Xft.dpi` stays 96, so
+  `highDpi` is false by this backend's documented policy.
+- **Hidden windows are throttled.** Presentation to a window the compositor does not show (behind
+  the lock screen, say) runs at a few frames per second with vsync on.
+- **Clipboard** interoperability with X clients is complete, including `INCR`. Native Wayland
+  applications are reached through the compositor's own X11 selection bridge, which the
+  validation could not exercise on GNOME (wl-clipboard gets no data-control protocol there).
 
 ## Keyboard
 
