@@ -9,6 +9,20 @@
 # Example/test executables historically live at the build root (scripts, docs and
 # the golden-image working-directory conventions rely on it); keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# plans/plan_native_platform_validation.md NPV-0106: this suite links SDL3 directly -- its test
+# macro names SDL3::SDL3, several examples include <SDL3/SDL.h>, and the shared
+# common/PixelTestGame.hpp probes for a display through SDL_InitSubSystem. A CNA_ENABLE_SDL=OFF
+# configuration has no SDL3 target at all, and without this guard selecting the Vulkan renderer
+# there failed the entire configure on an unresolved SDL3::SDL3. The suite is skipped, and says
+# so, rather than the SDL-free configuration being unusable with a real GPU renderer.
+if(NOT TARGET SDL3::SDL3)
+    if(CNA_BUILD_TESTS)
+        message(STATUS "CNA: Vulkan renderer example/test suite skipped -- it links SDL3 "
+                       "directly and this configuration has no SDL (CNA_ENABLE_SDL=OFF)")
+    endif()
+    return()
+endif()
 # Shared example-support headers ("common/PixelTestGame.hpp", ...) are owned by
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
