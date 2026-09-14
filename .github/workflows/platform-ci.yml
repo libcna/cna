@@ -465,6 +465,7 @@ jobs:
         run: |
           set -euo pipefail
           ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|IntegrationTests|WindowManagerTests))$' --output-on-failure
+          ctest --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'
           ./build/CnaContentTests --gtest_filter='*Wav*:*SoundEffect*'

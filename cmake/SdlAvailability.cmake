@@ -51,7 +51,7 @@ endif()
 # Including the shared default rule rather than restating it is what keeps the two from drifting:
 # an SDL-free configuration that silently stopped being SDL-free when the per-host default moved
 # would be the exact failure this gate exists to prevent.
-include(cmake/RendererIdentityDefault.cmake)
+include("${CMAKE_CURRENT_LIST_DIR}/RendererIdentityDefault.cmake")
 if(NOT DEFINED CNA_GRAPHICS_RENDERER OR CNA_GRAPHICS_RENDERER STREQUAL "")
     set(_cna_sdl_effective_renderer "${_cna_default_renderer}")
 else()
@@ -87,6 +87,17 @@ endif()
 
 if(_cna_enable_sdl_normalized STREQUAL "OFF")
     set(CNA_ENABLE_SDL OFF CACHE STRING "Configure the vendored SDL3 dependency (OFF, AUTO, or ON)" FORCE)
+    # "Not found" has to hold for every project this build adds, not only for CNA's own CMake:
+    # plans/plan_native_platform_validation.md NPV-0114 found the sibling easy-gl's example
+    # directory running find_package(SDL3 QUIET), picking up an SDL3 installed in /usr/local and
+    # adding an SDL-linked executable to the default target of a CNA_ENABLE_SDL=OFF build. With
+    # these set, an optional lookup anywhere in the tree finds nothing and a REQUIRED one fails
+    # configure, naming the package.
+    foreach(_cna_sdl_package IN ITEMS SDL3 SDL3_image SDL3_mixer SDL3_ttf SDL3_net
+                                      SDL2 SDL2_image SDL2_mixer SDL2_ttf SDL2_net SDL)
+        set(CMAKE_DISABLE_FIND_PACKAGE_${_cna_sdl_package} TRUE)
+    endforeach()
+    unset(_cna_sdl_package)
     message(STATUS
         "CNA: SDL is NOT configured (CNA_ENABLE_SDL=OFF). No SDL source is fetched, built, "
         "found or linked by this configuration.")

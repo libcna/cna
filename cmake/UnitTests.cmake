@@ -1388,6 +1388,14 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Sdl2OnlyRendererGate.cmake)
     set_tests_properties(CnaSdl2OnlyRendererGate PROPERTIES LABELS "platform;configuration")
 
+    add_test(NAME CnaSdlOffFindsNoSdlPackage
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSdlOffFindsNoSdlPackage
+            "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlOffFindPackage.cmake)
+    set_tests_properties(CnaSdlOffFindsNoSdlPackage PROPERTIES LABELS "platform;configuration")
+
     # plans/plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
