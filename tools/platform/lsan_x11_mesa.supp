@@ -1,0 +1,21 @@
+# LeakSanitizer suppressions for the X11 platform suites -- plans/plan_native_platform_validation.md
+# NPV-0004. Every entry names a leak that was REPRODUCED WITHOUT ANY CNA CODE, with the program
+# and the byte count that proved it; an entry without that evidence does not belong here.
+#
+# Use:  LSAN_OPTIONS=suppressions=tools/platform/lsan_x11_mesa.supp
+#
+# Mesa's GLX client (libGLX_mesa) allocates per-display state inside the first
+# glXChooseFBConfig on the software (swrast/Xvfb) path and XCloseDisplay does not free it.
+# Measured 2026-09-14, Mesa 25.0.7: a 20-line C program doing XOpenDisplay, glXChooseFBConfig,
+# glXGetVisualFromFBConfig, XFree, XCloseDisplay -- nothing else -- leaks 100,956 bytes in 449
+# allocations per display under Xvfb, which is exactly what each CNA GL test reported. The same
+# program leaks nothing against a hardware radeonsi (DRI3) display.
+leak:libGLX_mesa.so
+#
+# Not suppressed, deliberately: the RADV Vulkan ICD leaks 2 x 128 bytes from a pthread_once
+# initialiser during vkCreateInstance (reproduced the same way with a CNA-free program; absent with
+# only the lavapipe ICD loaded). Its frames belong to a module already unloaded at exit, so no
+# suppression can name it without also matching genuine leaks through libvulkan. Sanitizer runs
+# of the Vulkan surface tests therefore select lavapipe with
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json, and the RADV allocation is recorded as a
+# driver finding instead of being hidden.
