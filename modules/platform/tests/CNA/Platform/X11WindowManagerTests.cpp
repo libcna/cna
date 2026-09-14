@@ -11,8 +11,18 @@
 // So this suite starts one. `openbox` is a small, fast, standards-compliant EWMH window manager;
 // when it is absent the suite skips with that recorded, and the plan records the gap rather than
 // the absence being silently equivalent to a pass.
+//
+// A display that ALREADY has an EWMH window manager -- a developer's desktop session, where
+// mutter, KWin or xfwm4 manages the windows -- is used as it is, and nothing is started at all
+// (plans/plan_native_platform_validation.md NPV-0107). The first version always ran
+// `openbox --replace`, which on a real desktop would evict the session's own window manager: the
+// gtest-discovered copies of this suite inherit the shell's DISPLAY, so a plain `ctest` from a
+// desktop terminal did exactly that. Running against the session's window manager is also the
+// stronger test -- it is the one the application will actually meet.
 
 #include <gtest/gtest.h>
+
+#include "../../../src/X11/X11Headers.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
@@ -36,6 +46,11 @@ namespace {
 
 using namespace CNA::Platform;
 
+// `<X11/X.h>` declares `typedef unsigned char KeyCode` at global scope; these declarations hide it
+// behind CNA's own types, exactly as X11PlatformIntegrationTests.cpp does.
+using KeyCode = CNA::Platform::KeyCode;
+using Scancode = CNA::Platform::Scancode;
+
 bool HasDisplay()
 {
     const char* display = std::getenv("DISPLAY");
@@ -45,6 +60,79 @@ bool HasDisplay()
 bool HasWindowManagerBinary()
 {
     return std::system("command -v openbox >/dev/null 2>&1") == 0;
+}
+
+/// What the X server itself says about the window manager, read with plain Xlib.
+///
+/// Deliberately independent of the backend under test: the fixture uses it to decide whether to
+/// start a window manager at all, and to tell "the window manager is not there" apart from "the
+/// window manager is there and CNA failed to see it" -- which is a failure, not a skip.
+struct EwmhState
+{
+    bool windowManager = false;
+    bool advertisesFullscreen = false;
+};
+
+EwmhState ReadEwmhState()
+{
+    using CNA::Platform::X11::kNone;
+    using CNA::Platform::X11::kXFalse;
+
+    EwmhState state;
+    ::Display* display = XOpenDisplay(nullptr);
+    if (display == nullptr)
+    {
+        return state;
+    }
+    const ::Window root = DefaultRootWindow(display);
+    const Atom check = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", kXFalse);
+    const Atom supported = XInternAtom(display, "_NET_SUPPORTED", kXFalse);
+    const Atom fullscreen = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", kXFalse);
+
+    const auto readWindow = [display, check](const ::Window window) -> ::Window {
+        Atom type = kNone;
+        int format = 0;
+        unsigned long count = 0;
+        unsigned long remaining = 0;
+        unsigned char* data = nullptr;
+        ::Window value = kNone;
+        if (XGetWindowProperty(display, window, check, 0, 1, kXFalse, XA_WINDOW, &type, &format,
+                               &count, &remaining, &data) == Success &&
+            data != nullptr && format == 32 && count == 1)
+        {
+            value = static_cast<::Window>(*reinterpret_cast<unsigned long*>(data));
+        }
+        if (data != nullptr) { XFree(data); }
+        return value;
+    };
+
+    // The EWMH handshake: the root names a check window, and that window names itself. A stale
+    // root property left behind by a window manager that exited fails the second half.
+    const ::Window child = readWindow(root);
+    if (child != kNone)
+    {
+        int (*previous)(::Display*, XErrorEvent*) =
+            XSetErrorHandler([](::Display*, XErrorEvent*) { return 0; });
+        state.windowManager = readWindow(child) == child;
+        XSync(display, kXFalse);
+        XSetErrorHandler(previous);
+    }
+
+    Atom type = kNone;
+    int format = 0;
+    unsigned long count = 0;
+    unsigned long remaining = 0;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(display, root, supported, 0, 4096, kXFalse, XA_ATOM, &type, &format,
+                           &count, &remaining, &data) == Success &&
+        data != nullptr && format == 32)
+    {
+        const auto* atoms = reinterpret_cast<const unsigned long*>(data);
+        state.advertisesFullscreen = std::find(atoms, atoms + count, fullscreen) != atoms + count;
+    }
+    if (data != nullptr) { XFree(data); }
+    XCloseDisplay(display);
+    return state;
 }
 
 /// Starts one window manager for the whole suite and stops it when the process exits.
@@ -70,19 +158,49 @@ public:
         return manager;
     }
 
-    [[nodiscard]] bool Started() const { return pid_ > 0; }
+    /// True when a window manager is available: the display's own, or the one this started.
+    [[nodiscard]] bool Available() const { return external_ || pid_ > 0; }
+
+    /// True when the display already had a window manager and nothing was started.
+    [[nodiscard]] bool External() const { return external_; }
+
+    /// Why the window manager this started is gone, or empty while it is still running.
+    [[nodiscard]] std::string ExitReason()
+    {
+        if (external_ || pid_ <= 0)
+        {
+            return {};
+        }
+        int status = 0;
+        if (::waitpid(pid_, &status, WNOHANG) != pid_)
+        {
+            return {};
+        }
+        pid_ = -1;
+        return WIFEXITED(status) ? "openbox exited with status " + std::to_string(WEXITSTATUS(status))
+                                 : std::string("openbox was killed by a signal");
+    }
 
 private:
     SharedWindowManager()
     {
+        // A display that already has an EWMH window manager keeps it. Replacing it would evict a
+        // developer's desktop session from under them; using it tests CNA against the window
+        // manager it will really meet.
+        if (ReadEwmhState().windowManager)
+        {
+            external_ = true;
+            return;
+        }
         pid_ = fork();
         if (pid_ == 0)
         {
-            // --replace so a previous run's leftover cannot make this one fail, and stdio closed
-            // so its startup chatter does not interleave with the test output.
+            // No --replace: the check above found no window manager to replace, and should one
+            // appear in between, openbox failing is correct where replacing it would not be.
+            // stdio is closed so its startup chatter does not interleave with the test output.
             ::freopen("/dev/null", "w", stdout);
             ::freopen("/dev/null", "w", stderr);
-            ::execlp("openbox", "openbox", "--replace", static_cast<char*>(nullptr));
+            ::execlp("openbox", "openbox", static_cast<char*>(nullptr));
             ::_exit(127);
         }
     }
@@ -101,6 +219,7 @@ private:
     SharedWindowManager& operator=(const SharedWindowManager&) = delete;
 
     ::pid_t pid_ = -1;
+    bool external_ = false;
 };
 
 class X11WithWindowManager : public ::testing::Test
@@ -112,13 +231,14 @@ protected:
         {
             GTEST_SKIP() << "no DISPLAY";
         }
-        if (!HasWindowManagerBinary())
+        if (!ReadEwmhState().windowManager && !HasWindowManagerBinary())
         {
-            GTEST_SKIP() << "openbox is not installed; EWMH state transitions have nothing to "
-                            "perform them and asserting them here would test the environment";
+            GTEST_SKIP() << "no window manager runs on this display and openbox is not installed; "
+                            "EWMH state transitions have nothing to perform them and asserting "
+                            "them here would test the environment";
         }
 
-        ASSERT_TRUE(SharedWindowManager::Instance().Started());
+        ASSERT_TRUE(SharedWindowManager::Instance().Available());
 
         platform_ = PlatformFactory::Create("X11");
         try
@@ -136,7 +256,27 @@ protected:
         // what makes this deterministic on a slow machine.
         if (!WaitForWindowManager())
         {
-            GTEST_SKIP() << "openbox did not become the EWMH window manager in time";
+            // Three different situations, and only one of them is the environment's fault. A
+            // skip that hid the third is how this suite once reported green while 14 of its 15
+            // tests had run nothing (a broken openbox install exited at start-up).
+            const std::string exitReason = SharedWindowManager::Instance().ExitReason();
+            if (!exitReason.empty())
+            {
+                GTEST_SKIP() << exitReason
+                             << " before becoming the window manager; check its installation "
+                                "(config and theme files)";
+            }
+            const EwmhState server = ReadEwmhState();
+            if (!server.windowManager || !server.advertisesFullscreen)
+            {
+                GTEST_SKIP() << (server.windowManager
+                                     ? "the window manager does not advertise "
+                                       "_NET_WM_STATE_FULLSCREEN"
+                                     : "no EWMH window manager became ready in time");
+            }
+            FAIL() << "the X server shows an EWMH window manager advertising "
+                      "_NET_WM_STATE_FULLSCREEN, but the backend did not report "
+                      "borderlessFullscreen";
         }
     }
 
@@ -449,32 +589,92 @@ TEST_F(X11WithWindowManager, ASecondWindowTakesFocusFromTheFirstAndBothStayAlive
     EXPECT_EQ(second->GetTitle(), "second");
 }
 
+/// Asks the window manager to close a window the way its title-bar button does: EWMH
+/// `_NET_CLOSE_WINDOW` to the root, after which the window manager sends the window
+/// `WM_DELETE_WINDOW`. Source indication 2 ("pager") is the one a window manager honours
+/// unconditionally, which is what a test needs.
+bool AskWindowManagerToClose(const std::uintptr_t xid)
+{
+    using CNA::Platform::X11::kCurrentTime;
+    using CNA::Platform::X11::kXFalse;
+
+    ::Display* display = XOpenDisplay(nullptr);
+    if (display == nullptr)
+    {
+        return false;
+    }
+    XEvent event{};
+    event.type = ClientMessage;
+    event.xclient.window = static_cast<::Window>(xid);
+    event.xclient.message_type = XInternAtom(display, "_NET_CLOSE_WINDOW", kXFalse);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = static_cast<long>(kCurrentTime);
+    event.xclient.data.l[1] = 2;
+    const bool sent = XSendEvent(display, DefaultRootWindow(display), kXFalse,
+                                 SubstructureRedirectMask | SubstructureNotifyMask, &event) != 0;
+    XSync(display, kXFalse);
+    XCloseDisplay(display);
+    return sent;
+}
+
 TEST_F(X11WithWindowManager, ClosingASecondaryWindowIsNotApplicationTermination)
 {
     // The behaviour that separates a multi-window application from a single-window one. A window
     // manager's close button sends WM_DELETE_WINDOW to one window, and the application decides.
     auto first = MakeVisibleWindow("first");
     auto second = MakeVisibleWindow("second");
+    const WindowId secondId = second->GetId();
     seen_.clear();
 
-    // Ask the window manager to close the second window the way a user would, through the same
-    // protocol its title-bar button uses.
-    const std::string command =
-        "xdotool windowclose " + std::to_string(second->GetWindowHandle()) + " >/dev/null 2>&1";
+    // Through the window manager, as its title-bar button does. The first version of this test
+    // used `xdotool windowclose`, which is XDestroyWindow from outside -- a different path, and
+    // not the protocol the comment above describes.
+    ASSERT_TRUE(AskWindowManagerToClose(second->GetWindowHandle()));
+    const bool requested = PumpUntil([secondId](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [secondId](const PlatformEvent& event) {
+            const auto* window = std::get_if<WindowEvent>(&event);
+            return window != nullptr && window->window == secondId &&
+                   window->kind == WindowEventKind::CloseRequested;
+        });
+    });
+    EXPECT_TRUE(requested) << "the window manager's close request never reached the window";
+
+    // The window is still there -- the application answers -- and there is no QuitEvent: a
+    // second window is still open.
+    PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
+              std::chrono::milliseconds(300));
+    const bool quit = std::any_of(seen_.begin(), seen_.end(), [](const PlatformEvent& event) {
+        return std::holds_alternative<QuitEvent>(event);
+    });
+    EXPECT_FALSE(quit) << "closing one of two windows must not ask the application to quit";
+    EXPECT_EQ(first->GetTitle(), "first");
+    EXPECT_EQ(second->GetTitle(), "second");
+}
+
+TEST_F(X11WithWindowManager, AWindowDestroyedByAnotherClientIsNotApplicationTermination)
+{
+    // The other way a window disappears: another client destroys it outright (`xdotool
+    // windowclose` is XDestroyWindow). The application did not ask, so nothing may end it, and
+    // the wrapper it still holds must survive being destroyed afterwards.
     if (std::system("command -v xdotool >/dev/null 2>&1") != 0)
     {
-        GTEST_SKIP() << "xdotool is not installed, so there is no way to ask the window manager "
-                        "to close a window the way a user would";
+        GTEST_SKIP() << "xdotool is not installed, so there is no other client to destroy a window";
     }
+    auto first = MakeVisibleWindow("first");
+    auto second = MakeVisibleWindow("second");
+    seen_.clear();
+
+    const std::string command =
+        "xdotool windowclose " + std::to_string(second->GetWindowHandle()) + " >/dev/null 2>&1";
     (void) std::system(command.c_str());
 
-    // Whatever arrives, it must not be a QuitEvent: a second window is still open.
     PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
               std::chrono::milliseconds(1000));
     const bool quit = std::any_of(seen_.begin(), seen_.end(), [](const PlatformEvent& event) {
         return std::holds_alternative<QuitEvent>(event);
     });
-    EXPECT_FALSE(quit) << "closing one of two windows must not ask the application to quit";
+    EXPECT_FALSE(quit) << "a window destroyed from outside must not ask the application to quit";
+    second.reset();
     EXPECT_EQ(first->GetTitle(), "first");
 }
 
