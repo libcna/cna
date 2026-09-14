@@ -28,6 +28,9 @@ cmake -S . -B build-sdl2 \
 cmake -S . -B build-x11 \
   -DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL \
   -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF
+cmake -S . -B build-win32 \
+  -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL \
+  -DCNA_GRAPHICS_RENDERER=DIRECTX11 -DCNA_ENABLE_SDL=OFF
 cmake -S . -B build-headless \
   -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS
 cmake -S . -B build-terminal \
@@ -48,6 +51,27 @@ It is what makes an SDL-free CNA a configuration that exists rather than an argu
 `CNA_ENABLE_SDL=OFF` skips the vendored SDL sub-build entirely and refuses any selection that
 genuinely needs it. Its capability boundary, dependency table, DPI policy and the host state it
 deliberately does not seize are [`docs/platform-x11.md`](platform-x11.md).
+
+`WIN32` is the equivalent native backend on Windows: built directly on
+user32/gdi32/opengl32/ole32/shell32 with no SDL anywhere in it, offered only where the target is
+Windows (including a mingw-w64 cross-build from Linux). Together with `X11`, it is what makes
+`CNA_ENABLE_SDL=OFF` a maintained configuration on both desktop platform families CNA supports
+natively, not just one of them. See [`docs/platform-win32.md`](platform-win32.md) for its
+capability boundary and [`plans/plan_win32.md`](../plans/plan_win32.md) for the task log.
+
+**Platform independence, the audio backend and content WAV decoding are three separate axes, and
+"SDL-free" only means something once all three agree.** `CNA_PLATFORM=X11`/`WIN32` removes SDL from
+windowing/events/input; `CNA_AUDIO_PLATFORM=NULL` removes it from playback/capture; but until
+`plans/plan_native_platforms_integration.md` NPI-0007..0011, `cna_content` still could not finish
+linking in that combination, because `DecodeWavToPcm16` — used to decode a WAV-wrapped
+`SoundEffect`/XACT `WaveBank` entry to PCM16, independent of whether anything is ever played back —
+was implemented only via `SDL_LoadWAV_IO`/`SDL_ConvertAudioSamples` and excluded from the build
+whenever `CNA_AUDIO_PLATFORM` was not `SDL3`. It is now a CNA-owned implementation
+(`modules/audio/src/Internal/WavDecoder.cpp`, on top of the pre-existing SDL-free RIFF/WAVE chunk
+reader) covering PCM 8/16/24/32-bit, IEEE float 32/64-bit (including via
+`WAVE_FORMAT_EXTENSIBLE`), MS-ADPCM and IMA-ADPCM, compiled unconditionally regardless of
+`CNA_AUDIO_PLATFORM`. A renderer choice is the third axis again: it decides how pixels are
+produced and is unaffected by either of the above.
 
 **Two implementations of the same native library cannot share a process.** SDL2 and SDL3 export
 identically named entry points (`SDL_Init`, `SDL_GetError`, `SDL_PollEvent` and many more), so a
