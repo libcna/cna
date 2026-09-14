@@ -37,12 +37,18 @@
 
 namespace {
 
-/// Locates `modules/platform/src/X11` from the test's own source path.
+/// Locates `modules/platform/src/X11`.
 ///
-/// `__FILE__` rather than the working directory: ctest runs the suite from the build tree, and a
-/// path relative to the working directory would silently scan nothing and pass.
+/// Never relative to the working directory: ctest runs this suite from the build tree and from
+/// the source root, and a relative path would silently scan nothing and pass. CMake passes the
+/// absolute directory; `__FILE__` is only the fallback, because with CCACHE_BASEDIR (which this
+/// project requires) it is itself relative to the build directory
+/// (plans/plan_native_platform_validation.md NPV-0122).
 std::filesystem::path BackendDirectory()
 {
+#if defined(CNA_X11_BACKEND_SOURCE_DIR)
+    return std::filesystem::path(CNA_X11_BACKEND_SOURCE_DIR);
+#endif
     std::filesystem::path here(__FILE__);
     // .../modules/platform/tests/CNA/Platform/X11IsSdlFreeTests.cpp
     return here.parent_path()          // Platform

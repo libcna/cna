@@ -1075,6 +1075,16 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(CNA_PLATFORM STREQUAL "X11")
+        # plans/plan_native_platform_validation.md NPV-0122: X11IsSdlFreeTests scans the backend's
+        # own sources. __FILE__ is not an absolute path in this project -- CCACHE_BASEDIR makes
+        # the compiler see sources relative to the build directory -- so the scan found its
+        # directory only when run from there, and failed when ctest ran it from the source root.
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+            CNA_X11_BACKEND_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules/platform/src/X11"
+        )
+    endif()
+
     if(TARGET cna_platform_terminal_resize_harness)
         # plans/plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
         add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_terminal_resize_harness)
