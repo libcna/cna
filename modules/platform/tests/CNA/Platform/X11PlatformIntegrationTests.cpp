@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../../src/X11/X11Mouse.hpp"
 #include "../../../src/X11/X11Platform.hpp"
 #include "../../../src/X11/X11Window.hpp"
 
@@ -861,6 +862,47 @@ TEST_F(X11Live, RelativeMouseModeFollowsItsCapability)
     EXPECT_EQ(delta.y, 0);
     mouse->SetRelativeMode(window_->GetId(), false);
     EXPECT_FALSE(mouse->IsRelativeMode());
+}
+
+TEST_F(X11Live, RelativeMotionCarriesFractionsInsteadOfTruncatingEachReport)
+{
+    // NPV-0110. XInput2 raw deltas are doubles, and a high-resolution device normalised to the
+    // server's units moves in fractions of a unit per report. Truncating every report to an
+    // integer turned slow, steady movement into no movement at all.
+    if (!platform_->GetCapabilities().relativeMouse)
+    {
+        GTEST_SKIP() << "no XInput2 on this server";
+    }
+    window_ = MakeWindow();
+    const WindowId id = window_->GetId();
+    window_->Show();
+    ASSERT_TRUE(PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, id, WindowEventKind::Exposed);
+    }));
+    auto* mouse = dynamic_cast<CNA::Platform::X11::X11Mouse*>(platform_->GetMouse());
+    ASSERT_NE(mouse, nullptr);
+    try
+    {
+        mouse->SetRelativeMode(id, true);
+    }
+    catch (const PlatformException& error)
+    {
+        GTEST_SKIP() << "pointer grab unavailable here: " << error.what();
+    }
+    // No window manager on a bare server, so a viewable window is enough to hold the grab.
+    ASSERT_TRUE(PumpUntil([mouse](const std::vector<PlatformEvent>&) {
+        return mouse->IsRelativeGrabHeld();
+    }));
+    (void) mouse->ConsumeRelativeDelta();
+
+    for (int report = 0; report < 8; ++report)
+    {
+        mouse->AccumulateRawMotion(0.25, -0.125);
+    }
+    const MouseDelta delta = mouse->ConsumeRelativeDelta();
+    EXPECT_EQ(delta.x, 2) << "eight quarter-unit reports are two units";
+    EXPECT_EQ(delta.y, -1) << "eight eighth-unit reports are one unit";
+    mouse->SetRelativeMode(id, false);
 }
 
 TEST_F(X11Live, PointerCaptureIsSymmetric)

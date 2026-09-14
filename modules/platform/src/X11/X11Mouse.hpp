@@ -4,6 +4,7 @@
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "X11Headers.hpp"
 
+#include <chrono>
 #include <map>
 
 namespace CNA::Platform::X11 {
@@ -36,6 +37,16 @@ namespace CNA::Platform::X11 {
      *
      * Without XInput2 the capability is reported false and `SetRelativeMode` refuses. A
      * warp-based imitation would satisfy the signature and not the contract.
+     *
+     * Relative mode is a state the application WANTS for a window, and the grab that implements
+     * it is HELD only while that window has keyboard focus (or, with no window manager to move
+     * focus, while it is viewable) -- the semantics SDL3 gives the same request
+     * (plans/plan_native_platform_validation.md NPV-0109, NPV-0110). Holding a confining grab on
+     * a window the user has Alt-Tabbed away from would leave their whole desktop's pointer locked
+     * to it; enabling relative mode right after `Show()`, before the window manager has made the
+     * window viewable, must not fail because the grab has to wait. Raw motion is selected only
+     * while the grab is held: an XInput2 client with no grab receives every raw event on the
+     * desktop, which would hand the game motion the user made in another application.
      */
     class X11Mouse final : public IPlatformMouse
     {
@@ -94,7 +105,14 @@ namespace CNA::Platform::X11 {
          */
         void SetRelativeMode(WindowId window, bool enabled) override;
 
-        /** @brief Gets whether relative mode is active. @return True when active. */
+        /**
+         * @brief Gets whether relative mode is enabled.
+         *
+         * True from `SetRelativeMode(window, true)` until it is disabled or the window goes away,
+         * including while the grab itself is suspended because the window lost focus.
+         *
+         * @return True when enabled.
+         */
         [[nodiscard]] bool IsRelativeMode() const override { return relativeWindow_ != 0; }
 
         /**
@@ -133,10 +151,40 @@ namespace CNA::Platform::X11 {
         /**
          * @brief Accumulates raw relative motion reported by XInput2.
          *
+         * Counted only while the relative grab is held. Fractions are carried to the next report
+         * rather than truncated per event: raw motion from a high-resolution device arrives in
+         * sub-unit steps, and truncating each one would lose slow movement entirely.
+         *
          * @param deltaX Horizontal movement.
          * @param deltaY Vertical movement.
          */
         void AccumulateRawMotion(double deltaX, double deltaY);
+
+        /**
+         * @brief Follows a window's keyboard focus: the relative grab is held only while focused.
+         *
+         * @param id The window whose focus changed.
+         * @param gained True for FocusIn, false for FocusOut.
+         */
+        void OnFocusChanged(WindowId id, bool gained);
+
+        /** @brief Notes that a window became mapped, which may let a deferred grab engage. */
+        void OnWindowMapped(WindowId id);
+
+        /** @brief Notes that a window was unmapped; the server has released any grab on it. */
+        void OnWindowUnmapped(WindowId id);
+
+        /**
+         * @brief Retries a wanted but not yet held relative grab, at most every 100 ms.
+         *
+         * Called once per `PollEvents`. A grab can be refused transiently -- a window manager
+         * holds its own grab while it switches windows -- and giving up would leave relative mode
+         * enabled with nothing behind it.
+         */
+        void RefreshRelativeMode();
+
+        /** @brief Gets whether the relative grab is currently held (not merely wanted). */
+        [[nodiscard]] bool IsRelativeGrabHeld() const { return relativeHeld_; }
 
         /** @brief Records the last pointer position seen in an event. */
         void SetLastPosition(WindowId window, int x, int y);
@@ -160,13 +208,25 @@ namespace CNA::Platform::X11 {
         void ApplyCursor(::Cursor cursor);
         [[nodiscard]] ::Cursor GetHiddenCursor();
         void ReleaseRelativeMode();
+        /// Whether the relative window is in a state where the grab should be held.
+        [[nodiscard]] bool RelativeGrabWanted() const;
+        /// Selects or deselects XI_RawMotion on the root.
+        void SelectRawMotion(bool enabled);
+        /// Takes the relative grab. Returns the XGrabPointer status (GrabSuccess on success).
+        int EngageRelative();
+        /// Drops the relative grab and the raw-motion selection, keeping relative mode wanted.
+        void DisengageRelative();
 
         X11Connection& connection_;
         std::map<WindowId, X11Window*> windows_;
         MouseSnapshot snapshot_;
         int relativeX_ = 0;
         int relativeY_ = 0;
+        double carryX_ = 0.0;
+        double carryY_ = 0.0;
         WindowId relativeWindow_ = 0;
+        bool relativeHeld_ = false;
+        std::chrono::steady_clock::time_point nextGrabAttempt_{};
         bool cursorVisible_ = true;
         bool captured_ = false;
         ::Cursor activeCursor_ = 0;

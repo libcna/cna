@@ -578,6 +578,10 @@ namespace CNA::Platform::X11 {
             }
             TranslateEvent(event, destination);
         }
+        if (mouse_ != nullptr)
+        {
+            mouse_->RefreshRelativeMode();
+        }
     }
 
     void X11Platform::EmitWindowStateTransitions(X11Window& window,
@@ -771,6 +775,10 @@ namespace CNA::Platform::X11 {
                 if (window == nullptr) { return; }
                 const bool wasMapped = window->IsMapped();
                 window->SetMapped(true);
+                if (mouse_ != nullptr)
+                {
+                    mouse_->OnWindowMapped(windowId);
+                }
                 if (!wasMapped)
                 {
                     // A window becoming visible is a return to the normal state, whether it was
@@ -787,6 +795,10 @@ namespace CNA::Platform::X11 {
             {
                 if (window == nullptr) { return; }
                 window->SetMapped(false);
+                if (mouse_ != nullptr)
+                {
+                    mouse_->OnWindowUnmapped(windowId);
+                }
                 // An unmap is how iconification looks on the wire under ICCCM: the window manager
                 // unmaps the window and sets WM_STATE to IconicState. Distinguishing that from an
                 // application's own Hide() means asking the server which it was, which is exactly
@@ -827,6 +839,11 @@ namespace CNA::Platform::X11 {
                 }
                 const bool gained = event.type == FocusIn;
                 window->SetFocused(gained);
+                if (mouse_ != nullptr)
+                {
+                    // Relative mode's grab is held only while its window has focus.
+                    mouse_->OnFocusChanged(windowId, gained);
+                }
                 if (textInput_ != nullptr)
                 {
                     textInput_->SetFocusedWindow(gained ? window : nullptr);

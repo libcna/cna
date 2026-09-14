@@ -833,6 +833,155 @@ TEST_F(X11WithWindowManager, AnInjectedClickArrivesAsAButtonEventWithCoordinates
     EXPECT_TRUE(sawRelease) << "every button press must have a matching release";
 }
 
+// --- relative mouse and focus -----------------------------------------------------------------
+//
+// plans/plan_native_platform_validation.md NPV-0109 and NPV-0110. Relative mode is a state the
+// application wants; the confining grab behind it may be held only while the window has focus.
+// Both halves need a window manager: without one nothing is focused or refocused.
+
+/// A window belonging to a different X client, which a window manager can give focus to.
+class OtherClientWindow
+{
+public:
+    OtherClientWindow()
+    {
+        display_ = XOpenDisplay(nullptr);
+        if (display_ == nullptr)
+        {
+            return;
+        }
+        const int screen = DefaultScreen(display_);
+        window_ = XCreateSimpleWindow(display_, DefaultRootWindow(display_), 400, 60, 200, 150, 0,
+                                      BlackPixel(display_, screen), WhitePixel(display_, screen));
+        XMapWindow(display_, window_);
+        XSync(display_, CNA::Platform::X11::kXFalse);
+    }
+
+    ~OtherClientWindow()
+    {
+        if (display_ != nullptr)
+        {
+            XCloseDisplay(display_);
+        }
+    }
+
+    OtherClientWindow(const OtherClientWindow&) = delete;
+    OtherClientWindow& operator=(const OtherClientWindow&) = delete;
+
+    [[nodiscard]] bool Ok() const { return display_ != nullptr; }
+
+    /// Asks the window manager to activate a window, as a pager or a click would.
+    void Activate(const ::Window window) const
+    {
+        XEvent event{};
+        event.type = ClientMessage;
+        event.xclient.window = window;
+        event.xclient.message_type =
+            XInternAtom(display_, "_NET_ACTIVE_WINDOW", CNA::Platform::X11::kXFalse);
+        event.xclient.format = 32;
+        event.xclient.data.l[0] = 2;
+        XSendEvent(display_, DefaultRootWindow(display_), CNA::Platform::X11::kXFalse,
+                   SubstructureRedirectMask | SubstructureNotifyMask, &event);
+        XSync(display_, CNA::Platform::X11::kXFalse);
+    }
+
+    void ActivateSelf() const { Activate(window_); }
+
+    /// True when some OTHER client holds the pointer grab: this client's own grab is refused.
+    [[nodiscard]] bool PointerGrabbedElsewhere() const
+    {
+        const int status = XGrabPointer(display_, DefaultRootWindow(display_),
+                                        CNA::Platform::X11::kXFalse, ButtonPressMask,
+                                        GrabModeAsync, GrabModeAsync, CNA::Platform::X11::kNone,
+                                        CNA::Platform::X11::kNone,
+                                        CNA::Platform::X11::kCurrentTime);
+        if (status == GrabSuccess)
+        {
+            XUngrabPointer(display_, CNA::Platform::X11::kCurrentTime);
+        }
+        XSync(display_, CNA::Platform::X11::kXFalse);
+        return status == AlreadyGrabbed;
+    }
+
+private:
+    ::Display* display_ = nullptr;
+    ::Window window_ = CNA::Platform::X11::kNone;
+};
+
+TEST_F(X11WithWindowManager, RelativeModeRequestedRightAfterShowEngagesOnceTheWindowHasFocus)
+{
+    // The first thing a game does: show its window and lock the pointer. At that instant the
+    // window manager has not yet made the window viewable, so an immediate grab fails with
+    // GrabNotViewable -- which the first version reported as "another client holds the pointer
+    // grab" and threw.
+    if (!platform_->GetCapabilities().relativeMouse)
+    {
+        GTEST_SKIP() << "no XInput2 on this server";
+    }
+    OtherClientWindow other;
+    ASSERT_TRUE(other.Ok());
+    IPlatformMouse* mouse = platform_->GetMouse();
+    ASSERT_NE(mouse, nullptr);
+
+    WindowDescription description;
+    description.title = "CNA relative right after Show";
+    description.width = 320;
+    description.height = 240;
+    window_ = platform_->CreateWindow(description);
+    window_->Show();
+    ASSERT_NO_THROW(mouse->SetRelativeMode(window_->GetId(), true));
+    EXPECT_TRUE(mouse->IsRelativeMode());
+
+    const bool engaged = PumpUntil([this, &other](const std::vector<PlatformEvent>&) {
+        return window_->HasFocus() && other.PointerGrabbedElsewhere();
+    });
+    EXPECT_TRUE(engaged) << "the grab never engaged once the window was mapped and focused";
+
+    mouse->SetRelativeMode(window_->GetId(), false);
+    EXPECT_FALSE(mouse->IsRelativeMode());
+    EXPECT_FALSE(other.PointerGrabbedElsewhere()) << "disabling relative mode must free the pointer";
+}
+
+TEST_F(X11WithWindowManager, RelativeModeLetsGoOfThePointerWhileAnotherWindowHasFocus)
+{
+    // Alt-Tab while a game has the pointer locked. Keeping the confining grab would leave the
+    // user's pointer locked to a window they are no longer using -- on a native X server, their
+    // whole desktop.
+    if (!platform_->GetCapabilities().relativeMouse)
+    {
+        GTEST_SKIP() << "no XInput2 on this server";
+    }
+    OtherClientWindow other;
+    ASSERT_TRUE(other.Ok());
+    IPlatformMouse* mouse = platform_->GetMouse();
+    ASSERT_NE(mouse, nullptr);
+
+    window_ = MakeVisibleWindow("CNA relative focus");
+    ASSERT_TRUE(PumpUntil([this, &other](const std::vector<PlatformEvent>&) {
+        other.Activate(static_cast<::Window>(window_->GetWindowHandle()));
+        return window_->HasFocus();
+    }));
+    mouse->SetRelativeMode(window_->GetId(), true);
+    ASSERT_TRUE(PumpUntil([&other](const std::vector<PlatformEvent>&) {
+        return other.PointerGrabbedElsewhere();
+    })) << "relative mode on a focused window must hold the pointer";
+
+    other.ActivateSelf();
+    const bool released = PumpUntil([this, &other](const std::vector<PlatformEvent>&) {
+        return !window_->HasFocus() && !other.PointerGrabbedElsewhere();
+    });
+    EXPECT_TRUE(released) << "the pointer stayed grabbed while another window had focus";
+    EXPECT_TRUE(mouse->IsRelativeMode()) << "relative mode stays enabled while suspended";
+
+    other.Activate(static_cast<::Window>(window_->GetWindowHandle()));
+    const bool retaken = PumpUntil([this, &other](const std::vector<PlatformEvent>&) {
+        return window_->HasFocus() && other.PointerGrabbedElsewhere();
+    });
+    EXPECT_TRUE(retaken) << "focus came back but the pointer was not locked again";
+
+    mouse->SetRelativeMode(window_->GetId(), false);
+}
+
 TEST_F(X11WithWindowManager, TheWindowManagerSeesTheTitleCnaSet)
 {
     if (std::system("command -v xdotool >/dev/null 2>&1") != 0)

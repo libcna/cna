@@ -10,7 +10,9 @@
 #include <X11/cursorfont.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace CNA::Platform::X11 {
@@ -54,7 +56,7 @@ namespace CNA::Platform::X11 {
     X11Mouse::~X11Mouse()
     {
         Display* display = connection_.GetDisplay();
-        if (relativeWindow_ != 0 || captured_)
+        if (relativeHeld_ || captured_)
         {
             XUngrabPointer(display, kCurrentTime);
         }
@@ -292,38 +294,144 @@ namespace CNA::Platform::X11 {
             throw PlatformException("X11Mouse::SetRelativeMode", "unknown window id");
         }
 
-#if defined(CNA_X11_HAVE_XI)
-        Display* display = connection_.GetDisplay();
+        if (relativeWindow_ != 0 && relativeWindow_ != window)
+        {
+            ReleaseRelativeMode();
+        }
+        if (relativeWindow_ == window && relativeHeld_)
+        {
+            return;
+        }
+        relativeWindow_ = window;
+        relativeX_ = 0;
+        relativeY_ = 0;
+        carryX_ = 0.0;
+        carryY_ = 0.0;
+        nextGrabAttempt_ = {};
 
-        // Raw events are delivered per client, not per window, and only the root window can be
-        // selected on for them -- so the window argument decides the grab, not the selection.
+        if (!RelativeGrabWanted())
+        {
+            // Not focused yet -- typically because the window was shown a moment ago and the
+            // window manager has not made it viewable and focused it. The grab engages when it
+            // is (OnFocusChanged/OnWindowMapped); failing here would break the very first thing a
+            // game does, which is show its window and lock the pointer.
+            return;
+        }
+        const int status = EngageRelative();
+        if (status == GrabSuccess || status == GrabNotViewable)
+        {
+            return;
+        }
+        relativeWindow_ = 0;
+        throw PlatformException("X11Mouse::SetRelativeMode",
+                                status == AlreadyGrabbed
+                                    ? "another client holds the pointer grab"
+                                    : status == GrabFrozen
+                                          ? "the pointer is frozen by another client's grab"
+                                          : "the X server refused the pointer grab (status " +
+                                                std::to_string(status) + ")");
+    }
+
+    bool X11Mouse::RelativeGrabWanted() const
+    {
+        const X11Window* target = FindWindow(relativeWindow_);
+        if (target == nullptr || !target->IsMapped())
+        {
+            return false;
+        }
+        // Keyboard focus is what decides whose pointer this is. With no window manager there is
+        // nobody to move focus between windows (and no Alt-Tab to escape through), so a viewable
+        // window is enough -- which keeps relative mode working in a bare X session or kiosk.
+        return target->HasFocus() || !connection_.HasWindowManager();
+    }
+
+    void X11Mouse::SelectRawMotion(const bool enabled)
+    {
+#if defined(CNA_X11_HAVE_XI)
+        // Deselection is an all-zero mask for the same device, never num_masks = 0: the server
+        // answers an empty mask list with BadValue and leaves the previous selection in place.
         unsigned char mask[XIMaskLen(XI_LASTEVENT)] = {};
-        XISetMask(mask, XI_RawMotion);
+        if (enabled)
+        {
+            XISetMask(mask, XI_RawMotion);
+        }
         XIEventMask eventMask{};
         eventMask.deviceid = XIAllMasterDevices;
         eventMask.mask_len = sizeof(mask);
         eventMask.mask = mask;
-        XISelectEvents(display, connection_.GetRoot(), &eventMask, 1);
+        XISelectEvents(connection_.GetDisplay(), connection_.GetRoot(), &eventMask, 1);
+#else
+        (void) enabled;
+#endif
+    }
+
+    int X11Mouse::EngageRelative()
+    {
+        X11Window* target = FindWindow(relativeWindow_);
+        if (target == nullptr)
+        {
+            return GrabNotViewable;
+        }
+        Display* display = connection_.GetDisplay();
+
+        // Raw events are delivered per client, not per window, and only the root window can be
+        // selected on for them -- so the window argument decides the grab, not the selection.
+        SelectRawMotion(true);
 
         // The grab is what makes the mode deterministic: the pointer cannot leave the window, a
         // click cannot reach another application, and the cursor is hidden for the duration. The
         // raw deltas keep arriving regardless of where the confined pointer sits, which is why
         // edge clipping does not lose motion the way a warp-based scheme does.
-        const int grab = XGrabPointer(display, target->GetXWindow(), True,
-                                      ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-                                      GrabModeAsync, GrabModeAsync, target->GetXWindow(),
-                                      GetHiddenCursor(), kCurrentTime);
-        if (grab != GrabSuccess)
+        const int status = XGrabPointer(display, target->GetXWindow(), True,
+                                        ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+                                        GrabModeAsync, GrabModeAsync, target->GetXWindow(),
+                                        GetHiddenCursor(), kCurrentTime);
+        if (status != GrabSuccess)
         {
-            XISelectEvents(display, connection_.GetRoot(), &eventMask, 0);
-            throw PlatformException("X11Mouse::SetRelativeMode",
-                                    "another client holds the pointer grab");
+            SelectRawMotion(false);
+            XFlush(display);
+            return status;
         }
-        relativeWindow_ = window;
-        relativeX_ = 0;
-        relativeY_ = 0;
+        relativeHeld_ = true;
         XFlush(display);
-#endif
+        return status;
+    }
+
+    void X11Mouse::DisengageRelative()
+    {
+        if (!relativeHeld_)
+        {
+            return;
+        }
+        Display* display = connection_.GetDisplay();
+        SelectRawMotion(false);
+        relativeHeld_ = false;
+        if (captured_)
+        {
+            // A capture was requested on top of relative mode; it outlives the relative grab, so
+            // the pointer is re-grabbed with the capture's own parameters rather than released.
+            X11Window* target = FindWindow(snapshot_.window);
+            if (target == nullptr && !windows_.empty())
+            {
+                target = windows_.begin()->second;
+            }
+            if (target == nullptr ||
+                XGrabPointer(display, target->GetXWindow(), True,
+                             ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+                             GrabModeAsync, GrabModeAsync, kNone, kNone,
+                             kCurrentTime) != GrabSuccess)
+            {
+                captured_ = false;
+                XUngrabPointer(display, kCurrentTime);
+            }
+        }
+        else
+        {
+            XUngrabPointer(display, kCurrentTime);
+        }
+        carryX_ = 0.0;
+        carryY_ = 0.0;
+        XFlush(display);
     }
 
     void X11Mouse::ReleaseRelativeMode()
@@ -332,23 +440,72 @@ namespace CNA::Platform::X11 {
         {
             return;
         }
-        Display* display = connection_.GetDisplay();
-#if defined(CNA_X11_HAVE_XI)
-        unsigned char mask[XIMaskLen(XI_LASTEVENT)] = {};
-        XIEventMask eventMask{};
-        eventMask.deviceid = XIAllMasterDevices;
-        eventMask.mask_len = sizeof(mask);
-        eventMask.mask = mask;
-        XISelectEvents(display, connection_.GetRoot(), &eventMask, 1);
-#endif
-        if (!captured_)
-        {
-            XUngrabPointer(display, kCurrentTime);
-        }
+        DisengageRelative();
         relativeWindow_ = 0;
         relativeX_ = 0;
         relativeY_ = 0;
-        XFlush(display);
+        carryX_ = 0.0;
+        carryY_ = 0.0;
+    }
+
+    void X11Mouse::OnFocusChanged(const WindowId id, const bool gained)
+    {
+        if (relativeWindow_ == 0 || id != relativeWindow_)
+        {
+            return;
+        }
+        if (!gained)
+        {
+            // The user has moved to another window -- Alt-Tab, a click elsewhere, a dialog. A
+            // grab held now would keep their pointer locked to a window they are not using.
+            DisengageRelative();
+            return;
+        }
+        if (!relativeHeld_ && RelativeGrabWanted())
+        {
+            (void) EngageRelative();
+            nextGrabAttempt_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+        }
+    }
+
+    void X11Mouse::OnWindowMapped(const WindowId id)
+    {
+        if (relativeWindow_ != 0 && id == relativeWindow_ && !relativeHeld_ &&
+            RelativeGrabWanted())
+        {
+            (void) EngageRelative();
+            nextGrabAttempt_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+        }
+    }
+
+    void X11Mouse::OnWindowUnmapped(const WindowId id)
+    {
+        if (relativeWindow_ == 0 || id != relativeWindow_ || !relativeHeld_)
+        {
+            return;
+        }
+        // The server released the grab itself when its window stopped being viewable
+        // (minimised, hidden). Only the bookkeeping and the raw-motion selection are left.
+        SelectRawMotion(false);
+        relativeHeld_ = false;
+        carryX_ = 0.0;
+        carryY_ = 0.0;
+        XFlush(connection_.GetDisplay());
+    }
+
+    void X11Mouse::RefreshRelativeMode()
+    {
+        if (relativeWindow_ == 0 || relativeHeld_ || !RelativeGrabWanted())
+        {
+            return;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now < nextGrabAttempt_)
+        {
+            return;
+        }
+        nextGrabAttempt_ = now + std::chrono::milliseconds(100);
+        (void) EngageRelative();
     }
 
     bool X11Mouse::SetCapture(const bool enabled)
@@ -361,7 +518,7 @@ namespace CNA::Platform::X11 {
                 return true;
             }
             captured_ = false;
-            if (relativeWindow_ == 0)
+            if (!relativeHeld_)
             {
                 XUngrabPointer(display, kCurrentTime);
                 XFlush(display);
@@ -371,6 +528,13 @@ namespace CNA::Platform::X11 {
 
         if (captured_)
         {
+            return true;
+        }
+        if (relativeHeld_)
+        {
+            // The relative grab already delivers every pointer event to this client; re-grabbing
+            // with the capture's parameters would drop its confinement and hidden cursor.
+            captured_ = true;
             return true;
         }
         X11Window* target = FindWindow(snapshot_.window);
@@ -432,8 +596,20 @@ namespace CNA::Platform::X11 {
 
     void X11Mouse::AccumulateRawMotion(const double deltaX, const double deltaY)
     {
-        relativeX_ += static_cast<int>(deltaX);
-        relativeY_ += static_cast<int>(deltaY);
+        if (!relativeHeld_)
+        {
+            // Motion made while the grab was suspended belongs to whatever the user was doing
+            // instead; an event already queued when the selection was dropped is discarded too.
+            return;
+        }
+        carryX_ += deltaX;
+        carryY_ += deltaY;
+        const double wholeX = std::trunc(carryX_);
+        const double wholeY = std::trunc(carryY_);
+        carryX_ -= wholeX;
+        carryY_ -= wholeY;
+        relativeX_ += static_cast<int>(wholeX);
+        relativeY_ += static_cast<int>(wholeY);
     }
 
     void X11Mouse::SetLastPosition(const WindowId window, const int x, const int y)
