@@ -23,8 +23,9 @@ extern char** environ;
 
 // plans/plan_native_platforms_integration.md NPI-0007: cmake/Harnesses.cmake only builds
 // cna_devices_shutdown_ordering_harness (and defines this macro) when SDL3 is actually configured
-// -- the harness's whole point is proving the ordering around the real SDL_Quit(), which does not
-// exist to call under CNA_ENABLE_SDL=OFF or a non-SDL3 selection. Without this guard the test file
+// -- the harness's whole point is proving the ordering around SDL3's own real native shutdown
+// call, which does not exist to make under CNA_ENABLE_SDL=OFF or a non-SDL3 selection. Without
+// this guard the test file
 // failed to compile at all in that configuration; skipping cleanly is the correct answer, matching
 // how the harness itself is skipped rather than built empty.
 #if defined(CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH)
@@ -169,8 +170,8 @@ TEST(DevicesShutdownOrderingTest, HarnessExitsCleanlyViaFallbackWhenExplicitShut
 TEST(DevicesShutdownOrderingTest, SkippedBecauseThisConfigurationDoesNotBuildTheSdl3Harness)
 {
     GTEST_SKIP() << "cna_devices_shutdown_ordering_harness is only built when SDL3 is configured "
-                    "(cmake/Harnesses.cmake); this configuration has no real SDL_Quit() for it to "
-                    "order against.";
+                    "(cmake/Harnesses.cmake); this configuration has no real native shutdown call "
+                    "for it to order against.";
 }
 
 #endif // defined(CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH)
