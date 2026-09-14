@@ -146,6 +146,13 @@ endif()
 if(NOT CNA_PLATFORM STREQUAL "SDL2")
     list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/Sdl2.*\\.cpp$")
 endif()
+# plans/plan_native_platforms_integration.md NPI-0015: this harness's filters were all written
+# before the X11 backend existed, so X11*.cpp fell through none of them and was compiled into
+# every non-X11 selection (a WIN32 mingw cross-build fails outright: X11Headers.hpp has nothing to
+# find on that toolchain).
+if(NOT CNA_PLATFORM STREQUAL "X11")
+    list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/X11.*\\.cpp$")
+endif()
 if(WIN32)
     list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/Terminal.*\\.cpp$")
 endif()

@@ -37,7 +37,7 @@ endif()
 # that matters: termios is libc and is either there or not by target, while the X client
 # libraries are an installable package. So when X11 is requested and unavailable the diagnostic
 # below names what to install, and the configure fails rather than falling back to SDL3.
-include(cmake/PlatformX11.cmake)
+include("${CMAKE_CURRENT_LIST_DIR}/PlatformX11.cmake")
 cna_detect_x11()
 if(CNA_X11_AVAILABLE)
     list(APPEND _cna_platforms_available X11)
