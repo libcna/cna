@@ -482,10 +482,17 @@ individual task. Do not push unless the user explicitly asks to push.
 
 Platform, renderer and audio selection are three independent CMake axes:
 
-- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `SDL2`, `HEADLESS`, or
-  `TERMINAL`; SDL12/WIN32/EMSCRIPTEN are reserved identifiers and fail configuration). `SDL2` is an
-  independent backend with its own deliberately narrow capability profile -- never `sdl2-compat`
-  over SDL3 -- see `docs/platform-sdl2.md`.
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `SDL2`, `X11`,
+  `HEADLESS`, or `TERMINAL`; SDL12/WIN32/EMSCRIPTEN are reserved identifiers and fail
+  configuration). `SDL2` is an independent backend with its own deliberately narrow capability
+  profile -- never `sdl2-compat` over SDL3 -- see `docs/platform-sdl2.md`. `X11` is a native
+  backend written against Xlib directly with no SDL in it at all, offered only where the X
+  development environment exists; it is what makes an SDL-free CNA a configuration that exists
+  rather than an argument -- see `docs/platform-x11.md` and `plans/plan_x11.md`.
+- `CNA_ENABLE_SDL` (`AUTO` by default, and `AUTO` is byte-for-byte the historical behaviour)
+  decides whether the vendored SDL3 sub-build is configured at all. `OFF` skips it entirely and
+  refuses, at configure time, any platform/audio/renderer selection that genuinely needs SDL --
+  naming which one. Nothing is ever silently substituted.
 - `CNA_GRAPHICS_RENDERER` selects the renderer.
 - `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `SDL2` or `NULL`). Only `SDL3` defines
   `SOUND_ENABLED`, because the high-level XNA decoder/mixer is an SDL3_mixer engine.
@@ -497,6 +504,13 @@ SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
 - `modules/audio/src/Platform/Sdl3/`, `modules/audio/src/Platform/Sdl2/`, and the mixer
   implementation isolated inside audio;
 - renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
+
+`modules/platform/src/X11/` is inside the platform module and is deliberately **not** one of those
+edges: it is the backend that exists to prove CNA does not need SDL, so `sdl_ratchet.py` denylists
+it from the module-wide exemption and counts any SDL reference there as a boundary regression.
+Its own X headers are confined the same way -- `<X11/...>` is included only through
+`modules/platform/src/X11/X11Headers.hpp`, which also undefines the `None`, `Bool` and `Status`
+macros that collide with CNA enumerators and with GoogleTest.
 
 A genuinely backend-specific test belongs with the platform implementation it exercises. Consumer tests use
 canned platform services or the parameterized conformance suite, not native event injection.

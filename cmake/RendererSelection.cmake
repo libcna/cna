@@ -1,17 +1,9 @@
 # --- Graphics Renderer Selection ---
-# plans/plan_glbackends.md: EasyGL is an internal implementation family, not a public renderer name.
-# It is selected publicly via one of 5 GL-profile names -- OPENGLES2/OPENGLES3/OPENGL33
-# (desktop/mobile, non-Emscripten) and WEBGL1/WEBGL2 (Emscripten only). OPENGLES3 on Linux is the
-# default GL-family choice (was EASYGL); WEBGL2 is the default under Emscripten (was also EASYGL --
-# Emscripten's GLES 3.0 request already mapped to a WebGL 2 context, it just had no name of its
-# own). Other platforms default to SDL_RENDERER.
-if(EMSCRIPTEN)
-    set(_cna_default_renderer "WEBGL2")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(_cna_default_renderer "OPENGLES3")
-else()
-    set(_cna_default_renderer "SDL_RENDERER")
-endif()
+# The renderer identity and its per-host default are settled by cmake/RendererIdentityDefault.cmake
+# so that the SDL availability gate (cmake/SdlAvailability.cmake, plans/plan_x11.md X11-0090) can
+# ask which renderer this build will use BEFORE the vendored SDL sub-build is decided, without
+# either file restating the default rule and the two drifting apart.
+include(cmake/RendererIdentityDefault.cmake)
 set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES2, OPENGLES3, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, DIRECTX11, DIRECTX12, DIRECT2D, CANVAS, HTML_DOM, BLEND2D, FREEDIRECT, DIRECTX9, DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8, DIRECTX10, SDL_GPU, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, IGL, METAL, FNA3D, SVG_DOM, OPENVG, PORTABLEGL, TINYGL, PIXIJS, NANOVG, or RLGL)")
 set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES2" "OPENGLES3" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "DIRECTX11" "DIRECTX12" "DIRECT2D" "CANVAS" "HTML_DOM" "BLEND2D" "FREEDIRECT" "DIRECTX9" "DIRECTX1" "DIRECTX2" "DIRECTX3" "DIRECTX5" "DIRECTX6" "DIRECTX7" "DIRECTX8" "DIRECTX10" "SDL_GPU" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "IGL" "METAL" "FNA3D" "SVG_DOM" "OPENVG" "PORTABLEGL" "TINYGL" "PIXIJS" "NANOVG" "RLGL")
 

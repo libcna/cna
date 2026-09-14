@@ -91,6 +91,10 @@ def classify(record: FileRecord) -> str | None:
         "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp",
         "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp",
         "modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp",
+        # plans/plan_x11.md X11-0091: the same shape as the contract probe above, one layer in.
+        # It asserts that the native X11 backend contains no SDL, so every SDL token in it is
+        # either a `#error` sentinel or a string the source scan searches for.
+        "modules/platform/tests/CNA/Platform/X11IsSdlFreeTests.cpp",
         "modules/platform/tests/CNA/Platform/IPlatformTests.cpp",
         "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp",
     }:

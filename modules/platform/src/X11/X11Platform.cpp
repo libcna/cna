@@ -1,0 +1,1131 @@
+// SPDX-License-Identifier: MS-PL
+
+#include "X11Platform.hpp"
+
+#include "CNA/Platform/PlatformException.hpp"
+#include "X11Error.hpp"
+#include "X11EventMapper.hpp"
+#include "X11Window.hpp"
+
+#include <cerrno>
+#include <ctime>
+#include <unistd.h>
+
+namespace CNA::Platform::X11 {
+
+    namespace {
+
+        /// How close in time and space two clicks must be to count as a double click.
+        ///
+        /// X11 has no double-click concept at all: the server reports button presses and their
+        /// timestamps, and every toolkit decides for itself. 500 ms and 4 pixels are the values
+        /// the common toolkits converge on, and the spatial part matters as much as the temporal
+        /// one -- two fast clicks in different places are two clicks, not a double click.
+        constexpr unsigned long kDoubleClickMilliseconds = 500;
+        constexpr int kDoubleClickSlopPixels = 4;
+
+        /// Events a normal CNA window needs. Selected once at creation; adding to this later
+        /// means an XSelectInput round trip, so the set is deliberately complete rather than
+        /// minimal.
+        constexpr long kWindowEventMask =
+            ExposureMask | StructureNotifyMask | FocusChangeMask | KeyPressMask | KeyReleaseMask |
+            ButtonPressMask | ButtonReleaseMask | PointerMotionMask | EnterWindowMask |
+            LeaveWindowMask | PropertyChangeMask | VisibilityChangeMask;
+
+    } // namespace
+
+    /**
+     * A non-owning view of a window the platform already owns.
+     *
+     * `AdoptWindow` must not hand back something whose destructor destroys the X window, because
+     * the caller that created it still holds the owning wrapper. Forwarding to the live object
+     * rather than constructing a second `X11Window` over the same XID also means the two views
+     * cannot disagree about cached state such as focus or fullscreen mode.
+     */
+    class X11Platform::BorrowedWindow final : public IPlatformWindow
+    {
+    public:
+        explicit BorrowedWindow(X11Window& target) : target_(target) {}
+
+        [[nodiscard]] WindowId GetId() const override { return target_.GetId(); }
+        [[nodiscard]] std::uintptr_t GetWindowHandle() const override
+        {
+            return target_.GetWindowHandle();
+        }
+        [[nodiscard]] NativeWindowHandle GetNativeHandle() const override
+        {
+            return target_.GetNativeHandle();
+        }
+        [[nodiscard]] std::string GetTitle() const override { return target_.GetTitle(); }
+        void SetTitle(const std::string& title) override { target_.SetTitle(title); }
+        [[nodiscard]] WindowBounds GetClientBounds() const override
+        {
+            return target_.GetClientBounds();
+        }
+        [[nodiscard]] WindowSize GetPixelSize() const override { return target_.GetPixelSize(); }
+        void SetSize(int width, int height) override { target_.SetSize(width, height); }
+        [[nodiscard]] float GetDisplayScale() const override { return target_.GetDisplayScale(); }
+        [[nodiscard]] bool IsResizable() const override { return target_.IsResizable(); }
+        void SetResizable(bool resizable) override { target_.SetResizable(resizable); }
+        [[nodiscard]] bool IsBorderless() const override { return target_.IsBorderless(); }
+        void SetBorderless(bool borderless) override { target_.SetBorderless(borderless); }
+        void SetFullscreenMode(WindowFullscreenMode mode) override
+        {
+            target_.SetFullscreenMode(mode);
+        }
+        [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override
+        {
+            return target_.GetFullscreenMode();
+        }
+        void Show() override { target_.Show(); }
+        void Hide() override { target_.Hide(); }
+        void Minimize() override { target_.Minimize(); }
+        void Maximize() override { target_.Maximize(); }
+        void Restore() override { target_.Restore(); }
+        void Sync() override { target_.Sync(); }
+        [[nodiscard]] bool HasFocus() const override { return target_.HasFocus(); }
+        [[nodiscard]] bool IsMinimized() const override { return target_.IsMinimized(); }
+        [[nodiscard]] std::string GetDisplayName() const override
+        {
+            return target_.GetDisplayName();
+        }
+
+    private:
+        X11Window& target_;
+    };
+
+    X11Platform::X11Platform()
+    {
+        try
+        {
+            OpenConnection();
+        }
+        catch (const PlatformException& error)
+        {
+            // Recorded, not propagated. See the constructor's documentation: a process with no
+            // display must still be able to construct a platform to reach the portable services.
+            connectionError_ = error.GetDetail().empty() ? std::string(error.what())
+                                                         : error.GetDetail();
+        }
+        capabilities_ = ComputeCapabilities();
+    }
+
+    X11Platform::~X11Platform()
+    {
+        // Services before the connection, and the window registry before either: a service holds
+        // raw pointers into windows the application owns, and closing the display first would
+        // make every subsequent XFree* in a service destructor a use-after-free.
+        windows_.clear();
+        CloseConnection();
+    }
+
+    const std::string& X11Platform::GetName() const
+    {
+        static const std::string name = "X11";
+        return name;
+    }
+
+    PlatformCapabilities X11Platform::GetCapabilities() const
+    {
+        return capabilities_;
+    }
+
+    PlatformCapabilities X11Platform::ComputeCapabilities() const
+    {
+        PlatformCapabilities capabilities;
+
+        // Every flag below names what backs it. The contract's rule is that a service accessor is
+        // non-null exactly when its presence capability is true, so a flag may only be set in the
+        // same change that wires its accessor -- and several of these are conditional on an
+        // extension actually being present, not merely compiled in.
+        // Without a display there is no window system, so every one of these is false and each
+        // corresponding service accessor returns null. That is not a degraded mode pretending to
+        // work -- it is the truthful description of a platform that could not reach an X server.
+        if (connection_ == nullptr)
+        {
+            return capabilities;
+        }
+
+        capabilities.multipleWindows = true;      // XCreateWindow has no single-window limit.
+        capabilities.nativeWindowHandle = true;   // Display* + XID.
+        capabilities.surfacePresentation = true;  // XPutImage.
+        capabilities.textInput = true;            // Xutf8LookupString, or XLookupString.
+        capabilities.exactKeyboardState = true;   // Real KeyRelease events; no synthesis.
+        capabilities.pixelAccurateMouse = true;   // X reports true pixels.
+        capabilities.cursorShapes = true;         // The core cursor font; Xcursor for ARGB images.
+        capabilities.globalPointer = true;        // XQueryPointer/XWarpPointer on the root.
+        capabilities.clipboard = true;            // Real ICCCM selection ownership with INCR.
+
+        // High DPI is claimed only when the session actually states a scale. Reporting it true
+        // with a scale permanently pinned at 1.0 would tell a caller to expect a pixel size that
+        // differs from the logical size, which on X11 it never does.
+        capabilities.highDpi = connection_->GetDisplayScale() != 1.0f;
+        capabilities.multipleDisplays = connection_->HasRandr();
+        capabilities.borderlessFullscreen =
+            connection_->SupportsEwmhHint(connection_->GetAtoms().netWmStateFullscreen);
+        capabilities.openGlContext = glContext_ != nullptr && glContext_->IsAvailable();
+        capabilities.vulkanSurface = vulkanSurface_ != nullptr;
+        capabilities.relativeMouse = mouse_ != nullptr && mouse_->HasRawMotion();
+
+        // Deliberately false, each for a stated reason rather than for want of effort:
+        //   ime                    -- XIM here delivers committed text only; the capability
+        //                             promises composition and candidate events (plan D16).
+        //   gamepad/joystick/...   -- not an X11 facility; they are evdev/HID concerns.
+        //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or
+        //   tray                      kdialog would not be a native backend (plan D15).
+        //   camera, powerInfo      -- not an X11 facility.
+        //   inputDeviceEnumeration -- XI2 can answer it; not implemented yet, so it stays false.
+        //   managedEntrypoint      -- an ordinary main().
+        return capabilities;
+    }
+
+    void X11Platform::OpenConnection()
+    {
+        if (connection_ != nullptr)
+        {
+            return;
+        }
+        connection_ = std::make_unique<X11Connection>();
+
+        // Services are created with the connection and destroyed with it, so a service pointer is
+        // valid exactly while Video is held -- which is what makes "null when the capability is
+        // false" honest for the services that depend on a live display.
+        keyboard_ = std::make_unique<X11Keyboard>(*connection_);
+        mouse_ = std::make_unique<X11Mouse>(*connection_);
+        textInput_ = std::make_unique<X11TextInput>(*connection_);
+        clipboard_ = std::make_unique<X11Clipboard>(*connection_);
+        displays_ = std::make_unique<X11Displays>(*connection_);
+        glContext_ = std::make_unique<X11GlContext>(*connection_);
+        vulkanSurface_ = std::make_unique<X11VulkanSurface>(*connection_);
+    }
+
+    void X11Platform::CloseConnection()
+    {
+        // Reverse construction order. The clipboard owns a window on the connection and the text
+        // input owns an XIM, so both must go before XCloseDisplay; the graphics services hold
+        // GLX contexts, which must be destroyed while their display is alive.
+        vulkanSurface_.reset();
+        glContext_.reset();
+        displays_.reset();
+        clipboard_.reset();
+        textInput_.reset();
+        mouse_.reset();
+        keyboard_.reset();
+        connection_.reset();
+    }
+
+    X11Connection& X11Platform::RequireConnection(const char* operation) const
+    {
+        if (connection_ == nullptr)
+        {
+            throw PlatformException(operation,
+                                    "the Video subsystem has not been acquired, so there is no X "
+                                    "connection; call AcquireSubsystem(PlatformSubsystem::Video)");
+        }
+        return *connection_;
+    }
+
+    void X11Platform::AcquireSubsystem(const PlatformSubsystem subsystem)
+    {
+        // Video is the only subsystem with anything behind it, and the only one that can fail.
+        // The rest refcount and do nothing, exactly as the headless and terminal backends do:
+        // the cross-implementation contract is that acquisition is bookkeeping, and that a
+        // subsystem CNA has no facility for reports its absence through a null service and a
+        // false capability rather than by refusing to be acquired. `GraphicsDevice::Dispose`
+        // releases Video unconditionally, and callers balance acquisitions they never inspect.
+        if (subsystem == PlatformSubsystem::Video && connection_ == nullptr)
+        {
+            throw PlatformException("X11Platform::AcquireSubsystem(Video)",
+                                    connectionError_.empty()
+                                        ? std::string("no X connection could be opened")
+                                        : connectionError_);
+        }
+        ++refCounts_[subsystem];
+    }
+
+    void X11Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
+    {
+        const auto found = refCounts_.find(subsystem);
+        if (found == refCounts_.end() || found->second == 0)
+        {
+            // Unpaired release is a documented no-op: cleanup code may legitimately run after a
+            // partial initialization.
+            return;
+        }
+        --found->second;
+
+        // The connection is deliberately NOT closed when the Video count reaches zero. Closing it
+        // would change the capability set mid-life -- every display-dependent capability would
+        // flip to false -- and the contract says a capability set is stable for the instance's
+        // lifetime because callers cache it once. The connection is this platform instance's own
+        // resource: opened in its constructor, closed in its destructor, and never the host
+        // application's.
+    }
+
+    bool X11Platform::IsSubsystemInitialized(const PlatformSubsystem subsystem) const
+    {
+        const auto found = refCounts_.find(subsystem);
+        return found != refCounts_.end() && found->second > 0;
+    }
+
+    void X11Platform::RegisterWindowWithServices(const WindowId id, X11Window* window)
+    {
+        if (mouse_ != nullptr) { mouse_->RegisterWindow(id, window); }
+        if (textInput_ != nullptr) { textInput_->RegisterWindow(id, window); }
+        if (glContext_ != nullptr) { glContext_->RegisterWindow(id, window); }
+        if (vulkanSurface_ != nullptr) { vulkanSurface_->RegisterWindow(id, window); }
+    }
+
+    void X11Platform::ForgetWindow(const WindowId id)
+    {
+        windows_.erase(id);
+        RegisterWindowWithServices(id, nullptr);
+    }
+
+    X11Window* X11Platform::FindWindow(const WindowId id) const
+    {
+        const auto found = windows_.find(id);
+        return found != windows_.end() ? found->second : nullptr;
+    }
+
+    X11Window* X11Platform::FindWindowByXid(const ::Window xid) const
+    {
+        for (const auto& [id, window] : windows_)
+        {
+            (void) id;
+            if (window != nullptr && window->GetXWindow() == xid)
+            {
+                return window;
+            }
+        }
+        return nullptr;
+    }
+
+    std::unique_ptr<IPlatformWindow> X11Platform::CreateWindow(const WindowDescription& description)
+    {
+        X11Connection& connection = RequireConnection("X11Platform::CreateWindow");
+        Display* display = connection.GetDisplay();
+        const int screen = connection.GetScreen();
+
+        if (description.width <= 0 || description.height <= 0)
+        {
+            throw PlatformException("X11Platform::CreateWindow",
+                                    "a window size must be positive; X rejects a zero extent");
+        }
+
+        // The visual has to be settled BEFORE XCreateWindow, because an X window's visual is
+        // fixed for its lifetime. That is the entire reason WindowDescription carries a render
+        // intent rather than offering a post-creation setter -- see plan design decision 13.
+        Visual* visual = DefaultVisual(display, screen);
+        int depth = DefaultDepth(display, screen);
+        Colormap colormap = kNone;
+        void* fbConfig = nullptr;
+
+        if (description.renderIntent == WindowRenderIntent::OpenGl)
+        {
+            if (glContext_ == nullptr || !glContext_->IsAvailable())
+            {
+                throw PlatformNotSupportedException(
+                    PlatformCapability::OpenGlContext,
+                    "X11 (a window was requested with WindowRenderIntent::OpenGl, but this server "
+                    "provides no GLX 1.3)");
+            }
+            const X11GlVisual chosen = glContext_->ChooseVisual(
+                description.openGlFramebuffer.depthBits, description.openGlFramebuffer.stencilBits,
+                description.openGlFramebuffer.doubleBuffered, description.openGlFramebuffer.samples);
+            if (chosen.visual == nullptr)
+            {
+                throw PlatformException(
+                    "X11Platform::CreateWindow",
+                    "no GLX framebuffer configuration matches the requested framebuffer");
+            }
+            visual = chosen.visual;
+            depth = chosen.depth;
+            fbConfig = chosen.fbConfig;
+        }
+
+        // A window whose visual is not the screen default needs its own colormap: the root
+        // window's colormap belongs to the default visual, and XCreateWindow with a mismatched
+        // pair is a BadMatch.
+        const bool needsOwnColormap = visual != DefaultVisual(display, screen);
+        if (needsOwnColormap)
+        {
+            colormap = XCreateColormap(display, connection.GetRoot(), visual, AllocNone);
+        }
+
+        XSetWindowAttributes attributes{};
+        unsigned long valueMask = CWEventMask | CWBackPixel | CWBorderPixel;
+        attributes.event_mask = kWindowEventMask;
+        attributes.background_pixel = BlackPixel(display, screen);
+        // border_pixel must be set explicitly whenever the depth differs from the parent's, or
+        // XCreateWindow raises BadMatch -- the default is CopyFromParent, which cannot be copied
+        // across depths.
+        attributes.border_pixel = 0;
+        if (colormap != kNone)
+        {
+            attributes.colormap = colormap;
+            valueMask |= CWColormap;
+        }
+
+        const int x = description.centered
+                          ? (DisplayWidth(display, screen) - description.width) / 2
+                          : description.x;
+        const int y = description.centered
+                          ? (DisplayHeight(display, screen) - description.height) / 2
+                          : description.y;
+
+        X11ErrorTrap trap(display);
+        const ::Window xWindow = XCreateWindow(
+            display, connection.GetRoot(), x, y, static_cast<unsigned int>(description.width),
+            static_cast<unsigned int>(description.height), 0, depth, InputOutput, visual, valueMask,
+            &attributes);
+        trap.Sync();
+        if (xWindow == kNone || trap.HasError())
+        {
+            if (colormap != kNone) { XFreeColormap(display, colormap); }
+            throw PlatformException("X11Platform::CreateWindow",
+                                    trap.HasError() ? trap.Describe()
+                                                    : std::string("XCreateWindow failed"));
+        }
+
+        const WindowId id = nextWindowId_++;
+        auto window = std::make_unique<X11Window>(connection, xWindow, id, colormap, visual, depth,
+                                                   true);
+        window->SetGlFbConfig(fbConfig);
+        window->SetResizableFlag(description.resizable);
+        window->SetBorderlessFlag(description.borderless);
+        window->SetCachedSize(description.width, description.height);
+        window->SetCachedPosition(x, y);
+
+        // WM_DELETE_WINDOW is what turns the window manager's close button into a message this
+        // application can answer. Without it the window manager kills the connection instead,
+        // which takes every other window with it.
+        const X11Atoms& atoms = connection.GetAtoms();
+        Atom protocols[] = {atoms.wmDeleteWindow};
+        XSetWMProtocols(display, xWindow, protocols, 1);
+
+        // _NET_WM_PID and WM_CLIENT_MACHINE together let a window manager identify and, if it
+        // must, kill the owning process. A window with neither is one a stuck-application dialog
+        // cannot offer to close.
+        const long pid = static_cast<long>(getpid());
+        XChangeProperty(display, xWindow, atoms.netWmPid, XA_CARDINAL, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(&pid), 1);
+        char hostName[256] = {};
+        if (gethostname(hostName, sizeof(hostName) - 1) == 0)
+        {
+            XTextProperty machine{};
+            char* hostPointer = hostName;
+            if (XStringListToTextProperty(&hostPointer, 1, &machine) != 0)
+            {
+                XSetWMClientMachine(display, xWindow, &machine);
+                XFree(machine.value);
+            }
+        }
+
+        // WM_CLASS is what a window manager keys its per-application rules and task-list grouping
+        // off. "CNA" as the class, the window title as the instance name.
+        XClassHint* classHint = XAllocClassHint();
+        if (classHint != nullptr)
+        {
+            std::string instance = description.title.empty() ? std::string("cna")
+                                                             : description.title;
+            classHint->res_name = instance.data();
+            char className[] = "CNA";
+            classHint->res_class = className;
+            XSetClassHint(display, xWindow, classHint);
+            XFree(classHint);
+        }
+
+        window->SetTitle(description.title);
+        window->ApplySizeConstraints(description.minimumWidth, description.minimumHeight,
+                                     description.maximumWidth, description.maximumHeight);
+        if (description.borderless)
+        {
+            window->SetBorderlessFlag(false);
+            window->SetBorderless(true);
+        }
+
+        X11Window* raw = window.get();
+        windows_[id] = raw;
+        RegisterWindowWithServices(id, raw);
+        if (textInput_ != nullptr)
+        {
+            textInput_->AttachWindow(*raw);
+        }
+
+        if (description.visible)
+        {
+            window->Show();
+        }
+        // Fullscreen is applied after the map request, because a window manager only starts
+        // managing a window at MapRequest and a _NET_WM_STATE message before that has nobody to
+        // act on it. SetNetWmState knows the difference and writes the property directly when the
+        // window is still unmapped.
+        if (description.fullscreenMode != WindowFullscreenMode::Windowed)
+        {
+            window->SetFullscreenMode(description.fullscreenMode);
+        }
+        XFlush(display);
+        return window;
+    }
+
+    std::unique_ptr<IPlatformWindow> X11Platform::AdoptWindow(const WindowId windowId)
+    {
+        if (windowId == 0)
+        {
+            throw PlatformException("X11Platform::AdoptWindow", "window id must be non-zero");
+        }
+        X11Window* window = FindWindow(windowId);
+        if (window == nullptr)
+        {
+            throw PlatformException("X11Platform::AdoptWindow",
+                                    "no window of this platform has that id");
+        }
+        return std::make_unique<BorrowedWindow>(*window);
+    }
+
+    std::unique_ptr<IPlatformWindow> X11Platform::AdoptWindowHandle(const std::uintptr_t handle)
+    {
+        if (handle == 0)
+        {
+            throw PlatformException("X11Platform::AdoptWindowHandle",
+                                    "window handle must be non-zero");
+        }
+        const auto xid = static_cast<::Window>(handle);
+        if (X11Window* existing = FindWindowByXid(xid))
+        {
+            return std::make_unique<BorrowedWindow>(*existing);
+        }
+
+        // An XID this platform did not create. It may still be a real window on this display --
+        // another toolkit's, or one created before CNA started -- so it is validated against the
+        // server rather than refused outright. The error trap is what turns the asynchronous
+        // BadWindow into a synchronous answer.
+        X11Connection& connection = RequireConnection("X11Platform::AdoptWindowHandle");
+        Display* display = connection.GetDisplay();
+        XWindowAttributes attributes{};
+        X11ErrorTrap trap(display);
+        const XStatus status = XGetWindowAttributes(display, xid, &attributes);
+        trap.Sync();
+        if (status == 0 || trap.HasError())
+        {
+            throw PlatformException("X11Platform::AdoptWindowHandle",
+                                    "no window with that XID exists on " +
+                                        connection.GetDisplayName());
+        }
+
+        const WindowId id = nextWindowId_++;
+        auto window = std::make_unique<X11Window>(connection, xid, id, kNone, attributes.visual,
+                                                   attributes.depth, false);
+        // Deliberately NOT added to windows_: the platform does not own it, and an adopted window
+        // that vanished would leave a dangling pointer in the registry the event pump walks.
+        return window;
+    }
+
+    void X11Platform::PollEvents(std::vector<PlatformEvent>& destination)
+    {
+        destination.clear();
+        if (connection_ == nullptr)
+        {
+            return;
+        }
+        Display* display = connection_->GetDisplay();
+
+        // XPending flushes the output buffer and then reports what has already arrived, so this
+        // loop is non-blocking by construction: XNextEvent can only block when the queue is
+        // empty, and XPending has just said it is not.
+        XEvent event;
+        while (XPending(display) > 0)
+        {
+            XNextEvent(display, &event);
+
+            // XFilterEvent gives the input method first refusal. An IME consumes the key presses
+            // that make up a composition and produces one committed string at the end; delivering
+            // those presses as key events too would type the composition twice.
+            if (XFilterEvent(&event, kNone) == True)
+            {
+                continue;
+            }
+            if (clipboard_ != nullptr && clipboard_->HandleEvent(event))
+            {
+                continue;
+            }
+            TranslateEvent(event, destination);
+        }
+    }
+
+    void X11Platform::EmitWindowStateTransitions(X11Window& window,
+                                                 std::vector<PlatformEvent>& destination)
+    {
+        // Reads the server's answer once and reports only what CHANGED.
+        //
+        // `_NET_WM_STATE` changes for many reasons a game has no interest in -- a pager moving
+        // the window, a skip-taskbar toggle, a compositor marking it above others -- and the same
+        // state change also arrives as MapNotify/UnmapNotify. Emitting an event per property
+        // change would deliver duplicates for one user action and noise for none; deriving from
+        // the difference against what this object last observed delivers exactly one event per
+        // real transition.
+        bool minimized = false;
+        bool maximized = false;
+        {
+            // A window being closed is unmapped and then destroyed, so this read can race the
+            // DestroyNotify already in the queue behind us. That is an ordinary race, not a
+            // fault, and the trap is what keeps it from printing an alarming error line every
+            // time a user closes a window.
+            X11ErrorTrap trap(connection_->GetDisplay());
+            window.ReadStateFlags(minimized, maximized);
+            trap.Sync();
+            if (trap.HasError())
+            {
+                return;
+            }
+        }
+
+        const WindowId id = window.GetId();
+        if (minimized != window.WasMinimized())
+        {
+            WindowEvent event;
+            event.window = id;
+            event.kind = minimized ? WindowEventKind::Minimized : WindowEventKind::Restored;
+            destination.emplace_back(event);
+        }
+        if (maximized != window.WasMaximized())
+        {
+            WindowEvent event;
+            event.window = id;
+            event.kind = maximized ? WindowEventKind::Maximized : WindowEventKind::Restored;
+            destination.emplace_back(event);
+        }
+        window.SetObservedState(minimized, maximized);
+        window.SetObservedFullscreenMode(window.GetFullscreenMode());
+    }
+
+    void X11Platform::TranslateEvent(XEvent& event, std::vector<PlatformEvent>& destination)
+    {
+        Display* display = connection_->GetDisplay();
+        const X11Atoms& atoms = connection_->GetAtoms();
+
+        // A generic event is XInput2's; the opcode is what distinguishes it from any other
+        // extension's, and its data has to be fetched before it can be read.
+#if defined(CNA_X11_HAVE_XI)
+        if (event.type == GenericEvent && connection_->GetXInput2Opcode() >= 0 &&
+            event.xcookie.extension == connection_->GetXInput2Opcode())
+        {
+            if (XGetEventData(display, &event.xcookie) == True)
+            {
+                if (event.xcookie.evtype == XI_RawMotion && mouse_ != nullptr)
+                {
+                    const auto* raw = static_cast<const XIRawEvent*>(event.xcookie.data);
+                    double deltaX = 0.0;
+                    double deltaY = 0.0;
+                    const double* values = raw->raw_values;
+                    // valuators.mask is a bitmask over the device's axes: only the axes that
+                    // actually moved have a value, and they are packed. Walking the mask is the
+                    // only correct way to find axis 0 and 1 -- indexing raw_values directly reads
+                    // another axis's value whenever the pointer moved in one direction only.
+                    for (int axis = 0; axis < raw->valuators.mask_len * 8; ++axis)
+                    {
+                        if (XIMaskIsSet(raw->valuators.mask, axis) == 0)
+                        {
+                            continue;
+                        }
+                        if (axis == 0) { deltaX = *values; }
+                        else if (axis == 1) { deltaY = *values; }
+                        ++values;
+                    }
+                    mouse_->AccumulateRawMotion(deltaX, deltaY);
+                }
+                XFreeEventData(display, &event.xcookie);
+            }
+            return;
+        }
+#endif
+
+#if defined(CNA_X11_HAVE_XRANDR)
+        if (connection_->HasRandr() &&
+            event.type == connection_->GetRandrEventBase() + RRScreenChangeNotify)
+        {
+            // Xlib caches the screen configuration; without this call every later query returns
+            // the pre-hotplug geometry.
+            XRRUpdateConfiguration(&event);
+            if (displays_ != nullptr) { displays_->InvalidateCache(); }
+            for (const auto& [id, window] : windows_)
+            {
+                if (window == nullptr) { continue; }
+                WindowEvent changed;
+                changed.window = id;
+                changed.kind = WindowEventKind::DisplayChanged;
+                destination.emplace_back(changed);
+            }
+            return;
+        }
+#endif
+
+        if (connection_->HasXkb() && connection_->GetXkbEventBase() >= 0 &&
+            event.type == connection_->GetXkbEventBase())
+        {
+            // A layout switch or a new keyboard. The physical scancode table must not change; the
+            // logical KeyCode table must. RefreshKeyboardMapping rebuilds both, which is correct
+            // and is the simplest thing that cannot drift.
+            if (keyboard_ != nullptr)
+            {
+                keyboard_->RefreshKeyboardMapping();
+            }
+            return;
+        }
+
+        X11Window* window = FindWindowByXid(event.xany.window);
+        const WindowId windowId = window != nullptr ? window->GetId() : 0;
+
+        switch (event.type)
+        {
+            case Expose:
+            {
+                // count > 0 means more Expose events for this same damage region are queued.
+                // Reporting each would make an application repaint several times for one
+                // uncovering; the last one carries count == 0.
+                if (event.xexpose.count != 0 || window == nullptr)
+                {
+                    return;
+                }
+                WindowEvent mapped;
+                mapped.window = windowId;
+                mapped.kind = WindowEventKind::Exposed;
+                destination.emplace_back(mapped);
+                return;
+            }
+            case ConfigureNotify:
+            {
+                if (window == nullptr)
+                {
+                    return;
+                }
+                const WindowSize cached = window->GetCachedSize();
+                const int width = event.xconfigure.width;
+                const int height = event.xconfigure.height;
+                if (width != cached.width || height != cached.height)
+                {
+                    window->SetCachedSize(width, height);
+                    WindowEvent resized;
+                    resized.window = windowId;
+                    resized.kind = WindowEventKind::Resized;
+                    resized.data1 = width;
+                    resized.data2 = height;
+                    destination.emplace_back(resized);
+
+                    // X11 has no separate logical and physical window geometry, so a resize is
+                    // always both. Emitting only one of them would leave a renderer's swapchain
+                    // at the old size on a backend where the two never diverge.
+                    WindowEvent pixels;
+                    pixels.window = windowId;
+                    pixels.kind = WindowEventKind::PixelSizeChanged;
+                    pixels.data1 = width;
+                    pixels.data2 = height;
+                    destination.emplace_back(pixels);
+                }
+
+                // send_event marks a synthetic ConfigureNotify from the window manager, which is
+                // the ONLY one carrying root-relative coordinates. A real one from the server is
+                // relative to the decoration frame, so reporting its x/y as a move would send a
+                // reparented window's position wrong by the border width every time it resized.
+                if (event.xconfigure.send_event != 0)
+                {
+                    window->SetCachedPosition(event.xconfigure.x, event.xconfigure.y);
+                    WindowEvent moved;
+                    moved.window = windowId;
+                    moved.kind = WindowEventKind::Moved;
+                    moved.data1 = event.xconfigure.x;
+                    moved.data2 = event.xconfigure.y;
+                    destination.emplace_back(moved);
+                }
+                return;
+            }
+            case MapNotify:
+            {
+                if (window == nullptr) { return; }
+                const bool wasMapped = window->IsMapped();
+                window->SetMapped(true);
+                if (!wasMapped)
+                {
+                    // A window becoming visible is a return to the normal state, whether it was
+                    // hidden, iconified, or is being shown for the first time.
+                    WindowEvent restored;
+                    restored.window = windowId;
+                    restored.kind = WindowEventKind::Restored;
+                    destination.emplace_back(restored);
+                }
+                EmitWindowStateTransitions(*window, destination);
+                return;
+            }
+            case UnmapNotify:
+            {
+                if (window == nullptr) { return; }
+                window->SetMapped(false);
+                // An unmap is how iconification looks on the wire under ICCCM: the window manager
+                // unmaps the window and sets WM_STATE to IconicState. Distinguishing that from an
+                // application's own Hide() means asking the server which it was, which is exactly
+                // what the transition helper does -- and it emits nothing when the answer has not
+                // changed, so a Hide() produces no phantom Minimized.
+                EmitWindowStateTransitions(*window, destination);
+                return;
+            }
+            case PropertyNotify:
+            {
+                if (window == nullptr)
+                {
+                    if (event.xproperty.window == connection_->GetRoot() &&
+                        (event.xproperty.atom == atoms.netSupported ||
+                         event.xproperty.atom == atoms.netSupportingWmCheck))
+                    {
+                        // A window manager started, stopped or was replaced while the application
+                        // was running. Re-reading is what keeps the graceful-degradation checks
+                        // honest rather than frozen at startup.
+                        connection_->RefreshWindowManagerState();
+                    }
+                    return;
+                }
+                if (event.xproperty.atom == atoms.netWmState ||
+                    event.xproperty.atom == atoms.wmState)
+                {
+                    EmitWindowStateTransitions(*window, destination);
+                }
+                return;
+            }
+            case FocusIn:
+            case FocusOut:
+            {
+                if (window == nullptr ||
+                    !IsRealFocusChange(event.xfocus.mode, event.xfocus.detail))
+                {
+                    return;
+                }
+                const bool gained = event.type == FocusIn;
+                window->SetFocused(gained);
+                if (textInput_ != nullptr)
+                {
+                    textInput_->SetFocusedWindow(gained ? window : nullptr);
+                }
+                if (!gained && keyboard_ != nullptr)
+                {
+                    // Every key the application believed was held is released on focus loss. The
+                    // alternative is a key that sticks down forever, because the KeyRelease will
+                    // be delivered to whichever window has focus now.
+                    keyboard_->ReleaseAllKeys();
+                }
+                WindowEvent focus;
+                focus.window = windowId;
+                focus.kind = gained ? WindowEventKind::FocusGained : WindowEventKind::FocusLost;
+                destination.emplace_back(focus);
+                return;
+            }
+            case ClientMessage:
+            {
+                if (event.xclient.message_type != atoms.wmProtocols ||
+                    static_cast<Atom>(event.xclient.data.l[0]) != atoms.wmDeleteWindow)
+                {
+                    return;
+                }
+                WindowEvent close;
+                close.window = windowId;
+                close.kind = WindowEventKind::CloseRequested;
+                destination.emplace_back(close);
+
+                // The window is deliberately NOT destroyed here. WM_DELETE_WINDOW is a request,
+                // and the contract says the application answers it -- a game may want to show a
+                // "save first?" prompt. A QuitEvent follows only when the last window is being
+                // asked to close, which is what makes closing a secondary window not end the
+                // application.
+                if (windows_.size() <= 1)
+                {
+                    destination.emplace_back(QuitEvent{});
+                }
+                return;
+            }
+            case DestroyNotify:
+            {
+                if (window == nullptr) { return; }
+                // The window is gone at the server -- destroyed by the window manager, by another
+                // client, or by a user closing it. Telling the wrapper first is what stops its
+                // destructor calling XDestroyWindow on an XID the server has already released;
+                // dropping it from the registry then stops a later event resolving to a window
+                // whose XID has since been handed to somebody else.
+                window->MarkDestroyedByServer();
+                ForgetWindow(windowId);
+                return;
+            }
+            case KeyPress:
+            case KeyRelease:
+            {
+                if (keyboard_ == nullptr)
+                {
+                    return;
+                }
+                if (event.type == KeyRelease && !connection_->HasDetectableAutoRepeat())
+                {
+                    // Without detectable auto-repeat the server sends release+press pairs for a
+                    // held key. Peeking one event ahead and dropping both halves is the only way
+                    // to avoid telling the game the player let go several times a second.
+                    if (XPending(display) > 0)
+                    {
+                        XEvent next;
+                        XPeekEvent(display, &next);
+                        if (IsAutoRepeatPair(event.xkey, next))
+                        {
+                            XNextEvent(display, &next);
+                            KeyEvent repeat;
+                            repeat.window = windowId;
+                            repeat.scancode = keyboard_->GetScancode(event.xkey.keycode);
+                            repeat.keycode = keyboard_->GetKeyCode(event.xkey.keycode);
+                            repeat.modifiers = ModifiersFromXState(event.xkey.state,
+                                                                    keyboard_->GetModeSwitchMask());
+                            repeat.pressed = true;
+                            repeat.repeat = true;
+                            destination.emplace_back(repeat);
+
+                            std::string text;
+                            if (textInput_ != nullptr && textInput_->IsActive(windowId) &&
+                                textInput_->LookupText(window, next.xkey, text))
+                            {
+                                TextInputEvent input;
+                                input.window = windowId;
+                                input.text = std::move(text);
+                                destination.emplace_back(std::move(input));
+                            }
+                            return;
+                        }
+                    }
+                }
+
+                const bool pressed = event.type == KeyPress;
+                const bool repeat = keyboard_->TrackKeyState(event.xkey.keycode, pressed);
+
+                KeyEvent key;
+                key.window = windowId;
+                key.scancode = keyboard_->GetScancode(event.xkey.keycode);
+                key.keycode = keyboard_->GetKeyCode(event.xkey.keycode);
+                key.modifiers =
+                    ModifiersFromXState(event.xkey.state, keyboard_->GetModeSwitchMask());
+                key.pressed = pressed;
+                key.repeat = repeat;
+                destination.emplace_back(key);
+
+                if (pressed && textInput_ != nullptr && textInput_->IsActive(windowId))
+                {
+                    std::string text;
+                    if (textInput_->LookupText(window, event.xkey, text))
+                    {
+                        TextInputEvent input;
+                        input.window = windowId;
+                        input.text = std::move(text);
+                        destination.emplace_back(std::move(input));
+                    }
+                }
+                return;
+            }
+            case ButtonPress:
+            case ButtonRelease:
+            {
+                const WheelDirection wheel = ClassifyWheelButton(event.xbutton.button);
+                if (wheel != WheelDirection::None)
+                {
+                    // A wheel notch is a press AND a release of the same button. Reporting both
+                    // would double every scroll, so only the press is turned into wheel motion.
+                    if (event.type != ButtonPress)
+                    {
+                        return;
+                    }
+                    MouseWheelEvent scroll;
+                    scroll.window = windowId;
+                    switch (wheel)
+                    {
+                        case WheelDirection::Up: scroll.y = 1.0f; break;
+                        case WheelDirection::Down: scroll.y = -1.0f; break;
+                        case WheelDirection::Left: scroll.x = -1.0f; break;
+                        case WheelDirection::Right: scroll.x = 1.0f; break;
+                        case WheelDirection::None: break;
+                    }
+                    if (mouse_ != nullptr)
+                    {
+                        mouse_->AccumulateScroll(static_cast<int>(scroll.x),
+                                                 static_cast<int>(scroll.y));
+                    }
+                    destination.emplace_back(scroll);
+                    return;
+                }
+
+                const std::uint8_t button = MapButtonNumber(event.xbutton.button);
+                if (button == 0)
+                {
+                    return;
+                }
+                const bool pressed = event.type == ButtonPress;
+                if (mouse_ != nullptr)
+                {
+                    mouse_->SetButtonState(button, pressed);
+                    mouse_->SetLastPosition(windowId, event.xbutton.x, event.xbutton.y);
+                }
+
+                std::uint8_t clicks = 1;
+                if (pressed)
+                {
+                    const bool sameButton = event.xbutton.button == lastClickButton_;
+                    const bool soonEnough =
+                        event.xbutton.time >= lastClickTime_ &&
+                        (event.xbutton.time - lastClickTime_) <= kDoubleClickMilliseconds;
+                    const bool nearEnough =
+                        std::abs(event.xbutton.x - lastClickX_) <= kDoubleClickSlopPixels &&
+                        std::abs(event.xbutton.y - lastClickY_) <= kDoubleClickSlopPixels;
+                    clickCount_ = (sameButton && soonEnough && nearEnough)
+                                      ? static_cast<std::uint8_t>(clickCount_ + 1)
+                                      : static_cast<std::uint8_t>(1);
+                    clicks = clickCount_;
+                    lastClickTime_ = event.xbutton.time;
+                    lastClickButton_ = event.xbutton.button;
+                    lastClickX_ = event.xbutton.x;
+                    lastClickY_ = event.xbutton.y;
+                }
+
+                MouseButtonEvent mapped;
+                mapped.window = windowId;
+                mapped.button = button;
+                mapped.pressed = pressed;
+                mapped.clicks = clicks;
+                mapped.x = static_cast<float>(event.xbutton.x);
+                mapped.y = static_cast<float>(event.xbutton.y);
+                destination.emplace_back(mapped);
+                return;
+            }
+            case MotionNotify:
+            {
+                MouseMotionEvent motion;
+                motion.window = windowId;
+                motion.x = static_cast<float>(event.xmotion.x);
+                motion.y = static_cast<float>(event.xmotion.y);
+                if (hasLastMotion_)
+                {
+                    motion.deltaX = static_cast<float>(event.xmotion.x - lastMotionX_);
+                    motion.deltaY = static_cast<float>(event.xmotion.y - lastMotionY_);
+                }
+                lastMotionX_ = event.xmotion.x;
+                lastMotionY_ = event.xmotion.y;
+                hasLastMotion_ = true;
+                if (mouse_ != nullptr)
+                {
+                    mouse_->SetLastPosition(windowId, event.xmotion.x, event.xmotion.y);
+                }
+                destination.emplace_back(motion);
+                return;
+            }
+            case EnterNotify:
+            case LeaveNotify:
+            {
+                // Not a CNA event -- the taxonomy has no enter/leave -- but the pointer's window
+                // has changed, and the snapshot must follow it or the next Update() would query
+                // the wrong window's coordinate space. A LeaveNotify additionally resets the
+                // motion baseline so the first motion after re-entering is not a huge delta.
+                if (mouse_ != nullptr && event.type == EnterNotify)
+                {
+                    mouse_->SetLastPosition(windowId, event.xcrossing.x, event.xcrossing.y);
+                }
+                hasLastMotion_ = false;
+                return;
+            }
+            default:
+                return;
+        }
+    }
+
+    std::uint64_t X11Platform::GetPerformanceCounter() const
+    {
+        // CLOCK_MONOTONIC, not CLOCK_REALTIME: a game loop measures elapsed time, and wall-clock
+        // time jumps backwards when NTP corrects it or the user changes the timezone. A backwards
+        // jump in a fixed-timestep loop produces either a frozen frame or a burst of catch-up
+        // updates, depending on which side of the subtraction it lands on.
+        timespec now{};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        return static_cast<std::uint64_t>(now.tv_sec) * 1000000000uLL +
+               static_cast<std::uint64_t>(now.tv_nsec);
+    }
+
+    std::uint64_t X11Platform::GetPerformanceFrequency() const
+    {
+        return 1000000000uLL;
+    }
+
+    std::uint64_t X11Platform::GetTicksMilliseconds() const
+    {
+        const auto elapsed = std::chrono::steady_clock::now() - epoch_;
+        return static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+    }
+
+    void X11Platform::Delay(const std::uint32_t milliseconds)
+    {
+        if (milliseconds == 0)
+        {
+            // Zero means "yield the rest of the slice", which is a zero-length sleep rather than
+            // a no-op: a busy-wait loop calling Delay(0) must still let another thread run.
+            timespec zero{0, 0};
+            nanosleep(&zero, nullptr);
+            return;
+        }
+
+        // clock_nanosleep with TIMER_ABSTIME against CLOCK_MONOTONIC, so a signal that interrupts
+        // the sleep can be resumed against the ORIGINAL deadline. The relative form would restart
+        // the full duration on every interruption, which turns a 16 ms frame delay into an
+        // unbounded one on a process that receives signals.
+        timespec deadline{};
+        clock_gettime(CLOCK_MONOTONIC, &deadline);
+        deadline.tv_sec += static_cast<time_t>(milliseconds / 1000u);
+        deadline.tv_nsec += static_cast<long>((milliseconds % 1000u) * 1000000uL);
+        if (deadline.tv_nsec >= 1000000000L)
+        {
+            deadline.tv_nsec -= 1000000000L;
+            ++deadline.tv_sec;
+        }
+        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, nullptr) == EINTR)
+        {
+        }
+    }
+
+    IPlatformKeyboard* X11Platform::GetKeyboard() { return keyboard_.get(); }
+    IPlatformMouse* X11Platform::GetMouse() { return mouse_.get(); }
+    IPlatformTextInput* X11Platform::GetTextInput() { return textInput_.get(); }
+    IPlatformClipboard* X11Platform::GetClipboard() { return clipboard_.get(); }
+
+    IPlatformDisplays* X11Platform::GetDisplays()
+    {
+        // Non-null exactly when multipleDisplays is true. Without RandR this backend can only
+        // report the whole screen, which is not display enumeration -- and the contract's rule is
+        // that the accessor and the capability agree.
+        if (connection_ == nullptr || !connection_->HasRandr())
+        {
+            return nullptr;
+        }
+        return displays_.get();
+    }
+
+    IPlatformGlContext* X11Platform::GetGlContext()
+    {
+        if (glContext_ == nullptr || !glContext_->IsAvailable())
+        {
+            return nullptr;
+        }
+        return glContext_.get();
+    }
+
+    IPlatformVulkanSurface* X11Platform::GetVulkanSurface() { return vulkanSurface_.get(); }
+
+    std::unique_ptr<IPlatformSurfacePresenter> X11Platform::CreateSurfacePresenter(
+        IPlatformWindow& window)
+    {
+        auto* x11Window = dynamic_cast<X11Window*>(&window);
+        if (x11Window == nullptr)
+        {
+            throw PlatformException("X11Platform::CreateSurfacePresenter",
+                                    "the window was not created by this platform");
+        }
+        return std::make_unique<X11SurfacePresenter>(*x11Window);
+    }
+
+} // namespace CNA::Platform::X11

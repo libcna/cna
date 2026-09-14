@@ -13,6 +13,57 @@
 
 ---
 
+## 0a. Current checkpoint — a fourth backend, and CNA without SDL (2026-09-13)
+
+**`CNA_PLATFORM=X11` exists, and so does a CNA build with no SDL in it.**
+
+The campaign this file tracks made SDL3 an implementation of a CNA-owned contract. What it could
+not do was *demonstrate* the result: `cna_configure_vendored_sdl()` ran unconditionally from the
+root `CMakeLists.txt`, before platform, audio and renderer selection, so even
+`-DCNA_PLATFORM=HEADLESS -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=HEADLESS` — a
+configuration referencing no SDL symbol anywhere — still failed to configure without the SDL
+submodules and still spent minutes building three libraries nothing would link.
+
+A native X11 backend is what made the question answerable. Its plan, ledger and evidence are
+`plans/plan_x11.md`; its capability boundary is `docs/platform-x11.md`. The measured result:
+
+```
+$ ldd  cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -ci sdl   ->  0
+$ nm -uC cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -c SDL_ ->  0
+$ ./tools/platform/x11_test_server.sh --require-window-manager \
+      ./cmake-build-x11-nosdl/CnaPlatformModuleTests  ->  427 passed
+```
+
+Three things here change how the rest of this document should be read:
+
+1. **`CNA_ENABLE_SDL`** (`cmake/SdlAvailability.cmake`) gates the vendored sub-build. `AUTO` is
+   the default and is byte-for-byte the previous behaviour; `OFF` refuses any selection that
+   genuinely needs SDL, naming which. Nothing is ever substituted.
+2. **The ratchet covers more than it did.** PLAT-8 exempts `modules/platform/` wholesale.
+   `sdl_ratchet.py` now denylists `modules/platform/src/X11/` from that exemption — the backend
+   that must never touch SDL is the one part of the platform module the gate counts. Verified by
+   planting a synthetic `SDL_Init` there and watching the strict check fail.
+3. **The conformance suite earned its keep again.** It caught two real contract defects in the new
+   backend within minutes of it being registered (a capability set recomputed per call, and
+   subsystem acquisition refusing where the cross-implementation rule is that it is bookkeeping).
+   Ten defects in total were found by tests rather than by review; `plans/plan_x11.md` §8 lists
+   each one and why it was invisible.
+
+Five defects found in *other* parts of the tree are recorded in `plans/plan_x11.md` §7 rather than
+fixed here, each reproduced without X11 first. The one worth knowing about from this file:
+`CNA_AUDIO_PLATFORM=NULL` cannot link anything containing `cna_content`, because
+`XnbCanonicalData.cpp` calls `DecodeWavToPcm16` unconditionally and that function is compiled only
+for the SDL3 audio selection. Platform and audio are independent axes, so it costs the X11 backend
+nothing — but it is a real hole in the NULL audio selection.
+
+**Next, in order:** XInput2 device enumeration (the one capability X11 could report and does not);
+`PRIMARY` selection for middle-click paste; real-desktop validation of the items
+`plans/plan_x11.md` §9 lists as unvalidated here (hardware GLX, multi-monitor XRandR, a real input
+method); and a CI cell for the SDL-free configuration, which is the only way that property stays
+true.
+
+---
+
 ## 0. Current checkpoint (supersedes stale counts below)
 
 **2026-09-13 — a fourth desktop implementation, on branch `win32`.** Read this first.

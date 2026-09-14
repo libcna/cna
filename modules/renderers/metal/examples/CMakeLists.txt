@@ -21,13 +21,13 @@ if(CNA_BUILD_TESTS)
     file(GLOB CNA_METAL_PORTABLE_TEST_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/modules/renderers/metal/tests/CNA/Internal/Renderers/Metal/*.cpp")
     add_executable(cna_test_metal_portable ${CNA_METAL_PORTABLE_TEST_SOURCES})
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(cna_test_metal_portable PRIVATE
-            CNA
-            SHARP_RUNTIME gtest_main SDL3::SDL3)
-    else()
-        target_link_libraries(cna_test_metal_portable
-            PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
+    target_link_libraries(cna_test_metal_portable PRIVATE CNA SHARP_RUNTIME gtest_main)
+    # plans/plan_x11.md X11-0090: this suite is the portable half of the Metal tests -- it
+    # compiles the policy headers on every host and constructs no device at all. SDL3 was a
+    # transitive habit rather than a dependency, so the edge is kept where SDL is configured and
+    # omitted where it is not.
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(cna_test_metal_portable PRIVATE SDL3::SDL3)
     endif()
     # The portable policy suite includes the metal module's policy headers on every
     # platform; they ride the module's unconditional header-interface target.

@@ -65,7 +65,9 @@ endif()
 # SDL_Quit(), so it is meaningful only where SDL3 is actually the selected edge. Under an
 # SDL2-only selection it would be the one remaining executable dragging SDL3 back in, to test an
 # ordering hazard that selection cannot reach.
-if(CNA_BUILD_TESTS AND NOT CNA_SDL2_ONLY_CONFIGURATION)
+# plans/plan_x11.md X11-0090: and only where SDL3 is configured at all. This harness exists to
+# call the real SDL_Quit(); in a build that never configured SDL there is no such call to order.
+if(CNA_BUILD_TESTS AND NOT CNA_SDL2_ONLY_CONFIGURATION AND TARGET SDL3::SDL3)
     add_executable(cna_devices_shutdown_ordering_harness
         tools/devices/shutdown_ordering_harness.cpp
     )
@@ -310,7 +312,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
            "Build the compiled-effect fuzz harness for libFuzzer/AFL++ instead of standalone replay"
            OFF)
     add_executable(cna_compiled_effect_fuzzer tools/graphics/compiled_effect_fuzzer.cpp)
-    target_link_libraries(cna_compiled_effect_fuzzer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_compiled_effect_fuzzer PRIVATE CNA SHARP_RUNTIME)
+    # plans/plan_x11.md X11-0090: SDL3 is this tool's platform edge only when SDL3 is the
+    # configured platform. An SDL-free build reaches the same graphics device through whatever
+    # platform it did select, so the link edge is conditional rather than the tool.
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(cna_compiled_effect_fuzzer PRIVATE SDL3::SDL3)
+    endif()
     if(CNA_FX_FUZZER_ENTRY_POINT)
         target_compile_definitions(cna_compiled_effect_fuzzer PRIVATE CNA_FX_FUZZER_ENTRY_POINT)
         if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -379,7 +387,10 @@ endif()
 # timings on a shared machine are a baseline to compare, not a pass/fail signal.
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_compiled_effect_benchmark tools/graphics/compiled_effect_benchmark.cpp)
-    target_link_libraries(cna_compiled_effect_benchmark PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_compiled_effect_benchmark PRIVATE CNA SHARP_RUNTIME)
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(cna_compiled_effect_benchmark PRIVATE SDL3::SDL3)
+    endif()
 endif()
 
 # plans/plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a

@@ -69,7 +69,22 @@ ALLOWLIST_PREFIXES: tuple[str, ...] = (
 )
 
 
+# Sub-trees INSIDE an allowlisted prefix that are deliberately not exempt (plans/plan_x11.md
+# X11-0091).
+#
+# `modules/platform/` is allowlisted because it is the one place in CNA where SDL may be linked at
+# all -- that is the whole design. But the native X11 backend inside it exists precisely to
+# demonstrate that CNA does not depend existentially on SDL, and a blanket module-level exemption
+# would let an SDL call be added there without any gate noticing. The denylist is checked first, so
+# the backend that must never touch SDL is the one part of the platform module the ratchet counts.
+DENYLIST_PREFIXES: tuple[str, ...] = (
+    "modules/platform/src/X11/",
+)
+
+
 def is_allowlisted(path: str) -> bool:
+    if path.startswith(DENYLIST_PREFIXES):
+        return False
     return path.startswith(ALLOWLIST_PREFIXES)
 
 
