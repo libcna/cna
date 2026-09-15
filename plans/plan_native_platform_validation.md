@@ -24,6 +24,10 @@ gaps". No physical person tested anything. Win32 evidence is MinGW + Wine only a
 Windows validation**; docs/testing-win32-native.md and tools/platform/validate_win32_native.ps1 are
 ready for the first native run (a Windows 10 VirtualBox VM the owner prepared).
 
+What comes next, in the recommended order with estimates and what each step needs from the owner,
+is in "Next steps" -- first of all a CI that has been red for unrelated reasons since before this
+pass.
+
 Session events recorded honestly: gnome-shell crashed at 21:23:27 (untrapped BadWindow on its own
 X_SendEvent, core dump) and the owner logged in again -- no process of this validation was connected
 to `:0` then (the last had exited at 21:04:08); the second external monitor was disconnected during
@@ -173,6 +177,22 @@ that fails without it.
 | NPV-0121 | **Every X11 build linked libGLX**, so HEADLESS/SOFTWARE X11 binaries needed a GL implementation to start and all five `ModuleLinkClosure_NativeSdkFree_*` gates failed. | full ctest of the SDL-free X11 HEADLESS build | GLX 1.3 entry points resolved at run time (as the Vulkan loader already was); `openGlContext` false without a GL library; hardware GLX 15/15 afterwards | `12dbfedff` |
 | NPV-0122 | `X11IsSdlFree` scan failed from the source root: `__FILE__` is relative under the mandatory `CCACHE_BASEDIR`. | same full ctest | absolute backend path passed by CMake | `33a10f1af` |
 | NPV-0123 | **`cmake --build` of an SDL-free HEADLESS build failed**: five Headless example tests called SDL directly ("Not Run" in ctest). | same full build | smoke test's SDL check only where SDL exists (9 vs 10 checks); the four SDL-harness controls registered only with SDL3 | `2c6efc807` |
+
+## Next steps (recommended order, 2026-09-15)
+
+Estimates are for this kind of work in this repository; each step lists what it needs from the
+owner.
+
+| # | Step | Estimate | Needs | Notes |
+|---|------|----------|-------|-------|
+| 1 | **Make `platform-ci.yml` green** | 1-2 h | nothing | Almost every cell of "Platform implementation matrix" fails at configure, on `next` and long before this pass (run 34929323742 has the same failing set as 34870105761 at the starting HEAD): the workflow clones the sibling `sharp-runtime` from `develop`, which lacks the `Xml.Serialization` component CNA `next` asks for ("Unknown Sharp Runtime component 'Xml.Serialization'"); sharp-runtime has a `next` branch that has it. The native Windows job (`windows-latest`, real Windows Server, WARP rather than a GPU) runs only on `workflow_dispatch`, so it never runs on a push. The Wine job fails at "Run the platform contract and Win32 suites under Wine" -- cause not yet investigated. While there: install `xclip` in the SDL-free X11 cell (X11ClipboardInterop skips without it) and add an SDL-free cell with a GPU renderer (OPENGL33), the configuration NPV-0106, NPV-0114 and NPV-0121 slipped through. |
+| 2 | **Finish the X11 desktop validation** | 1-2 h | an unlocked session left alone for the run (or 20-30 min of the owner's time for `interactive`) | the commands under "Remaining gaps"; includes NPV-0113 on mutter |
+| 3 | **Native Windows validation of Win32** | 3-6 h, plus fixing what it finds | the Windows 10 VirtualBox VM (disk attached) and a way in: `VBoxManage guestcontrol` with Guest Additions, a shared folder, or SSH; about an hour of the owner's time for the interactive checklist | docs/testing-win32-native.md; the script's first run is also its own test |
+| 4 | X11 follow-ups | 2-4 h | owner's decision on `globalPointer` | `globalPointer` under Xwayland; INCR entries of a requestor that died |
+| 5 | Controllers on both platforms | Win32 XInput 6-10 h; Linux evdev 15-25 h | owner's go-ahead | Win32 design already sketched in plans/plan_win32.md §15; the evdev work also serves a future Wayland backend |
+| 6 | Native audio for SDL-free builds | 30-50 h | owner's go-ahead | the largest gap of an SDL-free game: NULL audio only today |
+| 7 | IME | Win32 8-12 h (plans/plan_win32.md §15); X11 via XIM 10-15 h | owner's go-ahead | both report `ime=false` truthfully today |
+| 8 | The rest of the deferred list | X11: exclusive fullscreen 6-10 h, XDND + touch 12-18 h, per-monitor DPI/PRIMARY/formats 7-11 h; Win32: tray 2 h | owner's go-ahead | Wayland backend (50-80 h) only on explicit permission |
 
 ## Win32: NOT NATIVE WINDOWS VALIDATION
 
