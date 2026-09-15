@@ -102,10 +102,22 @@ Xvfb ":$DISPLAY_NUMBER" -screen 0 1280x1024x24 -nolisten tcp -noreset >/dev/null
 XVFB_PID=$!
 
 IBUS_DIRECTORY=""
+IBUS_GROUP=""
 cleanup() {
     if [ -n "$IBUS_DIRECTORY" ]; then
-        # Only the daemon listening on this run's own socket: its XIM server and its bus follow it.
-        pkill -f "address unix:path=$IBUS_DIRECTORY/" 2>/dev/null
+        # The whole private ibus stack is one process group of its own (setsid below): the
+        # daemon, its XIM server, dbus-run-session's bus and whatever that bus activated (gvfsd).
+        # Killing only the daemon by its socket path used to take dbus-run-session with it
+        # before it could stop its bus, leaving a dbus-daemon and a gvfsd behind on every run.
+        if [ -n "$IBUS_GROUP" ]; then
+            kill -TERM "-$IBUS_GROUP" 2>/dev/null
+            WAITED=0
+            while kill -0 "-$IBUS_GROUP" 2>/dev/null && [ "$WAITED" -lt 30 ]; do
+                sleep 0.1
+                WAITED=$((WAITED + 1))
+            done
+            kill -KILL "-$IBUS_GROUP" 2>/dev/null
+        fi
         rm -rf "$IBUS_DIRECTORY"
     fi
     kill "$XVFB_PID" 2>/dev/null
@@ -143,9 +155,12 @@ if [ "$WITH_IBUS" -eq 1 ]; then
     mkdir -p "$IBUS_DIRECTORY/config" "$IBUS_DIRECTORY/cache"
     IBUS_ADDRESS="unix:path=$IBUS_DIRECTORY/ibus.sock"
     export IBUS_ADDRESS
-    XDG_CONFIG_HOME="$IBUS_DIRECTORY/config" XDG_CACHE_HOME="$IBUS_DIRECTORY/cache" \
-        dbus-run-session -- ibus-daemon --xim --single --panel disable --emoji-extension disable \
+    XDG_CONFIG_HOME="$IBUS_DIRECTORY/config" XDG_CACHE_HOME="$IBUS_DIRECTORY/cache" GIO_USE_VFS=local \
+        setsid dbus-run-session -- ibus-daemon --xim --single --panel disable --emoji-extension disable \
         --config disable --cache none --address "$IBUS_ADDRESS" >/dev/null 2>&1 &
+    # setsid made it the leader of a new process group (a background job of this non-interactive
+    # shell is not a group leader, so setsid does not fork): its pid is the group's id.
+    IBUS_GROUP=$!
     WAITED=0
     while [ "$WAITED" -lt 100 ]; do
         if xprop -root XIM_SERVERS 2>/dev/null | grep -q "@server=ibus"; then
