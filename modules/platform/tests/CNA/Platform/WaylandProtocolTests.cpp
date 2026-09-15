@@ -1510,6 +1510,44 @@ TEST_F(WaylandProtocol, ABorderlessWindowHasNoTitleBarAndGetsOneBack)
     EXPECT_EQ(window.GetClientBounds().height, 480) << "the content keeps its size; the frame is outside it";
 }
 
+TEST_F(WaylandProtocol, TogglingTheTitleBarOfAMaximizedWindowKeepsItsGeometryExact)
+{
+    // Found by the harness's stress scenario on Weston: the title bar is part of the window
+    // geometry, so adding or removing it while maximized must move the content, not the geometry,
+    // or the compositor raises invalid_surface_state.
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x123456);
+    window.Maximize();
+    window.Sync();
+    Pump();
+    PresentColour(presenter, window, 0x123456);
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().height, 1080 - 32);
+    seen_.clear();
+    window.SetBorderless(true);
+    PresentColour(presenter, window, 0x123456);
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().height, 1080) << "without its title bar the content fills the geometry";
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::Resized), 1);
+    std::optional<ToplevelInfo> toplevel = compositor_->GetToplevel(0);
+    ASSERT_TRUE(toplevel.has_value()) << compositor_->GetPostedError();
+    EXPECT_EQ(toplevel->geometryHeight, 1080);
+    window.SetBorderless(false);
+    PresentColour(presenter, window, 0x123456);
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().height, 1080 - 32);
+    toplevel = compositor_->GetToplevel(0);
+    ASSERT_TRUE(toplevel.has_value()) << compositor_->GetPostedError();
+    EXPECT_EQ(toplevel->geometryHeight, 1080);
+    EXPECT_EQ(toplevel->geometryY, -32);
+    window.Restore();
+    window.Sync();
+    Pump();
+    EXPECT_EQ(window.GetClientBounds().height, 480) << "the floating size comes back whole";
+}
+
 TEST_F(WaylandProtocol, WhereTheCompositorDecoratesThereIsNoTitleBarOfOurOwn)
 {
     CompositorOptions options;

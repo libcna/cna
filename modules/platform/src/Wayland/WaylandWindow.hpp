@@ -356,6 +356,9 @@ namespace CNA::Platform::Wayland {
         OpenGlFramebufferDescription openGlFramebuffer_;
         LogicalSize size_;
         LogicalSize floatingSize_;
+        // The window geometry the last configure named (0 per axis: the client's choice). A
+        // constrained window's geometry must stay exactly this whatever its own frame does.
+        LogicalSize configuredGeometry_;
         LogicalSize minimum_;
         LogicalSize maximum_;
         bool resizable_ = true;

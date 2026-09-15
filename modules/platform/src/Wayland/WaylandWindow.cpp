@@ -651,6 +651,7 @@ namespace CNA::Platform::Wayland {
         activated_ = states.activated;
         suspended_ = host_ != nullptr && host_->GetConnection().GetGlobals().wmBaseVersion >= 6 && states.suspended;
 
+        configuredGeometry_ = {std::max(0, pendingToplevel_.width), std::max(0, pendingToplevel_.height)};
         xdg_surface_ack_configure(xdgSurface_, serial);
         configureState_ = ConfigureState::Configured;
         ++configureCount_;
@@ -756,7 +757,33 @@ namespace CNA::Platform::Wayland {
             frame_->SetEnabled(!borderless_);
         }
         ApplySizeLimits();
-        ApplySurfaceGeometry(false);
+        if ((maximized_ || fullscreen_ || tiled_) && configuredGeometry_.height > 0)
+        {
+            // The title bar is inside the window geometry, and a constrained window's geometry is
+            // the compositor's: adding or removing the bar resizes the content, never the geometry
+            // (a maximized window whose geometry moved by 32 units is invalid_surface_state).
+            const LogicalSize before = size_;
+            const WindowSize beforePixels = pixelSize_;
+            if (configuredGeometry_.width > 0)
+            {
+                size_.width = configuredGeometry_.width;
+            }
+            size_.height = std::max(1, configuredGeometry_.height - FrameHeight());
+            const bool resized = size_.width != before.width || size_.height != before.height;
+            ApplySurfaceGeometry(resized);
+            if (resized)
+            {
+                Post(WindowEventKind::Resized, size_.width, size_.height);
+            }
+            if (pixelSize_.width != beforePixels.width || pixelSize_.height != beforePixels.height)
+            {
+                Post(WindowEventKind::PixelSizeChanged, pixelSize_.width, pixelSize_.height);
+            }
+        }
+        else
+        {
+            ApplySurfaceGeometry(false);
+        }
         CommitState();
     }
 

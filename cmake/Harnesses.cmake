@@ -556,6 +556,28 @@ if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11")
     endif()
 endif()
 
+# --- plans/plan_wayland.md WAYLAND-0114: real-desktop Wayland validation harness ---
+# A standalone (non-GTest) program that drives the native Wayland backend against whatever
+# compositor WAYLAND_DISPLAY names -- a real desktop, a real GPU, real outputs at a real fractional
+# scale -- and reports one PASS/FAIL/SKIP line per check. It injects no input (an ordinary Wayland
+# client cannot); what needs hands is its `interactive` scenario, for a person.
+# docs/platform-wayland.md describes every scenario.
+if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "WAYLAND")
+    file(GLOB _cna_wayland_validation_sources CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_desktop_validation/*.cpp")
+    add_executable(cna_wayland_desktop_validation ${_cna_wayland_validation_sources})
+    get_property(_cna_wayland_protocol_dir GLOBAL PROPERTY CNA_WAYLAND_PROTOCOL_DIR)
+    target_link_libraries(cna_wayland_desktop_validation PRIVATE cna_platform ${CNA_WAYLAND_LIBRARIES} ${CMAKE_DL_LIBS})
+    target_include_directories(cna_wayland_desktop_validation PRIVATE ${CNA_WAYLAND_INCLUDE_DIRS} ${_cna_wayland_protocol_dir})
+    if(CNA_WAYLAND_DEFINITIONS)
+        target_compile_definitions(cna_wayland_desktop_validation PRIVATE ${CNA_WAYLAND_DEFINITIONS})
+    endif()
+    # Vulkan is headers-only here, as it is in the backend: the loader is dlopen()ed at run time.
+    if("CNA_WAYLAND_HAVE_VULKAN_HEADERS=1" IN_LIST CNA_WAYLAND_DEFINITIONS)
+        target_compile_definitions(cna_wayland_desktop_validation PRIVATE CNA_WAYLAND_VALIDATION_HAVE_VULKAN)
+    endif()
+endif()
+
 # --- plans/plan_xnapipeline.md XNAP-A5: fake external effect compiler ---
 # A standalone (non-GTest) program that stands in for Microsoft's legacy `fxc` on the other side of
 # a real process boundary, so the `.fx` product route is proven as one chain -- command line,
