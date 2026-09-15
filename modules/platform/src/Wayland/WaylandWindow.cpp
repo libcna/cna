@@ -569,6 +569,7 @@ namespace CNA::Platform::Wayland {
         activated_ = false;
         suspended_ = false;
         pendingToplevel_ = {};
+        supersededGeometries_.clear();
     }
 
     void WaylandWindow::Show()
@@ -629,7 +630,40 @@ namespace CNA::Platform::Wayland {
         // Leaving maximized or fullscreen the compositor usually sends 0x0 ("you choose"): the
         // floating size from before comes back.
         const LogicalSize base = !constrainedNow && constrainedBefore ? floatingSize_ : size_;
-        LogicalSize resolved = ResolveConfigureSize(pendingToplevel_.width, pendingToplevel_.height, states, base,
+        int suggestedWidth = pendingToplevel_.width;
+        int suggestedHeight = pendingToplevel_.height;
+        if (!constrainedNow && !constrainedBefore && !states.resizing && suggestedWidth > 0 && suggestedHeight > 0)
+        {
+            // A floating window's configure size is a suggestion, and compositors (GNOME's among
+            // them) put the window's current geometry in every configure -- a focus change, say.
+            // One sent before the compositor saw a SetSize names the geometry the resize replaced;
+            // taking it would silently undo the resize, so it is recognised and ignored. A size the
+            // window never had is the compositor asking, and is taken; so is anything while the
+            // user drags an edge.
+            const int frame = FrameHeight();
+            const bool stale = std::any_of(supersededGeometries_.begin(), supersededGeometries_.end(),
+                                           [&](const LogicalSize& old) {
+                                               return old.width == suggestedWidth && old.height == suggestedHeight;
+                                           });
+            if (stale)
+            {
+                suggestedWidth = 0;
+                suggestedHeight = 0;
+            }
+            else if (suggestedWidth == size_.width && suggestedHeight == size_.height + frame)
+            {
+                supersededGeometries_.clear();  // the compositor has caught up
+            }
+            else
+            {
+                supersededGeometries_.clear();  // the compositor's own request wins
+            }
+        }
+        else if (constrainedNow || states.resizing)
+        {
+            supersededGeometries_.clear();
+        }
+        LogicalSize resolved = ResolveConfigureSize(suggestedWidth, suggestedHeight, states, base,
                                                     FrameHeight(), minimum_, maximum_);
         if (!constrainedNow && !resizable_)
         {
@@ -724,6 +758,15 @@ namespace CNA::Platform::Wayland {
             return;
         }
         const WindowSize before = pixelSize_;
+        if (configureState_ == ConfigureState::Configured)
+        {
+            // The geometry being replaced, until the compositor shows it has seen the new one.
+            supersededGeometries_.push_back({size_.width, size_.height + FrameHeight()});
+            if (supersededGeometries_.size() > 8)
+            {
+                supersededGeometries_.erase(supersededGeometries_.begin());
+            }
+        }
         size_ = wanted;
         ApplySizeLimits();
         ApplySurfaceGeometry(true);

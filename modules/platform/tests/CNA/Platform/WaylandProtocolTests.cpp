@@ -1459,6 +1459,45 @@ TEST_F(WaylandProtocol, SetSizeResizesAFloatingWindowAndWaitsOutAMaximizedOne)
     EXPECT_EQ(window.GetClientBounds().height, 400);
 }
 
+TEST_F(WaylandProtocol, AConfigureSentBeforeTheCompositorSawASetSizeDoesNotUndoIt)
+{
+    // Found under ASan on GNOME: a compositor repeats a floating window's geometry in every
+    // configure, and one sent before it saw the client's resize carried the old size.
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x444444);
+    Settle();
+    // The first configure with a size comes only after the application resized locally -- GNOME's
+    // activation configure, late on a loaded machine -- and names the geometry from before.
+    window.SetSize(900, 500);
+    compositor_->Configure(0, 800, 480 + 32, {XDG_TOPLEVEL_STATE_ACTIVATED});
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 900) << "a late first configure does not undo a resize either";
+    PresentColour(presenter, window, 0x444444);
+    Settle();
+    compositor_->Configure(0, 900, 500 + 32, {XDG_TOPLEVEL_STATE_ACTIVATED});  // caught up
+    Settle();
+    window.SetSize(1000, 600);
+    compositor_->Configure(0, 900, 500 + 32, {});  // stale: sent before our commit arrived
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 1000) << "the resize stands";
+    EXPECT_EQ(window.GetClientBounds().height, 600);
+    PresentColour(presenter, window, 0x444444);
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->geometryWidth, 1000);
+
+    compositor_->Configure(0, 700, 400 + 32, {});  // a new size: the compositor asks
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 700);
+    EXPECT_EQ(window.GetClientBounds().height, 400);
+    compositor_->Configure(0, 900, 500 + 32, {XDG_TOPLEVEL_STATE_RESIZING});
+    Settle();
+    compositor_->Configure(0, 900, 500 + 32, {XDG_TOPLEVEL_STATE_RESIZING});  // a drag repeats it
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 900) << "an interactive resize is always taken";
+}
+
 TEST_F(WaylandProtocol, ANonResizableWindowPinsItsLimitsToItsSize)
 {
     Start();

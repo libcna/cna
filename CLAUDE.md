@@ -483,12 +483,16 @@ individual task. Do not push unless the user explicitly asks to push.
 Platform, renderer and audio selection are three independent CMake axes:
 
 - `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `SDL2`, `X11`,
-  `HEADLESS`, or `TERMINAL`; SDL12/WIN32/EMSCRIPTEN are reserved identifiers and fail
+  `WAYLAND`, `HEADLESS`, or `TERMINAL`; SDL12/WIN32/EMSCRIPTEN are reserved identifiers and fail
   configuration). `SDL2` is an independent backend with its own deliberately narrow capability
   profile -- never `sdl2-compat` over SDL3 -- see `docs/platform-sdl2.md`. `X11` is a native
   backend written against Xlib directly with no SDL in it at all, offered only where the X
   development environment exists; it is what makes an SDL-free CNA a configuration that exists
-  rather than an argument -- see `docs/platform-x11.md` and `plans/plan_x11.md`.
+  rather than an argument -- see `docs/platform-x11.md` and `plans/plan_x11.md`. `WAYLAND` is the
+  second native Unix backend: a genuine Wayland client (libwayland-client, xdg-shell, xkbcommon,
+  EGL, VK_KHR_wayland_surface, wl_shm) with no SDL and no X11 library in it -- not SDL's Wayland
+  driver, not Xwayland -- offered where the Wayland development environment exists; see
+  `docs/platform-wayland.md` and `plans/plan_wayland.md`.
 - `CNA_ENABLE_SDL` (`AUTO` by default, and `AUTO` is byte-for-byte the historical behaviour)
   decides whether the vendored SDL3 sub-build is configured at all. `OFF` skips it entirely and
   refuses, at configure time, any platform/audio/renderer selection that genuinely needs SDL --
@@ -507,12 +511,15 @@ SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
   implementation isolated inside audio;
 - renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
 
-`modules/platform/src/X11/` is inside the platform module and is deliberately **not** one of those
-edges: it is the backend that exists to prove CNA does not need SDL, so `sdl_ratchet.py` denylists
-it from the module-wide exemption and counts any SDL reference there as a boundary regression.
-Its own X headers are confined the same way -- `<X11/...>` is included only through
-`modules/platform/src/X11/X11Headers.hpp`, which also undefines the `None`, `Bool` and `Status`
-macros that collide with CNA enumerators and with GoogleTest.
+`modules/platform/src/X11/` and `modules/platform/src/Wayland/` are inside the platform module and
+are deliberately **not** among those edges: they are the backends that exist to prove CNA does not
+need SDL, so `sdl_ratchet.py` denylists them (with the shared `Xkb/`, `Freedesktop/`, `Posix/` and
+`Linux/` directories) from the module-wide exemption and counts any SDL reference there as a
+boundary regression. X11's own X headers are confined the same way -- `<X11/...>` is included only
+through `modules/platform/src/X11/X11Headers.hpp`, which also undefines the `None`, `Bool` and
+`Status` macros that collide with CNA enumerators and with GoogleTest -- and the Wayland backend
+includes no X header at all: `WaylandIsSdlFreeTests` fails the build's tests if one appears, and
+`CnaWaylandLinkClosure` fails if any binary links SDL, X11, xcb or GLX.
 
 A genuinely backend-specific test belongs with the platform implementation it exercises. Consumer tests use
 canned platform services or the parameterized conformance suite, not native event injection.

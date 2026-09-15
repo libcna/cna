@@ -958,6 +958,11 @@ namespace CNA::Platform::Wayland::Testing {
             {
                 surface->viewport->surface = nullptr;
             }
+            if (surface->fractional != nullptr)
+            {
+                // Outlives the surface when a client is torn down (resources go in id order).
+                wl_resource_set_user_data(surface->fractional, nullptr);
+            }
             for (S::Constraint* constraint : server->constraints)
             {
                 if (constraint->surface == surface)

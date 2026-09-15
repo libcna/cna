@@ -1681,6 +1681,25 @@ if(CNA_BUILD_TESTS)
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
                     --layout cz $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandMutter.*
             LABELS "platform" TIMEOUT 600)
+        # plans/plan_wayland.md WAYLAND-0123: the binaries, not only the sources, are SDL- and
+        # X11-free (cmake/Tests/WaylandLinkClosure.cmake).
+        find_program(CNA_READELF_PROGRAM NAMES readelf)
+        find_program(CNA_LDD_PROGRAM NAMES ldd)
+        if(CNA_READELF_PROGRAM AND TARGET cna_wayland_desktop_validation)
+            set(_cna_wayland_linked "")
+            if(TARGET cna_demo_2d)
+                list(APPEND _cna_wayland_linked "$<TARGET_FILE:cna_demo_2d>")
+            endif()
+            add_test(NAME CnaWaylandLinkClosure
+                COMMAND ${CMAKE_COMMAND}
+                    "-DREADELF=${CNA_READELF_PROGRAM}" "-DLDD=${CNA_LDD_PROGRAM}" "-DNM=${CMAKE_NM}"
+                    "-DPLATFORM_ONLY=$<TARGET_FILE:cna_wayland_desktop_validation>"
+                    "-DOTHERS=${_cna_wayland_linked}"
+                    "-DTEST_BINARY=$<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>"
+                    "-DARCHIVE=$<TARGET_FILE:cna_platform>"
+                    -P "${CMAKE_SOURCE_DIR}/cmake/Tests/WaylandLinkClosure.cmake")
+            set_tests_properties(CnaWaylandLinkClosure PROPERTIES LABELS "platform;configuration")
+        endif()
         cna_register_renderer_test(NAME CnaWaylandWestonScaledTests
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
                     --scale 2 $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandLive.*

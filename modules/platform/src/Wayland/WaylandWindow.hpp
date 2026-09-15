@@ -359,6 +359,10 @@ namespace CNA::Platform::Wayland {
         // The window geometry the last configure named (0 per axis: the client's choice). A
         // constrained window's geometry must stay exactly this whatever its own frame does.
         LogicalSize configuredGeometry_;
+        // Window geometries a local SetSize replaced that the compositor may not have seen yet.
+        // A compositor repeats a floating window's geometry in its configures, so one sent before
+        // it saw the resize names one of these -- and is stale, not a request.
+        std::vector<LogicalSize> supersededGeometries_;
         LogicalSize minimum_;
         LogicalSize maximum_;
         bool resizable_ = true;

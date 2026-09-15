@@ -525,6 +525,14 @@ namespace CnaWaylandValidation {
                                  std::to_string(VK_VERSION_MINOR(properties.apiVersion)) + ")";
                 }
             }
+            if (vk.physical == VK_NULL_HANDLE && wantedDevice.empty() && !devices.empty())
+            {
+                // Only a CPU implementation (lavapipe, as sanitizer runs select): better than none.
+                vk.physical = devices.front();
+                VkPhysicalDeviceProperties properties{};
+                vk.vkGetPhysicalDeviceProperties(vk.physical, &properties);
+                deviceName = std::string(properties.deviceName) + " (CPU/software, the only device)";
+            }
             if (vk.physical == VK_NULL_HANDLE)
             {
                 error = "no matching physical device";

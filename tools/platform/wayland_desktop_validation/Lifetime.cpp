@@ -16,6 +16,26 @@ namespace CnaWaylandValidation {
 
     namespace {
 
+#if defined(__SANITIZE_ADDRESS__)
+        /// ASan keeps freed memory in quarantine, so resident size says nothing about leaks
+        /// there; LeakSanitizer, at exit, is the leak check of a sanitizer build.
+        constexpr bool kResidentSizeMeansAnything = false;
+#else
+        constexpr bool kResidentSizeMeansAnything = true;
+#endif
+
+        void CheckMemory(const long grownKb, const long limitKb, const std::string& check, const std::string& detail)
+        {
+            if (kResidentSizeMeansAnything)
+            {
+                Check(grownKb < limitKb, check, detail);
+            }
+            else
+            {
+                Skip(check, "an AddressSanitizer build: its quarantine holds freed memory, LeakSanitizer checks at exit");
+            }
+        }
+
         std::string Delta(const ProcessSample& before, const ProcessSample& after)
         {
             return "RSS " + std::to_string(before.residentKb) + " -> " + std::to_string(after.residentKb) + " kB, fds " +
@@ -136,7 +156,7 @@ namespace CnaWaylandValidation {
         Check(after.openDescriptors <= before.openDescriptors + 2, "lifetime.no-descriptor-leak", Delta(before, after));
         // Memory is noisier (allocator pools, driver caches): a real per-iteration leak of a
         // window's buffers grows far past this.
-        Check(after.residentKb - before.residentKb < 64 * 1024, "lifetime.no-memory-growth", Delta(before, after));
+        CheckMemory(after.residentKb - before.residentKb, 64 * 1024, "lifetime.no-memory-growth", Delta(before, after));
         Check(session.Alive(), "lifetime.no-protocol-error", session.ConnectionError());
         return 0;
     }
@@ -229,7 +249,7 @@ namespace CnaWaylandValidation {
              std::to_string(counts[7]) + ", borderless " + std::to_string(counts[8]));
         Check(session.Alive(), "stress.no-protocol-error", session.ConnectionError());
         Check(after.openDescriptors <= before.openDescriptors + 2, "stress.no-descriptor-leak", Delta(before, after));
-        Check(after.residentKb - before.residentKb < 64 * 1024, "stress.no-memory-growth", Delta(before, after));
+        CheckMemory(after.residentKb - before.residentKb, 64 * 1024, "stress.no-memory-growth", Delta(before, after));
         return 0;
     }
 
@@ -278,7 +298,7 @@ namespace CnaWaylandValidation {
              Delta(before, after));
         Check(session.Alive(), "soak.no-protocol-error", session.ConnectionError());
         Check(after.openDescriptors <= before.openDescriptors + 2, "soak.no-descriptor-leak", Delta(before, after));
-        Check(after.residentKb - before.residentKb < 32 * 1024, "soak.no-memory-growth", Delta(before, after));
+        CheckMemory(after.residentKb - before.residentKb, 32 * 1024, "soak.no-memory-growth", Delta(before, after));
         return 0;
     }
 
