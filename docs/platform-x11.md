@@ -62,7 +62,8 @@ would build something other than what you asked for.
 | GLX (through `libglvnd` or Mesa) | optional | `openGlContext` |
 | Vulkan **headers** | optional | `vulkanSurface` |
 | Linux kernel headers (`linux/input.h`) | optional | `gamepad`, `joystick`, `gamepadRumble`, `haptics` — see [Gamepads and joysticks](#gamepads-and-joysticks) |
-| D-Bus headers (`dbus/dbus.h`, Debian/Ubuntu `libdbus-1-dev`) | optional; headers only, `libdbus-1.so.3` is loaded at run time | `nativeFileDialog`, `OpenUrl` — see [File dialogs and URLs](#file-dialogs-and-urls) |
+| D-Bus headers (`dbus/dbus.h`, Debian/Ubuntu `libdbus-1-dev`) | optional; headers only, `libdbus-1.so.3` is loaded at run time | `nativeFileDialog`, `OpenUrl`, the desktop's screen saver — see [File dialogs and URLs](#file-dialogs-and-urls) and [Keeping the screen on](#keeping-the-screen-on) |
+| libXss (`libxss-dev`) | optional | the X server's saver suspended for this client alone, where no desktop takes the request — see [Keeping the screen on](#keeping-the-screen-on) |
 
 Vulkan is headers-only on purpose. `vkCreateXlibSurfaceKHR` is resolved through the
 `vkGetInstanceProcAddr` the caller already has, so the platform links no Vulkan loader and a
@@ -672,6 +673,21 @@ while a dialog is open.
 local files. It waits for the portal to accept the request (at most five seconds), not for the
 handler to start.
 
+## Keeping the screen on
+
+`SetScreenSaverEnabled(false)` -- XNA's `Guide.IsScreenSaverEnabled = false` -- keeps the screen from
+blanking while the game runs (`plans/plan_x11.md` X11-0170). The screen saver a user sees is the
+desktop's, not the X server's -- GNOME, for one, leaves the server's own saver off and blanks the
+screen itself -- and desktops take such requests on the session bus, so that is asked first:
+`org.freedesktop.ScreenSaver.Inhibit`, on a connection of its own that lasts exactly as long as the
+request. The desktop forgets the request the moment that connection closes, however the game ends.
+Without such a service the X server's saver is suspended for this client alone
+(`XScreenSaverSuspend`, MIT-SCREEN-SAVER 1.1, libXss), which the server also gives back when the
+client goes away -- a test kills a game holding it with `SIGKILL` and watches the saver come on. Only
+a server without that extension has its saver's timeout set to zero and restored afterwards, the one
+way that outlives a crashed game. `IsScreenSaverEnabled` is what the game asked for: false exactly
+while it keeps the screen on. The desktop's own idle settings are not a client's to read.
+
 ## Graphics bridges
 
 **OpenGL uses GLX**, not EGL. The window this must attach to is an Xlib window with an Xlib
@@ -729,8 +745,13 @@ effect of opening a window, and a program that started printing `3,14` after add
 no way to connect the two. So: only `LC_CTYPE`, only when it is still the startup `"C"` default,
 and only from the environment the user already set.
 
-**No session bus is started.** The desktop portal is asked for on the bus the session already has;
-where there is none, there is no portal, rather than a `dbus-launch` started on the game's behalf.
+**No session bus is started.** The desktop portal and the desktop's screen saver are asked for on
+the bus the session already has; where there is none, there are none, rather than a `dbus-launch`
+started on the game's behalf.
+
+**The X server's settings are left as they were.** Keeping the screen on suspends the server's saver
+for this client (or asks the desktop) instead of zeroing the server-wide timeout, which a crashed
+game would leave zeroed.
 
 No signal handler is installed, no environment variable is set, and no other process-global state
 is modified.

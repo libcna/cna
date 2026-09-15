@@ -50,7 +50,7 @@ namespace CNA::Platform::X11 {
 
     } // namespace
 
-    X11Displays::X11Displays(X11Connection& connection) : connection_(connection) {}
+    X11Displays::X11Displays(X11Connection& connection) : connection_(connection), screenSaver_(connection) {}
 
     void X11Displays::InvalidateCache()
     {
@@ -419,44 +419,22 @@ namespace CNA::Platform::X11 {
 
     bool X11Displays::IsScreenSaverEnabled() const
     {
-        int timeout = 0;
-        int interval = 0;
-        int preferBlanking = 0;
-        int allowExposures = 0;
-        XGetScreenSaver(connection_.GetDisplay(), &timeout, &interval, &preferBlanking,
-                        &allowExposures);
-        // Timeout 0 means the server's screen saver is disabled. This describes the X server's
-        // own saver, not a desktop environment's separate screen locker, which no client can
-        // observe -- which is why this is a query about the server and says so.
-        return timeout != 0;
+        // What this game asked for. The desktop's own idle settings are not a client's to read, and
+        // the X server's timeout says nothing about them -- GNOME, for one, leaves it at zero and
+        // blanks the screen itself.
+        return screenSaver_.GetMethod() == X11ScreenSaverInhibitor::Method::None;
     }
 
     void X11Displays::SetScreenSaverEnabled(const bool enabled)
     {
-        Display* display = connection_.GetDisplay();
-        int timeout = 0;
-        int interval = 0;
-        int preferBlanking = 0;
-        int allowExposures = 0;
-        XGetScreenSaver(display, &timeout, &interval, &preferBlanking, &allowExposures);
-
-        if (!enabled)
+        if (enabled)
         {
-            if (savedScreenSaverTimeout_ < 0)
-            {
-                // Remembered so the user's own timeout comes back, rather than a hardcoded
-                // default that would silently change their session settings.
-                savedScreenSaverTimeout_ = timeout;
-            }
-            XSetScreenSaver(display, 0, interval, preferBlanking, allowExposures);
+            screenSaver_.Lift();
         }
         else
         {
-            const int restored = savedScreenSaverTimeout_ >= 0 ? savedScreenSaverTimeout_ : timeout;
-            XSetScreenSaver(display, restored, interval, preferBlanking, allowExposures);
-            savedScreenSaverTimeout_ = -1;
+            screenSaver_.Inhibit();
         }
-        XFlush(display);
     }
 
 } // namespace CNA::Platform::X11

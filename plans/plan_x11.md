@@ -19,8 +19,9 @@
 > for the SDL-free mixer, X11-0162, microphone capture through ALSA, and X11-0163, host facts and
 > battery state from Linux, X11-0164, the clipboard handed to a clipboard manager at exit, and
 > X11-0165, input-device enumeration, X11-0166, gamepad motion sensors, X11-0167, message boxes
-> drawn with Xlib, X11-0168, force feedback through the kernel, and X11-0169, file dialogs and
-> OpenUrl through the desktop portal, are ✅ -- every Phase N row. See
+> drawn with Xlib, X11-0168, force feedback through the kernel, X11-0169, file dialogs and OpenUrl
+> through the desktop portal, and X11-0170, the screen kept on by the desktop, are ✅ -- every Phase N
+> row. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the eight defects found that belong to other parts of the tree, and
 > [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
@@ -319,6 +320,24 @@ first, as the owner ordered the list.
 - 2 through the X11 platform on the launcher's Xvfb: without a portal the capability is false and the refusals name it; with one, the chooser is modal to the game's window, `PollEvents` delivers the answer, and `OpenUrl` reaches the portal.
 
 The old refusal test now asserts that there is no portal before it calls anything. **Not covered:** a real portal and its choosers (GNOME, KDE, GTK) -- deliberately never reached from a test; the protocol is followed as xdg-desktop-portal documents it. |
+
+| X11-0170 | The screen kept on by the desktop, or by the server for this client alone | ✅ | `SetScreenSaverEnabled(false)` (XNA's `Guide.IsScreenSaverEnabled`) set the X server's saver timeout to zero. Desktops ignore that: GNOME leaves the server's saver off and blanks the screen itself. It is also server-wide state that a crashed game leaves zeroed. `X11ScreenSaverInhibitor` now works as SDL3's X11 backend does:
+- **First:** `org.freedesktop.ScreenSaver.Inhibit(application, "Playing a game")`, where that service is on the session bus. It runs on a connection of its own, which the desktop forgets the moment it closes, and `UnInhibit` closes it.
+- **Else:** `XScreenSaverSuspend` (MIT-SCREEN-SAVER 1.1, libXss, `CNA_X11_HAVE_XSS`), for this client only, which the server gives back when the client goes away.
+- **Only without that extension:** the old timeout, restored.
+
+`IsScreenSaverEnabled` is what the game asked for, since the desktop's own settings are not a client's to read. Before, it reported the server's timeout, so a GNOME session answered "disabled" before the game had asked for anything. The application name is `/proc/self/comm`.
+
+Tests (`X11ScreenSaverTests.cpp`):
+- 1 without a server: the name.
+- 2 on the launcher's Xvfb: the server's timeout left untouched while suspended. With the saver set to start after one idle second, it:
+  - stays off while suspended;
+  - comes on after the lift;
+  - comes on after the platform's destruction;
+  - comes on after a peer process holding the suspension is killed with `SIGKILL`.
+- 2 against a desktop service the test plays on a private bus: `Inhibit` with the name and the reason, once however often it is asked, then `UnInhibit` with the same cookie from the same connection. That connection's name is gone after the lift and after the platform's destruction.
+
+**Not covered:** a real desktop's idle blanking. A killed game's desktop request is also not tested directly; it follows from the bus dropping a dead connection's name. |
 
 ---
 
@@ -859,6 +878,16 @@ bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its o
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`): the portal suites, message boxes, capability, conformance, `LinuxSystemInfo` | 127 passed, no report (the 17 portal tests among them) |
 | `sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet --strict`, `hot_path_lint`, `nonproduction_sdl_audit`, `check_contract` | all pass |
+
+### The screen kept on (X11-0170, 2026-09-15)
+
+| Check | Result |
+|---|---|
+| `X11ScreenSaverName.*` | 1 passed |
+| `X11ScreenSaverLive.*` on the launcher's Xvfb | 2 passed: the saver, set to one idle second, stayed off for 2.5 s while suspended, came on within 4 s after the lift, after the platform's destruction and after the peer's `SIGKILL` |
+| `X11ScreenSaverDesktopLive.*`, private bus | 2 passed |
+| every X11 and platform ctest entry | 10/10 |
+| `build-asan` (`address,undefined`): the screen-saver and portal suites, conformance, capability | 109 passed, no report |
 
 ### Regression
 

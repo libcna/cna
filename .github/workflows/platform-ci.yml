@@ -492,8 +492,10 @@ jobs:
       # plans/plan_x11.md X11-0166: ctest counts a suite whose every case skipped as passed, and
       # the uinput suites skip wherever the machine lacks what they need. On this runner nothing
       # is lacking, so they run once more with their output kept, and any skip fails the job --
-      # what they prove on CI is then read in the log, not inferred from a green tick.
-      - name: The uinput suites ran rather than skipped
+      # what they prove on CI is then read in the log, not inferred from a green tick. Since
+      # X11-0169/X11-0170 the same goes for the suites that need a private D-Bus and the
+      # launcher's own X server.
+      - name: The uinput, D-Bus and private-server suites ran rather than skipped
         if: env.CNA_CI_HAS_UINPUT == '1'
         env:
           CNA_X11_TEST_MOTION_SENSOR: "1"
@@ -501,18 +503,27 @@ jobs:
           CNA_AUDIO_RECORDING_DEVICE: "null"
         run: |
           set -euo pipefail
-          for filter in 'X11EvdevVirtualDevice.*' 'X11Touchscreen.*'; do
-            status=0
-            output="$(./build/CnaPlatformModuleTests --gtest_filter="$filter" 2>&1)" || status=$?
+          run_without_skips() {
+            local label="$1"
+            shift
+            local status=0
+            local output
+            output="$("$@" 2>&1)" || status=$?
             printf '%s\n' "$output"
             if [ "$status" -ne 0 ]; then
               exit "$status"
             fi
             if grep -q '^\[  SKIPPED \]' <<<"$output"; then
-              echo "::error::$filter skipped on a runner that has uinput; the reasons are above" >&2
+              echo "::error::$label skipped on a runner that has what it needs; the reasons are above" >&2
               exit 1
             fi
+          }
+          for filter in 'X11EvdevVirtualDevice.*' 'X11Touchscreen.*' 'X11DesktopPortalBus.*'; do
+            run_without_skips "$filter" ./build/CnaPlatformModuleTests --gtest_filter="$filter"
           done
+          run_without_skips "the private-server suites" sh tools/platform/x11_test_server.sh \
+            ./build/CnaPlatformModuleTests \
+            --gtest_filter='X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11MessageBoxLive.*'
 
       - name: Run SDL containment gates
         run: |

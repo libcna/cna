@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "X11Headers.hpp"
+#include "X11ScreenSaver.hpp"
 
 #include <map>
 #include <vector>
@@ -90,15 +91,19 @@ namespace CNA::Platform::X11 {
 
         /**
          * @brief Gets whether the host screen saver may activate.
-         * @return True when the server's screen saver timeout is non-zero.
+         * @return False exactly while this game keeps the screen on (SetScreenSaverEnabled(false)).
          */
         [[nodiscard]] bool IsScreenSaverEnabled() const override;
 
         /**
-         * @brief Allows or prevents the host screen saver from activating.
+         * @brief Allows or prevents the host screen saver from activating: the desktop's, asked
+         * over the session bus, else the X server's (X11-0170; see X11ScreenSaverInhibitor).
          * @param enabled True to allow screen saving.
          */
         void SetScreenSaverEnabled(bool enabled) override;
+
+        /** @brief Gets how the screen is kept on, for tests. @return The method, or None. */
+        [[nodiscard]] X11ScreenSaverInhibitor::Method GetScreenSaverMethod() const { return screenSaver_.GetMethod(); }
 
         /** @brief Discards the cached enumeration after a RandR configuration change. */
         void InvalidateCache();
@@ -135,7 +140,7 @@ namespace CNA::Platform::X11 {
         mutable bool cacheValid_ = false;
         /// The mode switcher's generation the cache was built at.
         mutable std::uint64_t modeGeneration_ = 0;
-        int savedScreenSaverTimeout_ = -1;
+        X11ScreenSaverInhibitor screenSaver_;
     };
 
 } // namespace CNA::Platform::X11

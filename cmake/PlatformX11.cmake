@@ -82,7 +82,9 @@ from XKB key names and has no equivalent without it" PARENT_SCOPE)
     # Xau      -> the exclusive-fullscreen mode guardian's own connection to a server that asks
     #             for an authorisation cookie (plans/plan_x11.md X11-0153); libX11 already
     #             depends on it, so it is present wherever libX11 is
-    foreach(_ext Xi Xrandr Xcursor Xfixes Xau)
+    # Xss      -> a screen saver suspended for this client alone, and given back if it dies
+    #             (MIT-SCREEN-SAVER 1.1, plans/plan_x11.md X11-0170)
+    foreach(_ext Xi Xrandr Xcursor Xfixes Xau Xss)
         string(TOUPPER "${_ext}" _ext_upper)
         if(X11_${_ext}_FOUND AND X11_${_ext}_LIB)
             list(APPEND _libraries ${X11_${_ext}_LIB})

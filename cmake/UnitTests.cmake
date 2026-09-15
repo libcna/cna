@@ -1233,7 +1233,7 @@ if(CNA_BUILD_TESTS)
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11ScreenSaverPeer.*")
     endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
@@ -1538,7 +1538,7 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*:X11TouchMath.*:X11ContentScaleParsing.*:X11TextEncoding.*:X11EvdevMapping.*:LinuxSystemInfo.*:X11InputDeviceClassification.*:X11MessageBoxGeometry.*:X11EvdevHapticEffect.*:X11PortalRequest.*
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*:X11TouchMath.*:X11ContentScaleParsing.*:X11TextEncoding.*:X11EvdevMapping.*:LinuxSystemInfo.*:X11InputDeviceClassification.*:X11MessageBoxGeometry.*:X11EvdevHapticEffect.*:X11PortalRequest.*:X11ScreenSaverName.*
             LABELS "platform" TIMEOUT 120)
 
         # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No
@@ -1559,7 +1559,7 @@ if(CNA_BUILD_TESTS)
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests
