@@ -197,6 +197,9 @@ namespace CNA::Platform::X11 {
             capabilities.gamepad = true;
             capabilities.joystick = true;
             capabilities.gamepadRumble = true;
+            // Motion sensors likewise: the service answers, and each pad says whether it has
+            // them in GamepadCapabilities (X11-0166).
+            capabilities.gamepadSensors = true;
         }
 #ifdef CNA_PLATFORM_HAVE_EVDEV
         // Battery state is the kernel's power-supply class, which needs no display either
@@ -245,8 +248,6 @@ namespace CNA::Platform::X11 {
         capabilities.inputDeviceEnumeration = inputDevices_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
-        //   gamepadSensors         -- a pad's motion sensors are a second evdev node; pairing it
-        //                             with its pad is not implemented.
         //   haptics                -- the standalone force-feedback service; pad rumble is
         //                             gamepadRumble, above.
         //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or

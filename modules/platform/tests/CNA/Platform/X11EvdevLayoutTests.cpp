@@ -430,6 +430,85 @@ TEST(X11EvdevLayout, OnlyRealChangesAreReported)
     }
 }
 
+// --- motion sensors (X11-0166) ------------------------------------------------------------------
+
+// A DualShock 4's motion-sensor node as hid-playstation creates it: an accelerometer by property,
+// ABS_X/Y/Z in units per g and ABS_RX/RY/RZ in units per degree per second.
+EvdevDescription MotionSensor(const char* uniq, const char* phys)
+{
+    EvdevDescription sensor = Describe({}, {{ABS_X, {-32768, 32767, 0, 0, 8192}},
+                                            {ABS_Y, {-32768, 32767, 0, 0, 8192}},
+                                            {ABS_Z, {-32768, 32767, 0, 0, 8192}},
+                                            {ABS_RX, {-2097152, 2097151, 0, 0, 1024}},
+                                            {ABS_RY, {-2097152, 2097151, 0, 0, 1024}},
+                                            {ABS_RZ, {-2097152, 2097151, 0, 0, 1024}}});
+    sensor.properties.set(INPUT_PROP_ACCELEROMETER);
+    sensor.uniq = uniq;
+    sensor.phys = phys;
+    return sensor;
+}
+
+TEST(X11EvdevLayout, AMotionSensorNodeIsNeitherAControllerNorIgnored)
+{
+    const EvdevDescription sensor = MotionSensor("a4:53:85:00:00:01", "usb-0000:00:14.0-1/input3");
+    EXPECT_TRUE(IsEvdevMotionSensor(sensor));
+    EXPECT_EQ(ClassifyEvdevDevice(sensor), EvdevDeviceClass::None) << "not a second controller";
+    EvdevDescription unmarked = sensor;
+    unmarked.properties.reset(INPUT_PROP_ACCELEROMETER);
+    EXPECT_FALSE(IsEvdevMotionSensor(unmarked)) << "without the property it is just axes";
+    EXPECT_FALSE(IsEvdevMotionSensor(Xbox360()));
+}
+
+TEST(X11EvdevLayout, ASensorBelongsToThePadWithItsIdOrItsPath)
+{
+    EvdevDescription pad = Xbox360();
+    pad.uniq = "a4:53:85:00:00:01";
+    pad.phys = "usb-0000:00:14.0-1/input3";
+    EXPECT_TRUE(EvdevSensorBelongsTo(MotionSensor("a4:53:85:00:00:01", ""), pad));
+    EXPECT_FALSE(EvdevSensorBelongsTo(MotionSensor("a4:53:85:00:00:02", "usb-0000:00:14.0-1/input3"), pad))
+        << "a different controller's sensor, whatever the path";
+    pad.uniq.clear();
+    EXPECT_TRUE(EvdevSensorBelongsTo(MotionSensor("", "usb-0000:00:14.0-1/input3"), pad));
+    EXPECT_FALSE(EvdevSensorBelongsTo(MotionSensor("", "usb-0000:00:14.0-2/input3"), pad));
+    pad.phys.clear();
+    EXPECT_FALSE(EvdevSensorBelongsTo(MotionSensor("", ""), pad)) << "nothing in common is not a pair";
+}
+
+TEST(X11EvdevLayout, MotionIsScaledToMetresPerSecondSquaredAndRadiansPerSecond)
+{
+    const EvdevMotionLayout layout = DescribeEvdevMotionSensor(MotionSensor("", "p"), 0x054C);
+    ASSERT_TRUE(layout.accelerometer);
+    ASSERT_TRUE(layout.gyroscope);
+    EXPECT_FALSE(layout.nintendoAxes);
+    // One g down Y, and 90 degrees per second about Z.
+    const std::array<int, 6> raw{0, 8192, -4096, 0, 0, 1024 * 90};
+    const GamepadSensorReading acceleration = ScaleEvdevMotion(layout, GamepadSensor::Accelerometer, raw);
+    EXPECT_FLOAT_EQ(acceleration.x, 0.0f);
+    EXPECT_FLOAT_EQ(acceleration.y, 9.80665f);
+    EXPECT_FLOAT_EQ(acceleration.z, -9.80665f / 2.0f);
+    const GamepadSensorReading rotation = ScaleEvdevMotion(layout, GamepadSensor::Gyroscope, raw);
+    EXPECT_FLOAT_EQ(rotation.z, static_cast<float>(3.14159265358979323846 / 2.0));
+
+    // hid-nintendo's own axis order, turned into the gamepad convention.
+    const EvdevMotionLayout nintendo = DescribeEvdevMotionSensor(MotionSensor("", "p"), 0x057E);
+    EXPECT_TRUE(nintendo.nintendoAxes);
+    const GamepadSensorReading turned =
+        ScaleEvdevMotion(nintendo, GamepadSensor::Accelerometer, {8192, 0, 0, 0, 0, 0});
+    EXPECT_FLOAT_EQ(turned.z, -9.80665f);
+    EXPECT_FLOAT_EQ(turned.x, 0.0f);
+}
+
+TEST(X11EvdevLayout, AnAxisGroupWithoutAResolutionIsNotReported)
+{
+    EvdevDescription sensor = MotionSensor("", "p");
+    sensor.ranges[ABS_RY].resolution = 0;
+    const EvdevMotionLayout layout = DescribeEvdevMotionSensor(sensor, 0);
+    EXPECT_TRUE(layout.accelerometer);
+    EXPECT_FALSE(layout.gyroscope) << "a reading that cannot be put in physical units is not given";
+    const GamepadSensorReading none = ScaleEvdevMotion(layout, GamepadSensor::Gyroscope, {1, 1, 1, 1, 1, 1});
+    EXPECT_EQ(none.x, 0.0f);
+}
+
 TEST(X11EvdevLayout, TheModelComesFromTheDeviceIdentity)
 {
     const auto model = [](const std::uint16_t vendor, const std::uint16_t product,

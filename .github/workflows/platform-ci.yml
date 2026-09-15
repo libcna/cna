@@ -478,6 +478,8 @@ jobs:
       - name: Run platform, audio, content and WAV-decoder tests
         env:
           SDL_AUDIODRIVER: dummy
+          # plans/plan_x11.md X11-0166: a virtual accelerometer is safe only on this VM.
+          CNA_X11_TEST_MOTION_SENSOR: "1"
         run: |
           set -euo pipefail
           ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests|InputMethodTests|ExclusiveFullscreenTests|TouchscreenTests))$' --output-on-failure

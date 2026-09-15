@@ -128,6 +128,7 @@ namespace CNA::Platform::Linux {
     void EvdevControllerHub::Stop()
     {
         controllers_.clear();
+        sensors_.clear();
         refused_.clear();
         pending_.clear();
         if (watch_ >= 0)
@@ -277,10 +278,17 @@ namespace CNA::Platform::Linux {
         // -- no sysfs in a container, a test's own directory -- is opened to be asked.
         EvdevDescription preview;
         if (ReadEvdevSysfsDescription(name, preview, sysfsRoot_) &&
-            ClassifyEvdevDevice(preview) == EvdevDeviceClass::None)
+            ClassifyEvdevDevice(preview) == EvdevDeviceClass::None && !IsEvdevMotionSensor(preview))
         {
             refused_.insert(name);
             return;
+        }
+        for (const auto& sensor : sensors_)
+        {
+            if (sensor->GetPath() == path)
+            {
+                return;
+            }
         }
         std::unique_ptr<EvdevDevice> device = EvdevDevice::Open(path);
         if (device == nullptr)
@@ -289,6 +297,22 @@ namespace CNA::Platform::Linux {
             return;
         }
         const EvdevDescription& description = device->GetDescription();
+        if (IsEvdevMotionSensor(description))
+        {
+            // A pad's motion sensors, a node of their own (X11-0166): given to the controller it
+            // belongs to, or kept until that controller appears.
+            for (const auto& controller : controllers_)
+            {
+                if (controller->sensor == nullptr &&
+                    EvdevSensorBelongsTo(description, controller->device->GetDescription()))
+                {
+                    AttachSensor(*controller, std::move(device));
+                    return;
+                }
+            }
+            sensors_.push_back(std::move(device));
+            return;
+        }
         const EvdevDeviceClass kind = ClassifyEvdevDevice(description);
         if (kind == EvdevDeviceClass::None)
         {
@@ -379,6 +403,17 @@ namespace CNA::Platform::Linux {
             ApplyRaw(*controller, event);
         }
 
+        // Its motion sensors, if they appeared first.
+        for (auto sensor = sensors_.begin(); sensor != sensors_.end(); ++sensor)
+        {
+            if (EvdevSensorBelongsTo((*sensor)->GetDescription(), controller->device->GetDescription()))
+            {
+                AttachSensor(*controller, std::move(*sensor));
+                sensors_.erase(sensor);
+                break;
+            }
+        }
+
         const DeviceId id = controller->id;
         const bool gamepad = controller->kind == EvdevDeviceClass::Gamepad;
         controllers_.push_back(std::move(controller));
@@ -401,6 +436,55 @@ namespace CNA::Platform::Linux {
                 Remove(index);
                 return;
             }
+            if (controllers_[index]->sensor != nullptr && controllers_[index]->sensor->GetPath() == path)
+            {
+                controllers_[index]->sensor.reset();
+                controllers_[index]->motion = {};
+                return;
+            }
+        }
+        std::erase_if(sensors_, [&path](const std::unique_ptr<EvdevDevice>& sensor) {
+            return sensor->GetPath() == path;
+        });
+    }
+
+    void EvdevControllerHub::AttachSensor(Controller& controller, std::unique_ptr<EvdevDevice> sensor)
+    {
+        controller.motion =
+            DescribeEvdevMotionSensor(sensor->GetDescription(), controller.device->GetDescription().vendor);
+        controller.motionRaw.fill(0);
+        controller.sensor = std::move(sensor);
+        // What the sensor reads now, before its first event.
+        scratch_.clear();
+        controller.sensor->AppendCurrentState(scratch_);
+        for (const input_event& event : scratch_)
+        {
+            if (event.type == EV_ABS && event.code >= ABS_X && event.code <= ABS_RZ)
+            {
+                controller.motionRaw[event.code - ABS_X] = event.value;
+            }
+        }
+    }
+
+    void EvdevControllerHub::PumpSensor(Controller& controller)
+    {
+        if (controller.sensor == nullptr)
+        {
+            return;
+        }
+        scratch_.clear();
+        const bool alive = controller.sensor->Drain(scratch_);
+        for (const input_event& event : scratch_)
+        {
+            if (event.type == EV_ABS && event.code >= ABS_X && event.code <= ABS_RZ)
+            {
+                controller.motionRaw[event.code - ABS_X] = event.value;
+            }
+        }
+        if (!alive)
+        {
+            controller.sensor.reset();
+            controller.motion = {};
         }
     }
 
@@ -509,7 +593,14 @@ namespace CNA::Platform::Linux {
             {
                 gone.push_back(controller->id);
             }
+            PumpSensor(*controller);
         }
+        // Sensors still waiting for their controller: read and dropped, so their queues stay
+        // empty, and let go of when unplugged.
+        std::erase_if(sensors_, [this](const std::unique_ptr<EvdevDevice>& sensor) {
+            scratch_.clear();
+            return !sensor->Drain(scratch_);
+        });
         for (const DeviceId id : gone)
         {
             for (std::size_t index = 0; index < controllers_.size(); ++index)
@@ -576,6 +667,9 @@ namespace CNA::Platform::Linux {
                 snapshots_[at] = GamepadSnapshot{};
                 occupant_[at] = controller->id;
             }
+            // Its motion-sensor node can come and go after the pad itself (X11-0166).
+            capabilities_[at].gyroscope = controller->motion.gyroscope;
+            capabilities_[at].accelerometer = controller->motion.accelerometer;
             GamepadSnapshot& snapshot = snapshots_[at];
             const bool changed = !snapshot.connected ||
                                  snapshot.buttons != controller->gamepad->GetButtons() ||
@@ -635,10 +729,26 @@ namespace CNA::Platform::Linux {
         return false;
     }
 
-    bool EvdevGamepad::TryGetSensor(int, GamepadSensor, GamepadSensorReading& reading)
+    bool EvdevGamepad::TryGetSensor(const int index, const GamepadSensor sensor, GamepadSensorReading& reading)
     {
         reading = GamepadSensorReading{};
-        return false;
+        if (!IsValid(index))
+        {
+            return false;
+        }
+        const EvdevControllerHub::Controller* controller = hub_.FindBySlot(index);
+        if (controller == nullptr || controller->sensor == nullptr)
+        {
+            return false;
+        }
+        const bool present = sensor == GamepadSensor::Gyroscope ? controller->motion.gyroscope
+                                                                : controller->motion.accelerometer;
+        if (!present)
+        {
+            return false;
+        }
+        reading = ScaleEvdevMotion(controller->motion, sensor, controller->motionRaw);
+        return true;
     }
 
     int EvdevGamepad::GetPlayerIndex(int) const

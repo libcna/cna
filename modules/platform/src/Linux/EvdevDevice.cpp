@@ -171,6 +171,7 @@ namespace CNA::Platform::Linux {
         (void) ReadSysfsBits(device / "capabilities" / "ff", read.forceFeedback);
         (void) ReadSysfsBits(device / "properties", read.properties);
         (void) ReadAttribute(device / "uniq", read.uniq);
+        (void) ReadAttribute(device / "phys", read.phys);
         read.driver = ReadEvdevDriverName(nodeName, sysfsRoot);
         description = std::move(read);
         return true;
@@ -206,6 +207,11 @@ namespace CNA::Platform::Linux {
         if (ioctl(descriptor, EVIOCGUNIQ(uniq.size() - 1), uniq.data()) >= 0)
         {
             description.uniq = uniq.data();
+        }
+        std::array<char, 256> phys{};
+        if (ioctl(descriptor, EVIOCGPHYS(phys.size() - 1), phys.data()) >= 0)
+        {
+            description.phys = phys.data();
         }
         input_id identity{};
         if (ioctl(descriptor, EVIOCGID, &identity) >= 0)

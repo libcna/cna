@@ -50,6 +50,8 @@ namespace CNA::Platform::Linux {
         std::string driver;
         /** @brief The device's unique identifier (`EVIOCGUNIQ`: a Bluetooth address, a serial). */
         std::string uniq;
+        /** @brief Where the device is attached (`EVIOCGPHYS`); every node of one HID device shares it. */
+        std::string phys;
         /** @brief Bus type (`struct input_id`). */
         std::uint16_t bus = 0;
         /** @brief Vendor identifier (`struct input_id`). */
@@ -88,6 +90,69 @@ namespace CNA::Platform::Linux {
      * @return The class; motion-sensor nodes (`INPUT_PROP_ACCELEROMETER`) are never controllers.
      */
     [[nodiscard]] EvdevDeviceClass ClassifyEvdevDevice(const EvdevDescription& description);
+
+    /**
+     * @brief Gets whether a device is a controller's motion-sensor node (plans/plan_x11.md
+     * X11-0166): an accelerometer by its property, with an accelerometer's or a gyroscope's three
+     * axes -- the second node hid-playstation and hid-nintendo create beside a pad.
+     *
+     * @param description The device.
+     * @return True for a motion sensor.
+     */
+    [[nodiscard]] bool IsEvdevMotionSensor(const EvdevDescription& description);
+
+    /**
+     * @brief Gets whether a motion-sensor node belongs to a controller.
+     *
+     * The same non-empty unique id (a Bluetooth address, a serial), else the same non-empty
+     * physical path -- the kernel gives both nodes of one HID device the same of each.
+     *
+     * @param sensor The motion-sensor node.
+     * @param controller The controller.
+     * @return True when they are one device.
+     */
+    [[nodiscard]] bool EvdevSensorBelongsTo(const EvdevDescription& sensor, const EvdevDescription& controller);
+
+    /** @brief What a paired motion sensor can report, and how its raw values scale. */
+    struct EvdevMotionLayout
+    {
+        /** @brief Whether ABS_X/Y/Z are an accelerometer with a stated resolution. */
+        bool accelerometer = false;
+        /** @brief Whether ABS_RX/RY/RZ are a gyroscope with a stated resolution. */
+        bool gyroscope = false;
+        /** @brief Accelerometer units per g, per axis. */
+        std::array<int, 3> accelerometerResolution{};
+        /** @brief Gyroscope units per degree per second, per axis. */
+        std::array<int, 3> gyroscopeResolution{};
+        /** @brief Whether the axes are hid-nintendo's order rather than the gamepad convention. */
+        bool nintendoAxes = false;
+    };
+
+    /**
+     * @brief Describes a motion-sensor node for the controller it belongs to.
+     *
+     * An axis group counts only when all three axes are there and state their resolution: a
+     * reading that cannot be scaled to physical units is not reported at all.
+     *
+     * @param sensor The motion-sensor node.
+     * @param controllerVendor The controller's vendor, for the axis order.
+     * @return The layout.
+     */
+    [[nodiscard]] EvdevMotionLayout DescribeEvdevMotionSensor(const EvdevDescription& sensor,
+                                                              std::uint16_t controllerVendor);
+
+    /**
+     * @brief Scales a motion sensor's raw values as the SDL3 platform reports them: metres per
+     * second squared for the accelerometer, radians per second for the gyroscope, hid-nintendo's
+     * axis order turned into the gamepad convention.
+     *
+     * @param layout The sensor's layout.
+     * @param sensor Which of the two.
+     * @param raw ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ as last reported.
+     * @return The reading; zero when the layout lacks that sensor.
+     */
+    [[nodiscard]] GamepadSensorReading ScaleEvdevMotion(const EvdevMotionLayout& layout, GamepadSensor sensor,
+                                                        const std::array<int, 6>& raw);
 
     /** @brief How one absolute axis feeds a gamepad axis. */
     struct EvdevAxisBinding

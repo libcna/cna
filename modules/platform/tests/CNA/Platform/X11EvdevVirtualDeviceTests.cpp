@@ -29,6 +29,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -69,6 +70,7 @@ public:
         std::uint16_t code;
         int minimum;
         int maximum;
+        int resolution = 0;
     };
 
     struct Spec
@@ -82,6 +84,10 @@ public:
         std::vector<std::uint16_t> keys;
         std::vector<Axis> axes;
         bool rumble = false;
+        /// Where the device says it is attached; two nodes of one controller share it.
+        std::string phys;
+        /// A motion-sensor node (INPUT_PROP_ACCELEROMETER).
+        bool accelerometer = false;
     };
 
     struct ForceFeedbackLog
@@ -195,6 +201,7 @@ private:
             setup.code = axis.code;
             setup.absinfo.minimum = axis.minimum;
             setup.absinfo.maximum = axis.maximum;
+            setup.absinfo.resolution = axis.resolution;
             if (ioctl(descriptor_, UI_SET_ABSBIT, axis.code) < 0 ||
                 ioctl(descriptor_, UI_ABS_SETUP, &setup) < 0)
             {
@@ -206,6 +213,14 @@ private:
              ioctl(descriptor_, UI_SET_FFBIT, FF_RUMBLE) < 0))
         {
             return fail("UI_SET_FFBIT");
+        }
+        if (spec.accelerometer && ioctl(descriptor_, UI_SET_PROPBIT, INPUT_PROP_ACCELEROMETER) < 0)
+        {
+            return fail("UI_SET_PROPBIT");
+        }
+        if (!spec.phys.empty() && ioctl(descriptor_, UI_SET_PHYS, spec.phys.c_str()) < 0)
+        {
+            return fail("UI_SET_PHYS");
         }
         uinput_setup setup{};
         std::strncpy(setup.name, spec.name.c_str(), UINPUT_MAX_NAME_SIZE - 1);
@@ -888,6 +903,71 @@ TEST(X11EvdevVirtualDevice, AFlightStickIsARawJoystickAndNotAGamepad)
     EXPECT_TRUE(EventsOf<ControllerButtonEvent>(events, id).empty());
 }
 
+// --- motion sensors (X11-0166) -----------------------------------------------------------------------
+
+TEST(X11EvdevVirtualDevice, AMotionSensorNodeIsPairedWithItsPad)
+{
+    // Opt-in, and set only on CI's throwaway VM: an input accelerometer on a desktop is the
+    // desktop's business too -- iio-sensor-proxy takes one for screen rotation -- so this suite
+    // never creates one on a machine someone uses.
+    const char* optIn = std::getenv("CNA_X11_TEST_MOTION_SENSOR");
+    if (optIn == nullptr || std::string(optIn) != "1")
+    {
+        GTEST_SKIP() << "opt-in (CNA_X11_TEST_MOTION_SENSOR=1): creates a virtual accelerometer";
+    }
+    EvdevControllerHub hub;
+    ASSERT_TRUE(hub.Start());
+    EvdevGamepad gamepad(hub);
+    const std::string phys = "cna-motion-test-" + std::to_string(::getpid()) + "/input0";
+
+    VirtualDevice::Spec padSpec = PadSpec("motion pad");
+    padSpec.product = 0x0005;
+    padSpec.phys = phys;
+    CREATE_OR_SKIP(pad, padSpec);
+    ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, padSpec.name) != nullptr; }));
+
+    // hid-playstation's second node: the same physical path, an accelerometer's and a gyroscope's
+    // axes in units per g and per degree per second.
+    VirtualDevice::Spec sensorSpec;
+    sensorSpec.name = UniqueName("motion sensors");
+    sensorSpec.product = 0x0005;
+    sensorSpec.phys = phys;
+    sensorSpec.accelerometer = true;
+    sensorSpec.axes = {{ABS_X, -32768, 32767, 8192},       {ABS_Y, -32768, 32767, 8192},
+                       {ABS_Z, -32768, 32767, 8192},       {ABS_RX, -2097152, 2097151, 1024},
+                       {ABS_RY, -2097152, 2097151, 1024}, {ABS_RZ, -2097152, 2097151, 1024}};
+    CREATE_OR_SKIP(sensor, sensorSpec);
+    ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, padSpec.name)->sensor != nullptr; }))
+        << "the sensor node was never given to its pad";
+    EXPECT_EQ(FindByName(hub, sensorSpec.name), nullptr) << "a sensor is not a controller of its own";
+
+    gamepad.Update();
+    const int slot = FindSlot(gamepad, padSpec.name);
+    ASSERT_GE(slot, 0);
+    EXPECT_TRUE(gamepad.GetCapabilities(slot).accelerometer);
+    EXPECT_TRUE(gamepad.GetCapabilities(slot).gyroscope);
+
+    sensor->Emit(EV_ABS, ABS_Y, 8192);
+    sensor->Emit(EV_ABS, ABS_RZ, 1024 * 90);
+    sensor->Report();
+    GamepadSensorReading acceleration{};
+    ASSERT_TRUE(PumpUntil(hub, [&] {
+        return gamepad.TryGetSensor(slot, GamepadSensor::Accelerometer, acceleration) &&
+               std::fabs(acceleration.y - 9.80665f) < 1e-3f;
+    })) << "one g along Y never arrived";
+    GamepadSensorReading rotation{};
+    ASSERT_TRUE(gamepad.TryGetSensor(slot, GamepadSensor::Gyroscope, rotation));
+    EXPECT_NEAR(rotation.z, 3.14159265f / 2.0f, 1e-3f);
+
+    // The sensor node unplugged alone: the pad stays, its sensors go.
+    sensor->Destroy();
+    ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, padSpec.name)->sensor == nullptr; }));
+    gamepad.Update();
+    EXPECT_FALSE(gamepad.GetCapabilities(slot).accelerometer);
+    EXPECT_FALSE(gamepad.TryGetSensor(slot, GamepadSensor::Gyroscope, rotation));
+    EXPECT_NE(FindByName(hub, padSpec.name), nullptr);
+}
+
 // --- controller-database mappings (X11-0160) ---------------------------------------------------------
 
 /// Sets one environment variable for a scope.
@@ -1037,7 +1117,7 @@ TEST(X11EvdevVirtualDevice, ThePlatformServesControllersEvenWithoutADisplay)
     ASSERT_TRUE(capabilities.gamepad);
     ASSERT_TRUE(capabilities.joystick);
     EXPECT_TRUE(capabilities.gamepadRumble);
-    EXPECT_FALSE(capabilities.gamepadSensors);
+    EXPECT_TRUE(capabilities.gamepadSensors);    // Each pad says whether it has them (X11-0166).
     EXPECT_FALSE(capabilities.multipleWindows);  // Everything the display backs is still off.
     // So is battery state, which is the kernel's too (plans/plan_x11.md X11-0163).
     EXPECT_TRUE(capabilities.powerInfo);

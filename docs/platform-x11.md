@@ -104,7 +104,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `gamepad`, `joystick`, `gamepadRumble` | conditional | Linux only: the kernel's evdev nodes, true when the build has `linux/input.h` and the machine has `/dev/input` — **with or without a display** |
 | `ime` | conditional | true when the application asked to draw the composition (`CNA_IME_IMPLEMENTED_UI=composition`) and the input method offers on-the-spot composition; candidate lists stay with the input method — see [Input-method composition](#input-method-composition) |
 | `inputDeviceEnumeration` | conditional | true when XInput2 is present: keyboards, mice and touch devices from the server, controllers from the kernel — see [Input devices](#input-devices) |
-| `gamepadSensors` | ❌ | a pad's motion sensors are a second evdev node; pairing it with its pad is not implemented |
+| `gamepadSensors` | conditional | Linux only, with the controllers: a pad's motion-sensor node paired with it — each pad's `GamepadCapabilities` says whether it has a gyroscope and an accelerometer |
 | `powerInfo` | conditional | Linux only: the kernel's power supplies in sysfs — **with or without a display** — see [Host facts](#host-facts) |
 | `haptics`, `sensors` | ❌ | not an X11 facility |
 | `messageBox`, `nativeFileDialog` | ❌ | no core X11 facility; see below |
@@ -566,8 +566,17 @@ corrects one. CNA ships no database of its own: which one to use — the communi
 own — is the user's or the game's choice. All 269 Linux entries of the database SDL embeds are read
 (a test does, given the file).
 
-**Not supported:** motion sensors, trigger rumble, light bars, player LEDs, touchpads and battery
-state all return false or empty.
+**Motion sensors** (`plans/plan_x11.md` X11-0166). `hid-playstation` and `hid-nintendo` give a pad
+a second node for its accelerometer and gyroscope (`INPUT_PROP_ACCELEROMETER`). It is opened with
+the pad — never on its own as a controller — and given to the pad with the same unique id (a
+Bluetooth address, a serial) or, failing one, the same physical path, whichever node appears first;
+`TryGetSensor` then answers in the SDL3 platform's units: metres per second squared, radians per
+second, `hid-nintendo`'s axis order turned into the gamepad convention. An axis group that states no
+resolution cannot be put into physical units and is not reported. The sensor can come and go on its
+own; the pad's capabilities follow.
+
+**Not supported:** trigger rumble, light bars, player LEDs, touchpads and battery state all return
+false or empty.
 
 **What has been tested, and what has not.** Everything above runs against devices the kernel really
 creates through uinput — real evdev nodes, real hot-plug, real `SYN_DROPPED`, the real

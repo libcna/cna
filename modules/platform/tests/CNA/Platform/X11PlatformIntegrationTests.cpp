@@ -656,7 +656,7 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_EQ(capabilities.gamepad, evdev);
     EXPECT_EQ(capabilities.joystick, evdev);
     EXPECT_EQ(capabilities.gamepadRumble, evdev);
-    EXPECT_FALSE(capabilities.gamepadSensors);
+    EXPECT_EQ(capabilities.gamepadSensors, evdev);  // Each pad says whether it has them (X11-0166).
 
     // Deliberately false, each because the facility does not exist in X11 rather than because it
     // was not finished. A future change turning one of these on without implementing it would

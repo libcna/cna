@@ -80,6 +80,72 @@ namespace CNA::Platform::Linux {
         return ModelOf(description);
     }
 
+    bool IsEvdevMotionSensor(const EvdevDescription& description)
+    {
+        const bool accelerometer =
+            HasAxis(description, ABS_X) && HasAxis(description, ABS_Y) && HasAxis(description, ABS_Z);
+        const bool gyroscope =
+            HasAxis(description, ABS_RX) && HasAxis(description, ABS_RY) && HasAxis(description, ABS_RZ);
+        return description.properties.test(INPUT_PROP_ACCELEROMETER) && (accelerometer || gyroscope);
+    }
+
+    bool EvdevSensorBelongsTo(const EvdevDescription& sensor, const EvdevDescription& controller)
+    {
+        if (!sensor.uniq.empty() && !controller.uniq.empty())
+        {
+            return sensor.uniq == controller.uniq;
+        }
+        return !sensor.phys.empty() && sensor.phys == controller.phys;
+    }
+
+    EvdevMotionLayout DescribeEvdevMotionSensor(const EvdevDescription& sensor, const std::uint16_t controllerVendor)
+    {
+        EvdevMotionLayout layout;
+        const auto group = [&sensor](const int first, std::array<int, 3>& resolution) {
+            for (int index = 0; index < 3; ++index)
+            {
+                const int code = first + index;
+                if (!HasAxis(sensor, code) || sensor.ranges[static_cast<std::size_t>(code)].resolution <= 0)
+                {
+                    return false;
+                }
+                resolution[static_cast<std::size_t>(index)] = sensor.ranges[static_cast<std::size_t>(code)].resolution;
+            }
+            return true;
+        };
+        layout.accelerometer = group(ABS_X, layout.accelerometerResolution);
+        layout.gyroscope = group(ABS_RX, layout.gyroscopeResolution);
+        layout.nintendoAxes = controllerVendor == kNintendoVendor;
+        return layout;
+    }
+
+    GamepadSensorReading ScaleEvdevMotion(const EvdevMotionLayout& layout, const GamepadSensor sensor,
+                                          const std::array<int, 6>& raw)
+    {
+        constexpr double kStandardGravity = 9.80665;
+        constexpr double kRadiansPerDegree = 3.14159265358979323846 / 180.0;
+        const bool gyroscope = sensor == GamepadSensor::Gyroscope;
+        if ((gyroscope && !layout.gyroscope) || (!gyroscope && !layout.accelerometer))
+        {
+            return GamepadSensorReading{};
+        }
+        std::array<double, 3> value{};
+        for (std::size_t index = 0; index < 3; ++index)
+        {
+            value[index] = gyroscope
+                               ? raw[3 + index] * kRadiansPerDegree / layout.gyroscopeResolution[index]
+                               : raw[index] * kStandardGravity / layout.accelerometerResolution[index];
+        }
+        if (layout.nintendoAxes)
+        {
+            // hid-nintendo reports its axes in its own order.
+            return GamepadSensorReading{static_cast<float>(-value[1]), static_cast<float>(value[2]),
+                                        static_cast<float>(-value[0])};
+        }
+        return GamepadSensorReading{static_cast<float>(value[0]), static_cast<float>(value[1]),
+                                    static_cast<float>(value[2])};
+    }
+
     EvdevDeviceClass ClassifyEvdevDevice(const EvdevDescription& description)
     {
         // A DualShock or DualSense exposes its motion sensors as a node of their own, with

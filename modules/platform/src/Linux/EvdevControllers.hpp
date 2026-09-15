@@ -45,6 +45,12 @@ namespace CNA::Platform::Linux {
             EvdevDeviceClass kind = EvdevDeviceClass::Joystick;
             /** @brief Whether a controller-database mapping made it a gamepad, or remapped one. */
             bool mapped = false;
+            /** @brief Its motion-sensor node, when it has one and it is open (X11-0166). */
+            std::unique_ptr<EvdevDevice> sensor;
+            /** @brief What the motion sensor reports. */
+            EvdevMotionLayout motion{};
+            /** @brief ABS_X..ABS_Z and ABS_RX..ABS_RZ as the sensor last reported them. */
+            std::array<int, 6> motionRaw{};
             /** @brief The XNA player slot, or -1 for a joystick or when all four are taken. */
             int slot = -1;
             /** @brief The mapped state, for a gamepad. */
@@ -128,6 +134,8 @@ namespace CNA::Platform::Linux {
         void Remove(std::size_t index);
         void ApplyRaw(Controller& controller, const input_event& event);
         void Push(PlatformEvent event);
+        void AttachSensor(Controller& controller, std::unique_ptr<EvdevDevice> sensor);
+        void PumpSensor(Controller& controller);
 
         std::string directory_;
         std::string sysfsRoot_;
@@ -137,6 +145,8 @@ namespace CNA::Platform::Linux {
         std::chrono::steady_clock::time_point nextScan_{};
         DeviceId nextId_ = 1;
         std::vector<std::unique_ptr<Controller>> controllers_;
+        // Motion-sensor nodes whose controller is not open (yet): a sensor can appear first.
+        std::vector<std::unique_ptr<EvdevDevice>> sensors_;
         // Nodes that could not be opened (someone else's keyboard, mostly). Not retried on every
         // pump; a permission change (IN_ATTRIB) takes a node off the list.
         std::set<std::string> refused_;
@@ -179,7 +189,13 @@ namespace CNA::Platform::Linux {
                               std::uint32_t durationMilliseconds) override;
         /** @brief Light bars are not reachable through evdev. @return False. */
         bool SetLightBar(int index, std::uint8_t red, std::uint8_t green, std::uint8_t blue) override;
-        /** @brief Motion sensors are not exposed here. @return False, with `reading` zeroed. */
+        /**
+         * @brief Reads a pad's motion sensor, from its sensor node (X11-0166).
+         * @param index The slot.
+         * @param sensor The gyroscope (rad/s) or the accelerometer (m/s²).
+         * @param reading Receives the reading; zeroed when there is none.
+         * @return False for an empty slot or a pad without that sensor.
+         */
         [[nodiscard]] bool TryGetSensor(int index, GamepadSensor sensor,
                                         GamepadSensorReading& reading) override;
         /** @brief Gets the player indicator. @return -1: evdev has none. */
