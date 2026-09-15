@@ -1510,6 +1510,17 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Sdl2OnlyRendererGate.cmake)
     set_tests_properties(CnaSdl2OnlyRendererGate PROPERTIES LABELS "platform;configuration")
 
+    # plans/plan_wayland.md WAYLAND-0023: the Wayland selection is offered where it can be built,
+    # refuses loudly (naming the package) where it cannot, and changed no default. Runs everywhere,
+    # including where Wayland is absent: the refusal is what it checks.
+    add_test(NAME CnaWaylandPlatformSelection
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaWaylandPlatformSelection
+            "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/WaylandPlatformSelection.cmake)
+    set_tests_properties(CnaWaylandPlatformSelection PROPERTIES LABELS "platform;configuration" TIMEOUT 300)
+
     add_test(NAME CnaSdlOffFindsNoSdlPackage
         COMMAND ${CMAKE_COMMAND}
             -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}

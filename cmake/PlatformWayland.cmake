@@ -143,7 +143,6 @@ wayland-devel)" PARENT_SCOPE)
         "xdg-decoration-unstable-v1|unstable/xdg-decoration/xdg-decoration-unstable-v1.xml|XDG_DECORATION"
         "xdg-activation-v1|staging/xdg-activation/xdg-activation-v1.xml|XDG_ACTIVATION"
         "idle-inhibit-unstable-v1|unstable/idle-inhibit/idle-inhibit-unstable-v1.xml|IDLE_INHIBIT"
-        "presentation-time|stable/presentation-time/presentation-time.xml|PRESENTATION_TIME"
         "xdg-foreign-unstable-v2|unstable/xdg-foreign/xdg-foreign-unstable-v2.xml|XDG_FOREIGN")
     foreach(_entry IN LISTS _optional)
         string(REPLACE "|" ";" _parts "${_entry}")

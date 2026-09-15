@@ -43,9 +43,6 @@
 #if defined(CNA_WAYLAND_HAVE_IDLE_INHIBIT)
 #include "idle-inhibit-unstable-v1-client-protocol.h"
 #endif
-#if defined(CNA_WAYLAND_HAVE_PRESENTATION_TIME)
-#include "presentation-time-client-protocol.h"
-#endif
 #if defined(CNA_WAYLAND_HAVE_XDG_FOREIGN)
 #include "xdg-foreign-unstable-v2-client-protocol.h"
 #endif

@@ -79,10 +79,6 @@ namespace CNA::Platform::Wayland {
         /** @brief `zwp_idle_inhibit_manager_v1`. */
         zwp_idle_inhibit_manager_v1* idleInhibitManager = nullptr;
 #endif
-#if defined(CNA_WAYLAND_HAVE_PRESENTATION_TIME)
-        /** @brief `wp_presentation`. */
-        wp_presentation* presentation = nullptr;
-#endif
 #if defined(CNA_WAYLAND_HAVE_XDG_FOREIGN)
         /** @brief `zxdg_exporter_v2`: a window handle another process can name. */
         zxdg_exporter_v2* exporter = nullptr;

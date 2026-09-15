@@ -85,10 +85,10 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1058** |
-| Files referencing SDL (all) | **342** |
+| Files referencing SDL (all) | **343** |
 | Production files (`src/` + `include/`) referencing SDL | **59** |
 | …of which are renderer production files | **16** |
-| Test/example files referencing SDL | **283** |
+| Test/example files referencing SDL | **284** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 

@@ -57,7 +57,7 @@ Found through `pkg-config`; no distribution path is written anywhere
 | `xkbcommon` ≥ 0.5 | **mandatory**, linked | the backend is not offered |
 | `wayland-scanner` | **mandatory**, build time | the backend is not offered |
 | `wayland-protocols` with `stable/xdg-shell` | **mandatory**, build time | the backend is not offered |
-| each optional protocol XML (`xdg-output`, `viewporter`, `fractional-scale-v1`, `relative-pointer`, `pointer-constraints`, `text-input-v3`, `primary-selection`, `xdg-decoration`, `xdg-activation`, `idle-inhibit`, `presentation-time`, `xdg-foreign-v2`, `cursor-shape-v1` with `tablet-v2`) | optional, build time | exactly that protocol's capability (`CNA_WAYLAND_HAVE_<PROTOCOL>`) |
+| each optional protocol XML (`xdg-output`, `viewporter`, `fractional-scale-v1`, `relative-pointer`, `pointer-constraints`, `text-input-v3`, `primary-selection`, `xdg-decoration`, `xdg-activation`, `idle-inhibit`, `xdg-foreign-v2`, `cursor-shape-v1` with `tablet-v2`) | optional, build time | exactly that protocol's capability (`CNA_WAYLAND_HAVE_<PROTOCOL>`) |
 | EGL + `wayland-egl` **headers** | optional; `libEGL.so.1` and `libwayland-egl.so.1` are loaded at run time | `openGlContext` |
 | `wayland-cursor` **headers** | optional; `libwayland-cursor.so.0` loaded at run time | the cursor-theme fallback (cursor-shape still works) |
 | Vulkan **headers** | optional; the loader is the caller's | `vulkanSurface` |

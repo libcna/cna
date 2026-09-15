@@ -157,6 +157,19 @@ endif()
 if(NOT CNA_PLATFORM STREQUAL "X11")
     list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/X11.*\\.cpp$")
 endif()
+# plans/plan_wayland.md WAYLAND-0110/0128: the same for the native Wayland suites and the test
+# compositor -- their headers are wayland-client's, which a WIN32 mingw cross-build has nothing to
+# find either.
+if(NOT CNA_PLATFORM STREQUAL "WAYLAND")
+    list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/Wayland[A-Za-z]*\\.(cpp|hpp)$")
+endif()
+# plans/plan_wayland.md Phase B: the suites of the code the two native Unix backends share
+# (src/Xkb/, src/Freedesktop/, src/Posix/, src/Linux/) are compiled only for those selections --
+# the code itself is in cna_platform only there. They carried an X11 prefix until Phase B renamed
+# them, which is when they started falling through the X11 filter above.
+if(NOT CNA_PLATFORM STREQUAL "X11" AND NOT CNA_PLATFORM STREQUAL "WAYLAND")
+    list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/(Xkb|Freedesktop|Posix|Linux)[A-Za-z]*\\.cpp$")
+endif()
 if(WIN32)
     list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/Terminal.*\\.cpp$")
 endif()

@@ -304,13 +304,6 @@ namespace CNA::Platform::Wayland {
                           });
         }
 #endif
-#if defined(CNA_WAYLAND_HAVE_PRESENTATION_TIME)
-        else if (which == wp_presentation_interface.name)
-        {
-            bindSingleton(wp_presentation_interface, 1, reinterpret_cast<void**>(&globals_.presentation),
-                          [](void* proxy) { wp_presentation_destroy(static_cast<wp_presentation*>(proxy)); });
-        }
-#endif
 #if defined(CNA_WAYLAND_HAVE_XDG_FOREIGN)
         else if (which == zxdg_exporter_v2_interface.name)
         {

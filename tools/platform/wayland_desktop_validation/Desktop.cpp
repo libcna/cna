@@ -81,9 +81,6 @@ namespace CnaWaylandValidation {
 #if defined(CNA_WAYLAND_HAVE_IDLE_INHIBIT)
               << ", idle-inhibit " << Flag(globals.idleInhibitManager != nullptr)
 #endif
-#if defined(CNA_WAYLAND_HAVE_PRESENTATION_TIME)
-              << ", presentation-time " << Flag(globals.presentation != nullptr)
-#endif
 #if defined(CNA_WAYLAND_HAVE_XDG_FOREIGN)
               << ", xdg-foreign " << Flag(globals.exporter != nullptr)
 #endif
