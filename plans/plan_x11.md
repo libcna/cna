@@ -798,7 +798,7 @@ No real microphone was opened: every session in the suites opens ALSA's `null` d
 |---|---|
 | `X11EvdevLayout.*`, `X11EvdevHub.*` | 29 passed, the 4 new motion tests among them |
 | `X11EvdevVirtualDevice.*` here | 13 passed, the motion test skipped by design (no virtual accelerometer on this machine) |
-| `X11EvdevVirtualDevice.AMotionSensorNodeIsPairedWithItsPad` on CI | run 34986260548: `CnaX11EvdevTests` "passed" in 0.90 s -- 14 cases that take 20 s here, so what ran cannot be told from a green tick: ctest counts a suite whose every case skipped as passed. **Not evidence.** The motion test now fails rather than skips where it is opted in, and the SDL-free X11 cell runs the evdev and touchscreen suites once more with their output kept, failing on any skip; the result is recorded from that log |
+| `X11EvdevVirtualDevice.AMotionSensorNodeIsPairedWithItsPad` on CI | **passed, 105 ms**, run 34990604395 (`9d3bc09b0`), in the step that re-runs the uinput suites with their output in the log and fails on a skip: all 14 evdev cases ran (35-105 ms each) and all 9 touchscreen cases. The earlier run 34986260548 showed only a ctest entry passing in 0.90 s, which could not tell a run from a skip; the per-case times now in the log show that a real run is that fast there -- the runner's udev grants a new node at once, where this desktop's takes up to 2.5 s |
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`), `CnaPlatformModuleTests`: every evdev suite | 66 passed, no report |
 
