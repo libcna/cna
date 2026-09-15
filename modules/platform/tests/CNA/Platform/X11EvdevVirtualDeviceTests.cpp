@@ -350,6 +350,12 @@ VirtualDevice::Spec PadSpec(const char* role)
         GTEST_SKIP() << variable##Why;                                                             \
     }
 
+// For a test the machine was asked to run: a device it cannot create is a failure, not a skip.
+#define CREATE_OR_FAIL(variable, spec)                                                             \
+    std::string variable##Why;                                                                     \
+    std::unique_ptr<VirtualDevice> variable = VirtualDevice::Create((spec), variable##Why);        \
+    ASSERT_NE(variable, nullptr) << variable##Why
+
 bool PumpUntil(EvdevControllerHub& hub, const std::function<bool()>& done)
 {
     const auto deadline = std::chrono::steady_clock::now() + kTimeout;
@@ -909,7 +915,8 @@ TEST(X11EvdevVirtualDevice, AMotionSensorNodeIsPairedWithItsPad)
 {
     // Opt-in, and set only on CI's throwaway VM: an input accelerometer on a desktop is the
     // desktop's business too -- iio-sensor-proxy takes one for screen rotation -- so this suite
-    // never creates one on a machine someone uses.
+    // never creates one on a machine someone uses. Where it is opted in it must run: a device it
+    // cannot create fails the test rather than skipping it.
     const char* optIn = std::getenv("CNA_X11_TEST_MOTION_SENSOR");
     if (optIn == nullptr || std::string(optIn) != "1")
     {
@@ -923,7 +930,7 @@ TEST(X11EvdevVirtualDevice, AMotionSensorNodeIsPairedWithItsPad)
     VirtualDevice::Spec padSpec = PadSpec("motion pad");
     padSpec.product = 0x0005;
     padSpec.phys = phys;
-    CREATE_OR_SKIP(pad, padSpec);
+    CREATE_OR_FAIL(pad, padSpec);
     ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, padSpec.name) != nullptr; }));
 
     // hid-playstation's second node: the same physical path, an accelerometer's and a gyroscope's
@@ -936,7 +943,7 @@ TEST(X11EvdevVirtualDevice, AMotionSensorNodeIsPairedWithItsPad)
     sensorSpec.axes = {{ABS_X, -32768, 32767, 8192},       {ABS_Y, -32768, 32767, 8192},
                        {ABS_Z, -32768, 32767, 8192},       {ABS_RX, -2097152, 2097151, 1024},
                        {ABS_RY, -2097152, 2097151, 1024}, {ABS_RZ, -2097152, 2097151, 1024}};
-    CREATE_OR_SKIP(sensor, sensorSpec);
+    CREATE_OR_FAIL(sensor, sensorSpec);
     ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, padSpec.name)->sensor != nullptr; }))
         << "the sensor node was never given to its pad";
     EXPECT_EQ(FindByName(hub, sensorSpec.name), nullptr) << "a sensor is not a controller of its own";

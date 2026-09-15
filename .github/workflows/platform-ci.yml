@@ -421,6 +421,7 @@ jobs:
             echo 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0666"' \
               | sudo tee /etc/udev/rules.d/99-cna-ci-input.rules
             sudo udevadm control --reload-rules
+            echo "CNA_CI_HAS_UINPUT=1" >> "$GITHUB_ENV"
           else
             echo "::warning::no uinput on this runner; the evdev and touchscreen suites will skip"
           fi
@@ -487,6 +488,31 @@ jobs:
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'
           ./build/CnaContentTests --gtest_filter='*Wav*:*SoundEffect*'
+
+      # plans/plan_x11.md X11-0166: ctest counts a suite whose every case skipped as passed, and
+      # the uinput suites skip wherever the machine lacks what they need. On this runner nothing
+      # is lacking, so they run once more with their output kept, and any skip fails the job --
+      # what they prove on CI is then read in the log, not inferred from a green tick.
+      - name: The uinput suites ran rather than skipped
+        if: env.CNA_CI_HAS_UINPUT == '1'
+        env:
+          CNA_X11_TEST_MOTION_SENSOR: "1"
+          CNA_X11_TEST_TOUCHSCREEN: "1"
+          CNA_AUDIO_RECORDING_DEVICE: "null"
+        run: |
+          set -euo pipefail
+          for filter in 'X11EvdevVirtualDevice.*' 'X11Touchscreen.*'; do
+            status=0
+            output="$(./build/CnaPlatformModuleTests --gtest_filter="$filter" 2>&1)" || status=$?
+            printf '%s\n' "$output"
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+            if grep -q '^\[  SKIPPED \]' <<<"$output"; then
+              echo "::error::$filter skipped on a runner that has uinput; the reasons are above" >&2
+              exit 1
+            fi
+          done
 
       - name: Run SDL containment gates
         run: |
