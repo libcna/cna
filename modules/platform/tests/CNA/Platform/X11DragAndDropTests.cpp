@@ -3,8 +3,8 @@
 // plans/plan_x11.md X11-0154: files and text dropped on a CNA window by another client, through
 // XDND.
 //
-// Two halves. The parsing -- which type a drop is read as, what a text/uri-list names -- needs no
-// server. The protocol runs against the launcher's private Xvfb with a real drag source: this
+// The parsing -- which type a drop is read as, what a text/uri-list names -- is shared with the
+// Wayland drop target and tested in FreedesktopDropParsingTests.cpp. The protocol runs against the launcher's private Xvfb with a real drag source: this
 // binary started again as a separate process (X11DragSource below), a different X client
 // speaking XDND from the outside, exactly as a file manager would. No window manager is needed:
 // XDND is between the two clients.
@@ -41,114 +41,10 @@ extern char** environ;
 namespace {
 
 using namespace CNA::Platform;
-using CNA::Platform::X11::ChooseDropTarget;
-using CNA::Platform::X11::FileUriToPath;
-using CNA::Platform::X11::ParseUriList;
-using CNA::Platform::X11::X11DropEncoding;
 using CNA::Platform::X11::kCurrentTime;
 using CNA::Platform::X11::kNone;
 using CNA::Platform::X11::kXFalse;
 
-// --- which type a drop is read as ---------------------------------------------------------------------
-
-TEST(X11DropTarget, FilesWinOverTheirNamesAsText)
-{
-    // A file manager offers both; the game wants the files.
-    const auto choice = ChooseDropTarget({"text/plain", "UTF8_STRING", "text/uri-list"});
-    ASSERT_TRUE(choice.has_value());
-    EXPECT_EQ(choice->index, 2u);
-    EXPECT_EQ(choice->encoding, X11DropEncoding::UriList);
-}
-
-TEST(X11DropTarget, Utf8TextWinsOverUnspecifiedText)
-{
-    const auto choice = ChooseDropTarget({"text/plain", "TEXT", "text/plain;charset=utf-8"});
-    ASSERT_TRUE(choice.has_value());
-    EXPECT_EQ(choice->index, 2u);
-    EXPECT_EQ(choice->encoding, X11DropEncoding::Utf8);
-
-    // The charset is case-insensitive, as MIME parameters are.
-    EXPECT_EQ(ChooseDropTarget({"STRING", "text/plain;charset=UTF-8"})->index, 1u);
-}
-
-TEST(X11DropTarget, AmongEquallyGoodTypesTheSourcesOrderDecides)
-{
-    EXPECT_EQ(ChooseDropTarget({"UTF8_STRING", "text/plain;charset=utf-8"})->index, 0u);
-    EXPECT_EQ(ChooseDropTarget({"text/plain;charset=utf-8", "UTF8_STRING"})->index, 0u);
-}
-
-TEST(X11DropTarget, StringIsLatin1AndTheLastResort)
-{
-    const auto choice = ChooseDropTarget({"image/png", "STRING"});
-    ASSERT_TRUE(choice.has_value());
-    EXPECT_EQ(choice->index, 1u);
-    EXPECT_EQ(choice->encoding, X11DropEncoding::Latin1);
-}
-
-TEST(X11DropTarget, NothingTheWindowCanTakeIsNoChoice)
-{
-    EXPECT_FALSE(ChooseDropTarget({"image/png", "text/html", "application/x-kde-cutselection"}));
-    EXPECT_FALSE(ChooseDropTarget({}));
-    // An atom the backend could not name arrives as an empty string and is never chosen.
-    EXPECT_FALSE(ChooseDropTarget({""}));
-}
-
-// --- what a text/uri-list names ----------------------------------------------------------------------
-
-TEST(X11UriList, FileUrisOfEveryLocalSpellingBecomePaths)
-{
-    EXPECT_EQ(FileUriToPath("file:///home/player/save.dat", "arcade"), "/home/player/save.dat");
-    EXPECT_EQ(FileUriToPath("file://localhost/tmp/a", "arcade"), "/tmp/a");
-    EXPECT_EQ(FileUriToPath("file://arcade/tmp/a", "arcade"), "/tmp/a");
-    EXPECT_EQ(FileUriToPath("FILE:///tmp/a", "arcade"), "/tmp/a");
-    // The older single-slash form some file managers still send.
-    EXPECT_EQ(FileUriToPath("file:/tmp/a", "arcade"), "/tmp/a");
-}
-
-TEST(X11UriList, EscapesAreDecodedToTheBytesOfTheName)
-{
-    EXPECT_EQ(FileUriToPath("file:///tmp/a%20b.txt", ""), "/tmp/a b.txt");
-    // UTF-8 bytes, percent-encoded: Úroveň.
-    EXPECT_EQ(FileUriToPath("file:///tmp/%C3%9Arove%C5%88", ""), "/tmp/\xC3\x9Arove\xC5\x88");
-    EXPECT_EQ(FileUriToPath("file:///tmp/100%25", ""), "/tmp/100%");
-}
-
-TEST(X11UriList, WhatIsNotALocalFileIsNotAPath)
-{
-    EXPECT_FALSE(FileUriToPath("file://otherhost/tmp/a", "arcade"));
-    EXPECT_FALSE(FileUriToPath("https://example.org/", "arcade"));
-    EXPECT_FALSE(FileUriToPath("file:relative", "arcade"));
-    EXPECT_FALSE(FileUriToPath("file://", "arcade"));
-    // A malformed escape, a truncated one, and a NUL no path can hold.
-    EXPECT_FALSE(FileUriToPath("file:///tmp/%zz", ""));
-    EXPECT_FALSE(FileUriToPath("file:///tmp/%2", ""));
-    EXPECT_FALSE(FileUriToPath("file:///tmp/a%00b", ""));
-}
-
-TEST(X11UriList, AListIsSplitOnLinesWithCommentsSkippedAndLinksKeptAsText)
-{
-    const auto items = ParseUriList("# dragged from a file manager\r\n"
-                                    "file:///tmp/one.png\r\n"
-                                    "https://example.org/page\r\n"
-                                    "\r\n"
-                                    "file:///tmp/two%20words.png",
-                                    "arcade");
-    ASSERT_EQ(items.size(), 3u);
-    EXPECT_TRUE(items[0].file);
-    EXPECT_EQ(items[0].value, "/tmp/one.png");
-    EXPECT_FALSE(items[1].file) << "a link is text, not a file -- and not nothing";
-    EXPECT_EQ(items[1].value, "https://example.org/page");
-    EXPECT_TRUE(items[2].file);
-    EXPECT_EQ(items[2].value, "/tmp/two words.png");
-}
-
-TEST(X11UriList, BareNewlinesAndATrailingNulAreTolerated)
-{
-    const std::string list("file:///a\nfile:///b\n\0", 22);
-    const auto items = ParseUriList(list, "");
-    ASSERT_EQ(items.size(), 2u);
-    EXPECT_EQ(items[1].value, "/b");
-}
 
 // --- the protocol, against a real drag source ---------------------------------------------------------
 
