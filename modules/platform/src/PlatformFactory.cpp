@@ -18,6 +18,9 @@
 #if defined(CNA_PLATFORM_X11)
 #  include "X11/X11Platform.hpp"
 #endif
+#if defined(CNA_PLATFORM_WAYLAND)
+#  include "Wayland/WaylandPlatform.hpp"
+#endif
 
 // Compiled on every POSIX target regardless of the selection -- see the module's CMakeLists for
 // why, and _WIN32 for why not there.
@@ -41,6 +44,8 @@ namespace CNA::Platform {
         const std::string kDefaultName = "SDL2";
 #elif defined(CNA_PLATFORM_X11)
         const std::string kDefaultName = "X11";
+#elif defined(CNA_PLATFORM_WAYLAND)
+        const std::string kDefaultName = "Wayland";
 #else
         const std::string kDefaultName = "SDL3";
 #endif
@@ -76,6 +81,12 @@ namespace CNA::Platform {
         if (name == "X11")
         {
             return std::make_unique<X11::X11Platform>();
+        }
+#endif
+#if defined(CNA_PLATFORM_WAYLAND)
+        if (name == "Wayland")
+        {
+            return std::make_unique<Wayland::WaylandPlatform>();
         }
 #endif
 
@@ -126,6 +137,9 @@ namespace CNA::Platform {
 #endif
 #if defined(CNA_PLATFORM_X11)
         available.emplace_back("X11");
+#endif
+#if defined(CNA_PLATFORM_WAYLAND)
+        available.emplace_back("Wayland");
 #endif
         available.emplace_back("Headless");
 #if !defined(_WIN32)

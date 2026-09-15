@@ -229,45 +229,45 @@ the evidence (WAYLAND-0123).
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0020 | `cmake/PlatformWayland.cmake` discovery and `CNA_PLATFORM=WAYLAND` | ⬜ | pkg-config `wayland-client`, `xkbcommon`, `wayland-scanner`, `wayland-protocols`; optional headers (EGL, wayland-egl, wayland-cursor, Vulkan, D-Bus). An explicit selection without the mandatory set fails configure with the reason and the packages; the default stays SDL3. |
-| WAYLAND-0021 | Protocol code generation | ⬜ | `wayland-scanner` client-header + private-code per protocol into the build tree; server-header for the test compositor; `CNA_WAYLAND_HAVE_<PROTOCOL>` per optional XML. |
-| WAYLAND-0022 | Factory registration and conformance enrolment | ⬜ | `"Wayland"` in `PlatformFactory`; conformance suite runs it. |
+| WAYLAND-0020 | `cmake/PlatformWayland.cmake` discovery and `CNA_PLATFORM=WAYLAND` | ✅ | pkg-config `wayland-client`, `xkbcommon`, `wayland-scanner`, `wayland-protocols`; optional headers (EGL, wayland-egl, wayland-cursor, Vulkan, D-Bus). An explicit selection without the mandatory set fails configure with the reason and the packages; the default stays SDL3. Implemented: `cna_detect_wayland()` finds every piece through pkg-config (no distro path), `CNA_PLATFORM=WAYLAND` with a missing mandatory piece fails configure naming the package; the default selection is unchanged. `cmake-build-wayland` (Ninja, `-DCNA_PLATFORM=WAYLAND -DCNA_ENABLE_SDL=OFF`, renderers HEADLESS;OPENGL33;VULKAN;SOFTWARE) configures with wayland-client 1.23.1, xkbcommon 1.7.0, wayland-protocols 1.44 and every optional piece present, and builds all 1895 steps. |
+| WAYLAND-0021 | Protocol code generation | ✅ | `wayland-scanner` client-header + private-code per protocol into the build tree; server-header for the test compositor; `CNA_WAYLAND_HAVE_<PROTOCOL>` per optional XML. `cna_wayland_generate_protocols()`: client header, server header and `private-code` per protocol into `<build>/generated/wayland-protocols`; tablet-v2 is generated with cursor-shape-v1, whose tables name it. Nothing generated is committed. |
+| WAYLAND-0022 | Factory registration and conformance enrolment | 🟨 | `"Wayland"` in `PlatformFactory`; conformance suite runs it. `"Wayland"` in `PlatformFactory` (default name when `CNA_PLATFORM=WAYLAND`); the conformance suite instantiates it and, with no compositor in the unit-test environment, skips the window cases. Open: the conformance suite against a private compositor (WAYLAND-0112). |
 | WAYLAND-0023 | Configuration tests | ⬜ | ctest script: `CNA_PLATFORM=WAYLAND` with `PKG_CONFIG_LIBDIR` pointed at nothing fails with the diagnostic; a default configure does not select Wayland. |
 
 ### Phase D — connection, windows, lifecycle
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0030 | Connection and registry | ⬜ | Versioned binds (`min(advertised, supported)`), `global_remove` for every bound global, protocol and display errors reported with interface, object id and code. |
-| WAYLAND-0031 | Non-blocking event pump | ⬜ | D-5; a test holds the compositor silent and shows `PollEvents` returns in under a millisecond. |
-| WAYLAND-0032 | `xdg_wm_base.ping` | ⬜ | Answered from the pump; test with the in-process compositor. |
-| WAYLAND-0033 | Window and configure state machine | ⬜ | D-7; tests: configure before buffer, several configures before a commit, 0×0 configure, destroy while a configure is pending. |
-| WAYLAND-0034 | Window operations | ⬜ | Title, app id, `SetSize` (D-9), min/max size, resizable, `Show`/`Hide` (D-8), maximize, minimize (D-12), restore, fullscreen (D-11), close request, `Sync`, focus, `Exposed`. |
-| WAYLAND-0035 | Multiple windows and lifetime | ⬜ | 1, 2, 4 windows; rapid create/destroy; closing secondary and primary; no listener outlives its object (ASan). |
-| WAYLAND-0036 | Native handle | ⬜ | `{Wayland, wl_display*, wl_surface*}`, `TryGetWayland` succeeds. |
-| WAYLAND-0037 | `AdoptWindow` / `AdoptWindowHandle` | ⬜ | Borrowed wrappers for own windows; a foreign token refused. |
+| WAYLAND-0030 | Connection and registry | ✅ | Versioned binds (`min(advertised, supported)`), `global_remove` for every bound global, protocol and display errors reported with interface, object id and code. `WaylandConnection`: binds at `NegotiateVersion(advertised, handled, headers)`; `global_remove` destroys a withdrawn singleton and nulls its field; the first protocol/display error is kept with interface, object id and code. Protocol tests `ConnectsBindsAndReportsWhatTheCompositorOffers`, `AnOldCompositorIsBoundAtItsOwnVersions`, `AWithdrawnSingletonIsNoLongerUsed`, `ACompositorThatGoesAwayEndsTheApplicationOnceAndSafely`. |
+| WAYLAND-0031 | Non-blocking event pump | 🟨 | D-5; a test holds the compositor silent and shows `PollEvents` returns in under a millisecond. `Pump` = `DispatchFor(0)`: prepare_read / poll(0) / read_events / dispatch_pending, flush with EAGAIN kept for later. Open: the timing test with a silent compositor. |
+| WAYLAND-0032 | `xdg_wm_base.ping` | ✅ | Answered from the pump; test with the in-process compositor. Answered inside the dispatch; `APingIsAnsweredFromTheOrdinaryPump`. |
+| WAYLAND-0033 | Window and configure state machine | ✅ | D-7; tests: configure before buffer, several configures before a commit, 0×0 configure, destroy while a configure is pending. D-7 as designed; the in-process compositor posts `unconfigured_buffer`, `invalid_serial`, `invalid_size` and Mutter-style `invalid_surface_state` for a constrained geometry mismatch, and none is raised by any test. `AShownWindowIsConfiguredAcknowledgedAndDescribed`, `AHiddenWindowHasNoRoleUntilShown`, `ACompositorResizeReachesTheApplicationAndTheNextBuffer`, `AFloatingSizeRespectsTheApplicationsLimits`, `StateChangesAfterTheLastWindowAreHarmless`. |
+| WAYLAND-0034 | Window operations | 🟨 | Title, app id, `SetSize` (D-9), min/max size, resizable, `Show`/`Hide` (D-8), maximize, minimize (D-12), restore, fullscreen (D-11), close request, `Sync`, focus, `Exposed`. Maximize/restore, fullscreen (never exclusive, D-11), close, Show/Hide, focus tested (`MaximizeTakesExactly…`, `FullscreenIsBorderless…`, `ACompositorThatIgnoresStateRequests…`, `CloseAsksTheApplication…`). Open: tests for `SetSize`, resizable, borderless and minimize. |
+| WAYLAND-0035 | Multiple windows and lifetime | 🟨 | 1, 2, 4 windows; rapid create/destroy; closing secondary and primary; no listener outlives its object (ASan). Two windows, secondary close without quit, five create/present/destroy rounds leaving no surface, toplevel or subsurface behind (`DestroyingWindowsLeavesNothingBehind`). Open: ASan run (WAYLAND-0116). |
+| WAYLAND-0036 | Native handle | 🟨 | `{Wayland, wl_display*, wl_surface*}`, `TryGetWayland` succeeds. Implemented (`{Wayland, wl_display*, wl_surface*}`). Open: test. |
+| WAYLAND-0037 | `AdoptWindow` / `AdoptWindowHandle` | 🟨 | Borrowed wrappers for own windows; a foreign token refused. Implemented (borrowed wrappers; a foreign token refused). Open: test. |
 
 ### Phase E — outputs and scaling
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0040 | Outputs and `IPlatformDisplays` | ⬜ | `wl_output` v4 + `zxdg_output_v1`; name, description, logical geometry, mode, transform, scale; hot add/remove. |
-| WAYLAND-0041 | Window ↔ output tracking | ⬜ | `wl_surface.enter/leave`; `DisplayChanged`; `GetDisplayName`. |
-| WAYLAND-0042 | Fractional and integer scaling | ⬜ | D-13; 1.25 on the real desktop; transitions between outputs; `Resized`/`PixelSizeChanged`/`DisplayScaleChanged`. |
+| WAYLAND-0040 | Outputs and `IPlatformDisplays` | ✅ | `wl_output` v4 + `zxdg_output_v1`; name, description, logical geometry, mode, transform, scale; hot add/remove. `WaylandOutput` (wl_output v4 + zxdg_output_v1, atomic on `done`), `WaylandDisplays`; `OutputsComeAndGoWhileRunning` (hot add with a 125 % logical size, hot remove while a window is on it), `AnOutputsScaleChangeIsSeenAtOnce`. |
+| WAYLAND-0041 | Window ↔ output tracking | ✅ | `wl_surface.enter/leave`; `DisplayChanged`; `GetDisplayName`. `wl_surface.enter/leave`; `TheOutputsAWindowIsOnDecideItsIntegerScaleOnOldCompositors` (display name, scale per output), removal forgets the output. |
+| WAYLAND-0042 | Fractional and integer scaling | 🟨 | D-13; 1.25 on the real desktop; transitions between outputs; `Resized`/`PixelSizeChanged`/`DisplayScaleChanged`. D-13: viewport for every scale where there is one, `set_buffer_scale` only without. `AFractionalScaleResizesTheBufferNotTheWindow` (1.25: 800×600 logical, 1000×750 buffer, buffer scale 1, viewport 800×600), `AnApplicationThatIsNotHighDpi…`, `WithoutAViewporterAnIntegerScaleIsTheBufferScale` (odd logical size, even buffer). Open: 1.25 on the real desktop (WAYLAND-0120). |
 
 ### Phase F — input
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0050 | Seats | ⬜ | Capabilities gained and lost at run time; several seats; a seat's removal. |
-| WAYLAND-0051 | Keyboard | ⬜ | D-14; keymap fd mapped read-only; layouts, AltGr, Caps/Num Lock, sided modifiers; `IPlatformKeyboard` name queries. |
-| WAYLAND-0052 | Key repeat | ⬜ | From `repeat_info`; rate 0 disables; only keys the keymap marks repeating. |
-| WAYLAND-0053 | Committed text and compose | ⬜ | D-15; dead keys, compose sequences, Czech. |
-| WAYLAND-0054 | IME (`text-input-v3`) | ⬜ | D-16; tested with ibus in the headless gnome-shell. |
-| WAYLAND-0055 | Pointer | ⬜ | Buttons (left, middle, right, X1, X2), motion, wheel (D-17), frames, double click. |
-| WAYLAND-0056 | Relative pointer and constraints | ⬜ | D-18; lock/unlock stress, focus loss, window close. |
-| WAYLAND-0057 | Cursors | ⬜ | D-20. |
-| WAYLAND-0058 | Touch | ⬜ | `wl_touch` down/up/motion/frame/cancel, stable ids, normalised coordinates. |
+| WAYLAND-0050 | Seats | 🟨 | Capabilities gained and lost at run time; several seats; a seat's removal. Seats announced at startup and later; a seat without devices; `WithoutASeatThereIsNoClipboardAndNoInputDevices`. Open: capability loss at run time and several seats under test. |
+| WAYLAND-0051 | Keyboard | ✅ | D-14; keymap fd mapped read-only; layouts, AltGr, Caps/Num Lock, sided modifiers; `IPlatformKeyboard` name queries. D-14. `FocusAndKeysArriveWithScancodesKeyCodesAndText`, `KeysHeldAtEnterAreStateNotEvents…`, `TheCzechLayoutTypesCzechAndKeepsGameKeysWhereTheyAre`, `ANewKeymapTakesEffectForTheNextKey`, mapping suite `WaylandModifierMapping`. Defect found and fixed here: xkbcommon before 1.8 never reports a virtual modifier active, so AltGr (`LevelThree`) never became `Mode`; Mod5 is now asked as well. |
+| WAYLAND-0052 | Key repeat | ✅ | From `repeat_info`; rate 0 disables; only keys the keymap marks repeating. `AutoRepeatFollowsTheCompositorsRateAndStopsOnRelease` (rate 50, delay 100 ms), `ARepeatRateOfZeroMeansNoRepeat`. |
+| WAYLAND-0053 | Committed text and compose | 🟨 | D-15; dead keys, compose sequences, Czech. Committed text through xkbcommon and the compose table of the environment's locale; tested for plain and Czech text. Open: dead-key/compose test. |
+| WAYLAND-0054 | IME (`text-input-v3`) | 🟨 | D-16; tested with ibus in the headless gnome-shell. text-input-v3 per seat, done applies commit then preedit, preedit cursor bytes→characters; `AnInputMethodComposesAndCommitsThroughTextInputV3` on the in-process compositor. Open: ibus under headless gnome-shell. |
+| WAYLAND-0055 | Pointer | ✅ | Buttons (left, middle, right, X1, X2), motion, wheel (D-17), frames, double click. `PointerMotionButtonsAndDoubleClicks`, `WheelNotchesHighResolutionSlicesAndTouchpadScrollAllCount` (value120 halves, touchpad 5 units = half a notch), `OldSeatsSendDiscreteStepsInstead`, mapping suites `WaylandButtonMapping`, `WaylandWheelMapping`. |
+| WAYLAND-0056 | Relative pointer and constraints | ✅ | D-18; lock/unlock stress, focus loss, window close. D-18: persistent lock, unaccelerated motion with fractions carried, lock destroyed before its surface. `RelativeModeLocks…`, `DestroyingALockedWindowReleasesTheLockFirst`, `SetPositionWhileLockedBecomesTheUnlockHint`, `TheGlobalPointerIsRefusedByName`. |
+| WAYLAND-0057 | Cursors | 🟨 | D-20. cursor-shape-v1 with the enter serial, hidden = `set_cursor(NULL)`, custom ARGB surface with hot spot (`SystemCursorsGoThroughCursorShape…`, `ACustomCursorIsASurfaceWithItsHotSpot`). Defect found and fixed: the libwayland-cursor theme's buffers were destroyed after the connection closed (crash at exit on compositors without cursor-shape); the mouse now releases them in `OnDisconnecting`. Open: theme fallback under test. |
+| WAYLAND-0058 | Touch | ✅ | `wl_touch` down/up/motion/frame/cancel, stable ids, normalised coordinates. `TouchesAreNormalisedAndCancelled`. |
 | WAYLAND-0059 | Tablets | ⬜ | Investigate `zwp_tablet_manager_v2` against the contract. |
 | WAYLAND-0060 | Input-device enumeration | ⬜ | Seats' keyboards/pointers/touch plus evdev controllers. |
 
@@ -275,29 +275,29 @@ the evidence (WAYLAND-0123).
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0070 | Clipboard | ⬜ | D-21; to and from an external client; UTF-8; ≥ 512 KiB and multi-megabyte; source cancelled; offer replaced. |
-| WAYLAND-0071 | Clipboard formats | ⬜ | `GetMimeTypes`/`GetData`/`SetData`. |
-| WAYLAND-0072 | Primary selection | ⬜ | Separate from the clipboard. |
-| WAYLAND-0073 | Drag and drop | ⬜ | Target side: files (`text/uri-list`) and text; enter/motion/leave/drop/finish. |
+| WAYLAND-0070 | Clipboard | 🟨 | D-21; to and from an external client; UTF-8; ≥ 512 KiB and multi-megabyte; source cancelled; offer replaced. D-21. `AnotherProgramsClipboardIsReadWhenFocused`, `ALargeClipboardArrivesWhole` (24 MiB), `OurClipboardIsServedToOtherProgramsWhileWeKeepRunning` (3 MiB served from the game loop), `APasteTargetThatGivesUpDoesNotHurtUs`, `LosingTheSelectionForgetsWhatWeOffered`. Defect found and fixed: a paste target that closed its pipe early raised SIGPIPE and would have killed the game; writes now block SIGPIPE for the call and consume it. Open: an external client on a real compositor. |
+| WAYLAND-0071 | Clipboard formats | ✅ | `GetMimeTypes`/`GetData`/`SetData`. `BinaryClipboardDataRoundTripsUnderItsOwnMimeType`; text aliases (`WaylandMimeTypes`). |
+| WAYLAND-0072 | Primary selection | ✅ | Separate from the clipboard. `ThePrimarySelectionIsASeparateSelection`. |
+| WAYLAND-0073 | Drag and drop | ✅ | Target side: files (`text/uri-list`) and text; enter/motion/leave/drop/finish. Copy-only target; drop read outside the listener (no re-entrant dispatch). `DroppedFilesArriveAsLocalPathsAndTheDropIsFinished`, `ADragThatLeavesDropsNothing`. |
 
 ### Phase H — graphics
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0080 | EGL/OpenGL context | ⬜ | D-23; versions, profiles, debug, swap interval, resize, destroy. |
-| WAYLAND-0081 | Vulkan surface | ⬜ | D-24. |
-| WAYLAND-0082 | `wl_shm` presenter | ⬜ | D-25. |
-| WAYLAND-0083 | Frame callbacks | ⬜ | Pacing for the presenter and EGL vsync. |
+| WAYLAND-0080 | EGL/OpenGL context | 🟨 | D-23; versions, profiles, debug, swap interval, resize, destroy. EGL on the Wayland platform, loaded at run time; `cna_demo_2d` with `CNA_GRAPHICS_RENDERER=OPENGL33` runs on Weston (GL renderer) and on the real GNOME compositor: OpenGL 4.6 core, Mesa 25.0.7. Open: harness checks (versions, profiles, readback, resize, swap interval) and radeonsi confirmation (WAYLAND-0121). |
+| WAYLAND-0081 | Vulkan surface | 🟨 | D-24. `VK_KHR_wayland_surface` through the caller's loader; `cna_demo_2d` with `VULKAN` runs on Weston and on GNOME (AMD Radeon 780M, RADV PHOENIX). Open: swapchain/resize checks and validation layers (WAYLAND-0122). |
+| WAYLAND-0082 | `wl_shm` presenter | ✅ | D-25. XRGB8888 memfd buffers, ≤ 3 with release tracking, black bars, damage_buffer. `ThePresenterMapsTheWindowWithABufferOfItsPixelSize` (centre pixel checked), every scaling test; `cna_demo_2d` with `SOFTWARE` on Weston and GNOME. |
+| WAYLAND-0083 | Frame callbacks | 🟨 | Pacing for the presenter and EGL vsync. Frame pacer on a private queue with a 100 ms bound, used by the presenter and EGL. Open: pacing test with withheld callbacks. |
 | WAYLAND-0084 | `wp_presentation` | ⬜ | Investigate; optional. |
 
 ### Phase I — desktop integration and shared Linux services
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0090 | Decorations | ⬜ | D-22. |
-| WAYLAND-0091 | Desktop portal | ⬜ | File dialogs and OpenUrl, parent through `xdg-foreign`. |
-| WAYLAND-0092 | Idle inhibition | ⬜ | D-26. |
-| WAYLAND-0093 | `xdg-activation` | ⬜ | Investigate; a new window's focus request with the last input serial; the launcher's `XDG_ACTIVATION_TOKEN`. |
+| WAYLAND-0090 | Decorations | 🟨 | D-22. D-22: title bar and resize border of CNA's own where there is no `zxdg_decoration_manager_v1` (GNOME); geometry includes the bar (`AShownWindowIsConfigured…`: geometry y −32, height +32; fullscreen drops it). Open: interaction tests (buttons, drag, double click, menu, edges) and server-side decoration. |
+| WAYLAND-0091 | Desktop portal | 🟨 | File dialogs and OpenUrl, parent through `xdg-foreign`. Portal file dialogs parented through `xdg-foreign` ("wayland:<handle>"); none in tests (no session bus). Open: private-bus portal test. |
+| WAYLAND-0092 | Idle inhibition | ✅ | D-26. `zwp_idle_inhibitor_v1` per window while the screen saver is disabled, the session-bus inhibition without the protocol. `DisablingTheScreenSaverInhibitsIdleOnEveryWindow`. |
+| WAYLAND-0093 | `xdg-activation` | ✅ | Investigate; a new window's focus request with the last input serial; the launcher's `XDG_ACTIVATION_TOKEN`. Defect found: `RequestActivation` was never called. Now `Show()` asks: the launcher's `XDG_ACTIVATION_TOKEN` once (then unset), else a token for the latest input serial. `TheLaunchersActivationTokenIsSpentOnTheFirstWindowOnly`. |
 | WAYLAND-0094 | Message box | ⬜ | Decide: a window of CNA's own on `wl_shm`, or `messageBox = false`. |
 | WAYLAND-0095 | Gamepads, joysticks, haptics, power | ⬜ | The shared Linux services, same behaviour as X11. |
 | WAYLAND-0096 | Audio orthogonality | ⬜ | ALSA with a Wayland window; no audio code in `src/Wayland/`. |
@@ -306,7 +306,7 @@ the evidence (WAYLAND-0123).
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| WAYLAND-0100 | Truthful capability matrix | ⬜ | §3, each entry justified in `ComputeCapabilities` and tested. |
+| WAYLAND-0100 | Truthful capability matrix | 🟨 | §3, each entry justified in `ComputeCapabilities` and tested. `ComputeCapabilities` names what backs each flag; `EachMissingOptionalProtocolTurnsOffExactlyItsCapability`. Open: §3 matrix review against the final state. |
 
 ### Phase K — tests and environments
 

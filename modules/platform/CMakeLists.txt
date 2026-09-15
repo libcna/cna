@@ -43,6 +43,18 @@ if(CNA_PLATFORM STREQUAL "X11")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/X11/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
 endif()
+# The native Wayland backend (plans/plan_wayland.md), compiled only for its own selection for the
+# same reason as X11: libwayland-client and xkbcommon must not reach the link closure of a build
+# that did not ask for them. The protocol bindings are generated here by wayland-scanner from the
+# installed wayland-protocols (cmake/PlatformWayland.cmake, D-2) -- nothing generated is committed.
+if(CNA_PLATFORM STREQUAL "WAYLAND")
+    file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Wayland/*.cpp")
+    list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+    cna_wayland_generate_protocols(CNA_WAYLAND_PROTOCOL_SOURCES CNA_WAYLAND_PROTOCOL_DIR)
+    list(APPEND CNA_PLATFORM_SOURCES ${CNA_WAYLAND_PROTOCOL_SOURCES})
+    # For the test compositor, which includes the server-side headers generated beside these.
+    set_property(GLOBAL PROPERTY CNA_WAYLAND_PROTOCOL_DIR "${CNA_WAYLAND_PROTOCOL_DIR}")
+endif()
 
 # What the native Unix desktop backends -- X11 and Wayland -- share (plans/plan_wayland.md Phase
 # B). None of it is a window-system feature, so none of it lives under either backend:
@@ -162,6 +174,17 @@ if(CNA_PLATFORM STREQUAL "X11")
     endif()
     if(CNA_X11_DEFINITIONS)
         target_compile_definitions(cna_platform PRIVATE ${CNA_X11_DEFINITIONS})
+    endif()
+endif()
+# Every Wayland library is PRIVATE, as X11's are: `wl_display` and `wl_surface` reach no public
+# header -- the contract carries a Wayland window as two opaque pointers -- and libwayland-client
+# and xkbcommon are the whole link closure this backend adds (EGL, libwayland-egl,
+# libwayland-cursor, Vulkan and libdbus are opened at run time, D-1).
+if(CNA_PLATFORM STREQUAL "WAYLAND")
+    target_link_libraries(cna_platform PRIVATE ${CNA_WAYLAND_LIBRARIES})
+    target_include_directories(cna_platform PRIVATE ${CNA_WAYLAND_INCLUDE_DIRS} ${CNA_WAYLAND_PROTOCOL_DIR})
+    if(CNA_WAYLAND_DEFINITIONS)
+        target_compile_definitions(cna_platform PRIVATE ${CNA_WAYLAND_DEFINITIONS})
     endif()
 endif()
 if(CNA_PLATFORM STREQUAL "X11" OR CNA_PLATFORM STREQUAL "WAYLAND")

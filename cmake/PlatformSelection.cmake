@@ -13,7 +13,7 @@
 # =====================================================================================
 
 set(CNA_PLATFORM "SDL3" CACHE STRING
-        "Platform implementation (SDL3 | SDL2 | X11 | HEADLESS | TERMINAL | WIN32)")
+        "Platform implementation (SDL3 | SDL2 | X11 | WAYLAND | HEADLESS | TERMINAL | WIN32)")
 
 # Implemented today. Two of the five are host-conditional, for symmetrical reasons:
 #
@@ -51,6 +51,27 @@ if(CNA_PLATFORM STREQUAL "X11" AND NOT CNA_X11_AVAILABLE)
         "there is nothing to degrade to. Install the X development packages, or select one of "
         "${_cna_platforms_available}.\n"
         "See docs/platform-x11.md for the full dependency table.")
+endif()
+
+# WAYLAND is the native Wayland backend (plans/plan_wayland.md): a direct Wayland client, with no
+# SDL and no X11 library in it. Offered where the Wayland development environment exists, and --
+# like X11 -- refused with the packages to install when it is requested and absent, never replaced
+# by SDL3 or X11: a Wayland session can run either through Xwayland, but that is not what was
+# asked for.
+include("${CMAKE_CURRENT_LIST_DIR}/PlatformWayland.cmake")
+cna_detect_wayland()
+if(CNA_WAYLAND_AVAILABLE)
+    list(APPEND _cna_platforms_available WAYLAND)
+endif()
+
+if(CNA_PLATFORM STREQUAL "WAYLAND" AND NOT CNA_WAYLAND_AVAILABLE)
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=WAYLAND was requested but this machine cannot build it.\n"
+        "Reason: ${CNA_WAYLAND_UNAVAILABLE_REASON}\n"
+        "The Wayland backend is native -- it talks to the compositor directly and never falls "
+        "back to SDL3 or to X11 through Xwayland, so there is nothing to degrade to. Install the "
+        "Wayland development packages, or select one of ${_cna_platforms_available}.\n"
+        "See docs/platform-wayland.md for the full dependency table.")
 endif()
 
 # Reserved-but-unimplemented. These are recognised so that configuring with one fails
@@ -95,6 +116,13 @@ endif()
 message(STATUS "CNA: Using ${CNA_PLATFORM} platform implementation")
 if(CNA_PLATFORM STREQUAL "X11")
     message(STATUS "CNA: X11 platform dependencies -- ${CNA_X11_SUMMARY}")
+endif()
+if(CNA_PLATFORM STREQUAL "WAYLAND")
+    message(STATUS "CNA: Wayland platform dependencies -- ${CNA_WAYLAND_SUMMARY}")
+    # wayland-scanner writes the protocol bindings as C: a C++ translation unit would give the
+    # interface tables internal linkage (a namespace-scope `const`). Enabled here, at the top
+    # level, because the tables end up in every executable that links the platform.
+    enable_language(C)
 endif()
 
 # The compile definition an implementation's own sources and the entrypoint header key
