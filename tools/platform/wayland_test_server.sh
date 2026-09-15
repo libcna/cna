@@ -23,6 +23,7 @@
 #   XDG_RUNTIME_DIR                             the private runtime directory holding it
 #   CNA_WAYLAND_TEST_COMPOSITOR                 weston or mutter
 #   CNA_WAYLAND_TEST_SCALE                      the output scale asked for (weston)
+#   CNA_WAYLAND_TEST_LAYOUT                     the keyboard layout asked for, if any
 #   CNA_WAYLAND_TEST_BUS                        (mutter) the private session bus's address
 #   DBUS_SESSION_BUS_ADDRESS                    a path that does not exist: no session bus
 #
@@ -71,6 +72,10 @@ cleanup() {
         kill -9 "$pid" 2>/dev/null
         wait "$pid" 2>/dev/null
     done
+    # CNA_WAYLAND_TEST_KEEP_LOG=<file> keeps the compositor's log for a person debugging a run.
+    if [ -n "${CNA_WAYLAND_TEST_KEEP_LOG:-}" ] && [ -f "$PRIVATE/compositor.log" ]; then
+        cp "$PRIVATE/compositor.log" "$CNA_WAYLAND_TEST_KEEP_LOG"
+    fi
     rm -rf "$PRIVATE"
 }
 trap cleanup EXIT
@@ -165,8 +170,15 @@ EOF
         {
             echo "[org/gnome/desktop/interface]"
             echo "enable-animations=false"
+            # A virtual pointer that starts at, or is parked against, the top-left corner must
+            # not open the Activities overview, which takes the keyboard from every window.
+            echo "enable-hot-corners=false"
             echo "[org/gnome/desktop/session]"
             echo "idle-delay=uint32 0"
+            # A fresh profile gets the "Welcome to GNOME" tour dialog, which is modal: no window
+            # gets the keyboard, or a click, until it is dismissed.
+            echo "[org/gnome/shell]"
+            echo "welcome-dialog-last-shown-version='9999'"
             if [ -n "$LAYOUT" ]; then
                 SOURCES=""
                 OLDIFS="$IFS"
@@ -211,11 +223,34 @@ if [ ! -S "$PRIVATE/run/$SOCKET" ]; then
     exit 77
 fi
 if [ "$COMPOSITOR" = mutter ]; then
-    # The socket appears before the compositor has its monitor and its RemoteDesktop service.
+    # The socket appears long before the shell is ready: its startup ends by showing the
+    # Activities overview, which takes the keyboard from any window already shown. Ready is when
+    # the shell says it has started (its own log line, the only signal a headless shell gives).
     WAITED=0
-    while [ "$WAITED" -lt 100 ]; do
-        if DBUS_SESSION_BUS_ADDRESS="$BUS" gdbus introspect --session --dest org.gnome.Mutter.RemoteDesktop \
-            --object-path /org/gnome/Mutter/RemoteDesktop >/dev/null 2>&1; then
+    while [ "$WAITED" -lt 300 ]; do
+        if grep -q "GNOME Shell started" "$LOG" 2>/dev/null; then
+            break
+        fi
+        if ! kill -0 "$COMPOSITOR_PID" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+        WAITED=$((WAITED + 1))
+    done
+    if ! grep -q "GNOME Shell started" "$LOG" 2>/dev/null; then
+        echo "SKIP: gnome-shell did not finish starting; its log:" >&2
+        tail -20 "$LOG" >&2
+        exit 77
+    fi
+    # The shell starts in the Activities overview, where a new window is a thumbnail that gets
+    # neither the keyboard nor the pointer. Closed through the shell's own property, on the
+    # private bus -- deterministic, where pressing Escape races the startup.
+    DBUS_SESSION_BUS_ADDRESS="$BUS" gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.freedesktop.DBus.Properties.Set org.gnome.Shell OverviewActive "<false>" >/dev/null 2>&1
+    WAITED=0
+    while [ "$WAITED" -lt 50 ]; do
+        if DBUS_SESSION_BUS_ADDRESS="$BUS" gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+            --method org.freedesktop.DBus.Properties.Get org.gnome.Shell OverviewActive 2>/dev/null | grep -q false; then
             break
         fi
         sleep 0.1
@@ -228,8 +263,10 @@ WAYLAND_DISPLAY="$SOCKET"
 CNA_WAYLAND_TEST_DISPLAY="$SOCKET"
 CNA_WAYLAND_TEST_COMPOSITOR="$COMPOSITOR"
 CNA_WAYLAND_TEST_SCALE="$SCALE"
+CNA_WAYLAND_TEST_LAYOUT="$LAYOUT"
 DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent/cna-wayland-test-no-session-bus"
 export XDG_RUNTIME_DIR WAYLAND_DISPLAY CNA_WAYLAND_TEST_DISPLAY CNA_WAYLAND_TEST_COMPOSITOR CNA_WAYLAND_TEST_SCALE
+export CNA_WAYLAND_TEST_LAYOUT
 export DBUS_SESSION_BUS_ADDRESS
 unset DISPLAY
 

@@ -1669,6 +1669,18 @@ if(CNA_BUILD_TESTS)
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
                     --renderer gl $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> ${_cna_wayland_live_filter}
             LABELS "platform" TIMEOUT 300)
+        # GNOME's own compositor, headless on a private session bus, with real input from its
+        # RemoteDesktop API on that bus -- and once more with a Czech keymap. Skips (77) where
+        # gnome-shell or dbus-daemon is not installed.
+        cna_register_renderer_test(NAME CnaWaylandMutterTests
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
+                    $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                    "--gtest_filter=WaylandMutter.*:WaylandLive.*:EveryImplementation/Platform*Conformance.*/Wayland"
+            LABELS "platform" TIMEOUT 600)
+        cna_register_renderer_test(NAME CnaWaylandMutterCzechTests
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
+                    --layout cz $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandMutter.*
+            LABELS "platform" TIMEOUT 600)
         cna_register_renderer_test(NAME CnaWaylandWestonScaledTests
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
                     --scale 2 $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandLive.*
