@@ -1653,6 +1653,26 @@ if(CNA_BUILD_TESTS)
         cna_register_renderer_test(NAME CnaWaylandProtocolTests
             COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandProtocol.*
             LABELS "platform" TIMEOUT 300)
+
+        # A real compositor, private to the run: headless Weston through the launcher, which exits
+        # 77 (skip) where Weston is not installed. Once with the software renderer -- shm only,
+        # EGL skips -- once with Weston's GL renderer, where EGL and Vulkan hand the compositor
+        # dmabufs from the real GPU, and once at output scale 2. The conformance suite runs here
+        # too: in the plain unit-test environment the Wayland platform has no compositor at all.
+        set(_cna_wayland_live_filter
+            "--gtest_filter=WaylandLive.*:EveryImplementation/Platform*Conformance.*/Wayland")
+        cna_register_renderer_test(NAME CnaWaylandWestonTests
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
+                    $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> ${_cna_wayland_live_filter}
+            LABELS "platform" TIMEOUT 300)
+        cna_register_renderer_test(NAME CnaWaylandWestonGpuTests
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
+                    --renderer gl $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> ${_cna_wayland_live_filter}
+            LABELS "platform" TIMEOUT 300)
+        cna_register_renderer_test(NAME CnaWaylandWestonScaledTests
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
+                    --scale 2 $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandLive.*
+            LABELS "platform" TIMEOUT 300)
     endif()
 
     if(MINGW)
