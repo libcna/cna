@@ -233,6 +233,30 @@ namespace CNA::Platform::X11 {
         /** @brief Gets the last size the server reported. @return The cached size. */
         [[nodiscard]] WindowSize GetCachedSize() const { return {cachedWidth_, cachedHeight_}; }
 
+        /**
+         * @brief Gets the last position and size the event stream reported, in root coordinates.
+         *
+         * @return The bounds, with no server round trip.
+         */
+        [[nodiscard]] WindowBounds GetCachedBounds() const
+        {
+            return {cachedX_, cachedY_, cachedWidth_, cachedHeight_};
+        }
+
+        /**
+         * @brief Gets the content scale of the display the window was last seen on.
+         *
+         * @return The scale (X11-0156).
+         */
+        [[nodiscard]] float GetContentScale() const { return contentScale_; }
+
+        /**
+         * @brief Records the content scale of the display the window is on.
+         *
+         * @param scale The scale.
+         */
+        void SetContentScale(float scale) { contentScale_ = scale; }
+
         /** @brief Gets whether the window is currently mapped. @return True when mapped. */
         [[nodiscard]] bool IsMapped() const { return mapped_; }
 
@@ -405,6 +429,7 @@ namespace CNA::Platform::X11 {
 
         int cachedWidth_ = 0;
         int cachedHeight_ = 0;
+        float contentScale_ = 1.0f;
         int cachedX_ = 0;
         int cachedY_ = 0;
 

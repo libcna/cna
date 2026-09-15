@@ -3,6 +3,7 @@
 #include "X11Displays.hpp"
 
 #include "X11Display.hpp"
+#include "X11ContentScale.hpp"
 #include "X11Error.hpp"
 #include "X11ModeSwitch.hpp"
 #include "X11Window.hpp"
@@ -100,7 +101,6 @@ namespace CNA::Platform::X11 {
                     entry.info.y = monitor.y;
                     entry.info.width = monitor.width;
                     entry.info.height = monitor.height;
-                    entry.info.contentScale = connection_.GetDisplayScale();
                     entry.info.desktopMode.width = monitor.width;
                     entry.info.desktopMode.height = monitor.height;
 
@@ -188,7 +188,6 @@ namespace CNA::Platform::X11 {
                             entry.info.y = crtcInfo->y;
                             entry.info.width = static_cast<int>(crtcInfo->width);
                             entry.info.height = static_cast<int>(crtcInfo->height);
-                            entry.info.contentScale = connection_.GetDisplayScale();
                             entry.info.desktopMode.width = entry.info.width;
                             entry.info.desktopMode.height = entry.info.height;
                             entry.crtc = resources->crtcs[index];
@@ -235,19 +234,22 @@ namespace CNA::Platform::X11 {
             entry.info.y = 0;
             entry.info.width = DisplayWidth(display, screen);
             entry.info.height = DisplayHeight(display, screen);
-            entry.info.contentScale = connection_.GetDisplayScale();
             entry.info.desktopMode.width = entry.info.width;
             entry.info.desktopMode.height = entry.info.height;
             cache_.push_back(entry);
         }
 
         const X11ModeSwitcher& switcher = connection_.GetModeSwitcher();
-        for (CachedDisplay& entry : cache_)
+        const X11ContentScale& scale = connection_.GetContentScale();
+        for (std::size_t index = 0; index < cache_.size(); ++index)
         {
+            CachedDisplay& entry = cache_[index];
             if (entry.info.name.empty())
             {
                 entry.info.name = "Display " + std::to_string(entry.info.id);
             }
+            // The session's scale, or the monitor's own where the session sets one (X11-0156).
+            entry.info.contentScale = scale.ForMonitor(entry.info.name, index);
             // While exclusive fullscreen holds a mode of its own on a monitor, the monitor's
             // geometry and current mode are that mode's -- it is what the screen shows -- but the
             // DESKTOP mode is still the one the desktop will get back, which is what the contract
@@ -313,6 +315,27 @@ namespace CNA::Platform::X11 {
         }
         display = best->info;
         return true;
+    }
+
+    float X11Displays::ContentScaleAt(const WindowBounds& bounds) const
+    {
+        EnsureCache();
+        const CachedDisplay* best = nullptr;
+        int bestArea = 0;
+        for (const CachedDisplay& entry : cache_)
+        {
+            const int area = OverlapArea(bounds, entry.info);
+            if (area > bestArea)
+            {
+                bestArea = area;
+                best = &entry;
+            }
+        }
+        if (best == nullptr && !cache_.empty())
+        {
+            best = &cache_.front();
+        }
+        return best != nullptr ? best->info.contentScale : connection_.GetContentScale().Global();
     }
 
     bool X11Displays::TryGetSafeAreaForWindow(const IPlatformWindow& window,

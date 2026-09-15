@@ -55,7 +55,7 @@ namespace CNA::Platform {
         Restored,
         /** @brief The window moved. */
         Moved,
-        /** @brief The window's display scale changed. */
+        /** @brief The window's display scale, or the content scale of the display it is on, changed. */
         DisplayScaleChanged,
         /** @brief The window moved to a different display. */
         DisplayChanged

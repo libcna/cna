@@ -103,6 +103,17 @@ namespace CNA::Platform::X11 {
         /** @brief Discards the cached enumeration after a RandR configuration change. */
         void InvalidateCache();
 
+        /**
+         * @brief Gets the content scale of the display showing most of an area.
+         *
+         * From the cached enumeration, with no server round trip: called as windows move, to
+         * notice one crossing onto a monitor with a scale of its own (X11-0156).
+         *
+         * @param bounds The area, in root coordinates.
+         * @return That display's content scale.
+         */
+        [[nodiscard]] float ContentScaleAt(const WindowBounds& bounds) const;
+
     private:
         struct CachedDisplay
         {

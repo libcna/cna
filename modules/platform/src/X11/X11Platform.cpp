@@ -216,10 +216,9 @@ namespace CNA::Platform::X11 {
         capabilities.clipboard = true;            // Real ICCCM selection ownership with INCR.
         capabilities.dragAndDrop = true;          // XDND 5, target side: files and text.
 
-        // High DPI is claimed only when the session actually states a scale. Reporting it true
-        // with a scale permanently pinned at 1.0 would tell a caller to expect a pixel size that
-        // differs from the logical size, which on X11 it never does.
-        capabilities.highDpi = connection_->GetDisplayScale() != 1.0f;
+        // highDpi promises a drawable that can exceed the logical size, and on X11 it never does:
+        // one coordinate space. A session's scale is the displays' content scale (X11-0156).
+        capabilities.highDpi = false;
         capabilities.multipleDisplays = connection_->HasRandr();
         capabilities.borderlessFullscreen =
             connection_->SupportsEwmhHint(connection_->GetAtoms().netWmStateFullscreen);
@@ -574,6 +573,10 @@ namespace CNA::Platform::X11 {
             // Likewise: taking a window's touch events takes its emulated pointer events away.
             touch_->AttachWindow(*raw);
         }
+        if (displays_ != nullptr)
+        {
+            raw->SetContentScale(displays_->ContentScaleAt({x, y, description.width, description.height}));
+        }
 
         if (description.visible)
         {
@@ -734,6 +737,24 @@ namespace CNA::Platform::X11 {
         }
     }
 
+    void X11Platform::UpdateContentScale(X11Window& window, std::vector<PlatformEvent>& destination)
+    {
+        if (displays_ == nullptr)
+        {
+            return;
+        }
+        const float scale = displays_->ContentScaleAt(window.GetCachedBounds());
+        if (scale == window.GetContentScale())
+        {
+            return;
+        }
+        window.SetContentScale(scale);
+        WindowEvent changed;
+        changed.window = window.GetId();
+        changed.kind = WindowEventKind::DisplayScaleChanged;
+        destination.emplace_back(changed);
+    }
+
     void X11Platform::EmitWindowStateTransitions(X11Window& window,
                                                  std::vector<PlatformEvent>& destination)
     {
@@ -871,6 +892,18 @@ namespace CNA::Platform::X11 {
         }
 #endif
 
+        // plans/plan_x11.md X11-0156: the session's scale changed -- a new Xft.dpi, the settings
+        // manager's property, a manager arriving or leaving. The event goes on to its ordinary
+        // handling afterwards; nothing else here consumes these.
+        if (connection_->GetContentScale().HandleEvent(event))
+        {
+            if (displays_ != nullptr) { displays_->InvalidateCache(); }
+            for (const auto& [id, window] : windows_)
+            {
+                if (window != nullptr) { UpdateContentScale(*window, destination); }
+            }
+        }
+
         if (connection_->HasXkb() && connection_->GetXkbEventBase() >= 0 &&
             event.type == connection_->GetXkbEventBase())
         {
@@ -980,6 +1013,13 @@ namespace CNA::Platform::X11 {
                     moved.data1 = event.xconfigure.x;
                     moved.data2 = event.xconfigure.y;
                     destination.emplace_back(moved);
+                }
+                // Onto a monitor with a scale of its own (X11-0156). Only where the session gives
+                // monitors their own scales: otherwise every monitor has the session's, and a
+                // move cannot change it.
+                if (connection_->GetContentScale().HasPerMonitorScales())
+                {
+                    UpdateContentScale(*window, destination);
                 }
                 return;
             }

@@ -255,7 +255,13 @@ namespace CNA::Platform::X11 {
 
     float X11Window::GetDisplayScale() const
     {
-        return connection_.GetDisplayScale();
+        // Physical pixels per logical unit, as the contract defines it -- and X11 has one
+        // coordinate space, so a window's pixels ARE its logical units: 1, always. The session's
+        // Xft.dpi is a content scale, a preference for sizing an interface, and belongs to the
+        // display (DisplayInfo::contentScale). Reported here, it made a renderer relating the two
+        // take an 800x600 window at Xft.dpi 192 for a 400x300 one (plans/plan_x11.md X11-0156,
+        // D-16).
+        return 1.0f;
     }
 
     void X11Window::SetResizable(const bool resizable)

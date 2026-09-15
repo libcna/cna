@@ -13,11 +13,12 @@
 > 2026-09-15, worked on branch `x11`) goes past that first delivery: **X11-0150, gamepads and
 > joysticks through Linux evdev, X11-0151, sound for SDL-free builds (ALSA and CNA's own mixer),
 > X11-0152, input-method composition, X11-0153, exclusive fullscreen through XRandR, X11-0154,
-> drag and drop, and X11-0155, touch and pens, are ✅**; X11-0156..X11-0158 are ⬜. See
+> drag and drop, X11-0155, touch and pens, and X11-0156, per-monitor content scale, are ✅**;
+> X11-0157..X11-0158 are ⬜. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
-> for the five defects found that belong to other parts of the tree, and
-> [§8](#8-defects-this-work-found-in-its-own-implementation) for the fifteen this work's own tests
-> caught in this work's own code.
+> for the seven defects found that belong to other parts of the tree, and
+> [§8](#8-defects-this-work-found-in-its-own-implementation) for the sixteen this work found in
+> this work's own code.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code exists but has not met those criteria; ⬜ not implemented;
@@ -115,7 +116,7 @@ shared by three backends.
 | D7 | **`XInitThreads()` is never called.** | It must run before any other Xlib call in the process to be correct, and CNA is a library that does not own process startup. Instead every Xlib call this backend makes is serialised on the platform's own mutex and confined to the owning platform instance, and the contract's "poll once per frame" rule keeps that lock uncontended. Documented rather than silently assumed; a host that wants full Xlib thread-safety calls `XInitThreads()` itself before creating the platform, which this backend neither requires nor defeats. |
 | D8 | **The X error handler is installed with the previous handler saved, chained and restored.** | Xlib's error handler is process-global and Xlib's default calls `exit()`. The backend installs a handler on first display open, forwards any error whose `display` is not one of ours to the handler it replaced, and restores the previous handler when the last X11 platform closes its display. `XSetIOErrorHandler` is deliberately left alone: a genuine connection loss must not return. |
 | D9 | **Locale is set only if the host has not already set one.** | `XOpenIM` needs a locale and `XSupportsLocale()`; calling `setlocale(LC_CTYPE, "")` unconditionally would change the host process's number formatting. The backend reads the current `LC_CTYPE`; if it is still the startup default `"C"`, it sets `LC_CTYPE` **only** from the environment and records that it did. It never touches `LC_ALL`, `LC_NUMERIC` or any other category. |
-| D10 | **Display scale is 1.0 unless `Xft.dpi` says otherwise.** | X11 has no authoritative scale. `Xft.dpi` in the resource database is the one value the user's session actually sets deliberately; XRandR physical millimetres are frequently fictional (EDID lies, and a 1×1 mm or 0×0 mm output is common). So: read `Xft.dpi`, sanity-clamp the resulting scale to [0.5, 8.0], and otherwise report exactly 1.0. An absurd DPI derived from a fake physical size is worse than no scaling. |
+| D10 | **A window's display scale is 1.0; the session's scale is each display's `contentScale`, 1.0 unless the session states one.** (Revised by X11-0156, 2026-09-15: until then `Xft.dpi` was reported as the window's display scale, which is D-16.) | The contract's display scale is physical pixels per logical unit, and X11 has one coordinate space: a window's pixels *are* its logical units, whatever the session prefers -- so it is 1 and `highDpi` is false. What a session states is a preference for sizing an interface, which the contract carries as the display's content scale, read in SDL3's order so the two backends agree on one desktop: `Xft.dpi` in the live `RESOURCE_MANAGER`, the XSETTINGS manager's `Gdk/WindowScalingFactor` then `Xft/DPI`, `GDK_SCALE`, else 1; per monitor where KDE's `QT_SCREEN_SCALE_FACTORS` names one. Every value is sanity-clamped to [0.5, 8.0]. XRandR physical millimetres are still not used: they are frequently fictional (EDID lies, and a 1×1 mm or 0×0 mm output is common), and an absurd DPI derived from a fake physical size is worse than no scaling. |
 | D11 | **`BorderlessFullscreen` uses `_NET_WM_STATE_FULLSCREEN` and degrades gracefully; `ExclusiveFullscreen` is that plus an XRandR mode of the window's own.** (Revised by X11-0153, 2026-09-15; it was refused until then.) | Genuine exclusive mode means an XRandR mode switch, which changes the user's desktop resolution and can leave it wrong if the process dies -- which is why it was refused rather than faked as borderless until the restore could be made unconditional: in-process on every exit path, and by a forked mode guardian when the process dies however it dies (X11-0153). Where no mode fits, fullscreen stays on the desktop's mode and `GetFullscreenMode()` reports `BorderlessFullscreen`, never "exclusive". When the window manager does not advertise `_NET_WM_STATE_FULLSCREEN` in `_NET_SUPPORTED`, both kinds are refused rather than faked. |
 | D12 | **The clipboard is a real selection owner with `TARGETS`, `UTF8_STRING`, `STRING`, `TEXT` and `INCR` for large transfers.** | An X11 clipboard that only works between two CNA windows is not a clipboard. Ownership, `SelectionRequest`, `SelectionNotify`, `SelectionClear` and incremental transfer are all handled, and paste from an external application is what the test asserts. |
 | D13 | **A GLX window's `Visual` and `Colormap` are chosen from the `FBConfig` *before* `XCreateWindow`.** | This is the one place where window creation and GL are genuinely coupled. `WindowDescription::renderIntent == OpenGl` plus `openGlFramebuffer` already carries exactly the information needed, so the coupling is resolved at the contract level that already exists — no generic change. A window created with `renderIntent != OpenGl` refuses to host a GL context rather than failing obscurely inside GLX. |
@@ -227,7 +228,7 @@ shared by three backends.
 | X11-0071 | Modes and refresh | ✅ | Mode list per output; refresh computed as `dotClock / (hTotal * vTotal)` with the doublescan and interlace adjustments -- without them an interlaced 1080i reports 30 Hz instead of 60. |
 | X11-0072 | Window→display association | ✅ | Largest-overlap rectangle test against root-space bounds, not a corner test: a window straddling two monitors belongs to the one showing most of it. |
 | X11-0073 | Hotplug | ✅ | `XRRSelectInput(RRScreenChangeNotifyMask|RRCrtcChangeNotifyMask|RROutputChangeNotifyMask)`; the handler calls `XRRUpdateConfiguration` (without it every later query returns the pre-hotplug geometry) and invalidates the cache. |
-| X11-0074 | DPI policy | ✅ | `Xft.dpi` / 96, clamped to [0.5, 8.0], and exactly 1.0 otherwise. XRandR physical millimetres are deliberately **not** used: a 0x0 mm or 1x1 mm output is common enough that deriving DPI from it produces absurd numbers. `highDpi` is advertised only when the session actually states a scale. |
+| X11-0074 | DPI policy | ✅ | `Xft.dpi` / 96, clamped to [0.5, 8.0], and exactly 1.0 otherwise. XRandR physical millimetres are deliberately **not** used: a 0x0 mm or 1x1 mm output is common enough that deriving DPI from it produces absurd numbers. `highDpi` is advertised only when the session actually states a scale. *(Superseded by X11-0156: the scale moved to the display's content scale, and `highDpi` is false -- D10, D-16.)* |
 ### Phase I — clipboard (M8)
 
 | ID | Task | Status | Acceptance criteria / Notes |
@@ -272,7 +273,7 @@ Win32 and Wayland are out of scope for this phase.
 | X11-0153 | Exclusive fullscreen through XRandR | ✅ | `X11ModeSwitch` (one per connection, owned by `X11Connection`, restored before `XCloseDisplay`): SDL's mode rule (smallest mode holding the size, aspect ratio first, then the desktop's refresh rate); the screen grown before and shrunk after the CRTC change to the lit CRTCs' bounding box, so no step is an invalid configuration and other monitors keep their place; a server grab around each read-modify-write; a scaled/transformed CRTC, no RandR, or no mode large enough gives borderless, reported as such. `X11Window`: `SetSize` while exclusive picks a new mode (what `GraphicsDevice` does after `IsFullScreen`); the mode is held only while the window is shown and not minimised, and a focus loss minimises the window and gives the mode back, as SDL does (held 400 ms after a mode change, skipped under Xwayland); every restore path -- leaving, `Hide`, destroy, destroyed by another client, taken out of fullscreen by another client, connection closed -- and a mode someone else set in the meantime left alone; the display service reports the current and the desktop mode apart. **`X11ModeGuardian`**: forked with the first switch, it restores the mode when the process dies however it dies, speaking the X protocol itself (async-signal-safe after a fork of a threaded process), authenticating with the game's own cookie (libXau, new optional dependency), out of the terminal's session, disarmed by a normal restore. Tests: `X11ExclusiveModeTests.cpp` (21, no server: mode choice, screen plans, the wire format) in `CnaX11MappingTests`; `X11ExclusiveFullscreenTests.cpp` (17, on the launcher's private Xvfb with modes added through RandR and `openbox`, never on a desktop) as `CnaX11ExclusiveFullscreenTests`, including a helper process killed with `SIGKILL` whose mode its guardian restores and the guardian's own restore driven in-process; `X11_House3D_ExclusiveFullscreen_<renderer>` runs a real XNA game with `IsFullScreen` (`tools/platform/x11_exclusive_fullscreen_game.sh`). One defect found in the backend's older code on the way, D-14. **Not covered:** a real monitor's mode change (Xvfb switches its one CRTC instantly), multi-monitor layouts (the screen plan is unit-tested, not run), GNOME/KDE's compositors. |
 | X11-0154 | Drag and drop (XDND) | ✅ | The contract had no drop at all, so it gained one: `DropEvent` (`Begin`, `Position`, `File`, `Text`, `Complete` -- SDL3's sequence) and the thirtieth capability, `dragAndDrop`, appended so no recorded enum value moves. **X11**: `X11DragAndDrop`, XDND 5 target side -- `XdndAware` on every window CNA creates; `XdndEnter` (three types inline or `XdndTypeList`), `XdndPosition` translated to window coordinates and answered with `XdndStatus` (copy, positions on every move), `XdndLeave`, `XdndDrop` read through the clipboard's selection reader generalised to any selection and timestamp (`INCR` included, one-second bounds), `XdndFinished` always. `text/uri-list` > UTF-8 text > `text/plain`/`TEXT` > `STRING` (Latin-1); `file:` URIs percent-decoded to local paths, any other URI delivered as text (SDL3 discards it), text whole (SDL3 splits it by line); a drag of nothing takeable refused and silent. **SDL3**: `SDL_EVENT_DROP_*` mapped one to one, `dragAndDrop` true. **XNA side**: CNAEXT `GameWindow::FileDropEXT` (MonoGame's `FileDrop` shape, once per drop) and `TextDropEXT`, raised from `Game`'s pump. SDL2 and Win32 report `false`. Tests: `X11DragAndDropTests.cpp` -- 10 without a server (type choice, URI spellings, escapes, lists) in `CnaX11MappingTests`, 9 against a real XDND source (a second process of the test binary speaking the protocol from outside) in `CnaX11IntegrationTests`: files, whole text, a link, Latin-1, a type list, a leave, a refusal, a source that never delivers; `Sdl3EventMapperTests` (3 more); `GameWindowDropTests.cpp` (6, through a real `Game`); the contract's own event and capability tests. **Not implemented:** the source side (dragging out of a CNA window), `XdndProxy`, SDL2's and Win32's drop events. |
 | X11-0155 | Touch and pen through XInput2 | ✅ | `X11Touch`: the connection now negotiates XInput 2.2; every window CNA creates selects `XI_TouchBegin/Update/End` from the master devices, and each contact becomes `TouchEvent` (`Down`, `Motion` with its delta, `Up`) in the window it began in, normalised against the client size it had then -- exactly the size the input bridge multiplies back by; a window destroyed mid-touch has its contacts `Cancelled` on the next pump. A window that selects touch is sent no pointer events emulated from touches (the server's listener walk stops at the first selection it finds), so the contact flagged `XITouchEmulatingPointer` drives the mouse -- events and snapshot, once each, as SDL3's touch-to-mouse synthesis does. **Pens**: SDL3's rule (an enabled slave pointer with an "Abs Pressure" valuator), found at start-up and on `XI_HierarchyChanged`; a pen with its tip down is a touch with its normalised pressure, a hovering pen is not; its XI2 button/motion events are selected per pen device so the master's core pointer events -- the mouse -- are untouched. Tests: `X11TouchTests.cpp` -- 4 without a server, the selection on the launcher's Xvfb (asked over the platform's own connection: XI2 selections are per client), and **8 against real devices**: a uinput touchscreen and pen read by a private rootless Xorg (dummy video, evdev input with `GrabDevice`) that the suite verifies holds each device exclusively before it writes a single event, and re-verifies before every one -- the desktop's compositor, which sees the devices appear, receives none of it. As `CnaX11TouchscreenTests` (opt-in by the entry's environment). **Not delivered:** tilt, barrel buttons, the eraser as distinct from the tip, touch ownership and gesture grabs. |
-| X11-0156 | Per-monitor DPI | ⬜ | Beyond the session-wide `Xft.dpi` of D10. |
+| X11-0156 | Per-monitor DPI | ✅ | Doing it showed the scale was reported in the wrong place (D-16), so D10 was revised first: a window's display scale is 1 and `highDpi` false, because a window's pixels are its logical units; the session's scale is each display's `contentScale`. `X11ContentScale` (one per connection) reads it in SDL3's order -- `Xft.dpi` from the root window's **live** `RESOURCE_MANAGER` (not `XResourceManagerString()`, the string as it was when the connection opened), the XSETTINGS manager's `Gdk/WindowScalingFactor` then `Xft/DPI` (either byte order; a malformed property read as far as it is well-formed), `GDK_SCALE`, else 1 -- and **follows it**: a new `RESOURCE_MANAGER` (`xrdb -merge`), the manager's property, a manager leaving, a new one announcing itself with ICCCM's `MANAGER`. **Per monitor**: X11 itself has none; the one a desktop sets is KDE's `QT_SCREEN_SCALE_FACTORS` (`eDP-1=2;HDMI-1=1;`, or a positional list), and a display named there reports its own factor, the others the session's. A window whose content scale changes -- the setting changed, or it moved onto a monitor with another factor -- gets `DisplayScaleChanged`, as the SDL3 backend delivers SDL's window display-scale change, which covers the content scale too. `CNA::Devices::DisplayInfo::getContentScaleProperty` now combines the two as its documentation says it does: the larger of the window's pixel density and its display's content scale, so it answers 2 at 192 dpi on X11. Tests: `X11ContentScaleTests.cpp` -- 6 without a server (Xft.dpi, XSETTINGS in both byte orders past a string setting and truncated at every length, KDE's lists, the clamp) in `CnaX11MappingTests`; 5 on the launcher's private Xvfb, which they give a `RESOURCE_MANAGER` and an XSETTINGS manager of their own and restore (Xft.dpi 192: display scale 1, pixels = logical × scale, content scale 2; a live change announced; a manager appearing, changing and leaving; KDE's named and positional factors; `GDK_SCALE`), in `CnaX11IntegrationTests`. **Not covered:** a real GNOME/KDE/Xfce session changing its scale (Xvfb, and the settings managers played by the test), two monitors with different factors (Xvfb has one output), `DisplayInfo` itself (`CNA_DEVICES` is off in every build here: compiled with `-fsyntax-only` only). **Not implemented:** `QT_SCREEN_SCALE_FACTORS` changes after start-up (an environment variable, read once). |
 | X11-0157 | `PRIMARY` selection | ⬜ | Middle-click paste, both directions. |
 | X11-0158 | More clipboard formats | ⬜ | Beyond text. |
 ---
@@ -282,7 +283,7 @@ Win32 and Wayland are out of scope for this phase.
 | Capability | X11 | Why |
 |---|---|---|
 | `multipleWindows` | ✅ true | independent `XCreateWindow` per window |
-| `highDpi` | ✅ true | `Xft.dpi`-derived scale, D10 |
+| `highDpi` | false, by design | one coordinate space: a window's display scale is 1; the session's `Xft.dpi`/XSETTINGS scale, per monitor where KDE sets one, is each display's `contentScale` (D10, X11-0156) |
 | `multipleDisplays` | ✅ true when XRandR is present | else the service is null and the capability false |
 | `borderlessFullscreen` | ✅ true when the WM advertises it | else false; never faked. `ExclusiveFullscreen` has no flag of its own: it is available wherever borderless is, and borderless where no mode fits (X11-0153) |
 | `nativeWindowHandle` | ✅ true | |
@@ -325,7 +326,8 @@ Win32 and Wayland are out of scope for this phase.
 ## 7. Findings that are not this backend's
 
 Recorded rather than fixed, because each is pre-existing, generic, and outside what a platform
-backend may change. Each was **reproduced without X11** before being classified that way.
+backend may change. Each was **reproduced without X11** before being classified that way -- except
+F-6, which is recorded as read and says so, and F-7, which involves no platform code at all.
 
 ### F-1 — `plans/plan_platform.md` §2 is stale at the baseline commit
 
@@ -389,12 +391,33 @@ depend on assets that ctest builds through fixture dependencies, and on an FFmpe
 processor that `-DCNA_ENABLE_VIDEO=AUTO` disables on a machine without the libraries. Reproduced
 identically on the SDL3 baseline build at the same commit; see §10.
 
+### F-6 — the Win32 backend reports its monitor's DPI as the window's display scale
+
+The same contract breach as D-16, in `modules/platform/src/Win32/`: `Win32Window::GetDisplayScale()`
+returns the window's DPI over 96 and `highDpi` is true, while `GetPixelSize()` is -- correctly, as
+its own comment explains -- the client rectangle, so pixels are logical units there as they are on
+X11. A renderer relating the two (`PlatformGlSurfaceState::GetClientSize()` divides the drawable by
+the display scale) then takes a window on a 150 % monitor for two thirds of its size. The DPI
+belongs in the display's `contentScale`, which `Win32SystemServices` already fills from the same
+value. **Found by reading while fixing D-16, not reproduced**: Win32 is outside Phase M and no
+Windows machine was used. Left for the Win32 work.
+
+### F-7 — a graphics test builds its vertices before `Color`'s constants exist
+
+UndefinedBehaviorSanitizer reports, at the start of every `build-asan/CnaTests` run, a `Color` copied
+from an object that is not one yet: `BufferDataBindingContractTests.cpp` (SOFTWARE-291) initialises
+a namespace-scope `kVertices` array from `Color::Red`/`Green`/`Blue`, which are defined in another
+translation unit, so which is initialised first is unspecified and here the colours are read as
+zeros. Nothing to do with the platform axis; seen while running X11-0156's suites under the
+sanitizers (with `halt_on_error=0` so they could run). Not fixed here.
+
 ---
 
 ## 8. Defects this work found in its own implementation
 
 Recorded because the interesting output of a test suite is the bugs it caught, and every one of
-these was found by a test rather than by reading the code. None was fixed by weakening a test.
+these was found by a test rather than by reading the code -- or, for D-6, D-7 and D-16, by reading
+the contract while writing the test that now holds it. None was fixed by weakening a test.
 
 | # | Defect | Found by | Why it was invisible |
 |---|---|---|---|
@@ -415,6 +438,7 @@ these was found by a test rather than by reading the code. None was fixed by wea
 | D-13 | **A zero-length sound handed a null pointer to `memcpy`** in CNA's mixer (X11-0151): wrapping an empty SoundEffect's PCM copied zero bytes from an empty vector's `data()`, which may be null -- undefined behaviour even for zero bytes, since glibc declares both arguments nonnull. The same class as NPV-0103. | UndefinedBehaviorSanitizer, on the audio suites in `build-asan` switched to ALSA | Harmless on every compiler in practice, which is exactly why only a sanitizer sees it. `CnaMixer.AnEmptySoundPlaysAndEndsAtOnce` now plays an empty sound on purpose, forever-looped as well. |
 | D-14 | **Fullscreen asked for before a game's first event pump was never applied** (found by X11-0153, in X11-0062's code). `SetNetWmState` wrote `_NET_WM_STATE` directly onto a window until it had *seen* its `MapNotify`, but a game shows its window and applies `IsFullScreen` while it is still setting up, before pumping anything: the window manager had managed the window by then and ignores a property written onto a managed window. The window stayed windowed -- and under exclusive fullscreen, a decorated 800x600 window on an 800x600 monitor. Once `Show()` has sent the map request, the client message is the right one (the MapRequest reaches the window manager first). | `X11_House3D_ExclusiveFullscreen_OPENGL33`, checking the game window's geometry; reduced to `X11WithWindowManager.FullscreenAskedForBeforeTheFirstEventPumpIsApplied`, which fails (320x240, windowed) without the fix | `GetFullscreenMode()` reads `_NET_WM_STATE` back -- the very property the backend had written -- so every assertion on it passed; only the geometry shows it. Every suite waited for the window to be managed before asking. |
 | D-15 | **A composition was not ended by its commit** (X11-0152). The backend ended it only when the input method drew its preedit empty or finished it after committing; the ibus 1.5.32 it was written against does, the CI runner's ibus 1.5.29 did not within three seconds of the commit, so the application kept showing the composition beside the text that replaced it. The commit now ends it, ahead of the text, and an empty composition is delivered once however many the input method sends -- as SDL3's X11 backend does. | `X11InputMethod.AnApplicationThatDrawsTheCompositionReceivesIt` on CI (run 34955898208), not locally | Locally ibus cleared the preedit itself, so the path the backend was missing never ran. The test now also checks the composition ended exactly once and before the text, which exercises the de-duplication against the local ibus. |
+| D-16 | **The session's scale was reported as the window's display scale** (X11-0074's D10, found by X11-0156). The contract's display scale is pixels per logical unit, and `GetPixelSize()` rightly equalled the client size -- so at `Xft.dpi: 192` a window claimed 2 while having 1, and a renderer relating the two (`PlatformGlSurfaceState::GetClientSize()` divides the drawable by the scale) took an 800x600 window for a 400x300 one and doubled every window-to-drawable coordinate. The window's scale is now 1, `highDpi` false, and the session's scale the display's `contentScale` (D10 revised). | reading the contract while writing `X11ContentScaleLive.AtXftDpi192TheWindowStaysOnePixelPerUnitAndTheDisplaySaysTwo`, which asserts the contract's own relation (pixels = logical × display scale) at 192 dpi -- the relation the old code broke; it was not run against the old code | Every X server the suites ran on had no `Xft.dpi` or 96, so the scale was 1 and both answers agreed; the old test checked only that the scale lay in [0.5, 8]. The SDL3 backend, which the contract was written from, answers SDL's pixel density -- 1 on X11 -- so nothing compared the two backends on a scaled session. |
 
 D-10 is the one worth the extra sentence: it is exactly the failure the plan predicted when it
 split the Xvfb and window-manager suites, and it would have shipped green had the suite only ever
@@ -616,6 +640,21 @@ that config was right, found the grab not held -- and injected nothing, as desig
 | `build-asan` (`address,undefined`): `X11Touchscreen.*` and `X11TouchMath.*` twice; `X11Live.*`, the selection and drag and drop | 12 x 2 and 61 passed, 0 reports |
 | every X11 and platform ctest entry, the touchscreen one included | 10/10 |
 
+### Content scale (X11-0156, 2026-09-15)
+
+On the launcher's private Xvfb, whose `RESOURCE_MANAGER` the suite sets and restores and whose
+XSETTINGS manager it plays itself (it owns `_XSETTINGS_S0`, publishes `_XSETTINGS_SETTINGS`, sends
+`MANAGER`, then destroys its window). No desktop session was touched.
+
+| Check | Result |
+|---|---|
+| `X11ContentScaleParsing.*` | 6 passed |
+| `X11ContentScaleLive.*` and `X11Live.LogicalAndPixelSizeAgree...` | 6 passed: at `Xft.dpi: 192` the window's display scale is 1, its pixels its logical size, `highDpi` false and the display's content scale 2; 96 -> 144 announced and read as 1.5; a manager's `Gdk/WindowScalingFactor` 2 read, changed to 1 (which wins over its `Xft/DPI`), its departure falling back to `Xft.dpi: 120` = 1.25; `QT_SCREEN_SCALE_FACTORS` `screen=1.75;` and `1.5`; `GDK_SCALE=2` |
+| `DisplayInfo.cpp` (`CNA_DEVICES` is off in every build directory here) | `-fsyntax-only -Wall -Wextra` with `-DCNA_DEVICES` and `cna_runtime`'s flags from `cmake-build-x11`: clean, no warning |
+| `build-asan` (`address,undefined`): the two content-scale suites, `X11Live.*`, drag and drop, the clipboard and touch selection | 72 passed; no ASan or LSan report; one UBSan report, at start-up and outside the platform code (F-7) |
+| every X11 and platform ctest entry | 10/10 |
+| `sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet --strict`, `hot_path_lint`, `nonproduction_sdl_audit`, `check_contract.py` | all pass; the contract's documented declarations 635 -> 644 over the phase |
+
 ### Regression
 
 | Check | Result |
@@ -638,7 +677,8 @@ rather than assumed:
 
 - a hardware GLX driver, and a compositor's own fullscreen and vsync behaviour;
 - a multi-monitor XRandR layout, and monitor hotplug;
-- an `Xft.dpi` other than unset, so the high-DPI branch of the scale policy;
+- a desktop session that sets a scale (GNOME, KDE, Xfce) and changes it -- X11-0156 sets `Xft.dpi`
+  and plays an XSETTINGS manager on Xvfb;
 - a real input method (ibus, fcitx) driving `Xutf8LookupString` through a composition;
 - physical input devices, so XInput2 raw motion from a real mouse;
 - a window manager other than `openbox`.

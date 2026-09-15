@@ -67,7 +67,14 @@ namespace CNA::Platform {
         std::string name;
         /** @brief The display's position and size in the virtual desktop, in logical units. */
         int x = 0, y = 0, width = 0, height = 0;
-        /** @brief Content scale, where 1.0 means one logical unit per physical pixel. */
+        /**
+         * @brief The scale the user's settings ask content on this display to be sized by (2.0
+         * at 200 %), 1.0 when nothing states one.
+         *
+         * A sizing preference, not a pixel density: that is IPlatformWindow::GetDisplayScale().
+         * Where a platform's logical units are physical pixels (X11), a window on a 200 % display
+         * still has one pixel per logical unit and a display scale of 1.
+         */
         float contentScale = 1.0f;
         /** @brief The mode the desktop is currently in. */
         DisplayMode desktopMode;

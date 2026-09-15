@@ -9,6 +9,7 @@
 
 namespace CNA::Platform::X11 {
 
+    class X11ContentScale;
     class X11ModeSwitcher;
 
     /**
@@ -177,16 +178,16 @@ namespace CNA::Platform::X11 {
         void RefreshWindowManagerState();
 
         /**
-         * @brief Gets the display scale this connection reports.
+         * @brief Gets the session's content scale, and each monitor's.
          *
-         * See plans/plan_x11.md design decision 10 for the policy: `Xft.dpi` from the resource
-         * database divided by 96, clamped to a sane range, and exactly 1.0 when the session does
-         * not state one. X11 has no authoritative scale, and a value derived from a monitor's
-         * claimed physical size is frequently fiction.
+         * See plans/plan_x11.md design decision 10, as revised by X11-0156: the settings a session
+         * makes -- `Xft.dpi`, the XSETTINGS manager's, `GDK_SCALE`, KDE's per-screen factors --
+         * never a monitor's claimed physical size, which is frequently fiction. A preference for
+         * sizing an interface, not a pixel density: that is 1 on X11, whatever this says.
          *
-         * @return The scale, where 1.0 means one logical unit per physical pixel.
+         * @return The content scale, followed live.
          */
-        [[nodiscard]] float GetDisplayScale() const { return displayScale_; }
+        [[nodiscard]] X11ContentScale& GetContentScale() const { return *contentScale_; }
 
         /** @brief Gets whether the XKB extension is usable on this connection. */
         [[nodiscard]] bool HasXkb() const { return hasXkb_; }
@@ -287,7 +288,6 @@ namespace CNA::Platform::X11 {
     private:
         void InternAtoms();
         void DetectExtensions();
-        void ReadDisplayScale();
 
         Display* display_ = nullptr;
         int screen_ = 0;
@@ -303,7 +303,7 @@ namespace CNA::Platform::X11 {
         bool xi2Touch_ = false;
         int randrEventBase_ = -1;
         bool isXwayland_ = false;
-        float displayScale_ = 1.0f;
+        std::unique_ptr<X11ContentScale> contentScale_;
         std::unique_ptr<X11ModeSwitcher> modeSwitcher_;
     };
 

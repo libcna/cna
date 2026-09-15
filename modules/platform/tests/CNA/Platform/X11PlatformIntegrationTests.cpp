@@ -1096,11 +1096,10 @@ TEST_F(X11Live, LogicalAndPixelSizeAgreeBecauseX11HasOnlyOneCoordinateSpace)
     EXPECT_EQ(bounds.width, pixels.width);
     EXPECT_EQ(bounds.height, pixels.height);
 
-    // Whatever the scale is, it must be a usable positive number -- never zero, never negative,
-    // never an absurd value derived from a monitor's claimed physical size.
-    const float scale = window_->GetDisplayScale();
-    EXPECT_GE(scale, 0.5f);
-    EXPECT_LE(scale, 8.0f);
+    // X11-0156, D-16: the display scale is pixels per logical unit, and with one coordinate space
+    // that is 1 whatever the session's scale preference is -- that belongs to the display's
+    // content scale (X11ContentScaleLive).
+    EXPECT_EQ(window_->GetDisplayScale(), 1.0f);
 }
 
 // --- timing ---------------------------------------------------------------------------------------

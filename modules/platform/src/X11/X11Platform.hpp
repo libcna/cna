@@ -8,6 +8,7 @@
 #include "X11Clipboard.hpp"
 #include "X11Display.hpp"
 #include "X11Displays.hpp"
+#include "X11ContentScale.hpp"
 #include "X11DragAndDrop.hpp"
 #include "X11GraphicsServices.hpp"
 #include "X11Keyboard.hpp"
@@ -216,6 +217,7 @@ namespace CNA::Platform::X11 {
         /// X11WindowHost: drops a destroyed wrapper from the registry and from every service,
         /// matched on identity.
         void OnWindowDestroyed(X11Window& window) override;
+        void UpdateContentScale(X11Window& window, std::vector<PlatformEvent>& destination);
 
         [[nodiscard]] PlatformCapabilities ComputeCapabilities() const;
         void OpenConnection();

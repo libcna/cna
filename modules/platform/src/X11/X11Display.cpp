@@ -3,6 +3,7 @@
 #include "X11Display.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "X11ContentScale.hpp"
 #include "X11Error.hpp"
 #include "X11ModeSwitch.hpp"
 
@@ -54,7 +55,6 @@ namespace CNA::Platform::X11 {
 
         InternAtoms();
         DetectExtensions();
-        ReadDisplayScale();
 
         // The root window's property set is how a window manager announces itself, including one
         // that starts after this application did. Selecting for it here is what makes
@@ -63,6 +63,9 @@ namespace CNA::Platform::X11 {
         RefreshWindowManagerState();
 
         modeSwitcher_ = std::make_unique<X11ModeSwitcher>(*this);
+        // After the root's input selection: the scale is followed through root property changes
+        // and the settings manager's announcements, which arrive through it.
+        contentScale_ = std::make_unique<X11ContentScale>(*this);
     }
 
     X11Connection::~X11Connection()
@@ -266,46 +269,6 @@ namespace CNA::Platform::X11 {
             trap.Sync();
         }
 #endif
-    }
-
-    void X11Connection::ReadDisplayScale()
-    {
-        // plans/plan_x11.md design decision 10. Xft.dpi is the one scale value an X session sets
-        // deliberately; XRandR physical millimetres are routinely fiction (a 0x0 mm or 1x1 mm
-        // output is common enough that deriving DPI from it produces absurd numbers), so the
-        // fallback is exactly 1.0 rather than a heuristic.
-        displayScale_ = 1.0f;
-
-        char* resourceText = XResourceManagerString(display_);
-        if (resourceText == nullptr)
-        {
-            return;
-        }
-
-        XrmInitialize();
-        XrmDatabase database = XrmGetStringDatabase(resourceText);
-        if (database == nullptr)
-        {
-            return;
-        }
-
-        char* type = nullptr;
-        XrmValue value{};
-        if (XrmGetResource(database, "Xft.dpi", "Xft.Dpi", &type, &value) == True &&
-            value.addr != nullptr)
-        {
-            const double dpi = std::atof(value.addr);
-            const double scale = dpi / 96.0;
-            // A scale outside this range is not a high-DPI monitor, it is a broken resource
-            // value, and honouring it would produce a window whose logical and pixel sizes have
-            // no sane relationship. The contract's own normalisation rule says an invalid native
-            // scale becomes 1.0.
-            if (scale >= 0.5 && scale <= 8.0)
-            {
-                displayScale_ = static_cast<float>(scale);
-            }
-        }
-        XrmDestroyDatabase(database);
     }
 
     void X11Connection::RefreshWindowManagerState()

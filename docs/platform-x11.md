@@ -93,7 +93,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `globalPointer` | ✅ (see [Under Xwayland](#under-xwayland)) | `XQueryPointer` / `XWarpPointer` on the root window |
 | `clipboard` | ✅ | real ICCCM selection ownership, including `INCR` |
 | `dragAndDrop` | ✅ | XDND 5, target side: files and text dropped by another client — see [Drag and drop](#drag-and-drop) |
-| `highDpi` | conditional | true only when the session states an `Xft.dpi` |
+| `highDpi` | ❌ by design | X11 has one coordinate space, so a window's display scale is 1; the session's scale is each display's `contentScale` — see [Displays and DPI](#displays-and-dpi) |
 | `multipleDisplays` | conditional | true when XRandR ≥ 1.2 is present |
 | `borderlessFullscreen` | conditional | true when the running window manager advertises `_NET_WM_STATE_FULLSCREEN` |
 | `openGlContext` | conditional | true when the server provides GLX ≥ 1.3 |
@@ -147,8 +147,8 @@ server whose screen belongs to someone else, and a few things behave differently
 - **Keyboard layouts are XKB groups.** The compositor hands Xwayland one keymap with every input
   source as a group and switches layouts by locking a group; key codes follow the active group.
 - **Scaling happens in the compositor.** With fractional scaling and Xwayland not in its native
-  scaling mode, X clients see the logical size and are upscaled; `Xft.dpi` stays 96, so
-  `highDpi` is false by this backend's documented policy.
+  scaling mode, X clients see the logical size and are upscaled; `Xft.dpi` stays 96, so the
+  displays report a content scale of 1 and the compositor does all of the scaling.
 - **Hidden windows are throttled.** Presentation to a window the compositor does not show (behind
   the lock screen, say) runs at a few frames per second with vsync on.
 - **Clipboard** interoperability with X clients is complete, including `INCR`. Native Wayland
@@ -254,14 +254,39 @@ because it is the server's own notion of a monitor and correctly merges a pair o
 panel; active CRTCs (1.2) are the fallback; and only with no RandR at all is the whole screen
 reported as a single display — which is then the truth.
 
-**Display scale is `Xft.dpi / 96`, clamped to [0.5, 8.0], and exactly 1.0 otherwise.** X11 has no
-authoritative scale. `Xft.dpi` is the one value an X session sets deliberately. XRandR physical
-millimetres are deliberately *not* used: a 0×0 mm or 1×1 mm output is common enough that deriving
-DPI from it produces absurd numbers, and an absurd scale is worse than no scaling. `highDpi` is
-advertised only when the session actually states one.
+**A window's display scale is exactly 1.0.** X11 has one coordinate space, so a window's logical
+client size and its drawable pixel size are always equal, and the display scale — pixels per
+logical unit — is 1 whatever the session's settings say. `highDpi` is false. A resize emits both
+`Resized` and `PixelSizeChanged`. (Until `plans/plan_x11.md` X11-0156 the session's scale was
+reported here instead, which is D-16 there: a renderer dividing the drawable by it took an 800×600
+window at 192 dpi for a 400×300 one.)
 
-X11 has one coordinate space, so a window's logical client size and its drawable pixel size are
-always equal here. A resize therefore emits both `Resized` and `PixelSizeChanged`.
+**The session's scale is each display's `contentScale`** — a preference for sizing an interface,
+read in SDL3's order so the two backends agree on one desktop:
+
+1. `Xft.dpi` in the root window's live `RESOURCE_MANAGER` (what `xrdb` sets), over 96;
+2. the XSETTINGS manager's `Gdk/WindowScalingFactor`, then its `Xft/DPI` (in 1024ths) over 96 —
+   what `gsd-xsettings`, `xsettingsd` and Xfce's settings daemon publish;
+3. `GDK_SCALE`;
+4. 1.0.
+
+A value outside [0.5, 8.0] is ignored as a broken setting. XRandR physical millimetres are
+deliberately *not* used: a 0×0 mm or 1×1 mm output is common enough that deriving DPI from it
+produces absurd numbers, and an absurd scale is worse than no scaling.
+
+**Per monitor.** X11 itself has no per-monitor scale. The one a desktop sets is KDE's
+`QT_SCREEN_SCALE_FACTORS` (`eDP-1=2;HDMI-1=1;`, or a list in screen order): a display named there
+reports its own factor, the others the session's. It is an environment variable, read once when
+the platform starts.
+
+**Changes are followed.** A new `RESOURCE_MANAGER` (`xrdb -merge`), the settings manager's
+property, a manager going away or a new one announcing itself are all picked up while the game
+runs. A window whose content scale changes — because the setting changed, or because it moved onto
+a monitor with another factor — receives `DisplayScaleChanged`, as SDL3 delivers it.
+
+`CNA::Devices::DisplayInfo::getContentScaleProperty` combines the two: the larger of the window's
+pixel density and its display's content scale. So a game asking it gets 2.0 at 192 dpi on X11,
+while its back buffer stays one pixel per unit.
 
 ---
 
