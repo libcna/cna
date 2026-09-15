@@ -10,6 +10,7 @@
 #include "Platform/Sdl2/Sdl2AudioDevice.hpp"
 #elif defined(CNA_AUDIO_PLATFORM_ALSA)
 #include "Platform/Alsa/AlsaAudioDevice.hpp"
+#include "Platform/Alsa/AlsaAudioRecordingDevice.hpp"
 #endif
 
 #include <memory>
@@ -41,8 +42,8 @@ namespace CNA::Audio::Platform {
         // so preserve the platform contract's explicit "unsupported" representation.
         return nullptr;
 #elif defined(CNA_AUDIO_PLATFORM_ALSA)
-        // Capture through ALSA is not implemented: Microphone reports no devices.
-        return nullptr;
+        // plans/plan_x11.md X11-0162: capture through ALSA.
+        return std::make_unique<Alsa::AlsaAudioRecordingDeviceProvider>();
 #elif defined(CNA_AUDIO_PLATFORM_NULL)
         return nullptr;
 #else

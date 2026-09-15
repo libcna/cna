@@ -41,11 +41,16 @@ namespace {
 // Every test binary of an ALSA build plays to ALSA's silent `null` device unless told otherwise:
 // the mixer opens its device once per process, the first time anything makes a sound, so this has
 // to be settled before any test runs. ctest sets the same value; this covers a binary started by
-// hand. An explicit CNA_AUDIO_DEVICE wins.
+// hand. An explicit CNA_AUDIO_DEVICE wins. Since plans/plan_x11.md X11-0162 the same goes for
+// capture: no test records from the machine's microphone -- a room is not test data.
 const bool kSilentByDefault = [] {
     if (!System::Environment::GetEnvironmentVariable("CNA_AUDIO_DEVICE").has_value())
     {
         System::Environment::SetEnvironmentVariable("CNA_AUDIO_DEVICE", std::string("null"));
+    }
+    if (!System::Environment::GetEnvironmentVariable("CNA_AUDIO_RECORDING_DEVICE").has_value())
+    {
+        System::Environment::SetEnvironmentVariable("CNA_AUDIO_RECORDING_DEVICE", std::string("null"));
     }
     return true;
 }();

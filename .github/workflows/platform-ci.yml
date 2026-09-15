@@ -599,9 +599,10 @@ jobs:
       - name: Run the ALSA device, CNA mixer and XNA audio suites on ALSA's null device
         env:
           CNA_AUDIO_DEVICE: "null"
+          CNA_AUDIO_RECORDING_DEVICE: "null"
         run: |
           set -euo pipefail
-          ./build/CnaAudioTests --gtest_filter='CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AudioCategory*:*AudioDeviceConformanceTests*:AudioEngine*:RendererDetail*'
+          ./build/CnaAudioTests --gtest_filter='CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AlsaAudioRecordingDevice.*:Microphone*:AudioCategory*:*AudioDeviceConformanceTests*:AudioEngine*:RendererDetail*'
 
   # ---------------------------------------------------------------------------------------------
   # plans/plan_native_platforms_integration.md NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.

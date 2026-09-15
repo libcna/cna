@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Platform/Alsa/AlsaAudioDevice.hpp"
-
-#include <alsa/asoundlib.h>
-#include <dlfcn.h>
+#include "Platform/Alsa/AlsaLibrary.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -17,115 +15,6 @@ namespace CNA::Audio::Platform::Alsa {
 
     namespace {
 
-        /// The part of libasound this device uses, resolved once from the library loaded at run
-        /// time. Declared from ALSA's own headers, so a signature can never drift from the library.
-        struct AlsaApi
-        {
-            bool loaded = false;
-            std::string error;
-            decltype(&::snd_pcm_open) PcmOpen = nullptr;
-            decltype(&::snd_pcm_close) PcmClose = nullptr;
-            decltype(&::snd_pcm_type) PcmType = nullptr;
-            decltype(&::snd_pcm_hw_params_malloc) HwParamsMalloc = nullptr;
-            decltype(&::snd_pcm_hw_params_free) HwParamsFree = nullptr;
-            decltype(&::snd_pcm_hw_params_any) HwParamsAny = nullptr;
-            decltype(&::snd_pcm_hw_params_set_access) HwParamsSetAccess = nullptr;
-            decltype(&::snd_pcm_hw_params_set_format) HwParamsSetFormat = nullptr;
-            decltype(&::snd_pcm_hw_params_set_channels_near) HwParamsSetChannelsNear = nullptr;
-            decltype(&::snd_pcm_hw_params_set_rate_resample) HwParamsSetRateResample = nullptr;
-            decltype(&::snd_pcm_hw_params_set_rate_near) HwParamsSetRateNear = nullptr;
-            decltype(&::snd_pcm_hw_params_set_period_size_near) HwParamsSetPeriodSizeNear = nullptr;
-            decltype(&::snd_pcm_hw_params_set_buffer_size_near) HwParamsSetBufferSizeNear = nullptr;
-            decltype(&::snd_pcm_hw_params) HwParams = nullptr;
-            decltype(&::snd_pcm_hw_params_get_period_size) HwParamsGetPeriodSize = nullptr;
-            decltype(&::snd_pcm_hw_params_get_buffer_size) HwParamsGetBufferSize = nullptr;
-            decltype(&::snd_pcm_hw_params_get_channels) HwParamsGetChannels = nullptr;
-            decltype(&::snd_pcm_hw_params_get_rate) HwParamsGetRate = nullptr;
-            decltype(&::snd_pcm_sw_params_malloc) SwParamsMalloc = nullptr;
-            decltype(&::snd_pcm_sw_params_free) SwParamsFree = nullptr;
-            decltype(&::snd_pcm_sw_params_current) SwParamsCurrent = nullptr;
-            decltype(&::snd_pcm_sw_params_set_start_threshold) SwParamsSetStartThreshold = nullptr;
-            decltype(&::snd_pcm_sw_params_set_avail_min) SwParamsSetAvailMin = nullptr;
-            decltype(&::snd_pcm_sw_params) SwParams = nullptr;
-            decltype(&::snd_pcm_prepare) PcmPrepare = nullptr;
-            decltype(&::snd_pcm_drop) PcmDrop = nullptr;
-            decltype(&::snd_pcm_writei) PcmWritei = nullptr;
-            decltype(&::snd_pcm_recover) PcmRecover = nullptr;
-            decltype(&::snd_pcm_wait) PcmWait = nullptr;
-            decltype(&::snd_pcm_avail_update) PcmAvailUpdate = nullptr;
-            decltype(&::snd_strerror) StrError = nullptr;
-        };
-
-        template <typename Function>
-        bool Resolve(void* library, const char* name, Function& function)
-        {
-            function = reinterpret_cast<Function>(dlsym(library, name));
-            return function != nullptr;
-        }
-
-        const AlsaApi& Alsa()
-        {
-            // Immortal: an audio thread may still be running while static destructors run.
-            static const AlsaApi* api = [] {
-                auto* result = new AlsaApi();
-                void* library = dlopen("libasound.so.2", RTLD_NOW | RTLD_LOCAL);
-                if (library == nullptr)
-                {
-                    const char* reason = dlerror();
-                    result->error = std::string("libasound.so.2 could not be loaded: ") +
-                                    (reason != nullptr ? reason : "unknown error");
-                    return result;
-                }
-                const bool complete =
-                    Resolve(library, "snd_pcm_open", result->PcmOpen) &&
-                    Resolve(library, "snd_pcm_close", result->PcmClose) &&
-                    Resolve(library, "snd_pcm_type", result->PcmType) &&
-                    Resolve(library, "snd_pcm_hw_params_malloc", result->HwParamsMalloc) &&
-                    Resolve(library, "snd_pcm_hw_params_free", result->HwParamsFree) &&
-                    Resolve(library, "snd_pcm_hw_params_any", result->HwParamsAny) &&
-                    Resolve(library, "snd_pcm_hw_params_set_access", result->HwParamsSetAccess) &&
-                    Resolve(library, "snd_pcm_hw_params_set_format", result->HwParamsSetFormat) &&
-                    Resolve(library, "snd_pcm_hw_params_set_channels_near",
-                            result->HwParamsSetChannelsNear) &&
-                    Resolve(library, "snd_pcm_hw_params_set_rate_resample",
-                            result->HwParamsSetRateResample) &&
-                    Resolve(library, "snd_pcm_hw_params_set_rate_near", result->HwParamsSetRateNear) &&
-                    Resolve(library, "snd_pcm_hw_params_set_period_size_near",
-                            result->HwParamsSetPeriodSizeNear) &&
-                    Resolve(library, "snd_pcm_hw_params_set_buffer_size_near",
-                            result->HwParamsSetBufferSizeNear) &&
-                    Resolve(library, "snd_pcm_hw_params", result->HwParams) &&
-                    Resolve(library, "snd_pcm_hw_params_get_period_size",
-                            result->HwParamsGetPeriodSize) &&
-                    Resolve(library, "snd_pcm_hw_params_get_buffer_size",
-                            result->HwParamsGetBufferSize) &&
-                    Resolve(library, "snd_pcm_hw_params_get_channels", result->HwParamsGetChannels) &&
-                    Resolve(library, "snd_pcm_hw_params_get_rate", result->HwParamsGetRate) &&
-                    Resolve(library, "snd_pcm_sw_params_malloc", result->SwParamsMalloc) &&
-                    Resolve(library, "snd_pcm_sw_params_free", result->SwParamsFree) &&
-                    Resolve(library, "snd_pcm_sw_params_current", result->SwParamsCurrent) &&
-                    Resolve(library, "snd_pcm_sw_params_set_start_threshold",
-                            result->SwParamsSetStartThreshold) &&
-                    Resolve(library, "snd_pcm_sw_params_set_avail_min", result->SwParamsSetAvailMin) &&
-                    Resolve(library, "snd_pcm_sw_params", result->SwParams) &&
-                    Resolve(library, "snd_pcm_prepare", result->PcmPrepare) &&
-                    Resolve(library, "snd_pcm_drop", result->PcmDrop) &&
-                    Resolve(library, "snd_pcm_writei", result->PcmWritei) &&
-                    Resolve(library, "snd_pcm_recover", result->PcmRecover) &&
-                    Resolve(library, "snd_pcm_wait", result->PcmWait) &&
-                    Resolve(library, "snd_pcm_avail_update", result->PcmAvailUpdate) &&
-                    Resolve(library, "snd_strerror", result->StrError);
-                if (!complete)
-                {
-                    result->error = "libasound.so.2 lacks a PCM function this device needs";
-                    return result;
-                }
-                result->loaded = true;
-                return result;
-            }();
-            return *api;
-        }
-
         snd_pcm_t* Pcm(void* handle)
         {
             return static_cast<snd_pcm_t*>(handle);
@@ -133,7 +22,7 @@ namespace CNA::Audio::Platform::Alsa {
 
         std::string Describe(const char* what, const int code)
         {
-            return std::string(what) + ": " + Alsa().StrError(code);
+            return DescribeAlsaError(what, code);
         }
 
         /// The device period: about ten milliseconds, so one period of latency is small, with

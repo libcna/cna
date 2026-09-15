@@ -57,7 +57,29 @@ exposes today.
   or a suspend is recovered from; a device that is gone stops the thread.
 - **Devices with no clock:** ALSA's `null` and `file` devices take any amount at once. For those
   the thread keeps real time itself, so a 100 ms sound lasts 100 ms there as well.
-- **Capture:** not implemented. `Microphone.All` is empty, as under SDL2 and NULL.
+- **Capture** (`plans/plan_x11.md` X11-0162): `Microphone` records through ALSA — see below.
+
+## Capture
+
+`Microphone.All` lists ALSA's `default` PCM first — PipeWire's or PulseAudio's plugin on a
+desktop, the card through `dsnoop` on a bare system — when the host's configuration lists it for
+input, marked default and named by its description; then every sound card's capture devices, named
+after the card and the device (`HD-Audio Generic, ALC257 Analog`) and opened through `plughw`, so
+the 16-bit mono XNA asks for is converted from whatever the card records. Nothing is invented: a
+host whose configuration lists no `default` for input gets no default entry, and a machine with no
+card lists nothing. `CNA_AUDIO_RECORDING_DEVICE` names one ALSA PCM instead, which is then the whole
+list — `null` records silence.
+
+A session reads the device on a thread of its own, ten milliseconds at a time, into a queue the
+game takes from when it polls — so nothing is lost to the device's half-second buffer running over
+between two frames. The queue keeps at most eight seconds; a game that never reads gets the latest
+audio, not an unbounded backlog. An overrun is recovered from and capture restarted; a device that
+disappears is reported as lost once what it captured has been read. `null` and `file` have no clock,
+and for those the thread keeps real time, as playback does.
+
+**The test suites never record a room:** the test binaries set `CNA_AUDIO_RECORDING_DEVICE=null`
+themselves, as they set the playback device. The capture tests use ALSA's `null` device and its
+`file` device reading a known tone through a configuration of their own, and compare the bytes.
 
 ## The mixer
 
@@ -121,6 +143,9 @@ themselves, so no test can make a sound):
 - the device against ALSA's real `null` and `file` devices: negotiation, the stop barrier, real-time
   pacing, and a recording compared with what the callback produced, byte for byte
   (`AlsaAudioDeviceTests.cpp`), plus the cross-device conformance suite;
+- capture from ALSA's `null` device (real-time pacing, the contract's edges) and from its `file`
+  device reading a tone, byte for byte (`AlsaAudioRecordingDeviceTests.cpp`), and XNA's
+  `Microphone` over it;
 - the XNA classes through the real facade (`CnaMixerXnaTests.cpp`), and the XACT category suite
   that previously ran only on SDL3_mixer;
 - the media module's whole suite with the mixer in place, and an MP3 and a FLAC `Song` played by
@@ -128,5 +153,6 @@ themselves, so no test can make a sound):
 
 **Not validated:** playback through PipeWire, PulseAudio or a sound card. Nobody was at the machine,
 and opening the real device even with silence can wake the codec with an audible pop, so it was
-not opened. Latency and underruns under real load, and devices with other than two channels, are
+not opened. Nor capture from a real microphone: recording the room of someone who is not there is
+not a test; the machine's devices were only enumerated. Latency and underruns under real load, and devices with other than two channels, are
 likewise untested.

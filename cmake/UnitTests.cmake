@@ -1236,13 +1236,14 @@ if(CNA_BUILD_TESTS)
             TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*")
     endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
-    # to the machine's speakers. The test binary defaults to it on its own as well (see
+    # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
+    # the machine's microphone. The test binary defaults to both on its own as well (see
     # CnaMixerXnaTests.cpp); this states it where ctest runs them.
     set(_cna_unit_tests_audio_environment)
     set(_cna_unit_tests_audio_properties)
     if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
-        set(_cna_unit_tests_audio_environment ENVIRONMENT "CNA_AUDIO_DEVICE=null")
-        set(_cna_unit_tests_audio_properties PROPERTIES ENVIRONMENT "CNA_AUDIO_DEVICE=null")
+        set(_cna_unit_tests_audio_environment ENVIRONMENT "CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
+        set(_cna_unit_tests_audio_properties PROPERTIES ENVIRONMENT "CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
     endif()
     cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
     if(_cna_unit_tests_vk_gate)
@@ -1341,15 +1342,15 @@ if(CNA_BUILD_TESTS)
     # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
     cna_register_renderer_test(NAME CnaAudioPlatformTests
         COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl2AudioDeviceTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
-        LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy;CNA_AUDIO_DEVICE=null")
+        LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy;CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
 
     # plans/plan_x11.md X11-0151: the ALSA device, CNA's own mixer, the XNA audio classes over the
     # two, and the XACT category suite that needs a real mixer -- all on ALSA's silent device.
     if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
         cna_register_renderer_test(NAME CnaAudioAlsaTests
-            COMMAND CnaTests --gtest_filter=CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AudioCategory*
+            COMMAND CnaTests --gtest_filter=CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AlsaAudioRecordingDevice.*:AudioCategory*:Microphone*
             LABELS "audio;platform" TIMEOUT 300 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            ENVIRONMENT "CNA_AUDIO_DEVICE=null")
+            ENVIRONMENT "CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
         # The whole chain in its own process: its mixer plays to ALSA's `file` device, and the
         # test measures what was recorded.
         cna_register_renderer_test(NAME CnaAudioAlsaRecordingTest
