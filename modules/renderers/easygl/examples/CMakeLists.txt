@@ -65,8 +65,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # non-module-owned sources this file builds.
         cna_easygl_test(cna_xvfb_screenshot_demo_easygl ${CMAKE_SOURCE_DIR}/examples/xvfb_screenshot_demo.cpp)
 
-        # Task 85: 3-frame smoke test
-        cna_register_renderer_test(NAME EasyGL_House3D_SmokeTest COMMAND cna_house3d_demo --smoke 3
+        # Task 85: smoke test; since plans/plan_x11.md X11-0172 its last frame also checks that the
+        # back buffer occludes by depth.
+        cna_register_renderer_test(NAME EasyGL_House3D_SmokeTest COMMAND cna_house3d_demo --smoke 4 --depth-probe
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
         # Task 86: textured quad pixel readback

@@ -21,8 +21,8 @@
 > X11-0165, input-device enumeration, X11-0166, gamepad motion sensors, X11-0167, message boxes
 > drawn with Xlib, X11-0168, force feedback through the kernel, X11-0169, file dialogs and OpenUrl
 > through the desktop portal, X11-0170, the screen kept on by the desktop, X11-0171, tray icons
-> through X11's own system tray protocol, and X11-0172, a GL window with a depth buffer by default,
-> are ✅ -- every Phase N row. See
+> through X11's own system tray protocol, X11-0172, a GL window with a depth buffer by default, and
+> X11-0173, the house demo's smoke run looking at its depth buffer, are ✅ -- every Phase N row. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the eight defects found that belong to other parts of the tree, and
 > [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
@@ -367,6 +367,8 @@ The capability test still expects false: the bare Xvfb runs no tray. **Not cover
 - The owner's original comparison set X11 with OPENGL33 against SDL3 with VULKAN. What still differs between those two is the renderers', and SDL3 shows it too.
 
 **A lesson recorded:** `X11_House3D_SmokeTest` rendered frames and passed. It does not look at them. |
+
+| X11-0173 | The house demo's smoke run looks at what it drew | ✅ | X11-0172's lesson: `X11_House3D_SmokeTest_<renderer>` rendered frames of a demo whose walls showed through each other, and passed. With `--depth-probe` the demo's last smoke frame draws two planes over the back buffer's centre, the nearer red one first, the farther green one after it, under the default depth state. It reads the centre back and fails, naming the cause, when green wins or when nothing drawn can be read. The probe switches the device to HiDef, because XNA allows `GetBackBufferData` only there; the Reach profile's refusal is XNA's and stays. The smoke run waits for its probe frame however many updates a slow frame gets: with fixed time steps, a slow software frame used to reach the exit before a draw. Registered for every renderer of an X11 build except `HEADLESS` and `STUB`, which keep no pixels to read, and for SDL3's `EasyGL_House3D_SmokeTest`. **The probe was shown to catch the bug:** with X11-0172's fix switched off for one run, OPENGL33 read green and exited 1 (and the new visual warning fired). With the fix it reads red on X11 with OPENGL33, VULKAN and SOFTWARE, and on SDL3 with OPENGL33 and VULKAN. |
 
 ---
 

@@ -818,6 +818,13 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 | `CnaX11TouchscreenTests` | writable `/dev/uinput`, readable event nodes, `Xorg` with the `dummy` video and `evdev` input drivers (`CNA_X11_XORG_MODULE_PATH` adds module directories) | real contacts: a uinput touchscreen and pen that a private, rootless Xorg takes **exclusively** — the suite checks that grab before every event it writes, so nothing reaches the desktop's own compositor; opt-in through the entry's `CNA_X11_TEST_TOUCHSCREEN=1` |
 | `CnaX11ExclusiveFullscreenTests` | `Xvfb` + `openbox`; **the launcher's own server only** | exclusive fullscreen changes the display mode, so it runs only where `CNA_X11_PRIVATE_TEST_SERVER` is set: mode choice, the screen around the CRTC, SetSize while exclusive, hide/show, focus loss and return, every restore path, a mode someone else set, and a process killed with `SIGKILL` having its mode restored by its guardian |
 
+`X11_House3D_SmokeTest_<renderer>` runs the house demo for a few frames on the launcher's server, once
+per renderer compiled in, and its last frame looks at what it drew (`--depth-probe`): two planes over
+the back buffer's centre, the nearer drawn first, must still show the nearer. Without that check the
+test passed while every wall showed through every other (`plans/plan_x11.md` X11-0172/X11-0173); it
+is skipped only for the renderers that keep no pixels to read back (`HEADLESS`, `STUB`). SDL3's
+`EasyGL_House3D_SmokeTest` does the same.
+
 Where the build has a renderer that draws into a window, `X11_House3D_ExclusiveFullscreen_<renderer>`
 runs a real game with `IsFullScreen` on the launcher's server
 (`tools/platform/x11_exclusive_fullscreen_game.sh`, needing `openbox` and `xrandr`): the monitor

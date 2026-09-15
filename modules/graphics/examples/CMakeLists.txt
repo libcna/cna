@@ -192,10 +192,18 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             set(_cna_house3d_renderers ${CNA_GRAPHICS_RENDERER})
         endif()
         set(_cna_house3d_windowless HEADLESS SOFTWARE STUB TINYGL PORTABLEGL)
+        # plans/plan_x11.md X11-0172: the smoke run also looks at what it drew -- two planes, the
+        # nearer drawn first, must still show the nearer. It passed for months with a GL window
+        # that had no depth buffer at all. Not for the renderers that keep no pixels to read back.
+        set(_cna_house3d_unreadable HEADLESS STUB)
         foreach(_cna_house3d_renderer IN LISTS _cna_house3d_renderers)
+            set(_cna_house3d_probe --depth-probe)
+            if(_cna_house3d_renderer IN_LIST _cna_house3d_unreadable)
+                set(_cna_house3d_probe)
+            endif()
             add_test(NAME X11_House3D_SmokeTest_${_cna_house3d_renderer}
                 COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        $<TARGET_FILE:cna_house3d_demo> --smoke 3)
+                        $<TARGET_FILE:cna_house3d_demo> --smoke 4 ${_cna_house3d_probe})
             set_tests_properties(X11_House3D_SmokeTest_${_cna_house3d_renderer} PROPERTIES
                 ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_house3d_renderer}"
                 TIMEOUT 120 SKIP_RETURN_CODE 77 LABELS "GraphicsSmoke;platform")
@@ -220,6 +228,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         endforeach()
         unset(_cna_house3d_renderers)
         unset(_cna_house3d_windowless)
+        unset(_cna_house3d_unreadable)
+        unset(_cna_house3d_probe)
     endif()
 endif()
 
