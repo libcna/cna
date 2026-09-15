@@ -24,6 +24,7 @@
 #include "../../../src/X11/X11Headers.hpp"
 #include "../../../src/X11/X11Touch.hpp"
 
+#include "CNA/Platform/Input/IPlatformInputDevices.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
@@ -859,6 +860,29 @@ protected:
     std::vector<PlatformEvent> seen_;
     bool acquired_ = false;
 };
+
+TEST_F(X11Touchscreen, TheTouchscreenIsEnumeratedBeforeAnythingTouchesIt)
+{
+    // plans/plan_x11.md X11-0165: what TouchPanel asks before the first touch. The private Xorg's
+    // devices are exactly the two the suite made, named -- as Xorg names a configured device -- by
+    // their configuration's identifiers: the touchscreen first, then the pen.
+    IPlatformInputDevices* devices = platform_->GetInputDevices();
+    ASSERT_NE(devices, nullptr);
+    const auto names = [devices](const InputDeviceKind kind) {
+        std::vector<std::string> result;
+        for (const InputDeviceInfo& info : devices->GetDevices(kind))
+        {
+            result.push_back(info.name);
+            EXPECT_EQ(info.kind, kind);
+        }
+        std::sort(result.begin(), result.end());
+        return result;
+    };
+    EXPECT_EQ(names(InputDeviceKind::Touch), std::vector<std::string>{"cna-device-0"});
+    EXPECT_EQ(names(InputDeviceKind::Mouse), (std::vector<std::string>{"cna-device-0", "cna-device-1"}));
+    EXPECT_TRUE(names(InputDeviceKind::Keyboard).empty());
+    EXPECT_TRUE(devices->HasDevice(InputDeviceKind::Touch));
+}
 
 TEST_F(X11Touchscreen, ATouchArrivesInTheWindowsNormalisedCoordinates)
 {

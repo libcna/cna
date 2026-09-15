@@ -103,7 +103,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `relativeMouse` | conditional | true when XInput2 is present at build **and** run time |
 | `gamepad`, `joystick`, `gamepadRumble` | conditional | Linux only: the kernel's evdev nodes, true when the build has `linux/input.h` and the machine has `/dev/input` — **with or without a display** |
 | `ime` | conditional | true when the application asked to draw the composition (`CNA_IME_IMPLEMENTED_UI=composition`) and the input method offers on-the-spot composition; candidate lists stay with the input method — see [Input-method composition](#input-method-composition) |
-| `inputDeviceEnumeration` | ❌ | XI2 can answer it; not implemented |
+| `inputDeviceEnumeration` | conditional | true when XInput2 is present: keyboards, mice and touch devices from the server, controllers from the kernel — see [Input devices](#input-devices) |
 | `gamepadSensors` | ❌ | a pad's motion sensors are a second evdev node; pairing it with its pad is not implemented |
 | `powerInfo` | conditional | Linux only: the kernel's power supplies in sysfs — **with or without a display** — see [Host facts](#host-facts) |
 | `haptics`, `sensors` | ❌ | not an X11 facility |
@@ -453,6 +453,20 @@ it as `GameWindow::FileDropEXT` (every file of a drop at once, MonoGame's shape)
 - **Not implemented:** dragging *from* a CNA window (the source side), and `XdndProxy`.
 
 ---
+
+## Input devices
+
+`GetInputDevices()` answers from XInput2 each time it is asked (`plans/plan_x11.md` X11-0165):
+every enabled slave keyboard is a keyboard, every enabled slave pointer a mouse, and a slave pointer
+with an XInput 2.2 touch class a touch device as well — so `TouchPanel.GetCapabilities()` knows a
+touchscreen is there before anyone has touched it. The core pointer and keyboard every server has,
+the server's own `XTEST` devices, floating and disabled devices are left out: none is a device a
+user attached, and reporting them would tell a game a keyboard is attached to a machine with none.
+(Xvfb's own "Xvfb keyboard" and "Xvfb mouse" are slaves, and are listed.) Gamepads and joysticks
+are the Linux controllers, under the same ids as their `DeviceEvent`s; asking about them starts the
+controller hub as `GetGamepad()` does. X device ids are offset (`0x10000 +` the XInput id) so the two
+never meet. Plugging a device in or out changes the server's hierarchy, and each change is reported
+as `DeviceEvent`s for the classes that appeared or went. X has no haptic devices or sensors.
 
 ## Host facts
 

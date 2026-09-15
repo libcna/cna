@@ -10,6 +10,7 @@
 #include "X11Displays.hpp"
 #include "X11ContentScale.hpp"
 #include "X11DragAndDrop.hpp"
+#include "X11InputDevices.hpp"
 #include "X11GraphicsServices.hpp"
 #include "X11Keyboard.hpp"
 #include "X11Mouse.hpp"
@@ -170,8 +171,11 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] IPlatformSensors* GetSensors() override { return nullptr; }
         /** @brief Gets the haptics service. @return Null; X11 has no haptics facility. */
         [[nodiscard]] IPlatformHaptics* GetHaptics() override { return nullptr; }
-        /** @brief Gets the input device service. @return Null until XI2 enumeration lands. */
-        [[nodiscard]] IPlatformInputDevices* GetInputDevices() override { return nullptr; }
+        /**
+         * @brief Gets the input device service (X11-0165).
+         * @return XInput2's enumeration, or null without XInput2 or before `Video`.
+         */
+        [[nodiscard]] IPlatformInputDevices* GetInputDevices() override;
         /** @brief Gets the clipboard service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
         /**
@@ -223,6 +227,7 @@ namespace CNA::Platform::X11 {
         /// matched on identity.
         void OnWindowDestroyed(X11Window& window) override;
         void UpdateContentScale(X11Window& window, std::vector<PlatformEvent>& destination);
+        [[nodiscard]] std::vector<InputDeviceInfo> ControllerDevices(InputDeviceKind kind);
 
         [[nodiscard]] PlatformCapabilities ComputeCapabilities() const;
         void OpenConnection();
@@ -258,6 +263,7 @@ namespace CNA::Platform::X11 {
         std::unique_ptr<X11TextInput> textInput_;
         std::unique_ptr<X11Clipboard> clipboard_;
         std::unique_ptr<X11Clipboard> primarySelection_;
+        std::unique_ptr<X11InputDevices> inputDevices_;
         std::unique_ptr<X11DragAndDrop> dragAndDrop_;
         std::unique_ptr<X11Displays> displays_;
         std::unique_ptr<X11GlContext> glContext_;

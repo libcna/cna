@@ -241,6 +241,8 @@ namespace CNA::Platform::X11 {
         // Composition events exist only when the application asked to draw them and the input
         // method agreed to hand them over (X11TextInput's class comment, X11-0152).
         capabilities.ime = textInput_ != nullptr && textInput_->HasCompositionEvents();
+        // Keyboards, mice and touch devices through XInput2, controllers through the hub (X11-0165).
+        capabilities.inputDeviceEnumeration = inputDevices_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
         //   gamepadSensors         -- a pad's motion sensors are a second evdev node; pairing it
@@ -250,7 +252,6 @@ namespace CNA::Platform::X11 {
         //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or
         //   tray                      kdialog would not be a native backend (plan D15).
         //   camera                 -- not an X11 facility.
-        //   inputDeviceEnumeration -- XI2 can answer it; not implemented yet, so it stays false.
         //   managedEntrypoint      -- an ordinary main().
         return capabilities;
     }
@@ -275,6 +276,11 @@ namespace CNA::Platform::X11 {
         primarySelection_ = std::make_unique<X11Clipboard>(
             *connection_, connection_->GetAtoms().primary, "PRIMARY");
         dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
+        if (connection_->GetXInput2Opcode() >= 0)
+        {
+            inputDevices_ = std::make_unique<X11InputDevices>(
+                *connection_, [this](const InputDeviceKind kind) { return ControllerDevices(kind); });
+        }
         displays_ = std::make_unique<X11Displays>(*connection_);
         glContext_ = std::make_unique<X11GlContext>(*connection_);
         vulkanSurface_ = std::make_unique<X11VulkanSurface>(*connection_);
@@ -295,6 +301,7 @@ namespace CNA::Platform::X11 {
         vulkanSurface_.reset();
         glContext_.reset();
         displays_.reset();
+        inputDevices_.reset();
         dragAndDrop_.reset();
         primarySelection_.reset();
         clipboard_.reset();
@@ -892,10 +899,18 @@ namespace CNA::Platform::X11 {
                         (void) touch_->HandlePenEvent(*device, *target, destination);
                     }
                 }
-                else if (event.xcookie.evtype == XI_HierarchyChanged && touch_ != nullptr)
+                else if (event.xcookie.evtype == XI_HierarchyChanged)
                 {
-                    // A pen plugged in or out.
-                    touch_->RefreshPens();
+                    // A device plugged in or out: pens for touch, and every class for the
+                    // enumeration's DeviceEvents (X11-0165).
+                    if (touch_ != nullptr)
+                    {
+                        touch_->RefreshPens();
+                    }
+                    if (inputDevices_ != nullptr)
+                    {
+                        inputDevices_->HandleHierarchyChanged(destination);
+                    }
                 }
                 XFreeEventData(display, &event.xcookie);
             }
@@ -1519,6 +1534,34 @@ namespace CNA::Platform::X11 {
     IPlatformMouse* X11Platform::GetMouse() { return mouse_.get(); }
     IPlatformTextInput* X11Platform::GetTextInput() { return textInput_.get(); }
     IPlatformClipboard* X11Platform::GetClipboard() { return clipboard_.get(); }
+    IPlatformInputDevices* X11Platform::GetInputDevices() { return inputDevices_.get(); }
+
+    std::vector<InputDeviceInfo> X11Platform::ControllerDevices(const InputDeviceKind kind)
+    {
+        std::vector<InputDeviceInfo> devices;
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (controllers_ == nullptr)
+        {
+            return devices;
+        }
+        // Asking what controllers are attached is asking about controllers: the hub starts as it
+        // does for GetGamepad(), and is read now, since enumeration answers for this moment.
+        EnsureControllerSubsystem();
+        controllers_->hub.Pump();
+        for (const auto& controller : controllers_->hub.GetControllers())
+        {
+            // Every controller is a joystick; a gamepad is also a gamepad, under the same id -- as
+            // the DeviceEvents say.
+            if (kind == InputDeviceKind::Joystick || controller->kind == Linux::EvdevDeviceClass::Gamepad)
+            {
+                devices.push_back({controller->id, kind, controller->device->GetDescription().name});
+            }
+        }
+#else
+        (void) kind;
+#endif
+        return devices;
+    }
     IPlatformClipboard* X11Platform::GetPrimarySelection() { return primarySelection_.get(); }
 
     IPlatformDisplays* X11Platform::GetDisplays()
