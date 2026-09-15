@@ -95,6 +95,8 @@ struct PeerScript
     std::size_t chunk = 65536;
     /// own: when not empty, each type's own bytes, in the order of @ref types.
     std::vector<std::string> perType;
+    /// manager: never answer a request to save.
+    bool silent = false;
 };
 
 class X11SelectionLive : public ::testing::Test
@@ -125,7 +127,7 @@ protected:
             ::waitpid(pid, &status, 0);
         }
         for (const std::string& path : files_) { std::remove(path.c_str()); }
-        if (acquired_)
+        if (acquired_ && platform_ != nullptr)
         {
             platform_->ReleaseSubsystem(PlatformSubsystem::Video);
         }
@@ -134,8 +136,27 @@ protected:
 
     void Pump()
     {
+        if (platform_ == nullptr)
+        {
+            return;  // closed by the test itself
+        }
         std::vector<PlatformEvent> batch;
         platform_->PollEvents(batch);
+    }
+
+    /// Destroys the platform, as a game exiting does; returns how long that took.
+    double ClosePlatform()
+    {
+        const auto start = std::chrono::steady_clock::now();
+        if (acquired_)
+        {
+            platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+            acquired_ = false;
+        }
+        primary_ = nullptr;
+        clipboard_ = nullptr;
+        platform_.reset();
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     }
 
     bool PumpUntil(const std::function<bool()>& done,
@@ -186,6 +207,7 @@ protected:
             dataList += (dataList.empty() ? "" : ",") + path;
         }
         environment.push_back("CNA_X11_PEER_DATA_LIST=" + dataList);
+        environment.push_back(std::string("CNA_X11_PEER_SILENT=") + (script.silent ? "1" : "0"));
         environment.push_back("CNA_X11_PEER_REPORT=" + peer.report);
         environment.push_back("CNA_X11_PEER_OUTPUT=" + peer.output);
         std::vector<char*> environmentPointers;
@@ -212,7 +234,7 @@ protected:
         {
             running_.push_back(peer.pid);
         }
-        if (script.mode == "own")
+        if (script.mode == "own" || script.mode == "manager")
         {
             const bool ready = PumpUntil([&peer]() {
                 return ReadFile(peer.report).find("ready\n") != std::string::npos;
@@ -498,6 +520,71 @@ TEST_F(X11SelectionLive, CopyingAnImageReplacesTheText)
     EXPECT_EQ(code, 3) << "the text must no longer be served";
 }
 
+// --- MULTIPLE, and a clipboard manager at exit (X11-0164) -----------------------------------------
+
+TEST_F(X11SelectionLive, AMultipleRequestConvertsEachTargetAndRefusesTheUnknown)
+{
+    const std::string text = "several at once \xE2\x9C\x93";
+    const std::string png = EveryByteValue(4096);
+    clipboard_->SetData({{"text/plain;charset=utf-8", Bytes(text)}, {"image/png", Bytes(png)}});
+
+    PeerScript script{"read-multiple", "CLIPBOARD",
+                      {"UTF8_STRING", "image/png", "application/x-cna-nothing", "TARGETS"}, ""};
+    Peer peer = Start(script);
+    EXPECT_EQ(Finish(peer), 0) << ReadFile(peer.report);
+    const std::string report = ReadFile(peer.report);
+    EXPECT_EQ(ReadFile(peer.output + ".0"), text);
+    EXPECT_TRUE(ReadFile(peer.output + ".1") == png);
+    EXPECT_NE(report.find("pair 2 none"), std::string::npos) << report;
+    const std::vector<std::string> targets = Split(ReadFile(peer.output + ".3"), ',');
+    EXPECT_NE(std::find(targets.begin(), targets.end(), "MULTIPLE"), targets.end())
+        << "an owner that answers MULTIPLE lists it";
+    for (int index = 0; index < 4; ++index)
+    {
+        files_.push_back(peer.output + "." + std::to_string(index));
+    }
+}
+
+TEST_F(X11SelectionLive, AClipboardManagerKeepsWhatCnaCopiedAfterItCloses)
+{
+    const std::string text = "copied, then the game closed \xE2\x9C\x93";
+    const std::string png = EveryByteValue(4096);
+    clipboard_->SetData({{"text/plain;charset=utf-8", Bytes(text)}, {"image/png", Bytes(png)}});
+    Peer manager = Start({"manager", "CLIPBOARD", {}, ""});
+
+    // A game exiting: the platform goes, and with it the only copy X had -- unless the manager
+    // took one.
+    const double seconds = ClosePlatform();
+    EXPECT_LT(seconds, 1.5) << "the handover should not wait out its budget with a manager answering";
+    const std::string report = ReadFile(manager.report);
+    EXPECT_NE(report.find("handed-over"), std::string::npos) << report;
+    EXPECT_NE(report.find("saved image/png 4096"), std::string::npos) << report;
+
+    // Another application pastes -- from the manager now.
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "UTF8_STRING"), text);
+    EXPECT_TRUE(ReadAsAnotherClient("CLIPBOARD", "image/png") == png);
+    Stop(manager);
+}
+
+TEST_F(X11SelectionLive, WithoutAClipboardManagerClosingDoesNotWait)
+{
+    clipboard_->SetText("nobody to hand this to");
+    EXPECT_LT(ClosePlatform(), 0.5);
+}
+
+TEST_F(X11SelectionLive, AClipboardManagerThatNeverAnswersIsGivenUpOn)
+{
+    clipboard_->SetText("a manager that never answers");
+    PeerScript script{"manager", "CLIPBOARD", {}, ""};
+    script.silent = true;
+    Peer manager = Start(script);
+    const double seconds = ClosePlatform();
+    EXPECT_GE(seconds, 1.9) << "the manager was given its time";
+    EXPECT_LE(seconds, 3.0) << "and no more";
+    EXPECT_NE(ReadFile(manager.report).find("save-request"), std::string::npos);
+    Stop(manager);
+}
+
 TEST(X11TextEncoding, StringIsLatinOneBothWays)
 {
     using CNA::Platform::X11::Latin1ToUtf8;
@@ -646,6 +733,217 @@ TEST(X11SelectionPeer, DISABLED_Run)
         }
         report << "type=" << name(type) << "\n";
         std::ofstream(std::getenv("CNA_X11_PEER_OUTPUT"), std::ios::binary) << result;
+        report.flush();
+        XDestroyWindow(display, window);
+        XCloseDisplay(display);
+        ::_exit(0);
+    }
+
+    const Atom atomPair = atom("ATOM_PAIR");
+    const auto takeProperty = [&](const ::Window from, const Atom property, Atom& type, std::string& bytes,
+                                  const bool remove) {
+        int format = 0;
+        unsigned long count = 0;
+        unsigned long remaining = 0;
+        unsigned char* value = nullptr;
+        bytes.clear();
+        type = kNone;
+        if (XGetWindowProperty(display, from, property, 0, 0x7fffffff, remove ? True : False,
+                               AnyPropertyType, &type, &format, &count, &remaining, &value) != Success)
+        {
+            return false;
+        }
+        if (value != nullptr && format == 8)
+        {
+            bytes.assign(reinterpret_cast<char*>(value), count);
+        }
+        else if (value != nullptr && format == 32 && type == XA_ATOM)
+        {
+            const auto* atoms = reinterpret_cast<const Atom*>(value);
+            for (unsigned long index = 0; index < count; ++index)
+            {
+                bytes += (bytes.empty() ? "" : ",") + name(atoms[index]);
+            }
+        }
+        if (value != nullptr) { XFree(value); }
+        return true;
+    };
+    const auto waitForNotify = [&](XEvent& event, const std::chrono::seconds budget) {
+        const auto until = std::chrono::steady_clock::now() + budget;
+        while (std::chrono::steady_clock::now() < until)
+        {
+            if (XCheckTypedWindowEvent(display, window, SelectionNotify, &event) != 0) { return true; }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return false;
+    };
+
+    if (std::string(mode) == "read-multiple")
+    {
+        // All the targets in one MULTIPLE request: (target, property) pairs on our window.
+        std::vector<Atom> pairs;
+        for (std::size_t index = 0; index < typeNames.size(); ++index)
+        {
+            pairs.push_back(atom(typeNames[index]));
+            pairs.push_back(atom("CNA_PEER_MULTIPLE_" + std::to_string(index)));
+        }
+        const Atom request = atom("CNA_PEER_MULTIPLE");
+        XChangeProperty(display, window, request, atomPair, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(pairs.data()), static_cast<int>(pairs.size()));
+        XConvertSelection(display, selection, atom("MULTIPLE"), request, window, kCurrentTime);
+        XFlush(display);
+        XEvent event{};
+        if (!waitForNotify(event, std::chrono::seconds(5))) { report << "timeout\n"; ::_exit(4); }
+        if (event.xselection.property == kNone) { report << "refused\n"; ::_exit(3); }
+        // The pairs as the owner left them: a refused target's property is None.
+        int format = 0;
+        unsigned long count = 0;
+        unsigned long remaining = 0;
+        unsigned char* value = nullptr;
+        Atom type = kNone;
+        XGetWindowProperty(display, window, request, 0, 0x7fffffff, False, AnyPropertyType, &type,
+                           &format, &count, &remaining, &value);
+        std::vector<Atom> answered;
+        if (value != nullptr)
+        {
+            const auto* atoms = reinterpret_cast<const Atom*>(value);
+            answered.assign(atoms, atoms + count);
+            XFree(value);
+        }
+        for (std::size_t index = 0; index * 2 + 1 < answered.size(); ++index)
+        {
+            if (answered[index * 2 + 1] == kNone)
+            {
+                report << "pair " << index << " none\n";
+                continue;
+            }
+            std::string bytes;
+            ASSERT_TRUE(takeProperty(window, answered[index * 2 + 1], type, bytes, true));
+            report << "pair " << index << " " << name(type) << " " << bytes.size() << "\n";
+            std::ofstream(std::string(std::getenv("CNA_X11_PEER_OUTPUT")) + "." + std::to_string(index),
+                          std::ios::binary)
+                << bytes;
+        }
+        report.flush();
+        XDestroyWindow(display, window);
+        XCloseDisplay(display);
+        ::_exit(0);
+    }
+
+    if (std::string(mode) == "manager")
+    {
+        // A clipboard manager, as the freedesktop protocol has one: it owns CLIPBOARD_MANAGER, and
+        // on SAVE_TARGETS fetches the named formats with one MULTIPLE request, takes the clipboard
+        // over and says it is done -- then serves what it saved to whoever pastes.
+        const Atom manager = atom("CLIPBOARD_MANAGER");
+        const Atom saveTargets = atom("SAVE_TARGETS");
+        const bool silent = std::string(std::getenv("CNA_X11_PEER_SILENT")) == "1";
+        XSetSelectionOwner(display, manager, window, kCurrentTime);
+        ASSERT_EQ(XGetSelectionOwner(display, manager), window);
+        report << "ready\n";
+        report.flush();
+        std::map<Atom, std::pair<Atom, std::string>> saved;
+        bool owning = false;
+        static volatile std::sig_atomic_t stopManager = 0;
+        std::signal(SIGTERM, [](int) { stopManager = 1; });
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (stopManager == 0 && std::chrono::steady_clock::now() < until)
+        {
+            if (XPending(display) == 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+            XEvent event{};
+            XNextEvent(display, &event);
+            if (event.type != SelectionRequest) { continue; }
+            const XSelectionRequestEvent request = event.xselectionrequest;
+            XEvent notify{};
+            notify.xselection.type = SelectionNotify;
+            notify.xselection.requestor = request.requestor;
+            notify.xselection.selection = request.selection;
+            notify.xselection.target = request.target;
+            notify.xselection.time = request.time;
+            notify.xselection.property = kNone;
+            if (request.selection == manager && request.target == saveTargets)
+            {
+                report << "save-request\n";
+                report.flush();
+                if (silent) { continue; }
+                Atom type = kNone;
+                std::string names;
+                takeProperty(request.requestor, request.property, type, names, false);
+                report << "targets " << names << "\n";
+                std::vector<Atom> pairs;
+                std::size_t index = 0;
+                for (const std::string& target : Split(names, ','))
+                {
+                    if (target == "TARGETS" || target == "TIMESTAMP" || target == "MULTIPLE") { continue; }
+                    pairs.push_back(atom(target));
+                    pairs.push_back(atom("CNA_PEER_SAVE_" + std::to_string(index++)));
+                }
+                const Atom fetch = atom("CNA_PEER_FETCH");
+                XChangeProperty(display, window, fetch, atomPair, 32, PropModeReplace,
+                                reinterpret_cast<const unsigned char*>(pairs.data()), static_cast<int>(pairs.size()));
+                XConvertSelection(display, selection, atom("MULTIPLE"), fetch, window, kCurrentTime);
+                XFlush(display);
+                XEvent answer{};
+                if (waitForNotify(answer, std::chrono::seconds(5)) && answer.xselection.property != kNone)
+                {
+                    int format = 0;
+                    unsigned long count = 0;
+                    unsigned long remaining = 0;
+                    unsigned char* value = nullptr;
+                    XGetWindowProperty(display, window, fetch, 0, 0x7fffffff, False, AnyPropertyType,
+                                       &type, &format, &count, &remaining, &value);
+                    std::vector<Atom> answered;
+                    if (value != nullptr)
+                    {
+                        const auto* atoms = reinterpret_cast<const Atom*>(value);
+                        answered.assign(atoms, atoms + count);
+                        XFree(value);
+                    }
+                    for (std::size_t pair = 0; pair * 2 + 1 < answered.size(); ++pair)
+                    {
+                        if (answered[pair * 2 + 1] == kNone) { continue; }
+                        std::string bytes;
+                        takeProperty(window, answered[pair * 2 + 1], type, bytes, true);
+                        saved[answered[pair * 2]] = {type, bytes};
+                        report << "saved " << name(answered[pair * 2]) << " " << bytes.size() << "\n";
+                    }
+                    XSetSelectionOwner(display, selection, window, kCurrentTime);
+                    owning = XGetSelectionOwner(display, selection) == window;
+                    notify.xselection.property = request.property;
+                    report << "handed-over\n";
+                }
+                report.flush();
+            }
+            else if (request.selection == selection && owning)
+            {
+                if (request.target == targets)
+                {
+                    std::vector<Atom> list = {targets};
+                    for (const auto& [target, content] : saved) { list.push_back(target); }
+                    XChangeProperty(display, request.requestor, request.property, XA_ATOM, 32, PropModeReplace,
+                                    reinterpret_cast<const unsigned char*>(list.data()), static_cast<int>(list.size()));
+                    notify.xselection.property = request.property;
+                }
+                else if (const auto found = saved.find(request.target); found != saved.end())
+                {
+                    XChangeProperty(display, request.requestor, request.property, found->second.first, 8,
+                                    PropModeReplace,
+                                    reinterpret_cast<const unsigned char*>(found->second.second.data()),
+                                    static_cast<int>(found->second.second.size()));
+                    notify.xselection.property = request.property;
+                }
+            }
+            else
+            {
+                continue;
+            }
+            XSendEvent(display, request.requestor, kXFalse, NoEventMask, &notify);
+            XFlush(display);
+        }
         report.flush();
         XDestroyWindow(display, window);
         XCloseDisplay(display);

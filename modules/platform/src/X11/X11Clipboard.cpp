@@ -664,7 +664,20 @@ namespace CNA::Platform::X11 {
                 // A requestor went away in the middle of a transfer. The window is gone, so there
                 // is no selection to undo -- only the bookkeeping. Never consumed: the same window
                 // can be a requestor of the other selection too, or watched for another reason.
-                if (incrementalSends_.erase(event.xdestroywindow.window) > 0)
+                bool erased = false;
+                for (auto entry = incrementalSends_.begin(); entry != incrementalSends_.end();)
+                {
+                    if (entry->first.first == event.xdestroywindow.window)
+                    {
+                        entry = incrementalSends_.erase(entry);
+                        erased = true;
+                    }
+                    else
+                    {
+                        ++entry;
+                    }
+                }
+                if (erased)
                 {
                     connection_.UnwatchForeignWindow(event.xdestroywindow.window);
                 }
@@ -678,9 +691,9 @@ namespace CNA::Platform::X11 {
                 {
                     return false;
                 }
-                const auto found = incrementalSends_.find(event.xproperty.window);
-                if (found == incrementalSends_.end() ||
-                    found->second.property != event.xproperty.atom)
+                const auto found =
+                    incrementalSends_.find({event.xproperty.window, event.xproperty.atom});
+                if (found == incrementalSends_.end())
                 {
                     return false;
                 }
@@ -704,7 +717,10 @@ namespace CNA::Platform::X11 {
                     // watches it.
                     const ::Window requestor = send.requestor;
                     incrementalSends_.erase(found);
-                    connection_.UnwatchForeignWindow(requestor);
+                    if (!HasTransferTo(requestor))
+                    {
+                        connection_.UnwatchForeignWindow(requestor);
+                    }
                 }
                 return true;
             }
@@ -729,49 +745,66 @@ namespace CNA::Platform::X11 {
         const Atom property =
             request.property != kNone ? request.property : request.target;
 
-        if (request.target == atoms.targets)
+        if (request.target == XInternAtom(display, "MULTIPLE", False))
+        {
+            ConvertMultiple(request, property);
+            return;
+        }
+        SendSelectionNotify(request, ConvertInto(request.requestor, request.target, property)
+                                         ? property
+                                         : kNone);
+    }
+
+    bool X11Clipboard::ConvertInto(const ::Window requestor, const Atom target, const Atom property)
+    {
+        Display* display = connection_.GetDisplay();
+        const X11Atoms& atoms = connection_.GetAtoms();
+        if (property == kNone)
+        {
+            return false;
+        }
+
+        if (target == atoms.targets)
         {
             // Listing TARGETS itself is required: a requestor asks "what can you give me" and
             // then picks. Omitting TARGETS from its own answer is a common bug that makes
-            // well-behaved applications conclude we offer nothing.
-            std::vector<Atom> targets = {atoms.targets, atoms.timestamp};
-            for (const Atom target : OwnedTargets())
+            // well-behaved applications conclude we offer nothing. MULTIPLE is offered as the
+            // ICCCM asks of an owner that answers it (X11-0164).
+            std::vector<Atom> targets = {atoms.targets, atoms.timestamp,
+                                         XInternAtom(display, "MULTIPLE", False)};
+            for (const Atom offered : OwnedTargets())
             {
-                targets.push_back(target);
+                targets.push_back(offered);
             }
-            XChangeProperty(display, request.requestor, property, XA_ATOM, 32, PropModeReplace,
+            XChangeProperty(display, requestor, property, XA_ATOM, 32, PropModeReplace,
                             reinterpret_cast<const unsigned char*>(targets.data()),
                             static_cast<int>(targets.size()));
-            SendSelectionNotify(request, property);
-            return;
+            return true;
         }
 
-        if (request.target == atoms.timestamp)
+        if (target == atoms.timestamp)
         {
             const long when = static_cast<long>(kCurrentTime);
-            XChangeProperty(display, request.requestor, property, XA_INTEGER, 32, PropModeReplace,
+            XChangeProperty(display, requestor, property, XA_INTEGER, 32, PropModeReplace,
                             reinterpret_cast<const unsigned char*>(&when), 1);
-            SendSelectionNotify(request, property);
-            return;
+            return true;
         }
 
         Atom type = kNone;
         std::string bytes;
-        if (!OwnedContent(request.target, type, bytes))
+        if (!OwnedContent(target, type, bytes))
         {
             // Refusing a target we cannot convert to, rather than sending something in the wrong
             // format. property = None is the ICCCM way to say no.
-            SendSelectionNotify(request, kNone);
-            return;
+            return false;
         }
 
         if (bytes.size() <= MaximumChunkBytes())
         {
-            XChangeProperty(display, request.requestor, property, type, 8, PropModeReplace,
+            XChangeProperty(display, requestor, property, type, 8, PropModeReplace,
                             reinterpret_cast<const unsigned char*>(bytes.data()),
                             static_cast<int>(bytes.size()));
-            SendSelectionNotify(request, property);
-            return;
+            return true;
         }
 
         // Too large for one property: start an INCR transfer. The property value is the total
@@ -781,20 +814,145 @@ namespace CNA::Platform::X11 {
         // will never delete the property again, and without its DestroyNotify the transfer -- and
         // its copy of the content -- would be kept for good (NPV-0127). Counted, because the same
         // window may be reading the other selection at the same time (X11-0157).
-        if (incrementalSends_.find(request.requestor) == incrementalSends_.end())
+        if (!HasTransferTo(requestor))
         {
-            connection_.WatchForeignWindow(request.requestor);
+            connection_.WatchForeignWindow(requestor);
         }
-        XChangeProperty(display, request.requestor, property, atoms.incr, 32, PropModeReplace,
+        XChangeProperty(display, requestor, property, atoms.incr, 32, PropModeReplace,
                         reinterpret_cast<const unsigned char*>(&total), 1);
         IncrementalSend send;
-        send.requestor = request.requestor;
+        send.requestor = requestor;
         send.property = property;
         send.type = type;
         send.offset = 0;
         send.bytes = std::move(bytes);
-        incrementalSends_[request.requestor] = std::move(send);
+        incrementalSends_[{requestor, property}] = std::move(send);
+        return true;
+    }
+
+    void X11Clipboard::ConvertMultiple(const XSelectionRequestEvent& request, const Atom property)
+    {
+        // MULTIPLE: the requestor's property lists (target, property) pairs; each target is
+        // converted into its property, and a pair whose target cannot be converted gets None as
+        // its property -- written back, so the requestor knows which ones failed.
+        Display* display = connection_.GetDisplay();
+        const Atom atomPair = XInternAtom(display, "ATOM_PAIR", False);
+        int format = 0;
+        std::vector<unsigned char> data;
+        if (request.property == kNone ||
+            !connection_.ReadProperty(request.requestor, property, AnyPropertyType, format, data) ||
+            format != 32)
+        {
+            SendSelectionNotify(request, kNone);
+            return;
+        }
+        // Format-32 property data comes back from Xlib as longs, whatever their wire size.
+        std::vector<long> pairs(data.size() / sizeof(long));
+        std::memcpy(pairs.data(), data.data(), pairs.size() * sizeof(long));
+        for (std::size_t index = 0; index + 1 < pairs.size(); index += 2)
+        {
+            const auto target = static_cast<Atom>(pairs[index]);
+            const auto into = static_cast<Atom>(pairs[index + 1]);
+            if (target == XInternAtom(display, "MULTIPLE", False) ||
+                !ConvertInto(request.requestor, target, into))
+            {
+                pairs[index + 1] = static_cast<long>(kNone);
+            }
+        }
+        XChangeProperty(display, request.requestor, property, atomPair, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(pairs.data()),
+                        static_cast<int>(pairs.size()));
         SendSelectionNotify(request, property);
+    }
+
+    bool X11Clipboard::HasTransferTo(const ::Window requestor) const
+    {
+        return std::any_of(incrementalSends_.begin(), incrementalSends_.end(),
+                           [requestor](const auto& entry) { return entry.first.first == requestor; });
+    }
+
+    bool X11Clipboard::HandOverToClipboardManager(const std::chrono::milliseconds budget)
+    {
+        Display* display = connection_.GetDisplay();
+        if (!ownsSelection_ || ownedOffers_.empty() || owner_ == 0 ||
+            XGetSelectionOwner(display, selection_) != owner_)
+        {
+            return false;
+        }
+        const Atom manager = XInternAtom(display, "CLIPBOARD_MANAGER", False);
+        if (XGetSelectionOwner(display, manager) == kNone)
+        {
+            return false;
+        }
+        const Atom saveTargets = XInternAtom(display, "SAVE_TARGETS", False);
+        const Atom request = XInternAtom(display, "CNA_SAVE_TARGETS", False);
+
+        // The formats to keep, as the protocol has the owner name them.
+        const std::vector<Atom> targets = OwnedTargets();
+        XChangeProperty(display, owner_, request, XA_ATOM, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(targets.data()),
+                        static_cast<int>(targets.size()));
+        XConvertSelection(display, manager, saveTargets, request, owner_, kCurrentTime);
+        XFlush(display);
+
+        // Only what the handover needs is taken off the queue -- this selection's requests and
+        // ownership changes, the INCR traffic they start, and the manager's answer -- so nothing
+        // of the application's own is lost to it.
+        struct Filter
+        {
+            const X11Clipboard* self;
+            Atom manager;
+
+            static XBool Matches(Display*, XEvent* candidate, XPointer argument)
+            {
+                const auto* filter = reinterpret_cast<const Filter*>(argument);
+                const X11Clipboard& clipboard = *filter->self;
+                switch (candidate->type)
+                {
+                    case SelectionRequest:
+                        return candidate->xselectionrequest.selection == clipboard.selection_ ? 1 : 0;
+                    case SelectionClear:
+                        return candidate->xselectionclear.selection == clipboard.selection_ ? 1 : 0;
+                    case SelectionNotify:
+                        return candidate->xselection.requestor == clipboard.owner_ &&
+                                       candidate->xselection.selection == filter->manager
+                                   ? 1
+                                   : 0;
+                    case PropertyNotify:
+                        return candidate->xproperty.state == PropertyDelete &&
+                                       clipboard.incrementalSends_.count(
+                                           {candidate->xproperty.window, candidate->xproperty.atom}) != 0
+                                   ? 1
+                                   : 0;
+                    case DestroyNotify:
+                        return clipboard.HasTransferTo(candidate->xdestroywindow.window) ? 1 : 0;
+                    default:
+                        return 0;
+                }
+            }
+        };
+        Filter filter{this, manager};
+
+        const auto deadline = std::chrono::steady_clock::now() + budget;
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            XEvent event{};
+            XFlush(display);
+            if (XCheckIfEvent(display, &event, &Filter::Matches, reinterpret_cast<XPointer>(&filter)) == 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                continue;
+            }
+            if (event.type == SelectionNotify)
+            {
+                XDeleteProperty(display, owner_, request);
+                XFlush(display);
+                return event.xselection.property != kNone;
+            }
+            (void) HandleEvent(event);
+        }
+        XDeleteProperty(display, owner_, request);
+        return false;
     }
 
     void X11Clipboard::SendSelectionNotify(const XSelectionRequestEvent& request,

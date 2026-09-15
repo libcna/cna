@@ -282,6 +282,13 @@ namespace CNA::Platform::X11 {
 
     void X11Platform::CloseConnection()
     {
+        // What the game copied is its own until now: X has no clipboard storage. A clipboard
+        // manager, where the desktop runs one, is offered it before the owner goes away, so the
+        // copy outlives the game (X11-0164).
+        if (clipboard_ != nullptr)
+        {
+            (void) clipboard_->HandOverToClipboardManager();
+        }
         // Reverse construction order. The clipboard owns a window on the connection and the text
         // input owns an XIM, so both must go before XCloseDisplay; the graphics services hold
         // GLX contexts, which must be destroyed while their display is alive.

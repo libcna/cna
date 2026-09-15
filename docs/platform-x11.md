@@ -371,9 +371,17 @@ exactly. The capability is `clipboardData`; games reach it through the CNAEXT
 `CNA::Input::Clipboard::SetDataEXT()` / `GetDataEXT()` / `GetMimeTypesEXT()`. Converting between
 formats — decoding a PNG, stripping HTML — is not the platform's business and is not done.
 
-Not implemented: `MULTIPLE` (several targets in one request), which some clipboard managers use,
-and `SAVE_TARGETS`, the request to a clipboard manager to keep the content after the owner exits —
-so what CNA copied is gone when it quits, unless a clipboard manager took it already.
+### When the game closes
+
+X keeps no copy of a selection: what a program copied is gone the moment it exits — unless the
+desktop runs a clipboard manager and the program hands the content over. CNA does, as GTK and Qt
+applications do (`plans/plan_x11.md` X11-0164): as the platform closes its connection, if it owns
+`CLIPBOARD` and some client owns `CLIPBOARD_MANAGER`, it converts that selection to `SAVE_TARGETS`
+naming the formats it offers, and keeps answering the manager — which usually fetches them all in
+one `MULTIPLE` request — until the manager confirms, for at most two seconds. With no manager
+running, nothing waits. `MULTIPLE` is answered for any requestor: each (target, property) pair
+converted, `INCR` included, and a target that cannot be converted marked `None` in the list that is
+written back; `TARGETS` lists it. SDL3's X11 backend does neither.
 
 This is verified against `xclip` — a genuinely external X client with its own connection and no
 CNA code in it — including a 512 KB `INCR` transfer. A clipboard tested only between two CNA

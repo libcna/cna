@@ -4,9 +4,11 @@
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "X11Headers.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -169,6 +171,21 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] bool ReadSelection(Atom selection, Atom target, Time time, Atom& actualType,
                                          std::vector<unsigned char>& data);
 
+        /**
+         * @brief Hands what this client owns to a clipboard manager, when there is one -- at
+         * exit, so a copy outlives the game that made it (plans/plan_x11.md X11-0164).
+         *
+         * The freedesktop clipboard-manager protocol: the owner converts `CLIPBOARD_MANAGER` to
+         * `SAVE_TARGETS`, naming the formats it offers, and keeps answering the manager's
+         * requests -- `MULTIPLE` among them -- until the manager says it has them. Only this
+         * selection's traffic and the manager's answer are taken off the queue.
+         *
+         * @param budget How long to serve the manager before giving up on it.
+         * @return True when a manager confirmed it took the content; false when there was nothing
+         * to hand over, no manager, or it did not answer in time.
+         */
+        bool HandOverToClipboardManager(std::chrono::milliseconds budget = std::chrono::milliseconds(2000));
+
     private:
         struct IncrementalSend
         {
@@ -193,6 +210,9 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] bool OwnedContent(Atom target, Atom& type, std::string& bytes) const;
         [[nodiscard]] std::vector<std::string> AtomNames(const std::vector<Atom>& atoms) const;
         void AnswerSelectionRequest(const XSelectionRequestEvent& request);
+        [[nodiscard]] bool ConvertInto(::Window requestor, Atom target, Atom property);
+        void ConvertMultiple(const XSelectionRequestEvent& request, Atom property);
+        [[nodiscard]] bool HasTransferTo(::Window requestor) const;
         void SendSelectionNotify(const XSelectionRequestEvent& request, Atom property) const;
 
         X11Connection& connection_;
@@ -204,7 +224,9 @@ namespace CNA::Platform::X11 {
         std::vector<ClipboardOffer> ownedOffers_;
         std::vector<Atom> ownedOfferAtoms_;
         bool ownsSelection_ = false;
-        std::map<::Window, IncrementalSend> incrementalSends_;
+        // INCR transfers under way, by requestor and property: one requestor can be receiving
+        // several at once, the targets of a MULTIPLE request (X11-0164).
+        std::map<std::pair<::Window, Atom>, IncrementalSend> incrementalSends_;
     };
 
     /**
