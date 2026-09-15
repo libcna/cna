@@ -59,17 +59,21 @@ chmod 700 "$PRIVATE/run"
 COMPOSITOR_PID=""
 BUS_PID=""
 cleanup() {
+    # Each of them leads a process group of its own (setsid below), so what they started goes
+    # with them: gnome-shell's ibus-daemon and helpers, Weston's shell client, anything the
+    # private bus activated. A compositor killed before it finished starting leaves children
+    # that do not notice their parent went.
     for pid in $COMPOSITOR_PID $BUS_PID; do
-        kill "$pid" 2>/dev/null
+        kill -TERM "-$pid" 2>/dev/null
     done
     for pid in $COMPOSITOR_PID $BUS_PID; do
         # A compositor gets a few seconds to end its clients' connections cleanly, then no more.
         WAITED=0
-        while kill -0 "$pid" 2>/dev/null && [ "$WAITED" -lt 50 ]; do
+        while kill -0 "-$pid" 2>/dev/null && [ "$WAITED" -lt 50 ]; do
             sleep 0.1
             WAITED=$((WAITED + 1))
         done
-        kill -9 "$pid" 2>/dev/null
+        kill -KILL "-$pid" 2>/dev/null
         wait "$pid" 2>/dev/null
     done
     # CNA_WAYLAND_TEST_KEEP_LOG=<file> keeps the compositor's log for a person debugging a run.
@@ -125,7 +129,7 @@ case "$COMPOSITOR" in
             fi
         } > "$CONFIG"
         env -u WAYLAND_DISPLAY -u DISPLAY XDG_RUNTIME_DIR="$PRIVATE/run" \
-            "$WESTON" --backend=headless --renderer="$RENDERER" --socket="$SOCKET" --config="$CONFIG" \
+            setsid "$WESTON" --backend=headless --renderer="$RENDERER" --socket="$SOCKET" --config="$CONFIG" \
             --width=1920 --height=1080 --scale="$SCALE" --idle-time=0 >"$LOG" 2>&1 &
         COMPOSITOR_PID=$!
         ;;
@@ -151,7 +155,7 @@ case "$COMPOSITOR" in
   </policy>
 </busconfig>
 EOF
-        dbus-daemon --config-file="$BUS_CONFIG" --nofork --nopidfile >/dev/null 2>&1 &
+        setsid dbus-daemon --config-file="$BUS_CONFIG" --nofork --nopidfile >/dev/null 2>&1 &
         BUS_PID=$!
         WAITED=0
         while [ ! -S "$PRIVATE/bus" ] && [ "$WAITED" -lt 100 ]; do
@@ -194,8 +198,8 @@ EOF
         env -u WAYLAND_DISPLAY -u DISPLAY -u XDG_SESSION_TYPE -u XDG_CURRENT_DESKTOP -u GNOME_SETUP_DISPLAY \
             XDG_RUNTIME_DIR="$PRIVATE/run" XDG_CONFIG_HOME="$PRIVATE/config" XDG_DATA_HOME="$PRIVATE/data" \
             XDG_CACHE_HOME="$PRIVATE/cache" XDG_STATE_HOME="$PRIVATE/state" GSETTINGS_BACKEND=keyfile \
-            DBUS_SESSION_BUS_ADDRESS="$BUS" NO_AT_BRIDGE=1 GTK_A11Y=none \
-            gnome-shell --headless --wayland --no-x11 --sm-disable --virtual-monitor 1920x1080 \
+            DBUS_SESSION_BUS_ADDRESS="$BUS" NO_AT_BRIDGE=1 GTK_A11Y=none GIO_USE_VFS=local \
+            setsid gnome-shell --headless --wayland --no-x11 --sm-disable --virtual-monitor 1920x1080 \
             --wayland-display "$SOCKET" >"$LOG" 2>&1 &
         COMPOSITOR_PID=$!
         CNA_WAYLAND_TEST_BUS="$BUS"
