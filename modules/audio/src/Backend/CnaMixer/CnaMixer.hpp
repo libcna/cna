@@ -40,8 +40,22 @@ namespace CNA::Internal::Audio
             /** @brief Interleaved 32-bit float PCM in `pcmFloat`. */
             Float32,
             /** @brief A whole Ogg Vorbis file in `encoded`, decoded as it plays. */
-            Vorbis
+            Vorbis,
+            /** @brief A whole MP3 file in `encoded`, decoded as it plays (X11-0161). */
+            Mp3,
+            /** @brief A whole FLAC file (native or in Ogg) in `encoded`, decoded as it plays. */
+            Flac
         };
+
+        /**
+         * @brief Gets whether the samples are decoded as they play, from `encoded`.
+         * @return True for Vorbis, MP3 and FLAC.
+         */
+        [[nodiscard]] constexpr bool IsEncoded() const noexcept
+        {
+            return encoding == Encoding::Vorbis || encoding == Encoding::Mp3 ||
+                   encoding == Encoding::Flac;
+        }
 
         /** @brief How the samples are held. */
         Encoding encoding = Encoding::Pcm16;
@@ -55,7 +69,7 @@ namespace CNA::Internal::Audio
         std::vector<std::int16_t> pcm16;
         /** @brief Samples, for `Float32`. */
         std::vector<float> pcmFloat;
-        /** @brief The encoded file, for `Vorbis`. */
+        /** @brief The encoded file, for `Vorbis`, `Mp3` and `Flac`. */
         std::vector<unsigned char> encoded;
     };
 
@@ -88,18 +102,18 @@ namespace CNA::Internal::Audio
         [[nodiscard]] std::size_t Queued() const noexcept { return queue.size() - readOffset; }
     };
 
-    /** @brief A per-track Ogg Vorbis decoder (defined with the decoders). */
-    class VorbisCursor;
+    /** @brief A per-track decoder of encoded data (defined with the decoders). */
+    class EncodedCursor;
 
-    /** @brief Frees a VorbisCursor where its type is complete. */
-    struct VorbisCursorDeleter
+    /** @brief Frees an EncodedCursor where its type is complete. */
+    struct EncodedCursorDeleter
     {
         /** @brief Frees the decoder. @param cursor The decoder. */
-        void operator()(VorbisCursor* cursor) const noexcept;
+        void operator()(EncodedCursor* cursor) const noexcept;
     };
 
-    /** @brief An owned per-track Vorbis decoder. */
-    using VorbisCursorPtr = std::unique_ptr<VorbisCursor, VorbisCursorDeleter>;
+    /** @brief An owned per-track decoder. */
+    using EncodedCursorPtr = std::unique_ptr<EncodedCursor, EncodedCursorDeleter>;
 
     /** @brief One voice. */
     class MixerTrack final
@@ -117,8 +131,8 @@ namespace CNA::Internal::Audio
         State state = State::Stopped;
         /** @brief The bound audio, or null. */
         std::shared_ptr<const MixerAudioData> audio;
-        /** @brief The decoder for a bound Vorbis audio. */
-        VorbisCursorPtr vorbis;
+        /** @brief The decoder for a bound encoded audio. */
+        EncodedCursorPtr decoder;
         /** @brief The bound stream, or null. */
         MixerStream* stream = nullptr;
 
@@ -280,13 +294,14 @@ namespace CNA::Internal::Audio
     /**
      * @brief Decodes a whole audio file for the mixer.
      *
-     * RIFF/WAVE through CNA's own decoder (PCM 8/16/24/32-bit, float, MS-ADPCM, IMA-ADPCM) and
-     * Ogg Vorbis through stb_vorbis; nothing else. A Vorbis file is decoded up front when
-     * @p predecode is set and as it plays otherwise.
+     * RIFF/WAVE through CNA's own decoder (PCM 8/16/24/32-bit, float, MS-ADPCM, IMA-ADPCM), Ogg
+     * Vorbis through stb_vorbis, MP3 through dr_mp3 and FLAC -- native or in Ogg -- through
+     * dr_flac, recognised by their content rather than their name; nothing else. A compressed file
+     * is decoded up front when @p predecode is set and as it plays otherwise.
      *
      * @param bytes The file.
      * @param origin A name for diagnostics.
-     * @param predecode Whether to decode a Vorbis file up front.
+     * @param predecode Whether to decode a compressed file up front.
      * @param error Receives why, on failure.
      * @return The data, or null.
      */
@@ -307,26 +322,26 @@ namespace CNA::Internal::Audio
                                                                     std::string& error);
 
     /**
-     * @brief Opens a per-track decoder for Vorbis data.
-     * @param data The data; must be `Vorbis`.
+     * @brief Opens a per-track decoder for encoded data.
+     * @param data The data; must be encoded (`IsEncoded()`).
      * @return The decoder, or null when the file does not open.
      */
-    [[nodiscard]] VorbisCursorPtr OpenVorbisCursor(
+    [[nodiscard]] EncodedCursorPtr OpenEncodedCursor(
         const std::shared_ptr<const MixerAudioData>& data);
 
     /**
-     * @brief Reads one frame from a Vorbis decoder, as stereo.
+     * @brief Reads one frame from a decoder, as stereo.
      * @param cursor The decoder.
      * @param frame Receives the frame.
      * @return False at the end of the stream.
      */
-    bool ReadVorbisFrame(VorbisCursor& cursor, std::array<float, 2>& frame) noexcept;
+    bool ReadEncodedFrame(EncodedCursor& cursor, std::array<float, 2>& frame) noexcept;
 
     /**
-     * @brief Moves a Vorbis decoder to a frame.
+     * @brief Moves a decoder to a frame.
      * @param cursor The decoder.
      * @param frame The frame.
      * @return False when the stream cannot seek there.
      */
-    bool SeekVorbis(VorbisCursor& cursor, std::uint64_t frame) noexcept;
+    bool SeekEncoded(EncodedCursor& cursor, std::uint64_t frame) noexcept;
 }

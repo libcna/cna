@@ -14,8 +14,11 @@
 
 #include "Backend/CnaMixer/CnaMixer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <memory>
+#include <utility>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -47,7 +50,10 @@ std::vector<std::byte> ReadFile(const std::filesystem::path& path)
     std::ifstream file(path, std::ios::binary);
     const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     std::vector<std::byte> result(bytes.size());
-    std::memcpy(result.data(), bytes.data(), bytes.size());
+    if (!bytes.empty())  // an empty vector's data() may be null, which memcpy may not be given
+    {
+        std::memcpy(result.data(), bytes.data(), bytes.size());
+    }
     return result;
 }
 
@@ -498,14 +504,177 @@ TEST(CnaMixer, WavAndOggVorbisDecodeAndEverythingElseIsRefusedByName)
     EXPECT_EQ(predecoded->encoding, MixerAudioData::Encoding::Pcm16);
     EXPECT_EQ(predecoded->frames, 88200);
 
+    // plans/plan_x11.md X11-0161: MP3 and FLAC too, recognised by content -- an MP3 named .wav
+    // is an MP3 -- and anything else still refused with the list of what is played.
     const std::vector<std::byte> mp3 = ReadFile(Locate("tests/assets/xna40/media/mp3_mono_44100_128k.mp3"));
-    EXPECT_FALSE(DecodeMixerAudio(mp3, "song.mp3", true, error));
-    EXPECT_NE(error.find("MP3"), std::string::npos) << error;
+    const auto mp3Data = DecodeMixerAudio(mp3, "song.mp3", true, error);
+    ASSERT_TRUE(mp3Data) << error;
+    EXPECT_EQ(mp3Data->encoding, MixerAudioData::Encoding::Pcm16);
     const std::vector<std::byte> disguised = ReadFile(Locate("tests/assets/xna40/media/actually_mp3.wav"));
-    EXPECT_FALSE(DecodeMixerAudio(disguised, "actually_mp3.wav", true, error));
+    EXPECT_TRUE(DecodeMixerAudio(disguised, "actually_mp3.wav", true, error)) << error;
     const std::vector<std::byte> garbage{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
     EXPECT_FALSE(DecodeMixerAudio(garbage, "garbage", true, error));
     EXPECT_NE(error.find("not a known audio format"), std::string::npos) << error;
+    EXPECT_NE(error.find("MP3 and FLAC"), std::string::npos) << error;
+}
+
+/// The frequency of a tone, from its zero crossings over the middle half of the samples.
+double ToneFrequency(const std::vector<float>& samples, const int rate)
+{
+    const std::size_t from = samples.size() / 4;
+    const std::size_t to = samples.size() * 3 / 4;
+    std::size_t crossings = 0;
+    for (std::size_t index = from + 1; index < to; ++index)
+    {
+        crossings += (samples[index - 1] < 0.0f) != (samples[index] < 0.0f) ? 1 : 0;
+    }
+    return static_cast<double>(crossings) / 2.0 / (static_cast<double>(to - from) / rate);
+}
+
+std::vector<float> Channel(const MixerAudioData& data, const int channel)
+{
+    std::vector<float> samples;
+    for (std::size_t index = static_cast<std::size_t>(channel); index < data.pcm16.size();
+         index += static_cast<std::size_t>(data.channels))
+    {
+        samples.push_back(static_cast<float>(data.pcm16[index]) / 32768.0f);
+    }
+    return samples;
+}
+
+TEST(CnaMixer, Mp3IsDecodedToItsEveryFrameAndItsTone)
+{
+    std::string error;
+    // A 0.5 s 440 Hz tone, LAME at 128 kb/s with no Xing header: 21 MPEG frames of 1152.
+    const auto mono = DecodeMixerAudio(ReadFile(Locate("tests/assets/xna40/media/mp3_mono_44100_128k.mp3")),
+                                       "mono", true, error);
+    ASSERT_TRUE(mono) << error;
+    EXPECT_EQ(mono->channels, 1);
+    EXPECT_EQ(mono->sampleRate, 44100);
+    EXPECT_EQ(mono->frames, 24192);  // what ffmpeg decodes from the same file
+    EXPECT_NEAR(ToneFrequency(Channel(*mono, 0), 44100), 440.0, 5.0);
+
+    // 440 Hz left, 660 Hz right: the channels are in their order.
+    const auto stereo = DecodeMixerAudio(
+        ReadFile(Locate("tests/assets/xna40/media/mp3_stereo_44100_192k.mp3")), "stereo", true, error);
+    ASSERT_TRUE(stereo) << error;
+    EXPECT_EQ(stereo->channels, 2);
+    EXPECT_EQ(stereo->frames, 24192);
+    EXPECT_NEAR(ToneFrequency(Channel(*stereo, 0), 44100), 440.0, 5.0);
+    EXPECT_NEAR(ToneFrequency(Channel(*stereo, 1), 44100), 660.0, 5.0);
+
+    // Other rates (MPEG-2 and 2.5 among them), and ffmpeg's frame count for each. The two with a
+    // LAME header -- the VBR one and the ID3-tagged one -- have the encoder's delay and padding
+    // trimmed from it, and are the source's 0.5 s exactly.
+    struct Expected
+    {
+        const char* file;
+        int rate;
+        std::int64_t frames;
+    };
+    for (const Expected& expected : {Expected{"mp3_mono_8000_32k.mp3", 8000, 5184},
+                                     Expected{"mp3_mono_22050_64k.mp3", 22050, 12672},
+                                     Expected{"mp3_mono_48000_128k.mp3", 48000, 25344},
+                                     Expected{"mp3_mono_44100_2s.mp3", 44100, 89856},
+                                     Expected{"mp3_mono_44100_vbr.mp3", 44100, 22050},
+                                     Expected{"mp3_mono_44100_tagged.mp3", 44100, 22050}})
+    {
+        const auto data = DecodeMixerAudio(
+            ReadFile(Locate(std::string("tests/assets/xna40/media/") + expected.file)),
+            expected.file, true, error);
+        ASSERT_TRUE(data) << expected.file << ": " << error;
+        EXPECT_EQ(data->sampleRate, expected.rate) << expected.file;
+        EXPECT_EQ(data->frames, expected.frames) << expected.file;
+        EXPECT_NEAR(ToneFrequency(Channel(*data, 0), expected.rate), 440.0, 8.0) << expected.file;
+    }
+
+    for (const char* broken : {"empty.mp3", "garbage.mp3", "truncated.mp3"})
+    {
+        const std::vector<std::byte> bytes = ReadFile(Locate(std::string("tests/assets/xna40/media/") + broken));
+        const auto data = DecodeMixerAudio(bytes, broken, true, error);
+        if (std::string(broken) == "truncated.mp3" && data)
+        {
+            // The frames before the cut are real audio; what matters is that nothing past it is.
+            EXPECT_LT(data->frames, 24192) << broken;
+            continue;
+        }
+        EXPECT_FALSE(data) << broken;
+    }
+}
+
+TEST(CnaMixer, FlacIsDecodedToItsEveryFrameAndItsTone)
+{
+    std::string error;
+    const std::vector<std::byte> flac =
+        ReadFile(Locate("tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac"));
+    const auto decoded = DecodeMixerAudio(flac, "flac", true, error);
+    ASSERT_TRUE(decoded) << error;
+    EXPECT_EQ(decoded->encoding, MixerAudioData::Encoding::Pcm16);
+    EXPECT_EQ(decoded->channels, 1);
+    EXPECT_EQ(decoded->sampleRate, 44100);
+    EXPECT_EQ(decoded->frames, 44100);  // lossless: exactly the second it holds
+    EXPECT_NEAR(ToneFrequency(Channel(*decoded, 0), 44100), 440.0, 2.0);
+
+    const auto streamed = DecodeMixerAudio(flac, "flac", false, error);
+    ASSERT_TRUE(streamed) << error;
+    EXPECT_EQ(streamed->encoding, MixerAudioData::Encoding::Flac);
+    EXPECT_EQ(streamed->frames, 44100);
+}
+
+/// Plays audio to its end at its own rate and returns the left channel.
+std::vector<float> PlayToTheEnd(const std::shared_ptr<MixerAudioData>& data, const int loops = 0)
+{
+    MixerAudio audio;
+    audio.data = data;
+    CnaMixer mixer(data->sampleRate);
+    MixerTrack* track = mixer.CreateTrack();
+    EXPECT_TRUE(mixer.BindAudio(track, &audio));
+    MixerPlayOptions options;
+    options.loopCount = loops;
+    EXPECT_TRUE(mixer.Play(track, options));
+    std::vector<float> left;
+    for (int block = 0; block < 256 && track->state == MixerTrack::State::Playing; ++block)
+    {
+        const std::vector<float> rendered = Left(Render(mixer, 4096));
+        left.insert(left.end(), rendered.begin(), rendered.end());
+    }
+    EXPECT_EQ(track->state, MixerTrack::State::Stopped);
+    // Render() pads the last block after the end with silence.
+    return left;
+}
+
+TEST(CnaMixer, StreamedMp3AndFlacPlayWhatTheDecodedOnesPlayAndLoop)
+{
+    for (const char* file : {"tests/assets/xna40/media/mp3_mono_44100_128k.mp3",
+                             "tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac"})
+    {
+        std::string error;
+        const std::vector<std::byte> bytes = ReadFile(Locate(file));
+        const auto streamed = DecodeMixerAudio(bytes, file, false, error);
+        const auto decoded = DecodeMixerAudio(bytes, file, true, error);
+        ASSERT_TRUE(streamed && decoded) << file << ": " << error;
+        EXPECT_TRUE(streamed->IsEncoded()) << file;
+        EXPECT_EQ(streamed->frames, decoded->frames) << file;
+
+        const std::vector<float> fromStream = PlayToTheEnd(streamed);
+        const std::vector<float> fromMemory = PlayToTheEnd(decoded);
+        ASSERT_EQ(fromStream.size(), fromMemory.size()) << file;
+        double worst = 0.0;
+        for (std::size_t index = 0; index < fromStream.size(); ++index)
+        {
+            worst = std::max(worst, std::fabs(static_cast<double>(fromStream[index] - fromMemory[index])));
+        }
+        EXPECT_LE(worst, 2.0 / 32768.0) << file << ": float decoding against its own 16-bit rounding";
+
+        // One loop: the streamed decoder seeks back, and the second pass is the first again.
+        const std::vector<float> looped = PlayToTheEnd(streamed, 1);
+        const std::size_t frames = static_cast<std::size_t>(streamed->frames);
+        ASSERT_GE(looped.size(), 2 * frames) << file;
+        for (std::size_t index = 0; index < frames; index += 97)
+        {
+            ASSERT_EQ(looped[index], looped[frames + index]) << file << " at " << index;
+        }
+    }
 }
 
 TEST(CnaMixer, AStreamedVorbisTrackPlaysEveryFrameAndMatchesTheDecodedOne)

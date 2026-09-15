@@ -198,7 +198,7 @@ TEST_F(CnaMixerXna, ADynamicInstanceConsumesItsBuffersAndKeepsAskingForMore)
     instance.Stop();
 }
 
-TEST_F(CnaMixerXna, WavAndOggFilesLoadAndOtherFormatsAreRefusedByName)
+TEST_F(CnaMixerXna, WavOggMp3AndFlacFilesLoadAndOtherFormatsAreRefusedByName)
 {
     const SoundEffect wav(Locate("tests/assets/xna40/media/tone_mono_44100.wav").string());
     EXPECT_NEAR(wav.getDurationProperty().getTotalSecondsProperty(), 0.5, 0.001);
@@ -206,14 +206,22 @@ TEST_F(CnaMixerXna, WavAndOggFilesLoadAndOtherFormatsAreRefusedByName)
     const SoundEffect ogg(Locate("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg").string());
     EXPECT_NEAR(ogg.getDurationProperty().getTotalSecondsProperty(), 2.0, 0.001);
 
+    // plans/plan_x11.md X11-0161: 21 MPEG frames of 1152, and one lossless second.
+    const SoundEffect mp3(Locate("tests/assets/xna40/media/mp3_mono_44100_128k.mp3").string());
+    EXPECT_NEAR(mp3.getDurationProperty().getTotalSecondsProperty(), 24192.0 / 44100.0, 0.001);
+    const SoundEffect flac(
+        Locate("tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac").string());
+    EXPECT_NEAR(flac.getDurationProperty().getTotalSecondsProperty(), 1.0, 0.001);
+
     try
     {
-        const SoundEffect mp3(Locate("tests/assets/xna40/media/mp3_mono_44100_128k.mp3").string());
-        FAIL() << "an MP3 loaded";
+        const SoundEffect opus(
+            Locate("tests/assets/media/music/Artist Four/Album Opus/01 - Opus Song.opus").string());
+        FAIL() << "an Opus file loaded";
     }
     catch (const System::NotSupportedException& refusal)
     {
-        EXPECT_NE(std::string(refusal.what()).find("MP3"), std::string::npos) << refusal.what();
+        EXPECT_NE(std::string(refusal.what()).find("Opus"), std::string::npos) << refusal.what();
     }
 }
 

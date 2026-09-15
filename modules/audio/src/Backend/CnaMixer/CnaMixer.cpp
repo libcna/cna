@@ -142,7 +142,7 @@ namespace CNA::Internal::Audio
             return false;
         }
         track->stream = nullptr;
-        track->vorbis.reset();
+        track->decoder.reset();
         track->audio.reset();
         track->position = 0;
         track->ResetResampler();
@@ -150,17 +150,17 @@ namespace CNA::Internal::Audio
         {
             return audio == nullptr;
         }
-        if (audio->data->encoding == MixerAudioData::Encoding::Vorbis)
+        if (audio->data->IsEncoded())
         {
             try
             {
-                track->vorbis = OpenVorbisCursor(audio->data);
+                track->decoder = OpenEncodedCursor(audio->data);
             }
             catch (...)
             {
-                track->vorbis.reset();
+                track->decoder.reset();
             }
-            if (!track->vorbis)
+            if (!track->decoder)
             {
                 return false;
             }
@@ -176,7 +176,7 @@ namespace CNA::Internal::Audio
             return;
         }
         track->audio.reset();
-        track->vorbis.reset();
+        track->decoder.reset();
         track->stream = stream;
         track->position = 0;
         track->ResetResampler();
@@ -207,7 +207,7 @@ namespace CNA::Internal::Audio
         {
             return false;
         }
-        if (track->vorbis && !SeekVorbis(*track->vorbis, 0))
+        if (track->decoder && !SeekEncoded(*track->decoder, 0))
         {
             return false;
         }
@@ -293,9 +293,9 @@ namespace CNA::Internal::Audio
         {
             if (track.position < end)
             {
-                if (data.encoding == MixerAudioData::Encoding::Vorbis)
+                if (data.IsEncoded())
                 {
-                    if (track.vorbis && ReadVorbisFrame(*track.vorbis, frame))
+                    if (track.decoder && ReadEncodedFrame(*track.decoder, frame))
                     {
                         ++track.position;
                         return MixerFrameResult::Frame;
@@ -329,7 +329,7 @@ namespace CNA::Internal::Audio
             {
                 return MixerFrameResult::Ended;
             }
-            if (track.vorbis && !SeekVorbis(*track.vorbis, track.loopStart))
+            if (track.decoder && !SeekEncoded(*track.decoder, track.loopStart))
             {
                 return MixerFrameResult::Ended;
             }

@@ -15,10 +15,10 @@
 > X11-0152, input-method composition, X11-0153, exclusive fullscreen through XRandR, X11-0154,
 > drag and drop, X11-0155, touch and pens, X11-0156, per-monitor content scale, X11-0157, the
 > primary selection, and X11-0158, clipboard formats beyond text, are ✅** -- every Phase M row.
-> **Phase N** takes on the gaps left after it: X11-0160, controller mappings, is ✅; X11-0161..0166
-> are ⬜. See
+> **Phase N** takes on the gaps left after it: X11-0160, controller mappings, and X11-0161, MP3 and
+> FLAC for the SDL-free mixer, are ✅; X11-0162..0166 are ⬜. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
-> for the seven defects found that belong to other parts of the tree, and
+> for the eight defects found that belong to other parts of the tree, and
 > [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
 > this work's own code.
 >
@@ -290,7 +290,7 @@ first, as the owner ordered the list.
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
 | X11-0160 | Controller mappings (the community database's format) | ✅ | `src/Linux/EvdevMapping`: the `gamecontrollerdb.txt` format read line by line -- GUID (a checksum written into it moved out), name, every element kind: buttons, whole, half (`+a2`/`-a2`) and inverted (`a1~`) axes, hat directions (`h0.4`), half-axis outputs (`-leftx:b4`), trigger ranges; unknown elements skipped; `platform:` other than Linux refused; the two label conditions turned positional as the database's readers do, any other `hint:` taking its stated default. The database's numbering of a device's inputs (joystick range and above first, then below; hats that look digital as hats, the rest as axes), and its matching (exact identity, then any version; a stated name checksum -- CRC-16/ARC -- must match). The state evaluates a mapping with the database's rules: first element whose range holds the value decides, the previous one's control is released, half axes threshold at their middle, hat changes press and release by bit. The hub reads `CNA_GAMECONTROLLERCONFIG_FILE` then `CNA_GAMECONTROLLERCONFIG` when started; a device a mapping describes is a gamepad through it (also one the gamepad API already describes -- a user's correction). CNA ships no database. Tests: `X11EvdevMappingTests.cpp` (24 without a device, and one more over a whole database file where `CNA_TEST_GAMECONTROLLERDB` names one: all 269 Linux entries of the database SDL embeds are read, 5101 elements), in `CnaX11MappingTests`; 2 more in `CnaX11EvdevTests` against a real uinput pad with no gamepad-API code, a gamepad through a mapping in the environment and only a joystick without. **Not covered:** a physical generic pad. |
-| X11-0161 | MP3 and FLAC for CNA's own mixer | ⬜ | X11-0151 refuses them by name; SDL3_mixer plays both. |
+| X11-0161 | MP3 and FLAC for CNA's own mixer | ✅ | X11-0151 refused them by name while SDL3_mixer plays both. Now dr_mp3 v0.7.3 and dr_flac v0.13.3 (public domain / MIT No Attribution), vendored byte-identical as `third_party/dr_libs/` from SDL_mixer's copies (so the SDL-free build needs no submodule), compiled in one translation unit with warnings off. The mixer's streaming decoder is generalised from Vorbis to an `EncodedCursor` with a Vorbis, an MP3 and a FLAC implementation, each decoding a block of floats at a time from the shared file bytes and seeking through its decoder; `IsEncoded()` replaces the Vorbis test in the mix loop. Formats are recognised by content (ID3 or an MPEG frame sync; `fLaC`; FLAC inside Ogg by its `\x7FFLAC` packet), so an MP3 named `.wav` plays; sound effects are decoded when loaded, Songs as they play. An MP3's length is its frames' (counted from the headers, which is also what gives a Song its duration); Opus, WMA and XMA stay refused, by name. Tests: `CnaMixerTests.cpp` (3 new, 1 changed: frame counts equal to ffmpeg's decode of the same seven MP3 files (8 to 48 kHz, VBR, a LAME header trimmed to the source's exact 22 050 frames) and the FLAC, the 440 Hz tone measured in each and a stereo pair's 440/660 Hz per channel, empty/garbage/truncated input, streamed against decoded to within 16-bit rounding for both formats, a loop's second pass equal to its first); `CnaMixerXnaTests.cpp` (an MP3 and a FLAC `SoundEffect` with their durations, Opus refused by name); `MediaPlayerTests.cpp` (an MP3 and a FLAC `Song` played by `MediaPlayer` to their own end on ALSA's real-time `null` device). A LAME header's encoder delay and padding are trimmed, as ffmpeg trims them. **Not covered:** a real sound card (as X11-0151). |
 | X11-0162 | Microphone capture through ALSA | ⬜ | X11-0151 left capture out. |
 | X11-0163 | Battery and power state from sysfs | ⬜ | `powerInfo` is false; `/sys/class/power_supply` is a Linux facility, like evdev. |
 | X11-0164 | The clipboard handed to a clipboard manager at exit | ⬜ | `SAVE_TARGETS`, so what a game copied outlives it. |
@@ -349,7 +349,7 @@ first, as the owner ordered the list.
 
 Recorded rather than fixed, because each is pre-existing, generic, and outside what a platform
 backend may change. Each was **reproduced without X11** before being classified that way -- except
-F-6, which is recorded as read and says so, and F-7, which involves no platform code at all.
+F-6, which is recorded as read and says so, and F-7 and F-8, which involve no platform code at all.
 
 ### F-1 — `plans/plan_platform.md` §2 is stale at the baseline commit
 
@@ -432,6 +432,14 @@ a namespace-scope `kVertices` array from `Color::Red`/`Green`/`Blue`, which are 
 translation unit, so which is initialised first is unspecified and here the colours are read as
 zeros. Nothing to do with the platform axis; seen while running X11-0156's suites under the
 sanitizers (with `halt_on_error=0` so they could run). Not fixed here.
+
+### F-8 — a media-library test leaks the stream it saves a picture from
+
+LeakSanitizer reports 8815 bytes in `build-asan/CnaMediaTests`:
+`MediaLibrarySavePictureTest.SavePictureFromStreamProducesTheSameResultAsFromBuffer` makes its
+`FileStream` with `new` and never deletes it (`MediaLibraryTests.cpp`). A test's leak, not the
+library's, in a file this branch never touched; seen while running X11-0161's media suite under
+the sanitizers. Not fixed here.
 
 ---
 
@@ -723,6 +731,19 @@ The same peer, now serving each offered type its own bytes.
 | `build-asan` (`address,undefined`), `CnaPlatformModuleTests`: every evdev suite, the database case included | 63 passed, no report |
 | every X11 and platform ctest entry | 10/10 |
 | the boundary gates | all pass; nothing in `src/Linux/` names SDL |
+| CI, run 34976397502 (X11-0158) | every X11, SDL3, SDL2, headless and terminal job green -- the X11 cells with `xclip`, so the clipboard interop suite ran against the rewritten clipboard there; the two Win32 jobs fail only on the known `Win32RendererBridge.TheHandleSurvivesAResizeUnchanged` |
+
+### MP3 and FLAC (X11-0161, 2026-09-15)
+
+Everything on ALSA's silent `null` device, in `cmake-build-x11` (`CNA_AUDIO_PLATFORM=ALSA`).
+
+| Check | Result |
+|---|---|
+| `CnaMixer.*` | 24 passed: dr_mp3's frame counts equal ffmpeg's decode of the same seven MP3 fixtures -- 24 192 for the 0.5 s tone without a LAME header, 22 050 exactly for the two with one (VBR, ID3-tagged), 5 184 / 12 672 / 25 344 / 89 856 at 8, 22.05, 48 and 44.1 kHz (2 s) -- and 44 100 for the FLAC; the tone measured at 440 Hz in each, the stereo MP3 at 440 Hz left and 660 Hz right; streamed and predecoded playback equal to 2/32768 for both formats; a loop's second pass equal to its first |
+| the audio and media suites (`*Audio*:*Mixer*:*Song*:*Media*:*SoundEffect*:*Xact*:*Microphone*:*DynamicSound*`) | 586 passed, 8 skipped (the recording test outside its ctest entry, and the seven microphone tests: no capture on ALSA -- X11-0162); `MediaPlayerTest.Mp3AndFlacSongsPlayThroughCnasOwnMixerToTheirEnd` plays both songs to their own end in 3.04 s (2.04 + 1.0) |
+| `CnaAudioAlsaTests`, `CnaAudioAlsaRecordingTest` | 2/2 |
+| `build-asan` (`address,undefined`), `CnaAudioTests` and `CnaMediaTests` | 289 and 296 passed; one UBSan report, in the mixer test's own file helper, which the new empty-MP3 case reached (`memcpy` of an empty vector's null `data()`; fixed); one LeakSanitizer report, 8815 bytes, from a media-library test's own `FileStream` (F-8) |
+| the boundary gates | all pass |
 
 ### Regression
 

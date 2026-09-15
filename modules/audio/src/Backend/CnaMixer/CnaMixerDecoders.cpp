@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Backend/CnaMixer/CnaMixer.hpp"
+#include "Backend/CnaMixer/DrLibsApi.hpp"
 #include "Backend/CnaMixer/StbVorbisApi.hpp"
 
 #include "CNA/Internal/Audio/WavDecoder.hpp"
@@ -10,30 +11,31 @@
 
 namespace CNA::Internal::Audio
 {
-    /** @brief One track's Ogg Vorbis decoder over shared file bytes. */
-    class VorbisCursor
+    /**
+     * @brief One track's decoder over shared encoded file bytes: Vorbis, MP3 or FLAC.
+     *
+     * Decodes a block at a time into floats and hands them out a frame at a time; the file's
+     * bytes are the MixerAudioData's, shared by every track playing it.
+     */
+    class EncodedCursor
     {
     public:
-        VorbisCursor(std::shared_ptr<const MixerAudioData> data, stb_vorbis* vorbis, const int channels)
-            : data_(std::move(data)), vorbis_(vorbis), channels_(channels)
+        explicit EncodedCursor(std::shared_ptr<const MixerAudioData> data)
+            : data_(std::move(data)), channels_(data_->channels)
         {
-            buffer_.resize(static_cast<std::size_t>(kBufferFrames) * static_cast<std::size_t>(channels));
+            buffer_.resize(static_cast<std::size_t>(kBufferFrames) * static_cast<std::size_t>(channels_));
         }
 
-        ~VorbisCursor()
-        {
-            stb_vorbis_close(vorbis_);
-        }
+        virtual ~EncodedCursor() = default;
 
-        VorbisCursor(const VorbisCursor&) = delete;
-        VorbisCursor& operator=(const VorbisCursor&) = delete;
+        EncodedCursor(const EncodedCursor&) = delete;
+        EncodedCursor& operator=(const EncodedCursor&) = delete;
 
         bool Read(std::array<float, 2>& frame) noexcept
         {
             if (index_ == count_)
             {
-                const int frames = stb_vorbis_get_samples_float_interleaved(
-                    vorbis_, channels_, buffer_.data(), kBufferFrames * channels_);
+                const int frames = Decode(buffer_.data(), kBufferFrames);
                 if (frames <= 0)
                 {
                     return false;
@@ -51,31 +53,130 @@ namespace CNA::Internal::Audio
         {
             index_ = 0;
             count_ = 0;
-            if (frame == 0)
-            {
-                return stb_vorbis_seek_start(vorbis_) != 0;
-            }
-            if (frame > 0xFFFFFFFFull)
-            {
-                return false;
-            }
-            return stb_vorbis_seek(vorbis_, static_cast<unsigned int>(frame)) != 0;
+            return SeekTo(frame);
         }
+
+    protected:
+        /// Decodes up to @p frames interleaved frames; the count decoded, 0 at the end.
+        virtual int Decode(float* destination, int frames) noexcept = 0;
+        virtual bool SeekTo(std::uint64_t frame) noexcept = 0;
+
+        std::shared_ptr<const MixerAudioData> data_;
+        int channels_;
 
     private:
         static constexpr int kBufferFrames = 1024;
 
-        std::shared_ptr<const MixerAudioData> data_;
-        stb_vorbis* vorbis_;
-        int channels_;
         std::vector<float> buffer_;
         int index_ = 0;
         int count_ = 0;
     };
 
-    void VorbisCursorDeleter::operator()(VorbisCursor* cursor) const noexcept
+    void EncodedCursorDeleter::operator()(EncodedCursor* cursor) const noexcept
     {
         delete cursor;
+    }
+
+    namespace
+    {
+        class VorbisCursor final : public EncodedCursor
+        {
+        public:
+            VorbisCursor(std::shared_ptr<const MixerAudioData> data, stb_vorbis* vorbis)
+                : EncodedCursor(std::move(data)), vorbis_(vorbis)
+            {
+            }
+
+            ~VorbisCursor() override { stb_vorbis_close(vorbis_); }
+
+        protected:
+            int Decode(float* destination, const int frames) noexcept override
+            {
+                return stb_vorbis_get_samples_float_interleaved(vorbis_, channels_, destination,
+                                                                frames * channels_);
+            }
+
+            bool SeekTo(const std::uint64_t frame) noexcept override
+            {
+                if (frame == 0)
+                {
+                    return stb_vorbis_seek_start(vorbis_) != 0;
+                }
+                if (frame > 0xFFFFFFFFull)
+                {
+                    return false;
+                }
+                return stb_vorbis_seek(vorbis_, static_cast<unsigned int>(frame)) != 0;
+            }
+
+        private:
+            stb_vorbis* vorbis_;
+        };
+
+        class Mp3Cursor final : public EncodedCursor
+        {
+        public:
+            explicit Mp3Cursor(std::shared_ptr<const MixerAudioData> data) : EncodedCursor(std::move(data)) {}
+
+            ~Mp3Cursor() override
+            {
+                if (open_) { drmp3_uninit(&mp3_); }
+            }
+
+            bool Open() noexcept
+            {
+                open_ = drmp3_init_memory(&mp3_, data_->encoded.data(), data_->encoded.size(), nullptr) != 0;
+                return open_ && static_cast<int>(mp3_.channels) == channels_;
+            }
+
+        protected:
+            int Decode(float* destination, const int frames) noexcept override
+            {
+                return static_cast<int>(
+                    drmp3_read_pcm_frames_f32(&mp3_, static_cast<drmp3_uint64>(frames), destination));
+            }
+
+            bool SeekTo(const std::uint64_t frame) noexcept override
+            {
+                return drmp3_seek_to_pcm_frame(&mp3_, frame) != 0;
+            }
+
+        private:
+            drmp3 mp3_{};
+            bool open_ = false;
+        };
+
+        class FlacCursor final : public EncodedCursor
+        {
+        public:
+            explicit FlacCursor(std::shared_ptr<const MixerAudioData> data) : EncodedCursor(std::move(data)) {}
+
+            ~FlacCursor() override
+            {
+                if (flac_ != nullptr) { drflac_close(flac_); }
+            }
+
+            bool Open() noexcept
+            {
+                flac_ = drflac_open_memory(data_->encoded.data(), data_->encoded.size(), nullptr);
+                return flac_ != nullptr && static_cast<int>(flac_->channels) == channels_;
+            }
+
+        protected:
+            int Decode(float* destination, const int frames) noexcept override
+            {
+                return static_cast<int>(
+                    drflac_read_pcm_frames_f32(flac_, static_cast<drflac_uint64>(frames), destination));
+            }
+
+            bool SeekTo(const std::uint64_t frame) noexcept override
+            {
+                return drflac_seek_to_pcm_frame(flac_, frame) != 0;
+            }
+
+        private:
+            drflac* flac_ = nullptr;
+        };
     }
 
     namespace
@@ -204,6 +305,111 @@ namespace CNA::Internal::Audio
             data->frames = frames > 0 ? static_cast<std::int64_t>(frames) : -1;
             return data;
         }
+
+        std::shared_ptr<MixerAudioData> DecodeMp3(const std::span<const std::byte> bytes,
+                                                  const bool predecode, std::string& error)
+        {
+            drmp3 mp3{};
+            if (drmp3_init_memory(&mp3, bytes.data(), bytes.size(), nullptr) == 0)
+            {
+                error = "not a decodable MP3 stream";
+                return nullptr;
+            }
+            auto data = std::make_shared<MixerAudioData>();
+            data->channels = static_cast<int>(mp3.channels);
+            data->sampleRate = static_cast<int>(mp3.sampleRate);
+            // Counting walks the frame headers without synthesising them -- quick, and it is what
+            // gives a song its duration.
+            const drmp3_uint64 frames = drmp3_get_pcm_frame_count(&mp3);
+            if (data->channels <= 0 || data->sampleRate <= 0 || frames == 0)
+            {
+                drmp3_uninit(&mp3);
+                error = "the MP3 stream holds no audio";
+                return nullptr;
+            }
+            if (predecode)
+            {
+                if (drmp3_seek_to_pcm_frame(&mp3, 0) == 0)
+                {
+                    drmp3_uninit(&mp3);
+                    error = "the MP3 stream could not be rewound";
+                    return nullptr;
+                }
+                data->encoding = MixerAudioData::Encoding::Pcm16;
+                data->pcm16.resize(static_cast<std::size_t>(frames) * static_cast<std::size_t>(data->channels));
+                const drmp3_uint64 decoded = drmp3_read_pcm_frames_s16(&mp3, frames, data->pcm16.data());
+                drmp3_uninit(&mp3);
+                data->pcm16.resize(static_cast<std::size_t>(decoded) * static_cast<std::size_t>(data->channels));
+                data->frames = static_cast<std::int64_t>(decoded);
+                return data;
+            }
+            drmp3_uninit(&mp3);
+            const auto* raw = reinterpret_cast<const unsigned char*>(bytes.data());
+            data->encoding = MixerAudioData::Encoding::Mp3;
+            data->encoded.assign(raw, raw + bytes.size());
+            data->frames = static_cast<std::int64_t>(frames);
+            return data;
+        }
+
+        std::shared_ptr<MixerAudioData> DecodeFlac(const std::span<const std::byte> bytes,
+                                                   const bool predecode, std::string& error)
+        {
+            drflac* flac = drflac_open_memory(bytes.data(), bytes.size(), nullptr);
+            if (flac == nullptr)
+            {
+                error = "not a decodable FLAC stream";
+                return nullptr;
+            }
+            auto data = std::make_shared<MixerAudioData>();
+            data->channels = static_cast<int>(flac->channels);
+            data->sampleRate = static_cast<int>(flac->sampleRate);
+            const drflac_uint64 frames = flac->totalPCMFrameCount;
+            if (data->channels <= 0 || data->sampleRate <= 0)
+            {
+                drflac_close(flac);
+                error = "the FLAC stream declares no channels or no rate";
+                return nullptr;
+            }
+            if (predecode)
+            {
+                // A stream that does not state its length (0) is read to its end in blocks.
+                data->encoding = MixerAudioData::Encoding::Pcm16;
+                const std::size_t channels = static_cast<std::size_t>(data->channels);
+                constexpr drflac_uint64 kBlock = 4096;
+                std::vector<std::int16_t> block(static_cast<std::size_t>(kBlock) * channels);
+                drflac_uint64 total = 0;
+                while (true)
+                {
+                    const drflac_uint64 decoded = drflac_read_pcm_frames_s16(flac, kBlock, block.data());
+                    if (decoded == 0) { break; }
+                    data->pcm16.insert(data->pcm16.end(), block.begin(),
+                                       block.begin() + static_cast<std::ptrdiff_t>(decoded * channels));
+                    total += decoded;
+                }
+                drflac_close(flac);
+                if (total == 0)
+                {
+                    error = "the FLAC stream holds no audio";
+                    return nullptr;
+                }
+                data->frames = static_cast<std::int64_t>(total);
+                return data;
+            }
+            drflac_close(flac);
+            const auto* raw = reinterpret_cast<const unsigned char*>(bytes.data());
+            data->encoding = MixerAudioData::Encoding::Flac;
+            data->encoded.assign(raw, raw + bytes.size());
+            data->frames = frames > 0 ? static_cast<std::int64_t>(frames) : -1;
+            return data;
+        }
+
+        bool LooksLikeMp3(const std::span<const std::byte> bytes)
+        {
+            // An ID3v2 tag, or an MPEG audio frame's sync word.
+            return StartsWith(bytes, "ID3") ||
+                   (bytes.size() >= 2 && std::to_integer<unsigned>(bytes[0]) == 0xFF &&
+                    (std::to_integer<unsigned>(bytes[1]) & 0xE0) == 0xE0);
+        }
     }
 
     std::shared_ptr<MixerAudioData> DecodeMixerAudio(const std::span<const std::byte> bytes,
@@ -222,31 +428,42 @@ namespace CNA::Internal::Audio
                 if (ContainsWithin(bytes, "OpusHead", 256))
                 {
                     error = "'" + origin + "' is Ogg Opus, which CNA's mixer does not decode "
-                                           "(it plays WAV and Ogg Vorbis)";
+                                           "(it plays WAV, Ogg Vorbis, MP3 and FLAC)";
                     return nullptr;
                 }
                 std::string reason;
-                auto data = DecodeVorbis(bytes, predecode, reason);
+                // FLAC in an Ogg container announces itself in its first packet.
+                auto data = ContainsWithin(bytes, "\x7F" "FLAC", 256)
+                                ? DecodeFlac(bytes, predecode, reason)
+                                : DecodeVorbis(bytes, predecode, reason);
                 if (!data)
                 {
                     error = "'" + origin + "': " + reason;
                 }
                 return data;
             }
-            const char* format = nullptr;
-            if (StartsWith(bytes, "ID3") ||
-                (bytes.size() >= 2 && std::to_integer<unsigned>(bytes[0]) == 0xFF &&
-                 (std::to_integer<unsigned>(bytes[1]) & 0xE0) == 0xE0))
+            if (StartsWith(bytes, "fLaC"))
             {
-                format = "MP3";
+                std::string reason;
+                auto data = DecodeFlac(bytes, predecode, reason);
+                if (!data)
+                {
+                    error = "'" + origin + "': " + reason;
+                }
+                return data;
             }
-            else if (StartsWith(bytes, "fLaC"))
+            if (LooksLikeMp3(bytes))
             {
-                format = "FLAC";
+                std::string reason;
+                auto data = DecodeMp3(bytes, predecode, reason);
+                if (!data)
+                {
+                    error = "'" + origin + "': " + reason;
+                }
+                return data;
             }
-            error = "'" + origin + "' is " + (format != nullptr ? std::string(format)
-                                                                  : std::string("not a known audio format")) +
-                    ": CNA's mixer plays WAV (PCM, float, MS-ADPCM, IMA-ADPCM) and Ogg Vorbis";
+            error = "'" + origin + "' is not a known audio format: CNA's mixer plays WAV (PCM, "
+                                   "float, MS-ADPCM, IMA-ADPCM), Ogg Vorbis, MP3 and FLAC";
             return nullptr;
         }
         catch (const std::exception& exception)
@@ -284,29 +501,51 @@ namespace CNA::Internal::Audio
         return data;
     }
 
-    VorbisCursorPtr OpenVorbisCursor(const std::shared_ptr<const MixerAudioData>& data)
+    EncodedCursorPtr OpenEncodedCursor(const std::shared_ptr<const MixerAudioData>& data)
     {
-        if (!data || data->encoding != MixerAudioData::Encoding::Vorbis || data->encoded.empty())
+        if (!data || !data->IsEncoded() || data->encoded.empty() || data->channels <= 0)
         {
             return nullptr;
         }
-        int code = 0;
-        stb_vorbis* vorbis = stb_vorbis_open_memory(
-            data->encoded.data(), static_cast<int>(data->encoded.size()), &code, nullptr);
-        if (vorbis == nullptr)
+        switch (data->encoding)
         {
-            return nullptr;
+            case MixerAudioData::Encoding::Vorbis:
+            {
+                int code = 0;
+                stb_vorbis* vorbis = stb_vorbis_open_memory(
+                    data->encoded.data(), static_cast<int>(data->encoded.size()), &code, nullptr);
+                if (vorbis == nullptr)
+                {
+                    return nullptr;
+                }
+                if (stb_vorbis_get_info(vorbis).channels != data->channels)
+                {
+                    stb_vorbis_close(vorbis);
+                    return nullptr;
+                }
+                return EncodedCursorPtr(new VorbisCursor(data, vorbis));
+            }
+            case MixerAudioData::Encoding::Mp3:
+            {
+                auto cursor = std::make_unique<Mp3Cursor>(data);
+                return cursor->Open() ? EncodedCursorPtr(cursor.release()) : nullptr;
+            }
+            case MixerAudioData::Encoding::Flac:
+            {
+                auto cursor = std::make_unique<FlacCursor>(data);
+                return cursor->Open() ? EncodedCursorPtr(cursor.release()) : nullptr;
+            }
+            default:
+                return nullptr;
         }
-        const int channels = stb_vorbis_get_info(vorbis).channels;
-        return VorbisCursorPtr(new VorbisCursor(data, vorbis, channels));
     }
 
-    bool ReadVorbisFrame(VorbisCursor& cursor, std::array<float, 2>& frame) noexcept
+    bool ReadEncodedFrame(EncodedCursor& cursor, std::array<float, 2>& frame) noexcept
     {
         return cursor.Read(frame);
     }
 
-    bool SeekVorbis(VorbisCursor& cursor, const std::uint64_t frame) noexcept
+    bool SeekEncoded(EncodedCursor& cursor, const std::uint64_t frame) noexcept
     {
         return cursor.Seek(frame);
     }

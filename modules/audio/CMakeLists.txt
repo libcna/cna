@@ -41,10 +41,13 @@ if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
 elseif(CNA_AUDIO_PLATFORM STREQUAL "SDL2")
     target_link_libraries(cna_audio PRIVATE SDL2::SDL2)
 elseif(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
-    target_include_directories(cna_audio PRIVATE ${ALSA_INCLUDE_DIR} ${CNA_SOURCE_DIR}/third_party/stb)
+    target_include_directories(cna_audio PRIVATE ${ALSA_INCLUDE_DIR} ${CNA_SOURCE_DIR}/third_party/stb
+        ${CNA_SOURCE_DIR}/third_party/dr_libs)
     target_link_libraries(cna_audio PRIVATE ${CMAKE_DL_LIBS})
-    # stb_vorbis is third-party code kept identical to upstream; its warnings are not ours to fix.
+    # stb_vorbis and dr_libs (plans/plan_x11.md X11-0161) are third-party code kept identical to
+    # upstream; their warnings are not ours to fix.
     set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Backend/CnaMixer/StbVorbis.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Backend/CnaMixer/DrLibs.cpp"
         PROPERTIES COMPILE_OPTIONS "-w")
 elseif(NOT CNA_AUDIO_PLATFORM STREQUAL "NULL")
     message(FATAL_ERROR "CNA: cna_audio has no link rule for CNA_AUDIO_PLATFORM=${CNA_AUDIO_PLATFORM}")

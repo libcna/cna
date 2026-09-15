@@ -94,12 +94,20 @@ callback reaches into XNA objects while the process's statics are destroyed.
 | WAV — PCM 8/16/24/32-bit, IEEE float, MS-ADPCM, IMA-ADPCM | CNA's own decoder (`WavDecoder.cpp`), the one XNB content already uses |
 | XNB sound effects, WaveBank PCM/ADPCM entries | the same |
 | Ogg Vorbis | [stb_vorbis](https://github.com/nothings/stb) v1.22, vendored as `third_party/stb/stb_vorbis.c` (public domain / MIT). Sound effects are decoded when loaded; **Songs are decoded as they play**, so a long track costs its file size in memory, not its decoded size |
-| MP3, FLAC, Ogg Opus, WMA/xWMA, XMA | **not decoded.** Loading one fails with a message naming the format — `SoundEffect` throws `NotSupportedException`, `MediaPlayer.Play()` plays nothing |
+| MP3 (MPEG-1, 2 and 2.5 layer III — 8 to 48 kHz — CBR or VBR) | [dr_mp3](https://github.com/mackron/dr_libs) v0.7.3, vendored as `third_party/dr_libs/dr_mp3.h` (public domain / MIT No Attribution). Decoded when loaded for sound effects, as they play for Songs, like Vorbis (`plans/plan_x11.md` X11-0161) |
+| FLAC, native or in Ogg | dr_flac v0.13.3, `third_party/dr_libs/dr_flac.h`, the same way |
+| Ogg Opus, WMA/xWMA, XMA | **not decoded.** Loading one fails with a message naming what is played — `SoundEffect` throws `NotSupportedException`, `MediaPlayer.Play()` plays nothing |
+
+A file is recognised by its content, not its name: an MP3 named `.wav` plays as the MP3 it is. An
+MP3 with a LAME header has the encoder's delay and padding trimmed, so a 0.5 s tone lasts exactly
+22 050 frames; one without is exactly its frames, since nothing says how much of the first and last
+is padding — 24 192 for the same tone. Both are what ffmpeg decodes from the same files.
 
 A streamed Vorbis track that loops back to a frame other than its first seeks on the audio thread,
 which stb_vorbis does by bisecting the file's pages — cheap for a short file, a few milliseconds for
-a long one. Songs loop from their start, which is instant; a long streamed track with a loop point
-in its middle could underrun once per loop.
+a long one; MP3 and FLAC seek the same way through their decoders. Songs loop from their start,
+which is instant; a long streamed track with a loop point in its middle could underrun once per
+loop.
 
 ## What has been validated, and what has not
 
@@ -107,14 +115,16 @@ On a Debian 13 laptop, with every test on ALSA's `null` device (the test binarie
 themselves, so no test can make a sound):
 
 - the mixer against sample-exact expectations: gain order, mixing, interpolation, speed, loops, loop
-  regions, pause, restart from a stopped callback, deferred destruction, streams, Vorbis streaming
-  against the same file fully decoded (`CnaMixerTests.cpp`);
+  regions, pause, restart from a stopped callback, deferred destruction, streams, Vorbis, MP3 and
+  FLAC streaming against the same file fully decoded, and each decoded format's tone and channel
+  order measured (`CnaMixerTests.cpp`);
 - the device against ALSA's real `null` and `file` devices: negotiation, the stop barrier, real-time
   pacing, and a recording compared with what the callback produced, byte for byte
   (`AlsaAudioDeviceTests.cpp`), plus the cross-device conformance suite;
 - the XNA classes through the real facade (`CnaMixerXnaTests.cpp`), and the XACT category suite
   that previously ran only on SDL3_mixer;
-- the media module's whole suite with the mixer in place.
+- the media module's whole suite with the mixer in place, and an MP3 and a FLAC `Song` played by
+  `MediaPlayer` to their own end on the real-time `null` device.
 
 **Not validated:** playback through PipeWire, PulseAudio or a sound card. Nobody was at the machine,
 and opening the real device even with silence can wake the codec with an audible pop, so it was
