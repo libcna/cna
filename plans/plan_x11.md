@@ -884,6 +884,7 @@ No real microphone was opened: every session in the suites opens ALSA's `null` d
 | `X11Live.CapabilitiesDescribeThisServerRatherThanX11InGeneral`, the no-display platform test | `haptics` true and the service present with the controllers |
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`), `CnaPlatformModuleTests`: every evdev suite, the haptic tests, enumeration, capability, conformance | 173 passed, no report |
+| CI, run 34993257411 (`d0aac16c9`) | every X11 job green; in the step that re-runs the uinput suites with their output kept, all 7 haptic tests ran and passed on the runner (48-111 ms each). The two Win32 jobs fail only on the known `Win32RendererBridge.TheHandleSurvivesAResizeUnchanged` |
 
 ### File dialogs and URLs (X11-0169, 2026-09-15)
 
@@ -900,6 +901,8 @@ bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its o
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`): the portal suites, message boxes, capability, conformance, `LinuxSystemInfo` | 127 passed, no report (the 17 portal tests among them) |
 | `sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet --strict`, `hot_path_lint`, `nonproduction_sdl_audit`, `check_contract` | all pass |
+| CI, run 34996430174 (`ca096d1f4`) | every X11 job green, the D-Bus headers found; no per-case log of the portal suites yet |
+| CI, run 34998434866 (`32fbe21a2`) | in the step that fails on a skip, the 9 private-bus tests and the 2 through the platform ran and passed on the runner, with `libdbus-1-dev` and `dbus-daemon` installed by the job |
 
 ### The screen kept on (X11-0170, 2026-09-15)
 
@@ -910,6 +913,7 @@ bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its o
 | `X11ScreenSaverDesktopLive.*`, private bus | 2 passed |
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`): the screen-saver and portal suites, conformance, capability | 109 passed, no report |
+| CI, run 34998434866 (`32fbe21a2`) | all 4 ran and passed on the runner, the killed peer's included (10.1 s); every X11 job green |
 
 ### Tray icons (X11-0171, 2026-09-15)
 
