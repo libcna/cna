@@ -4,6 +4,7 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "X11Clipboard.hpp"
+#include "X11CoreFont.hpp"
 #include "X11DesktopPortal.hpp"
 #include "X11Display.hpp"
 #include "X11Error.hpp"
@@ -36,93 +37,6 @@ namespace CNA::Platform::X11 {
             if ((lead & 0xF8u) == 0xF0u) { return 4; }
             return 1;
         }
-
-        /// Unicode core fonts, best first: the classic 6x13 `fixed`, whose Unicode edition covers
-        /// most scripts, then whatever Unicode font the server has.
-        constexpr const char* kUnicodeFonts[] = {
-            "-misc-fixed-medium-r-normal--13-*-*-*-c-70-iso10646-1",
-            "-misc-fixed-medium-r-normal--13-*-*-*-*-*-iso10646-1",
-            "-*-*-medium-r-normal--*-120-*-*-*-*-iso10646-1",
-            "-*-*-*-*-*--*-*-*-*-*-*-iso10646-1",
-        };
-
-        /// The font a box draws with: a Unicode core font indexed by UTF-16 code unit, which needs
-        /// nothing of the process locale; the server's built-in `fixed`, Latin-1, where there is
-        /// none.
-        class BoxFont
-        {
-        public:
-            explicit BoxFont(Display* display) : display_(display)
-            {
-                X11ErrorTrap trap(display_);
-                for (const char* pattern : kUnicodeFonts)
-                {
-                    font_ = XLoadQueryFont(display_, pattern);
-                    if (font_ != nullptr)
-                    {
-                        unicode_ = true;
-                        break;
-                    }
-                }
-                if (font_ == nullptr)
-                {
-                    font_ = XLoadQueryFont(display_, "fixed");
-                }
-                trap.Sync();
-                if (font_ == nullptr)
-                {
-                    throw PlatformException("X11Dialogs", "the X server has no font to draw a message box with");
-                }
-            }
-
-            ~BoxFont() { XFreeFont(display_, font_); }
-
-            BoxFont(const BoxFont&) = delete;
-            BoxFont& operator=(const BoxFont&) = delete;
-
-            [[nodiscard]] int Measure(const std::string_view text) const
-            {
-                if (unicode_)
-                {
-                    const std::vector<XChar2b> characters = Characters(text);
-                    return XTextWidth16(font_, characters.data(), static_cast<int>(characters.size()));
-                }
-                const std::string latin1 = Utf8ToLatin1(std::string(text));
-                return XTextWidth(font_, latin1.data(), static_cast<int>(latin1.size()));
-            }
-
-            void Draw(const Drawable drawable, GC gc, const int x, const int y, const std::string_view text) const
-            {
-                XSetFont(display_, gc, font_->fid);
-                if (unicode_)
-                {
-                    const std::vector<XChar2b> characters = Characters(text);
-                    XDrawString16(display_, drawable, gc, x, y, characters.data(), static_cast<int>(characters.size()));
-                    return;
-                }
-                const std::string latin1 = Utf8ToLatin1(std::string(text));
-                XDrawString(display_, drawable, gc, x, y, latin1.data(), static_cast<int>(latin1.size()));
-            }
-
-            [[nodiscard]] int Ascent() const { return font_->ascent; }
-            [[nodiscard]] int Descent() const { return font_->descent; }
-
-        private:
-            [[nodiscard]] static std::vector<XChar2b> Characters(const std::string_view text)
-            {
-                std::vector<XChar2b> characters;
-                for (const char16_t unit : DecodeMessageBoxText(text))
-                {
-                    characters.push_back(XChar2b{static_cast<unsigned char>(unit >> 8),
-                                                 static_cast<unsigned char>(unit & 0xFFu)});
-                }
-                return characters;
-            }
-
-            Display* display_;
-            XFontStruct* font_ = nullptr;
-            bool unicode_ = false;
-        };
 
         /// A connection of the box's own, registered with the error policy so a stray error on it
         /// is reported, never fatal, and closed however the box ends.
@@ -188,7 +102,7 @@ namespace CNA::Platform::X11 {
                     parent = kNone;
                 }
             }
-            const BoxFont font(display);
+            const X11CoreFont font(display);
             const X11TextMeasure measure = [&font](const std::string_view text) { return font.Measure(text); };
             const std::vector<std::string> lines = WrapMessageBoxText(message, kMaximumTextWidth, measure);
             const X11MessageBoxLayout layout = LayoutMessageBox(lines, buttons, measure, font.Ascent(), font.Descent());

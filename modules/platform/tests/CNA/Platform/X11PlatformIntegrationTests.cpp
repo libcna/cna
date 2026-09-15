@@ -670,6 +670,7 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     // File dialogs are the desktop portal's (X11-0169), and no test reaches a session bus that
     // has one (X11DesktopPortalTests.cpp).
     EXPECT_FALSE(capabilities.nativeFileDialog);
+    // A tray is a client owning _NET_SYSTEM_TRAY_S0 (X11-0171), and this server runs none.
     EXPECT_FALSE(capabilities.tray);
     EXPECT_FALSE(capabilities.camera);
     EXPECT_FALSE(capabilities.managedEntrypoint);

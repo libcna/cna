@@ -523,7 +523,7 @@ jobs:
           done
           run_without_skips "the private-server suites" sh tools/platform/x11_test_server.sh \
             ./build/CnaPlatformModuleTests \
-            --gtest_filter='X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11MessageBoxLive.*'
+            --gtest_filter='X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11MessageBoxLive.*:X11TrayLive.*'
 
       - name: Run SDL containment gates
         run: |

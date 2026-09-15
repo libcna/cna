@@ -1233,7 +1233,7 @@ if(CNA_BUILD_TESTS)
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11ScreenSaverPeer.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11ScreenSaverPeer.*:X11TrayLive.*")
     endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
@@ -1559,7 +1559,7 @@ if(CNA_BUILD_TESTS)
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11TrayLive.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests

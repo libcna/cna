@@ -112,7 +112,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `sensors` | ❌ | not an X11 facility |
 | `messageBox` | ✅ | drawn by the backend with Xlib, a dialog window of its own — see [Message boxes](#message-boxes) |
 | `nativeFileDialog` | conditional | true when the session bus has the desktop portal (`xdg-desktop-portal`), running or one the bus would start — see [File dialogs and URLs](#file-dialogs-and-urls) |
-| `tray` | ❌ | a desktop-environment protocol, not an X11 one |
+| `tray` | conditional | true when a system tray (a client owning `_NET_SYSTEM_TRAY_S<n>`) is running when the platform is made — see [Tray icons](#tray-icons) |
 | `camera` | ❌ | not an X11 facility |
 | `managedEntrypoint` | ❌ | an ordinary `main()` |
 
@@ -687,6 +687,24 @@ client goes away -- a test kills a game holding it with `SIGKILL` and watches th
 a server without that extension has its saver's timeout set to zero and restored afterwards, the one
 way that outlives a crashed game. `IsScreenSaverEnabled` is what the game asked for: false exactly
 while it keeps the screen on. The desktop's own idle settings are not a client's to read.
+
+## Tray icons
+
+`GetTray()` puts icons in the system tray through X11's own protocol, the freedesktop System Tray
+Protocol (`plans/plan_x11.md` X11-0171): an icon is a small window the tray embeds with XEmbed when
+the icon asks to be docked. Xfce, MATE, LXDE, i3bar, polybar and the like show such icons
+themselves; KDE Plasma shows them through its XEmbed bridge; GNOME has no tray, and `tray` is false
+where no client owns `_NET_SYSTEM_TRAY_S<screen>` when the platform is made. The contract gives an
+icon no picture, so it is a badge with the tooltip's first letter.
+
+A click on the icon opens its flat menu, a popup window drawn with Xlib like the message box: a check
+box for a checkable entry, greyed text for one that cannot be chosen, the entry under the pointer
+lit. A click on an entry toggles a checkable one first, then runs its callback from `PollEvents`, as
+the native menus of the other backends do. A click anywhere else closes the menu without choosing
+anything. The tooltip appears when the pointer has rested on the icon for 0.6 s. A tray that restarts
+announces itself, and every icon docks with it again, made anew if the old tray took it along. The
+service has a connection of its own, read by `PollEvents`; the game's windows and their events are
+not involved.
 
 ## Graphics bridges
 

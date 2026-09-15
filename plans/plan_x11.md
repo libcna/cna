@@ -20,8 +20,8 @@
 > battery state from Linux, X11-0164, the clipboard handed to a clipboard manager at exit, and
 > X11-0165, input-device enumeration, X11-0166, gamepad motion sensors, X11-0167, message boxes
 > drawn with Xlib, X11-0168, force feedback through the kernel, X11-0169, file dialogs and OpenUrl
-> through the desktop portal, and X11-0170, the screen kept on by the desktop, are ✅ -- every Phase N
-> row. See
+> through the desktop portal, X11-0170, the screen kept on by the desktop, and X11-0171, tray icons
+> through X11's own system tray protocol, are ✅ -- every Phase N row. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the eight defects found that belong to other parts of the tree, and
 > [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
@@ -128,7 +128,7 @@ shared by three backends.
 | D12 | **The clipboard is a real selection owner with `TARGETS`, `UTF8_STRING`, `STRING`, `TEXT` and `INCR` for large transfers.** | An X11 clipboard that only works between two CNA windows is not a clipboard. Ownership, `SelectionRequest`, `SelectionNotify`, `SelectionClear` and incremental transfer are all handled, and paste from an external application is what the test asserts. |
 | D13 | **A GLX window's `Visual` and `Colormap` are chosen from the `FBConfig` *before* `XCreateWindow`.** | This is the one place where window creation and GL are genuinely coupled. `WindowDescription::renderIntent == OpenGl` plus `openGlFramebuffer` already carries exactly the information needed, so the coupling is resolved at the contract level that already exists — no generic change. A window created with `renderIntent != OpenGl` refuses to host a GL context rather than failing obscurely inside GLX. |
 | D14 | **Optional X extensions are optional at *build* time, individually.** | `X11` and `Xext` are mandatory. `Xi` (raw mouse), `Xrandr` (displays), `Xcursor` (shaped cursors), `Xfixes` (pointer barriers/hiding) are each detected separately, each guarded by its own `CNA_X11_HAVE_*` macro, and each turns off exactly one capability when absent. No extension is required because it is convenient. |
-| D15 | **`tray`, `camera`, `sensors` are `false`.** | Core X11 has no standard facility for any of them, and shelling out to `zenity`/`kdialog` is not a native backend. Truthfulness beats checkbox count; the contract's rule is that a false capability *refuses*, which is exactly what these do. (`gamepad` and `joystick` were on this list until X11-0150; see D17. `haptics` was until X11-0168: force feedback is the kernel's, as the controllers are. `nativeFileDialog` was until X11-0169: the desktop portal is a service on the session bus, asked over it, not a program started. `messageBox` was until X11-0167: X has no dialog service, but a box is only a window, which the backend draws itself -- no program is started -- as SDL3's X11 backend draws its own once `zenity` has failed, a step CNA does not take.) |
+| D15 | **`camera` and `sensors` are `false`.** | Core X11 has no standard facility for any of them, and shelling out to `zenity`/`kdialog` is not a native backend. Truthfulness beats checkbox count; the contract's rule is that a false capability *refuses*, which is exactly what these do. (`gamepad` and `joystick` were on this list until X11-0150; see D17. `haptics` was until X11-0168: force feedback is the kernel's, as the controllers are. `nativeFileDialog` was until X11-0169: the desktop portal is a service on the session bus, asked over it, not a program started. `tray` was until X11-0171: X11 has a tray protocol of its own, the freedesktop System Tray Protocol. `messageBox` was until X11-0167: X has no dialog service, but a box is only a window, which the backend draws itself -- no program is started -- as SDL3's X11 backend draws its own once `zenity` has failed, a step CNA does not take.) |
 | D16 | **`ime` is `false` unless the application draws the composition.** (Revised by X11-0152, 2026-09-15.) | XIM delivers committed text via `Xutf8LookupString`, which is `textInput`. Composition (`TextEditingEvent`) needs the on-the-spot style, in which the input method stops drawing its own composition -- so it is requested only when the application says it draws one (`CNA_IME_IMPLEMENTED_UI=composition`, as SDL's hint does), and `ime` is true exactly then. Candidate lists (`TextEditingCandidatesEvent`) have no XIM protocol and are never delivered. |
 | D17 | **Controllers come from the Linux kernel's evdev nodes directly -- no libudev, no libevdev, no SDL -- in `src/Linux/`, not `src/X11/`.** (X11-0150, 2026-09-15) | X delivers no controller input, so this was never going to be an X feature; it is a Linux one, and keeping it out of `src/X11/` is what lets a future Wayland backend take it unchanged. The kernel's own interfaces -- `<linux/input.h>`, sysfs, inotify -- are all it needs; libudev would add a link dependency for a hot-plug signal inotify already gives, and libevdev a dependency for ioctls that are a page of code. Classification reads sysfs rather than opening nodes (D-12). On a Unix without `<linux/input.h>` the capabilities are simply false. |
 
@@ -339,6 +339,27 @@ Tests (`X11ScreenSaverTests.cpp`):
 
 **Not covered:** a real desktop's idle blanking. A killed game's desktop request is also not tested directly; it follows from the bus dropping a dead connection's name. |
 
+| X11-0171 | Tray icons through X11's own system tray protocol | ✅ | `tray` was false because, by D15, a tray is a desktop-environment protocol. X11 has one of its own, though: the freedesktop System Tray Protocol, which Xfce, MATE, LXDE, i3bar and polybar implement, and which KDE Plasma bridges; SDL3 goes through GTK and libappindicator instead. `X11Tray` works on a connection of its own, read by `PollEvents`.
+- **The icon** is a window with `_XEMBED_INFO` (version 0, mapped), docked with `SYSTEM_TRAY_REQUEST_DOCK` to the owner of `_NET_SYSTEM_TRAY_S<screen>`, and sized by the tray. The contract gives it no picture, so it is drawn as a badge with the tooltip's first letter. The tooltip is also its `_NET_WM_NAME`.
+- **The menu** is an override-redirect `_NET_WM_WINDOW_TYPE_POPUP_MENU` window drawn with `X11CoreFont` (the message box's font, moved to a class of its own), opened by releasing a click on the icon, with the pointer grabbed so a click outside closes it. It shows check boxes, greyed entries that cannot be chosen, and the lit entry under the pointer. Choosing an entry needs a press and a release on it. A checkable entry is toggled first, then its callback runs from `PollEvents`, after the event loop, so a callback may destroy its own icon.
+- **The tooltip** appears after 0.6 s of resting on the icon.
+- **A tray that restarts** is followed through its `MANAGER` announcement: every icon docks again, and is made anew if the old tray took it along.
+- **An icon that outlives the service** is detached rather than left to call into a closed connection.
+
+`tray` is true where a tray owns the selection when the platform is made. Tests: `X11TrayTests.cpp`, 7 on the launcher's Xvfb against a tray the test plays:
+- no tray, no service;
+- the dock request, `_XEMBED_INFO` and the badge's pixels;
+- the menu opened by a click, and a greyed entry doing nothing;
+- a checkable entry toggled before its callback, run from `PollEvents`;
+- an outside click closing the menu;
+- a Quit whose callback destroys its own icon;
+- entry changes read back, unknown indices ignored, the tooltip as the window's name;
+- the tooltip appearing after a rest and going on leave;
+- a restarted tray getting the icon again;
+- a released icon leaving the tray.
+
+The capability test still expects false: the bare Xvfb runs no tray. **Not covered:** a real panel, which sizes, scales and composites icons in its own way. |
+
 ---
 
 ## 5. Capability matrix (target)
@@ -373,7 +394,8 @@ Tests (`X11ScreenSaverTests.cpp`):
 | `powerInfo` | ✅ true on Linux | the kernel's power supplies in sysfs, with or without a display (X11-0163) |
 | `messageBox` | ✅ true | drawn with Xlib, a dialog window on a connection of its own (X11-0167) |
 | `nativeFileDialog` | ✅ true with a display and the desktop portal on the session bus | xdg-desktop-portal's FileChooser, asked over D-Bus (X11-0169) |
-| `tray`, `camera` | ❌ false | D15 |
+| `tray` | ✅ true where a system tray runs | the freedesktop System Tray Protocol, XEmbed (X11-0171) |
+| `camera` | ❌ false | D15 |
 | `managedEntrypoint` | ❌ false | ordinary `main()` |
 
 ---
@@ -888,6 +910,15 @@ bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its o
 | `X11ScreenSaverDesktopLive.*`, private bus | 2 passed |
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`): the screen-saver and portal suites, conformance, capability | 109 passed, no report |
+
+### Tray icons (X11-0171, 2026-09-15)
+
+| Check | Result |
+|---|---|
+| `X11TrayLive.*` on the launcher's Xvfb, against the test's own tray | 7 passed; 2 shuffled runs with the message-box suite, 21 of 21 each |
+| `X11MessageBox*` after the font moved to `X11CoreFont` | 26 passed |
+| `build-asan` (`address,undefined`): the tray, the message boxes, conformance, capability | 120 passed, no report |
+| every X11 and platform ctest entry | 10/10 |
 
 ### Regression
 

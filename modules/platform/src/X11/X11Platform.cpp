@@ -281,10 +281,10 @@ namespace CNA::Platform::X11 {
         // desktop portal's, where the session bus has one (X11-0169).
         capabilities.messageBox = dialogs_ != nullptr;
         capabilities.nativeFileDialog = dialogs_ != nullptr && portal_ != nullptr;
+        // Icons in the system tray, where a tray was running when the platform was made (X11-0171).
+        capabilities.tray = tray_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
-        //   tray                   -- a desktop-environment protocol, and shelling out to a
-        //                             helper would not be a native backend (plan D15).
         //   camera                 -- not an X11 facility.
         //   managedEntrypoint      -- an ordinary main().
         return capabilities;
@@ -311,6 +311,11 @@ namespace CNA::Platform::X11 {
             *connection_, connection_->GetAtoms().primary, "PRIMARY");
         dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
         dialogs_ = std::make_unique<X11Dialogs>(*connection_, portal_.get());
+        // A tray is a client owning the selection; there is one or there is not, now (X11-0171).
+        if (HasSystemTray(connection_->GetDisplay(), connection_->GetScreen()))
+        {
+            tray_ = std::make_unique<X11Tray>(connection_->GetDisplayName());
+        }
         if (connection_->GetXInput2Opcode() >= 0)
         {
             inputDevices_ = std::make_unique<X11InputDevices>(
@@ -336,6 +341,7 @@ namespace CNA::Platform::X11 {
         vulkanSurface_.reset();
         glContext_.reset();
         displays_.reset();
+        tray_.reset();
         dialogs_.reset();
         inputDevices_.reset();
         dragAndDrop_.reset();
@@ -743,6 +749,11 @@ namespace CNA::Platform::X11 {
             portal_->Pump();
         }
 #endif
+        // The tray's clicks and menus, from the same call too (X11-0171).
+        if (tray_ != nullptr)
+        {
+            tray_->Pump();
+        }
     }
 
     void X11Platform::PollXEvents(std::vector<PlatformEvent>& destination)
