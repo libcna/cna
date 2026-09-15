@@ -197,6 +197,38 @@ TEST_F(X11InputMethod, AnApplicationThatDrawsTheCompositionReceivesIt)
         return !Editing().empty() && Editing().back().text.empty();
     })) << "the composition never ended";
 
+    // Ended once, and before the text that replaced it, whatever the input method sends after
+    // its commit: ibus 1.5.32 draws its preedit empty once more, the CI runner's 1.5.29 sent
+    // nothing, and either way the application saw one empty composition, as under SDL3.
+    Drain(std::chrono::milliseconds(300));
+    std::ptrdiff_t lastComposing = -1;
+    std::ptrdiff_t ended = -1;
+    std::ptrdiff_t committed = -1;
+    int endings = 0;
+    for (std::size_t index = 0; index < seen_.size(); ++index)
+    {
+        if (const auto* editing = std::get_if<TextEditingEvent>(&seen_[index]))
+        {
+            if (!editing->text.empty())
+            {
+                lastComposing = static_cast<std::ptrdiff_t>(index);
+                endings = 0;
+            }
+            else
+            {
+                ended = static_cast<std::ptrdiff_t>(index);
+                ++endings;
+            }
+        }
+        else if (std::holds_alternative<TextInputEvent>(seen_[index]) && committed < 0)
+        {
+            committed = static_cast<std::ptrdiff_t>(index);
+        }
+    }
+    EXPECT_EQ(endings, 1) << "the composition was ended more than once";
+    EXPECT_LT(lastComposing, ended);
+    EXPECT_LT(ended, committed) << "the committed text arrived before its composition ended";
+
     // The composing keys were the input method's, not the game's: no key event carries the
     // input method's commit as a press of keycode 0, and nothing arrived for "no key".
     for (const PlatformEvent& event : seen_)

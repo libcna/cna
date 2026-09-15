@@ -16,7 +16,7 @@
 > X11-0154..X11-0158 are ⬜. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the five defects found that belong to other parts of the tree, and
-> [§8](#8-defects-this-work-found-in-its-own-implementation) for the fourteen this work's own tests
+> [§8](#8-defects-this-work-found-in-its-own-implementation) for the fifteen this work's own tests
 > caught in this work's own code.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
@@ -412,6 +412,7 @@ these was found by a test rather than by reading the code. None was fixed by wea
 
 | D-13 | **A zero-length sound handed a null pointer to `memcpy`** in CNA's mixer (X11-0151): wrapping an empty SoundEffect's PCM copied zero bytes from an empty vector's `data()`, which may be null -- undefined behaviour even for zero bytes, since glibc declares both arguments nonnull. The same class as NPV-0103. | UndefinedBehaviorSanitizer, on the audio suites in `build-asan` switched to ALSA | Harmless on every compiler in practice, which is exactly why only a sanitizer sees it. `CnaMixer.AnEmptySoundPlaysAndEndsAtOnce` now plays an empty sound on purpose, forever-looped as well. |
 | D-14 | **Fullscreen asked for before a game's first event pump was never applied** (found by X11-0153, in X11-0062's code). `SetNetWmState` wrote `_NET_WM_STATE` directly onto a window until it had *seen* its `MapNotify`, but a game shows its window and applies `IsFullScreen` while it is still setting up, before pumping anything: the window manager had managed the window by then and ignores a property written onto a managed window. The window stayed windowed -- and under exclusive fullscreen, a decorated 800x600 window on an 800x600 monitor. Once `Show()` has sent the map request, the client message is the right one (the MapRequest reaches the window manager first). | `X11_House3D_ExclusiveFullscreen_OPENGL33`, checking the game window's geometry; reduced to `X11WithWindowManager.FullscreenAskedForBeforeTheFirstEventPumpIsApplied`, which fails (320x240, windowed) without the fix | `GetFullscreenMode()` reads `_NET_WM_STATE` back -- the very property the backend had written -- so every assertion on it passed; only the geometry shows it. Every suite waited for the window to be managed before asking. |
+| D-15 | **A composition was not ended by its commit** (X11-0152). The backend ended it only when the input method drew its preedit empty or finished it after committing; the ibus 1.5.32 it was written against does, the CI runner's ibus 1.5.29 did not within three seconds of the commit, so the application kept showing the composition beside the text that replaced it. The commit now ends it, ahead of the text, and an empty composition is delivered once however many the input method sends -- as SDL3's X11 backend does. | `X11InputMethod.AnApplicationThatDrawsTheCompositionReceivesIt` on CI (run 34955898208), not locally | Locally ibus cleared the preedit itself, so the path the backend was missing never ran. The test now also checks the composition ended exactly once and before the text, which exercises the de-duplication against the local ibus. |
 
 D-10 is the one worth the extra sentence: it is exactly the failure the plan predicted when it
 split the Xvfb and window-manager suites, and it would have shipped green had the suite only ever
@@ -562,7 +563,9 @@ the one end-to-end test records through ALSA's `file` device.
 | stopping text input mid-composition | an empty editing event; an `e` typed after restarting is `e`, not `é` |
 
 Four passes of the suite in a row; `X11Live.*` (51) passes with the private ibus present as well
-as without one, and `X11Live.*`, the clipboard suite and both conformance suites pass (137, 6
+as without one. On CI's Ubuntu 24.04 (ibus 1.5.29) the first case failed -- the commit arrived and
+the composition was never ended -- which is D-15; after its fix, four more local passes with the
+composition checked to end once and before the committed text, and `X11Live.*`, the clipboard suite and both conformance suites pass (137, 6
 skipped as before). The developer's own ibus daemon ran throughout, untouched.
 
 ### Exclusive fullscreen (X11-0153, 2026-09-15)

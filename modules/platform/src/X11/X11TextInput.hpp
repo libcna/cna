@@ -134,7 +134,8 @@ namespace CNA::Platform::X11 {
          * @param event The key press event; not const because `Xutf8LookupString` takes a
          *        non-const pointer.
          * @param text Receives the committed UTF-8 text; cleared first.
-         * @return True when @p text is non-empty.
+         * @return True when @p text is non-empty. A commit also ends the window's composition,
+         *         queueing its empty `TextEditingEvent` -- drain those before delivering the text.
          */
         bool LookupText(X11Window* window, XKeyEvent& event, std::string& text);
 
@@ -166,6 +167,7 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] X11Window* FindWindow(WindowId id) const;
         void UpdateContextFocus();
         void EndComposition(X11Window& window);
+        void ClearComposition(X11Window& window);
 
         X11Connection& connection_;
         XIM inputMethod_ = nullptr;

@@ -54,6 +54,9 @@ namespace CNA::Platform::X11 {
             std::u32string text;
             std::vector<XIMFeedback> feedback;
             int caret = 0;
+            /// A non-empty composition was delivered and nothing has ended it yet -- so the next
+            /// empty one is news, and any after it are not.
+            bool announced = false;
             XIMCallback start{};
             XIMCallback done{};
             XIMCallback draw{};
@@ -133,6 +136,20 @@ namespace CNA::Platform::X11 {
 
         void EmitComposition(PreeditState& state)
         {
+            // An empty composition is delivered once, to end the one before it: a commit ends a
+            // composition here and the input method may then clear its own as well.
+            if (state.text.empty())
+            {
+                if (!state.announced)
+                {
+                    return;
+                }
+                state.announced = false;
+            }
+            else
+            {
+                state.announced = true;
+            }
             TextEditingEvent event;
             event.window = state.window;
             event.text = ToUtf8(state.text);
@@ -176,14 +193,10 @@ namespace CNA::Platform::X11 {
         void PreeditDone(XIM, XPointer clientData, XPointer)
         {
             auto& state = *reinterpret_cast<PreeditState*>(clientData);
-            const bool hadText = !state.text.empty();
             state.text.clear();
             state.feedback.clear();
             state.caret = 0;
-            if (hadText)
-            {
-                EmitComposition(state);
-            }
+            EmitComposition(state);
         }
 
         void PreeditDraw(XIM, XPointer clientData, XPointer callData)
@@ -456,16 +469,21 @@ namespace CNA::Platform::X11 {
         {
             XFree(discarded);
         }
-        if (HasCompositionEvents())
+        ClearComposition(window);
+    }
+
+    void X11TextInput::ClearComposition(X11Window& window)
+    {
+        if (!HasCompositionEvents())
         {
-            auto* state = static_cast<PreeditState*>(window.GetInputContextData());
-            if (state != nullptr && !state->text.empty())
-            {
-                state->text.clear();
-                state->feedback.clear();
-                state->caret = 0;
-                EmitComposition(*state);
-            }
+            return;
+        }
+        if (auto* state = static_cast<PreeditState*>(window.GetInputContextData()))
+        {
+            state->text.clear();
+            state->feedback.clear();
+            state->caret = 0;
+            EmitComposition(*state);
         }
     }
 
@@ -598,6 +616,16 @@ namespace CNA::Platform::X11 {
         if (text.size() == 1 && static_cast<unsigned char>(text[0]) == 0x7Fu)
         {
             text.clear();
+        }
+
+        // A commit ends the composition it came from. Some input methods then draw their preedit
+        // empty and some do not: the ibus 1.5.32 this was written against does, the ibus 1.5.29 of
+        // the CI runner did not within three seconds of committing, which left an application
+        // showing the composition next to the text that replaced it. SDL3's X11 backend ends it at
+        // the commit for the same reason; the empty event is then queued ahead of the text.
+        if (!text.empty() && window != nullptr && context != nullptr)
+        {
+            ClearComposition(*window);
         }
         return !text.empty();
     }

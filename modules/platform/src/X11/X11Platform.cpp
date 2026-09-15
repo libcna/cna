@@ -1086,6 +1086,8 @@ namespace CNA::Platform::X11 {
                     if (event.type == KeyPress && textInput_ != nullptr &&
                         textInput_->IsActive(windowId) && textInput_->LookupText(window, event.xkey, text))
                     {
+                        // The composition the commit ended goes first (LookupText).
+                        textInput_->TakeEditingEvents(destination);
                         TextInputEvent input;
                         input.window = windowId;
                         input.text = std::move(text);
@@ -1119,6 +1121,7 @@ namespace CNA::Platform::X11 {
                             if (textInput_ != nullptr && textInput_->IsActive(windowId) &&
                                 textInput_->LookupText(window, next.xkey, text))
                             {
+                                textInput_->TakeEditingEvents(destination);
                                 TextInputEvent input;
                                 input.window = windowId;
                                 input.text = std::move(text);
@@ -1147,6 +1150,8 @@ namespace CNA::Platform::X11 {
                     std::string text;
                     if (textInput_->LookupText(window, event.xkey, text))
                     {
+                        // The composition the commit ended goes first (LookupText).
+                        textInput_->TakeEditingEvents(destination);
                         TextInputEvent input;
                         input.window = windowId;
                         input.text = std::move(text);
