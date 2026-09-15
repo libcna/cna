@@ -1287,6 +1287,14 @@ namespace Microsoft::Xna::Framework
                         break;
                     }
                 }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::DropEvent>)
+                {
+                    // plans/plan_x11.md X11-0154: a drop reaches the game as GameWindow's
+                    // FileDropEXT/TextDropEXT. Like the window events above, not filtered by
+                    // window id: a game has one window, and a desktop's "open this file" names
+                    // none.
+                    Window_.OnDropEXT(platformEvent);
+                }
                 else if constexpr (std::is_same_v<Event, CNA::Platform::AppLifecycleEvent>)
                 {
                     switch (platformEvent.kind)

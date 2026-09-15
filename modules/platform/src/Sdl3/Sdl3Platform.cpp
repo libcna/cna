@@ -299,6 +299,8 @@ namespace CNA::Platform::Sdl3 {
         capabilities.clipboard = true;
         capabilities.powerInfo = true;
         capabilities.managedEntrypoint = true;
+        // SDL delivers its drop events on every platform it has them; Sdl3EventMapper maps them.
+        capabilities.dragAndDrop = true;
 
         // Input services: implemented. exactKeyboardState and pixelAccurateMouse are the two
         // capabilities that exist because a terminal cannot provide them -- SDL delivers real

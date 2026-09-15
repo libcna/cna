@@ -69,8 +69,32 @@ namespace CNA::Platform::X11 {
         Atom incr = kNone;
         /** @brief `CNA_SELECTION`: this backend's own property for receiving selection data. */
         Atom cnaSelection = kNone;
-        /** @brief `XdndAware`, interned so a future drag-and-drop task has the vocabulary. */
+        /** @brief `XdndAware`: the XDND version a window accepts drops with. */
         Atom xdndAware = kNone;
+        /** @brief `XdndEnter`: a drag came over the window. */
+        Atom xdndEnter = kNone;
+        /** @brief `XdndPosition`: where the drag is, and the reply it wants. */
+        Atom xdndPosition = kNone;
+        /** @brief `XdndStatus`: the target's answer to a position. */
+        Atom xdndStatus = kNone;
+        /** @brief `XdndLeave`: the drag left without dropping. */
+        Atom xdndLeave = kNone;
+        /** @brief `XdndDrop`: the drag was dropped. */
+        Atom xdndDrop = kNone;
+        /** @brief `XdndFinished`: the target is done with the drop. */
+        Atom xdndFinished = kNone;
+        /** @brief `XdndSelection`: the selection a drop's data is read through. */
+        Atom xdndSelection = kNone;
+        /** @brief `XdndTypeList`: the source's types, when there are more than three. */
+        Atom xdndTypeList = kNone;
+        /** @brief `XdndActionCopy`: the only action this backend performs. */
+        Atom xdndActionCopy = kNone;
+        /** @brief `text/uri-list`: files, as URIs. */
+        Atom textUriList = kNone;
+        /** @brief `text/plain`. */
+        Atom textPlain = kNone;
+        /** @brief `text/plain;charset=utf-8`. */
+        Atom textPlainUtf8 = kNone;
     };
 
     /**

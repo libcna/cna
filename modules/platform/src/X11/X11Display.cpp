@@ -87,7 +87,7 @@ namespace CNA::Platform::X11 {
     void X11Connection::InternAtoms()
     {
         // One round trip for the whole set rather than one per atom: XInternAtoms is the batched
-        // form, and this runs at connection time where 25 sequential round trips would be a
+        // form, and this runs at connection time where 37 sequential round trips would be a
         // visible startup cost on a remote display.
         static const char* const names[] = {
             "WM_PROTOCOLS",
@@ -115,6 +115,18 @@ namespace CNA::Platform::X11 {
             "INCR",
             "CNA_SELECTION",
             "XdndAware",
+            "XdndEnter",
+            "XdndPosition",
+            "XdndStatus",
+            "XdndLeave",
+            "XdndDrop",
+            "XdndFinished",
+            "XdndSelection",
+            "XdndTypeList",
+            "XdndActionCopy",
+            "text/uri-list",
+            "text/plain",
+            "text/plain;charset=utf-8",
         };
         constexpr int kCount = static_cast<int>(sizeof(names) / sizeof(names[0]));
         Atom interned[kCount] = {};
@@ -146,6 +158,18 @@ namespace CNA::Platform::X11 {
         atoms_.incr = interned[index++];
         atoms_.cnaSelection = interned[index++];
         atoms_.xdndAware = interned[index++];
+        atoms_.xdndEnter = interned[index++];
+        atoms_.xdndPosition = interned[index++];
+        atoms_.xdndStatus = interned[index++];
+        atoms_.xdndLeave = interned[index++];
+        atoms_.xdndDrop = interned[index++];
+        atoms_.xdndFinished = interned[index++];
+        atoms_.xdndSelection = interned[index++];
+        atoms_.xdndTypeList = interned[index++];
+        atoms_.xdndActionCopy = interned[index++];
+        atoms_.textUriList = interned[index++];
+        atoms_.textPlain = interned[index++];
+        atoms_.textPlainUtf8 = interned[index++];
     }
 
     void X11Connection::DetectExtensions()

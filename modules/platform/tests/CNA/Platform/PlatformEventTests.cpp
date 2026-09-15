@@ -44,6 +44,9 @@ std::vector<PlatformEvent> OneOfEach()
     TouchEvent touch;
     touch.window = 7;
 
+    DropEvent drop;
+    drop.window = 7;
+
     return {QuitEvent{},        window,
             key,                textInput,
             textEditing,        candidates,
@@ -52,12 +55,12 @@ std::vector<PlatformEvent> OneOfEach()
             touch,              DeviceEvent{},
             SensorEvent{},
             ControllerAxisEvent{}, ControllerButtonEvent{},
-            AppLifecycleEvent{}};
+            AppLifecycleEvent{}, drop};
 }
 
 TEST(PlatformEventTests, VariantCoversEveryDocumentedAlternative)
 {
-    EXPECT_EQ(std::variant_size_v<PlatformEvent>, 15u);
+    EXPECT_EQ(std::variant_size_v<PlatformEvent>, 16u);
     EXPECT_EQ(OneOfEach().size(), std::variant_size_v<PlatformEvent>);
 }
 
@@ -92,7 +95,8 @@ TEST(PlatformEventTests, WindowScopedEventsReportTheirWindow)
                                   name == "TextInputEvent" || name == "TextEditingEvent" ||
                                   name == "TextEditingCandidatesEvent" ||
                                   name == "MouseMotionEvent" || name == "MouseButtonEvent" ||
-                                  name == "MouseWheelEvent" || name == "TouchEvent";
+                                  name == "MouseWheelEvent" || name == "TouchEvent" ||
+                                  name == "DropEvent";
         if (windowScoped)
         {
             EXPECT_EQ(GetEventWindow(event), 7u) << name;
@@ -110,6 +114,31 @@ TEST(PlatformEventTests, ProcessScopedEventsReportNoWindow)
     EXPECT_EQ(GetEventWindow(PlatformEvent{ControllerAxisEvent{}}), 0u);
     EXPECT_EQ(GetEventWindow(PlatformEvent{ControllerButtonEvent{}}), 0u);
     EXPECT_EQ(GetEventWindow(PlatformEvent{AppLifecycleEvent{}}), 0u);
+}
+
+TEST(PlatformEventTests, DropKindsHaveDistinctStableNames)
+{
+    std::set<std::string> names;
+    for (const DropEventKind kind : {DropEventKind::Begin, DropEventKind::Position,
+                                     DropEventKind::File, DropEventKind::Text,
+                                     DropEventKind::Complete})
+    {
+        EXPECT_FALSE(ToString(kind).empty());
+        EXPECT_EQ(&ToString(kind), &ToString(kind));
+        names.insert(ToString(kind));
+    }
+    EXPECT_EQ(names.size(), 5u);
+    EXPECT_EQ(ToString(DropEventKind::File), "File");
+}
+
+TEST(PlatformEventTests, ADropAimedAtNoWindowReportsNone)
+{
+    // A desktop's "open this file with" names no window, and the event says so rather than
+    // borrowing one.
+    DropEvent open;
+    open.kind = DropEventKind::File;
+    open.data = "/tmp/level.xnb";
+    EXPECT_EQ(GetEventWindow(PlatformEvent{open}), 0u);
 }
 
 TEST(PlatformEventTests, SensorDefaultsCarryNoPhantomReading)

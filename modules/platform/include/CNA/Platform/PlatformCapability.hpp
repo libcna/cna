@@ -101,7 +101,14 @@ namespace CNA::Platform {
          * as SDL does on Android. Applications must include the CNA entrypoint header for this
          * to work; see docs/platform-entrypoint-audit.md.
          */
-        ManagedEntrypoint
+        ManagedEntrypoint,
+        /**
+         * @brief Files and text dropped onto a window are delivered as `DropEvent`s.
+         *
+         * Last in the enumeration rather than next to `Clipboard`, so that no value an earlier
+         * build recorded changes meaning.
+         */
+        DragAndDrop
     };
 
     /**

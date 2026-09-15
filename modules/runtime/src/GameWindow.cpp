@@ -3,6 +3,9 @@
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
 #include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
+
+#include <utility>
 
 namespace Microsoft::Xna::Framework
 {
@@ -443,5 +446,46 @@ namespace Microsoft::Xna::Framework
         }
 
         return hasFlag(supportedOrientations_, orientation);
+    }
+
+    void GameWindow::OnDropEXT(const CNA::Platform::DropEvent& drop)
+    {
+        // plans/plan_x11.md X11-0154. The platform reports a drop step by step; a game gets it as
+        // MonoGame does, once it is complete: every file of it together, then each text.
+        switch (drop.kind)
+        {
+        case CNA::Platform::DropEventKind::Begin:
+            droppedFiles_.clear();
+            droppedTexts_.clear();
+            break;
+        case CNA::Platform::DropEventKind::File:
+            droppedFiles_.push_back(drop.data);
+            break;
+        case CNA::Platform::DropEventKind::Text:
+            droppedTexts_.push_back(drop.data);
+            break;
+        case CNA::Platform::DropEventKind::Complete:
+        {
+            // Moved out first: a handler may itself pump events -- a modal "import?" prompt --
+            // and a drop arriving meanwhile must start from nothing.
+            std::vector<String> files = std::move(droppedFiles_);
+            std::vector<String> texts = std::move(droppedTexts_);
+            droppedFiles_.clear();
+            droppedTexts_.clear();
+            if (!files.empty())
+            {
+                FileDropEventArgsEXT args(std::move(files));
+                FileDropEXT.Raise(this, args);
+            }
+            for (String& text : texts)
+            {
+                TextDropEventArgsEXT args(std::move(text));
+                TextDropEXT.Raise(this, args);
+            }
+            break;
+        }
+        case CNA::Platform::DropEventKind::Position:
+            break;
+        }
     }
 } // namespace Microsoft::Xna::Framework

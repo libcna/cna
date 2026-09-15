@@ -43,8 +43,8 @@ Every other capability is false **and its accessor returns null**, which PLAT-11
 compiled into the binary. Nothing here is a stub that accepts work and drops it.
 
 Absent today: mouse, gamepad, joystick, text input, sensors, haptics, input-device enumeration,
-clipboard, dialogs, tray, camera, Vulkan surface, surface presentation, power info and
-`managedEntrypoint`.
+clipboard, dialogs, tray, camera, Vulkan surface, surface presentation, power info,
+`managedEntrypoint` and `dragAndDrop` (SDL2's `SDL_DROP*` events are not mapped).
 
 ### Consequences a game can observe
 

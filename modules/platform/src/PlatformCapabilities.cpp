@@ -40,6 +40,7 @@ namespace CNA::Platform {
             case PlatformCapability::Tray: return capabilities.tray;
             case PlatformCapability::Camera: return capabilities.camera;
             case PlatformCapability::ManagedEntrypoint: return capabilities.managedEntrypoint;
+            case PlatformCapability::DragAndDrop: return capabilities.dragAndDrop;
         }
 
         return false;
@@ -77,6 +78,7 @@ namespace CNA::Platform {
             PlatformCapability::Tray,
             PlatformCapability::Camera,
             PlatformCapability::ManagedEntrypoint,
+            PlatformCapability::DragAndDrop,
         };
         return all;
     }

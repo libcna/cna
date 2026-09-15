@@ -175,7 +175,33 @@ namespace CNA::Platform::X11 {
         // window is an implementation detail of the read rather than a state change a caller
         // could observe.
         auto& self = const_cast<X11Clipboard&>(*this);
-        self.EnsureOwnerWindow();
+        return self.ReadSelection(connection_.GetAtoms().clipboard, target, kCurrentTime,
+                                  actualType, data);
+    }
+
+    Atom X11Clipboard::PropertyType(const Atom property) const
+    {
+        // ReadProperty deliberately does not report the type, so the type is read separately
+        // with a zero-length request -- which returns the type and format without the data.
+        Atom actual = kNone;
+        int actualFormat = 0;
+        unsigned long itemCount = 0;
+        unsigned long remaining = 0;
+        unsigned char* probe = nullptr;
+        if (XGetWindowProperty(connection_.GetDisplay(), owner_, property, 0, 0, False,
+                               AnyPropertyType, &actual, &actualFormat, &itemCount, &remaining,
+                               &probe) != Success)
+        {
+            actual = kNone;
+        }
+        if (probe != nullptr) { XFree(probe); }
+        return actual;
+    }
+
+    bool X11Clipboard::ReadSelection(const Atom selection, const Atom target, const Time time,
+                                     Atom& actualType, std::vector<unsigned char>& data)
+    {
+        EnsureOwnerWindow();
 
         Display* display = connection_.GetDisplay();
         const X11Atoms& atoms = connection_.GetAtoms();
@@ -189,8 +215,7 @@ namespace CNA::Platform::X11 {
         while (XCheckTypedWindowEvent(display, owner_, PropertyNotify, &stale) == True)
         {
         }
-        XConvertSelection(display, atoms.clipboard, target, atoms.cnaSelection, owner_,
-                          kCurrentTime);
+        XConvertSelection(display, selection, target, atoms.cnaSelection, owner_, time);
         XFlush(display);
 
         // Waiting with XCheckTypedWindowEvent rather than XNextEvent: this must not consume the
@@ -221,30 +246,14 @@ namespace CNA::Platform::X11 {
             return false;
         }
 
-        Atom propertyType = kNone;
-        {
-            // ReadProperty deliberately does not report the type, so the type is read separately
-            // with a zero-length request -- which returns the type and format without the data.
-            Atom actual = kNone;
-            int actualFormat = 0;
-            unsigned long itemCount = 0;
-            unsigned long remaining = 0;
-            unsigned char* probe = nullptr;
-            if (XGetWindowProperty(display, owner_, atoms.cnaSelection, 0, 0, False,
-                                   AnyPropertyType, &actual, &actualFormat, &itemCount, &remaining,
-                                   &probe) == Success)
-            {
-                propertyType = actual;
-                if (probe != nullptr) { XFree(probe); }
-            }
-        }
-
+        const Atom propertyType = PropertyType(atoms.cnaSelection);
         if (propertyType == atoms.incr)
         {
             // INCR: the property value was the total size, not the data. Deleting the property is
             // the signal to the owner to write the first chunk; each further delete asks for the
             // next, and a zero-length chunk ends the transfer.
             data.clear();
+            actualType = kNone;
             XDeleteProperty(display, owner_, atoms.cnaSelection);
             XFlush(display);
 
@@ -269,6 +278,11 @@ namespace CNA::Platform::X11 {
                     return !data.empty();
                 }
 
+                // The chunks carry the data's real type; the first one says what it is.
+                if (actualType == kNone)
+                {
+                    actualType = PropertyType(atoms.cnaSelection);
+                }
                 std::vector<unsigned char> chunk;
                 int chunkFormat = 0;
                 const bool present = connection_.ReadProperty(owner_, atoms.cnaSelection,
@@ -290,7 +304,10 @@ namespace CNA::Platform::X11 {
                 }
                 data.insert(data.end(), chunk.begin(), chunk.end());
             }
-            actualType = atoms.utf8String;
+            if (actualType == kNone)
+            {
+                actualType = target;
+            }
             return !data.empty();
         }
 

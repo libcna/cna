@@ -92,6 +92,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `cursorShapes` | ✅ | the core cursor font; Xcursor for custom ARGB images |
 | `globalPointer` | ✅ (see [Under Xwayland](#under-xwayland)) | `XQueryPointer` / `XWarpPointer` on the root window |
 | `clipboard` | ✅ | real ICCCM selection ownership, including `INCR` |
+| `dragAndDrop` | ✅ | XDND 5, target side: files and text dropped by another client — see [Drag and drop](#drag-and-drop) |
 | `highDpi` | conditional | true only when the session states an `Xft.dpi` |
 | `multipleDisplays` | conditional | true when XRandR ≥ 1.2 is present |
 | `borderlessFullscreen` | conditional | true when the running window manager advertises `_NET_WM_STATE_FULLSCREEN` |
@@ -335,6 +336,31 @@ windows would pass while proving nothing.
 
 ---
 
+## Drag and drop
+
+Every window CNA creates announces `XdndAware` (version 5), and a drag from another client — a
+file manager, a browser, a text editor — arrives as the contract's `DropEvent` sequence: `Begin`
+when the drag first comes over the window, `Position` as it moves, then on the drop one `File` per
+file or one `Text`, and `Complete`; a drag that leaves ends with `Complete` alone. An XNA game sees
+it as `GameWindow::FileDropEXT` (every file of a drop at once, MonoGame's shape) and `TextDropEXT`.
+
+- **What is taken.** `text/uri-list` first, then UTF-8 text (`text/plain;charset=utf-8`,
+  `UTF8_STRING`), then `text/plain`, `TEXT` and `STRING` (Latin-1, converted). A `file:` URI —
+  `file:///`, `file://localhost/`, `file://<this host>/` or `file:/` — is percent-decoded into a
+  local path; a URI that is not a local file, such as a link dragged out of a browser, arrives as
+  text rather than being dropped silently (SDL3 discards it). Text arrives whole, where SDL3's X11
+  backend splits it into one event per line.
+- **What is refused.** A drag offering none of those types is refused in the protocol
+  (`XdndStatus` "no") and produces no event at all — a game must not show a "drop here" highlight
+  for something it cannot receive. Only `XdndActionCopy` is performed: a move would ask the source
+  to delete its files.
+- **The data** is read through the clipboard's selection reader, `INCR` included, synchronously and
+  within its one-second timeouts: a source that dies mid-drop costs the event pump a bounded wait,
+  and the sequence still ends with `Complete`. Every drop is answered with `XdndFinished`.
+- **Not implemented:** dragging *from* a CNA window (the source side), and `XdndProxy`.
+
+---
+
 ## Gamepads and joysticks
 
 The X server has not delivered controller input to clients for decades, so controllers do not come
@@ -503,7 +529,7 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 | `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan, controller classification and mapping from synthetic device descriptions |
 | `CnaX11InputMethodTests` | `Xvfb` + ibus (with its XIM server), `xdotool`, `setxkbmap` | composition with and without the application drawing it, a commit, abandoning a composition, and no keys taken outside text entry — against a private ibus the launcher starts (`--with-ibus`) |
 | `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, the platform with no X server; each test skips where the machine grants neither |
-| `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy |
+| `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy, and drag and drop against a real XDND source — a second process of the test binary |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
 | `CnaX11ExclusiveFullscreenTests` | `Xvfb` + `openbox`; **the launcher's own server only** | exclusive fullscreen changes the display mode, so it runs only where `CNA_X11_PRIVATE_TEST_SERVER` is set: mode choice, the screen around the CRTC, SetSize while exclusive, hide/show, focus loss and return, every restore path, a mode someone else set, and a process killed with `SIGKILL` having its mode restored by its guardian |
 

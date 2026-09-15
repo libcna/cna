@@ -100,6 +100,24 @@ namespace CNA::Platform::X11 {
             return incrementalSends_.size();
         }
 
+        /**
+         * @brief Converts any selection to a target and waits for the owner's answer.
+         *
+         * The clipboard's own reader, for the other selections this backend reads -- a drop's
+         * `XdndSelection` (plans/plan_x11.md X11-0154). Synchronous, bounded by a timeout per
+         * step, and INCR-aware; it takes only the answer's own events off the queue.
+         *
+         * @param selection The selection to convert.
+         * @param target The target type to ask for.
+         * @param time The timestamp the conversion is for; a drop's must be the drop's own.
+         * @param actualType Receives the type the owner answered with.
+         * @param data Receives the bytes.
+         * @return True when the owner answered with data, false when it refused, never answered
+         * or died.
+         */
+        [[nodiscard]] bool ReadSelection(Atom selection, Atom target, Time time, Atom& actualType,
+                                         std::vector<unsigned char>& data);
+
     private:
         struct IncrementalSend
         {
@@ -116,6 +134,7 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] std::size_t MaximumChunkBytes() const;
         [[nodiscard]] bool ConvertAndWait(Atom target, Atom& actualType,
                                           std::vector<unsigned char>& data) const;
+        [[nodiscard]] Atom PropertyType(Atom property) const;
         void AnswerSelectionRequest(const XSelectionRequestEvent& request);
         void SendSelectionNotify(const XSelectionRequestEvent& request, Atom property) const;
 

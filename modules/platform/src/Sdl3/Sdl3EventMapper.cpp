@@ -213,6 +213,42 @@ namespace CNA::Platform::Sdl3 {
                 return true;
             }
 
+            // --- drag and drop -------------------------------------------------------------------
+            // plans/plan_x11.md X11-0154: DropEvent is SDL3's drop sequence in CNA's vocabulary,
+            // so the mapping is one to one. SDL owns `data` only for the lifetime of the event,
+            // hence the copy.
+            case SDL_EVENT_DROP_BEGIN:
+            case SDL_EVENT_DROP_POSITION:
+            case SDL_EVENT_DROP_FILE:
+            case SDL_EVENT_DROP_TEXT:
+            case SDL_EVENT_DROP_COMPLETE:
+            {
+                DropEvent drop;
+                drop.window = static_cast<WindowId>(source.drop.windowID);
+                switch (source.type)
+                {
+                    case SDL_EVENT_DROP_BEGIN:    drop.kind = DropEventKind::Begin; break;
+                    case SDL_EVENT_DROP_POSITION: drop.kind = DropEventKind::Position; break;
+                    case SDL_EVENT_DROP_FILE:     drop.kind = DropEventKind::File; break;
+                    case SDL_EVENT_DROP_TEXT:     drop.kind = DropEventKind::Text; break;
+                    default:                      drop.kind = DropEventKind::Complete; break;
+                }
+                // SDL documents the coordinates as meaningless on BEGIN; the contract makes them
+                // zero there and on COMPLETE rather than passing along whatever SDL left.
+                if (drop.kind != DropEventKind::Begin && drop.kind != DropEventKind::Complete)
+                {
+                    drop.x = source.drop.x;
+                    drop.y = source.drop.y;
+                }
+                if ((drop.kind == DropEventKind::File || drop.kind == DropEventKind::Text) &&
+                    source.drop.data != nullptr)
+                {
+                    drop.data = source.drop.data;
+                }
+                destination = std::move(drop);
+                return true;
+            }
+
             // --- devices -----------------------------------------------------------------------
             case SDL_EVENT_GAMEPAD_ADDED:
             case SDL_EVENT_GAMEPAD_REMOVED:

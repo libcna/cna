@@ -9,7 +9,10 @@
 #include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include <functional>
+#include <vector>
+#include "Microsoft/Xna/Framework/FileDropEventArgsEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/TextDropEventArgsEXT.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -18,6 +21,7 @@
 namespace CNA::Platform
 {
     class IPlatformWindow;
+    struct DropEvent;
 }
 
 namespace CNA::Devices
@@ -56,6 +60,23 @@ namespace Microsoft::Xna::Framework
 
         /** @brief Raised when the screen device name changes. */
         System::EventHandler<System::EventArgs> ScreenDeviceNameChanged;
+
+        /**
+         * @brief Raised when files are dropped on the window -- once per drop, with all of them.
+         *
+         * @note CNAEXT — CNA extension, not XNA API, which had no drag and drop; the name and shape
+         * are MonoGame's `GameWindow.FileDrop`. Raised from `Game`'s event pump on the game-loop
+         * thread, where the platform reports `PlatformCapability::DragAndDrop`.
+         */
+        CNAEXT System::EventHandler<FileDropEventArgsEXT> FileDropEXT;
+
+        /**
+         * @brief Raised when text is dropped on the window, once per dropped text.
+         *
+         * @note CNAEXT — CNA extension, not XNA API. A link dragged out of a browser arrives here
+         * as its URL. Raised after `FileDropEXT` when one drop carried both.
+         */
+        CNAEXT System::EventHandler<TextDropEventArgsEXT> TextDropEXT;
 
         /** @brief Creates a window wrapper without an attached platform window. */
         GameWindow();
@@ -246,6 +267,8 @@ namespace Microsoft::Xna::Framework
         bool isBorderless_;
         bool pendingFullScreen_;
         bool hasPendingScreenDeviceChange_;
+        std::vector<String> droppedFiles_;
+        std::vector<String> droppedTexts_;
 
         void setWindowInternal(CNA::Platform::IPlatformWindow* window,
                                SharpRuntime::IntPtr legacyHandle);
@@ -253,6 +276,8 @@ namespace Microsoft::Xna::Framework
         void setCurrentOrientationProperty(DisplayOrientation value);
         void updateFromPlatform();
         void refreshCachedPlatformState(bool raiseEvents);
+        /// Collects one drop's files and texts and raises FileDropEXT/TextDropEXT at its end.
+        void OnDropEXT(const CNA::Platform::DropEvent& drop);
         [[nodiscard]] Rectangle queryClientBoundsFromPlatform() const;
         [[nodiscard]] String queryScreenDeviceNameFromPlatform() const;
         [[nodiscard]] DisplayOrientation orientationFromBounds(const Rectangle& bounds) const;

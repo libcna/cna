@@ -214,6 +214,7 @@ namespace CNA::Platform::X11 {
         capabilities.cursorShapes = true;         // The core cursor font; Xcursor for ARGB images.
         capabilities.globalPointer = true;        // XQueryPointer/XWarpPointer on the root.
         capabilities.clipboard = true;            // Real ICCCM selection ownership with INCR.
+        capabilities.dragAndDrop = true;          // XDND 5, target side: files and text.
 
         // High DPI is claimed only when the session actually states a scale. Reporting it true
         // with a scale permanently pinned at 1.0 would tell a caller to expect a pixel size that
@@ -257,6 +258,7 @@ namespace CNA::Platform::X11 {
         mouse_ = std::make_unique<X11Mouse>(*connection_);
         textInput_ = std::make_unique<X11TextInput>(*connection_);
         clipboard_ = std::make_unique<X11Clipboard>(*connection_);
+        dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
         displays_ = std::make_unique<X11Displays>(*connection_);
         glContext_ = std::make_unique<X11GlContext>(*connection_);
         vulkanSurface_ = std::make_unique<X11VulkanSurface>(*connection_);
@@ -270,6 +272,7 @@ namespace CNA::Platform::X11 {
         vulkanSurface_.reset();
         glContext_.reset();
         displays_.reset();
+        dragAndDrop_.reset();
         clipboard_.reset();
         textInput_.reset();
         mouse_.reset();
@@ -375,6 +378,10 @@ namespace CNA::Platform::X11 {
         if (found == windows_.end() || found->second != &window)
         {
             return;
+        }
+        if (dragAndDrop_ != nullptr)
+        {
+            dragAndDrop_->ForgetWindow(window.GetXWindow());
         }
         ForgetWindow(window.GetId());
     }
@@ -549,6 +556,12 @@ namespace CNA::Platform::X11 {
         if (textInput_ != nullptr)
         {
             textInput_->AttachWindow(*raw);
+        }
+        if (dragAndDrop_ != nullptr)
+        {
+            // Only windows CNA created: an adopted window belongs to a host that may run its own
+            // drag and drop.
+            dragAndDrop_->AttachWindow(*raw);
         }
 
         if (description.visible)
@@ -1029,6 +1042,12 @@ namespace CNA::Platform::X11 {
             }
             case ClientMessage:
             {
+                // A drag from another client (plans/plan_x11.md X11-0154).
+                if (window != nullptr && dragAndDrop_ != nullptr &&
+                    dragAndDrop_->HandleClientMessage(event.xclient, *window, destination))
+                {
+                    return;
+                }
                 if (event.xclient.message_type != atoms.wmProtocols ||
                     static_cast<Atom>(event.xclient.data.l[0]) != atoms.wmDeleteWindow)
                 {
@@ -1067,6 +1086,10 @@ namespace CNA::Platform::X11 {
                 // dropping it from the registry then stops a later event resolving to a window
                 // whose XID has since been handed to somebody else.
                 window->MarkDestroyedByServer();
+                if (dragAndDrop_ != nullptr)
+                {
+                    dragAndDrop_->ForgetWindow(event.xdestroywindow.window);
+                }
                 ForgetWindow(windowId);
                 return;
             }

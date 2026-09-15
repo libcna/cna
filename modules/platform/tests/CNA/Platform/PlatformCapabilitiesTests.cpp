@@ -138,9 +138,10 @@ TEST(PlatformCapabilitiesTests, ToStringReturnsStableStorage)
 TEST(PlatformCapabilitiesTests, CapabilitySetCoversTheDocumentedContract)
 {
     // cnaplatform.md sketched ten capabilities; PLAT-2's classification, PLAT-3's renderer audit
-    // and the terminal analysis each added more. Pinning the count makes growing the set a
-    // deliberate act that updates this expectation too.
-    EXPECT_EQ(AllCapabilities().size(), 29u);
+    // and the terminal analysis each added more -- the thirtieth, DragAndDrop, with
+    // plans/plan_x11.md X11-0154. Pinning the count makes growing the set a deliberate act that
+    // updates this expectation too.
+    EXPECT_EQ(AllCapabilities().size(), 30u);
 }
 
 } // namespace

@@ -69,6 +69,7 @@ It is built with MSVC and with mingw-w64. Nothing in it is MSVC-only.
 | `tray` | ❌ | `Shell_NotifyIconW` is not wired up |
 | `camera` | ❌ | Media Foundation capture is out of scope |
 | `managedEntrypoint` | ❌ | This backend never renames the host's `main()` |
+| `dragAndDrop` | ❌ | `WM_DROPFILES` / OLE drop targets are not wired up (the capability was added with X11-0154) |
 
 Every ❌ is a capability reported **false** with a service accessor that returns `nullptr` and a
 capability-gated call that raises `PlatformNotSupportedException` naming the capability. None is a

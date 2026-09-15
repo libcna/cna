@@ -8,6 +8,7 @@
 #include "X11Clipboard.hpp"
 #include "X11Display.hpp"
 #include "X11Displays.hpp"
+#include "X11DragAndDrop.hpp"
 #include "X11GraphicsServices.hpp"
 #include "X11Keyboard.hpp"
 #include "X11Mouse.hpp"
@@ -247,6 +248,7 @@ namespace CNA::Platform::X11 {
         std::unique_ptr<X11Mouse> mouse_;
         std::unique_ptr<X11TextInput> textInput_;
         std::unique_ptr<X11Clipboard> clipboard_;
+        std::unique_ptr<X11DragAndDrop> dragAndDrop_;
         std::unique_ptr<X11Displays> displays_;
         std::unique_ptr<X11GlContext> glContext_;
         std::unique_ptr<X11VulkanSurface> vulkanSurface_;

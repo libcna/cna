@@ -83,6 +83,8 @@ namespace CNA::Platform {
         bool camera = false;
         /** @brief The platform manages the application entry point (SDL-on-Android style). */
         bool managedEntrypoint = false;
+        /** @brief Files and text dropped onto a window are delivered as `DropEvent`s. */
+        bool dragAndDrop = false;
     };
 
     /**
