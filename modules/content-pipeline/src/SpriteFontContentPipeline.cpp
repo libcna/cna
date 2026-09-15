@@ -350,7 +350,13 @@ namespace CNA::Content::Pipeline
         private:
             FT_Face face_ = nullptr;
         };
+    }
+#endif
 
+    // The packer needs no FreeType: a font sheet (a texture of glyph cells) is packed with it too,
+    // and that route is compiled in every build (plans/plan_native_platform_validation.md NPV-0130).
+    namespace
+    {
         /** @brief One rasterized glyph, before packing. */
         struct RasterGlyph
         {
@@ -554,6 +560,7 @@ namespace CNA::Content::Pipeline
         }
     }
 
+#if defined(CNA_HAVE_FREETYPE)
     Cnb::CnbSpriteFontData RasterizeFontDescription(
         const FontDescription& description, std::vector<std::string>& warnings,
         const ContentStrictness strictness,

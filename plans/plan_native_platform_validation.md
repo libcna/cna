@@ -28,6 +28,12 @@ What comes next, in the recommended order with estimates and what each step need
 is in "Next steps" -- first of all a CI that has been red for unrelated reasons since before this
 pass.
 
+**Continued on 2026-09-15 on branch `x11`** (the owner approved the X11 part of "Next steps", about
+120 hours; Win32 and Wayland out of scope): CI defects NPV-0124..NPV-0126 and NPV-0128..NPV-0130,
+the INCR follow-up NPV-0127, and **gamepads and joysticks through Linux evdev**
+(`plans/plan_x11.md` X11-0150) are done; the rest of the X11 list is `plans/plan_x11.md` Phase M.
+The session stayed locked throughout, so the desktop scenarios below remain unrun.
+
 Session events recorded honestly: gnome-shell crashed at 21:23:27 (untrapped BadWindow on its own
 X_SendEvent, core dump) and the owner logged in again -- no process of this validation was connected
 to `:0` then (the last had exited at 21:04:08); the second external monitor was disconnected during
@@ -177,11 +183,23 @@ that fails without it.
 | NPV-0121 | **Every X11 build linked libGLX**, so HEADLESS/SOFTWARE X11 binaries needed a GL implementation to start and all five `ModuleLinkClosure_NativeSdkFree_*` gates failed. | full ctest of the SDL-free X11 HEADLESS build | GLX 1.3 entry points resolved at run time (as the Vulkan loader already was); `openGlContext` false without a GL library; hardware GLX 15/15 afterwards | `12dbfedff` |
 | NPV-0122 | `X11IsSdlFree` scan failed from the source root: `__FILE__` is relative under the mandatory `CCACHE_BASEDIR`. | same full ctest | absolute backend path passed by CMake | `33a10f1af` |
 | NPV-0123 | **`cmake --build` of an SDL-free HEADLESS build failed**: five Headless example tests called SDL directly ("Not Run" in ctest). | same full build | smoke test's SDL check only where SDL exists (9 vs 10 checks); the four SDL-harness controls registered only with SDL3 | `2c6efc807` |
+| NPV-0124 | **Every CI workflow failed at configure on `next`**, long before this pass: sibling repositories were cloned from `develop`, and CNA `next` asks for a sharp-runtime component only sharp-runtime `next` has ("Unknown Sharp Runtime component 'Xml.Serialization'"). A topic branch cut from `next` then fell back to `develop` too. | CI runs 34929323742 and 34870105761 (same failing set) | `scripts/ci/clone_siblings.sh`: the pushed branch, a pull request's source and target, then `next`, then `develop` -- whichever each sibling actually has; all 13 pinned clones in 10 workflows | `608c9494b`, `2dbe8f847` |
+| NPV-0125 | The Wine job built everything and died with `wine64: command not found` before a test ran (Ubuntu 24.04's wine64 package installs no such command). | CI, once past configure | installs `wine` and calls the `wine` launcher, which picks the 64-bit loader itself | `f261cf644` |
+| NPV-0126 | **CI's SDL-free coverage missed where the defects were**: no xclip (so `X11ClipboardInterop` always skipped) and only HEADLESS, where NPV-0106/0114/0121 could not show. | reviewing the matrix against NPV-0106/0114/0121 | xclip + xsel in the SDL-free cell; new `x11-sdl-free-gpu` job (X11 + OPENGL33;VULKAN;SOFTWARE;HEADLESS, SDL OFF) that fails on any SDL in the cache, `NEEDED` or symbols and runs both games with every renderer on Xvfb; green on its first run | `ccd20214c` |
+| NPV-0127 | An INCR requestor that died mid-transfer kept its transfer (and, since NPV-0119, its copy of the text) for the life of the process. | the NPV-0119 follow-up list | StructureNotify on the requestor, transfer dropped at its DestroyNotify; real INCR paste from another connection destroyed after one chunk | `f14d5ea85` |
+| NPV-0128 | The content pipeline's media decoder compiled only against FFmpeg 7: FFmpeg 6 (the CI runners) declares `swr_convert`'s input `const uint8_t **`. | CI, once past configure | explicit cast, valid against both declarations (as `VideoDecoder.cpp` already did) | `5e8f58707` |
+| NPV-0129 | The native MSVC job could not build the Win32 harness: UTF-8 literals read in the ANSI code page (C2015). | the job's first run in this pass | `/utf-8` under MSVC for the standalone harness | `860977a0c` |
+| NPV-0130 | **Every Linux CI build failed in `SpriteFontContentPipeline.cpp`** (`'RasterGlyph' was not declared`): XNASWEEP-131/137 made the font-sheet route use the atlas packer, which sat inside `#if defined(CNA_HAVE_FREETYPE)`, and the runners have no FreeType. Only builds with FreeType -- this workstation's -- compiled. | CI run 34942450340, all nine Linux cells | the guard covers only the FreeType code; the packer is compiled in every build. The translation unit compiles with and without `CNA_HAVE_FREETYPE`; 114 sprite-font tests unchanged (the one failure, a HEADLESS render-target readback, fails identically without the change) | this commit |
 
 ## Next steps (recommended order, 2026-09-15)
 
 Estimates are for this kind of work in this repository; each step lists what it needs from the
 owner.
+
+Progress on branch `x11` (2026-09-15): step 1 -- NPV-0124, 0125, 0126, 0128, 0129, 0130; what is
+left red is the one Win32 test below. Step 4 -- the INCR follow-up is NPV-0127; `globalPointer`
+still waits for the owner. Step 5 -- Linux evdev is `plans/plan_x11.md` X11-0150; Win32 XInput is
+out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158.
 
 | # | Step | Estimate | Needs | Notes |
 |---|------|----------|-------|-------|
@@ -310,10 +328,15 @@ ibus.
 - `globalPointer` under Xwayland: report false there, or narrow the contract.
 - Examples that clear depth without a GraphicsDeviceManager since SOFTWARE-333 (NPV-0118 fixed only
   the 3D house demo): an audit for the graphics owners.
-- An INCR requestor that dies mid-transfer leaves its entry (and copy) until the next transfer to
-  that window.
-- The CI SDL-free cell does not install xclip, so `X11ClipboardInterop` skips there; it runs a fixed
-  test subset, which is how NPV-0121/0122/0123 went unnoticed.
+- ~~An INCR requestor that dies mid-transfer leaves its entry (and copy) until the next transfer to
+  that window.~~ Fixed, NPV-0127.
+- ~~The CI SDL-free cell does not install xclip~~ (fixed, NPV-0126); it still runs a fixed test
+  subset, which is how NPV-0121/0122/0123 went unnoticed.
+- **Win32, for the Win32 phase:** `Win32RendererBridge.TheHandleSurvivesAResizeUnchanged` fails on
+  the native `windows-latest` runner as well as under Wine (client height 749 where 768 was asked;
+  CI run 34942450340). Most likely the runner's 1024x768 desktop -- Windows keeps a captioned window
+  within the screen, so a 1024x768 client area cannot exist there -- which would make it the test's
+  assumption rather than a backend defect; not investigated further on this branch.
 
 **Deferred on the owner's decision (2026-09-14) -- planned, not started**, estimates as given:
 gamepad over Linux evdev with hotplug, XNA mapping and rumble (15-25 h); native audio without SDL --
