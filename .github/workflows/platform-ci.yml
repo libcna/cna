@@ -253,8 +253,11 @@ jobs:
           sudo apt-get update
           sudo dpkg --add-architecture i386
           sudo apt-get update
+          # `wine`, not only `wine64`: on Ubuntu 24.04 the wine64 package no longer puts a `wine64`
+          # command on PATH (the job failed with "wine64: command not found"); the `wine`
+          # launcher picks the 64-bit loader for a PE32+ executable itself.
           sudo apt-get install -y --no-install-recommends \
-            g++-mingw-w64-x86-64 cmake ninja-build xvfb wine64
+            g++-mingw-w64-x86-64 cmake ninja-build xvfb wine wine64
 
       - name: Configure the standalone platform harness for WIN32
         run: |
@@ -278,8 +281,8 @@ jobs:
           export WINEPREFIX="${RUNNER_TEMP}/wineprefix"
           # Let Wine create and settle its prefix before the run, so first-boot chatter is not
           # mistaken for a test failure.
-          wine64 wineboot --init || true
-          wine64 build-win32/cna_platform_tests.exe
+          wine wineboot --init || true
+          wine build-win32/cna_platform_tests.exe
 
       - name: Probe real Direct3D on the produced window
         # Wine's D3D12 needs vkd3d over a Vulkan driver and its D3D11 needs a GL or Vulkan path, so
@@ -292,7 +295,7 @@ jobs:
           export WINEDEBUG=-all
           export WINEPREFIX="${RUNNER_TEMP}/wineprefix"
           set +e
-          wine64 build-win32/cna_win32_directx_probe.exe
+          wine build-win32/cna_win32_directx_probe.exe
           status=$?
           set -e
           if [ "$status" -eq 2 ]; then
