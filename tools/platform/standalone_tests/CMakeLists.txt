@@ -51,6 +51,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # at all. /W4 is the MSVC equivalent of what the rest of CNA asks for.
 if(MSVC)
     set(CNA_HARNESS_WARNINGS /W4)
+    # The sources are UTF-8. Without /utf-8, cl.exe reads them in the machine's ANSI code page,
+    # and a test's non-ASCII character literal becomes "too many characters in constant" (C2015)
+    # -- which is how the first native MSVC run of this harness failed to build.
+    add_compile_options(/utf-8)
 else()
     set(CNA_HARNESS_WARNINGS -Wall -Wextra)
 endif()
