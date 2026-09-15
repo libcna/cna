@@ -266,10 +266,11 @@ if(EMSCRIPTEN)
     endif()
 endif()
 
-# The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a
-# configuration which deliberately selected a non-SDL3 audio transport: that would compile
-# the XNA facade against an implementation which cannot exist in the resulting binary.
-if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+# SOUND_ENABLED means "a mixer exists behind MixerEngine.hpp": SDL3_mixer for SDL3 audio, CNA's
+# own mixer for ALSA (plans/plan_x11.md X11-0151). SDL2 and NULL transport audio but have no
+# mixer, so the XNA facade is compiled without one there rather than against an implementation
+# that cannot exist in the resulting binary.
+if(CNA_AUDIO_PLATFORM STREQUAL "SDL3" OR CNA_AUDIO_PLATFORM STREQUAL "ALSA")
     target_compile_definitions(cna_build_config INTERFACE SOUND_ENABLED)
 endif()
 

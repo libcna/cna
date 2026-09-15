@@ -8,6 +8,9 @@
 
 #include "System/Environment.hpp"
 #endif
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+#include "Platform/Alsa/AlsaAudioDevice.hpp"
+#endif
 
 #include <gtest/gtest.h>
 
@@ -37,6 +40,9 @@ enum class AudioDeviceImplementation
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
     Sdl3,
 #endif
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+    Alsa,
+#endif
 };
 
 struct AudioDeviceCase
@@ -55,6 +61,11 @@ std::unique_ptr<IAudioDevice> CreateDevice(const AudioDeviceImplementation imple
         case AudioDeviceImplementation::Sdl3:
             return std::make_unique<CNA::Audio::Platform::Sdl3::Sdl3AudioDevice>();
 #endif
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+        case AudioDeviceImplementation::Alsa:
+            // ALSA's own silent device: the conformance contract, with no sound and no card.
+            return std::make_unique<CNA::Audio::Platform::Alsa::AlsaAudioDevice>("null");
+#endif
     }
     throw std::logic_error("unknown audio device conformance implementation");
 }
@@ -64,6 +75,12 @@ std::vector<AudioDeviceCase> GetAudioDeviceCases()
     std::vector<AudioDeviceCase> result{{AudioDeviceImplementation::Null, "NULL"}};
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
     result.push_back({AudioDeviceImplementation::Sdl3, "SDL3"});
+#endif
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+    if (CNA::Audio::Platform::Alsa::IsAlsaAvailable())
+    {
+        result.push_back({AudioDeviceImplementation::Alsa, "ALSA"});
+    }
 #endif
     return result;
 }

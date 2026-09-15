@@ -383,6 +383,18 @@ product that uses it. This notice is that credit:
 > Portions of this software are copyright © 1996-2023 The FreeType Project (www.freetype.org).
 > All rights reserved.
 
+## stb_vorbis (Ogg Vorbis decoding for CNA's own mixer)
+
+`CNA_AUDIO_PLATFORM=ALSA` decodes Ogg Vorbis with [stb_vorbis](https://github.com/nothings/stb)
+v1.22 by Sean Barrett, vendored unmodified as `third_party/stb/stb_vorbis.c` (upstream commit
+`2c980bb59875b0d32144a71867fbdebb2f77cd20`). It is compiled in exactly one translation unit,
+`modules/audio/src/Backend/CnaMixer/StbVorbis.cpp`, and only for the ALSA audio selection
+(`plans/plan_x11.md` X11-0151, `docs/audio-alsa.md`); every other audio selection neither compiles
+nor links it.
+
+stb_vorbis is dual-licensed, at the user's choice, under the MIT License or into the public domain
+(the Unlicense); both texts are at the end of the file itself. CNA uses it under either.
+
 ## Liberation Mono (test font)
 
 `tests/assets/fonts/LiberationMono-Regular.ttf` is committed so that the SpriteFont content-pipeline

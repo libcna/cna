@@ -73,6 +73,10 @@ reader) covering PCM 8/16/24/32-bit, IEEE float 32/64-bit (including via
 `CNA_AUDIO_PLATFORM`. A renderer choice is the third axis again: it decides how pixels are
 produced and is unaffected by either of the above.
 
+An SDL-free build no longer has to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` plays through ALSA
+(and so through PipeWire or PulseAudio on a desktop) with CNA's own mixer behind the same
+`MixerEngine.hpp` facade SDL3_mixer implements -- see [`docs/audio-alsa.md`](audio-alsa.md).
+
 **Two implementations of the same native library cannot share a process.** SDL2 and SDL3 export
 identically named entry points (`SDL_Init`, `SDL_GetError`, `SDL_PollEvent` and many more), so a
 binary linking both leaves one backend's calls bound to whichever library the loader reached

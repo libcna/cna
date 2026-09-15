@@ -71,8 +71,10 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
     // The SDL "dummy" driver (forced above) always exposes exactly one recording device, so
     // real enumeration never sees zero microphones here, unlike a genuine headless machine.
     EXPECT_FALSE(Microphone::getAllProperty().empty());
-#elif defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
-    // SDL2 and NULL currently advertise no recording provider and must never fall back to SDL3.
+#elif defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL) \
+    || defined(CNA_AUDIO_PLATFORM_ALSA)
+    // SDL2, NULL and ALSA currently advertise no recording provider and must never fall back to
+    // SDL3.
     EXPECT_TRUE(Microphone::getAllProperty().empty());
 #else
 #error "CNA audio platform selection did not define an implementation"
@@ -85,7 +87,8 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
 // XNA runtime, and CLAUDE.md makes XNA the tie-break. No entry may carry that invented name.
 TEST(MicrophoneTest, AllContainsOnlyRealDevicesWithNoInventedDefaultEntry)
 {
-#if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
+#if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL) \
+    || defined(CNA_AUDIO_PLATFORM_ALSA)
     GTEST_SKIP() << "selected audio backend has no recording capability";
 #endif
     const auto& all = Microphone::getAllProperty();

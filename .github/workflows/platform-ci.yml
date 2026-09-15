@@ -484,7 +484,7 @@ jobs:
   # every build (NPV-0121). This cell configures that selection, builds two real games from it and
   # runs them with every renderer compiled in, on Mesa's software GL and Vulkan drivers.
   x11-sdl-free-gpu:
-    name: X11 + OpenGL33/Vulkan/Software/Headless + Null audio (CNA_ENABLE_SDL=OFF)
+    name: X11 + OpenGL33/Vulkan/Software/Headless + ALSA audio (CNA_ENABLE_SDL=OFF)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -502,7 +502,7 @@ jobs:
           set -euo pipefail
           bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
-      - name: Install build, X11, GL and Vulkan dependencies (no SDL packages)
+      - name: Install build, X11, GL, Vulkan and ALSA dependencies (no SDL packages)
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -511,7 +511,8 @@ jobs:
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev \
-            libgl1-mesa-dev libglx-dev libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers
+            libgl1-mesa-dev libglx-dev libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers \
+            libasound2-dev
 
       - name: Cache compiler outputs
         uses: actions/cache@v4
@@ -521,7 +522,9 @@ jobs:
           restore-keys: |
             platform-ccache-${{ runner.os }}-x11-sdl-free-gpu-
 
-      - name: Configure CNA_ENABLE_SDL=OFF + X11 + OPENGL33;VULKAN;SOFTWARE;HEADLESS + Null audio
+      # plans/plan_x11.md X11-0151: the SDL-free games with sound -- ALSA playback and CNA's own
+      # mixer. The runner has no sound card; everything plays to ALSA's silent `null` device.
+      - name: Configure CNA_ENABLE_SDL=OFF + X11 + OPENGL33;VULKAN;SOFTWARE;HEADLESS + ALSA audio
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -529,14 +532,14 @@ jobs:
             -DCNA_PLATFORM=X11 \
             -DCNA_GRAPHICS_RENDERER=OPENGL33 \
             -DCNA_GRAPHICS_RENDERERS="OPENGL33;VULKAN;SOFTWARE;HEADLESS" \
-            -DCNA_AUDIO_PLATFORM=NULL \
+            -DCNA_AUDIO_PLATFORM=ALSA \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_ENABLE_NET=OFF \
             -DCNA_USE_CCACHE=ON
 
-      - name: Build two real games
-        run: cmake --build build --target cna_demo_2d cna_house3d_demo --parallel "$(nproc)"
+      - name: Build two real games and the audio test suite
+        run: cmake --build build --target cna_demo_2d cna_house3d_demo CnaAudioTests --parallel "$(nproc)"
 
       - name: Prove no SDL was found, built or linked
         run: |
@@ -545,7 +548,7 @@ jobs:
             echo "::error::An SDL package was found by a CNA_ENABLE_SDL=OFF configuration." >&2
             exit 1
           fi
-          for exe in build/cna_demo_2d build/cna_house3d_demo; do
+          for exe in build/cna_demo_2d build/cna_house3d_demo build/CnaAudioTests; do
             if readelf -d "$exe" | grep -i 'NEEDED.*sdl'; then
               echo "::error::$exe links against SDL." >&2
               exit 1
@@ -554,9 +557,16 @@ jobs:
               echo "::error::$exe references SDL symbols." >&2
               exit 1
             fi
+            # libasound is loaded at run time, never linked: a machine without it must still start.
+            if readelf -d "$exe" | grep -i 'NEEDED.*asound'; then
+              echo "::error::$exe links libasound instead of loading it at run time." >&2
+              exit 1
+            fi
           done
 
       - name: Run both games with every renderer compiled in (private Xvfb, Mesa software drivers)
+        env:
+          CNA_AUDIO_DEVICE: "null"
         run: |
           set -euo pipefail
           ctest --test-dir build -R '^X11_House3D_SmokeTest_' --output-on-failure
@@ -564,6 +574,13 @@ jobs:
             (cd build && CNA_GRAPHICS_RENDERER="$renderer" \
               sh ../tools/platform/x11_test_server.sh ./cna_demo_2d --smoke 6)
           done
+
+      - name: Run the ALSA device, CNA mixer and XNA audio suites on ALSA's null device
+        env:
+          CNA_AUDIO_DEVICE: "null"
+        run: |
+          set -euo pipefail
+          ./build/CnaAudioTests --gtest_filter='CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AudioCategory*:*AudioDeviceConformanceTests*:AudioEngine*:RendererDetail*'
 
   # ---------------------------------------------------------------------------------------------
   # plans/plan_native_platforms_integration.md NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.

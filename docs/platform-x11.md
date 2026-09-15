@@ -33,6 +33,9 @@ cmake -S . -B cmake-build-x11-nosdl -G Ninja \
       -DCNA_ENABLE_SDL=OFF
 ```
 
+`-DCNA_AUDIO_PLATFORM=ALSA` in place of `NULL` gives that configuration sound, still with no SDL
+anywhere: ALSA playback and CNA's own mixer — see [`docs/audio-alsa.md`](audio-alsa.md).
+
 `CNA_ENABLE_SDL` is `AUTO` by default, which is byte-for-byte the behaviour every existing build
 had. `OFF` skips the vendored SDL sub-build entirely and refuses, at configure time, any selection
 that genuinely needs SDL — naming which one. Nothing is ever substituted silently.

@@ -11,10 +11,11 @@
 > measured, not argued: `ldd` shows no `libSDL` and `nm` shows no undefined `SDL_` symbol in a
 > working CNA test binary, and its 427 tests pass. **Phase M** (the owner approved it on
 > 2026-09-15, worked on branch `x11`) goes past that first delivery: **X11-0150, gamepads and
-> joysticks through Linux evdev, is ✅**; X11-0151..X11-0158 are ⬜. See
+> joysticks through Linux evdev, and X11-0151, sound for SDL-free builds (ALSA and CNA's own mixer),
+> are ✅**; X11-0152..X11-0158 are ⬜. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the five defects found that belong to other parts of the tree, and
-> [§8](#8-defects-this-work-found-in-its-own-implementation) for the twelve this work's own tests
+> [§8](#8-defects-this-work-found-in-its-own-implementation) for the thirteen this work's own tests
 > caught in this work's own code.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
@@ -265,7 +266,7 @@ Win32 and Wayland are out of scope for this phase.
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
 | X11-0150 | Gamepads and joysticks through Linux evdev | ✅ | `modules/platform/src/Linux/` (D17): `EvdevLayout` (classification, the gamepad mapping, normalisation -- pure), `EvdevDevice` (one node: ioctls, sysfs description, `SYN_DROPPED` resync, `FF_RUMBLE`), `EvdevControllers` (the hub over `/dev/input` with inotify hot-plug, and `IPlatformGamepad`/`IPlatformJoystick` over it). `X11Platform` reports `gamepad`/`joystick`/`gamepadRumble` wherever the build has `<linux/input.h>` and the machine `/dev/input` -- **independently of the X connection** -- starts the hub lazily on the first `GetGamepad()`/`GetJoystick()` like the SDL3 platform, closes every node when `PlatformSubsystem::Gamepad` is released, and delivers `DeviceEvent`/`ControllerButtonEvent`/`ControllerAxisEvent` from `PollEvents`. Tests: `X11EvdevLayoutTests.cpp` (25 cases, no device: classification of pads/keyboards/mice/touchpads/tablets/sensor nodes, xpad vs gamepad-API face buttons, sticks/triggers/hats, scaling, sysfs parsing, which nodes the hub opens) in `CnaX11MappingTests`; `X11EvdevVirtualDeviceTests.cpp` (11 cases against real kernel devices through uinput: hot-plug both ways, events and snapshots, held-at-open state, `SYN_DROPPED`, xpad identity, the whole force-feedback upload/play/stop/erase handshake, a flight stick as a raw joystick, the platform with no `DISPLAY`, sysfs vs ioctl agreement for every node on the machine) as `CnaX11EvdevTests`. Two defects caught on the way, D-11 and D-12. **Not covered:** physical pads -- the xpad/hid-playstation/hid-nintendo layouts follow the kernel's documentation and drivers but no physical controller was available. Not implemented: motion sensors, trigger rumble, light bar, player LEDs, touchpad, battery, a controller mapping database for pads outside the gamepad API. |
-| X11-0151 | Native audio for SDL-free builds | ⬜ | PipeWire/PulseAudio/ALSA output and a decoder/mixer without SDL; the largest gap of an SDL-free game. Verified on a null sink only (no audible output on this machine at night). |
+| X11-0151 | Native audio for SDL-free builds | ✅ | `CNA_AUDIO_PLATFORM=ALSA` (`docs/audio-alsa.md`): **ALSA playback** (`modules/audio/src/Platform/Alsa/`, libasound loaded at run time -- ALSA's `default` is PipeWire or PulseAudio on a desktop, so one backend reaches all three) and **CNA's own mixer** (`modules/audio/src/Backend/CnaMixer/`) implementing `MixerEngine.hpp`, the facade the XNA classes already used over SDL3_mixer, with SDL3_mixer's semantics read from its source (gain before the mix callback, master gain after, loops as extra passes ending at the max frame, streams that wait when starved, deferred destruction from a stopped callback) and FAudio's linear resampling. Decoding: CNA's own WAV decoder, and Ogg Vorbis through `third_party/stb/stb_vorbis.c` v1.22 (songs stream-decoded); MP3/FLAC/Opus/WMA/XMA are refused by name. `SOUND_ENABLED` now means "a mixer exists" (SDL3 or ALSA). Tests, all on ALSA's silent devices (`CNA_AUDIO_DEVICE`; the test binaries default to `null` themselves): `CnaMixerTests.cpp` (20, sample-exact), `AlsaAudioDeviceTests.cpp` (6, real libasound `null`/`file`, byte-exact recording) plus the ALSA case of the device conformance suite, `CnaMixerXnaTests.cpp` (6 through the XNA API) and an end-to-end recording -- a SoundEffect played through the public API measured off ALSA's `file` device at 440 Hz, its level and its duration -- and `AudioCategoryTests`, previously SDL3-only, now passes (24) on this mixer; the media suite passes whole (295). **Not validated:** playback through PipeWire/PulseAudio/a sound card itself (nobody at the machine; opening the real device even silently can pop the codec), latency under load, surround devices. **Not implemented:** capture (Microphone), MP3/FLAC/Opus. |
 | X11-0152 | IME through XIM preedit callbacks | ⬜ | `TextEditingEvent`/`TextEditingCandidatesEvent`, making `ime` true truthfully (D16). |
 | X11-0153 | Exclusive fullscreen through XRandR | ⬜ | Mode switch with restore on exit, failure and abnormal termination; tested on private servers only -- the owner's displays are not reconfigured. |
 | X11-0154 | Drag and drop (XDND) | ⬜ | Files and text dropped from another client. |
@@ -408,6 +409,8 @@ these was found by a test rather than by reading the code. None was fixed by wea
 | D-11 | **After a kernel queue overflow a button could stay stuck in a stale state** (X11-0150). The resync read the pad's key state and then went on applying the rest of the same `read()` -- events *older* than that state. Reading the key state makes the kernel drop the key events still queued (`EVIOCGKEY` flushes them), so nothing newer followed to correct the stale ones: 27 of 48 flood lengths ended with the wrong buttons held. | noticed while writing `X11EvdevVirtualDevice.AnOverflowedQueueEndsOnTheDevicesRealState`, whose first form passed with the bug in place; rewritten to vary the flood across a whole ring buffer, it fails 27/48 rounds without the fix and passes with it | Only when more than one read's worth of events is left after the `SYN_DROPPED`, which depends on where the kernel's ring last wrapped. |
 | D-12 | **The first controller query stalled for 0.8 s** (X11-0150): the hub opened every `/dev/input` node to classify it, and closing an evdev node waits for an RCU grace period (23-72 ms per node, measured). Classification now reads sysfs and never opens a keyboard or mouse: 3 ms. | every uinput test taking about a second; timing each node's open, ioctl and close | Correct output, just slow -- and it only shows on a machine with many input nodes. `X11EvdevHub.SysfsDecidesWhatIsOpenedAndAKeyboardNeverIs` watches the opens through inotify and fails without the fix. |
 
+| D-13 | **A zero-length sound handed a null pointer to `memcpy`** in CNA's mixer (X11-0151): wrapping an empty SoundEffect's PCM copied zero bytes from an empty vector's `data()`, which may be null -- undefined behaviour even for zero bytes, since glibc declares both arguments nonnull. The same class as NPV-0103. | UndefinedBehaviorSanitizer, on the audio suites in `build-asan` switched to ALSA | Harmless on every compiler in practice, which is exactly why only a sanitizer sees it. `CnaMixer.AnEmptySoundPlaysAndEndsAtOnce` now plays an empty sound on purpose, forever-looped as well. |
+
 D-10 is the one worth the extra sentence: it is exactly the failure the plan predicted when it
 split the Xvfb and window-manager suites, and it would have shipped green had the suite only ever
 run against a bare virtual server.
@@ -525,6 +528,24 @@ CnaX11WindowManagerTests . Skipped (no openbox on this machine)
 - **The ratchet covers `src/Linux/`:** a planted `SDL_Init` there takes
   `sdl_ratchet.py --check --strict` from 0 to 1 reference and fails it; removed, it is at budget again.
 - `sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet`, `hot_path_lint`: all pass.
+
+### Sound for SDL-free builds (X11-0151, 2026-09-15)
+
+`cmake-build-x11` switched to `-DCNA_AUDIO_PLATFORM=ALSA` (X11, SDL OFF, HEADLESS). Nothing ever played
+to a real device: the test binaries default to ALSA's `null` device themselves, ctest sets it, and
+the one end-to-end test records through ALSA's `file` device.
+
+| Check | Result |
+|---|---|
+| `CnaAudioTests`, whole | 286 passed, 7 skipped (Microphone capture: ALSA has no capture yet) |
+| the same under ASan + UBSan + LSan (`build-asan` switched to ALSA) | 286 passed, no sanitizer report after D-13's fix |
+| `CnaMixer.*` / `AlsaAudioDevice.*` / `CnaMixerXna.*` | 20 / 6 / 6 passed; the ALSA case of the device conformance suite passes beside NULL |
+| end to end (`CnaAudioAlsaRecordingTest`) | a SoundEffect played through the public API, measured off ALSA's `file` device: 440 Hz ± 10, peak 8000/32768 ± 0.01, 0.3 s ± 0.02, identical in both channels |
+| `AudioCategoryTests` (previously SDL3-only) | 24 passed, and 6 repetitions of the suite at `ctest -j16` after two fixture races it exposed were fixed: fixture files written in place while other test processes read them ("Engine initialization failed!"), and a 2 ms wave that finished before `IsPlaying` was asserted -- both test-side, both would equally hit SDL3 under load |
+| `CnaMediaTests`, whole | 295 passed (MediaPlayer and VideoPlayer now take their SOUND_ENABLED paths) |
+| `CnaContentTests`, whole | 1795 passed; the 13 failures are the pre-existing content/renderer set recorded in `plans/plan_native_platform_validation.md` "Regression runs" |
+| full `ctest -j12` | 9255 of 9285; every other failure is that recorded pre-existing set (content/renderer, `SupportsMultipleRenderTargets`, `CApi*`, `CNAEXT_*`, `CnaGltfConformanceL0`, `CnaXnbModelCorpusSweep`, parallel ENet), plus the AudioCategory races above and `XnaDifferentialBuildTest` timing out while the ASan build ran beside it -- alone it passes in 530 s of its 600 s budget. `CNAEXT_NoPosixSetenv` also flagged this work's own tests (POSIX `setenv` in the ALSA and evdev tests); they use `System::Environment` now, leaving only the RLGL examples it already listed |
+| the SDL-free game, `cna_demo_2d --smoke 6` | runs with ALSA audio on the `null` device; no binary has libasound (or SDL) in `NEEDED` |
 
 ### Regression
 
