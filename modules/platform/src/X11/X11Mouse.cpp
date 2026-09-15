@@ -140,7 +140,7 @@ namespace CNA::Platform::X11 {
         // is why they are carried across rather than rebuilt here.
         constexpr std::uint8_t kExtraButtonBits = 0x18;  // bits 3 and 4
         std::uint8_t buttons = static_cast<std::uint8_t>(snapshot_.buttons & kExtraButtonBits);
-        if ((mask & Button1Mask) != 0) { buttons |= 1u << 0; }
+        if ((mask & Button1Mask) != 0 || touchHeld_) { buttons |= 1u << 0; }
         if ((mask & Button2Mask) != 0) { buttons |= 1u << 1; }
         if ((mask & Button3Mask) != 0) { buttons |= 1u << 2; }
         snapshot_.buttons = buttons;

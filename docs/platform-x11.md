@@ -53,7 +53,7 @@ would build something other than what you asked for.
 | `libX11` | **mandatory** | the backend is not offered at all |
 | `libXext` | **mandatory** | the backend is not offered at all |
 | `X11/XKBlib.h` | **mandatory** | layout-independent scancodes have no substitute |
-| `libXi` (XInput2) | optional | `relativeMouse` |
+| `libXi` (XInput2) | optional | `relativeMouse`; touchscreen and pen contacts (the server must speak XInput 2.2 for touch) |
 | `libXrandr` (≥ 1.2) | optional | `multipleDisplays`, and `GetDisplays()` returns null; exclusive fullscreen then has no mode to switch to and is borderless |
 | `libXau` | optional (installed with `libX11`) | the exclusive-fullscreen mode guardian's cookie, for a server that asks for one — see [Fullscreen](#fullscreen) |
 | `libXcursor` | optional | custom ARGB cursor images; the standard shapes still work |
@@ -336,6 +336,29 @@ windows would pass while proving nothing.
 
 ---
 
+## Touch and pens
+
+Where the server speaks XInput 2.2, every window CNA creates selects touch events, and each
+touchscreen contact becomes the contract's `TouchEvent` — `Down`, `Motion` with its delta, `Up` —
+in the window it began in, normalised against the client size it had then. XNA's `TouchPanel`
+reads them. A window destroyed mid-touch has its contacts `Cancelled`, so no finger stays down.
+
+- **The mouse keeps working on a touchscreen.** A window that selects touch events is no longer
+  sent the pointer events the server emulates from touches, so the backend drives the mouse from
+  the contact the server marks as emulating the pointer: motion, a left-button press and release,
+  and the mouse snapshot with them — once each, measured. SDL3 does the same by synthesising mouse
+  events from touches.
+- **Pens.** SDL3's rule finds them — an enabled slave pointer with an "Abs Pressure" valuator — at
+  start-up and whenever the device hierarchy changes. A pen whose tip is down is a touch with the
+  pressure it reports; a hovering pen is not. Its own XI2 events are selected per device, so the
+  core pointer events it drives — the mouse — arrive as they always did, also measured. Pressure is
+  1 for a finger, as SDL3 reports it.
+- **Not delivered:** a pen's tilt, its barrel buttons and eraser as such (an eraser touching is a
+  touch like the tip), touch-ownership and gesture grabs, and XInput 2.2 on a server that has only
+  2.0 or 2.1 (touch is then absent; the mouse still works through the server's own emulation).
+
+---
+
 ## Drag and drop
 
 Every window CNA creates announces `XdndAware` (version 5), and a drag from another client — a
@@ -518,7 +541,7 @@ exist; that has **not** been tested, and is recorded as untested rather than cla
 
 ## Running the tests
 
-Six ctest entries, split by what each actually needs:
+Seven ctest entries, split by what each actually needs:
 
 ```sh
 ctest --test-dir cmake-build-x11 -R 'CnaX11'
@@ -531,6 +554,7 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 | `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, the platform with no X server; each test skips where the machine grants neither |
 | `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy, and drag and drop against a real XDND source — a second process of the test binary |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
+| `CnaX11TouchscreenTests` | writable `/dev/uinput`, readable event nodes, `Xorg` with the `dummy` video and `evdev` input drivers (`CNA_X11_XORG_MODULE_PATH` adds module directories) | real contacts: a uinput touchscreen and pen that a private, rootless Xorg takes **exclusively** — the suite checks that grab before every event it writes, so nothing reaches the desktop's own compositor; opt-in through the entry's `CNA_X11_TEST_TOUCHSCREEN=1` |
 | `CnaX11ExclusiveFullscreenTests` | `Xvfb` + `openbox`; **the launcher's own server only** | exclusive fullscreen changes the display mode, so it runs only where `CNA_X11_PRIVATE_TEST_SERVER` is set: mode choice, the screen around the CRTC, SetSize while exclusive, hide/show, focus loss and return, every restore path, a mode someone else set, and a process killed with `SIGKILL` having its mode restored by its guardian |
 
 Where the build has a renderer that draws into a window, `X11_House3D_ExclusiveFullscreen_<renderer>`

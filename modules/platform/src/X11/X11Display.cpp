@@ -209,11 +209,15 @@ namespace CNA::Platform::X11 {
 #if defined(CNA_X11_HAVE_XI)
         if (XQueryExtension(display_, "XInputExtension", &opcode, &event, &error) == True)
         {
+            // 2.2 is the version with touch events (X11-0155). The server answers with the version
+            // it will use -- the lower of the two -- and a client announces one version only, so
+            // this is the one call. Raw motion, the 2.0 feature relative mode uses, is unchanged.
             int xiMajor = 2;
-            int xiMinor = 0;
+            int xiMinor = 2;
             if (XIQueryVersion(display_, &xiMajor, &xiMinor) == Success)
             {
                 xi2Opcode_ = opcode;
+                xi2Touch_ = xiMajor > 2 || (xiMajor == 2 && xiMinor >= 2);
             }
         }
 #endif

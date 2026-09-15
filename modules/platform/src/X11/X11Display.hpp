@@ -225,6 +225,13 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] bool HasRandr() const { return randrEventBase_ >= 0; }
 
         /**
+         * @brief Gets whether the server speaks XInput 2.2, the version with touch events.
+         *
+         * @return True when touchscreen contacts can be selected on a window.
+         */
+        [[nodiscard]] bool HasXInput2Touch() const { return xi2Touch_; }
+
+        /**
          * @brief Gets whether the server is Xwayland rather than a server that owns its displays.
          *
          * Matters where Xwayland is different by design: it emulates display-mode changes for the
@@ -293,6 +300,7 @@ namespace CNA::Platform::X11 {
         bool detectableAutoRepeat_ = false;
         int xkbEventBase_ = -1;
         int xi2Opcode_ = -1;
+        bool xi2Touch_ = false;
         int randrEventBase_ = -1;
         bool isXwayland_ = false;
         float displayScale_ = 1.0f;

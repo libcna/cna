@@ -13,6 +13,7 @@
 #include "X11Keyboard.hpp"
 #include "X11Mouse.hpp"
 #include "X11TextInput.hpp"
+#include "X11Touch.hpp"
 #include "X11Window.hpp"
 
 #include <chrono>
@@ -246,6 +247,7 @@ namespace CNA::Platform::X11 {
 
         std::unique_ptr<X11Keyboard> keyboard_;
         std::unique_ptr<X11Mouse> mouse_;
+        std::unique_ptr<X11Touch> touch_;
         std::unique_ptr<X11TextInput> textInput_;
         std::unique_ptr<X11Clipboard> clipboard_;
         std::unique_ptr<X11DragAndDrop> dragAndDrop_;

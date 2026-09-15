@@ -193,6 +193,17 @@ namespace CNA::Platform::X11 {
         void SetButtonState(unsigned int button, bool pressed);
 
         /**
+         * @brief Records that a touch emulating the pointer holds the left button.
+         *
+         * The snapshot's first three buttons are read from the server's pointer state every frame;
+         * a window that takes touch events gets no pointer events for its touches, so the touch
+         * the server marks as emulating the pointer holds the left button here instead (X11-0155).
+         *
+         * @param held True while the touch is down.
+         */
+        void SetTouchHeld(bool held) { touchHeld_ = held; }
+
+        /**
          * @brief Accumulates wheel motion for the snapshot's cumulative scroll fields.
          *
          * @param x Horizontal notches.
@@ -226,6 +237,7 @@ namespace CNA::Platform::X11 {
         double carryY_ = 0.0;
         WindowId relativeWindow_ = 0;
         bool relativeHeld_ = false;
+        bool touchHeld_ = false;
         std::chrono::steady_clock::time_point nextGrabAttempt_{};
         bool cursorVisible_ = true;
         bool captured_ = false;

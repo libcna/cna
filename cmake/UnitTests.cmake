@@ -1231,7 +1231,7 @@ if(CNA_BUILD_TESTS)
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*")
     endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers. The test binary defaults to it on its own as well (see
@@ -1525,7 +1525,7 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*:X11TouchMath.*
             LABELS "platform" TIMEOUT 120)
 
         # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No
@@ -1546,7 +1546,7 @@ if(CNA_BUILD_TESTS)
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests
@@ -1563,6 +1563,17 @@ if(CNA_BUILD_TESTS)
                         --with-ibus
                         $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
                         --gtest_filter=X11InputMethod.*
+                LABELS "platform" TIMEOUT 300)
+
+            # plans/plan_x11.md X11-0155: real touchscreen contacts, through a uinput touchscreen a
+            # private rootless Xorg takes EXCLUSIVELY -- the suite verifies the grab before it
+            # injects anything, so nothing reaches the desktop's own compositor. Opt-in by this
+            # entry's environment; skips where uinput, Xorg or its dummy/evdev drivers are missing
+            # (CNA_X11_XORG_MODULE_PATH adds module directories).
+            cna_register_renderer_test(NAME CnaX11TouchscreenTests
+                COMMAND ${CMAKE_COMMAND} -E env CNA_X11_TEST_TOUCHSCREEN=1
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                        --gtest_filter=X11Touchscreen.*
                 LABELS "platform" TIMEOUT 300)
 
             # plans/plan_x11.md X11-0153: exclusive fullscreen changes the display mode, so it

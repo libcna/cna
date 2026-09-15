@@ -256,6 +256,7 @@ namespace CNA::Platform::X11 {
         // false" honest for the services that depend on a live display.
         keyboard_ = std::make_unique<X11Keyboard>(*connection_);
         mouse_ = std::make_unique<X11Mouse>(*connection_);
+        touch_ = std::make_unique<X11Touch>(*connection_, mouse_.get());
         textInput_ = std::make_unique<X11TextInput>(*connection_);
         clipboard_ = std::make_unique<X11Clipboard>(*connection_);
         dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
@@ -275,6 +276,7 @@ namespace CNA::Platform::X11 {
         dragAndDrop_.reset();
         clipboard_.reset();
         textInput_.reset();
+        touch_.reset();
         mouse_.reset();
         keyboard_.reset();
         connection_.reset();
@@ -382,6 +384,10 @@ namespace CNA::Platform::X11 {
         if (dragAndDrop_ != nullptr)
         {
             dragAndDrop_->ForgetWindow(window.GetXWindow());
+        }
+        if (touch_ != nullptr)
+        {
+            touch_->ForgetWindow(window.GetId(), window.GetXWindow());
         }
         ForgetWindow(window.GetId());
     }
@@ -563,6 +569,11 @@ namespace CNA::Platform::X11 {
             // drag and drop.
             dragAndDrop_->AttachWindow(*raw);
         }
+        if (touch_ != nullptr)
+        {
+            // Likewise: taking a window's touch events takes its emulated pointer events away.
+            touch_->AttachWindow(*raw);
+        }
 
         if (description.visible)
         {
@@ -706,6 +717,11 @@ namespace CNA::Platform::X11 {
         {
             mouse_->RefreshRelativeMode();
         }
+        if (touch_ != nullptr)
+        {
+            // Contacts of a window that went away since the last pump (X11Touch::ForgetWindow).
+            touch_->TakePendingEvents(destination);
+        }
         // A focus loss held back because it came right after a display-mode change is decided
         // here, once the grace period is over (X11Window::OnFocusChanged).
         for (const auto& [id, window] : windows_)
@@ -798,6 +814,36 @@ namespace CNA::Platform::X11 {
                         ++values;
                     }
                     mouse_->AccumulateRawMotion(deltaX, deltaY);
+                }
+                else if ((event.xcookie.evtype == XI_TouchBegin ||
+                          event.xcookie.evtype == XI_TouchUpdate ||
+                          event.xcookie.evtype == XI_TouchEnd) &&
+                         touch_ != nullptr)
+                {
+                    // plans/plan_x11.md X11-0155: a touchscreen contact on one of our windows.
+                    const auto* device = static_cast<const XIDeviceEvent*>(event.xcookie.data);
+                    if (X11Window* target = FindWindowByXid(device->event))
+                    {
+                        touch_->HandleEvent(*device, *target, destination);
+                    }
+                }
+                else if ((event.xcookie.evtype == XI_ButtonPress ||
+                          event.xcookie.evtype == XI_ButtonRelease ||
+                          event.xcookie.evtype == XI_Motion) &&
+                         touch_ != nullptr)
+                {
+                    // A pen's own events: only pens' are selected. The core pointer events the
+                    // pen drives -- the mouse -- arrive separately, as for any pointer.
+                    const auto* device = static_cast<const XIDeviceEvent*>(event.xcookie.data);
+                    if (X11Window* target = FindWindowByXid(device->event))
+                    {
+                        (void) touch_->HandlePenEvent(*device, *target, destination);
+                    }
+                }
+                else if (event.xcookie.evtype == XI_HierarchyChanged && touch_ != nullptr)
+                {
+                    // A pen plugged in or out.
+                    touch_->RefreshPens();
                 }
                 XFreeEventData(display, &event.xcookie);
             }
@@ -1089,6 +1135,10 @@ namespace CNA::Platform::X11 {
                 if (dragAndDrop_ != nullptr)
                 {
                     dragAndDrop_->ForgetWindow(event.xdestroywindow.window);
+                }
+                if (touch_ != nullptr)
+                {
+                    touch_->ForgetWindow(windowId, event.xdestroywindow.window);
                 }
                 ForgetWindow(windowId);
                 return;
