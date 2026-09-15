@@ -90,6 +90,16 @@ namespace CNA::Platform::X11 {
         /** @brief Gets the window that holds selection ownership. @return The owner window XID. */
         [[nodiscard]] ::Window GetOwnerWindow() const { return owner_; }
 
+        /**
+         * @brief Gets how many INCR transfers to other clients are still in progress.
+         *
+         * @return The number of requestors still being served.
+         */
+        [[nodiscard]] std::size_t GetIncrementalTransferCount() const
+        {
+            return incrementalSends_.size();
+        }
+
     private:
         struct IncrementalSend
         {

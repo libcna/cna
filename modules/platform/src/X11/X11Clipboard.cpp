@@ -365,6 +365,12 @@ namespace CNA::Platform::X11 {
                 ownedText_.clear();
                 return true;
             }
+            case DestroyNotify:
+            {
+                // A requestor went away in the middle of a transfer. The window is gone, so there
+                // is no selection to undo -- only the bookkeeping.
+                return incrementalSends_.erase(event.xdestroywindow.window) > 0;
+            }
             case PropertyNotify:
             {
                 // The requestor deleted the property, which under INCR means "send me the next
@@ -468,7 +474,10 @@ namespace CNA::Platform::X11 {
         // Too large for one property: start an INCR transfer. The property value is the total
         // size, the type is INCR, and the chunks follow as the requestor deletes the property.
         const long total = static_cast<long>(ownedText_.size());
-        XSelectInput(display, request.requestor, PropertyChangeMask);
+        // StructureNotify as well as PropertyChange: a requestor that is destroyed mid-transfer
+        // will never delete the property again, and without its DestroyNotify the transfer -- and
+        // its copy of the text -- would be kept for good (NPV-0127).
+        XSelectInput(display, request.requestor, PropertyChangeMask | StructureNotifyMask);
         XChangeProperty(display, request.requestor, property, atoms.incr, 32, PropModeReplace,
                         reinterpret_cast<const unsigned char*>(&total), 1);
         IncrementalSend send;

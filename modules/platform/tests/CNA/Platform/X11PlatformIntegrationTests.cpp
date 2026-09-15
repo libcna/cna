@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../../src/X11/X11Clipboard.hpp"
 #include "../../../src/X11/X11Error.hpp"
 #include "../../../src/X11/X11Mouse.hpp"
 #include "../../../src/X11/X11Platform.hpp"
@@ -261,8 +262,9 @@ private:
 class IncrementalRequestor
 {
 public:
-    explicit IncrementalRequestor(std::function<void()> afterFirstChunk)
-        : afterFirstChunk_(std::move(afterFirstChunk))
+    explicit IncrementalRequestor(std::function<void()> afterFirstChunk,
+                                  const bool abandonAfterFirstChunk = false)
+        : afterFirstChunk_(std::move(afterFirstChunk)), abandon_(abandonAfterFirstChunk)
     {
     }
 
@@ -353,6 +355,12 @@ private:
                 {
                     first = false;
                     afterFirstChunk_();
+                    if (abandon_)
+                    {
+                        // A requestor that dies mid-transfer: its window goes, with the
+                        // connection, and it never asks for another chunk.
+                        break;
+                    }
                 }
             }
         }
@@ -362,6 +370,7 @@ private:
     }
 
     std::function<void()> afterFirstChunk_;
+    bool abandon_ = false;
     std::thread thread_;
     std::string text_;
     std::atomic<bool> done_{false};
@@ -1630,6 +1639,31 @@ TEST_F(X11Live, AnIncrementalTransferUnderWayKeepsTheTextItStartedWith)
     EXPECT_TRUE(copied);
     EXPECT_EQ(requestor.Text().size(), text.size());
     EXPECT_TRUE(requestor.Text() == text) << "the transfer switched to the newer text part-way";
+}
+
+// plans/plan_native_platform_validation.md NPV-0127: a requestor that went away in the middle of
+// an INCR transfer left the transfer -- and, since NPV-0119, its copy of the text -- behind for
+// good: nothing told the clipboard the window was gone.
+TEST_F(X11Live, AnIncrementalTransferWhoseRequestorDiesIsForgotten)
+{
+    IPlatformClipboard* clipboard = platform_->GetClipboard();
+    ASSERT_NE(clipboard, nullptr);
+    auto* x11Clipboard = dynamic_cast<CNA::Platform::X11::X11Clipboard*>(clipboard);
+    ASSERT_NE(x11Clipboard, nullptr);
+    clipboard->SetText(LargeClipboardText('d'));
+
+    IncrementalRequestor requestor([] {}, true);
+    requestor.Start();
+    ASSERT_TRUE(PumpUntil([&](const std::vector<PlatformEvent>&) { return requestor.Done(); },
+                          std::chrono::milliseconds(20000)));
+    ASSERT_TRUE(requestor.SawIncr()) << "the payload did not go through INCR";
+    EXPECT_TRUE(PumpUntil(
+        [&](const std::vector<PlatformEvent>&) {
+            return x11Clipboard->GetIncrementalTransferCount() == 0;
+        },
+        std::chrono::milliseconds(2000)))
+        << x11Clipboard->GetIncrementalTransferCount()
+        << " transfer(s) still kept for a requestor that no longer exists";
 }
 
 TEST_F(X11Live, AClipboardPayloadTooLargeForOnePropertyStillRoundTrips)
