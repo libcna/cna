@@ -9,6 +9,7 @@
 #include <fstream>
 #include <optional>
 #include <string_view>
+#include <utility>
 
 #include <unistd.h>
 
@@ -227,9 +228,11 @@ namespace CNA::Platform::Linux {
         return ReadPowerSupplies();
     }
 
-    bool LinuxSystemInfo::OpenUrl(const std::string&)
+    LinuxSystemInfo::LinuxSystemInfo(UrlOpener openUrl) : openUrl_(std::move(openUrl)) {}
+
+    bool LinuxSystemInfo::OpenUrl(const std::string& url)
     {
-        return false;
+        return openUrl_ && openUrl_(url);
     }
 
 } // namespace CNA::Platform::Linux

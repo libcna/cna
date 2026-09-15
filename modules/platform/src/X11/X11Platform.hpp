@@ -229,6 +229,10 @@ namespace CNA::Platform::X11 {
         {
             void operator()(Controllers* controllers) const;
         };
+        struct PortalDeleter
+        {
+            void operator()(X11DesktopPortal* portal) const;
+        };
 
         /// X11WindowHost: drops a destroyed wrapper from the registry and from every service,
         /// matched on identity.
@@ -280,6 +284,8 @@ namespace CNA::Platform::X11 {
         /// Null where the kernel offers no controller interface. Independent of the X
         /// connection: controllers come from the kernel, not from the X server.
         std::unique_ptr<Controllers, ControllersDeleter> controllers_;
+        // The desktop portal on the session bus (X11-0169); null without one, or without D-Bus.
+        std::unique_ptr<X11DesktopPortal, PortalDeleter> portal_;
         /// Set by the first GetGamepad()/GetJoystick(), whether or not starting succeeded.
         bool controllerSubsystemEnsured_ = false;
 

@@ -898,9 +898,11 @@ TEST_F(X11MessageBoxLive, ABoxWithoutButtonsIsRefused)
                  PlatformException);
 }
 
-TEST_F(X11MessageBoxLive, FileDialogsRefuseNamingTheirCapability)
+TEST_F(X11MessageBoxLive, WithoutAPortalFileDialogsRefuseNamingTheirCapability)
 {
-    EXPECT_FALSE(platform_->GetCapabilities().nativeFileDialog);
+    // The binary and the launcher give this test no session bus, so no portal (X11-0169). Were
+    // one found anyway, nothing below may run: it would open a real file chooser.
+    ASSERT_FALSE(platform_->GetCapabilities().nativeFileDialog) << "a desktop portal was reached from a test";
     const auto names = [](const std::function<void()>& call) {
         try
         {

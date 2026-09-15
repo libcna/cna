@@ -4,6 +4,7 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "X11Clipboard.hpp"
+#include "X11DesktopPortal.hpp"
 #include "X11Display.hpp"
 #include "X11Error.hpp"
 #include "X11Window.hpp"
@@ -578,7 +579,10 @@ namespace CNA::Platform::X11 {
         return std::nullopt;
     }
 
-    X11Dialogs::X11Dialogs(X11Connection& connection) : connection_(connection) {}
+    X11Dialogs::X11Dialogs(X11Connection& connection, X11DesktopPortal* portal)
+        : connection_(connection), portal_(portal)
+    {
+    }
 
     void X11Dialogs::ShowMessageBox(const MessageBoxSeverity severity, const std::string& title,
                                     const std::string& message, IPlatformWindow* parent)
@@ -602,21 +606,60 @@ namespace CNA::Platform::X11 {
         return RunMessageBox(connection_.GetDisplayName(), parentWindow, severity, title, message, buttons);
     }
 
-    void X11Dialogs::ShowOpenFileDialog(FileDialogCallback, const std::vector<FileDialogFilter>&, const std::string&,
-                                        bool, IPlatformWindow*)
+    namespace {
+
+        unsigned long ParentXid(IPlatformWindow* parent)
+        {
+            const auto* x11 = dynamic_cast<const X11Window*>(parent);
+            return x11 != nullptr ? static_cast<unsigned long>(x11->GetXWindow()) : 0ul;
+        }
+
+    } // namespace
+
+    void X11Dialogs::ShowOpenFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
+                                        const std::string& defaultLocation, const bool allowMultiple,
+                                        IPlatformWindow* parent)
     {
-        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "X11");
+#if defined(CNA_X11_HAVE_DBUS)
+        if (portal_ != nullptr)
+        {
+            portal_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, std::move(onResult), filters,
+                                    defaultLocation, allowMultiple, ParentXid(parent));
+            return;
+        }
+#endif
+        (void) onResult; (void) filters; (void) defaultLocation; (void) allowMultiple; (void) ParentXid(parent);
+        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "X11 (no desktop portal)");
     }
 
-    void X11Dialogs::ShowSaveFileDialog(FileDialogCallback, const std::vector<FileDialogFilter>&, const std::string&,
-                                        IPlatformWindow*)
+    void X11Dialogs::ShowSaveFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
+                                        const std::string& defaultLocation, IPlatformWindow* parent)
     {
-        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "X11");
+#if defined(CNA_X11_HAVE_DBUS)
+        if (portal_ != nullptr)
+        {
+            portal_->ShowFileDialog(X11DesktopPortal::FileRequest::Save, std::move(onResult), filters,
+                                    defaultLocation, false, ParentXid(parent));
+            return;
+        }
+#endif
+        (void) onResult; (void) filters; (void) defaultLocation;
+        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "X11 (no desktop portal)");
     }
 
-    void X11Dialogs::ShowOpenFolderDialog(FileDialogCallback, const std::string&, bool, IPlatformWindow*)
+    void X11Dialogs::ShowOpenFolderDialog(FileDialogCallback onResult, const std::string& defaultLocation,
+                                          const bool allowMultiple, IPlatformWindow* parent)
     {
-        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "X11");
+#if defined(CNA_X11_HAVE_DBUS)
+        if (portal_ != nullptr)
+        {
+            portal_->ShowFileDialog(X11DesktopPortal::FileRequest::OpenFolder, std::move(onResult), {},
+                                    defaultLocation, allowMultiple, ParentXid(parent));
+            return;
+        }
+#endif
+        (void) onResult; (void) defaultLocation; (void) allowMultiple;
+        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "X11 (no desktop portal)");
     }
 
 } // namespace CNA::Platform::X11

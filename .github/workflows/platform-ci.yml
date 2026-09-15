@@ -398,7 +398,7 @@ jobs:
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils \
-            ibus dbus-x11 xdotool x11-xkb-utils \
+            ibus dbus-x11 xdotool x11-xkb-utils libdbus-1-dev dbus-daemon \
             xserver-xorg-core xserver-xorg-video-dummy xserver-xorg-input-evdev
 
       - name: Cache compiler outputs
@@ -558,7 +558,7 @@ jobs:
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev \
             libgl1-mesa-dev libglx-dev libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers \
-            libasound2-dev openbox x11-xserver-utils
+            libasound2-dev openbox x11-xserver-utils libdbus-1-dev dbus-daemon
 
       - name: Cache compiler outputs
         uses: actions/cache@v4

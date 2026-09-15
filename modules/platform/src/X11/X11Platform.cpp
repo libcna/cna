@@ -3,6 +3,7 @@
 #include "X11Platform.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "X11DesktopPortal.hpp"
 #include "X11Error.hpp"
 #include "X11EventMapper.hpp"
 #include "X11Window.hpp"
@@ -42,6 +43,15 @@ namespace CNA::Platform::X11 {
     void X11Platform::ControllersDeleter::operator()(Controllers* controllers) const
     {
         delete controllers;
+    }
+
+    void X11Platform::PortalDeleter::operator()(X11DesktopPortal* portal) const
+    {
+#if defined(CNA_X11_HAVE_DBUS)
+        delete portal;
+#else
+        (void) portal;  // Never made without D-Bus.
+#endif
     }
 
     namespace {
@@ -127,8 +137,20 @@ namespace CNA::Platform::X11 {
 
     X11Platform::X11Platform()
     {
+#if defined(CNA_X11_HAVE_DBUS)
+        // The desktop portal is the session bus's, not the X server's: looked for once, without
+        // starting it, whatever the display (X11-0169).
+        portal_.reset(X11DesktopPortal::Connect().release());
+#endif
 #ifdef CNA_PLATFORM_HAVE_EVDEV
-        systemInfo_ = std::make_unique<Linux::LinuxSystemInfo>();
+        systemInfo_ = std::make_unique<Linux::LinuxSystemInfo>([this](const std::string& url) {
+#if defined(CNA_X11_HAVE_DBUS)
+            return portal_ != nullptr && portal_->OpenUri(url, 0);
+#else
+            (void) url;
+            return false;
+#endif
+        });
 #else
         systemInfo_ = std::make_unique<Common::StandardSystemInfo>();
 #endif
@@ -255,12 +277,14 @@ namespace CNA::Platform::X11 {
         capabilities.ime = textInput_ != nullptr && textInput_->HasCompositionEvents();
         // Keyboards, mice and touch devices through XInput2, controllers through the hub (X11-0165).
         capabilities.inputDeviceEnumeration = inputDevices_ != nullptr;
-        // Message boxes drawn with Xlib in a window of their own (X11-0167).
+        // Message boxes drawn with Xlib in a window of their own (X11-0167); file dialogs the
+        // desktop portal's, where the session bus has one (X11-0169).
         capabilities.messageBox = dialogs_ != nullptr;
+        capabilities.nativeFileDialog = dialogs_ != nullptr && portal_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
-        //   nativeFileDialog, tray -- no core X11 facility, and shelling out to zenity or
-        //                             kdialog would not be a native backend (plan D15).
+        //   tray                   -- a desktop-environment protocol, and shelling out to a
+        //                             helper would not be a native backend (plan D15).
         //   camera                 -- not an X11 facility.
         //   managedEntrypoint      -- an ordinary main().
         return capabilities;
@@ -286,7 +310,7 @@ namespace CNA::Platform::X11 {
         primarySelection_ = std::make_unique<X11Clipboard>(
             *connection_, connection_->GetAtoms().primary, "PRIMARY");
         dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
-        dialogs_ = std::make_unique<X11Dialogs>(*connection_);
+        dialogs_ = std::make_unique<X11Dialogs>(*connection_, portal_.get());
         if (connection_->GetXInput2Opcode() >= 0)
         {
             inputDevices_ = std::make_unique<X11InputDevices>(
@@ -710,6 +734,13 @@ namespace CNA::Platform::X11 {
         {
             controllers_->hub.Pump();
             controllers_->hub.TakeEvents(destination);
+        }
+#endif
+#if defined(CNA_X11_HAVE_DBUS)
+        // A file dialog's answer, and its callback, from the same call; nothing when none is open.
+        if (portal_ != nullptr)
+        {
+            portal_->Pump();
         }
 #endif
     }

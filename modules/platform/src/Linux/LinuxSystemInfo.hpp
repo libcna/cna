@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,15 @@ namespace CNA::Platform::Linux {
     class LinuxSystemInfo final : public IPlatformSystemInfo
     {
     public:
+        /** @brief Opens a URL on the platform's behalf: the desktop portal, where there is one. */
+        using UrlOpener = std::function<bool(const std::string&)>;
+
+        /**
+         * @brief Answers from Linux, and opens URLs through @p openUrl.
+         * @param openUrl What opens a URL; none refuses every one.
+         */
+        explicit LinuxSystemInfo(UrlOpener openUrl = {});
+
         /** @brief Gets the platform's name. @return `"Linux"`. */
         [[nodiscard]] std::string GetPlatformName() const override;
         /** @brief Gets physical memory. @return Megabytes, from `sysconf`; 0 when unknown. */
@@ -54,14 +64,19 @@ namespace CNA::Platform::Linux {
         /** @brief Gets power state. @return From sysfs; see ReadPowerSupplies(). */
         [[nodiscard]] PowerInfo GetPowerInfo() const override;
         /**
-         * @brief Refuses to open a URL.
+         * @brief Opens a URL through the opener the platform gave: the desktop portal
+         * (plans/plan_x11.md X11-0169).
          *
-         * Opening one on Linux means starting another program (`xdg-open`), which this platform
-         * does not do on a game's behalf -- the rule its message boxes follow too.
+         * Never by starting another program (`xdg-open`), which this platform does not do on a
+         * game's behalf -- the rule its message boxes follow too.
          *
-         * @return False.
+         * @param url The URL.
+         * @return True when it was accepted; false without an opener.
          */
         bool OpenUrl(const std::string& url) override;
+
+    private:
+        UrlOpener openUrl_;
     };
 
 } // namespace CNA::Platform::Linux

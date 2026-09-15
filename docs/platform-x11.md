@@ -62,6 +62,7 @@ would build something other than what you asked for.
 | GLX (through `libglvnd` or Mesa) | optional | `openGlContext` |
 | Vulkan **headers** | optional | `vulkanSurface` |
 | Linux kernel headers (`linux/input.h`) | optional | `gamepad`, `joystick`, `gamepadRumble`, `haptics` — see [Gamepads and joysticks](#gamepads-and-joysticks) |
+| D-Bus headers (`dbus/dbus.h`, Debian/Ubuntu `libdbus-1-dev`) | optional; headers only, `libdbus-1.so.3` is loaded at run time | `nativeFileDialog`, `OpenUrl` — see [File dialogs and URLs](#file-dialogs-and-urls) |
 
 Vulkan is headers-only on purpose. `vkCreateXlibSurfaceKHR` is resolved through the
 `vkGetInstanceProcAddr` the caller already has, so the platform links no Vulkan loader and a
@@ -109,15 +110,15 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `haptics` | conditional | Linux only, with the controllers: every force-feedback node — a wheel, a stick, a pad, a vibrator — through the kernel's effect interface — see [Gamepads and joysticks](#gamepads-and-joysticks) |
 | `sensors` | ❌ | not an X11 facility |
 | `messageBox` | ✅ | drawn by the backend with Xlib, a dialog window of its own — see [Message boxes](#message-boxes) |
-| `nativeFileDialog` | ❌ | no core X11 facility; see below |
+| `nativeFileDialog` | conditional | true when the session bus has the desktop portal (`xdg-desktop-portal`), running or one the bus would start — see [File dialogs and URLs](#file-dialogs-and-urls) |
 | `tray` | ❌ | a desktop-environment protocol, not an X11 one |
 | `camera` | ❌ | not an X11 facility |
 | `managedEntrypoint` | ❌ | an ordinary `main()` |
 
 Nothing here is shelled out to `zenity` or `kdialog` to make a row turn green. A backend that
 launched another program to show a message box would not be a native X11 backend -- which is why
-the message box this backend has, it draws itself -- and CNA has no abstraction for optional
-desktop-environment integration to hang a file chooser on. `false` here means the call refuses
+the message box this backend has, it draws itself, and why its file chooser is the desktop portal's,
+a service the session bus already offers, asked over it. `false` here means the call refuses
 deterministically, which is what a false capability promises.
 
 **The capability set is fixed for the lifetime of a platform instance.** Half of these answers are
@@ -480,9 +481,10 @@ SDL3 backend reads them; and battery state from `/sys/class/power_supply`. Only 
 count — a supply whose `scope` is `Device` is a gamepad's or a mouse's — and with several, the one
 with the most time left, or else the fullest, is reported. No battery means plugged in; a battery
 that is "Not charging" while plugged in (held at a charge threshold) counts as charged; time left
-is `time_to_empty_now`, else energy over power, else charge over current. `OpenUrl` stays false:
-opening a URL on Linux means starting another program, which this platform does not do on a game's
-behalf. Elsewhere the portable answers apply (no battery information, no locales).
+is `time_to_empty_now`, else energy over power, else charge over current. `OpenUrl` asks the desktop
+portal, where there is one (see [File dialogs and URLs](#file-dialogs-and-urls)); it never starts
+`xdg-open` or any other program on a game's behalf. Elsewhere the portable answers apply (no battery
+information, no locales).
 
 ## Gamepads and joysticks
 
@@ -644,6 +646,32 @@ manager's close button answer "no choice" (-1). File dialogs refuse with
 `PlatformNotSupportedException` naming `NativeFileDialog`: a file chooser would have to be a
 toolkit, and starting one is starting another program.
 
+## File dialogs and URLs
+
+X has no file chooser, but every Linux desktop offers one on the session bus: `xdg-desktop-portal`,
+behind which GNOME, KDE, Xfce and the others put their own, the same one sandboxed applications
+use (`plans/plan_x11.md` X11-0169). The backend asks for it over D-Bus -- libdbus loaded at run
+time, nothing started: the bus starts the portal itself when it is first asked. Whether there is
+one is settled when the platform is made, without starting it: the bus says the portal is running,
+or that it would start it. Without a session bus, without libdbus, or without a portal,
+`nativeFileDialog` is false and the three file dialogs refuse. The session bus is
+`DBUS_SESSION_BUS_ADDRESS`, else the user bus at `$XDG_RUNTIME_DIR/bus`; libdbus's own way out --
+starting a bus with `dbus-launch` -- is never taken.
+
+A dialog is a request the portal answers when the user has chosen: `Show*` returns at once, and the
+callback runs from a later `PollEvents`, on the game's thread, with the chosen paths -- or none,
+when the user cancelled, the portal could not show a chooser, or the bus went away. Filters become
+the portal's case-insensitive globs (`png` is `*.[pP][nN][gG]`); a save dialog's default location
+is a folder, an existing file, or a name to suggest, in a folder or not; a folder dialog is
+`OpenFile` with `directory`. With a parent window the chooser is modal to it (`x11:<xid>`). A dialog
+still open when the platform is destroyed is never answered. `PollEvents` touches the bus only
+while a dialog is open.
+
+`OpenUrl` hands a URL to the portal's `OpenURI`, which opens it in the user's default handler; a
+`file:` URL is handed over as an open file descriptor (`OpenFile`), which is how the portal takes
+local files. It waits for the portal to accept the request (at most five seconds), not for the
+handler to start.
+
 ## Graphics bridges
 
 **OpenGL uses GLX**, not EGL. The window this must attach to is an Xlib window with an Xlib
@@ -701,6 +729,9 @@ effect of opening a window, and a program that started printing `3,14` after add
 no way to connect the two. So: only `LC_CTYPE`, only when it is still the startup `"C"` default,
 and only from the environment the user already set.
 
+**No session bus is started.** The desktop portal is asked for on the bus the session already has;
+where there is none, there is no portal, rather than a `dbus-launch` started on the game's behalf.
+
 No signal handler is installed, no environment variable is set, and no other process-global state
 is modified.
 
@@ -734,7 +765,7 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 | `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan, controller classification and mapping from synthetic device descriptions |
 | `CnaX11InputMethodTests` | `Xvfb` + ibus (with its XIM server), `xdotool`, `setxkbmap` | composition with and without the application drawing it, a commit, abandoning a composition, and no keys taken outside text entry — against a private ibus the launcher starts (`--with-ibus`) |
 | `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, force-feedback wheels and vibrators, the platform with no X server; each test skips where the machine grants neither |
-| `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy, and drag and drop against a real XDND source — a second process of the test binary |
+| `CnaX11IntegrationTests` | `Xvfb`; `dbus-daemon` for the portal tests | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy, drag and drop against a real XDND source — a second process of the test binary — message boxes, and file dialogs and `OpenUrl` against a portal played on a private bus |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
 | `CnaX11TouchscreenTests` | writable `/dev/uinput`, readable event nodes, `Xorg` with the `dummy` video and `evdev` input drivers (`CNA_X11_XORG_MODULE_PATH` adds module directories) | real contacts: a uinput touchscreen and pen that a private, rootless Xorg takes **exclusively** — the suite checks that grab before every event it writes, so nothing reaches the desktop's own compositor; opt-in through the entry's `CNA_X11_TEST_TOUCHSCREEN=1` |
 | `CnaX11ExclusiveFullscreenTests` | `Xvfb` + `openbox`; **the launcher's own server only** | exclusive fullscreen changes the display mode, so it runs only where `CNA_X11_PRIVATE_TEST_SERVER` is set: mode choice, the screen around the CRTC, SetSize while exclusive, hide/show, focus loss and return, every restore path, a mode someone else set, and a process killed with `SIGKILL` having its mode restored by its guardian |
@@ -748,6 +779,12 @@ switches and the window covers it, a normal exit restores the mode, and so does 
 rather than a hardcoded `:99` — a fixed number collides with a parallel ctest job and the collision
 looks like flakiness — and exits 77 (ctest's skip code) where `Xvfb` or `openbox` is absent, so a
 machine without them records a skip rather than a failure.
+
+**No test reaches the desktop's session bus.** A file chooser opened on it would open on the
+desktop of whoever runs the tests, so the launcher, ctest and the test binary itself (as it loads)
+all point `DBUS_SESSION_BUS_ADDRESS` at nothing. The portal tests start a private `dbus-daemon` --
+whose configuration names no service it could start, so no real portal can appear on it -- and play
+the portal on it themselves.
 
 The launcher owns the *server*; the window-manager suite's own fixture owns the *window manager*,
 because a test that needs one also needs to know when it became ready. Having both start `openbox`

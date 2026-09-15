@@ -667,6 +667,8 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     // was not finished. A future change turning one of these on without implementing it would
     // fail here rather than at a null dereference in a game.
     EXPECT_FALSE(capabilities.sensors);
+    // File dialogs are the desktop portal's (X11-0169), and no test reaches a session bus that
+    // has one (X11DesktopPortalTests.cpp).
     EXPECT_FALSE(capabilities.nativeFileDialog);
     EXPECT_FALSE(capabilities.tray);
     EXPECT_FALSE(capabilities.camera);

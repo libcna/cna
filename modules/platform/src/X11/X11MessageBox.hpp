@@ -13,6 +13,7 @@
 namespace CNA::Platform::X11 {
 
     class X11Connection;
+    class X11DesktopPortal;
 
     /** @brief A rectangle of a message box, in its window's pixels. */
     struct X11MessageBoxRect
@@ -114,8 +115,11 @@ namespace CNA::Platform::X11 {
      * (plans/plan_x11.md design decision 9); a server with no Unicode font gets its built-in
      * `fixed`, and Latin-1. It blocks until it is answered: a click on a button, Return or space on
      * the focused one (Tab and the arrow keys move the focus), Escape or the window manager's close
-     * for "no choice". Nothing is started to show it -- no zenity, no helper process. File dialogs
-     * would need a file browser, which X does not have and this backend does not draw; they refuse.
+     * for "no choice". Nothing is started to show it -- no zenity, no helper process.
+     *
+     * File dialogs are the desktop portal's (X11-0169): the desktop's own file chooser, asked for
+     * over the session bus and answered when the platform pumps events. Without a portal they
+     * refuse -- X has no file browser, and this backend does not draw one.
      */
     class X11Dialogs final : public IPlatformDialogs
     {
@@ -123,8 +127,9 @@ namespace CNA::Platform::X11 {
         /**
          * @brief Dialogs on the server one connection talks to.
          * @param connection The platform's connection, whose server the boxes appear on.
+         * @param portal The desktop portal for file dialogs, or null where there is none.
          */
-        explicit X11Dialogs(X11Connection& connection);
+        X11Dialogs(X11Connection& connection, X11DesktopPortal* portal);
 
         /**
          * @brief Shows a box with one OK button, and waits for it to be closed.
@@ -152,19 +157,42 @@ namespace CNA::Platform::X11 {
                                                     const std::vector<std::string>& buttons,
                                                     IPlatformWindow* parent) override;
 
-        /** @brief Refuses. @throws PlatformNotSupportedException Always, naming NativeFileDialog. */
+        /**
+         * @brief Asks the portal for a file-open chooser.
+         * @param onResult Called from a later PollEvents with the chosen paths, or none.
+         * @param filters The file types.
+         * @param defaultLocation The directory it starts in, or empty.
+         * @param allowMultiple Whether several files may be chosen.
+         * @param parent The window it belongs to, or null.
+         * @throws PlatformNotSupportedException Without a portal, naming NativeFileDialog.
+         */
         void ShowOpenFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
                                 const std::string& defaultLocation, bool allowMultiple,
                                 IPlatformWindow* parent) override;
-        /** @brief Refuses. @throws PlatformNotSupportedException Always, naming NativeFileDialog. */
+        /**
+         * @brief Asks the portal for a file-save chooser.
+         * @param onResult Called from a later PollEvents with the chosen path, or none.
+         * @param filters The file types.
+         * @param defaultLocation A directory or a file name to start with, or empty.
+         * @param parent The window it belongs to, or null.
+         * @throws PlatformNotSupportedException Without a portal, naming NativeFileDialog.
+         */
         void ShowSaveFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
                                 const std::string& defaultLocation, IPlatformWindow* parent) override;
-        /** @brief Refuses. @throws PlatformNotSupportedException Always, naming NativeFileDialog. */
+        /**
+         * @brief Asks the portal for a folder chooser.
+         * @param onResult Called from a later PollEvents with the chosen folders, or none.
+         * @param defaultLocation The directory it starts in, or empty.
+         * @param allowMultiple Whether several folders may be chosen.
+         * @param parent The window it belongs to, or null.
+         * @throws PlatformNotSupportedException Without a portal, naming NativeFileDialog.
+         */
         void ShowOpenFolderDialog(FileDialogCallback onResult, const std::string& defaultLocation,
                                   bool allowMultiple, IPlatformWindow* parent) override;
 
     private:
         X11Connection& connection_;
+        X11DesktopPortal* portal_ = nullptr;
     };
 
 } // namespace CNA::Platform::X11

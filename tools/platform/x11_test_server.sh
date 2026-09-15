@@ -165,4 +165,10 @@ if [ "$WITH_IBUS" -eq 1 ]; then
     export CNA_X11_TEST_IBUS
 fi
 
+# plans/plan_x11.md X11-0169: the X11 platform asks the session bus for the desktop portal, and a
+# file chooser opened there would open on the desktop of whoever runs the tests. The command gets
+# no session bus at all; a test that wants a portal starts a private bus, and a portal, of its own.
+DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent/cna-x11-test-no-session-bus"
+export DBUS_SESSION_BUS_ADDRESS
+
 "$@"

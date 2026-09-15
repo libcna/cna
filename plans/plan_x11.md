@@ -19,7 +19,8 @@
 > for the SDL-free mixer, X11-0162, microphone capture through ALSA, and X11-0163, host facts and
 > battery state from Linux, X11-0164, the clipboard handed to a clipboard manager at exit, and
 > X11-0165, input-device enumeration, X11-0166, gamepad motion sensors, X11-0167, message boxes
-> drawn with Xlib, and X11-0168, force feedback through the kernel, are ✅ -- every Phase N row. See
+> drawn with Xlib, X11-0168, force feedback through the kernel, and X11-0169, file dialogs and
+> OpenUrl through the desktop portal, are ✅ -- every Phase N row. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the eight defects found that belong to other parts of the tree, and
 > [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
@@ -126,7 +127,7 @@ shared by three backends.
 | D12 | **The clipboard is a real selection owner with `TARGETS`, `UTF8_STRING`, `STRING`, `TEXT` and `INCR` for large transfers.** | An X11 clipboard that only works between two CNA windows is not a clipboard. Ownership, `SelectionRequest`, `SelectionNotify`, `SelectionClear` and incremental transfer are all handled, and paste from an external application is what the test asserts. |
 | D13 | **A GLX window's `Visual` and `Colormap` are chosen from the `FBConfig` *before* `XCreateWindow`.** | This is the one place where window creation and GL are genuinely coupled. `WindowDescription::renderIntent == OpenGl` plus `openGlFramebuffer` already carries exactly the information needed, so the coupling is resolved at the contract level that already exists — no generic change. A window created with `renderIntent != OpenGl` refuses to host a GL context rather than failing obscurely inside GLX. |
 | D14 | **Optional X extensions are optional at *build* time, individually.** | `X11` and `Xext` are mandatory. `Xi` (raw mouse), `Xrandr` (displays), `Xcursor` (shaped cursors), `Xfixes` (pointer barriers/hiding) are each detected separately, each guarded by its own `CNA_X11_HAVE_*` macro, and each turns off exactly one capability when absent. No extension is required because it is convenient. |
-| D15 | **`nativeFileDialog`, `tray`, `camera`, `sensors` are `false`.** | Core X11 has no standard facility for any of them, and shelling out to `zenity`/`kdialog` is not a native backend. Truthfulness beats checkbox count; the contract's rule is that a false capability *refuses*, which is exactly what these do. (`gamepad` and `joystick` were on this list until X11-0150; see D17. `haptics` was until X11-0168: force feedback is the kernel's, as the controllers are. `messageBox` was until X11-0167: X has no dialog service, but a box is only a window, which the backend draws itself -- no program is started -- as SDL3's X11 backend draws its own once `zenity` has failed, a step CNA does not take.) |
+| D15 | **`tray`, `camera`, `sensors` are `false`.** | Core X11 has no standard facility for any of them, and shelling out to `zenity`/`kdialog` is not a native backend. Truthfulness beats checkbox count; the contract's rule is that a false capability *refuses*, which is exactly what these do. (`gamepad` and `joystick` were on this list until X11-0150; see D17. `haptics` was until X11-0168: force feedback is the kernel's, as the controllers are. `nativeFileDialog` was until X11-0169: the desktop portal is a service on the session bus, asked over it, not a program started. `messageBox` was until X11-0167: X has no dialog service, but a box is only a window, which the backend draws itself -- no program is started -- as SDL3's X11 backend draws its own once `zenity` has failed, a step CNA does not take.) |
 | D16 | **`ime` is `false` unless the application draws the composition.** (Revised by X11-0152, 2026-09-15.) | XIM delivers committed text via `Xutf8LookupString`, which is `textInput`. Composition (`TextEditingEvent`) needs the on-the-spot style, in which the input method stops drawing its own composition -- so it is requested only when the application says it draws one (`CNA_IME_IMPLEMENTED_UI=composition`, as SDL's hint does), and `ime` is true exactly then. Candidate lists (`TextEditingCandidatesEvent`) have no XIM protocol and are never delivered. |
 | D17 | **Controllers come from the Linux kernel's evdev nodes directly -- no libudev, no libevdev, no SDL -- in `src/Linux/`, not `src/X11/`.** (X11-0150, 2026-09-15) | X delivers no controller input, so this was never going to be an X feature; it is a Linux one, and keeping it out of `src/X11/` is what lets a future Wayland backend take it unchanged. The kernel's own interfaces -- `<linux/input.h>`, sysfs, inotify -- are all it needs; libudev would add a link dependency for a hot-plug signal inotify already gives, and libevdev a dependency for ioctls that are a page of code. Classification reads sysfs rather than opening nodes (D-12). On a Unix without `<linux/input.h>` the capabilities are simply false. |
 
@@ -303,6 +304,22 @@ first, as the owner ordered the list.
 
 | X11-0168 | Force feedback through the kernel | ✅ | `haptics` was false although the kernel's force-feedback interface is what SDL3's Linux haptic backend is built on. `src/Linux/EvdevHaptics` implements `IPlatformHaptics` and `IPlatformHapticDevice` over it. Every event node that can play an effect is a haptic device -- listed from sysfs without opening anything, when this user may write to it; its id (above `0x20000`) kept for as long as the kernel's input device (`inputN`) lasts. Effects are translated as SDL3's Linux backend translates them (directions, envelope, trigger button, the 32767 limits, two condition axes, the phase as a fraction of the period) with three deliberate differences: a left/right magnitude keeps the kernel's full 16-bit range (SDL3 clamps it to half and doubles it, saturating everything above half); a length of 0 becomes 1 ms instead of the kernel's "until stopped"; Custom is refused and not claimed. Simple rumble is SDL3's choice: a sine where there is one, else both motors. The kernel's `FF_GAIN`/`FF_AUTOCENTER` are gain and autocenter. The kernel does not report effects played at once or effect status, and cannot pause, so those answer -1, false and false. Effects belong to the open descriptor, and closing it -- or releasing the Haptic subsystem, which closes what the service opened -- erases them. `OpenFromJoystick` finds a controller's node through the hub. The default vibration device is the first that can rumble and is not a gamepad. Haptic devices are listed by the input-device enumeration too. `haptics` is true with the controllers. Tests: `X11EvdevHapticsTests.cpp` (11 without a device: haptic-device and feature classification against `HapticFeatureEXT`'s values, support by family and waveform, every direction type, each effect family's fields and limits, the rumble choice), in `CnaX11MappingTests`; 6 on uinput devices in `CnaX11EvdevTests`: a wheel's effects uploaded, updated, played three times, stopped, erased and erased on close, with the kernel refusing a change of family and the driver never seeing it; simple rumble as a sine on the wheel and both motors on a pad, the motors apart, both stopped, `CloseAll` erasing; a joystick's force feedback found by its controller id; the default vibration device a motor-only node and never a gamepad; an unplugged device answering false; the platform without a display erasing its rumble when the Haptic subsystem is released. The enumeration test lists its uinput pad as haptic under the service's id. **Not covered:** a physical wheel or pad -- the effects reach a uinput "driver", which records them; what a real motor does with them is the driver's. |
 
+| X11-0169 | File dialogs and OpenUrl through the desktop portal | ✅ | `nativeFileDialog` was false and `OpenUrl` refused, while SDL3 asks xdg-desktop-portal (after which it tries `zenity`, a step CNA does not take). `X11DBus` loads libdbus at run time (headers only at build time, `CNA_X11_HAVE_DBUS`) and connects privately to the session bus: `DBUS_SESSION_BUS_ADDRESS`, else `$XDG_RUNTIME_DIR/bus`, never libdbus's `dbus-launch` fallback. `X11DesktopPortal` finds the portal when the platform is made, without starting it: the name has an owner, or the bus lists it as activatable. File dialogs are `FileChooser.OpenFile`/`SaveFile`: `handle_token`, `modal` with the parent as `x11:<xid>`, `multiple`, `directory` for folders, filters as case-insensitive globs, `current_folder`, and for a save `current_file`/`current_name` from the default location. The request's answer is heard through a match on `Request.Response` that is set up before the call; the request path is predicted from the unique name and the token, and an older portal's own path is followed from its reply. `PollEvents` pumps the bus only while a dialog is open. A callback runs from a later `PollEvents`, exactly once: with the `file:` URIs as paths, or with nothing on a cancel, an error reply, or a bus that went away. `OpenUrl` (LinuxSystemInfo, given an opener) is `OpenURI.OpenURI`, or `OpenURI.OpenFile` with a descriptor for a `file:` URL, and waits at most 5 s for acceptance. `nativeFileDialog` is true with a display and a portal. **No test reaches the desktop's session bus.** A chooser opened there would open on the desktop of whoever runs the tests, so the launcher, ctest (every discovered test of an X11 build) and the test binary as it loads all point `DBUS_SESSION_BUS_ADDRESS` at nothing, and a test asserts it. Tests: `X11DesktopPortalTests.cpp`:
+- 6 in `CnaX11MappingTests`: globs, filters, `file:` URIs with every malformed form, request path and parent handle, save locations, and the binary's own missing bus.
+- 9 against a portal the test plays on a private `dbus-daemon` whose configuration names no service it could start:
+  - no portal, and no bus;
+  - every option of an open dialog, and its answer arriving from `Pump` exactly once;
+  - a cancel and an error reply, each answered empty;
+  - save and folder dialogs;
+  - an older portal's own path;
+  - an answer long after the question;
+  - a callback asking for another dialog;
+  - the bus dying with a dialog open;
+  - `OpenURI` with a URL, and `OpenFile` with a descriptor that points at the file.
+- 2 through the X11 platform on the launcher's Xvfb: without a portal the capability is false and the refusals name it; with one, the chooser is modal to the game's window, `PollEvents` delivers the answer, and `OpenUrl` reaches the portal.
+
+The old refusal test now asserts that there is no portal before it calls anything. **Not covered:** a real portal and its choosers (GNOME, KDE, GTK) -- deliberately never reached from a test; the protocol is followed as xdg-desktop-portal documents it. |
+
 ---
 
 ## 5. Capability matrix (target)
@@ -336,7 +353,8 @@ first, as the owner ordered the list.
 | `sensors` | ❌ false | not an X11 facility |
 | `powerInfo` | ✅ true on Linux | the kernel's power supplies in sysfs, with or without a display (X11-0163) |
 | `messageBox` | ✅ true | drawn with Xlib, a dialog window on a connection of its own (X11-0167) |
-| `nativeFileDialog`, `tray`, `camera` | ❌ false | D15 |
+| `nativeFileDialog` | ✅ true with a display and the desktop portal on the session bus | xdg-desktop-portal's FileChooser, asked over D-Bus (X11-0169) |
+| `tray`, `camera` | ❌ false | D15 |
 | `managedEntrypoint` | ❌ false | ordinary `main()` |
 
 ---
@@ -825,6 +843,22 @@ No real microphone was opened: every session in the suites opens ALSA's `null` d
 | `X11Live.CapabilitiesDescribeThisServerRatherThanX11InGeneral`, the no-display platform test | `haptics` true and the service present with the controllers |
 | every X11 and platform ctest entry | 10/10 |
 | `build-asan` (`address,undefined`), `CnaPlatformModuleTests`: every evdev suite, the haptic tests, enumeration, capability, conformance | 173 passed, no report |
+
+### File dialogs and URLs (X11-0169, 2026-09-15)
+
+No test reached the desktop's session bus. This shell's `DBUS_SESSION_BUS_ADDRESS` is the user's
+bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its own address as
+`unix:path=/nonexistent/cna-test-no-session-bus` and finds no portal
+(`X11PortalRequest.NoTestOfThisBinaryReachesTheDesktopsSessionBus`).
+
+| Check | Result |
+|---|---|
+| `X11PortalRequest.*` | 6 passed |
+| `X11DesktopPortalBus.*`, private `dbus-daemon` and the test's own portal | 9 passed; the answer delivered only from `Pump`, exactly once |
+| `X11DesktopPortalLive.*`, `X11MessageBoxLive.*`, the capability test on the launcher's Xvfb | 17 passed |
+| every X11 and platform ctest entry | 10/10 |
+| `build-asan` (`address,undefined`): the portal suites, message boxes, capability, conformance, `LinuxSystemInfo` | 127 passed, no report (the 17 portal tests among them) |
+| `sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet --strict`, `hot_path_lint`, `nonproduction_sdl_audit`, `check_contract` | all pass |
 
 ### Regression
 
