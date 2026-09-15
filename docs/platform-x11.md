@@ -61,7 +61,7 @@ would build something other than what you asked for.
 | MIT-SHM (`X11/extensions/XShm.h`) | optional | shared-memory presentation; `XPutImage` still works |
 | GLX (through `libglvnd` or Mesa) | optional | `openGlContext` |
 | Vulkan **headers** | optional | `vulkanSurface` |
-| Linux kernel headers (`linux/input.h`) | optional | `gamepad`, `joystick`, `gamepadRumble` — see [Gamepads and joysticks](#gamepads-and-joysticks) |
+| Linux kernel headers (`linux/input.h`) | optional | `gamepad`, `joystick`, `gamepadRumble`, `haptics` — see [Gamepads and joysticks](#gamepads-and-joysticks) |
 
 Vulkan is headers-only on purpose. `vkCreateXlibSurfaceKHR` is resolved through the
 `vkGetInstanceProcAddr` the caller already has, so the platform links no Vulkan loader and a
@@ -106,7 +106,8 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `inputDeviceEnumeration` | conditional | true when XInput2 is present: keyboards, mice and touch devices from the server, controllers from the kernel — see [Input devices](#input-devices) |
 | `gamepadSensors` | conditional | Linux only, with the controllers: a pad's motion-sensor node paired with it — each pad's `GamepadCapabilities` says whether it has a gyroscope and an accelerometer |
 | `powerInfo` | conditional | Linux only: the kernel's power supplies in sysfs — **with or without a display** — see [Host facts](#host-facts) |
-| `haptics`, `sensors` | ❌ | not an X11 facility |
+| `haptics` | conditional | Linux only, with the controllers: every force-feedback node — a wheel, a stick, a pad, a vibrator — through the kernel's effect interface — see [Gamepads and joysticks](#gamepads-and-joysticks) |
+| `sensors` | ❌ | not an X11 facility |
 | `messageBox` | ✅ | drawn by the backend with Xlib, a dialog window of its own — see [Message boxes](#message-boxes) |
 | `nativeFileDialog` | ❌ | no core X11 facility; see below |
 | `tray` | ❌ | a desktop-environment protocol, not an X11 one |
@@ -577,6 +578,25 @@ second, `hid-nintendo`'s axis order turned into the gamepad convention. An axis 
 resolution cannot be put into physical units and is not reported. The sensor can come and go on its
 own; the pad's capabilities follow.
 
+**Force feedback** (`plans/plan_x11.md` X11-0168). `GetHaptics()` serves every event node that can
+play an effect — a wheel, a flight stick, a pad, a phone's vibration motor — listed from sysfs
+without opening anything, as long as this user may write to it. Its id (above `0x20000`, apart from
+the controllers' and the X devices') lasts as long as the kernel's input device; a replug is a new
+device. `OpenFromJoystick` finds a controller's own node from its joystick id. Effects go to the
+kernel as SDL3's Linux backend puts them there — constant, the five periodic waveforms, ramp,
+spring, damper, inertia and friction on two axes, left/right as `FF_RUMBLE`, directions as the
+kernel's angle, the envelope and the trigger button — with three differences, each where SDL3's
+translation would do something the contract does not ask: a left/right magnitude is the kernel's
+full 16-bit range (SDL3 clamps it to half and doubles it, so everything above half strength is
+full); a length of 0 is the kernel's shortest, 1 ms (the kernel's 0 is "until stopped", which the
+contract spells `UINT32_MAX`); and a Custom waveform is refused rather than claimed. Simple rumble is
+a sine where the device has one, else both motors, as SDL3 chooses. Gain and autocenter are the
+kernel's `FF_GAIN` and `FF_AUTOCENTER`. The kernel reports neither how many effects play at once nor
+whether one is playing, and cannot pause: those answer -1, false and false. Effects belong to the
+open device: closing it — releasing the Haptic subsystem closes what the service opened — erases
+them, so nothing keeps pushing after a game quits. The default vibration device, for
+`VibrateController`, is the first that can rumble and is not a gamepad.
+
 **Not supported:** trigger rumble, light bars, player LEDs, touchpads and battery state all return
 false or empty.
 
@@ -713,7 +733,7 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 |---|---|---|
 | `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan, controller classification and mapping from synthetic device descriptions |
 | `CnaX11InputMethodTests` | `Xvfb` + ibus (with its XIM server), `xdotool`, `setxkbmap` | composition with and without the application drawing it, a commit, abandoning a composition, and no keys taken outside text entry — against a private ibus the launcher starts (`--with-ibus`) |
-| `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, the platform with no X server; each test skips where the machine grants neither |
+| `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, force-feedback wheels and vibrators, the platform with no X server; each test skips where the machine grants neither |
 | `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy, and drag and drop against a real XDND source — a second process of the test binary |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
 | `CnaX11TouchscreenTests` | writable `/dev/uinput`, readable event nodes, `Xorg` with the `dummy` video and `evdev` input drivers (`CNA_X11_XORG_MODULE_PATH` adds module directories) | real contacts: a uinput touchscreen and pen that a private, rootless Xorg takes **exclusively** — the suite checks that grab before every event it writes, so nothing reaches the desktop's own compositor; opt-in through the entry's `CNA_X11_TEST_TOUCHSCREEN=1` |

@@ -23,6 +23,8 @@
 #include <vector>
 
 #ifdef CNA_PLATFORM_HAVE_EVDEV
+#include "../../../src/Linux/EvdevHaptics.hpp"
+
 #include <fcntl.h>
 #include <linux/uinput.h>
 #include <sys/ioctl.h>
@@ -170,11 +172,19 @@ TEST_F(X11InputDevicesLive, TheServersOwnDevicesAreLeftOutAndItsSlavesListed)
     EXPECT_EQ(names(InputDeviceKind::Mouse), mice);
     EXPECT_EQ(devices->HasDevice(InputDeviceKind::Keyboard), !keyboards.empty());
 #endif
-    // Xvfb has no touch device, and X has no haptic device or sensor at all.
-    for (const InputDeviceKind kind : {InputDeviceKind::Touch, InputDeviceKind::Haptic, InputDeviceKind::Sensor})
+    // Xvfb has no touch device, and nothing here has a sensor.
+    for (const InputDeviceKind kind : {InputDeviceKind::Touch, InputDeviceKind::Sensor})
     {
         EXPECT_TRUE(devices->GetDevices(kind).empty()) << ToString(kind);
         EXPECT_FALSE(devices->HasDevice(kind)) << ToString(kind);
+    }
+    // Haptic devices are Linux's force-feedback nodes (X11-0168), whatever the machine has.
+    for (const InputDeviceInfo& haptic : devices->GetDevices(InputDeviceKind::Haptic))
+    {
+        EXPECT_EQ(haptic.kind, InputDeviceKind::Haptic);
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        EXPECT_GT(haptic.id, CNA::Platform::Linux::kEvdevHapticIdBase);
+#endif
     }
 }
 
@@ -195,6 +205,9 @@ TEST_F(X11InputDevicesLive, AControllerIsListedUnderTheIdItsEventsCarry)
     {
         ioctl(uinput, UI_SET_KEYBIT, key);
     }
+    // It rumbles, so it is a haptic device as well (X11-0168).
+    ioctl(uinput, UI_SET_EVBIT, EV_FF);
+    ioctl(uinput, UI_SET_FFBIT, FF_RUMBLE);
     ioctl(uinput, UI_SET_EVBIT, EV_ABS);
     for (const int axis : {ABS_X, ABS_Y})
     {
@@ -210,6 +223,7 @@ TEST_F(X11InputDevicesLive, AControllerIsListedUnderTheIdItsEventsCarry)
     setup.id.bustype = BUS_USB;
     setup.id.vendor = 0x1209;
     setup.id.product = 0x0004;
+    setup.ff_effects_max = 1;
     ASSERT_EQ(ioctl(uinput, UI_DEV_SETUP, &setup), 0);
     ASSERT_EQ(ioctl(uinput, UI_DEV_CREATE), 0);
 
@@ -230,6 +244,8 @@ TEST_F(X11InputDevicesLive, AControllerIsListedUnderTheIdItsEventsCarry)
     }
     const auto pad = listed(gamepads);
     const std::vector<InputDeviceInfo> joysticks = devices->GetDevices(InputDeviceKind::Joystick);
+    const std::vector<InputDeviceInfo> haptics = devices->GetDevices(InputDeviceKind::Haptic);
+    const std::vector<HapticInfo> served = platform_->GetHaptics()->GetHaptics();
     const bool hasGamepad = devices->HasDevice(InputDeviceKind::Gamepad);
     ioctl(uinput, UI_DEV_DESTROY);
     ::close(uinput);
@@ -241,6 +257,13 @@ TEST_F(X11InputDevicesLive, AControllerIsListedUnderTheIdItsEventsCarry)
     ASSERT_NE(asJoystick, joysticks.end());
     EXPECT_EQ(asJoystick->id, pad->id);
     EXPECT_LT(pad->id, kX11InputDeviceIdBase) << "controller ids and X device ids never meet";
+    // Its force feedback, under the haptics service's id -- the one IPlatformHaptics takes.
+    const auto asHaptic = listed(haptics);
+    ASSERT_NE(asHaptic, haptics.end());
+    EXPECT_EQ(asHaptic->kind, InputDeviceKind::Haptic);
+    EXPECT_GT(asHaptic->id, CNA::Platform::Linux::kEvdevHapticIdBase);
+    EXPECT_TRUE(std::any_of(served.begin(), served.end(),
+                            [&](const HapticInfo& info) { return info.id == asHaptic->id && info.name == name; }));
 }
 
 #endif // CNA_PLATFORM_HAVE_EVDEV

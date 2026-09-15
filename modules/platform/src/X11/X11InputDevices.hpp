@@ -65,28 +65,28 @@ namespace CNA::Platform::X11 {
      *
      * Keyboards, mice and touch devices are asked of the server on each call, as the contract
      * wants -- `TouchPanel` asks whether a touchscreen is attached before anyone has touched one.
-     * Gamepads and joysticks are the Linux controllers', asked of the callback the platform gives.
+     * Gamepads, joysticks and haptic devices are Linux's, asked of the callback the platform gives.
      * Hot-plug is followed through `XI_HierarchyChanged`: each change is diffed against the last
      * enumeration and reported as `DeviceEvent`s with the same ids.
      */
     class X11InputDevices final : public IPlatformInputDevices
     {
     public:
-        /** @brief Answers the Linux controllers' classes. */
+        /** @brief Answers the classes Linux serves: gamepads, joysticks and haptic devices. */
         using ControllerSource = std::function<std::vector<InputDeviceInfo>(InputDeviceKind)>;
 
         /**
          * @brief Enumerates through one connection.
          *
          * @param connection The connection; XInput2 must be present on it.
-         * @param controllers The Linux controllers, or an empty function where there are none.
+         * @param controllers The Linux devices, or an empty function where there are none.
          */
         X11InputDevices(X11Connection& connection, ControllerSource controllers);
 
         /**
          * @brief Lists the attached devices of one class.
          * @param kind The class.
-         * @return The devices; haptic devices and sensors never, X having neither.
+         * @return The devices; sensors never, neither X nor this backend having any.
          */
         [[nodiscard]] std::vector<InputDeviceInfo> GetDevices(InputDeviceKind kind) const override;
 

@@ -130,7 +130,7 @@ namespace CNA::Platform::X11 {
 
     std::vector<InputDeviceInfo> X11InputDevices::GetDevices(const InputDeviceKind kind) const
     {
-        if (kind == InputDeviceKind::Gamepad || kind == InputDeviceKind::Joystick)
+        if (kind == InputDeviceKind::Gamepad || kind == InputDeviceKind::Joystick || kind == InputDeviceKind::Haptic)
         {
             return controllers_ ? controllers_(kind) : std::vector<InputDeviceInfo>();
         }

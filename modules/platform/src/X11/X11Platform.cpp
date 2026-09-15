@@ -9,6 +9,7 @@
 
 #ifdef CNA_PLATFORM_HAVE_EVDEV
 #include "../Linux/EvdevControllers.hpp"
+#include "../Linux/EvdevHaptics.hpp"
 #include "../Linux/LinuxSystemInfo.hpp"
 #endif
 
@@ -25,6 +26,12 @@ namespace CNA::Platform::X11 {
         Linux::EvdevControllerHub hub;
         Linux::EvdevGamepad gamepad{hub};
         Linux::EvdevJoystick joystick{hub};
+        // Force feedback is the same nodes' (X11-0168); a joystick's node is found through the hub.
+        Linux::EvdevHaptics haptics{[this](const DeviceId id) {
+            const Linux::EvdevControllerHub::Controller* controller = hub.FindById(id);
+            return controller != nullptr && controller->device != nullptr ? controller->device->GetPath()
+                                                                           : std::string();
+        }};
     };
 #else
     struct X11Platform::Controllers
@@ -200,6 +207,8 @@ namespace CNA::Platform::X11 {
             // Motion sensors likewise: the service answers, and each pad says whether it has
             // them in GamepadCapabilities (X11-0166).
             capabilities.gamepadSensors = true;
+            // Force feedback through the same nodes: the service lists what can play (X11-0168).
+            capabilities.haptics = true;
         }
 #ifdef CNA_PLATFORM_HAVE_EVDEV
         // Battery state is the kernel's power-supply class, which needs no display either
@@ -250,8 +259,6 @@ namespace CNA::Platform::X11 {
         capabilities.messageBox = dialogs_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
-        //   haptics                -- the standalone force-feedback service; pad rumble is
-        //                             gamepadRumble, above.
         //   nativeFileDialog, tray -- no core X11 facility, and shelling out to zenity or
         //                             kdialog would not be a native backend (plan D15).
         //   camera                 -- not an X11 facility.
@@ -375,6 +382,11 @@ namespace CNA::Platform::X11 {
             controllers_->hub.Stop();
             controllers_->gamepad.Update();
             controllers_->joystick.Update();
+        }
+        if (subsystem == PlatformSubsystem::Haptic && found->second == 0 && controllers_ != nullptr)
+        {
+            // Closing a device erases what it played: nothing is left buzzing.
+            controllers_->haptics.CloseAll();
         }
 #endif
 
@@ -1535,6 +1547,15 @@ namespace CNA::Platform::X11 {
         return nullptr;
     }
 
+    IPlatformHaptics* X11Platform::GetHaptics()
+    {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        return controllers_ != nullptr ? &controllers_->haptics : nullptr;
+#else
+        return nullptr;
+#endif
+    }
+
     IPlatformKeyboard* X11Platform::GetKeyboard() { return keyboard_.get(); }
     IPlatformMouse* X11Platform::GetMouse() { return mouse_.get(); }
     IPlatformTextInput* X11Platform::GetTextInput() { return textInput_.get(); }
@@ -1547,6 +1568,15 @@ namespace CNA::Platform::X11 {
 #ifdef CNA_PLATFORM_HAVE_EVDEV
         if (controllers_ == nullptr)
         {
+            return devices;
+        }
+        if (kind == InputDeviceKind::Haptic)
+        {
+            // Force feedback, from sysfs; nothing is opened to list it (X11-0168).
+            for (const HapticInfo& haptic : controllers_->haptics.GetHaptics())
+            {
+                devices.push_back({haptic.id, kind, haptic.name});
+            }
             return devices;
         }
         // Asking what controllers are attached is asking about controllers: the hub starts as it

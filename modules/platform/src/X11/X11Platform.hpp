@@ -170,8 +170,11 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null; X11 has no sensor facility. */
         [[nodiscard]] IPlatformSensors* GetSensors() override { return nullptr; }
-        /** @brief Gets the haptics service. @return Null; X11 has no haptics facility. */
-        [[nodiscard]] IPlatformHaptics* GetHaptics() override { return nullptr; }
+        /**
+         * @brief Gets the haptics service: force feedback through the kernel (X11-0168).
+         * @return The Linux evdev service, or null where the kernel offers none.
+         */
+        [[nodiscard]] IPlatformHaptics* GetHaptics() override;
         /**
          * @brief Gets the input device service (X11-0165).
          * @return XInput2's enumeration, or null without XInput2 or before `Video`.

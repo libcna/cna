@@ -660,11 +660,12 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_EQ(capabilities.joystick, evdev);
     EXPECT_EQ(capabilities.gamepadRumble, evdev);
     EXPECT_EQ(capabilities.gamepadSensors, evdev);  // Each pad says whether it has them (X11-0166).
+    EXPECT_EQ(capabilities.haptics, evdev);         // Force feedback through the same nodes (X11-0168).
+    EXPECT_EQ(platform_->GetHaptics() != nullptr, evdev);
 
     // Deliberately false, each because the facility does not exist in X11 rather than because it
     // was not finished. A future change turning one of these on without implementing it would
     // fail here rather than at a null dereference in a game.
-    EXPECT_FALSE(capabilities.haptics);
     EXPECT_FALSE(capabilities.sensors);
     EXPECT_FALSE(capabilities.nativeFileDialog);
     EXPECT_FALSE(capabilities.tray);

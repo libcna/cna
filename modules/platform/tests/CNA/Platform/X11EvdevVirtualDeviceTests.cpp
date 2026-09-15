@@ -21,6 +21,7 @@
 #ifdef CNA_PLATFORM_HAVE_EVDEV
 
 #include "../../../src/Linux/EvdevControllers.hpp"
+#include "../../../src/Linux/EvdevHaptics.hpp"
 #include "../../../src/X11/X11Platform.hpp"
 
 #include "System/Environment.hpp"
@@ -84,6 +85,8 @@ public:
         std::vector<std::uint16_t> keys;
         std::vector<Axis> axes;
         bool rumble = false;
+        /// Force-feedback codes beyond rumble (X11-0168): effect families, waveforms, controls.
+        std::vector<std::uint16_t> forceFeedback;
         /// Where the device says it is attached; two nodes of one controller share it.
         std::string phys;
         /// A motion-sensor node (INPUT_PROP_ACCELEROMETER).
@@ -95,6 +98,7 @@ public:
         std::vector<ff_effect> uploads;
         std::vector<std::pair<int, int>> plays;
         int erases = 0;
+        std::vector<int> erased;
     };
 
     /// Creates the device, or explains why it cannot be created on this machine.
@@ -214,6 +218,17 @@ private:
         {
             return fail("UI_SET_FFBIT");
         }
+        if (!spec.forceFeedback.empty() && ioctl(descriptor_, UI_SET_EVBIT, EV_FF) < 0)
+        {
+            return fail("UI_SET_EVBIT(EV_FF)");
+        }
+        for (const std::uint16_t code : spec.forceFeedback)
+        {
+            if (ioctl(descriptor_, UI_SET_FFBIT, code) < 0)
+            {
+                return fail("UI_SET_FFBIT");
+            }
+        }
         if (spec.accelerometer && ioctl(descriptor_, UI_SET_PROPBIT, INPUT_PROP_ACCELEROMETER) < 0)
         {
             return fail("UI_SET_PROPBIT");
@@ -228,7 +243,7 @@ private:
         setup.id.vendor = spec.vendor;
         setup.id.product = spec.product;
         setup.id.version = spec.version;
-        setup.ff_effects_max = spec.rumble ? 4 : 0;
+        setup.ff_effects_max = !spec.forceFeedback.empty() ? 16 : spec.rumble ? 4 : 0;
         if (ioctl(descriptor_, UI_DEV_SETUP, &setup) < 0)
         {
             return fail("UI_DEV_SETUP");
@@ -307,6 +322,7 @@ private:
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
                         ++log_.erases;
+                        log_.erased.push_back(static_cast<int>(erase.effect_id));
                     }
                     erase.retval = 0;
                     ioctl(descriptor_, UI_END_FF_ERASE, &erase);
@@ -1125,6 +1141,8 @@ TEST(X11EvdevVirtualDevice, ThePlatformServesControllersEvenWithoutADisplay)
     ASSERT_TRUE(capabilities.joystick);
     EXPECT_TRUE(capabilities.gamepadRumble);
     EXPECT_TRUE(capabilities.gamepadSensors);    // Each pad says whether it has them (X11-0166).
+    EXPECT_TRUE(capabilities.haptics);           // Force feedback is the kernel's too (X11-0168).
+    EXPECT_NE(platform->GetHaptics(), nullptr);
     EXPECT_FALSE(capabilities.multipleWindows);  // Everything the display backs is still off.
     // So is battery state, which is the kernel's too (plans/plan_x11.md X11-0163).
     EXPECT_TRUE(capabilities.powerInfo);
@@ -1204,6 +1222,314 @@ TEST(X11EvdevVirtualDevice, ThePlatformServesControllersEvenWithoutADisplay)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     EXPECT_GE(FindSlot(*gamepad, spec.name), 0);
+}
+
+// --- force feedback: the haptics service (plans/plan_x11.md X11-0168) ----------------------------
+
+/// A force-feedback wheel: a joystick, not a gamepad, with the effects a wheel driver offers.
+VirtualDevice::Spec WheelSpec(const char* role)
+{
+    VirtualDevice::Spec spec;
+    spec.name = UniqueName(role);
+    spec.product = 0x0006;
+    spec.keys = {BTN_TRIGGER, BTN_THUMB, BTN_THUMB2, BTN_TOP};
+    spec.axes = {{ABS_X, -32768, 32767}, {ABS_Z, 0, 255}, {ABS_RZ, 0, 255}};
+    spec.forceFeedback = {FF_CONSTANT, FF_PERIODIC, FF_SINE, FF_SQUARE, FF_SPRING, FF_DAMPER, FF_GAIN, FF_AUTOCENTER};
+    return spec;
+}
+
+std::optional<HapticInfo> WaitForHaptic(const IPlatformHaptics& haptics, const std::string& name)
+{
+    const auto deadline = std::chrono::steady_clock::now() + kTimeout;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        for (const HapticInfo& info : haptics.GetHaptics())
+        {
+            if (info.name == name)
+            {
+                return info;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return std::nullopt;
+}
+
+/// Waits until a device's force-feedback log satisfies a condition, and returns it.
+VirtualDevice::ForceFeedbackLog WaitForLog(VirtualDevice& device,
+                                           const std::function<bool(const VirtualDevice::ForceFeedbackLog&)>& done)
+{
+    const auto deadline = std::chrono::steady_clock::now() + kTimeout;
+    VirtualDevice::ForceFeedbackLog log = device.GetLog();
+    while (!done(log) && std::chrono::steady_clock::now() < deadline)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        log = device.GetLog();
+    }
+    return log;
+}
+
+TEST(X11EvdevVirtualDevice, AWheelsEffectsAreUploadedPlayedUpdatedAndErasedThroughTheKernel)
+{
+    const VirtualDevice::Spec spec = WheelSpec("wheel");
+    CREATE_OR_SKIP(wheel, spec);
+    wheel->StartServicing();
+    EvdevHaptics haptics({});
+    const std::optional<HapticInfo> info = WaitForHaptic(haptics, spec.name);
+    ASSERT_TRUE(info.has_value()) << "the wheel was never listed";
+    EXPECT_GT(info->id, kEvdevHapticIdBase);
+    EXPECT_TRUE(info->rumbleSupported) << "it has a sine";
+    EXPECT_TRUE(haptics.IsConnected(info->id));
+    EXPECT_EQ(WaitForHaptic(haptics, spec.name)->id, info->id) << "the id is kept while it is connected";
+
+    std::unique_ptr<IPlatformHapticDevice> device = haptics.Open(info->id);
+    ASSERT_NE(device, nullptr);
+    const HapticDeviceCapabilities capabilities = device->GetCapabilities();
+    EXPECT_EQ(capabilities.name, spec.name);
+    // Constant, sine, square, spring, damper, gain, autocenter -- and left/right, which the kernel
+    // gives every device that has periodic effects.
+    EXPECT_EQ(capabilities.features, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 7) | (1u << 8) | (1u << 11) |
+                                         (1u << 16) | (1u << 17));
+    EXPECT_EQ(capabilities.maxEffects, 16);
+    EXPECT_EQ(capabilities.maxEffectsPlaying, -1) << "the kernel does not say";
+    EXPECT_TRUE(capabilities.rumbleSupported);
+
+    HapticEffect push;
+    push.type = HapticEffectType::Constant;
+    push.direction.type = HapticDirectionType::Polar;
+    push.direction.values = {9000, 0, 0};
+    push.length = 800;
+    push.level = 12000;
+    const int id = device->CreateEffect(push);
+    ASSERT_GE(id, 0);
+    push.level = -6000;
+    EXPECT_TRUE(device->UpdateEffect(id, push));
+    EXPECT_TRUE(device->RunEffect(id, 3));
+    EXPECT_TRUE(device->StopEffect(id));
+    EXPECT_TRUE(device->SetGain(50));
+    EXPECT_TRUE(device->SetAutocenter(100));
+
+    HapticEffect triangle;
+    triangle.type = HapticEffectType::Triangle;
+    EXPECT_FALSE(device->IsEffectSupported(triangle));
+    EXPECT_EQ(device->CreateEffect(triangle), -1) << "a waveform the wheel does not have";
+    HapticEffect sine;
+    sine.type = HapticEffectType::Sine;
+    EXPECT_FALSE(device->UpdateEffect(id, sine)) << "the kernel keeps an effect's family";
+    EXPECT_FALSE(device->RunEffect(id + 5, 1)) << "not an effect of this device";
+    EXPECT_FALSE(device->GetEffectStatus(id));
+    EXPECT_FALSE(device->Pause());
+
+    VirtualDevice::ForceFeedbackLog log =
+        WaitForLog(*wheel, [](const auto& seen) { return seen.plays.size() >= 4; });
+    ASSERT_EQ(log.uploads.size(), 2u) << "the triangle and the change of family never reached the driver";
+    EXPECT_EQ(log.uploads[0].type, FF_CONSTANT);
+    EXPECT_EQ(log.uploads[0].direction, 0x4000);
+    EXPECT_EQ(log.uploads[0].replay.length, 800);
+    EXPECT_EQ(log.uploads[0].u.constant.level, 12000);
+    EXPECT_EQ(log.uploads[1].id, id);
+    EXPECT_EQ(log.uploads[1].u.constant.level, -6000);
+    ASSERT_EQ(log.plays.size(), 4u);
+    EXPECT_EQ(log.plays[0], std::make_pair(id, 3));
+    EXPECT_EQ(log.plays[1], std::make_pair(id, 0));
+    EXPECT_EQ(log.plays[2], std::make_pair(static_cast<int>(FF_GAIN), 0x7FFF));
+    EXPECT_EQ(log.plays[3], std::make_pair(static_cast<int>(FF_AUTOCENTER), 0xFFFF));
+
+    device->DestroyEffect(id);
+    log = WaitForLog(*wheel, [](const auto& seen) { return seen.erases >= 1; });
+    ASSERT_EQ(log.erased.size(), 1u);
+    EXPECT_EQ(log.erased[0], id);
+
+    // What a device leaves uploaded is erased when it is closed: nothing keeps pushing.
+    const int left = device->CreateEffect(push);
+    ASSERT_GE(left, 0);
+    ASSERT_TRUE(device->RunEffect(left, 1));
+    device.reset();
+    log = WaitForLog(*wheel, [](const auto& seen) { return seen.erases >= 2; });
+    ASSERT_EQ(log.erased.size(), 2u);
+    EXPECT_EQ(log.erased[1], left);
+    wheel->StopServicing();
+}
+
+TEST(X11EvdevVirtualDevice, SimpleRumbleIsASineOnAWheelAndBothMotorsOnAPad)
+{
+    const VirtualDevice::Spec wheelSpec = WheelSpec("rumbling wheel");
+    VirtualDevice::Spec padSpec = PadSpec("rumbling pad");
+    padSpec.rumble = true;
+    CREATE_OR_SKIP(wheel, wheelSpec);
+    CREATE_OR_SKIP(pad, padSpec);
+    wheel->StartServicing();
+    pad->StartServicing();
+    EvdevHaptics haptics({});
+    const std::optional<HapticInfo> wheelInfo = WaitForHaptic(haptics, wheelSpec.name);
+    const std::optional<HapticInfo> padInfo = WaitForHaptic(haptics, padSpec.name);
+    ASSERT_TRUE(wheelInfo && padInfo);
+    EXPECT_TRUE(haptics.SupportsRumble(padInfo->id));
+
+    ASSERT_TRUE(haptics.PlayRumble(wheelInfo->id, 0.5f, 300));
+    VirtualDevice::ForceFeedbackLog log =
+        WaitForLog(*wheel, [](const auto& seen) { return !seen.plays.empty(); });
+    // Readied at half strength for five seconds, then played as asked.
+    ASSERT_EQ(log.uploads.size(), 2u);
+    EXPECT_EQ(log.uploads[0].type, FF_PERIODIC);
+    EXPECT_EQ(log.uploads[0].u.periodic.waveform, FF_SINE);
+    EXPECT_EQ(log.uploads[1].u.periodic.magnitude, 16383);
+    EXPECT_EQ(log.uploads[1].u.periodic.period, 1000);
+    EXPECT_EQ(log.uploads[1].replay.length, 300);
+    EXPECT_EQ(log.plays.at(0), std::make_pair(static_cast<int>(log.uploads[1].id), 1));
+
+    ASSERT_TRUE(haptics.PlayRumble(padInfo->id, 1.0f, 250));
+    log = WaitForLog(*pad, [](const auto& seen) { return !seen.plays.empty(); });
+    ASSERT_EQ(log.uploads.size(), 2u);
+    EXPECT_EQ(log.uploads[1].type, FF_RUMBLE);
+    EXPECT_EQ(log.uploads[1].u.rumble.strong_magnitude, 0xFFFF);
+    EXPECT_EQ(log.uploads[1].u.rumble.weak_magnitude, 0xFFFF);
+    EXPECT_EQ(log.uploads[1].replay.length, 250);
+    const int rumble = log.uploads[1].id;
+
+    // The two motors apart: the simple rumble is stopped, the pair played as an effect of its own.
+    ASSERT_TRUE(haptics.PlayLeftRight(padInfo->id, 0.25f, 1.0f, 100));
+    log = WaitForLog(*pad, [](const auto& seen) { return seen.plays.size() >= 3; });
+    ASSERT_EQ(log.uploads.size(), 3u);
+    EXPECT_EQ(log.uploads[2].u.rumble.strong_magnitude, 16383);
+    EXPECT_EQ(log.uploads[2].u.rumble.weak_magnitude, 0xFFFF);
+    const int pair = log.uploads[2].id;
+    EXPECT_NE(pair, rumble);
+    ASSERT_EQ(log.plays.size(), 3u);
+    EXPECT_EQ(log.plays[1], std::make_pair(rumble, 0));
+    EXPECT_EQ(log.plays[2], std::make_pair(pair, 1));
+
+    EXPECT_TRUE(haptics.StopRumble(padInfo->id));
+    log = WaitForLog(*pad, [](const auto& seen) { return seen.plays.size() >= 5; });
+    ASSERT_EQ(log.plays.size(), 5u) << "both the simple rumble and the pair are stopped";
+
+    // A release of the Haptic subsystem closes what the service opened.
+    haptics.CloseAll();
+    log = WaitForLog(*pad, [](const auto& seen) { return seen.erases >= 2; });
+    EXPECT_EQ(log.erases, 2);
+    EXPECT_GE(WaitForLog(*wheel, [](const auto& seen) { return seen.erases >= 1; }).erases, 1);
+    wheel->StopServicing();
+    pad->StopServicing();
+}
+
+TEST(X11EvdevVirtualDevice, AJoysticksForceFeedbackIsFoundFromItsControllerId)
+{
+    VirtualDevice::Spec rumbling = PadSpec("haptic joystick");
+    rumbling.rumble = true;
+    const VirtualDevice::Spec still = PadSpec("still joystick");
+    CREATE_OR_SKIP(pad, rumbling);
+    CREATE_OR_SKIP(quiet, still);
+    pad->StartServicing();
+    EvdevControllerHub hub;
+    ASSERT_TRUE(hub.Start());
+    ASSERT_TRUE(PumpUntil(hub, [&] {
+        return FindByName(hub, rumbling.name) != nullptr && FindByName(hub, still.name) != nullptr;
+    }));
+    EvdevHaptics haptics([&hub](const DeviceId id) {
+        const EvdevControllerHub::Controller* controller = hub.FindById(id);
+        return controller != nullptr ? controller->device->GetPath() : std::string();
+    });
+    const DeviceId padId = FindByName(hub, rumbling.name)->id;
+    const DeviceId quietId = FindByName(hub, still.name)->id;
+    EXPECT_TRUE(haptics.IsJoystickHaptic(padId));
+    EXPECT_FALSE(haptics.IsJoystickHaptic(quietId));
+    EXPECT_FALSE(haptics.IsJoystickHaptic(999999)) << "no such joystick";
+    EXPECT_EQ(haptics.OpenFromJoystick(quietId), nullptr);
+    std::unique_ptr<IPlatformHapticDevice> device = haptics.OpenFromJoystick(padId);
+    ASSERT_NE(device, nullptr);
+    EXPECT_EQ(device->GetCapabilities().name, rumbling.name);
+    ASSERT_TRUE(device->InitializeRumble());
+    EXPECT_TRUE(device->PlayRumble(0.75f, 100));
+    const VirtualDevice::ForceFeedbackLog log = WaitForLog(*pad, [](const auto& seen) { return !seen.plays.empty(); });
+    ASSERT_EQ(log.uploads.size(), 2u);
+    EXPECT_EQ(log.uploads[1].u.rumble.strong_magnitude, static_cast<std::uint16_t>(65535.0f * 0.75f));
+    device.reset();
+    pad->StopServicing();
+}
+
+TEST(X11EvdevVirtualDevice, TheDefaultVibrationDeviceIsNotAGamepad)
+{
+    VirtualDevice::Spec padSpec = PadSpec("vibrating pad");
+    padSpec.rumble = true;
+    VirtualDevice::Spec motorSpec;
+    motorSpec.name = UniqueName("vibration motor");
+    motorSpec.product = 0x0007;
+    motorSpec.rumble = true;  // Nothing else: a phone's vibrator, as the kernel presents one.
+    CREATE_OR_SKIP(pad, padSpec);
+    CREATE_OR_SKIP(motor, motorSpec);
+    pad->StartServicing();
+    motor->StartServicing();
+    EvdevHaptics haptics({});
+    ASSERT_TRUE(WaitForHaptic(haptics, padSpec.name).has_value());
+    const std::optional<HapticInfo> motorInfo = WaitForHaptic(haptics, motorSpec.name);
+    ASSERT_TRUE(motorInfo.has_value());
+
+    const std::optional<HapticInfo> chosen = haptics.GetDefaultVibrationDevice();
+    ASSERT_TRUE(chosen.has_value());
+    EXPECT_NE(chosen->name, padSpec.name) << "a gamepad's rumble is the gamepad's";
+    EXPECT_TRUE(chosen->rumbleSupported);
+    std::size_t others = 0;
+    for (const HapticInfo& info : haptics.GetHaptics())
+    {
+        others += info.name != padSpec.name && info.name != motorSpec.name ? 1 : 0;
+    }
+    if (others == 0)
+    {
+        EXPECT_EQ(chosen->id, motorInfo->id) << "the only vibration device that is not a gamepad";
+    }
+    pad->StopServicing();
+    motor->StopServicing();
+}
+
+TEST(X11EvdevVirtualDevice, ReleasingTheHapticSubsystemStopsWhatThePlatformPlayed)
+{
+    std::unique_ptr<CNA::Platform::X11::X11Platform> platform;
+    {
+        NoDisplay noDisplay;
+        platform = std::make_unique<CNA::Platform::X11::X11Platform>();
+    }
+    VirtualDevice::Spec spec = PadSpec("platform haptic");
+    spec.rumble = true;
+    CREATE_OR_SKIP(pad, spec);
+    pad->StartServicing();
+    platform->AcquireSubsystem(PlatformSubsystem::Haptic);
+    IPlatformHaptics* haptics = platform->GetHaptics();
+    ASSERT_NE(haptics, nullptr);
+    const std::optional<HapticInfo> info = WaitForHaptic(*haptics, spec.name);
+    ASSERT_TRUE(info.has_value());
+    ASSERT_TRUE(haptics->PlayRumble(info->id, 0.5f, UINT32_MAX));
+    VirtualDevice::ForceFeedbackLog log = WaitForLog(*pad, [](const auto& seen) { return !seen.plays.empty(); });
+    ASSERT_FALSE(log.uploads.empty());
+    EXPECT_EQ(log.uploads.back().replay.length, 0) << "until stopped";
+    EXPECT_EQ(log.erases, 0);
+
+    platform->ReleaseSubsystem(PlatformSubsystem::Haptic);
+    log = WaitForLog(*pad, [](const auto& seen) { return seen.erases >= 1; });
+    EXPECT_EQ(log.erases, 1) << "the device was closed, and the kernel erased its effect";
+    pad->StopServicing();
+}
+
+TEST(X11EvdevVirtualDevice, AnUnpluggedHapticDeviceAnswersFalse)
+{
+    VirtualDevice::Spec spec = PadSpec("unplugged haptic");
+    spec.rumble = true;
+    CREATE_OR_SKIP(pad, spec);
+    pad->StartServicing();
+    EvdevHaptics haptics({});
+    const std::optional<HapticInfo> info = WaitForHaptic(haptics, spec.name);
+    ASSERT_TRUE(info.has_value());
+    ASSERT_TRUE(haptics.PlayRumble(info->id, 1.0f, 100));
+    pad->StopServicing();
+    pad->Destroy();
+    const auto deadline = std::chrono::steady_clock::now() + kTimeout;
+    while (haptics.IsConnected(info->id) && std::chrono::steady_clock::now() < deadline)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_FALSE(haptics.IsConnected(info->id));
+    EXPECT_FALSE(haptics.PlayRumble(info->id, 1.0f, 100)) << "unplugged mid-effect is ordinary, not an exception";
+    EXPECT_FALSE(haptics.SupportsRumble(info->id));
+    EXPECT_EQ(haptics.Open(info->id), nullptr);
 }
 
 } // namespace
