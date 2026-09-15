@@ -5,7 +5,9 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "X11Clipboard.hpp"
 #include "X11CoreFont.hpp"
-#include "X11DesktopPortal.hpp"
+#include "../Freedesktop/DesktopPortal.hpp"
+
+#include <cstdio>
 #include "X11Display.hpp"
 #include "X11Error.hpp"
 #include "X11Window.hpp"
@@ -493,7 +495,7 @@ namespace CNA::Platform::X11 {
         return std::nullopt;
     }
 
-    X11Dialogs::X11Dialogs(X11Connection& connection, X11DesktopPortal* portal)
+    X11Dialogs::X11Dialogs(X11Connection& connection, Freedesktop::DesktopPortal* portal)
         : connection_(connection), portal_(portal)
     {
     }
@@ -530,15 +532,26 @@ namespace CNA::Platform::X11 {
 
     } // namespace
 
+    std::string PortalParentWindow(const unsigned long xid)
+    {
+        if (xid == 0)
+        {
+            return {};
+        }
+        char text[32] = {};
+        std::snprintf(text, sizeof(text), "x11:%lx", xid);
+        return text;
+    }
+
     void X11Dialogs::ShowOpenFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
                                         const std::string& defaultLocation, const bool allowMultiple,
                                         IPlatformWindow* parent)
     {
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
         if (portal_ != nullptr)
         {
-            portal_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, std::move(onResult), filters,
-                                    defaultLocation, allowMultiple, ParentXid(parent));
+            portal_->ShowFileDialog(Freedesktop::DesktopPortal::FileRequest::Open, std::move(onResult), filters,
+                                    defaultLocation, allowMultiple, PortalParentWindow(ParentXid(parent)));
             return;
         }
 #endif
@@ -549,11 +562,11 @@ namespace CNA::Platform::X11 {
     void X11Dialogs::ShowSaveFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
                                         const std::string& defaultLocation, IPlatformWindow* parent)
     {
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
         if (portal_ != nullptr)
         {
-            portal_->ShowFileDialog(X11DesktopPortal::FileRequest::Save, std::move(onResult), filters,
-                                    defaultLocation, false, ParentXid(parent));
+            portal_->ShowFileDialog(Freedesktop::DesktopPortal::FileRequest::Save, std::move(onResult), filters,
+                                    defaultLocation, false, PortalParentWindow(ParentXid(parent)));
             return;
         }
 #endif
@@ -564,11 +577,11 @@ namespace CNA::Platform::X11 {
     void X11Dialogs::ShowOpenFolderDialog(FileDialogCallback onResult, const std::string& defaultLocation,
                                           const bool allowMultiple, IPlatformWindow* parent)
     {
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
         if (portal_ != nullptr)
         {
-            portal_->ShowFileDialog(X11DesktopPortal::FileRequest::OpenFolder, std::move(onResult), {},
-                                    defaultLocation, allowMultiple, ParentXid(parent));
+            portal_->ShowFileDialog(Freedesktop::DesktopPortal::FileRequest::OpenFolder, std::move(onResult), {},
+                                    defaultLocation, allowMultiple, PortalParentWindow(ParentXid(parent)));
             return;
         }
 #endif

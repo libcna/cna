@@ -93,7 +93,7 @@ float AxisOf(const EvdevGamepadState& state, const GamepadAxis axis)
 
 // --- the format ------------------------------------------------------------------------------------
 
-TEST(X11EvdevMapping, AnEntryIsReadElementByElement)
+TEST(LinuxEvdevMapping, AnEntryIsReadElementByElement)
 {
     const std::optional<ControllerMapping> mapping = ParseControllerMapping(GenericMapping());
     ASSERT_TRUE(mapping.has_value());
@@ -130,7 +130,7 @@ TEST(X11EvdevMapping, AnEntryIsReadElementByElement)
     EXPECT_EQ(dpleft.input.hatMask, 8);
 }
 
-TEST(X11EvdevMapping, HalfAxesAndInversionAreRead)
+TEST(LinuxEvdevMapping, HalfAxesAndInversionAreRead)
 {
     const std::optional<ControllerMapping> mapping = ParseControllerMapping(
         std::string(kGenericGuid) + ",Halves,+leftx:b5,-leftx:b4,lefttrigger:+a2,righttrigger:-a2,"
@@ -151,7 +151,7 @@ TEST(X11EvdevMapping, HalfAxesAndInversionAreRead)
     EXPECT_EQ(mapping->bindings[5].input.maximum, -32768);
 }
 
-TEST(X11EvdevMapping, OnlyLinuxEntriesAreTaken)
+TEST(LinuxEvdevMapping, OnlyLinuxEntriesAreTaken)
 {
     EXPECT_FALSE(ParseControllerMapping(std::string(kGenericGuid) + ",W,a:b0,platform:Windows,"));
     EXPECT_FALSE(ParseControllerMapping(std::string(kGenericGuid) + ",M,a:b0,platform:Mac OS X,"));
@@ -159,7 +159,7 @@ TEST(X11EvdevMapping, OnlyLinuxEntriesAreTaken)
         << "an entry naming no platform is for every platform";
 }
 
-TEST(X11EvdevMapping, AConditionTakesTheDefaultTheEntryStates)
+TEST(LinuxEvdevMapping, AConditionTakesTheDefaultTheEntryStates)
 {
     const std::string guid = kGenericGuid;
     EXPECT_TRUE(ParseControllerMapping(guid + ",On,a:b0,hint:SOME_SETTING:=1,platform:Linux,"));
@@ -167,7 +167,7 @@ TEST(X11EvdevMapping, AConditionTakesTheDefaultTheEntryStates)
     EXPECT_FALSE(ParseControllerMapping(guid + ",Unset,a:b0,hint:SOME_SETTING,platform:Linux,"));
 }
 
-TEST(X11EvdevMapping, ALabelledNintendoEntryBecomesPositional)
+TEST(LinuxEvdevMapping, ALabelledNintendoEntryBecomesPositional)
 {
     // The same pad twice, as databases carry it: once by position, once by printed label.
     const std::string guid = kGenericGuid;
@@ -200,7 +200,7 @@ TEST(X11EvdevMapping, ALabelledNintendoEntryBecomesPositional)
                                 {GamepadButton::B, 1}, {GamepadButton::Y, 3}}));
 }
 
-TEST(X11EvdevMapping, CommentsBlanksAndBrokenLinesAreNotEntries)
+TEST(LinuxEvdevMapping, CommentsBlanksAndBrokenLinesAreNotEntries)
 {
     EXPECT_FALSE(ParseControllerMapping("# Linux"));
     EXPECT_FALSE(ParseControllerMapping("   "));
@@ -214,7 +214,7 @@ TEST(X11EvdevMapping, CommentsBlanksAndBrokenLinesAreNotEntries)
     EXPECT_EQ(partial->bindings.size(), 2u);
 }
 
-TEST(X11EvdevMapping, AChecksumInTheGuidIsMovedOutOfIt)
+TEST(LinuxEvdevMapping, AChecksumInTheGuidIsMovedOutOfIt)
 {
     const std::optional<ControllerMapping> mapping =
         ParseControllerMapping("0300cdab790000000600000010010000,Checksummed,a:b0,");
@@ -229,13 +229,13 @@ TEST(X11EvdevMapping, AChecksumInTheGuidIsMovedOutOfIt)
     EXPECT_EQ(*field->crc, 0x1F2E);
 }
 
-TEST(X11EvdevMapping, TheNameChecksumIsCrc16Arc)
+TEST(LinuxEvdevMapping, TheNameChecksumIsCrc16Arc)
 {
     EXPECT_EQ(ControllerNameCrc16("123456789"), 0xBB3D);  // the algorithm's check value
     EXPECT_EQ(ControllerNameCrc16(""), 0);
 }
 
-TEST(X11EvdevMapping, EveryEntryOfADatabaseFileIsRead)
+TEST(LinuxEvdevMapping, EveryEntryOfADatabaseFileIsRead)
 {
     // Against a real database, where one is given: CNA_TEST_GAMECONTROLLERDB names a
     // gamecontrollerdb.txt-style file. Every entry must be read, except another platform's and
@@ -274,7 +274,7 @@ TEST(X11EvdevMapping, EveryEntryOfADatabaseFileIsRead)
 
 // --- numbering and matching -------------------------------------------------------------------------
 
-TEST(X11EvdevMapping, InputsAreNumberedAsTheDatabaseNumbersThem)
+TEST(LinuxEvdevMapping, InputsAreNumberedAsTheDatabaseNumbersThem)
 {
     EvdevDescription description = GenericPad();
     // A key below the joystick range comes after every button in or above it.
@@ -291,7 +291,7 @@ TEST(X11EvdevMapping, InputsAreNumberedAsTheDatabaseNumbersThem)
     EXPECT_EQ(numbering.hats, (std::vector<std::uint16_t>{ABS_HAT0X}));
 }
 
-TEST(X11EvdevMapping, AHatThatLooksAnalogueIsNumberedAsAxes)
+TEST(LinuxEvdevMapping, AHatThatLooksAnalogueIsNumberedAsAxes)
 {
     EvdevDescription description = GenericPad();
     description.ranges[ABS_HAT0X] = {-127, 127, 4, 2, 0};
@@ -307,7 +307,7 @@ TEST(X11EvdevMapping, AHatThatLooksAnalogueIsNumberedAsAxes)
     EXPECT_EQ(NumberControllerInputs(description).hats.size(), 1u);
 }
 
-TEST(X11EvdevMapping, TheGuidIsBusVendorProductAndVersion)
+TEST(LinuxEvdevMapping, TheGuidIsBusVendorProductAndVersion)
 {
     const std::array<std::uint8_t, 16> guid = ControllerGuidOf(GenericPad());
     const std::optional<ControllerMapping> mapping = ParseControllerMapping(GenericMapping());
@@ -323,7 +323,7 @@ TEST(X11EvdevMapping, TheGuidIsBusVendorProductAndVersion)
     EXPECT_EQ(named[15], 0);
 }
 
-TEST(X11EvdevMapping, TheExactVersionWinsThenAnyVersion)
+TEST(LinuxEvdevMapping, TheExactVersionWinsThenAnyVersion)
 {
     ControllerMappingDatabase database;
     database.AddMappings("03000000790000000600000000000000,Any version,a:b0,\n" +
@@ -342,7 +342,7 @@ TEST(X11EvdevMapping, TheExactVersionWinsThenAnyVersion)
     EXPECT_EQ(database.Find(other), nullptr);
 }
 
-TEST(X11EvdevMapping, AStatedChecksumMustBeTheDevicesNames)
+TEST(LinuxEvdevMapping, AStatedChecksumMustBeTheDevicesNames)
 {
     const EvdevDescription pad = GenericPad();
     char crc[8];
@@ -357,7 +357,7 @@ TEST(X11EvdevMapping, AStatedChecksumMustBeTheDevicesNames)
     EXPECT_EQ(*database.Find(pad)->crc, ControllerNameCrc16(pad.name));
 }
 
-TEST(X11EvdevMapping, ALaterEntryForTheSameDeviceReplacesTheEarlier)
+TEST(LinuxEvdevMapping, ALaterEntryForTheSameDeviceReplacesTheEarlier)
 {
     ControllerMappingDatabase database;
     database.AddMappings(std::string(kGenericGuid) + ",First,a:b0,\n");
@@ -366,7 +366,7 @@ TEST(X11EvdevMapping, ALaterEntryForTheSameDeviceReplacesTheEarlier)
     EXPECT_EQ(database.Find(GenericPad())->name, "Second");
 }
 
-TEST(X11EvdevMapping, TheEnvironmentNamesAFileAndEntries)
+TEST(LinuxEvdevMapping, TheEnvironmentNamesAFileAndEntries)
 {
     const std::filesystem::path file =
         std::filesystem::temp_directory_path() / ("cna-gamecontrollerdb-" + std::to_string(::getpid()));
@@ -398,7 +398,7 @@ EvdevGamepadState MappedState(const std::string& entry, const EvdevDescription& 
     return EvdevGamepadState(BuildMappedGamepadLayout(*mapping, description));
 }
 
-TEST(X11EvdevMapping, ButtonsGoWhereTheEntrySays)
+TEST(LinuxEvdevMapping, ButtonsGoWhereTheEntrySays)
 {
     EvdevGamepadState state = MappedState(GenericMapping());
     EXPECT_EQ(state.GetLayout().mapped.size(), 20u);
@@ -421,7 +421,7 @@ TEST(X11EvdevMapping, ButtonsGoWhereTheEntrySays)
     EXPECT_EQ(state.GetLayout().axisMask, 0x3F);
 }
 
-TEST(X11EvdevMapping, SticksKeepCnasUpIsPositive)
+TEST(LinuxEvdevMapping, SticksKeepCnasUpIsPositive)
 {
     EvdevGamepadState state = MappedState(GenericMapping());
     Apply(state, EV_ABS, ABS_X, 255);
@@ -432,7 +432,7 @@ TEST(X11EvdevMapping, SticksKeepCnasUpIsPositive)
     EXPECT_EQ(AxisOf(state, GamepadAxis::RightThumbstickY), -1.0f);
 }
 
-TEST(X11EvdevMapping, AHatPressesAndReleasesItsDirections)
+TEST(LinuxEvdevMapping, AHatPressesAndReleasesItsDirections)
 {
     EvdevGamepadState state = MappedState(GenericMapping());
     Apply(state, EV_ABS, ABS_HAT0Y, -1);
@@ -448,7 +448,7 @@ TEST(X11EvdevMapping, AHatPressesAndReleasesItsDirections)
     EXPECT_TRUE(Held(state, GamepadButton::DPadLeft));
 }
 
-TEST(X11EvdevMapping, OneAxisSplitInTwoDrivesEachHalfAndLetsGoOfTheOther)
+TEST(LinuxEvdevMapping, OneAxisSplitInTwoDrivesEachHalfAndLetsGoOfTheOther)
 {
     // A pad reporting both triggers on one axis, each pulling it one way from the centre.
     EvdevGamepadState state = MappedState(std::string(kGenericGuid) +
@@ -461,7 +461,7 @@ TEST(X11EvdevMapping, OneAxisSplitInTwoDrivesEachHalfAndLetsGoOfTheOther)
     EXPECT_NEAR(AxisOf(state, GamepadAxis::RightTrigger), 1.0f, 1e-4f);
 }
 
-TEST(X11EvdevMapping, AFullAxisBecomesAFullTrigger)
+TEST(LinuxEvdevMapping, AFullAxisBecomesAFullTrigger)
 {
     EvdevGamepadState state = MappedState(std::string(kGenericGuid) + ",Trigger axis,lefttrigger:a2,");
     Apply(state, EV_ABS, ABS_Z, 0);
@@ -470,7 +470,7 @@ TEST(X11EvdevMapping, AFullAxisBecomesAFullTrigger)
     EXPECT_NEAR(AxisOf(state, GamepadAxis::LeftTrigger), 1.0f, 1e-4f);
 }
 
-TEST(X11EvdevMapping, AnInvertedAxisAndButtonsOnHalfAxes)
+TEST(LinuxEvdevMapping, AnInvertedAxisAndButtonsOnHalfAxes)
 {
     EvdevGamepadState state = MappedState(std::string(kGenericGuid) +
                                           ",Odd,leftx:a0~,-lefty:b4,+lefty:b5,dpup:-a1,dpdown:+a1,");
@@ -488,14 +488,14 @@ TEST(X11EvdevMapping, AnInvertedAxisAndButtonsOnHalfAxes)
     EXPECT_TRUE(Held(state, GamepadButton::DPadDown));
 }
 
-TEST(X11EvdevMapping, ElementsNamingInputsTheDeviceLacksAreLeftOut)
+TEST(LinuxEvdevMapping, ElementsNamingInputsTheDeviceLacksAreLeftOut)
 {
     EvdevGamepadState state = MappedState(std::string(kGenericGuid) +
                                           ",Too many,a:b0,b:b40,leftx:a9,dpup:h3.1,");
     EXPECT_EQ(state.GetLayout().mapped.size(), 1u);
 }
 
-TEST(X11EvdevMapping, AResetForgetsHatsAndAxes)
+TEST(LinuxEvdevMapping, AResetForgetsHatsAndAxes)
 {
     EvdevGamepadState state = MappedState(GenericMapping());
     Apply(state, EV_ABS, ABS_HAT0Y, -1);
@@ -505,7 +505,7 @@ TEST(X11EvdevMapping, AResetForgetsHatsAndAxes)
     EXPECT_FALSE(Apply(state, EV_ABS, ABS_HAT0Y, -1).empty());
 }
 
-TEST(X11EvdevMapping, CnasScaleFromTheDatabasesScale)
+TEST(LinuxEvdevMapping, CnasScaleFromTheDatabasesScale)
 {
     EXPECT_EQ(NormalizeMappedGamepadAxis(GamepadAxis::LeftThumbstickX, 32767), 1.0f);
     EXPECT_EQ(NormalizeMappedGamepadAxis(GamepadAxis::LeftThumbstickX, -32768), -1.0f);

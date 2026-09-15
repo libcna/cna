@@ -607,7 +607,7 @@ false or empty.
 creates through uinput — real evdev nodes, real hot-plug, real `SYN_DROPPED`, the real
 force-feedback upload handshake (`CnaX11EvdevTests`). What uinput cannot reproduce is a particular
 driver: the `xpad`, `hid-playstation` and `hid-nintendo` layouts are taken from the kernel's own
-documentation and drivers and pinned in `X11EvdevLayoutTests.cpp`, but have **not** been exercised
+documentation and drivers and pinned in `LinuxEvdevLayoutTests.cpp`, but have **not** been exercised
 with physical pads.
 
 Other Unix systems running X have no `<linux/input.h>`; their X11 build reports no gamepad and no
@@ -788,10 +788,12 @@ is modified.
 ## Portability
 
 The backend is X11, not Linux. Nothing outside `modules/platform/src/X11/` learns that the host is
-X11 — which is what keeps a future `CNA_PLATFORM=WAYLAND` an independent addition rather than a
-refactor. The one Linux-specific part is the controller support in `modules/platform/src/Linux/`,
-which knows nothing about X and is compiled only where `<linux/input.h>` exists; a Wayland backend
-would take it unchanged.
+X11. What the backend needs that is not X11 lives beside it, shared with the native Wayland backend
+since plans/plan_wayland.md Phase B moved it out of `src/X11/`: the XKB key tables in
+`modules/platform/src/Xkb/`, libdbus, the desktop portal and the session bus's screen saver in
+`modules/platform/src/Freedesktop/`, the monotonic clock and the Vulkan loader lookup in
+`modules/platform/src/Posix/`, and the controller support in `modules/platform/src/Linux/`, which
+knows nothing about X and is compiled only where `<linux/input.h>` exists.
 
 The only non-POSIX dependencies are the X client libraries themselves and `clock_gettime`/
 `clock_nanosleep` for timing, both of which are POSIX. MIT-SHM uses System V shared memory, and is
@@ -868,10 +870,11 @@ nm -uC cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -c SDL_   # 0
 Three independent checks keep it that way rather than leaving it to a note:
 
 1. `X11IsSdlFreeTests.cpp` `#error`s if an SDL header ever reaches a translation unit that also
-   includes this backend, and scans every file under `src/X11/` and `src/Linux/` — with comments
+   includes this backend, and scans every file under `src/X11/`, `src/Linux/`, `src/Xkb/`,
+   `src/Freedesktop/` and `src/Posix/` — with comments
    and string literals stripped, so the documentation may explain SDL while the code may not call it.
-2. `tools/platform/sdl_ratchet.py` now **denylists** `modules/platform/src/X11/` and
-   `modules/platform/src/Linux/` from the
+2. `tools/platform/sdl_ratchet.py` now **denylists** `modules/platform/src/X11/`,
+   `modules/platform/src/Linux/` and the other shared directories above from the
    module-wide exemption `modules/platform/` otherwise has. The platform module is allowlisted
    because it is the one place SDL may be linked at all; the X11 backend inside it is specifically
    a place where it may not.

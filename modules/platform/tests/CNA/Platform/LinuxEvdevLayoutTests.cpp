@@ -126,14 +126,14 @@ GamepadButton ButtonFor(const EvdevGamepadLayout& layout, const int code)
 
 // --- classification ------------------------------------------------------------------------------
 
-TEST(X11EvdevLayout, PadsWithTheKernelGamepadButtonSetAreGamepads)
+TEST(LinuxEvdevLayout, PadsWithTheKernelGamepadButtonSetAreGamepads)
 {
     EXPECT_EQ(ClassifyEvdevDevice(Xbox360()), EvdevDeviceClass::Gamepad);
     EXPECT_EQ(ClassifyEvdevDevice(DualSense()), EvdevDeviceClass::Gamepad);
     EXPECT_EQ(ClassifyEvdevDevice(SwitchPro()), EvdevDeviceClass::Gamepad);
 }
 
-TEST(X11EvdevLayout, KeyboardsMiceTouchpadsAndTabletsAreNotControllers)
+TEST(LinuxEvdevLayout, KeyboardsMiceTouchpadsAndTabletsAreNotControllers)
 {
     // Being wrong here does not merely list a phantom pad: the hub keeps controllers open, and
     // holding someone's keyboard open is not a controller service's business.
@@ -156,7 +156,7 @@ TEST(X11EvdevLayout, KeyboardsMiceTouchpadsAndTabletsAreNotControllers)
               EvdevDeviceClass::None);
 }
 
-TEST(X11EvdevLayout, AMotionSensorNodeIsNotASecondController)
+TEST(LinuxEvdevLayout, AMotionSensorNodeIsNotASecondController)
 {
     // hid-playstation's sensor node has three accelerometer and three gyro axes, and must not
     // appear as a controller of its own next to the pad it belongs to.
@@ -172,7 +172,7 @@ TEST(X11EvdevLayout, AMotionSensorNodeIsNotASecondController)
     EXPECT_EQ(ClassifyEvdevDevice(odd), EvdevDeviceClass::None);
 }
 
-TEST(X11EvdevLayout, JoystickButtonsWithAxesOrAHatMakeAJoystick)
+TEST(LinuxEvdevLayout, JoystickButtonsWithAxesOrAHatMakeAJoystick)
 {
     // A flight stick through hid-generic: the joystick button range, not the gamepad one.
     EXPECT_EQ(ClassifyEvdevDevice(Describe({BTN_TRIGGER, BTN_THUMB, BTN_THUMB2, BTN_TOP},
@@ -189,7 +189,7 @@ TEST(X11EvdevLayout, JoystickButtonsWithAxesOrAHatMakeAJoystick)
 
 // --- face buttons --------------------------------------------------------------------------------
 
-TEST(X11EvdevLayout, GamepadApiFaceButtonsAreNamedByPosition)
+TEST(LinuxEvdevLayout, GamepadApiFaceButtonsAreNamedByPosition)
 {
     // The kernel's gamepad API names face buttons by where they are, and so does CNA: A is the
     // bottom one whatever is printed on it. A DualSense's square (left) is therefore X.
@@ -201,7 +201,7 @@ TEST(X11EvdevLayout, GamepadApiFaceButtonsAreNamedByPosition)
     EXPECT_EQ(ButtonFor(layout, BTN_NORTH), GamepadButton::Y);
 }
 
-TEST(X11EvdevLayout, XpadFaceButtonsAreSwappedBackToTheirPositions)
+TEST(LinuxEvdevLayout, XpadFaceButtonsAreSwappedBackToTheirPositions)
 {
     // xpad predates the gamepad API: it reports an Xbox pad's left X button as BTN_X, which the
     // gamepad API calls BTN_NORTH. Taking the code at its gamepad-API word would put XNA's X on
@@ -226,7 +226,7 @@ TEST(X11EvdevLayout, XpadFaceButtonsAreSwappedBackToTheirPositions)
     EXPECT_TRUE(BuildEvdevGamepadLayout(thirdParty).xpadFaceButtons);
 }
 
-TEST(X11EvdevLayout, TheRemainingButtonsMapOneToOne)
+TEST(LinuxEvdevLayout, TheRemainingButtonsMapOneToOne)
 {
     const EvdevGamepadLayout layout = BuildEvdevGamepadLayout(Xbox360());
     EXPECT_EQ(ButtonFor(layout, BTN_TL), GamepadButton::LeftShoulder);
@@ -246,7 +246,7 @@ TEST(X11EvdevLayout, TheRemainingButtonsMapOneToOne)
                     GamepadButton::DPadLeft, GamepadButton::DPadRight}));
 }
 
-TEST(X11EvdevLayout, XpadTriggerHappyButtonsAreTheDPadAndThePaddles)
+TEST(LinuxEvdevLayout, XpadTriggerHappyButtonsAreTheDPadAndThePaddles)
 {
     EvdevDescription elite = Xbox360();
     elite.axes.reset(ABS_HAT0X);
@@ -276,7 +276,7 @@ TEST(X11EvdevLayout, XpadTriggerHappyButtonsAreTheDPadAndThePaddles)
 
 // --- sticks and triggers -------------------------------------------------------------------------
 
-TEST(X11EvdevLayout, RxRyAreTheRightStickAndZRzTheTriggersWhenPresent)
+TEST(LinuxEvdevLayout, RxRyAreTheRightStickAndZRzTheTriggersWhenPresent)
 {
     const EvdevGamepadLayout layout = BuildEvdevGamepadLayout(Xbox360());
     std::vector<std::pair<int, GamepadAxis>> seen;
@@ -293,7 +293,7 @@ TEST(X11EvdevLayout, RxRyAreTheRightStickAndZRzTheTriggersWhenPresent)
     EXPECT_TRUE(layout.digitalTriggers.empty());
 }
 
-TEST(X11EvdevLayout, WithoutRxRyTheRightStickIsOnZRz)
+TEST(LinuxEvdevLayout, WithoutRxRyTheRightStickIsOnZRz)
 {
     // The DirectInput layout many generic pads keep; their triggers, if analogue, are BRAKE/GAS.
     const EvdevGamepadLayout layout = BuildEvdevGamepadLayout(
@@ -311,7 +311,7 @@ TEST(X11EvdevLayout, WithoutRxRyTheRightStickIsOnZRz)
     EXPECT_EQ(layout.axes[5].axis, GamepadAxis::RightTrigger);
 }
 
-TEST(X11EvdevLayout, DigitalTriggersStandInOnlyForMissingAnalogueOnes)
+TEST(LinuxEvdevLayout, DigitalTriggersStandInOnlyForMissingAnalogueOnes)
 {
     // Switch Pro: ZL/ZR are buttons, so they drive the trigger axes to 0 or 1.
     const EvdevGamepadLayout pro = BuildEvdevGamepadLayout(SwitchPro());
@@ -336,7 +336,7 @@ TEST(X11EvdevLayout, DigitalTriggersStandInOnlyForMissingAnalogueOnes)
     EXPECT_NEAR(squeezed.GetAxes()[static_cast<std::size_t>(GamepadAxis::LeftTrigger)], 0.2f, 0.001f);
 }
 
-TEST(X11EvdevLayout, TheHatIsTheDPad)
+TEST(LinuxEvdevLayout, TheHatIsTheDPad)
 {
     EvdevGamepadState state(BuildEvdevGamepadLayout(Xbox360()));
     std::vector<EvdevGamepadChange> changes;
@@ -368,7 +368,7 @@ TEST(X11EvdevLayout, TheHatIsTheDPad)
 
 // --- values --------------------------------------------------------------------------------------
 
-TEST(X11EvdevLayout, AxesScaleOntoTheSigned16BitRange)
+TEST(LinuxEvdevLayout, AxesScaleOntoTheSigned16BitRange)
 {
     EXPECT_EQ(ScaleEvdevAxis(-32768, kStick16), -32768);
     EXPECT_EQ(ScaleEvdevAxis(0, kStick16), 0);
@@ -387,7 +387,7 @@ TEST(X11EvdevLayout, AxesScaleOntoTheSigned16BitRange)
     EXPECT_EQ(ScaleEvdevAxis(7, EvdevAxisRange{9, 1, 0}), 0);
 }
 
-TEST(X11EvdevLayout, SticksAreUpPositiveAndTriggersZeroToOne)
+TEST(LinuxEvdevLayout, SticksAreUpPositiveAndTriggersZeroToOne)
 {
     // The kernel's Y grows downwards; XNA's grows upwards.
     EXPECT_FLOAT_EQ(NormalizeEvdevGamepadAxis(GamepadAxis::LeftThumbstickY, -32768, kStick16), 1.0f);
@@ -404,7 +404,7 @@ TEST(X11EvdevLayout, SticksAreUpPositiveAndTriggersZeroToOne)
     EXPECT_NE(NormalizeEvdevGamepadAxis(GamepadAxis::LeftThumbstickX, 200, kStick16), 0.0f);
 }
 
-TEST(X11EvdevLayout, OnlyRealChangesAreReported)
+TEST(LinuxEvdevLayout, OnlyRealChangesAreReported)
 {
     EvdevGamepadState state(BuildEvdevGamepadLayout(Xbox360()));
     std::vector<EvdevGamepadChange> changes;
@@ -448,7 +448,7 @@ EvdevDescription MotionSensor(const char* uniq, const char* phys)
     return sensor;
 }
 
-TEST(X11EvdevLayout, AMotionSensorNodeIsNeitherAControllerNorIgnored)
+TEST(LinuxEvdevLayout, AMotionSensorNodeIsNeitherAControllerNorIgnored)
 {
     const EvdevDescription sensor = MotionSensor("a4:53:85:00:00:01", "usb-0000:00:14.0-1/input3");
     EXPECT_TRUE(IsEvdevMotionSensor(sensor));
@@ -459,7 +459,7 @@ TEST(X11EvdevLayout, AMotionSensorNodeIsNeitherAControllerNorIgnored)
     EXPECT_FALSE(IsEvdevMotionSensor(Xbox360()));
 }
 
-TEST(X11EvdevLayout, ASensorBelongsToThePadWithItsIdOrItsPath)
+TEST(LinuxEvdevLayout, ASensorBelongsToThePadWithItsIdOrItsPath)
 {
     EvdevDescription pad = Xbox360();
     pad.uniq = "a4:53:85:00:00:01";
@@ -474,7 +474,7 @@ TEST(X11EvdevLayout, ASensorBelongsToThePadWithItsIdOrItsPath)
     EXPECT_FALSE(EvdevSensorBelongsTo(MotionSensor("", ""), pad)) << "nothing in common is not a pair";
 }
 
-TEST(X11EvdevLayout, MotionIsScaledToMetresPerSecondSquaredAndRadiansPerSecond)
+TEST(LinuxEvdevLayout, MotionIsScaledToMetresPerSecondSquaredAndRadiansPerSecond)
 {
     const EvdevMotionLayout layout = DescribeEvdevMotionSensor(MotionSensor("", "p"), 0x054C);
     ASSERT_TRUE(layout.accelerometer);
@@ -498,7 +498,7 @@ TEST(X11EvdevLayout, MotionIsScaledToMetresPerSecondSquaredAndRadiansPerSecond)
     EXPECT_FLOAT_EQ(turned.x, 0.0f);
 }
 
-TEST(X11EvdevLayout, AnAxisGroupWithoutAResolutionIsNotReported)
+TEST(LinuxEvdevLayout, AnAxisGroupWithoutAResolutionIsNotReported)
 {
     EvdevDescription sensor = MotionSensor("", "p");
     sensor.ranges[ABS_RY].resolution = 0;
@@ -509,7 +509,7 @@ TEST(X11EvdevLayout, AnAxisGroupWithoutAResolutionIsNotReported)
     EXPECT_EQ(none.x, 0.0f);
 }
 
-TEST(X11EvdevLayout, TheModelComesFromTheDeviceIdentity)
+TEST(LinuxEvdevLayout, TheModelComesFromTheDeviceIdentity)
 {
     const auto model = [](const std::uint16_t vendor, const std::uint16_t product,
                           const char* driver = "") {
@@ -532,7 +532,7 @@ TEST(X11EvdevLayout, TheModelComesFromTheDeviceIdentity)
 
 // --- identity helpers ----------------------------------------------------------------------------
 
-TEST(X11EvdevLayout, TheGuidIsTheUsbStyleLayoutControllerDatabasesUse)
+TEST(LinuxEvdevLayout, TheGuidIsTheUsbStyleLayoutControllerDatabasesUse)
 {
     // Bus, vendor, product and version, each little-endian, at bytes 0, 4, 8 and 12. The same
     // string SDL builds for the same pad, so a mapping keyed on it names the same device.
@@ -541,7 +541,7 @@ TEST(X11EvdevLayout, TheGuidIsTheUsbStyleLayoutControllerDatabasesUse)
     EXPECT_EQ(FormatEvdevGuid(blank), std::string(32, '0'));
 }
 
-TEST(X11EvdevLayout, HatAxesCombineIntoNinePositions)
+TEST(LinuxEvdevLayout, HatAxesCombineIntoNinePositions)
 {
     EXPECT_EQ(EvdevHatPosition(0, 0), JoystickHat::Centered);
     EXPECT_EQ(EvdevHatPosition(0, -1), JoystickHat::Up);
@@ -580,7 +580,7 @@ private:
     std::filesystem::path path_;
 };
 
-TEST(X11EvdevHub, TheDriverNameIsReadFromSysfs)
+TEST(LinuxEvdevHub, TheDriverNameIsReadFromSysfs)
 {
     ScratchDirectory sysfs;
     // /sys/class/input/event7/device/device/driver -> .../drivers/xpad
@@ -595,7 +595,7 @@ TEST(X11EvdevHub, TheDriverNameIsReadFromSysfs)
     EXPECT_EQ(ReadEvdevDriverName("event8", sysfs.Path().string()), "");
 }
 
-TEST(X11EvdevHub, SysfsBitmapsParseAsTheKernelPrintsThem)
+TEST(LinuxEvdevHub, SysfsBitmapsParseAsTheKernelPrintsThem)
 {
     // A single word, as `capabilities/ev` prints it.
     EXPECT_EQ(ParseEvdevSysfsBitmap("120013\n"), std::vector<unsigned long>{0x120013});
@@ -647,7 +647,7 @@ TEST(X11EvdevHub, SysfsBitmapsParseAsTheKernelPrintsThem)
     }
 }
 
-TEST(X11EvdevHub, SysfsDescribesAPadWithoutItsNodeBeingOpened)
+TEST(LinuxEvdevHub, SysfsDescribesAPadWithoutItsNodeBeingOpened)
 {
     ScratchDirectory sysfs;
     const std::filesystem::path device = sysfs.Path() / "event9" / "device";
@@ -734,7 +734,7 @@ void WriteSysfsNode(const std::filesystem::path& sysfs, const std::string& node,
     }
 }
 
-TEST(X11EvdevHub, SysfsDecidesWhatIsOpenedAndAKeyboardNeverIs)
+TEST(LinuxEvdevHub, SysfsDecidesWhatIsOpenedAndAKeyboardNeverIs)
 {
     // plans/plan_x11.md X11-0150: the hub used to open every node to classify it, and closing an
     // evdev node waits for an RCU grace period -- 0.8 s across a laptop's sixteen nodes, stalling
@@ -784,7 +784,7 @@ TEST(X11EvdevHub, SysfsDecidesWhatIsOpenedAndAKeyboardNeverIs)
     EXPECT_TRUE(hub.GetControllers().empty());
 }
 
-TEST(X11EvdevHub, ADirectoryThatDoesNotExistIsAnAnswerNotAnError)
+TEST(LinuxEvdevHub, ADirectoryThatDoesNotExistIsAnAnswerNotAnError)
 {
     EvdevControllerHub hub("/nonexistent/cna/input");
     EXPECT_FALSE(hub.Start());
@@ -796,7 +796,7 @@ TEST(X11EvdevHub, ADirectoryThatDoesNotExistIsAnAnswerNotAnError)
     EXPECT_TRUE(hub.GetControllers().empty());
 }
 
-TEST(X11EvdevHub, NodesThatAreNotDevicesAreIgnored)
+TEST(LinuxEvdevHub, NodesThatAreNotDevicesAreIgnored)
 {
     ScratchDirectory input;
     // Files named like event nodes that are no such thing, plus the legacy nodes the hub never
@@ -825,7 +825,7 @@ TEST(X11EvdevHub, NodesThatAreNotDevicesAreIgnored)
     EXPECT_FALSE(hub.IsStarted());
 }
 
-TEST(X11EvdevHub, ServicesOverAHubWithNoControllersReportEmptySlots)
+TEST(LinuxEvdevHub, ServicesOverAHubWithNoControllersReportEmptySlots)
 {
     ScratchDirectory input;
     EvdevControllerHub hub(input.Path().string(), input.Path().string());

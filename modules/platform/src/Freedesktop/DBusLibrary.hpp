@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
 #include <dbus/dbus.h>
 
 #include <memory>
 #include <string>
 
-namespace CNA::Platform::X11 {
+namespace CNA::Platform::Freedesktop {
 
     /**
      * @brief libdbus, loaded when first asked for (plans/plan_x11.md X11-0169).
@@ -18,7 +18,7 @@ namespace CNA::Platform::X11 {
      * The entry points are the few the portal client uses, and those a test's own portal needs to
      * answer it.
      */
-    struct X11DBusApi
+    struct DBusLibrary
     {
         /** @brief Whether libdbus was found and every entry point resolved. */
         bool loaded = false;
@@ -119,17 +119,17 @@ namespace CNA::Platform::X11 {
      * @brief Gets libdbus, loading it on the first call.
      * @return The entry points; `loaded` is false where the library is not installed.
      */
-    [[nodiscard]] const X11DBusApi& DBusApi();
+    [[nodiscard]] const DBusLibrary& GetDBus();
 
     /** @brief Releases a message when it goes out of scope. */
-    struct X11DBusMessageDeleter
+    struct DBusMessageDeleter
     {
         /** @brief Unreferences the message. @param message The message. */
         void operator()(DBusMessage* message) const;
     };
 
     /** @brief An owned reference to a message. */
-    using X11DBusMessagePtr = std::unique_ptr<DBusMessage, X11DBusMessageDeleter>;
+    using DBusMessagePtr = std::unique_ptr<DBusMessage, DBusMessageDeleter>;
 
     /**
      * @brief Connects privately to the session bus, never starting one.
@@ -145,6 +145,6 @@ namespace CNA::Platform::X11 {
     /** @brief Closes and releases a connection OpenSessionBus() made. @param connection It. */
     void CloseSessionBus(DBusConnection* connection);
 
-} // namespace CNA::Platform::X11
+} // namespace CNA::Platform::Freedesktop
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS

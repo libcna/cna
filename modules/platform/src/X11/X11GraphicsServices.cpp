@@ -3,7 +3,9 @@
 #include "X11GraphicsServices.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "../Common/SurfaceFrameFitting.hpp"
 #include "../Common/SurfaceFrameValidation.hpp"
+#include "../Posix/VulkanLoader.hpp"
 #include "X11Display.hpp"
 #include "X11Error.hpp"
 #include "X11Window.hpp"
@@ -132,50 +134,6 @@ namespace CNA::Platform::X11 {
         void* LoadGlxProcAddress(const char*) { return nullptr; }
 #endif
 
-
-        struct PresentRect
-        {
-            int x = 0;
-            int y = 0;
-            int width = 0;
-            int height = 0;
-        };
-
-        /// Where a frame of the given size lands inside a target of the given size.
-        PresentRect ComputePresentRect(const PresentScaleMode mode, const int frameWidth,
-                                       const int frameHeight, const int targetWidth,
-                                       const int targetHeight)
-        {
-            PresentRect rect;
-            switch (mode)
-            {
-                case PresentScaleMode::Stretch:
-                    rect = {0, 0, targetWidth, targetHeight};
-                    break;
-                case PresentScaleMode::Letterbox:
-                case PresentScaleMode::Overscan:
-                {
-                    const double scaleX = static_cast<double>(targetWidth) / frameWidth;
-                    const double scaleY = static_cast<double>(targetHeight) / frameHeight;
-                    const double scale = mode == PresentScaleMode::Letterbox
-                                             ? std::min(scaleX, scaleY)
-                                             : std::max(scaleX, scaleY);
-                    rect.width = std::max(1, static_cast<int>(frameWidth * scale));
-                    rect.height = std::max(1, static_cast<int>(frameHeight * scale));
-                    rect.x = (targetWidth - rect.width) / 2;
-                    rect.y = (targetHeight - rect.height) / 2;
-                    break;
-                }
-                case PresentScaleMode::None:
-                    rect = {(targetWidth - frameWidth) / 2, (targetHeight - frameHeight) / 2,
-                            frameWidth, frameHeight};
-                    break;
-                case PresentScaleMode::Native:
-                    rect = {0, 0, frameWidth, frameHeight};
-                    break;
-            }
-            return rect;
-        }
 
     } // namespace
 
@@ -677,57 +635,6 @@ namespace CNA::Platform::X11 {
 
     // --- X11VulkanSurface -----------------------------------------------------------------------
 
-    namespace {
-
-        using VkGetInstanceProcAddrFn = void* (*) (void*, const char*);
-
-        /**
-         * Finds the process's `vkGetInstanceProcAddr`, without this module linking a Vulkan loader.
-         *
-         * `dlsym(RTLD_DEFAULT, ...)` first, and that is the case that matters: an application whose
-         * renderer links `libvulkan` -- which is what CNA's own Vulkan renderer does -- has the
-         * symbol in the global scope already, and using the caller's own loader is the only way the
-         * `VkInstance` it hands us is one our `vkCreateXlibSurfaceKHR` can act on.
-         *
-         * Failing that, the loader is opened here. An application that `dlopen`s Vulkan with
-         * `RTLD_LOCAL` (engines that pin a loader version do) leaves nothing in the global scope,
-         * and refusing there would mean the surface service works only for applications that
-         * happen to link the library the ordinary way. There is one system Vulkan loader, so the
-         * handle opened here resolves to the same implementation the caller's instance came from.
-         *
-         * The handle is never closed. Function pointers resolved through it stay live for as long
-         * as any surface exists, and a `dlclose` on a library whose entry points a renderer still
-         * holds is the kind of teardown crash that takes a week to find.
-         */
-        VkGetInstanceProcAddrFn ResolveVulkanProcAddr()
-        {
-            static VkGetInstanceProcAddrFn resolved = [] {
-                if (auto* fromProcess = reinterpret_cast<VkGetInstanceProcAddrFn>(
-                        dlsym(RTLD_DEFAULT, "vkGetInstanceProcAddr")))
-                {
-                    return fromProcess;
-                }
-                // The versioned SONAME first: it is what an application links, and the unversioned
-                // name exists only where the development package is installed.
-                for (const char* name : {"libvulkan.so.1", "libvulkan.so"})
-                {
-                    if (void* handle = dlopen(name, RTLD_NOW | RTLD_LOCAL))
-                    {
-                        if (auto* entry = reinterpret_cast<VkGetInstanceProcAddrFn>(
-                                dlsym(handle, "vkGetInstanceProcAddr")))
-                        {
-                            return entry;
-                        }
-                        dlclose(handle);
-                    }
-                }
-                return static_cast<VkGetInstanceProcAddrFn>(nullptr);
-            }();
-            return resolved;
-        }
-
-    } // namespace
-
     X11VulkanSurface::X11VulkanSurface(X11Connection& connection) : connection_(connection) {}
 
     std::vector<std::string> X11VulkanSurface::GetInstanceExtensions() const
@@ -776,7 +683,7 @@ namespace CNA::Platform::X11 {
         using VkCreateXlibSurfaceFn = int (*)(void*, const VkXlibSurfaceCreateInfo*, const void*,
                                               std::uint64_t*);
 
-        VkGetInstanceProcAddrFn getInstanceProcAddr = ResolveVulkanProcAddr();
+        Posix::VkGetInstanceProcAddrFn getInstanceProcAddr = Posix::ResolveVulkanProcAddr();
         if (getInstanceProcAddr == nullptr)
         {
             throw PlatformException(
@@ -818,7 +725,7 @@ namespace CNA::Platform::X11 {
             return;
         }
         using VkDestroySurfaceFn = void (*)(void*, std::uint64_t, const void*);
-        VkGetInstanceProcAddrFn getInstanceProcAddr = ResolveVulkanProcAddr();
+        Posix::VkGetInstanceProcAddrFn getInstanceProcAddr = Posix::ResolveVulkanProcAddr();
         if (getInstanceProcAddr == nullptr)
         {
             return;
@@ -1057,8 +964,8 @@ namespace CNA::Platform::X11 {
             return;
         }
 
-        const PresentRect rect = ComputePresentRect(scaleMode_, frame.width, frame.height,
-                                                     target.width, target.height);
+        const Common::PresentRect rect = Common::ComputePresentRect(scaleMode_, frame.width, frame.height,
+                                                                     target.width, target.height);
         if (rect.width <= 0 || rect.height <= 0)
         {
             return;
@@ -1071,24 +978,6 @@ namespace CNA::Platform::X11 {
                                     visual != nullptr ? visual->green_mask : 0x0000FF00uL,
                                     visual != nullptr ? visual->blue_mask : 0x000000FFuL);
 
-        // Everything that does not change across a frame is decided once per frame. The first
-        // version derived each channel's shift from its mask, divided to find the source column
-        // and called XPutPixel through its function pointer for every pixel: about 30 ms for a
-        // 1920x1080 frame even in an optimised build -- over a 60 Hz frame budget before the
-        // software renderer had drawn anything (plans/plan_native_platform_validation.md
-        // NPV-0116).
-        sourceColumns_.resize(static_cast<std::size_t>(rect.width));
-        for (int x = 0; x < rect.width; ++x)
-        {
-            sourceColumns_[static_cast<std::size_t>(x)] =
-                std::min(frame.width - 1, x * frame.width / std::max(1, rect.width));
-        }
-        // Downscaling with nearest neighbour drops entire source pixels, which on text or fine
-        // detail looks like noise. A 2x2 box is the cheapest averaging that removes it; upscaling
-        // is left nearest because interpolating a magnified image would blur pixel art the caller
-        // may have intended.
-        const bool box = filter_ == PresentFilter::Linear && rect.width < frame.width &&
-                         rect.height < frame.height;
         // A 32-bit pixel in this machine's own byte order is written straight into the image --
         // exactly the bytes XPutPixel would store. Any other layout (16 bits per pixel, 24 packed,
         // or a display whose byte order differs from this machine's) keeps XPutPixel, which
@@ -1097,50 +986,27 @@ namespace CNA::Platform::X11 {
                                                                                    : MSBFirst;
         const bool direct = image_->bits_per_pixel == 32 && image_->byte_order == kHostByteOrder;
 
-        // Scaling and conversion in one pass. Doing both in one loop avoids an intermediate
+        // Scaling and conversion in one pass (the scaling is shared with the Wayland presenter,
+        // plans/plan_wayland.md WAYLAND-0013). Doing both in one loop avoids an intermediate
         // full-size buffer, which for a 4K frame is 32 MB of traffic that would otherwise happen
         // every frame.
-        for (int y = 0; y < rect.height; ++y)
-        {
-            const int sourceY =
-                std::min(frame.height - 1, y * frame.height / std::max(1, rect.height));
-            const std::uint8_t* row =
-                frame.pixels + static_cast<std::size_t>(sourceY) * static_cast<std::size_t>(stride);
-            const std::uint8_t* nextRow =
-                frame.pixels + static_cast<std::size_t>(std::min(frame.height - 1, sourceY + 1)) *
-                                   static_cast<std::size_t>(stride);
-            char* line = image_->data + static_cast<std::size_t>(y) *
-                                            static_cast<std::size_t>(image_->bytes_per_line);
-            for (int x = 0; x < rect.width; ++x)
-            {
-                const int sourceX = sourceColumns_[static_cast<std::size_t>(x)];
-                const std::uint8_t* pixel = row + static_cast<std::size_t>(sourceX) * 4u;
-                unsigned int red = pixel[0];
-                unsigned int green = pixel[1];
-                unsigned int blue = pixel[2];
-                if (box)
-                {
-                    const std::size_t nextX =
-                        static_cast<std::size_t>(std::min(frame.width - 1, sourceX + 1)) * 4u;
-                    const std::uint8_t* p10 = row + nextX;
-                    const std::uint8_t* p01 = nextRow + static_cast<std::size_t>(sourceX) * 4u;
-                    const std::uint8_t* p11 = nextRow + nextX;
-                    red = (red + p10[0] + p01[0] + p11[0]) / 4u;
-                    green = (green + p10[1] + p01[1] + p11[1]) / 4u;
-                    blue = (blue + p10[2] + p01[2] + p11[2]) / 4u;
-                }
+        Common::ScaleSurfaceFrame(
+            frame, stride, rect.width, rect.height, filter_, sourceColumns_,
+            [this, &packer, direct](const int x, const int y, const unsigned int red, const unsigned int green,
+                                    const unsigned int blue) {
                 const unsigned long value = packer.Pack(red, green, blue);
                 if (direct)
                 {
                     const auto word = static_cast<std::uint32_t>(value);
-                    std::memcpy(line + static_cast<std::size_t>(x) * 4u, &word, sizeof(word));
+                    std::memcpy(image_->data + static_cast<std::size_t>(y) * static_cast<std::size_t>(image_->bytes_per_line) +
+                                    static_cast<std::size_t>(x) * 4u,
+                                &word, sizeof(word));
                 }
                 else
                 {
                     XPutPixel(image_, x, y, value);
                 }
-            }
-        }
+            });
 
 #if defined(CNA_X11_HAVE_XSHM)
         if (usesSharedMemory_)

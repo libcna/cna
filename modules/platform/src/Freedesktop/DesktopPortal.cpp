@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "X11DesktopPortal.hpp"
+#include "DesktopPortal.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
 #include <filesystem>
 #include <functional>
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 #include <fcntl.h>
 #include <unistd.h>
 #endif
 
-namespace CNA::Platform::X11 {
+namespace CNA::Platform::Freedesktop {
 
     namespace {
 
@@ -52,12 +51,12 @@ namespace CNA::Platform::X11 {
         return glob;
     }
 
-    std::vector<X11PortalFilter> ToPortalFilters(const std::vector<FileDialogFilter>& filters)
+    std::vector<PortalFilter> ToPortalFilters(const std::vector<FileDialogFilter>& filters)
     {
-        std::vector<X11PortalFilter> result;
+        std::vector<PortalFilter> result;
         for (const FileDialogFilter& filter : filters)
         {
-            X11PortalFilter converted;
+            PortalFilter converted;
             converted.name = filter.name;
             std::size_t start = 0;
             while (start <= filter.patterns.size())
@@ -145,20 +144,9 @@ namespace CNA::Platform::X11 {
         return "/org/freedesktop/portal/desktop/request/" + sender + "/" + std::string(token);
     }
 
-    std::string PortalParentWindow(const unsigned long xid)
+    PortalSaveLocation SplitSaveLocation(const std::string& defaultLocation)
     {
-        if (xid == 0)
-        {
-            return {};
-        }
-        char text[32] = {};
-        std::snprintf(text, sizeof(text), "x11:%lx", xid);
-        return text;
-    }
-
-    X11PortalSaveLocation SplitSaveLocation(const std::string& defaultLocation)
-    {
-        X11PortalSaveLocation location;
+        PortalSaveLocation location;
         if (defaultLocation.empty())
         {
             return location;
@@ -186,7 +174,7 @@ namespace CNA::Platform::X11 {
         return location;
     }
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
     namespace {
 
@@ -201,14 +189,14 @@ namespace CNA::Platform::X11 {
         void AppendString(DBusMessageIter* iter, const std::string& value)
         {
             const char* text = value.c_str();
-            DBusApi().message_iter_append_basic(iter, DBUS_TYPE_STRING, &text);
+            GetDBus().message_iter_append_basic(iter, DBUS_TYPE_STRING, &text);
         }
 
         /// One `{sv}` entry of an options dictionary.
         void AppendOption(DBusMessageIter* dictionary, const char* key, const char* signature,
                           const std::function<void(DBusMessageIter*)>& value)
         {
-            const X11DBusApi& dbus = DBusApi();
+            const DBusLibrary& dbus = GetDBus();
             DBusMessageIter entry;
             DBusMessageIter variant;
             dbus.message_iter_open_container(dictionary, DBUS_TYPE_DICT_ENTRY, nullptr, &entry);
@@ -223,7 +211,7 @@ namespace CNA::Platform::X11 {
         {
             AppendOption(dictionary, key, "b", [value](DBusMessageIter* variant) {
                 const dbus_bool_t flag = value ? TRUE : FALSE;
-                DBusApi().message_iter_append_basic(variant, DBUS_TYPE_BOOLEAN, &flag);
+                GetDBus().message_iter_append_basic(variant, DBUS_TYPE_BOOLEAN, &flag);
             });
         }
 
@@ -236,7 +224,7 @@ namespace CNA::Platform::X11 {
         void AppendPathOption(DBusMessageIter* dictionary, const char* key, const std::string& path)
         {
             AppendOption(dictionary, key, "ay", [&path](DBusMessageIter* variant) {
-                const X11DBusApi& dbus = DBusApi();
+                const DBusLibrary& dbus = GetDBus();
                 DBusMessageIter bytes;
                 dbus.message_iter_open_container(variant, DBUS_TYPE_ARRAY, "y", &bytes);
                 const char* data = path.c_str();
@@ -245,20 +233,20 @@ namespace CNA::Platform::X11 {
             });
         }
 
-        void AppendFiltersOption(DBusMessageIter* dictionary, const std::vector<X11PortalFilter>& filters)
+        void AppendFiltersOption(DBusMessageIter* dictionary, const std::vector<PortalFilter>& filters)
         {
             AppendOption(dictionary, "filters", "a(sa(us))", [&filters](DBusMessageIter* variant) {
-                const X11DBusApi& dbus = DBusApi();
+                const DBusLibrary& dbus = GetDBus();
                 DBusMessageIter list;
                 dbus.message_iter_open_container(variant, DBUS_TYPE_ARRAY, "(sa(us))", &list);
-                for (const X11PortalFilter& filter : filters)
+                for (const PortalFilter& filter : filters)
                 {
                     DBusMessageIter entry;
                     dbus.message_iter_open_container(&list, DBUS_TYPE_STRUCT, nullptr, &entry);
                     AppendString(&entry, filter.name);
                     DBusMessageIter patterns;
                     dbus.message_iter_open_container(&entry, DBUS_TYPE_ARRAY, "(us)", &patterns);
-                    for (const X11PortalPattern& pattern : filter.patterns)
+                    for (const PortalPattern& pattern : filter.patterns)
                     {
                         DBusMessageIter pair;
                         dbus.message_iter_open_container(&patterns, DBUS_TYPE_STRUCT, nullptr, &pair);
@@ -277,7 +265,7 @@ namespace CNA::Platform::X11 {
         /// The `uris` of a Response's results, as local paths.
         std::vector<std::string> ResponsePaths(DBusMessage* message, bool& success)
         {
-            const X11DBusApi& dbus = DBusApi();
+            const DBusLibrary& dbus = GetDBus();
             std::vector<std::string> paths;
             success = false;
             DBusMessageIter iter;
@@ -335,7 +323,7 @@ namespace CNA::Platform::X11 {
         /// Whether the bus knows the portal: running, or one it would start when asked.
         bool PortalOnBus(DBusConnection* connection)
         {
-            const X11DBusApi& dbus = DBusApi();
+            const DBusLibrary& dbus = GetDBus();
             DBusError error;
             dbus.error_init(&error);
             if (dbus.bus_name_has_owner(connection, kPortalService, &error))
@@ -343,14 +331,14 @@ namespace CNA::Platform::X11 {
                 return true;
             }
             dbus.error_free(&error);
-            X11DBusMessagePtr call(dbus.message_new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+            DBusMessagePtr call(dbus.message_new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                                                 "org.freedesktop.DBus", "ListActivatableNames"));
             if (call == nullptr)
             {
                 return false;
             }
             dbus.error_init(&error);
-            X11DBusMessagePtr reply(
+            DBusMessagePtr reply(
                 dbus.connection_send_with_reply_and_block(connection, call.get(), kCallTimeoutMilliseconds, &error));
             if (reply == nullptr)
             {
@@ -379,13 +367,13 @@ namespace CNA::Platform::X11 {
 
     } // namespace
 
-    X11DesktopPortal::X11DesktopPortal(DBusConnection* connection) : connection_(connection)
+    DesktopPortal::DesktopPortal(DBusConnection* connection) : connection_(connection)
     {
-        const char* name = DBusApi().bus_get_unique_name(connection_);
+        const char* name = GetDBus().bus_get_unique_name(connection_);
         uniqueName_ = name != nullptr ? name : "";
     }
 
-    std::unique_ptr<X11DesktopPortal> X11DesktopPortal::Connect()
+    std::unique_ptr<DesktopPortal> DesktopPortal::Connect()
     {
         DBusConnection* connection = OpenSessionBus();
         if (connection == nullptr)
@@ -397,7 +385,7 @@ namespace CNA::Platform::X11 {
             CloseSessionBus(connection);
             return nullptr;
         }
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         DBusError error;
         dbus.error_init(&error);
         // Every request's answer: a portal may send it to this connection alone or to all.
@@ -409,22 +397,22 @@ namespace CNA::Platform::X11 {
             CloseSessionBus(connection);
             return nullptr;
         }
-        return std::unique_ptr<X11DesktopPortal>(new X11DesktopPortal(connection));
+        return std::unique_ptr<DesktopPortal>(new DesktopPortal(connection));
     }
 
-    X11DesktopPortal::~X11DesktopPortal()
+    DesktopPortal::~DesktopPortal()
     {
         CloseSessionBus(connection_);
     }
 
-    void X11DesktopPortal::ShowFileDialog(const FileRequest kind, FileDialogCallback onResult,
+    void DesktopPortal::ShowFileDialog(const FileRequest kind, FileDialogCallback onResult,
                                           const std::vector<FileDialogFilter>& filters,
                                           const std::string& defaultLocation, const bool multiple,
-                                          const unsigned long parentXid)
+                                          const std::string& parentWindow)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         std::lock_guard<std::mutex> lock(mutex_);
-        X11DBusMessagePtr call(dbus.message_new_method_call(kPortalService, kPortalPath, kFileChooser,
+        DBusMessagePtr call(dbus.message_new_method_call(kPortalService, kPortalPath, kFileChooser,
                                                             kind == FileRequest::Save ? "SaveFile" : "OpenFile"));
         if (call == nullptr)
         {
@@ -433,7 +421,7 @@ namespace CNA::Platform::X11 {
         }
         DBusMessageIter arguments;
         dbus.message_iter_init_append(call.get(), &arguments);
-        AppendString(&arguments, PortalParentWindow(parentXid));
+        AppendString(&arguments, parentWindow);
         AppendString(&arguments, kind == FileRequest::Save         ? "Save File"
                                  : kind == FileRequest::OpenFolder ? "Open Folder"
                                                                    : "Open File");
@@ -441,7 +429,7 @@ namespace CNA::Platform::X11 {
         dbus.message_iter_open_container(&arguments, DBUS_TYPE_ARRAY, "{sv}", &options);
         const std::string token = "cna" + std::to_string(++counter_);
         AppendStringOption(&options, "handle_token", token);
-        AppendBoolOption(&options, "modal", parentXid != 0);
+        AppendBoolOption(&options, "modal", !parentWindow.empty());
         if (kind != FileRequest::Save && multiple)
         {
             AppendBoolOption(&options, "multiple", true);
@@ -452,7 +440,7 @@ namespace CNA::Platform::X11 {
         }
         if (kind != FileRequest::OpenFolder)
         {
-            const std::vector<X11PortalFilter> portalFilters = ToPortalFilters(filters);
+            const std::vector<PortalFilter> portalFilters = ToPortalFilters(filters);
             if (!portalFilters.empty())
             {
                 AppendFiltersOption(&options, portalFilters);
@@ -460,7 +448,7 @@ namespace CNA::Platform::X11 {
         }
         if (kind == FileRequest::Save)
         {
-            const X11PortalSaveLocation location = SplitSaveLocation(defaultLocation);
+            const PortalSaveLocation location = SplitSaveLocation(defaultLocation);
             if (!location.currentFile.empty()) { AppendPathOption(&options, "current_file", location.currentFile); }
             if (!location.currentFolder.empty()) { AppendPathOption(&options, "current_folder", location.currentFolder); }
             if (!location.currentName.empty()) { AppendStringOption(&options, "current_name", location.currentName); }
@@ -483,13 +471,13 @@ namespace CNA::Platform::X11 {
         pending_.push_back(std::move(request));
     }
 
-    bool X11DesktopPortal::OpenUri(const std::string& uri, const unsigned long parentXid)
+    bool DesktopPortal::OpenUri(const std::string& uri, const std::string& parentWindow)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         std::lock_guard<std::mutex> lock(mutex_);
         const std::optional<std::string> path = PathFromFileUri(uri);
         int descriptor = -1;
-        X11DBusMessagePtr call;
+        DBusMessagePtr call;
         if (path)
         {
             if (!dbus.connection_can_send_type(connection_, DBUS_TYPE_UNIX_FD))
@@ -523,7 +511,7 @@ namespace CNA::Platform::X11 {
         }
         DBusMessageIter arguments;
         dbus.message_iter_init_append(call.get(), &arguments);
-        AppendString(&arguments, PortalParentWindow(parentXid));
+        AppendString(&arguments, parentWindow);
         if (descriptor >= 0)
         {
             // libdbus sends its own duplicate; this one is closed below either way.
@@ -540,7 +528,7 @@ namespace CNA::Platform::X11 {
 
         DBusError error;
         dbus.error_init(&error);
-        X11DBusMessagePtr reply(
+        DBusMessagePtr reply(
             dbus.connection_send_with_reply_and_block(connection_, call.get(), kCallTimeoutMilliseconds, &error));
         if (descriptor >= 0)
         {
@@ -554,13 +542,13 @@ namespace CNA::Platform::X11 {
         return true;
     }
 
-    void X11DesktopPortal::FinishLocked(const std::size_t index, std::vector<std::string> paths)
+    void DesktopPortal::FinishLocked(const std::size_t index, std::vector<std::string> paths)
     {
         finished_.emplace_back(std::move(pending_[index].callback), std::move(paths));
         pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(index));
     }
 
-    void X11DesktopPortal::Pump()
+    void DesktopPortal::Pump()
     {
         std::vector<std::pair<FileDialogCallback, std::vector<std::string>>> ready;
         {
@@ -569,13 +557,13 @@ namespace CNA::Platform::X11 {
             {
                 return;
             }
-            const X11DBusApi& dbus = DBusApi();
+            const DBusLibrary& dbus = GetDBus();
             if (!pending_.empty())
             {
                 dbus.connection_read_write(connection_, 0);
                 while (DBusMessage* raw = dbus.connection_pop_message(connection_))
                 {
-                    X11DBusMessagePtr message(raw);
+                    DBusMessagePtr message(raw);
                     const int type = dbus.message_get_type(raw);
                     if (type == DBUS_MESSAGE_TYPE_METHOD_RETURN || type == DBUS_MESSAGE_TYPE_ERROR)
                     {
@@ -641,6 +629,6 @@ namespace CNA::Platform::X11 {
         }
     }
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS
 
-} // namespace CNA::Platform::X11
+} // namespace CNA::Platform::Freedesktop

@@ -78,10 +78,16 @@ ALLOWLIST_PREFIXES: tuple[str, ...] = (
 # would let an SDL call be added there without any gate noticing. The denylist is checked first, so
 # the backend that must never touch SDL is the one part of the platform module the ratchet counts.
 # The Linux evdev controllers the X11 backend serves its gamepads from are part of that same
-# SDL-free build, so they are counted too.
+# SDL-free build, so they are counted too -- and so is everything the native Wayland backend is
+# and shares with X11 (plans/plan_wayland.md WAYLAND-0115): the backend itself, the XKB tables,
+# the freedesktop.org services and the POSIX helpers.
 DENYLIST_PREFIXES: tuple[str, ...] = (
     "modules/platform/src/X11/",
+    "modules/platform/src/Wayland/",
     "modules/platform/src/Linux/",
+    "modules/platform/src/Xkb/",
+    "modules/platform/src/Freedesktop/",
+    "modules/platform/src/Posix/",
 )
 
 

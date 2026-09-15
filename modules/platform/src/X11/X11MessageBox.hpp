@@ -10,10 +10,20 @@
 #include <string_view>
 #include <vector>
 
+namespace CNA::Platform::Freedesktop {
+    class DesktopPortal;
+}
+
 namespace CNA::Platform::X11 {
 
     class X11Connection;
-    class X11DesktopPortal;
+
+    /**
+     * @brief How the desktop portal names an X11 parent window.
+     * @param xid The window, or 0.
+     * @return `x11:<hex xid>`, or empty for no parent.
+     */
+    [[nodiscard]] std::string PortalParentWindow(unsigned long xid);
 
     /** @brief A rectangle of a message box, in its window's pixels. */
     struct X11MessageBoxRect
@@ -129,7 +139,7 @@ namespace CNA::Platform::X11 {
          * @param connection The platform's connection, whose server the boxes appear on.
          * @param portal The desktop portal for file dialogs, or null where there is none.
          */
-        X11Dialogs(X11Connection& connection, X11DesktopPortal* portal);
+        X11Dialogs(X11Connection& connection, Freedesktop::DesktopPortal* portal);
 
         /**
          * @brief Shows a box with one OK button, and waits for it to be closed.
@@ -192,7 +202,7 @@ namespace CNA::Platform::X11 {
 
     private:
         X11Connection& connection_;
-        X11DesktopPortal* portal_ = nullptr;
+        Freedesktop::DesktopPortal* portal_ = nullptr;
     };
 
 } // namespace CNA::Platform::X11

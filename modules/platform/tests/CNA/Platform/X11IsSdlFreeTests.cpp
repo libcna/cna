@@ -171,10 +171,12 @@ TEST(X11IsSdlFree, StrippingCommentsKeepsCodeAndDiscardsProse)
 
 TEST(X11IsSdlFree, NoCodeInTheBackendReferencesSdl)
 {
-    // src/X11/ and the Linux evdev controllers in src/Linux/ it serves gamepads from: both are
-    // part of every SDL-free X11 build.
+    // src/X11/, the Linux evdev controllers in src/Linux/ it serves gamepads from, and the code it
+    // shares with the Wayland backend (plans/plan_wayland.md Phase B): all are part of every
+    // SDL-free X11 build.
+    const std::filesystem::path shared = BackendDirectory().parent_path();
     const std::vector<std::filesystem::path> directories = {
-        BackendDirectory(), BackendDirectory().parent_path() / "Linux"};
+        BackendDirectory(), shared / "Linux", shared / "Xkb", shared / "Freedesktop", shared / "Posix"};
 
     // The tokens that constitute a use rather than a mention: SDL's own C identifiers, its
     // headers, CNA's SDL backend namespaces, and SDL_mixer's prefix.

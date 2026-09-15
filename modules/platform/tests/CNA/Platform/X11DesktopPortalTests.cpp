@@ -10,7 +10,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../../../src/X11/X11DesktopPortal.hpp"
+#include "../../../src/Freedesktop/DesktopPortal.hpp"
+#include "../../../src/X11/X11MessageBox.hpp"
 #include "../../../src/X11/X11Headers.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
@@ -31,8 +32,8 @@
 #include <thread>
 #include <vector>
 
-#if defined(CNA_X11_HAVE_DBUS)
-#include "X11PrivateSessionBus.hpp"
+#if defined(CNA_PLATFORM_HAVE_DBUS)
+#include "FreedesktopPrivateSessionBus.hpp"
 
 #include <unistd.h>
 #endif
@@ -41,8 +42,9 @@ namespace {
 
 using namespace CNA::Platform;
 using namespace CNA::Platform::X11;
-#if defined(CNA_X11_HAVE_DBUS)
-using CNA::Platform::X11::Testing::PrivateBus;
+using namespace CNA::Platform::Freedesktop;
+#if defined(CNA_PLATFORM_HAVE_DBUS)
+using CNA::Platform::Freedesktop::Testing::PrivateBus;
 #endif
 
 // Before any test runs, and whatever started the binary: no session bus.
@@ -59,8 +61,8 @@ TEST(X11PortalRequest, NoTestOfThisBinaryReachesTheDesktopsSessionBus)
     const char* address = std::getenv("DBUS_SESSION_BUS_ADDRESS");
     ASSERT_NE(address, nullptr);
     EXPECT_STREQ(address, "unix:path=/nonexistent/cna-test-no-session-bus");
-#if defined(CNA_X11_HAVE_DBUS)
-    EXPECT_EQ(X11DesktopPortal::Connect(), nullptr);
+#if defined(CNA_PLATFORM_HAVE_DBUS)
+    EXPECT_EQ(DesktopPortal::Connect(), nullptr);
 #endif
 }
 
@@ -76,7 +78,7 @@ TEST(X11PortalRequest, AnExtensionBecomesACaseInsensitiveGlob)
 
 TEST(X11PortalRequest, FiltersSplitTheirPatternsAndDropTheEmpty)
 {
-    const std::vector<X11PortalFilter> filters =
+    const std::vector<PortalFilter> filters =
         ToPortalFilters({{"Images", "png;jpg"}, {"Everything", "*"}, {"Nothing", ";; "}, {"Spaced", " txt ; *.md"}});
     ASSERT_EQ(filters.size(), 3u) << "a filter with no pattern is not offered";
     EXPECT_EQ(filters[0].name, "Images");
@@ -117,20 +119,20 @@ TEST(X11PortalRequest, ASaveLocationIsAFolderAFileOrASuggestedName)
     std::filesystem::create_directories(directory);
     std::ofstream(directory / "existing.txt") << "x";
 
-    X11PortalSaveLocation folder = SplitSaveLocation(directory.string());
+    PortalSaveLocation folder = SplitSaveLocation(directory.string());
     EXPECT_EQ(folder.currentFolder, directory.string());
     EXPECT_TRUE(folder.currentName.empty());
 
-    X11PortalSaveLocation existing = SplitSaveLocation((directory / "existing.txt").string());
+    PortalSaveLocation existing = SplitSaveLocation((directory / "existing.txt").string());
     EXPECT_EQ(existing.currentFile, (directory / "existing.txt").string());
     EXPECT_EQ(existing.currentName, "existing.txt");
 
-    X11PortalSaveLocation suggested = SplitSaveLocation((directory / "new.sav").string());
+    PortalSaveLocation suggested = SplitSaveLocation((directory / "new.sav").string());
     EXPECT_EQ(suggested.currentFolder, directory.string());
     EXPECT_EQ(suggested.currentName, "new.sav");
     EXPECT_TRUE(suggested.currentFile.empty());
 
-    X11PortalSaveLocation bare = SplitSaveLocation("slot1.sav");
+    PortalSaveLocation bare = SplitSaveLocation("slot1.sav");
     EXPECT_TRUE(bare.currentFolder.empty());
     EXPECT_EQ(bare.currentName, "slot1.sav");
 
@@ -138,7 +140,7 @@ TEST(X11PortalRequest, ASaveLocationIsAFolderAFileOrASuggestedName)
     std::filesystem::remove_all(directory);
 }
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
 // --- a private bus and a portal played on it --------------------------------------------------
 
@@ -155,7 +157,7 @@ struct PortalCall
     std::map<std::string, std::string> strings;
     std::map<std::string, bool> flags;
     std::map<std::string, std::string> paths;  ///< The `ay` options, NUL dropped.
-    std::vector<X11PortalFilter> filters;
+    std::vector<PortalFilter> filters;
 };
 
 /// How the test's portal answers the next file chooser.
@@ -174,7 +176,7 @@ class FakePortal
 public:
     explicit FakePortal(const std::string& address)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         DBusError error;
         dbus.error_init(&error);
         connection_ = dbus.connection_open_private(address.c_str(), &error);
@@ -202,8 +204,8 @@ public:
         if (thread_.joinable()) { thread_.join(); }
         if (connection_ != nullptr)
         {
-            DBusApi().connection_close(connection_);
-            DBusApi().connection_unref(connection_);
+            GetDBus().connection_close(connection_);
+            GetDBus().connection_unref(connection_);
         }
     }
 
@@ -229,7 +231,7 @@ public:
     }
 
 private:
-    static std::string Text(const X11DBusApi& dbus, DBusMessageIter* iter)
+    static std::string Text(const DBusLibrary& dbus, DBusMessageIter* iter)
     {
         const char* text = nullptr;
         if (dbus.message_iter_get_arg_type(iter) == DBUS_TYPE_STRING ||
@@ -240,7 +242,7 @@ private:
         return text != nullptr ? text : "";
     }
 
-    static void ReadOptions(const X11DBusApi& dbus, DBusMessageIter* iter, PortalCall& call)
+    static void ReadOptions(const DBusLibrary& dbus, DBusMessageIter* iter, PortalCall& call)
     {
         DBusMessageIter dictionary;
         dbus.message_iter_recurse(iter, &dictionary);
@@ -282,7 +284,7 @@ private:
                 {
                     DBusMessageIter filter;
                     dbus.message_iter_recurse(&filters, &filter);
-                    X11PortalFilter read;
+                    PortalFilter read;
                     read.name = Text(dbus, &filter);
                     dbus.message_iter_next(&filter);
                     DBusMessageIter patterns;
@@ -291,7 +293,7 @@ private:
                     {
                         DBusMessageIter pair;
                         dbus.message_iter_recurse(&patterns, &pair);
-                        X11PortalPattern pattern;
+                        PortalPattern pattern;
                         dbus_uint32_t kind = 0;
                         dbus.message_iter_get_basic(&pair, &kind);
                         pattern.kind = kind;
@@ -310,7 +312,7 @@ private:
 
     void EmitResponse(const std::string& path, const std::uint32_t response, const std::vector<std::string>& uris)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         DBusMessage* signal = dbus.message_new_signal(path.c_str(), "org.freedesktop.portal.Request", "Response");
         DBusMessageIter arguments;
         dbus.message_iter_init_append(signal, &arguments);
@@ -345,7 +347,7 @@ private:
 
     void Serve()
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         while (running_)
         {
             dbus.connection_read_write(connection_, 10);
@@ -368,7 +370,7 @@ private:
 
     void Handle(DBusMessage* message)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         const bool openFile = dbus.message_is_method_call(message, "org.freedesktop.portal.FileChooser", "OpenFile");
         const bool saveFile = dbus.message_is_method_call(message, "org.freedesktop.portal.FileChooser", "SaveFile");
         const bool openUri = dbus.message_is_method_call(message, "org.freedesktop.portal.OpenURI", "OpenURI");
@@ -474,7 +476,7 @@ class X11DesktopPortalBus : public ::testing::Test
 protected:
     void SetUp() override
     {
-        if (!DBusApi().loaded)
+        if (!GetDBus().loaded)
         {
             GTEST_SKIP() << "libdbus is not installed";
         }
@@ -499,7 +501,7 @@ protected:
     {
         portal_ = std::make_unique<FakePortal>(bus_->Address());
         ASSERT_TRUE(portal_->Ready());
-        client_ = X11DesktopPortal::Connect();
+        client_ = DesktopPortal::Connect();
         ASSERT_NE(client_, nullptr) << "the portal on the bus was not found";
     }
 
@@ -527,16 +529,16 @@ protected:
 
     std::unique_ptr<PrivateBus> bus_;
     std::unique_ptr<FakePortal> portal_;
-    std::unique_ptr<X11DesktopPortal> client_;
+    std::unique_ptr<DesktopPortal> client_;
     std::optional<std::string> saved_;
 };
 
 TEST_F(X11DesktopPortalBus, WithoutAPortalOnTheBusThereIsNone)
 {
-    EXPECT_EQ(X11DesktopPortal::Connect(), nullptr) << "a bus with nothing on it";
+    EXPECT_EQ(DesktopPortal::Connect(), nullptr) << "a bus with nothing on it";
     System::Environment::SetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS",
                                                 std::string("unix:path=/nonexistent/cna-no-bus"));
-    EXPECT_EQ(X11DesktopPortal::Connect(), nullptr) << "no bus at all";
+    EXPECT_EQ(DesktopPortal::Connect(), nullptr) << "no bus at all";
 }
 
 TEST_F(X11DesktopPortalBus, AnOpenDialogCarriesItsOptionsAndItsAnswerArrivesFromPump)
@@ -545,8 +547,8 @@ TEST_F(X11DesktopPortalBus, AnOpenDialogCarriesItsOptionsAndItsAnswerArrivesFrom
     portal_->Answer({0, {"file:///tmp/a%20b.png", "file:///tmp/c.jpg", "https://example.com/not-a-file"}});
     auto got = std::make_shared<std::optional<std::vector<std::string>>>();
     auto count = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(got, count),
-                            {{"Images", "png;jpg"}}, "/tmp", true, 0x1a00003);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(got, count),
+                            {{"Images", "png;jpg"}}, "/tmp", true, PortalParentWindow(0x1a00003));
     EXPECT_FALSE(got->has_value()) << "never inside the call";
     const std::optional<std::vector<std::string>> paths = PumpForAnswer(got);
     ASSERT_TRUE(paths.has_value()) << "no answer came";
@@ -578,7 +580,7 @@ TEST_F(X11DesktopPortalBus, ACancelledOrFailedDialogAnswersNothingOnce)
     portal_->Answer({1, {"file:///tmp/ignored"}});
     auto cancelled = std::make_shared<std::optional<std::vector<std::string>>>();
     auto cancelledCount = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(cancelled, cancelledCount), {}, "", false, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(cancelled, cancelledCount), {}, "", false, "");
     ASSERT_TRUE(PumpForAnswer(cancelled).has_value());
     EXPECT_TRUE((*cancelled)->empty()) << "cancelled: no paths, whatever came with it";
 
@@ -587,7 +589,7 @@ TEST_F(X11DesktopPortalBus, ACancelledOrFailedDialogAnswersNothingOnce)
     portal_->Answer(failure);
     auto failed = std::make_shared<std::optional<std::vector<std::string>>>();
     auto failedCount = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(failed, failedCount), {}, "", false, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(failed, failedCount), {}, "", false, "");
     ASSERT_TRUE(PumpForAnswer(failed).has_value()) << "an error is an answer too";
     EXPECT_TRUE((*failed)->empty());
     for (int pass = 0; pass < 20; ++pass) { client_->Pump(); }
@@ -606,15 +608,15 @@ TEST_F(X11DesktopPortalBus, SaveAndFolderDialogsSayWhatTheyAre)
     portal_->Answer({0, {"file://" + (directory / "new.sav").string()}});
     auto saved = std::make_shared<std::optional<std::vector<std::string>>>();
     auto count = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Save, Capture(saved, count), {{"Saves", "sav"}},
-                            (directory / "new.sav").string(), true, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Save, Capture(saved, count), {{"Saves", "sav"}},
+                            (directory / "new.sav").string(), true, "");
     ASSERT_TRUE(PumpForAnswer(saved).has_value());
     EXPECT_EQ(**saved, std::vector<std::string>{(directory / "new.sav").string()});
 
     portal_->Answer({0, {"file:///tmp", "file:///var"}});
     auto folders = std::make_shared<std::optional<std::vector<std::string>>>();
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::OpenFolder, Capture(folders, count), {{"Ignored", "x"}},
-                            directory.string(), true, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::OpenFolder, Capture(folders, count), {{"Ignored", "x"}},
+                            directory.string(), true, "");
     ASSERT_TRUE(PumpForAnswer(folders).has_value());
     EXPECT_EQ(**folders, (std::vector<std::string>{"/tmp", "/var"}));
 
@@ -644,7 +646,7 @@ TEST_F(X11DesktopPortalBus, AnOlderPortalsOwnRequestPathIsFollowed)
     portal_->Answer(answer);
     auto got = std::make_shared<std::optional<std::vector<std::string>>>();
     auto count = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(got, count), {}, "", false, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(got, count), {}, "", false, "");
     ASSERT_TRUE(PumpForAnswer(got).has_value()) << "the answer on the portal's own path was missed";
     EXPECT_EQ(**got, std::vector<std::string>{"/tmp/older"});
 }
@@ -657,7 +659,7 @@ TEST_F(X11DesktopPortalBus, AnAnswerLongAfterTheQuestionStillArrives)
     portal_->Answer(answer);
     auto got = std::make_shared<std::optional<std::vector<std::string>>>();
     auto count = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(got, count), {}, "", false, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(got, count), {}, "", false, "");
     // The user takes their time: frames go by.
     EXPECT_FALSE(PumpForAnswer(got, std::chrono::milliseconds(300)).has_value());
     portal_->RespondLater(0, {"file:///tmp/eventually"});
@@ -672,14 +674,14 @@ TEST_F(X11DesktopPortalBus, ACallbackMayAskForAnotherDialog)
     auto second = std::make_shared<std::optional<std::vector<std::string>>>();
     auto count = std::make_shared<int>(0);
     auto first = std::make_shared<std::optional<std::vector<std::string>>>();
-    X11DesktopPortal* client = client_.get();
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open,
+    DesktopPortal* client = client_.get();
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open,
                             [first, second, count, client](const std::vector<std::string>& paths) {
                                 *first = paths;
-                                client->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(second, count), {},
-                                                       "", false, 0);
+                                client->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(second, count), {},
+                                                       "", false, "");
                             },
-                            {}, "", false, 0);
+                            {}, "", false, "");
     ASSERT_TRUE(PumpForAnswer(first).has_value());
     ASSERT_TRUE(PumpForAnswer(second).has_value()) << "the second dialog, asked for from the first's callback";
     EXPECT_EQ(portal_->Calls().size(), 2u);
@@ -693,7 +695,7 @@ TEST_F(X11DesktopPortalBus, ABusThatGoesAwayAnswersEveryOpenDialog)
     portal_->Answer(answer);
     auto got = std::make_shared<std::optional<std::vector<std::string>>>();
     auto count = std::make_shared<int>(0);
-    client_->ShowFileDialog(X11DesktopPortal::FileRequest::Open, Capture(got, count), {}, "", false, 0);
+    client_->ShowFileDialog(DesktopPortal::FileRequest::Open, Capture(got, count), {}, "", false, "");
     EXPECT_FALSE(PumpForAnswer(got, std::chrono::milliseconds(200)).has_value());
     portal_.reset();
     bus_->Stop();
@@ -705,14 +707,14 @@ TEST_F(X11DesktopPortalBus, ABusThatGoesAwayAnswersEveryOpenDialog)
 TEST_F(X11DesktopPortalBus, OpenUriHandsOverAUrlOrAnOpenFile)
 {
     StartPortal();
-    EXPECT_TRUE(client_->OpenUri("https://example.com/page?x=1", 0x2c00001));
+    EXPECT_TRUE(client_->OpenUri("https://example.com/page?x=1", PortalParentWindow(0x2c00001)));
     const std::filesystem::path file =
         std::filesystem::temp_directory_path() / ("cna-portal-open-" + std::to_string(::getpid()) + ".txt");
     std::ofstream(file) << "hello";
-    EXPECT_TRUE(client_->OpenUri("file://" + file.string(), 0));
-    EXPECT_FALSE(client_->OpenUri("file:///nonexistent/cna/file", 0)) << "a file that is not there";
-    EXPECT_FALSE(client_->OpenUri("no scheme at all", 0));
-    EXPECT_FALSE(client_->OpenUri(":empty-scheme", 0));
+    EXPECT_TRUE(client_->OpenUri("file://" + file.string(), ""));
+    EXPECT_FALSE(client_->OpenUri("file:///nonexistent/cna/file", "")) << "a file that is not there";
+    EXPECT_FALSE(client_->OpenUri("no scheme at all", ""));
+    EXPECT_FALSE(client_->OpenUri(":empty-scheme", ""));
 
     const std::vector<PortalCall> calls = portal_->Calls();
     ASSERT_EQ(calls.size(), 2u) << "only the two that were URLs reached the portal";
@@ -816,6 +818,6 @@ TEST_F(X11DesktopPortalLive, ThePlatformsDialogsAndOpenUrlGoThroughThePortal)
     EXPECT_EQ(calls[1].uri, "https://example.com/");
 }
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS
 
 } // namespace

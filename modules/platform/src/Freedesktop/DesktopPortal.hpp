@@ -12,14 +12,14 @@
 #include <utility>
 #include <vector>
 
-#if defined(CNA_X11_HAVE_DBUS)
-#include "X11DBus.hpp"
+#if defined(CNA_PLATFORM_HAVE_DBUS)
+#include "DBusLibrary.hpp"
 #endif
 
-namespace CNA::Platform::X11 {
+namespace CNA::Platform::Freedesktop {
 
     /** @brief One pattern of a portal filter: the kind (0, a glob) and the glob. */
-    struct X11PortalPattern
+    struct PortalPattern
     {
         /** @brief 0 for a glob, 1 for a MIME type; CNA only writes globs. */
         std::uint32_t kind = 0;
@@ -28,12 +28,12 @@ namespace CNA::Platform::X11 {
     };
 
     /** @brief A file-type filter as the portal takes it: `(sa(us))`. */
-    struct X11PortalFilter
+    struct PortalFilter
     {
         /** @brief The name shown for it. */
         std::string name;
         /** @brief Its patterns. */
-        std::vector<X11PortalPattern> patterns;
+        std::vector<PortalPattern> patterns;
     };
 
     /**
@@ -50,7 +50,7 @@ namespace CNA::Platform::X11 {
      * @param filters The filters, their patterns separated by semicolons.
      * @return One portal filter each, empty patterns dropped.
      */
-    [[nodiscard]] std::vector<X11PortalFilter> ToPortalFilters(const std::vector<FileDialogFilter>& filters);
+    [[nodiscard]] std::vector<PortalFilter> ToPortalFilters(const std::vector<FileDialogFilter>& filters);
 
     /**
      * @brief The path a `file:` URI names.
@@ -74,15 +74,8 @@ namespace CNA::Platform::X11 {
      */
     [[nodiscard]] std::string PortalRequestPath(std::string_view uniqueName, std::string_view token);
 
-    /**
-     * @brief How the portal names an X11 parent window.
-     * @param xid The window, or 0.
-     * @return `x11:<hex xid>`, or empty for no parent.
-     */
-    [[nodiscard]] std::string PortalParentWindow(unsigned long xid);
-
     /** @brief Where a save dialog starts, in the portal's terms. */
-    struct X11PortalSaveLocation
+    struct PortalSaveLocation
     {
         /** @brief `current_folder`: the directory it opens in, or empty. */
         std::string currentFolder;
@@ -103,12 +96,16 @@ namespace CNA::Platform::X11 {
      * @param defaultLocation The location, or empty.
      * @return The portal's options for it.
      */
-    [[nodiscard]] X11PortalSaveLocation SplitSaveLocation(const std::string& defaultLocation);
+    [[nodiscard]] PortalSaveLocation SplitSaveLocation(const std::string& defaultLocation);
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
     /**
      * @brief File dialogs and URL opening through xdg-desktop-portal (plans/plan_x11.md X11-0169).
+     *
+     * Shared by the X11 and Wayland backends (plans/plan_wayland.md WAYLAND-0011): nothing here
+     * knows the window system. A backend names its parent window in the portal's own notation --
+     * `x11:<hex xid>`, `wayland:<xdg-foreign handle>` -- or passes an empty string for none.
      *
      * The portal is the desktop's own service on the session bus: GNOME, KDE and the others each
      * put their file chooser behind it, sandboxed applications included. Nothing is started to
@@ -116,7 +113,7 @@ namespace CNA::Platform::X11 {
      * A file dialog is a request the portal answers later: the result is read from the bus when
      * the platform pumps events, and the callback runs then, never inside the `Show*` call.
      */
-    class X11DesktopPortal
+    class DesktopPortal
     {
     public:
         /** @brief Which file chooser. */
@@ -134,13 +131,13 @@ namespace CNA::Platform::X11 {
          * @brief Connects to the session bus and looks for the portal there, without starting it.
          * @return The client, or null where there is no session bus, no libdbus or no portal.
          */
-        [[nodiscard]] static std::unique_ptr<X11DesktopPortal> Connect();
+        [[nodiscard]] static std::unique_ptr<DesktopPortal> Connect();
 
         /** @brief Closes the connection; a dialog still open is never answered. */
-        ~X11DesktopPortal();
+        ~DesktopPortal();
 
-        X11DesktopPortal(const X11DesktopPortal&) = delete;
-        X11DesktopPortal& operator=(const X11DesktopPortal&) = delete;
+        DesktopPortal(const DesktopPortal&) = delete;
+        DesktopPortal& operator=(const DesktopPortal&) = delete;
 
         /**
          * @brief Asks the portal for a file chooser.
@@ -151,10 +148,11 @@ namespace CNA::Platform::X11 {
          * @param filters The file types, for Open and Save.
          * @param defaultLocation Where it starts; for Save a directory or a file name.
          * @param multiple Whether several may be chosen (Open and OpenFolder).
-         * @param parentXid The window it belongs to, or 0.
+         * @param parentWindow The window it belongs to in the portal's notation, or empty; a
+         * dialog with a parent is modal to it.
          */
         void ShowFileDialog(FileRequest kind, FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,
-                            const std::string& defaultLocation, bool multiple, unsigned long parentXid);
+                            const std::string& defaultLocation, bool multiple, const std::string& parentWindow);
 
         /**
          * @brief Asks the portal to open a URL in the user's default handler.
@@ -163,10 +161,11 @@ namespace CNA::Platform::X11 {
          * portal takes local files; anything else by its URI (`OpenURI`).
          *
          * @param uri The URL.
-         * @param parentXid The window the handler's own dialog belongs to, or 0.
+         * @param parentWindow The window the handler's own dialog belongs to, in the portal's
+         * notation, or empty.
          * @return True when the portal accepted the request.
          */
-        [[nodiscard]] bool OpenUri(const std::string& uri, unsigned long parentXid);
+        [[nodiscard]] bool OpenUri(const std::string& uri, const std::string& parentWindow);
 
         /**
          * @brief Reads the portal's answers and runs the callbacks of the dialogs they finish.
@@ -186,7 +185,7 @@ namespace CNA::Platform::X11 {
             dbus_uint32_t serial = 0;
         };
 
-        explicit X11DesktopPortal(DBusConnection* connection);
+        explicit DesktopPortal(DBusConnection* connection);
 
         void FinishLocked(std::size_t index, std::vector<std::string> paths);
 
@@ -198,6 +197,6 @@ namespace CNA::Platform::X11 {
         std::vector<std::pair<FileDialogCallback, std::vector<std::string>>> finished_;
     };
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS
 
-} // namespace CNA::Platform::X11
+} // namespace CNA::Platform::Freedesktop

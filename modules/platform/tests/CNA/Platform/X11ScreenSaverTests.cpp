@@ -28,8 +28,8 @@
 #include <thread>
 #include <vector>
 
-#if defined(CNA_X11_HAVE_DBUS)
-#include "X11PrivateSessionBus.hpp"
+#if defined(CNA_PLATFORM_HAVE_DBUS)
+#include "FreedesktopPrivateSessionBus.hpp"
 #endif
 
 #include <csignal>
@@ -44,6 +44,7 @@ namespace {
 
 using namespace CNA::Platform;
 using namespace CNA::Platform::X11;
+using namespace CNA::Platform::Freedesktop;
 
 TEST(X11ScreenSaverName, TheDesktopIsToldTheExecutablesName)
 {
@@ -251,7 +252,7 @@ TEST(X11ScreenSaverPeer, DISABLED_HoldTheSaverSuspended)
 
 #endif // CNA_X11_HAVE_XSS
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
 /// org.freedesktop.ScreenSaver as a desktop implements it, played on a private bus.
 class FakeScreenSaver
@@ -268,7 +269,7 @@ public:
 
     explicit FakeScreenSaver(const std::string& address)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         DBusError error;
         dbus.error_init(&error);
         connection_ = dbus.connection_open_private(address.c_str(), &error);
@@ -296,8 +297,8 @@ public:
         if (thread_.joinable()) { thread_.join(); }
         if (connection_ != nullptr)
         {
-            DBusApi().connection_close(connection_);
-            DBusApi().connection_unref(connection_);
+            GetDBus().connection_close(connection_);
+            GetDBus().connection_unref(connection_);
         }
     }
 
@@ -313,7 +314,7 @@ public:
     [[nodiscard]] bool IsOnTheBus(const std::string& name)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         DBusError error;
         dbus.error_init(&error);
         const bool present = dbus.bus_name_has_owner(connection_, name.c_str(), &error) != FALSE;
@@ -324,7 +325,7 @@ public:
 private:
     void Serve()
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         while (running_)
         {
             std::unique_lock<std::mutex> lock(mutex_);
@@ -341,7 +342,7 @@ private:
 
     void Handle(DBusMessage* message)
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         const bool inhibit = dbus.message_is_method_call(message, "org.freedesktop.ScreenSaver", "Inhibit");
         const bool uninhibit = dbus.message_is_method_call(message, "org.freedesktop.ScreenSaver", "UnInhibit");
         if (!inhibit && !uninhibit)
@@ -404,7 +405,7 @@ protected:
         {
             return;
         }
-        if (!DBusApi().loaded)
+        if (!GetDBus().loaded)
         {
             GTEST_SKIP() << "libdbus is not installed";
         }
@@ -499,6 +500,6 @@ TEST_F(X11ScreenSaverDesktopLive, AGameThatGoesAwayTakesItsRequestWithIt)
         << "the request's connection outlived the game, so a desktop would keep the screen on";
 }
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS
 
 } // namespace

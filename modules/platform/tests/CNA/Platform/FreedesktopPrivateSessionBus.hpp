@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plans/plan_x11.md X11-0169/X11-0170: a session bus of a test's own, for the tests of the desktop
-// services the X11 platform asks for on the session bus. Never the bus of the desktop the tests
+// services the X11 and Wayland platforms ask for on the session bus (shared since
+// plans/plan_wayland.md WAYLAND-0011). Never the bus of the desktop the tests
 // run on: its configuration names no service it could start, so nothing real can appear on it.
 #pragma once
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
 #include <chrono>
 #include <csignal>
@@ -21,7 +22,7 @@
 
 extern char** environ;
 
-namespace CNA::Platform::X11::Testing {
+namespace CNA::Platform::Freedesktop::Testing {
 
 /// A dbus-daemon of the test's own: a session bus with no service it could start.
 class PrivateBus
@@ -110,6 +111,6 @@ private:
     std::string address_;
 };
 
-} // namespace CNA::Platform::X11::Testing
+} // namespace CNA::Platform::Freedesktop::Testing
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS

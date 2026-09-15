@@ -3,7 +3,8 @@
 #include "X11Platform.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
-#include "X11DesktopPortal.hpp"
+#include "../Freedesktop/DesktopPortal.hpp"
+#include "../Posix/MonotonicClock.hpp"
 #include "X11Error.hpp"
 #include "X11EventMapper.hpp"
 #include "X11Window.hpp"
@@ -14,8 +15,6 @@
 #include "../Linux/LinuxSystemInfo.hpp"
 #endif
 
-#include <cerrno>
-#include <ctime>
 #include <filesystem>
 #include <unistd.h>
 
@@ -45,9 +44,9 @@ namespace CNA::Platform::X11 {
         delete controllers;
     }
 
-    void X11Platform::PortalDeleter::operator()(X11DesktopPortal* portal) const
+    void X11Platform::PortalDeleter::operator()(Freedesktop::DesktopPortal* portal) const
     {
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
         delete portal;
 #else
         (void) portal;  // Never made without D-Bus.
@@ -137,15 +136,15 @@ namespace CNA::Platform::X11 {
 
     X11Platform::X11Platform()
     {
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
         // The desktop portal is the session bus's, not the X server's: looked for once, without
         // starting it, whatever the display (X11-0169).
-        portal_.reset(X11DesktopPortal::Connect().release());
+        portal_.reset(Freedesktop::DesktopPortal::Connect().release());
 #endif
 #ifdef CNA_PLATFORM_HAVE_EVDEV
         systemInfo_ = std::make_unique<Linux::LinuxSystemInfo>([this](const std::string& url) {
-#if defined(CNA_X11_HAVE_DBUS)
-            return portal_ != nullptr && portal_->OpenUri(url, 0);
+#if defined(CNA_PLATFORM_HAVE_DBUS)
+            return portal_ != nullptr && portal_->OpenUri(url, std::string());
 #else
             (void) url;
             return false;
@@ -742,7 +741,7 @@ namespace CNA::Platform::X11 {
             controllers_->hub.TakeEvents(destination);
         }
 #endif
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
         // A file dialog's answer, and its callback, from the same call; nothing when none is open.
         if (portal_ != nullptr)
         {
@@ -1493,14 +1492,7 @@ namespace CNA::Platform::X11 {
 
     std::uint64_t X11Platform::GetPerformanceCounter() const
     {
-        // CLOCK_MONOTONIC, not CLOCK_REALTIME: a game loop measures elapsed time, and wall-clock
-        // time jumps backwards when NTP corrects it or the user changes the timezone. A backwards
-        // jump in a fixed-timestep loop produces either a frozen frame or a burst of catch-up
-        // updates, depending on which side of the subtraction it lands on.
-        timespec now{};
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        return static_cast<std::uint64_t>(now.tv_sec) * 1000000000uLL +
-               static_cast<std::uint64_t>(now.tv_nsec);
+        return Posix::MonotonicNanoseconds();
     }
 
     std::uint64_t X11Platform::GetPerformanceFrequency() const
@@ -1517,31 +1509,7 @@ namespace CNA::Platform::X11 {
 
     void X11Platform::Delay(const std::uint32_t milliseconds)
     {
-        if (milliseconds == 0)
-        {
-            // Zero means "yield the rest of the slice", which is a zero-length sleep rather than
-            // a no-op: a busy-wait loop calling Delay(0) must still let another thread run.
-            timespec zero{0, 0};
-            nanosleep(&zero, nullptr);
-            return;
-        }
-
-        // clock_nanosleep with TIMER_ABSTIME against CLOCK_MONOTONIC, so a signal that interrupts
-        // the sleep can be resumed against the ORIGINAL deadline. The relative form would restart
-        // the full duration on every interruption, which turns a 16 ms frame delay into an
-        // unbounded one on a process that receives signals.
-        timespec deadline{};
-        clock_gettime(CLOCK_MONOTONIC, &deadline);
-        deadline.tv_sec += static_cast<time_t>(milliseconds / 1000u);
-        deadline.tv_nsec += static_cast<long>((milliseconds % 1000u) * 1000000uL);
-        if (deadline.tv_nsec >= 1000000000L)
-        {
-            deadline.tv_nsec -= 1000000000L;
-            ++deadline.tv_sec;
-        }
-        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, nullptr) == EINTR)
-        {
-        }
+        Posix::SleepMilliseconds(milliseconds);
     }
 
     // The controller subsystem is started by the first question about controllers rather than at

@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 
+#if defined(CNA_PLATFORM_HAVE_EVDEV)
+
 #include "../../../src/Linux/EvdevHaptics.hpp"
 
 #include <bitset>
@@ -34,7 +36,7 @@ HapticDirection Direction(const HapticDirectionType type, const int x, const int
     return direction;
 }
 
-TEST(X11EvdevHapticEffect, ADeviceThatCanPlayNothingIsNotAHapticDevice)
+TEST(LinuxEvdevHapticEffect, ADeviceThatCanPlayNothingIsNotAHapticDevice)
 {
     EXPECT_FALSE(IsEvdevHapticDevice({}));
     EXPECT_FALSE(IsEvdevHapticDevice(Bits({FF_GAIN, FF_AUTOCENTER}))) << "controls without an effect";
@@ -48,7 +50,7 @@ TEST(X11EvdevHapticEffect, ADeviceThatCanPlayNothingIsNotAHapticDevice)
     }
 }
 
-TEST(X11EvdevHapticEffect, FeatureBitsAreTheContractsValues)
+TEST(LinuxEvdevHapticEffect, FeatureBitsAreTheContractsValues)
 {
     // CNA::Input::HapticFeatureEXT: Constant 1<<0 ... LeftRight 1<<11, Gain 1<<16, Autocenter 1<<17.
     const std::bitset<FF_CNT> everything =
@@ -61,7 +63,7 @@ TEST(X11EvdevHapticEffect, FeatureBitsAreTheContractsValues)
     EXPECT_EQ(EvdevHapticFeatures(Bits({FF_PERIODIC, FF_SQUARE})), 1u << 2);
 }
 
-TEST(X11EvdevHapticEffect, AnEffectIsSupportedByItsFamilysBitAndItsWaveforms)
+TEST(LinuxEvdevHapticEffect, AnEffectIsSupportedByItsFamilysBitAndItsWaveforms)
 {
     const std::bitset<FF_CNT> wheel = Bits({FF_CONSTANT, FF_PERIODIC, FF_SINE, FF_SPRING, FF_GAIN});
     HapticEffect effect;
@@ -82,7 +84,7 @@ TEST(X11EvdevHapticEffect, AnEffectIsSupportedByItsFamilysBitAndItsWaveforms)
     EXPECT_FALSE(EvdevSupportsEffect(Bits({FF_PERIODIC, FF_CUSTOM}), effect)) << "never uploaded";
 }
 
-TEST(X11EvdevHapticEffect, DirectionsBecomeTheKernelsAngle)
+TEST(LinuxEvdevHapticEffect, DirectionsBecomeTheKernelsAngle)
 {
     // The kernel: 0 is north, a quarter turn 0x4000, clockwise.
     EXPECT_EQ(ToEvdevDirection(Direction(HapticDirectionType::Polar, 0)), 0x0000);
@@ -104,7 +106,7 @@ TEST(X11EvdevHapticEffect, DirectionsBecomeTheKernelsAngle)
     EXPECT_EQ(ToEvdevDirection(Direction(HapticDirectionType::SteeringAxis, 0)), 0x4000);
 }
 
-TEST(X11EvdevHapticEffect, AConstantForceKeepsItsLevelTimingTriggerAndEnvelope)
+TEST(LinuxEvdevHapticEffect, AConstantForceKeepsItsLevelTimingTriggerAndEnvelope)
 {
     HapticEffect effect;
     effect.type = HapticEffectType::Constant;
@@ -134,7 +136,7 @@ TEST(X11EvdevHapticEffect, AConstantForceKeepsItsLevelTimingTriggerAndEnvelope)
     EXPECT_EQ(native.u.constant.envelope.fade_level, 1000);
 }
 
-TEST(X11EvdevHapticEffect, LengthsBecomeTheKernelsWithItsLimitsAndItsZero)
+TEST(LinuxEvdevHapticEffect, LengthsBecomeTheKernelsWithItsLimitsAndItsZero)
 {
     HapticEffect effect;
     effect.type = HapticEffectType::Constant;
@@ -155,7 +157,7 @@ TEST(X11EvdevHapticEffect, LengthsBecomeTheKernelsWithItsLimitsAndItsZero)
     EXPECT_EQ(native.trigger.button, 0) << "no trigger";
 }
 
-TEST(X11EvdevHapticEffect, PeriodicEffectsCarryTheirWaveformAndPhaseAsAFractionOfATurn)
+TEST(LinuxEvdevHapticEffect, PeriodicEffectsCarryTheirWaveformAndPhaseAsAFractionOfATurn)
 {
     const std::pair<HapticEffectType, int> waveforms[] = {
         {HapticEffectType::Sine, FF_SINE},        {HapticEffectType::Square, FF_SQUARE},
@@ -188,7 +190,7 @@ TEST(X11EvdevHapticEffect, PeriodicEffectsCarryTheirWaveformAndPhaseAsAFractionO
     EXPECT_EQ(native.u.periodic.phase, 0x8000) << "a turn and a half is half a turn";
 }
 
-TEST(X11EvdevHapticEffect, ConditionsKeepTwoAxesAndARampItsLevels)
+TEST(LinuxEvdevHapticEffect, ConditionsKeepTwoAxesAndARampItsLevels)
 {
     HapticEffect spring;
     spring.type = HapticEffectType::Spring;
@@ -232,7 +234,7 @@ TEST(X11EvdevHapticEffect, ConditionsKeepTwoAxesAndARampItsLevels)
     EXPECT_EQ(native.u.ramp.envelope.attack_length, 50);
 }
 
-TEST(X11EvdevHapticEffect, ALeftRightEffectIsTheKernelsRumbleAtFullRange)
+TEST(LinuxEvdevHapticEffect, ALeftRightEffectIsTheKernelsRumbleAtFullRange)
 {
     HapticEffect effect;
     effect.type = HapticEffectType::LeftRight;
@@ -251,7 +253,7 @@ TEST(X11EvdevHapticEffect, ALeftRightEffectIsTheKernelsRumbleAtFullRange)
     EXPECT_EQ(native.trigger.button, 0);
 }
 
-TEST(X11EvdevHapticEffect, ACustomWaveformIsNotUploaded)
+TEST(LinuxEvdevHapticEffect, ACustomWaveformIsNotUploaded)
 {
     HapticEffect effect;
     effect.type = HapticEffectType::Custom;
@@ -262,7 +264,7 @@ TEST(X11EvdevHapticEffect, ACustomWaveformIsNotUploaded)
     EXPECT_FALSE(ToEvdevEffect(effect, native));
 }
 
-TEST(X11EvdevHapticEffect, SimpleRumbleIsASineWhereThereIsOneElseBothMotors)
+TEST(LinuxEvdevHapticEffect, SimpleRumbleIsASineWhereThereIsOneElseBothMotors)
 {
     const std::optional<HapticEffect> sine = EvdevRumbleEffect(Bits({FF_PERIODIC, FF_SINE, FF_RUMBLE}), 0.5f, 700);
     ASSERT_TRUE(sine.has_value());
@@ -284,3 +286,5 @@ TEST(X11EvdevHapticEffect, SimpleRumbleIsASineWhereThereIsOneElseBothMotors)
 }
 
 } // namespace
+
+#endif // CNA_PLATFORM_HAVE_EVDEV

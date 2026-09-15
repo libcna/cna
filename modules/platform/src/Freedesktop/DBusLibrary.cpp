@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "X11DBus.hpp"
+#include "DBusLibrary.hpp"
 
-#if defined(CNA_X11_HAVE_DBUS)
+#if defined(CNA_PLATFORM_HAVE_DBUS)
 
 #include <cstdlib>
 #include <filesystem>
@@ -10,7 +10,7 @@
 
 #include <dlfcn.h>
 
-namespace CNA::Platform::X11 {
+namespace CNA::Platform::Freedesktop {
 
     namespace {
 
@@ -21,9 +21,9 @@ namespace CNA::Platform::X11 {
             return function != nullptr;
         }
 
-        X11DBusApi Load()
+        DBusLibrary Load()
         {
-            X11DBusApi api;
+            DBusLibrary api;
             // Deliberately never closed: libdbus keeps process-wide state that outlives any one
             // connection, and unloading it under a live one is undefined.
             void* library = dlopen("libdbus-1.so.3", RTLD_NOW | RTLD_LOCAL);
@@ -82,23 +82,23 @@ namespace CNA::Platform::X11 {
 
     } // namespace
 
-    const X11DBusApi& DBusApi()
+    const DBusLibrary& GetDBus()
     {
-        static const X11DBusApi api = Load();
+        static const DBusLibrary api = Load();
         return api;
     }
 
-    void X11DBusMessageDeleter::operator()(DBusMessage* message) const
+    void DBusMessageDeleter::operator()(DBusMessage* message) const
     {
         if (message != nullptr)
         {
-            DBusApi().message_unref(message);
+            GetDBus().message_unref(message);
         }
     }
 
     DBusConnection* OpenSessionBus()
     {
-        const X11DBusApi& dbus = DBusApi();
+        const DBusLibrary& dbus = GetDBus();
         if (!dbus.loaded)
         {
             return nullptr;
@@ -145,12 +145,12 @@ namespace CNA::Platform::X11 {
     {
         if (connection != nullptr)
         {
-            const X11DBusApi& dbus = DBusApi();
+            const DBusLibrary& dbus = GetDBus();
             dbus.connection_close(connection);
             dbus.connection_unref(connection);
         }
     }
 
-} // namespace CNA::Platform::X11
+} // namespace CNA::Platform::Freedesktop
 
-#endif // CNA_X11_HAVE_DBUS
+#endif // CNA_PLATFORM_HAVE_DBUS

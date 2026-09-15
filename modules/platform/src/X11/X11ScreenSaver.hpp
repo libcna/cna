@@ -3,12 +3,7 @@
 
 #include "X11Headers.hpp"
 
-#include <cstdint>
-#include <string>
-
-#if defined(CNA_X11_HAVE_DBUS)
-#include "X11DBus.hpp"
-#endif
+#include "../Freedesktop/ScreenSaverBus.hpp"
 
 namespace CNA::Platform::X11 {
 
@@ -19,9 +14,10 @@ namespace CNA::Platform::X11 {
      *
      * The screen saver a user sees is the desktop's -- GNOME's, KDE's, Xfce's idle blanking and
      * locking -- not the X server's own, and the desktop takes requests on the session bus:
-     * `org.freedesktop.ScreenSaver.Inhibit`. That is asked first, on a connection of this
-     * inhibitor's own that lasts exactly as long as the request, so the desktop forgets the request
-     * the moment the game goes away, however it goes. Without such a service the X server's saver
+     * `org.freedesktop.ScreenSaver.Inhibit`. That is asked first, through
+     * `Freedesktop::ScreenSaverBusInhibition` (shared with the Wayland backend), on a connection
+     * that lasts exactly as long as the request, so the desktop forgets the request the moment
+     * the game goes away, however it goes. Without such a service the X server's saver
      * is suspended for this client alone (MIT-SCREEN-SAVER 1.1's `XScreenSaverSuspend`), which the
      * server also gives back if the client dies. Only a server without that extension has its
      * timeout set to zero and restored, the one way that outlives a crashed game.
@@ -64,22 +60,12 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] Method GetMethod() const { return method_; }
 
     private:
-        bool InhibitOnSessionBus();
         bool SuspendServerSaver(bool suspend);
 
         X11Connection& connection_;
         Method method_ = Method::None;
-#if defined(CNA_X11_HAVE_DBUS)
-        DBusConnection* bus_ = nullptr;
-        std::uint32_t cookie_ = 0;
-#endif
+        Freedesktop::ScreenSaverBusInhibition desktop_;
         int savedTimeout_ = -1;
     };
-
-    /**
-     * @brief The name a game gives the desktop when it asks to keep the screen on.
-     * @return The executable's name, or "CNA" when it cannot be read.
-     */
-    [[nodiscard]] std::string ScreenSaverApplicationName();
 
 } // namespace CNA::Platform::X11

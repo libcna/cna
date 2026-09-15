@@ -6,8 +6,9 @@
 # (cmake/PlatformRatchet.cmake, PLAT-8) and, from PLAT-121, as a hard error.
 #
 # src/ is flat for the contract's own types; each implementation owns a subdirectory
-# (src/Sdl3/, src/Sdl2/, src/Win32/, src/Headless/, src/Terminal/), with src/Common/ holding the
-# pieces more than one of them shares.
+# (src/Sdl3/, src/Sdl2/, src/Win32/, src/X11/, src/Wayland/, src/Headless/, src/Terminal/), with
+# src/Common/ holding the portable pieces more than one of them shares and src/Xkb/,
+# src/Freedesktop/, src/Posix/ and src/Linux/ the ones only the Unix desktop backends share.
 file(GLOB CNA_PLATFORM_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 # The selected implementation, chosen by CNA_PLATFORM (cmake/PlatformSelection.cmake).
@@ -41,11 +42,26 @@ endif()
 if(CNA_PLATFORM STREQUAL "X11")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/X11/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+endif()
 
-    # Controllers come from the kernel, not from X: the X server has not delivered joystick input
-    # to clients for decades. On Linux that is evdev, reached through nothing but the kernel's own
-    # <linux/input.h> -- no libudev, no libevdev. Another Unix running X (FreeBSD, say) has no
-    # such header and its X11 build simply reports no gamepad and no joystick.
+# What the native Unix desktop backends -- X11 and Wayland -- share (plans/plan_wayland.md Phase
+# B). None of it is a window-system feature, so none of it lives under either backend:
+#
+#   src/Xkb/          XKB key names -> Scancode, keysyms -> KeyCode (no X or xkbcommon header)
+#   src/Freedesktop/  libdbus loaded at run time, the desktop portal, the session bus's screen
+#                     saver -- freedesktop.org services, on Linux and the BSDs alike
+#   src/Posix/        the monotonic clock and the Vulkan loader lookup
+#   src/Linux/        the kernel's evdev controllers and haptics, sysfs power and host facts
+#
+# Controllers come from the kernel, not from the window system: the X server has not delivered
+# joystick input to clients for decades and Wayland never did. On Linux that is evdev, reached
+# through nothing but the kernel's own <linux/input.h> -- no libudev, no libevdev. Another Unix
+# (FreeBSD, say) has no such header and its build simply reports no gamepad and no joystick.
+if(CNA_PLATFORM STREQUAL "X11" OR CNA_PLATFORM STREQUAL "WAYLAND")
+    file(GLOB CNA_PLATFORM_UNIX_DESKTOP_SOURCES CONFIGURE_DEPENDS
+        "src/Xkb/*.cpp" "src/Freedesktop/*.cpp" "src/Posix/*.cpp")
+    list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_UNIX_DESKTOP_SOURCES})
+
     include(CheckIncludeFileCXX)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         check_include_file_cxx("linux/input.h" CNA_PLATFORM_HAVE_LINUX_INPUT_H)
@@ -147,9 +163,11 @@ if(CNA_PLATFORM STREQUAL "X11")
     if(CNA_X11_DEFINITIONS)
         target_compile_definitions(cna_platform PRIVATE ${CNA_X11_DEFINITIONS})
     endif()
-    # dlopen/dlsym for the GLX and Vulkan entry points the backend resolves at run time rather
-    # than linking; libdl is folded into glibc on modern Linux but is a separate library on
-    # several other Unix hosts, so it is asked for rather than assumed.
+endif()
+if(CNA_PLATFORM STREQUAL "X11" OR CNA_PLATFORM STREQUAL "WAYLAND")
+    # dlopen/dlsym for the entry points both backends resolve at run time rather than linking
+    # (GLX or EGL, Vulkan, libdbus); libdl is folded into glibc on modern Linux but is a separate
+    # library on several other Unix hosts, so it is asked for rather than assumed.
     target_link_libraries(cna_platform PRIVATE ${CMAKE_DL_LIBS})
     if(CNA_PLATFORM_HAVE_EVDEV)
         target_compile_definitions(cna_platform PRIVATE CNA_PLATFORM_HAVE_EVDEV=1)
