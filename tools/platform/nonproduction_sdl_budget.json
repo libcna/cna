@@ -213,6 +213,10 @@
       "category": "containment-assertion",
       "max_references": 1
     },
+    "modules/platform/tests/CNA/Platform/WaylandIsSdlFreeTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 5
+    },
     "modules/platform/tests/CNA/Platform/Win32NoSdlTests.cpp": {
       "category": "text-evidence-assertion",
       "max_references": 2

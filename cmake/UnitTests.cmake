@@ -105,6 +105,11 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_PLATFORM STREQUAL "X11")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/X11.*\\.cpp$")
     endif()
+    # plans/plan_wayland.md WAYLAND-0110: the native Wayland tests exercise CNA::Platform::Wayland,
+    # compiled only when CNA_PLATFORM=WAYLAND -- the X11 rule above, for the same reason.
+    if(NOT CNA_PLATFORM STREQUAL "WAYLAND")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Wayland[A-Za-z]*\\.(cpp|hpp)$")
+    endif()
     # plans/plan_wayland.md Phase B: the code the X11 and Wayland backends share (src/Xkb/,
     # src/Freedesktop/, src/Posix/, src/Linux/) is compiled only for those two selections, and so
     # are its tests -- in both, which is how one suite proves the same behaviour under either.
@@ -575,6 +580,22 @@ if(CNA_BUILD_TESTS)
             target_compile_definitions(cna_test_build_config INTERFACE ${CNA_X11_DEFINITIONS})
         endif()
         target_link_libraries(cna_test_build_config INTERFACE ${CNA_X11_LIBRARIES} ${CMAKE_DL_LIBS})
+    endif()
+    # plans/plan_wayland.md WAYLAND-0110/0111: the Wayland tests include the backend's own headers
+    # (and so its generated protocol headers and CNA_WAYLAND_HAVE_* definitions), and the in-process
+    # test compositor is a libwayland-server program: libwayland-server is linked into the test
+    # binary only, never into cna_platform.
+    if(CNA_PLATFORM STREQUAL "WAYLAND")
+        get_property(_cna_wayland_protocol_dir GLOBAL PROPERTY CNA_WAYLAND_PROTOCOL_DIR)
+        target_include_directories(cna_test_build_config INTERFACE ${CNA_WAYLAND_INCLUDE_DIRS} ${_cna_wayland_protocol_dir})
+        if(CNA_WAYLAND_DEFINITIONS)
+            target_compile_definitions(cna_test_build_config INTERFACE ${CNA_WAYLAND_DEFINITIONS})
+        endif()
+        target_link_libraries(cna_test_build_config INTERFACE ${CNA_WAYLAND_LIBRARIES}
+                              ${CNA_WAYLAND_SERVER_LIBRARIES} ${CMAKE_DL_LIBS})
+        if(CNA_WAYLAND_SERVER_LIBRARIES)
+            target_compile_definitions(cna_test_build_config INTERFACE CNA_WAYLAND_HAVE_TEST_COMPOSITOR=1)
+        endif()
     endif()
 
     # The Draco corpus owns one test-only encoder oracle: it recreates the committed compressed
@@ -1087,6 +1108,18 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(CNA_PLATFORM STREQUAL "WAYLAND")
+        # plans/plan_wayland.md WAYLAND-0115: WaylandIsSdlFreeTests scans the backend's own sources,
+        # from an absolute path for the reason NPV-0122 records for X11 below.
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+            CNA_WAYLAND_BACKEND_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules/platform/src/Wayland"
+        )
+        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
+        if(_cna_have_evdev)
+            target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+                CNA_PLATFORM_HAVE_EVDEV=1)
+        endif()
+    endif()
     if(CNA_PLATFORM STREQUAL "X11")
         # plans/plan_native_platform_validation.md NPV-0122: X11IsSdlFreeTests scans the backend's
         # own sources. __FILE__ is not an absolute path in this project -- CCACHE_BASEDIR makes
@@ -1254,7 +1287,7 @@ if(CNA_BUILD_TESTS)
     # plans/plan_x11.md X11-0169: an X11 platform asks the session bus for the desktop portal, and
     # no test may reach the portal of the desktop it runs on -- a file chooser would open there.
     # The test binary says the same on its own (X11DesktopPortalTests.cpp).
-    if(CNA_PLATFORM STREQUAL "X11")
+    if(CNA_PLATFORM STREQUAL "X11" OR CNA_PLATFORM STREQUAL "WAYLAND")
         list(APPEND _cna_unit_tests_environment "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/cna-test-no-session-bus")
     endif()
     if(_cna_unit_tests_environment)
@@ -1605,6 +1638,21 @@ if(CNA_BUILD_TESTS)
                         --gtest_filter=X11ExclusiveFullscreen.*
                 LABELS "platform" TIMEOUT 300)
         endif()
+    endif()
+
+    # plans/plan_wayland.md WAYLAND-0110..0113: the native Wayland backend's suites, split by what
+    # each needs, as X11's are. Neither of the first two needs a compositor of any kind: the
+    # mapping suite is pure functions and source scans, and the protocol suite brings its own
+    # compositor inside the test process (WaylandTestCompositor, reached through WAYLAND_SOCKET).
+    # No Wayland test ever reaches the desktop it runs on: WaylandTestEnvironment.cpp points
+    # WAYLAND_DISPLAY and the session bus at nothing before any test runs.
+    if(CNA_PLATFORM STREQUAL "WAYLAND")
+        cna_register_renderer_test(NAME CnaWaylandMappingTests
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandVersionNegotiation.*:WaylandScaling.*:WaylandToplevelStates.*:WaylandConfigureSize.*:WaylandOutputScale.*:WaylandFrameHitTest.*:WaylandButtonMapping.*:WaylandWheelMapping.*:WaylandModifierMapping.*:WaylandCommittedText.*:WaylandTextInputMath.*:WaylandMimeTypes.*:WaylandTransferWrite.*:WaylandShmFile.*:WaylandIsSdlFree.*:WaylandTestEnvironment.*:XkbKeyMapping.*:FreedesktopDropTarget.*:FreedesktopUriList.*:FreedesktopDropText.*:LinuxEvdevLayout.*:LinuxEvdevHub.*:LinuxEvdevMapping.*:LinuxSystemInfo.*:LinuxEvdevHapticEffect.*
+            LABELS "platform" TIMEOUT 120)
+        cna_register_renderer_test(NAME CnaWaylandProtocolTests
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandProtocol.*
+            LABELS "platform" TIMEOUT 300)
     endif()
 
     if(MINGW)

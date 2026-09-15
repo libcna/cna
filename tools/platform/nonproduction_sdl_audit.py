@@ -95,6 +95,8 @@ def classify(record: FileRecord) -> str | None:
         # It asserts that the native X11 backend contains no SDL, so every SDL token in it is
         # either a `#error` sentinel or a string the source scan searches for.
         "modules/platform/tests/CNA/Platform/X11IsSdlFreeTests.cpp",
+        # plans/plan_wayland.md WAYLAND-0115: the same assertion for the native Wayland backend.
+        "modules/platform/tests/CNA/Platform/WaylandIsSdlFreeTests.cpp",
         "modules/platform/tests/CNA/Platform/IPlatformTests.cpp",
         "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp",
     }:
