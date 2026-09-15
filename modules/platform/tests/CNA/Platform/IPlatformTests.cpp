@@ -288,6 +288,9 @@ TEST(IPlatformTests, UnsupportedServicesReturnNullRatherThanASilentStub)
     const PlatformCapabilities capabilities = platform.GetCapabilities();
     EXPECT_FALSE(capabilities.clipboard);
     EXPECT_EQ(platform.GetClipboard(), nullptr);
+    // The inherited default, which every platform without one relies on (X11-0157).
+    EXPECT_FALSE(capabilities.primarySelection);
+    EXPECT_EQ(platform.GetPrimarySelection(), nullptr);
     EXPECT_FALSE(capabilities.gamepad);
     EXPECT_EQ(platform.GetGamepad(), nullptr);
 }

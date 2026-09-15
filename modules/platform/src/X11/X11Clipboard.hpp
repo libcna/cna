@@ -14,7 +14,12 @@ namespace CNA::Platform::X11 {
     class X11Connection;
 
     /**
-     * @brief The X11 clipboard, as a real selection owner.
+     * @brief One X selection as a clipboard service, owned for real: `CLIPBOARD` for the clipboard,
+     * `PRIMARY` for the primary selection (plans/plan_x11.md X11-0157).
+     *
+     * The two are the same protocol on different selection atoms, and independent: owning one
+     * says nothing about the other. Each instance owns its own selection through a window of its
+     * own.
      *
      * ### There is no clipboard buffer in X11
      *
@@ -42,11 +47,13 @@ namespace CNA::Platform::X11 {
     {
     public:
         /**
-         * @brief Builds the clipboard for one connection.
+         * @brief Builds the service for one selection on one connection.
          *
-         * @param connection The connection whose selections this owns and reads.
+         * @param connection The connection whose selection this owns and reads.
+         * @param selection The selection: `CLIPBOARD` or `PRIMARY`.
+         * @param selectionName The selection's name, for error messages.
          */
-        explicit X11Clipboard(X11Connection& connection);
+        X11Clipboard(X11Connection& connection, Atom selection, std::string selectionName);
 
         /** @brief Releases selection ownership and destroys the owner window. */
         ~X11Clipboard() override;
@@ -55,22 +62,22 @@ namespace CNA::Platform::X11 {
         X11Clipboard& operator=(const X11Clipboard&) = delete;
 
         /**
-         * @brief Gets whether the clipboard currently holds text.
+         * @brief Gets whether the selection currently holds text.
          *
-         * @return True when some client owns `CLIPBOARD` and offers a text target.
+         * @return True when some client owns the selection and offers a text target.
          */
         [[nodiscard]] bool HasText() const override;
 
         /**
-         * @brief Gets the clipboard's text.
+         * @brief Gets the selection's text.
          *
-         * @return The text as UTF-8, or an empty string when the clipboard is empty or the owner
+         * @return The text as UTF-8, or an empty string when the selection is empty or the owner
          * did not answer within the timeout.
          */
         [[nodiscard]] std::string GetText() const override;
 
         /**
-         * @brief Takes ownership of the clipboard and offers @p text.
+         * @brief Takes ownership of the selection and offers @p text.
          *
          * @param text The text to offer, UTF-8.
          * @throws PlatformException If the server refused to transfer ownership.
@@ -89,6 +96,9 @@ namespace CNA::Platform::X11 {
 
         /** @brief Gets the window that holds selection ownership. @return The owner window XID. */
         [[nodiscard]] ::Window GetOwnerWindow() const { return owner_; }
+
+        /** @brief Gets the selection this serves. @return The selection atom. */
+        [[nodiscard]] Atom GetSelection() const { return selection_; }
 
         /**
          * @brief Gets how many INCR transfers to other clients are still in progress.
@@ -139,6 +149,8 @@ namespace CNA::Platform::X11 {
         void SendSelectionNotify(const XSelectionRequestEvent& request, Atom property) const;
 
         X11Connection& connection_;
+        Atom selection_;
+        std::string selectionName_;
         ::Window owner_ = 0;
         std::string ownedText_;
         bool ownsSelection_ = false;

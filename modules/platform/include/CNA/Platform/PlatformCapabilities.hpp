@@ -85,6 +85,8 @@ namespace CNA::Platform {
         bool managedEntrypoint = false;
         /** @brief Files and text dropped onto a window are delivered as `DropEvent`s. */
         bool dragAndDrop = false;
+        /** @brief The primary selection (middle-click paste) can be read and written. */
+        bool primarySelection = false;
     };
 
     /**

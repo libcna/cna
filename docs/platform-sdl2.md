@@ -44,7 +44,8 @@ compiled into the binary. Nothing here is a stub that accepts work and drops it.
 
 Absent today: mouse, gamepad, joystick, text input, sensors, haptics, input-device enumeration,
 clipboard, dialogs, tray, camera, Vulkan surface, surface presentation, power info,
-`managedEntrypoint` and `dragAndDrop` (SDL2's `SDL_DROP*` events are not mapped).
+`managedEntrypoint`, `dragAndDrop` (SDL2's `SDL_DROP*` events are not mapped) and
+`primarySelection` (SDL2 2.26's `SDL_*PrimarySelectionText` is not wired up).
 
 ### Consequences a game can observe
 

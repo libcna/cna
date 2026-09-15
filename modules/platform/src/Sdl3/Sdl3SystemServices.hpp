@@ -17,6 +17,23 @@ namespace CNA::Platform::Sdl3 {
         void SetText(const std::string& text) override;
     };
 
+    /**
+     * @brief SDL3-backed primary selection (plans/plan_x11.md X11-0157).
+     *
+     * SDL's X11 and Wayland video drivers own the desktop's real one; under any other driver SDL
+     * keeps it inside the process, which is what the capability's platform gate accounts for.
+     */
+    class Sdl3PrimarySelection final : public IPlatformClipboard
+    {
+    public:
+        /** @brief Gets whether the primary selection holds text. @return True if there is text. */
+        [[nodiscard]] bool HasText() const override;
+        /** @brief Reads the primary selection. @return The text, or empty when there is none. */
+        [[nodiscard]] std::string GetText() const override;
+        /** @brief Writes text to the primary selection. @param text The text to write. */
+        void SetText(const std::string& text) override;
+    };
+
     /** @brief SDL3-backed display enumeration. */
     class Sdl3Displays final : public IPlatformDisplays
     {

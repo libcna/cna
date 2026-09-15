@@ -301,6 +301,12 @@ namespace CNA::Platform::Sdl3 {
         capabilities.managedEntrypoint = true;
         // SDL delivers its drop events on every platform it has them; Sdl3EventMapper maps them.
         capabilities.dragAndDrop = true;
+        // Only X11 and Wayland desktops have a primary selection, and SDL's drivers for them own
+        // the real one. Elsewhere SDL would keep one inside the process, which is not the
+        // desktop's (plans/plan_x11.md X11-0157).
+#if defined(__unix__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+        capabilities.primarySelection = true;
+#endif
 
         // Input services: implemented. exactKeyboardState and pixelAccurateMouse are the two
         // capabilities that exist because a terminal cannot provide them -- SDL delivers real
@@ -606,6 +612,11 @@ namespace CNA::Platform::Sdl3 {
 
     IPlatformInputDevices* Sdl3Platform::GetInputDevices() { return &inputDevices_; }
     IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }
+
+    IPlatformClipboard* Sdl3Platform::GetPrimarySelection()
+    {
+        return GetCapabilities().primarySelection ? &primarySelection_ : nullptr;
+    }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return &dialogs_; }
     IPlatformTray* Sdl3Platform::GetTray() { return Sdl3Tray::IsSupported() ? &tray_ : nullptr; }

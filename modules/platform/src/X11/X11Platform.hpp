@@ -174,6 +174,11 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] IPlatformInputDevices* GetInputDevices() override { return nullptr; }
         /** @brief Gets the clipboard service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
+        /**
+         * @brief Gets the primary selection, `PRIMARY` (X11-0157).
+         * @return The service, or null before `Video`.
+         */
+        [[nodiscard]] IPlatformClipboard* GetPrimarySelection() override;
         /** @brief Gets the display service. @return The service, or null without XRandR. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
         /** @brief Gets the dialog service. @return Null; X11 has no native dialogs. */
@@ -252,6 +257,7 @@ namespace CNA::Platform::X11 {
         std::unique_ptr<X11Touch> touch_;
         std::unique_ptr<X11TextInput> textInput_;
         std::unique_ptr<X11Clipboard> clipboard_;
+        std::unique_ptr<X11Clipboard> primarySelection_;
         std::unique_ptr<X11DragAndDrop> dragAndDrop_;
         std::unique_ptr<X11Displays> displays_;
         std::unique_ptr<X11GlContext> glContext_;

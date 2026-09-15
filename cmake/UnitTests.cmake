@@ -1227,11 +1227,13 @@ if(CNA_BUILD_TESTS)
     # discovered as well it would plug every one of its virtual pads in a second time.
     # plans/plan_x11.md X11-0153: the exclusive-fullscreen suite changes display modes and runs
     # only through CnaX11ExclusiveFullscreenTests, on the launcher's private server; X11-0154's
-    # drag-and-drop suite runs through CnaX11IntegrationTests, where its drag source has a server.
+    # drag-and-drop suite runs through CnaX11IntegrationTests, where its drag source has a server;
+    # so do X11-0156's content scale and X11-0157's selections, which change the server's
+    # resources and take its selections.
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*")
     endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers. The test binary defaults to it on its own as well (see
@@ -1546,7 +1548,7 @@ if(CNA_BUILD_TESTS)
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests

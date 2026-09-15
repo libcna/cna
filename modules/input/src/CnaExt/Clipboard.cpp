@@ -45,4 +45,41 @@ namespace CNA::Input
             CNA::Platform::GetCurrentPlatform().GetClipboard();
         return clipboard != nullptr && clipboard->HasText();
     }
+
+    // plans/plan_x11.md X11-0157: the same three answers over the primary selection, which only
+    // X11 and Wayland desktops have. Where there is none, it reads as empty and ignores writes,
+    // exactly as an absent clipboard does above.
+
+    std::string Clipboard::GetPrimarySelectionTextEXT()
+    {
+        CNA::Platform::IPlatformClipboard* selection =
+            CNA::Platform::GetCurrentPlatform().GetPrimarySelection();
+        return selection != nullptr ? selection->GetText() : std::string();
+    }
+
+    void Clipboard::SetPrimarySelectionTextEXT(const std::string& text)
+    {
+        CNA::Platform::IPlatformClipboard* selection =
+            CNA::Platform::GetCurrentPlatform().GetPrimarySelection();
+        if (selection == nullptr)
+        {
+            return;
+        }
+        try
+        {
+            selection->SetText(text);
+        }
+        catch (const CNA::Platform::PlatformException&)
+        {
+            // Void, like SetTextEXT: a selection another client won in the same instant has
+            // nowhere to be reported, and losing it is what selecting elsewhere does anyway.
+        }
+    }
+
+    bool Clipboard::HasPrimarySelectionTextEXT()
+    {
+        CNA::Platform::IPlatformClipboard* selection =
+            CNA::Platform::GetCurrentPlatform().GetPrimarySelection();
+        return selection != nullptr && selection->HasText();
+    }
 }

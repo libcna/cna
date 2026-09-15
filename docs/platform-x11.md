@@ -92,6 +92,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `cursorShapes` | ✅ | the core cursor font; Xcursor for custom ARGB images |
 | `globalPointer` | ✅ (see [Under Xwayland](#under-xwayland)) | `XQueryPointer` / `XWarpPointer` on the root window |
 | `clipboard` | ✅ | real ICCCM selection ownership, including `INCR` |
+| `primarySelection` | ✅ | `PRIMARY`, the middle-click selection, served and read like `CLIPBOARD` — see [The primary selection](#the-primary-selection) |
 | `dragAndDrop` | ✅ | XDND 5, target side: files and text dropped by another client — see [Drag and drop](#drag-and-drop) |
 | `highDpi` | ❌ by design | X11 has one coordinate space, so a window's display scale is 1; the session's scale is each display's `contentScale` — see [Displays and DPI](#displays-and-dpi) |
 | `multipleDisplays` | conditional | true when XRandR ≥ 1.2 is present |
@@ -357,7 +358,22 @@ This is verified against `xclip` — a genuinely external X client with its own 
 CNA code in it — including a 512 KB `INCR` transfer. A clipboard tested only between two CNA
 windows would pass while proving nothing.
 
-`PRIMARY` is interned but not implemented; middle-click paste is future work.
+### The primary selection
+
+`PRIMARY` — what an X11 desktop pastes with the middle mouse button — is the same protocol on a
+second selection, and is served the same way through `IPlatform::GetPrimarySelection()`
+(`plans/plan_x11.md` X11-0157): the same targets, `INCR` both ways, Latin-1 transcoded. The two are
+independent, as they are for every X application: selecting does not copy and copying does not
+select. Each has an owner window of its own.
+
+The backend carries the text both ways and does nothing else. Selecting text in a text field and
+pasting on a middle click are the application's to do — through the CNAEXT
+`CNA::Input::Clipboard::SetPrimarySelectionTextEXT()` / `GetPrimarySelectionTextEXT()` — because only
+the application knows what is selected and where the pointer is.
+
+It is verified against another X client too: the test binary started again as a separate process,
+owning `PRIMARY` or pasting it, a 3 MB transfer included. It changes the server's selections, so
+it runs only on the test launcher's private server.
 
 ---
 

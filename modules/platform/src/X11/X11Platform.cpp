@@ -215,6 +215,7 @@ namespace CNA::Platform::X11 {
         capabilities.globalPointer = true;        // XQueryPointer/XWarpPointer on the root.
         capabilities.clipboard = true;            // Real ICCCM selection ownership with INCR.
         capabilities.dragAndDrop = true;          // XDND 5, target side: files and text.
+        capabilities.primarySelection = true;     // PRIMARY, owned and read like CLIPBOARD.
 
         // highDpi promises a drawable that can exceed the logical size, and on X11 it never does:
         // one coordinate space. A session's scale is the displays' content scale (X11-0156).
@@ -257,7 +258,10 @@ namespace CNA::Platform::X11 {
         mouse_ = std::make_unique<X11Mouse>(*connection_);
         touch_ = std::make_unique<X11Touch>(*connection_, mouse_.get());
         textInput_ = std::make_unique<X11TextInput>(*connection_);
-        clipboard_ = std::make_unique<X11Clipboard>(*connection_);
+        clipboard_ = std::make_unique<X11Clipboard>(*connection_, connection_->GetAtoms().clipboard,
+                                                    "CLIPBOARD");
+        primarySelection_ = std::make_unique<X11Clipboard>(
+            *connection_, connection_->GetAtoms().primary, "PRIMARY");
         dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
         displays_ = std::make_unique<X11Displays>(*connection_);
         glContext_ = std::make_unique<X11GlContext>(*connection_);
@@ -273,6 +277,7 @@ namespace CNA::Platform::X11 {
         glContext_.reset();
         displays_.reset();
         dragAndDrop_.reset();
+        primarySelection_.reset();
         clipboard_.reset();
         textInput_.reset();
         touch_.reset();
@@ -705,7 +710,14 @@ namespace CNA::Platform::X11 {
             {
                 continue;
             }
-            if (clipboard_ != nullptr && clipboard_->HandleEvent(event))
+            // Both selections see every event: one requestor can be reading both at once, and
+            // neither consumes what the other needs.
+            bool selectionEvent = clipboard_ != nullptr && clipboard_->HandleEvent(event);
+            if (primarySelection_ != nullptr && primarySelection_->HandleEvent(event))
+            {
+                selectionEvent = true;
+            }
+            if (selectionEvent)
             {
                 continue;
             }
@@ -1488,6 +1500,7 @@ namespace CNA::Platform::X11 {
     IPlatformMouse* X11Platform::GetMouse() { return mouse_.get(); }
     IPlatformTextInput* X11Platform::GetTextInput() { return textInput_.get(); }
     IPlatformClipboard* X11Platform::GetClipboard() { return clipboard_.get(); }
+    IPlatformClipboard* X11Platform::GetPrimarySelection() { return primarySelection_.get(); }
 
     IPlatformDisplays* X11Platform::GetDisplays()
     {

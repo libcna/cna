@@ -285,6 +285,21 @@ namespace CNA::Platform {
         [[nodiscard]] virtual IPlatformClipboard* GetClipboard() = 0;
 
         /**
+         * @brief Gets the primary selection: the text most recently selected, which X11 and
+         * Wayland desktops paste with the middle mouse button.
+         *
+         * A second selection beside the clipboard and independent of it -- selecting text puts it
+         * here without touching the clipboard, and copying does the reverse -- so it has the
+         * clipboard's interface and its own accessor. Neither selecting nor pasting on a middle
+         * click is done for the application; this only carries the text both ways. Platforms
+         * without one inherit this default.
+         *
+         * @return The primary selection, or null when this platform reports no `PrimarySelection`
+         * capability.
+         */
+        [[nodiscard]] virtual IPlatformClipboard* GetPrimarySelection();
+
+        /**
          * @brief Gets the display enumeration service.
          *
          * @return The service, or null when this platform has no displays.

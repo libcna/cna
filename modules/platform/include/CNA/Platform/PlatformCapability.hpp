@@ -108,7 +108,14 @@ namespace CNA::Platform {
          * Last in the enumeration rather than next to `Clipboard`, so that no value an earlier
          * build recorded changes meaning.
          */
-        DragAndDrop
+        DragAndDrop,
+        /**
+         * @brief The primary selection -- the text most recently selected, which X11 and Wayland
+         * desktops paste with the middle mouse button -- can be read and written.
+         *
+         * Appended for the same reason as `DragAndDrop`.
+         */
+        PrimarySelection
     };
 
     /**

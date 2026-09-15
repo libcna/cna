@@ -3,6 +3,7 @@
 
 #include "X11Headers.hpp"
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -285,6 +286,29 @@ namespace CNA::Platform::X11 {
         bool SendRootClientMessage(::Window window, Atom type, long data0, long data1 = 0,
                                    long data2 = 0, long data3 = 0) const;
 
+        /**
+         * @brief Starts watching another client's window for property changes and destruction.
+         *
+         * Several parts of the backend watch windows they do not own -- a requestor an `INCR`
+         * transfer is being sent to, the XSETTINGS manager -- and the same window can be several
+         * of those at once. An event mask is per client and per window, and `XSelectInput`
+         * replaces it, so a part that finished would clear what another still needs. Watches are
+         * therefore counted, and only the last one to stop clears the mask.
+         *
+         * @param window The other client's window.
+         */
+        void WatchForeignWindow(::Window window);
+
+        /**
+         * @brief Stops one watch started with @ref WatchForeignWindow.
+         *
+         * The last one clears the mask. A window that no longer exists is not an error: the
+         * watch usually ends because it was destroyed.
+         *
+         * @param window The window.
+         */
+        void UnwatchForeignWindow(::Window window);
+
     private:
         void InternAtoms();
         void DetectExtensions();
@@ -303,6 +327,7 @@ namespace CNA::Platform::X11 {
         bool xi2Touch_ = false;
         int randrEventBase_ = -1;
         bool isXwayland_ = false;
+        std::map<::Window, int> foreignWatches_;
         std::unique_ptr<X11ContentScale> contentScale_;
         std::unique_ptr<X11ModeSwitcher> modeSwitcher_;
     };

@@ -402,4 +402,37 @@ namespace CNA::Platform::X11 {
                           SubstructureNotifyMask | SubstructureRedirectMask, &event) != 0;
     }
 
+    void X11Connection::WatchForeignWindow(const ::Window window)
+    {
+        if (window == kNone)
+        {
+            return;
+        }
+        if (foreignWatches_[window]++ == 0)
+        {
+            // Another client's window: the mask is this client's own and changes nothing for
+            // anyone else.
+            XSelectInput(display_, window, PropertyChangeMask | StructureNotifyMask);
+        }
+    }
+
+    void X11Connection::UnwatchForeignWindow(const ::Window window)
+    {
+        const auto found = foreignWatches_.find(window);
+        if (found == foreignWatches_.end())
+        {
+            return;
+        }
+        if (--found->second > 0)
+        {
+            return;
+        }
+        foreignWatches_.erase(found);
+        // Usually the window is already gone -- its destruction is why the watch ended -- and
+        // BadWindow is then the expected answer rather than a failure.
+        X11ErrorTrap trap(display_);
+        XSelectInput(display_, window, NoEventMask);
+        trap.Sync();
+    }
+
 } // namespace CNA::Platform::X11

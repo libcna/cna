@@ -39,5 +39,32 @@ namespace CNA::Input
          * @return True if the clipboard has non-empty text; false otherwise.
          */
         CNAEXT [[nodiscard]] static bool HasTextEXT();
+
+        /**
+         * @brief Returns the primary selection's current UTF-8 text.
+         *
+         * The primary selection is the text most recently selected on an X11 or Wayland desktop,
+         * pasted there with the middle mouse button; it is separate from the clipboard. A game
+         * pastes it on a middle click itself -- nothing does that for it.
+         *
+         * @return The selected text, or an empty string if there is none or the platform has no
+         * primary selection.
+         */
+        CNAEXT [[nodiscard]] static std::string GetPrimarySelectionTextEXT();
+
+        /**
+         * @brief Offers text as the primary selection, as selecting it in a text field would.
+         *
+         * Ignored where the platform has no primary selection.
+         *
+         * @param text The UTF-8 text that was selected.
+         */
+        CNAEXT static void SetPrimarySelectionTextEXT(const std::string& text);
+
+        /**
+         * @brief Returns whether the primary selection currently holds non-empty text.
+         * @return True if there is selected text to paste; false otherwise.
+         */
+        CNAEXT [[nodiscard]] static bool HasPrimarySelectionTextEXT();
     };
 }

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstring>
 #include <thread>
+#include <utility>
 
 namespace CNA::Platform::X11 {
 
@@ -29,7 +30,11 @@ namespace CNA::Platform::X11 {
 
     } // namespace
 
-    X11Clipboard::X11Clipboard(X11Connection& connection) : connection_(connection) {}
+    X11Clipboard::X11Clipboard(X11Connection& connection, const Atom selection,
+                               std::string selectionName)
+        : connection_(connection), selection_(selection), selectionName_(std::move(selectionName))
+    {
+    }
 
     X11Clipboard::~X11Clipboard()
     {
@@ -39,7 +44,7 @@ namespace CNA::Platform::X11 {
             // Releasing ownership explicitly rather than letting the window's destruction do it:
             // the difference is visible to other clients, which see the selection become
             // unowned immediately instead of at the next round trip.
-            XSetSelectionOwner(display, connection_.GetAtoms().clipboard, kNone, kCurrentTime);
+            XSetSelectionOwner(display, selection_, kNone, kCurrentTime);
         }
         if (owner_ != 0)
         {
@@ -80,8 +85,7 @@ namespace CNA::Platform::X11 {
     bool X11Clipboard::HasText() const
     {
         Display* display = connection_.GetDisplay();
-        const ::Window current =
-            XGetSelectionOwner(display, connection_.GetAtoms().clipboard);
+        const ::Window current = XGetSelectionOwner(display, selection_);
         if (current == kNone)
         {
             return false;
@@ -118,7 +122,7 @@ namespace CNA::Platform::X11 {
     {
         Display* display = connection_.GetDisplay();
         const X11Atoms& atoms = connection_.GetAtoms();
-        const ::Window current = XGetSelectionOwner(display, atoms.clipboard);
+        const ::Window current = XGetSelectionOwner(display, selection_);
         if (current == kNone)
         {
             return {};
@@ -175,8 +179,7 @@ namespace CNA::Platform::X11 {
         // window is an implementation detail of the read rather than a state change a caller
         // could observe.
         auto& self = const_cast<X11Clipboard&>(*this);
-        return self.ReadSelection(connection_.GetAtoms().clipboard, target, kCurrentTime,
-                                  actualType, data);
+        return self.ReadSelection(selection_, target, kCurrentTime, actualType, data);
     }
 
     Atom X11Clipboard::PropertyType(const Atom property) const
@@ -323,15 +326,15 @@ namespace CNA::Platform::X11 {
         const X11Atoms& atoms = connection_.GetAtoms();
 
         ownedText_ = text;
-        XSetSelectionOwner(display, atoms.clipboard, owner_, kCurrentTime);
+        XSetSelectionOwner(display, selection_, owner_, kCurrentTime);
 
         // The server is the authority on who owns a selection, and XSetSelectionOwner has no
         // return value -- a request that lost a race is only visible by asking afterwards.
-        if (XGetSelectionOwner(display, atoms.clipboard) != owner_)
+        if (XGetSelectionOwner(display, selection_) != owner_)
         {
             ownedText_.clear();
             throw PlatformException("X11Clipboard::SetText",
-                                    "the X server did not grant CLIPBOARD ownership");
+                                    "the X server did not grant " + selectionName_ + " ownership");
         }
         ownsSelection_ = true;
         XFlush(display);
@@ -346,7 +349,7 @@ namespace CNA::Platform::X11 {
         {
             case SelectionRequest:
             {
-                if (event.xselectionrequest.selection != atoms.clipboard)
+                if (event.xselectionrequest.selection != selection_)
                 {
                     return false;
                 }
@@ -355,7 +358,7 @@ namespace CNA::Platform::X11 {
             }
             case SelectionClear:
             {
-                if (event.xselectionclear.selection != atoms.clipboard)
+                if (event.xselectionclear.selection != selection_)
                 {
                     return false;
                 }
@@ -365,7 +368,7 @@ namespace CNA::Platform::X11 {
                 // already been undone. Acting on it then threw the new text away and every paste
                 // came back empty (plans/plan_native_platform_validation.md NPV-0115). The server
                 // is the authority on who owns the selection now.
-                if (XGetSelectionOwner(display, atoms.clipboard) == owner_)
+                if (XGetSelectionOwner(display, selection_) == owner_)
                 {
                     return true;
                 }
@@ -385,8 +388,13 @@ namespace CNA::Platform::X11 {
             case DestroyNotify:
             {
                 // A requestor went away in the middle of a transfer. The window is gone, so there
-                // is no selection to undo -- only the bookkeeping.
-                return incrementalSends_.erase(event.xdestroywindow.window) > 0;
+                // is no selection to undo -- only the bookkeeping. Never consumed: the same window
+                // can be a requestor of the other selection too, or watched for another reason.
+                if (incrementalSends_.erase(event.xdestroywindow.window) > 0)
+                {
+                    connection_.UnwatchForeignWindow(event.xdestroywindow.window);
+                }
+                return false;
             }
             case PropertyNotify:
             {
@@ -417,10 +425,12 @@ namespace CNA::Platform::X11 {
                 XFlush(display);
                 if (length == 0)
                 {
-                    // The zero-length write is the terminator. Stopping the PropertyChangeMask
-                    // selection here releases the requestor's window, which we do not own.
-                    XSelectInput(display, send.requestor, NoEventMask);
+                    // The zero-length write is the terminator. Ending the watch releases the
+                    // requestor's window, which we do not own -- unless something else still
+                    // watches it.
+                    const ::Window requestor = send.requestor;
                     incrementalSends_.erase(found);
+                    connection_.UnwatchForeignWindow(requestor);
                 }
                 return true;
             }
@@ -493,8 +503,12 @@ namespace CNA::Platform::X11 {
         const long total = static_cast<long>(ownedText_.size());
         // StructureNotify as well as PropertyChange: a requestor that is destroyed mid-transfer
         // will never delete the property again, and without its DestroyNotify the transfer -- and
-        // its copy of the text -- would be kept for good (NPV-0127).
-        XSelectInput(display, request.requestor, PropertyChangeMask | StructureNotifyMask);
+        // its copy of the text -- would be kept for good (NPV-0127). Counted, because the same
+        // window may be reading the other selection at the same time (X11-0157).
+        if (incrementalSends_.find(request.requestor) == incrementalSends_.end())
+        {
+            connection_.WatchForeignWindow(request.requestor);
+        }
         XChangeProperty(display, request.requestor, property, atoms.incr, 32, PropModeReplace,
                         reinterpret_cast<const unsigned char*>(&total), 1);
         IncrementalSend send;

@@ -214,6 +214,21 @@ namespace CNA::Platform::Sdl3 {
         }
     }
 
+    bool Sdl3PrimarySelection::HasText() const { return SDL_HasPrimarySelectionText(); }
+
+    std::string Sdl3PrimarySelection::GetText() const
+    {
+        return TakeSdlString(SDL_GetPrimarySelectionText());
+    }
+
+    void Sdl3PrimarySelection::SetText(const std::string& text)
+    {
+        if (!SDL_SetPrimarySelectionText(text.c_str()))
+        {
+            throw PlatformException("PrimarySelection::SetText", SDL_GetError());
+        }
+    }
+
     // --- displays ---------------------------------------------------------------------------------
 
     std::vector<DisplayInfo> Sdl3Displays::GetDisplays() const

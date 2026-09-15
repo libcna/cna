@@ -25,6 +25,13 @@ namespace CNA::Platform {
         return AdoptWindow(static_cast<WindowId>(handle));
     }
 
+    IPlatformClipboard* IPlatform::GetPrimarySelection()
+    {
+        // Only X11 and Wayland desktops have one; everywhere else the capability is false and the
+        // accessor null, which is what the contract's pairing rule asks of an absent service.
+        return nullptr;
+    }
+
     const std::string& ToString(const PlatformSubsystem subsystem)
     {
         static const std::string video = "Video";

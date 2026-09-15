@@ -99,3 +99,80 @@ TEST(CnaInputClipboardWithoutAServiceTest, ReportsEmptyAndIgnoresWritesRatherTha
     EXPECT_EQ(Clipboard::GetTextEXT(), std::string());
     EXPECT_FALSE(Clipboard::HasTextEXT());
 }
+
+// --- the primary selection (plans/plan_x11.md X11-0157) ----------------------------------------------
+
+namespace
+{
+    /// An in-memory selection, to see which service the CNAEXT calls reach.
+    class RecordingSelection final : public CNA::Platform::IPlatformClipboard
+    {
+    public:
+        [[nodiscard]] bool HasText() const override { return !text.empty(); }
+        [[nodiscard]] std::string GetText() const override { return text; }
+        void SetText(const std::string& value) override { text = value; }
+        std::string text;
+    };
+
+    /// A platform whose clipboard and primary selection are two separate recorders.
+    class TwoSelectionPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        [[nodiscard]] CNA::Platform::IPlatformClipboard* GetClipboard() override
+        {
+            return &clipboard;
+        }
+        [[nodiscard]] CNA::Platform::IPlatformClipboard* GetPrimarySelection() override
+        {
+            return &primary;
+        }
+        RecordingSelection clipboard;
+        RecordingSelection primary;
+    };
+
+    /// A platform with a clipboard but no primary selection -- Windows, macOS, the web.
+    class ClipboardOnlyPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        [[nodiscard]] CNA::Platform::IPlatformClipboard* GetClipboard() override
+        {
+            return &clipboard;
+        }
+        [[nodiscard]] CNA::Platform::IPlatformClipboard* GetPrimarySelection() override
+        {
+            return nullptr;
+        }
+        RecordingSelection clipboard;
+    };
+}
+
+TEST(CnaInputPrimarySelectionTest, SelectingAndPastingUseThePrimarySelectionNotTheClipboard)
+{
+    TwoSelectionPlatform platform;
+    const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    platform.clipboard.text = "copied";
+
+    Clipboard::SetPrimarySelectionTextEXT("selected \xE2\x9C\x93");
+    EXPECT_EQ(platform.primary.text, "selected \xE2\x9C\x93");
+    EXPECT_EQ(platform.clipboard.text, "copied") << "selecting must not replace what was copied";
+    EXPECT_EQ(Clipboard::GetPrimarySelectionTextEXT(), "selected \xE2\x9C\x93");
+    EXPECT_TRUE(Clipboard::HasPrimarySelectionTextEXT());
+
+    Clipboard::SetTextEXT("copied again");
+    EXPECT_EQ(Clipboard::GetPrimarySelectionTextEXT(), "selected \xE2\x9C\x93")
+        << "copying must not replace what was selected";
+
+    Clipboard::SetPrimarySelectionTextEXT("");
+    EXPECT_FALSE(Clipboard::HasPrimarySelectionTextEXT());
+}
+
+TEST(CnaInputPrimarySelectionTest, WithoutOneItReadsAsEmptyAndIgnoresWrites)
+{
+    ClipboardOnlyPlatform platform;
+    const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+
+    EXPECT_NO_THROW(Clipboard::SetPrimarySelectionTextEXT("ignored"));
+    EXPECT_EQ(Clipboard::GetPrimarySelectionTextEXT(), std::string());
+    EXPECT_FALSE(Clipboard::HasPrimarySelectionTextEXT());
+    EXPECT_TRUE(platform.clipboard.text.empty()) << "and it never falls back to the clipboard";
+}

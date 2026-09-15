@@ -209,18 +209,22 @@ namespace CNA::Platform::X11 {
     void X11ContentScale::FindSettingsManager()
     {
         Display* display = connection_.GetDisplay();
+        const ::Window previous = settingsOwner_;
         X11ErrorTrap trap(display);
-        settingsOwner_ = XGetSelectionOwner(display, settingsSelection_);
-        if (settingsOwner_ != kNone)
+        const ::Window owner = XGetSelectionOwner(display, settingsSelection_);
+        if (owner == previous)
         {
-            // Another client's window; the mask is this client's own and changes nothing for
-            // anyone else. Its property is the settings; its destruction is the manager leaving.
-            XSelectInput(display, settingsOwner_, PropertyChangeMask | StructureNotifyMask);
+            return;
         }
+        // Its property is the settings; its destruction is the manager leaving.
+        connection_.WatchForeignWindow(owner);
         trap.Sync();
+        connection_.UnwatchForeignWindow(previous);
+        settingsOwner_ = owner;
         if (trap.HasError())
         {
             // It went away between the two requests.
+            connection_.UnwatchForeignWindow(owner);
             settingsOwner_ = kNone;
         }
     }
