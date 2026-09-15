@@ -667,8 +667,13 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_FALSE(capabilities.nativeFileDialog);
     EXPECT_FALSE(capabilities.tray);
     EXPECT_FALSE(capabilities.camera);
-    EXPECT_FALSE(capabilities.powerInfo);
     EXPECT_FALSE(capabilities.managedEntrypoint);
+    // Battery state is Linux's, not X's: the kernel's power supplies (plans/plan_x11.md X11-0163).
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+    EXPECT_TRUE(capabilities.powerInfo);
+#else
+    EXPECT_FALSE(capabilities.powerInfo);
+#endif
 
     // XIM is used for committed text, which is `textInput`. `ime` promises composition events,
     // and those reach the application only when it asked to draw the composition

@@ -9,6 +9,7 @@
 
 #ifdef CNA_PLATFORM_HAVE_EVDEV
 #include "../Linux/EvdevControllers.hpp"
+#include "../Linux/LinuxSystemInfo.hpp"
 #endif
 
 #include <cerrno>
@@ -119,6 +120,11 @@ namespace CNA::Platform::X11 {
 
     X11Platform::X11Platform()
     {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        systemInfo_ = std::make_unique<Linux::LinuxSystemInfo>();
+#else
+        systemInfo_ = std::make_unique<Common::StandardSystemInfo>();
+#endif
         try
         {
             OpenConnection();
@@ -192,6 +198,11 @@ namespace CNA::Platform::X11 {
             capabilities.joystick = true;
             capabilities.gamepadRumble = true;
         }
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // Battery state is the kernel's power-supply class, which needs no display either
+        // (X11-0163).
+        capabilities.powerInfo = true;
+#endif
 
         // Every flag below names what backs it. The contract's rule is that a service accessor is
         // non-null exactly when its presence capability is true, so a flag may only be set in the
@@ -238,7 +249,7 @@ namespace CNA::Platform::X11 {
         //                             gamepadRumble, above.
         //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or
         //   tray                      kdialog would not be a native backend (plan D15).
-        //   camera, powerInfo      -- not an X11 facility.
+        //   camera                 -- not an X11 facility.
         //   inputDeviceEnumeration -- XI2 can answer it; not implemented yet, so it stays false.
         //   managedEntrypoint      -- an ordinary main().
         return capabilities;

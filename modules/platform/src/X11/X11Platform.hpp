@@ -190,7 +190,7 @@ namespace CNA::Platform::X11 {
         /** @brief Gets the filesystem service. @return The portable implementation; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override { return &fileSystem_; }
         /** @brief Gets the system information service. @return The portable implementation. */
-        [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return &systemInfo_; }
+        [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return systemInfo_.get(); }
         /** @brief Gets the GL context service. @return The service, or null without GLX. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
         /** @brief Gets the Vulkan surface service. @return The service, or null before `Video`. */
@@ -270,7 +270,9 @@ namespace CNA::Platform::X11 {
         bool controllerSubsystemEnsured_ = false;
 
         Common::StandardFileSystem fileSystem_{"cna-x11"};
-        Common::StandardSystemInfo systemInfo_;
+        // Linux's own where the Linux facilities are compiled in (X11-0163), the portable one
+        // elsewhere; held by pointer so the class is the same in every translation unit.
+        std::unique_ptr<IPlatformSystemInfo> systemInfo_;
 
         std::chrono::steady_clock::time_point epoch_ = std::chrono::steady_clock::now();
 

@@ -1039,6 +1039,9 @@ TEST(X11EvdevVirtualDevice, ThePlatformServesControllersEvenWithoutADisplay)
     EXPECT_TRUE(capabilities.gamepadRumble);
     EXPECT_FALSE(capabilities.gamepadSensors);
     EXPECT_FALSE(capabilities.multipleWindows);  // Everything the display backs is still off.
+    // So is battery state, which is the kernel's too (plans/plan_x11.md X11-0163).
+    EXPECT_TRUE(capabilities.powerInfo);
+    EXPECT_GT(platform->GetSystemInfo()->GetSystemMemoryMegabytes(), 0);
     EXPECT_EQ(platform->GetKeyboard(), nullptr);
 
     // Lazy: nothing is started until someone asks.

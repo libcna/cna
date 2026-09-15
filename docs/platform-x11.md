@@ -105,7 +105,8 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `ime` | conditional | true when the application asked to draw the composition (`CNA_IME_IMPLEMENTED_UI=composition`) and the input method offers on-the-spot composition; candidate lists stay with the input method — see [Input-method composition](#input-method-composition) |
 | `inputDeviceEnumeration` | ❌ | XI2 can answer it; not implemented |
 | `gamepadSensors` | ❌ | a pad's motion sensors are a second evdev node; pairing it with its pad is not implemented |
-| `haptics`, `sensors`, `powerInfo` | ❌ | not an X11 facility |
+| `powerInfo` | conditional | Linux only: the kernel's power supplies in sysfs — **with or without a display** — see [Host facts](#host-facts) |
+| `haptics`, `sensors` | ❌ | not an X11 facility |
 | `messageBox`, `nativeFileDialog` | ❌ | no core X11 facility; see below |
 | `tray` | ❌ | a desktop-environment protocol, not an X11 one |
 | `camera` | ❌ | not an X11 facility |
@@ -444,6 +445,19 @@ it as `GameWindow::FileDropEXT` (every file of a drop at once, MonoGame's shape)
 - **Not implemented:** dragging *from* a CNA window (the source side), and `XdndProxy`.
 
 ---
+
+## Host facts
+
+`GetSystemInfo()` answers from Linux itself on a Linux build (`plans/plan_x11.md` X11-0163), with
+or without an X server: memory and online processors from `sysconf`; the preferred locales from
+`LANG`, then each entry of `LANGUAGE` (codesets and modifiers dropped, `C`/`POSIX` skipped), as the
+SDL3 backend reads them; and battery state from `/sys/class/power_supply`. Only system batteries
+count — a supply whose `scope` is `Device` is a gamepad's or a mouse's — and with several, the one
+with the most time left, or else the fullest, is reported. No battery means plugged in; a battery
+that is "Not charging" while plugged in (held at a charge threshold) counts as charged; time left
+is `time_to_empty_now`, else energy over power, else charge over current. `OpenUrl` stays false:
+opening a URL on Linux means starting another program, which this platform does not do on a game's
+behalf. Elsewhere the portable answers apply (no battery information, no locales).
 
 ## Gamepads and joysticks
 
