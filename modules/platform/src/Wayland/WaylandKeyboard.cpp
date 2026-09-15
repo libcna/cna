@@ -233,11 +233,7 @@ namespace CNA::Platform::Wayland {
         {
             return;
         }
-        // A keyboard that goes away while focused takes its focus with it.
-        if ((*found)->focus != 0 && host_.focusChanged)
-        {
-            host_.focusChanged((*found)->focus, false);
-        }
+        const WindowId focus = (*found)->focus;
         if (wl_keyboard_get_version(keyboard) >= WL_KEYBOARD_RELEASE_SINCE_VERSION)
         {
             wl_keyboard_release(keyboard);
@@ -248,6 +244,13 @@ namespace CNA::Platform::Wayland {
         }
         keyboards_.erase(found);
         Update();
+        // A keyboard that goes away while focused takes its focus with it -- told after it is
+        // gone, so the window sees the seat as it now is (with no keyboard left, the compositor's
+        // activated window keeps the focus, and nothing is lost).
+        if (focus != 0 && host_.focusChanged)
+        {
+            host_.focusChanged(focus, false);
+        }
     }
 
     void WaylandKeyboard::ForgetWindow(const WindowId window)

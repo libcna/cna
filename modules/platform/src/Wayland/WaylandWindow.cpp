@@ -631,8 +631,10 @@ namespace CNA::Platform::Wayland {
         const LogicalSize base = !constrainedNow && constrainedBefore ? floatingSize_ : size_;
         LogicalSize resolved = ResolveConfigureSize(pendingToplevel_.width, pendingToplevel_.height, states, base,
                                                     FrameHeight(), minimum_, maximum_);
-        if (!constrainedNow && !resizable_ && pendingToplevel_.width == 0)
+        if (!constrainedNow && !resizable_)
         {
+            // A fixed-size window keeps its size whatever a floating configure suggests; the
+            // compositor was told min = max = this size, and one that suggests another is ignored.
             resolved = base;
         }
         if (!constrainedNow)
@@ -642,6 +644,7 @@ namespace CNA::Platform::Wayland {
 
         const bool wasMaximized = maximized_;
         const bool wasSuspended = suspended_;
+        const bool focusBefore = HasFocus();
         maximized_ = states.maximized;
         fullscreen_ = states.fullscreen;
         tiled_ = states.tiled;
@@ -673,6 +676,8 @@ namespace CNA::Platform::Wayland {
         {
             Post(suspended_ ? WindowEventKind::Minimized : WindowEventKind::Restored);
         }
+        // Without a keyboard the activated state is the focus (HasFocus), and it changes here.
+        PostFocusChange(focusBefore);
         // Every configure asks for a frame at the state it describes.
         Post(WindowEventKind::Exposed);
         CommitState();
@@ -904,9 +909,17 @@ namespace CNA::Platform::Wayland {
 
     void WaylandWindow::OnKeyboardFocus(const bool focused)
     {
-        const bool before = keyboardFocusCount_ > 0;
+        const bool before = HasFocus();
         keyboardFocusCount_ = std::max(0, keyboardFocusCount_ + (focused ? 1 : -1));
-        const bool after = keyboardFocusCount_ > 0;
+        PostFocusChange(before);
+    }
+
+    void WaylandWindow::PostFocusChange(const bool before)
+    {
+        // The events follow HasFocus exactly, so an application that tracks them never
+        // disagrees with one that asks -- e.g. when the last keyboard is unplugged from a window
+        // the compositor keeps active, which stays focused.
+        const bool after = HasFocus();
         if (before != after)
         {
             Post(after ? WindowEventKind::FocusGained : WindowEventKind::FocusLost);

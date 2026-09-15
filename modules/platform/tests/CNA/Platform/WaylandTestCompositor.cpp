@@ -455,6 +455,9 @@ namespace CNA::Platform::Wayland::Testing {
         Surface* touchFocus = nullptr;
         std::set<std::uint32_t> inputSerials;
         std::uint32_t lastInputSerial = 0;
+        /// Serials of button presses (and touch downs) still held: the implicit grabs a move,
+        /// resize or window menu may name, as Mutter checks.
+        std::map<std::uint32_t, std::uint32_t> heldPresses;  // button -> serial
         std::uint32_t pointerEnterSerial = 0;
 
         PointerInfo pointerInfo;
@@ -513,6 +516,20 @@ namespace CNA::Platform::Wayland::Testing {
             inputSerials.insert(serial);
             lastInputSerial = serial;
             return serial;
+        }
+
+        void CheckGrabSerial(const std::uint32_t serial, const char* request)
+        {
+            for (const auto& [button, held] : heldPresses)
+            {
+                (void) button;
+                if (held == serial)
+                {
+                    return;
+                }
+            }
+            Violation(std::string(request) + " used serial " + std::to_string(serial) +
+                      ", which is not a button press still held (the compositor would ignore it)");
         }
 
         void CheckInputSerial(const std::uint32_t serial, const char* request)
@@ -1446,12 +1463,12 @@ namespace CNA::Platform::Wayland::Testing {
         .show_window_menu = [](wl_client*, wl_resource* resource, wl_resource*, const std::uint32_t serial, std::int32_t,
                                std::int32_t) {
             Toplevel* toplevel = Data<Toplevel>(resource);
-            toplevel->server->CheckInputSerial(serial, "xdg_toplevel.show_window_menu");
+            toplevel->server->CheckGrabSerial(serial, "xdg_toplevel.show_window_menu");
             ++toplevel->windowMenuRequests;
         },
         .move = [](wl_client*, wl_resource* resource, wl_resource*, const std::uint32_t serial) {
             Toplevel* toplevel = Data<Toplevel>(resource);
-            toplevel->server->CheckInputSerial(serial, "xdg_toplevel.move");
+            toplevel->server->CheckGrabSerial(serial, "xdg_toplevel.move");
             ++toplevel->moveRequests;
         },
         .resize = [](wl_client*, wl_resource* resource, wl_resource*, const std::uint32_t serial, const std::uint32_t edges) {
@@ -1464,7 +1481,7 @@ namespace CNA::Platform::Wayland::Testing {
                                             "resize edge " + std::to_string(edges));
                 return;
             }
-            toplevel->server->CheckInputSerial(serial, "xdg_toplevel.resize");
+            toplevel->server->CheckGrabSerial(serial, "xdg_toplevel.resize");
             ++toplevel->resizeRequests;
             toplevel->lastResizeEdges = edges;
         },
@@ -3364,6 +3381,34 @@ namespace CNA::Platform::Wayland::Testing {
         });
     }
 
+    void TestCompositor::SetSeatCapabilities(const bool pointer, const bool keyboard, const bool touch)
+    {
+        Run([&] {
+            State& s = *state_;
+            s.options.pointer = pointer;
+            s.options.keyboard = keyboard;
+            s.options.touch = touch;
+            if (!keyboard) { s.keyboardFocus = nullptr; }
+            if (!pointer) { s.pointerFocus = nullptr; }
+            if (!touch) { s.touchFocus = nullptr; }
+            std::uint32_t capabilities = 0;
+            if (pointer) { capabilities |= WL_SEAT_CAPABILITY_POINTER; }
+            if (keyboard) { capabilities |= WL_SEAT_CAPABILITY_KEYBOARD; }
+            if (touch) { capabilities |= WL_SEAT_CAPABILITY_TOUCH; }
+            for (wl_resource* seat : s.seats)
+            {
+                wl_seat_send_capabilities(seat, capabilities);
+            }
+        });
+    }
+
+    int TestCompositor::GetTouchCount()
+    {
+        int count = 0;
+        Run([&] { count = static_cast<int>(state_->touches.size()); });
+        return count;
+    }
+
     int TestCompositor::GetKeyboardCount()
     {
         int count = 0;
@@ -3468,6 +3513,14 @@ namespace CNA::Platform::Wayland::Testing {
             }
             const std::uint32_t serial = s.InputSerial();
             const std::uint32_t time = NowMs();
+            if (pressed)
+            {
+                s.heldPresses[button] = serial;
+            }
+            else
+            {
+                s.heldPresses.erase(button);
+            }
             for (wl_resource* pointer : s.pointers)
             {
                 wl_pointer_send_button(pointer, serial, time, button,

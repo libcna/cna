@@ -269,9 +269,10 @@ namespace CNA::Platform::Wayland {
         }
         if (callback_ != nullptr)
         {
-            // Given up on: the compositor is not drawing this surface. The request is dropped so
-            // the next frame asks afresh.
-            Cancel();
+            // Not answered in time: the compositor is not drawing this surface (minimized, on a
+            // hidden workspace, behind a lock screen). The callback is KEPT -- the next frame waits
+            // on the same one and asks for no other -- so a game running unseen for hours leaves
+            // one pending callback in the compositor, not one for every frame it drew.
             return false;
         }
         return true;

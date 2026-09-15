@@ -1425,6 +1425,417 @@ TEST_F(WaylandProtocol, TheLaunchersActivationTokenIsSpentOnTheFirstWindowOnly)
     EXPECT_EQ(compositor_->GetActivationTokenCount(), 1);
 }
 
+// --- more window operations (WAYLAND-0034/0036/0037) ----------------------------------------------
+
+TEST_F(WaylandProtocol, SetSizeResizesAFloatingWindowAndWaitsOutAMaximizedOne)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x111111);
+    Settle();
+    seen_.clear();
+    window.SetSize(1000, 700);
+    PresentColour(presenter, window, 0x111111);
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 1000);
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::Resized), 1);
+    std::optional<ToplevelInfo> toplevel = compositor_->GetToplevel(0);
+    EXPECT_EQ(toplevel->geometryWidth, 1000);
+    EXPECT_EQ(toplevel->geometryHeight, 700 + 32);
+    EXPECT_EQ(toplevel->bufferWidth, 1000);
+
+    window.Maximize();
+    window.Sync();
+    Pump();
+    window.SetSize(640, 400);  // the compositor's size stands while it constrains the window
+    PresentColour(presenter, window, 0x111111);
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 1920);
+    window.Restore();
+    window.Sync();
+    Pump();
+    EXPECT_EQ(window.GetClientBounds().width, 640) << "the size asked for while maximized comes back on restore";
+    EXPECT_EQ(window.GetClientBounds().height, 400);
+}
+
+TEST_F(WaylandProtocol, ANonResizableWindowPinsItsLimitsToItsSize)
+{
+    Start();
+    WindowDescription description;
+    description.resizable = false;
+    description.width = 640;
+    description.height = 360;
+    IPlatformWindow& window = MakeWindow(description);
+    Settle();
+    std::optional<ToplevelInfo> toplevel = compositor_->GetToplevel(0);
+    EXPECT_EQ(toplevel->minWidth, 640);
+    EXPECT_EQ(toplevel->maxWidth, 640);
+    EXPECT_EQ(toplevel->minHeight, 360 + 32);
+    EXPECT_EQ(toplevel->maxHeight, 360 + 32);
+    compositor_->Configure(0, 900, 900, {});
+    Settle();
+    EXPECT_EQ(window.GetClientBounds().width, 640) << "a suggestion a fixed-size window does not take";
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    window.SetResizable(true);
+    PresentColour(presenter, window, 0x010101);  // limits are surface state: they go with a frame
+    Settle();
+    toplevel = compositor_->GetToplevel(0);
+    EXPECT_EQ(toplevel->maxWidth, 0);
+    EXPECT_TRUE(window.IsResizable());
+}
+
+TEST_F(WaylandProtocol, ABorderlessWindowHasNoTitleBarAndGetsOneBack)
+{
+    Start();
+    WindowDescription description;
+    description.borderless = true;
+    IPlatformWindow& window = MakeWindow(description);
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x222222);
+    Settle();
+    std::optional<ToplevelInfo> toplevel = compositor_->GetToplevel(0);
+    EXPECT_EQ(toplevel->geometryY, 0);
+    EXPECT_EQ(toplevel->geometryHeight, 480);
+    for (const SubsurfaceInfo& sub : compositor_->GetSubsurfaces())
+    {
+        EXPECT_EQ(sub.bufferWidth, 0) << "no part of a frame is shown";
+    }
+    window.SetBorderless(false);
+    PresentColour(presenter, window, 0x222222);
+    Settle();
+    toplevel = compositor_->GetToplevel(0);
+    EXPECT_EQ(toplevel->geometryY, -32);
+    EXPECT_EQ(toplevel->geometryHeight, 480 + 32);
+    EXPECT_EQ(window.GetClientBounds().height, 480) << "the content keeps its size; the frame is outside it";
+}
+
+TEST_F(WaylandProtocol, WhereTheCompositorDecoratesThereIsNoTitleBarOfOurOwn)
+{
+    CompositorOptions options;
+    options.decorationManager = true;
+    options.serverSideDecorations = true;
+    Start(options);
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x333333);
+    Settle();
+    std::optional<ToplevelInfo> toplevel = compositor_->GetToplevel(0);
+    EXPECT_TRUE(toplevel->hasDecoration);
+    EXPECT_EQ(toplevel->requestedDecorationMode, 2u);  // server side
+    EXPECT_EQ(toplevel->geometryY, 0);
+    EXPECT_EQ(toplevel->geometryHeight, 480);
+    EXPECT_EQ(window.GetClientBounds().height, 480);
+    // A borderless window asks for client-side decoration -- i.e. none at all.
+    window.SetBorderless(true);
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->requestedDecorationMode, 1u);
+}
+
+TEST_F(WaylandProtocol, ACompositorThatRefusesToDecorateGetsOurTitleBar)
+{
+    CompositorOptions options;
+    options.decorationManager = true;
+    options.serverSideDecorations = false;
+    Start(options);
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x333333);
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->geometryY, -32);
+    EXPECT_EQ(window.GetClientBounds().height, 480);
+}
+
+TEST_F(WaylandProtocol, MinimizeAsksAndSuspendedIsWhatReportsIt)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    Settle();
+    window.Minimize();
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->minimizeRequests, 1);
+    EXPECT_FALSE(window.IsMinimized()) << "asking is not being minimized";
+    compositor_->Configure(0, 0, 0, {XDG_TOPLEVEL_STATE_SUSPENDED});
+    Settle();
+    EXPECT_TRUE(window.IsMinimized());
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::Minimized), 1);
+    compositor_->Configure(0, 0, 0, {XDG_TOPLEVEL_STATE_ACTIVATED});
+    Settle();
+    EXPECT_FALSE(window.IsMinimized());
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::Restored), 1);
+}
+
+TEST_F(WaylandProtocol, TheNativeHandleIsTheDisplayAndTheSurface)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    const NativeWindowHandle handle = window.GetNativeHandle();
+    EXPECT_EQ(handle.system, NativeWindowSystem::Wayland);
+    EXPECT_EQ(handle.display, platform_->GetConnectionForTesting()->GetDisplay());
+    EXPECT_NE(handle.surface, nullptr);
+}
+
+TEST_F(WaylandProtocol, OwnWindowsCanBeAdoptedAndForeignOnesCannot)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    std::unique_ptr<IPlatformWindow> view = platform_->AdoptWindow(window.GetId());
+    ASSERT_NE(view, nullptr);
+    EXPECT_EQ(view->GetId(), window.GetId());
+    view->SetTitle("through the view");
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->title, "through the view");
+    view.reset();
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevels().size(), 1u) << "a borrowed view destroys nothing";
+    EXPECT_THROW((void) platform_->AdoptWindow(window.GetId() + 100), PlatformException);
+    EXPECT_THROW((void) platform_->AdoptWindowHandle(0xdeadbeefu), PlatformException);
+    EXPECT_NE(platform_->AdoptWindowHandle(window.GetWindowHandle()), nullptr);
+}
+
+// --- the pump and pacing (WAYLAND-0031/0083) ------------------------------------------------------
+
+TEST_F(WaylandProtocol, PollingWithNothingToReadNeverWaits)
+{
+    Start();
+    MakeWindow();
+    Settle();
+    const auto start = std::chrono::steady_clock::now();
+    for (int poll = 0; poll < 1000; ++poll)
+    {
+        Pump();
+    }
+    const double perPoll = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() / 1000.0;
+    EXPECT_LT(perPoll, 1.0) << "PollEvents waited for the compositor";
+}
+
+TEST_F(WaylandProtocol, WithheldFrameCallbacksSlowThePresenterButNeverStallIt)
+{
+    CompositorOptions options;
+    options.autoFrameDone = false;
+    Start(options);
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    presenter.SetVSync(true);
+    PresentColour(presenter, window, 0x10);  // requests a callback the compositor keeps
+    Settle();
+    EXPECT_EQ(compositor_->GetPendingFrameCallbacks(), 1);
+    const auto start = std::chrono::steady_clock::now();
+    PresentColour(presenter, window, 0x20);  // waits for it -- a minimized window's frame
+    const double waited = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    EXPECT_GE(waited, 80.0);
+    EXPECT_LE(waited, 500.0) << "bounded, so a hidden window's game loop keeps running";
+    Settle();
+    EXPECT_EQ(compositor_->FrameDone(), 1) << "one outstanding callback at a time, never a pile";
+    const auto after = std::chrono::steady_clock::now();
+    PresentColour(presenter, window, 0x30);
+    Settle();
+    const double quick = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - after).count();
+    EXPECT_LT(quick, 80.0);
+}
+
+TEST_F(WaylandProtocol, BuffersTheCompositorHoldsAreNeverDrawnInto)
+{
+    CompositorOptions options;
+    options.releaseBuffers = false;
+    Start(options);
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        PresentColour(presenter, window, 0x40u + static_cast<std::uint32_t>(frame));
+        Settle();
+    }
+    EXPECT_EQ(compositor_->GetHeldBuffers(), 2) << "two replaced and kept, one on screen";
+    // Every buffer is busy: this frame waits a bounded time and is dropped, not drawn over one
+    // the compositor may still be reading.
+    const std::optional<ToplevelInfo> before = compositor_->GetToplevel(0);
+    PresentColour(presenter, window, 0x99);
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->bufferCommits, before->bufferCommits);
+    compositor_->ReleaseHeldBuffers();
+    Settle();
+    PresentColour(presenter, window, 0x99);
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->bufferCommits, before->bufferCommits + 1);
+    EXPECT_EQ(compositor_->GetToplevel(0)->centrePixel & 0xFFFFFFu, 0x000099u);
+}
+
+// --- the built-in title bar under a pointer (WAYLAND-0090) ----------------------------------------
+
+namespace {
+    /// The title bar's subsurface: at (0, -32) with a buffer.
+    std::uint32_t TitleBarOf(TestCompositor& compositor)
+    {
+        for (const SubsurfaceInfo& sub : compositor.GetSubsurfaces())
+        {
+            if (sub.x == 0 && sub.y == -32 && sub.bufferWidth > 0)
+            {
+                return sub.surfaceId;
+            }
+        }
+        return 0;
+    }
+
+    std::uint32_t LeftBorderOf(TestCompositor& compositor)
+    {
+        for (const SubsurfaceInfo& sub : compositor.GetSubsurfaces())
+        {
+            if (sub.x == -8 && sub.y == -32)
+            {
+                return sub.surfaceId;
+            }
+        }
+        return 0;
+    }
+}
+
+TEST_F(WaylandProtocol, TheTitleBarsCloseButtonClosesAndTheGameSeesNoClick)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x505050);
+    Settle();
+    const std::uint32_t title = TitleBarOf(*compositor_);
+    ASSERT_NE(title, 0u);
+    compositor_->PointerEnterSurface(title, 790, 16);
+    compositor_->PointerButton(BTN_LEFT, true);
+    compositor_->PointerButton(BTN_LEFT, false);
+    Settle();
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::CloseRequested), 1);
+    EXPECT_TRUE(SeenOf<MouseButtonEvent>().empty());
+    EXPECT_TRUE(SeenOf<MouseMotionEvent>().empty()) << "the frame's pointer is not the game's pointer";
+}
+
+TEST_F(WaylandProtocol, DraggingTheTitleBarMovesAndDoubleClickingMaximizes)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x505050);
+    Settle();
+    const std::uint32_t title = TitleBarOf(*compositor_);
+    ASSERT_NE(title, 0u);
+    compositor_->PointerEnterSurface(title, 200, 16);
+    compositor_->PointerButton(BTN_LEFT, true);
+    Settle();
+    EXPECT_EQ(compositor_->GetToplevel(0)->moveRequests, 1) << "a press on the title starts a move, with the press's serial";
+    compositor_->PointerButton(BTN_LEFT, false);
+    compositor_->PointerButton(BTN_LEFT, true);
+    compositor_->PointerButton(BTN_LEFT, false);
+    window.Sync();
+    Pump();
+    EXPECT_TRUE(compositor_->GetToplevel(0)->maximizeRequested) << "a double click on the title maximizes";
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::Maximized), 1);
+    compositor_->PointerButton(BTN_RIGHT, true);
+    Settle();
+    compositor_->PointerButton(BTN_RIGHT, false);
+    EXPECT_EQ(compositor_->GetToplevel(0)->windowMenuRequests, 1);
+}
+
+TEST_F(WaylandProtocol, TheBorderResizesFromTheEdgeUnderThePointer)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    IPlatformSurfacePresenter& presenter = PresenterFor(window);
+    PresentColour(presenter, window, 0x505050);
+    Settle();
+    const std::uint32_t left = LeftBorderOf(*compositor_);
+    ASSERT_NE(left, 0u);
+    compositor_->PointerEnterSurface(left, 4, 200);  // the left edge, well away from the corners
+    Settle();
+    EXPECT_EQ(compositor_->GetPointerInfo().shape, 26u);  // WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_EW_RESIZE
+    compositor_->PointerButton(BTN_LEFT, true);
+    Settle();
+    compositor_->PointerButton(BTN_LEFT, false);
+    const std::optional<ToplevelInfo> toplevel = compositor_->GetToplevel(0);
+    EXPECT_EQ(toplevel->resizeRequests, 1);
+    EXPECT_EQ(toplevel->lastResizeEdges, 4u);  // XDG_TOPLEVEL_RESIZE_EDGE_LEFT
+}
+
+// --- seats that change (WAYLAND-0050) -------------------------------------------------------------
+
+TEST_F(WaylandProtocol, DevicesComeAndGoWithTheSeatsCapabilities)
+{
+    Start();
+    IPlatformWindow& window = MakeWindow();
+    Settle();
+    compositor_->KeyboardEnter(0, {KEY_LEFTSHIFT});
+    Settle();
+    EXPECT_TRUE(window.HasFocus());
+    compositor_->SetSeatCapabilities(true, false, true);  // keyboard unplugged, touchscreen attached
+    Settle();
+    EXPECT_EQ(compositor_->GetKeyboardCount(), 0);
+    EXPECT_EQ(compositor_->GetTouchCount(), 1);
+    EXPECT_FALSE(platform_->GetKeyboard()->HasKeyboard());
+    platform_->GetKeyboard()->Update();
+    EXPECT_TRUE(platform_->GetKeyboard()->GetSnapshot().pressedKeys.empty()) << "a keyboard that went holds nothing";
+    // Without a keyboard the compositor's activated window is the focus, as on a touch-only
+    // kiosk: the window was activated, so it stays focused, and no FocusLost says otherwise.
+    EXPECT_TRUE(window.HasFocus());
+    EXPECT_EQ(CountWindowEvents(window.GetId(), WindowEventKind::FocusLost), 0);
+    compositor_->SetSeatCapabilities(true, true, false);
+    Settle();
+    EXPECT_EQ(compositor_->GetKeyboardCount(), 1);
+    EXPECT_EQ(compositor_->GetTouchCount(), 0);
+    EXPECT_TRUE(platform_->GetKeyboard()->HasKeyboard());
+}
+
+// --- compose and the cursor theme (WAYLAND-0053/0057) ---------------------------------------------
+
+TEST_F(WaylandProtocol, DeadKeysComposeThroughTheLocalesTable)
+{
+    const char* savedAll = std::getenv("LC_ALL");
+    const std::string restoreAll = savedAll != nullptr ? savedAll : "";
+    ::setenv("LC_ALL", "en_US.UTF-8", 1);
+    CompositorOptions options;
+    options.layout = "us";
+    options.variant = "intl";  // ' is a dead acute
+    Start(options);
+    if (savedAll != nullptr) { ::setenv("LC_ALL", restoreAll.c_str(), 1); } else { ::unsetenv("LC_ALL"); }
+    IPlatformWindow& window = MakeWindow();
+    Settle();
+    platform_->GetTextInput()->Start(window.GetId(), TextInputType::Text);
+    compositor_->KeyboardEnter(0);
+    compositor_->Key(KEY_APOSTROPHE, true);
+    compositor_->Key(KEY_APOSTROPHE, false);
+    compositor_->Key(KEY_E, true);
+    compositor_->Key(KEY_E, false);
+    Settle();
+    std::string text;
+    for (const TextInputEvent& event : SeenOf<TextInputEvent>())
+    {
+        text += event.text;
+    }
+    if (text == "'e")
+    {
+        GTEST_SKIP() << "no compose table for en_US.UTF-8 on this machine";
+    }
+    EXPECT_EQ(text, "\xc3\xa9") << "dead acute then e is é, and the dead key types nothing itself";
+}
+
+TEST_F(WaylandProtocol, WithoutCursorShapeTheThemeDrawsTheSystemCursor)
+{
+    CompositorOptions options;
+    options.cursorShape = false;
+    Start(options);
+    if (!platform_->GetCapabilities().cursorShapes)
+    {
+        GTEST_SKIP() << "no cursor theme is installed here";
+    }
+    MakeWindow();
+    Settle();
+    compositor_->PointerEnter(0, 10, 10);
+    Settle();
+    platform_->GetMouse()->SetCursor(SystemCursor::Crosshair);
+    Settle();
+    const PointerInfo info = compositor_->GetPointerInfo();
+    EXPECT_TRUE(info.cursorSet);
+    EXPECT_NE(info.cursorSurface, 0u) << "a theme cursor is a surface of the client's";
+    EXPECT_EQ(info.shapeRequests, 0);
+}
+
 // --- the connection ends (WAYLAND-0030) -----------------------------------------------------------
 
 TEST_F(WaylandProtocol, ACompositorThatGoesAwayEndsTheApplicationOnceAndSafely)

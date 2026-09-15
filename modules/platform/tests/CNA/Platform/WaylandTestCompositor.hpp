@@ -456,8 +456,15 @@ namespace CNA::Platform::Wayland::Testing {
         void ReplaceKeymap(const std::string& layout, const std::string& variant = {});
         /** @brief Sends a modifiers event with an explicit layout group (a layout switch key). */
         void SetLayoutGroup(std::uint32_t group);
+        /**
+         * @brief Changes what the seat has, sending wl_seat.capabilities to every binding (a
+         * keyboard unplugged, a touchscreen attached). Focus on a device that goes is dropped.
+         */
+        void SetSeatCapabilities(bool pointer, bool keyboard, bool touch);
         /** @brief wl_keyboard resources the client holds. */
         [[nodiscard]] int GetKeyboardCount();
+        /** @brief wl_touch resources the client holds. */
+        [[nodiscard]] int GetTouchCount();
         /** @brief The serial of the last input event sent. */
         [[nodiscard]] std::uint32_t GetLastInputSerial();
 

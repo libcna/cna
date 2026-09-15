@@ -298,6 +298,9 @@ namespace CNA::Platform::Wayland {
         [[nodiscard]] bool HasWmCapabilities() const { return hasWmCapabilities_; }
 
     private:
+        /** @brief Posts FocusGained or FocusLost when HasFocus() changed from @p before. */
+        void PostFocusChange(bool before);
+
         enum class ConfigureState
         {
             NoRole,
