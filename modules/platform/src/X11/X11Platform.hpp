@@ -11,6 +11,7 @@
 #include "X11ContentScale.hpp"
 #include "X11DragAndDrop.hpp"
 #include "X11InputDevices.hpp"
+#include "X11MessageBox.hpp"
 #include "X11GraphicsServices.hpp"
 #include "X11Keyboard.hpp"
 #include "X11Mouse.hpp"
@@ -185,8 +186,11 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] IPlatformClipboard* GetPrimarySelection() override;
         /** @brief Gets the display service. @return The service, or null without XRandR. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
-        /** @brief Gets the dialog service. @return Null; X11 has no native dialogs. */
-        [[nodiscard]] IPlatformDialogs* GetDialogs() override { return nullptr; }
+        /**
+         * @brief Gets the dialog service: Xlib message boxes, no file dialogs (X11-0167).
+         * @return The service; null without a display.
+         */
+        [[nodiscard]] IPlatformDialogs* GetDialogs() override { return dialogs_.get(); }
         /** @brief Gets the tray service. @return Null; a tray is a desktop-environment protocol. */
         [[nodiscard]] IPlatformTray* GetTray() override { return nullptr; }
         /** @brief Gets the camera provider. @return Null; X11 has no camera facility. */
@@ -264,6 +268,7 @@ namespace CNA::Platform::X11 {
         std::unique_ptr<X11Clipboard> clipboard_;
         std::unique_ptr<X11Clipboard> primarySelection_;
         std::unique_ptr<X11InputDevices> inputDevices_;
+        std::unique_ptr<X11Dialogs> dialogs_;
         std::unique_ptr<X11DragAndDrop> dragAndDrop_;
         std::unique_ptr<X11Displays> displays_;
         std::unique_ptr<X11GlContext> glContext_;

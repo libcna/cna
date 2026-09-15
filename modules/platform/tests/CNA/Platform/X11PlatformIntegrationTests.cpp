@@ -645,6 +645,9 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_TRUE(capabilities.globalPointer);
     EXPECT_TRUE(capabilities.cursorShapes);
     EXPECT_TRUE(capabilities.clipboard);
+    // X has no dialog service; the backend draws its own boxes (plans/plan_x11.md X11-0167).
+    EXPECT_TRUE(capabilities.messageBox);
+    EXPECT_NE(platform_->GetDialogs(), nullptr);
 
     // Controllers are not an X facility: they come from the kernel's evdev nodes, wherever the
     // build has them and the machine has /dev/input (plans/plan_x11.md X11-0150).
@@ -663,7 +666,6 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     // fail here rather than at a null dereference in a game.
     EXPECT_FALSE(capabilities.haptics);
     EXPECT_FALSE(capabilities.sensors);
-    EXPECT_FALSE(capabilities.messageBox);
     EXPECT_FALSE(capabilities.nativeFileDialog);
     EXPECT_FALSE(capabilities.tray);
     EXPECT_FALSE(capabilities.camera);

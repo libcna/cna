@@ -246,12 +246,14 @@ namespace CNA::Platform::X11 {
         capabilities.ime = textInput_ != nullptr && textInput_->HasCompositionEvents();
         // Keyboards, mice and touch devices through XInput2, controllers through the hub (X11-0165).
         capabilities.inputDeviceEnumeration = inputDevices_ != nullptr;
+        // Message boxes drawn with Xlib in a window of their own (X11-0167).
+        capabilities.messageBox = dialogs_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
         //   haptics                -- the standalone force-feedback service; pad rumble is
         //                             gamepadRumble, above.
-        //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or
-        //   tray                      kdialog would not be a native backend (plan D15).
+        //   nativeFileDialog, tray -- no core X11 facility, and shelling out to zenity or
+        //                             kdialog would not be a native backend (plan D15).
         //   camera                 -- not an X11 facility.
         //   managedEntrypoint      -- an ordinary main().
         return capabilities;
@@ -277,6 +279,7 @@ namespace CNA::Platform::X11 {
         primarySelection_ = std::make_unique<X11Clipboard>(
             *connection_, connection_->GetAtoms().primary, "PRIMARY");
         dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
+        dialogs_ = std::make_unique<X11Dialogs>(*connection_);
         if (connection_->GetXInput2Opcode() >= 0)
         {
             inputDevices_ = std::make_unique<X11InputDevices>(
@@ -302,6 +305,7 @@ namespace CNA::Platform::X11 {
         vulkanSurface_.reset();
         glContext_.reset();
         displays_.reset();
+        dialogs_.reset();
         inputDevices_.reset();
         dragAndDrop_.reset();
         primarySelection_.reset();

@@ -107,15 +107,17 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `gamepadSensors` | conditional | Linux only, with the controllers: a pad's motion-sensor node paired with it — each pad's `GamepadCapabilities` says whether it has a gyroscope and an accelerometer |
 | `powerInfo` | conditional | Linux only: the kernel's power supplies in sysfs — **with or without a display** — see [Host facts](#host-facts) |
 | `haptics`, `sensors` | ❌ | not an X11 facility |
-| `messageBox`, `nativeFileDialog` | ❌ | no core X11 facility; see below |
+| `messageBox` | ✅ | drawn by the backend with Xlib, a dialog window of its own — see [Message boxes](#message-boxes) |
+| `nativeFileDialog` | ❌ | no core X11 facility; see below |
 | `tray` | ❌ | a desktop-environment protocol, not an X11 one |
 | `camera` | ❌ | not an X11 facility |
 | `managedEntrypoint` | ❌ | an ordinary `main()` |
 
 Nothing here is shelled out to `zenity` or `kdialog` to make a row turn green. A backend that
-launched another program to show a message box would not be a native X11 backend, and CNA has no
-abstraction for optional desktop-environment integration to hang that on. `false` here means the
-call refuses deterministically, which is what a false capability promises.
+launched another program to show a message box would not be a native X11 backend -- which is why
+the message box this backend has, it draws itself -- and CNA has no abstraction for optional
+desktop-environment integration to hang a file chooser on. `false` here means the call refuses
+deterministically, which is what a false capability promises.
 
 **The capability set is fixed for the lifetime of a platform instance.** Half of these answers are
 about a particular X server — does it have RandR, does the window manager advertise fullscreen,
@@ -589,6 +591,38 @@ Other Unix systems running X have no `<linux/input.h>`; their X11 build reports 
 joystick.
 
 ---
+
+## Message boxes
+
+X has no dialog service, but a message box is only a window, and `GetDialogs()` draws one
+(`plans/plan_x11.md` X11-0167). It opens a connection of its own to the same server, used only by
+the calling thread: nothing of the platform's connection is touched, so the game's event queue is
+exactly as it was when the box closes. The call blocks until the box is answered, as on every
+backend.
+
+The window is what a window manager expects of a dialog: `_NET_WM_WINDOW_TYPE_DIALOG`;
+`WM_TRANSIENT_FOR` the parent and `_NET_WM_STATE_MODAL`, since the game is blocked on the box
+(neither when there is no parent, or the parent has gone); the keyboard asked for in `WM_HINTS`; a
+fixed size; the title in `_NET_WM_NAME` as UTF-8 and in `WM_NAME` as Latin-1; `WM_DELETE_WINDOW`. It is centred on its
+parent, or a third of the way down the screen without one, and never placed partly off the screen.
+A coloured band down its left edge gives the severity -- blue for information, amber for a warning,
+red for an error. The message keeps its own line breaks and is wrapped at spaces to about 520
+pixels (a word wider than that is broken, never inside a UTF-8 sequence); the buttons sit
+right-aligned along the bottom in the order given.
+
+Text is drawn in a Unicode core font -- the `-misc-fixed-...-iso10646-1` 6x13 face most servers
+carry, else any `iso10646-1` font -- through `XDrawString16`, which needs nothing of the process
+locale, so a box changes none of it (see [below](#what-the-backend-does-not-take-from-the-host-process)).
+A server with no Unicode font gets its built-in `fixed` and Latin-1, other characters shown as `?`;
+a character beyond U+FFFF, which a core font cannot index, and malformed UTF-8 are shown as U+FFFD.
+Core fonts are not anti-aliased: the box looks like an X application from before Xft, and needs no
+font library to do so.
+
+A click answers it (press and release on the same button), as do Return, keypad Enter and space on
+the focused button; Tab, Shift+Tab and the arrow keys move the focus ring. Escape and the window
+manager's close button answer "no choice" (-1). File dialogs refuse with
+`PlatformNotSupportedException` naming `NativeFileDialog`: a file chooser would have to be a
+toolkit, and starting one is starting another program.
 
 ## Graphics bridges
 
