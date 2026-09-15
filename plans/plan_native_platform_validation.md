@@ -33,8 +33,16 @@ pass.
 the INCR follow-up NPV-0127, **gamepads and joysticks through Linux evdev**, **sound for SDL-free
 builds**, **input-method composition** and **exclusive fullscreen through XRandR**
 (`plans/plan_x11.md` X11-0150..X11-0153) are done, and so is the rest of the X11 list,
-`plans/plan_x11.md` Phase M (X11-0154..X11-0158).
-The session stayed locked throughout, so the desktop scenarios below remain unrun.
+`plans/plan_x11.md` Phase M (X11-0154..X11-0158), and after it Phase N (X11-0160..X11-0173):
+controller mappings, MP3/FLAC, microphone capture, battery and host facts, the clipboard handed to a
+clipboard manager, input-device enumeration, motion sensors, message boxes, force feedback, file
+dialogs and OpenUrl through the desktop portal, screen-saver inhibition, the X11 tray -- and two
+from the real desktop: the owner ran the house demo there and found its walls drawn through each
+other, a GL window without a depth buffer (X11-0172, `plans/plan_x11.md` D-18), and the house smoke
+test now looks at its depth buffer (X11-0173). **The owner considers the X11 implementation complete
+(2026-09-15)**: what is left is battle-testing (`plans/plan_x11.md` §9, "Real-desktop validation"),
+not a missing subsystem. The session stayed locked through the automated work, so the desktop
+scenarios below remain unrun.
 
 Session events recorded honestly: gnome-shell crashed at 21:23:27 (untrapped BadWindow on its own
 X_SendEvent, core dump) and the owner logged in again -- no process of this validation was connected
@@ -205,18 +213,21 @@ still waits for the owner. Step 5 -- Linux evdev is `plans/plan_x11.md` X11-0150
 out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158,
 all done: audio (0151), XIM (0152), exclusive fullscreen (0153), XDND (0154), touch and pens (0155),
 per-monitor scale (0156), `PRIMARY` (0157) and clipboard formats (0158). The gaps left after them
-are `plans/plan_x11.md` Phase N (X11-0160..).
+are `plans/plan_x11.md` Phase N (X11-0160..X11-0173), done as well. **Every X11 step of the table
+is done** except the owner's `globalPointer` decision in step 4; what the table still offers is
+the desktop validation (2), native Windows (3), and the Win32 halves of 5, 7 and 8. The X11 halves
+are kept below as they were proposed, marked with where they were done.
 
 | # | Step | Estimate | Needs | Notes |
 |---|------|----------|-------|-------|
 | 1 | **Make `platform-ci.yml` green** | 1-2 h | nothing | Almost every cell of "Platform implementation matrix" fails at configure, on `next` and long before this pass (run 34929323742 has the same failing set as 34870105761 at the starting HEAD): the workflow clones the sibling `sharp-runtime` from `develop`, which lacks the `Xml.Serialization` component CNA `next` asks for ("Unknown Sharp Runtime component 'Xml.Serialization'"); sharp-runtime has a `next` branch that has it. The native Windows job (`windows-latest`, real Windows Server, WARP rather than a GPU) runs only on `workflow_dispatch`, so it never runs on a push. The Wine job fails at "Run the platform contract and Win32 suites under Wine" -- cause not yet investigated. While there: install `xclip` in the SDL-free X11 cell (X11ClipboardInterop skips without it) and add an SDL-free cell with a GPU renderer (OPENGL33), the configuration NPV-0106, NPV-0114 and NPV-0121 slipped through. |
 | 2 | **Finish the X11 desktop validation** | 1-2 h | an unlocked session left alone for the run (or 20-30 min of the owner's time for `interactive`) | the commands under "Remaining gaps"; includes NPV-0113 on mutter |
 | 3 | **Native Windows validation of Win32** | 3-6 h, plus fixing what it finds | the Windows 10 VirtualBox VM (disk attached) and a way in: `VBoxManage guestcontrol` with Guest Additions, a shared folder, or SSH; about an hour of the owner's time for the interactive checklist | docs/testing-win32-native.md; the script's first run is also its own test |
-| 4 | X11 follow-ups | 2-4 h | owner's decision on `globalPointer` | `globalPointer` under Xwayland; INCR entries of a requestor that died |
-| 5 | Controllers on both platforms | Win32 XInput 6-10 h; Linux evdev 15-25 h | owner's go-ahead | Win32 design already sketched in plans/plan_win32.md §15; the evdev work also serves a future Wayland backend |
-| 6 | Native audio for SDL-free builds | 30-50 h | owner's go-ahead | the largest gap of an SDL-free game: NULL audio only today |
-| 7 | IME | Win32 8-12 h (plans/plan_win32.md §15); X11 via XIM 10-15 h | owner's go-ahead | both report `ime=false` truthfully today |
-| 8 | The rest of the deferred list | X11: exclusive fullscreen 6-10 h, XDND + touch 12-18 h, per-monitor DPI/PRIMARY/formats 7-11 h; Win32: tray 2 h | owner's go-ahead | Wayland backend (50-80 h) only on explicit permission |
+| 4 | X11 follow-ups | 2-4 h | owner's decision on `globalPointer` | `globalPointer` under Xwayland -- **still open, the owner's decision**; INCR entries of a requestor that died -- ✅ NPV-0127 |
+| 5 | Controllers on both platforms | Win32 XInput 6-10 h; Linux evdev 15-25 h | owner's go-ahead | Linux evdev ✅ X11-0150, with mappings, motion sensors and force feedback (X11-0160, 0166, 0168); it serves a Wayland backend unchanged. Win32 XInput open, for the Win32 phase: design in plans/plan_win32.md §15 |
+| 6 | Native audio for SDL-free builds | 30-50 h | owner's go-ahead | ✅ X11-0151 (ALSA and CNA's own mixer), X11-0161 (MP3, FLAC), X11-0162 (capture) |
+| 7 | IME | Win32 8-12 h (plans/plan_win32.md §15); X11 via XIM 10-15 h | owner's go-ahead | X11 ✅ X11-0152; Win32 open, for the Win32 phase |
+| 8 | The rest of the deferred list | X11: exclusive fullscreen 6-10 h, XDND + touch 12-18 h, per-monitor DPI/PRIMARY/formats 7-11 h; Win32: tray 2 h | owner's go-ahead | X11 ✅ X11-0153..X11-0158; Win32 tray open. Wayland backend (50-80 h) only on explicit permission |
 
 ## Win32: NOT NATIVE WINDOWS VALIDATION
 
@@ -330,6 +341,10 @@ ibus.
 
 **Needs native Windows**: the list above.
 
+**Found later on the real desktop, and fixed:** the house demo's walls drawn through each other --
+a GL window without a depth buffer (`plans/plan_x11.md` X11-0172, D-18); its smoke test now checks
+the depth buffer (X11-0173).
+
 **Follow-ups found here, not done** (each a decision for its owner):
 - `globalPointer` under Xwayland: report false there, or narrow the contract.
 - Examples that clear depth without a GraphicsDeviceManager since SOFTWARE-333 (NPV-0118 fixed only
@@ -344,9 +359,9 @@ ibus.
   within the screen, so a 1024x768 client area cannot exist there -- which would make it the test's
   assumption rather than a backend defect; not investigated further on this branch.
 
-**Deferred on the owner's decision (2026-09-14) -- planned, not started**, estimates as given:
-gamepad over Linux evdev with hotplug, XNA mapping and rumble (15-25 h); native audio without SDL --
-PipeWire/Pulse/ALSA output plus a non-SDL decoder/mixer, the largest gap of SDL-free builds (30-50 h);
-IME through XIM (10-15 h); exclusive fullscreen through XRandR (6-10 h); XDND and XI2 touch/pen
-(12-18 h); per-monitor DPI, PRIMARY selection, more clipboard formats (7-11 h). A native Wayland
+**Deferred on the owner's decision (2026-09-14), approved and done on 2026-09-15** (branch `x11`):
+gamepads over Linux evdev (X11-0150), native audio without SDL through ALSA and CNA's own mixer
+(X11-0151), IME through XIM (X11-0152), exclusive fullscreen through XRandR (X11-0153), XDND and XI2
+touch/pen (X11-0154, X11-0155), per-monitor scale, PRIMARY and clipboard formats (X11-0156..0158) --
+and the rest of the gaps an SDL-free Linux game had, `plans/plan_x11.md` Phase N. A native Wayland
 backend (50-80 h) waits for the owner's explicit go-ahead.

@@ -25,8 +25,13 @@
 > X11-0173, the house demo's smoke run looking at its depth buffer, are ✅ -- every Phase N row. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the eight defects found that belong to other parts of the tree, and
-> [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
-> this work's own code.
+> [§8](#8-defects-this-work-found-in-its-own-implementation) for the eighteen this work found in
+> this work's own code -- the last of them by the owner, on a real desktop.
+>
+> **The implementation is complete** (the owner's assessment, 2026-09-15): no row is open, and
+> what is left is battle-testing on hardware and desktops this work could not reach -- listed in
+> [§9, "Real-desktop validation"](#real-desktop-validation-what-ran-there-and-what-did-not) --
+> rather than a missing subsystem. Further X11 work is fixing what real use finds.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code exists but has not met those criteria; ⬜ not implemented;
@@ -40,11 +45,12 @@
 | Fact | Value |
 |---|---|
 | Repository | `libcna/cna` |
-| Branch | `claude/x11-native-platform-vie452` (from `next`) |
+| Branch | `claude/x11-native-platform-vie452` (from `next`) for the original rows; `x11` for Phase M and N |
 | Baseline commit | `e05b3d0f026e0926741f89459daf02579240399d` — `merge(RLGL): integrate rlgl renderer into next` |
 | Working tree at start | clean (`git status --short` empty); no pre-existing user changes to preserve |
 | Sibling `sharp-runtime` | cloned at `/home/user/sharp-runtime`, branch `next`, `0c82d9b8` |
-| Host | Ubuntu 24.04, GCC 13.3.0, 4 cores, 15 GiB RAM, no GPU, no X session |
+| Host (the original 53 rows) | a cloud machine: Ubuntu 24.04, GCC 13.3.0, 4 cores, 15 GiB RAM, no GPU, no X session |
+| Host (Phase M and N, branch `x11`) | the owner's workstation: Debian 13, GCC 14, AMD Radeon 780M, GNOME 48 on Wayland -- the X11 backend reaches that desktop through Xwayland only; the tests run on private Xvfb and Xorg servers |
 | X11 development libraries present | `x11 1.8.7`, `xext 1.3.4`, `xi 1.8.1`, `xrandr 1.5.2`, `xcursor 1.2.1`, `xfixes 6.0.0`, GLX via `libglvnd-dev 1.7.0`, `vulkan 1.3.275` |
 | Test X servers available | `Xvfb`; window manager `openbox`; `xdotool`, `xprop` for injection/inspection |
 
@@ -66,7 +72,7 @@ Everything below was read out of the tree at the baseline commit, not assumed.
 
 ### 0.2 Baseline test results
 
-Recorded in §14 once measured, before any X11 source exists.
+Measured before any X11 source existed; recorded in [§9, "Regression"](#regression).
 
 ---
 
@@ -550,6 +556,7 @@ weakening a test.
 | D-15 | **A composition was not ended by its commit** (X11-0152). The backend ended it only when the input method drew its preedit empty or finished it after committing; the ibus 1.5.32 it was written against does, the CI runner's ibus 1.5.29 did not within three seconds of the commit, so the application kept showing the composition beside the text that replaced it. The commit now ends it, ahead of the text, and an empty composition is delivered once however many the input method sends -- as SDL3's X11 backend does. | `X11InputMethod.AnApplicationThatDrawsTheCompositionReceivesIt` on CI (run 34955898208), not locally | Locally ibus cleared the preedit itself, so the path the backend was missing never ran. The test now also checks the composition ended exactly once and before the text, which exercises the de-duplication against the local ibus. |
 | D-16 | **The session's scale was reported as the window's display scale** (X11-0074's D10, found by X11-0156). The contract's display scale is pixels per logical unit, and `GetPixelSize()` rightly equalled the client size -- so at `Xft.dpi: 192` a window claimed 2 while having 1, and a renderer relating the two (`PlatformGlSurfaceState::GetClientSize()` divides the drawable by the scale) took an 800x600 window for a 400x300 one and doubled every window-to-drawable coordinate. The window's scale is now 1, `highDpi` false, and the session's scale the display's `contentScale` (D10 revised). | reading the contract while writing `X11ContentScaleLive.AtXftDpi192TheWindowStaysOnePixelPerUnitAndTheDisplaySaysTwo`, which asserts the contract's own relation (pixels = logical × display scale) at 192 dpi -- the relation the old code broke; it was not run against the old code | Every X server the suites ran on had no `Xft.dpi` or 96, so the scale was 1 and both answers agreed; the old test checked only that the scale lay in [0.5, 8]. The SDL3 backend, which the contract was written from, answers SDL's pixel density -- 1 on X11 -- so nothing compared the two backends on a scaled session. |
 | D-17 | **Text served as `STRING` was UTF-8** (X11-0080's code, found by X11-0158). The owner answered every text target with the UTF-8 bytes it held, `STRING` included, but the ICCCM defines `STRING` as Latin-1 -- the reading side already decoded it so -- so an application that asks for `STRING` and honours it showed each non-ASCII character as two wrong ones. It is now transcoded, a character Latin-1 lacks becoming `?`. | reading the ICCCM while writing `X11SelectionLive.StringIsLatinOneWhenCnaServesText`, which asks for `STRING` as a separate client; the old code sent the UTF-8 bytes under any text target, so the test's expectation could not hold for it (not run against it) | Every reader in the suites -- `xclip`, CNA itself -- asked for `UTF8_STRING` first and never saw a `STRING` reply; SDL3's X11 backend sends UTF-8 under `STRING` too (`SDL_ClipboardTextCallback` answers every text type with the same bytes), so comparing the two would not have shown it either -- this is a deliberate difference from SDL3, on the ICCCM's side. |
+| D-18 | **A GL window had no depth buffer and one buffer** (X11-0100's visual choice, found by the owner, fixed by X11-0172). The renderers that state their framebuffer only when they create the context left the window's request zeroed, the contract's "platform default", and X11's default was the first `glXChooseFBConfig` config for `GLX_DOUBLEBUFFER False`, depth 0 and stencil 0. The house demo drew every wall through every other on the owner's desktop; SDL3's own default (double buffering, 16-bit depth) hid the same renderer's reliance on it. | the owner, running the house demo on the real desktop and comparing it with SDL3 | every GL test stated its framebuffer explicitly, and the house smoke test drew frames without looking at them -- which X11-0173 changed |
 
 D-10 is the one worth the extra sentence: it is exactly the failure the plan predicted when it
 split the Xvfb and window-manager suites, and it would have shipped green had the suite only ever
@@ -958,16 +965,33 @@ bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its o
 | `check_contract.py` | 28 headers covered, 635 declarations documented |
 | full `CnaTests` under `CNA_PLATFORM=X11` | 9476 tests; every remaining failure is content-pipeline/XNB and **fails identically on the SDL3 baseline build at the same commit** (measured, §7 F-4 and F-5) |
 
-### Real-desktop validation: what is still missing
+### Real-desktop validation: what ran there, and what did not
 
-This machine has no X session, no GPU and no input-method server. Xvfb plus `openbox` plus
-llvmpipe covers a great deal and is not the same thing. Not validated here, and recorded as such
-rather than assumed:
+The original rows were built and tested on a cloud machine with no GPU and no X session. Phase M
+and N were done on the owner's workstation -- Debian 13, AMD Radeon 780M, GNOME 48 on Wayland --
+where no native Xorg session exists: CNA's X11 backend reached the real desktop through Xwayland,
+and every test ran on private Xvfb and Xorg servers.
 
-- a hardware GLX driver, and a compositor's own fullscreen and vsync behaviour;
-- a multi-monitor XRandR layout, and monitor hotplug;
-- a desktop session that sets a scale (GNOME, KDE, Xfce) and changes it -- X11-0156 sets `Xft.dpi`
-  and plays an XSETTINGS manager on Xvfb;
-- a real input method (ibus, fcitx) driving `Xutf8LookupString` through a composition;
-- physical input devices, so XInput2 raw motion from a real mouse;
-- a window manager other than `openbox`.
+**Ran on the real desktop** (`plans/plan_native_platform_validation.md` has the commands and the 23
+defects that run found): the integration suite, hardware GLX (radeonsi) and hardware Vulkan (RADV,
+validation layer clean), the MIT-SHM presenter, 300-cycle GL/Vulkan/presenter lifetimes, the
+clipboard against `xclip`/`xsel`, the SDL-free demos with every compiled renderer -- and, on
+2026-09-15, the house demo in the owner's own hands, which found D-18.
+
+**Not validated anywhere real**, recorded as such rather than assumed:
+
+- a native Xorg session -- only Xwayland;
+- the focus- and input-dependent desktop scenarios (`cna_x11_desktop_validation` lifecycle, wm,
+  keyboard, text, mouse, relative, soak): the session was locked while they could have run, and
+  input is never injected into it;
+- physical controllers: a pad, a wheel, a force-feedback motor, a pad's motion sensors -- the kernel
+  paths ran against uinput devices, the drivers' layouts were read from their sources;
+- a real language input method (Pinyin, Hangul) through ibus or fcitx -- the private ibus runs its
+  XKB engine;
+- an XRandR mode switch on a physical monitor, several monitors and their hotplug, a desktop that
+  sets and changes a scale -- exclusive fullscreen and scale ran on private Xvfb servers;
+- window managers other than `openbox` and mutter's Xwayland;
+- a real desktop portal's choosers, a real tray panel, a real clipboard manager, a real
+  `org.freedesktop.ScreenSaver` -- each was played by the test on a private server or bus;
+- a real sound card and microphone -- deliberately: the suites play to and record from ALSA's
+  `null` device.
