@@ -23,6 +23,8 @@
 #include "../../../src/Linux/EvdevControllers.hpp"
 #include "../../../src/X11/X11Platform.hpp"
 
+#include "System/Environment.hpp"
+
 #include <linux/uinput.h>
 
 #include <atomic>
@@ -33,6 +35,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <variant>
@@ -891,28 +894,19 @@ TEST(X11EvdevVirtualDevice, AFlightStickIsARawJoystickAndNotAGamepad)
 class NoDisplay
 {
 public:
-    NoDisplay()
+    NoDisplay() : saved_(System::Environment::GetEnvironmentVariable("DISPLAY"))
     {
-        if (const char* display = std::getenv("DISPLAY"); display != nullptr)
-        {
-            saved_ = display;
-            had_ = true;
-        }
-        ::unsetenv("DISPLAY");
+        System::Environment::SetEnvironmentVariable("DISPLAY", std::nullopt);
     }
     ~NoDisplay()
     {
-        if (had_)
-        {
-            ::setenv("DISPLAY", saved_.c_str(), 1);
-        }
+        System::Environment::SetEnvironmentVariable("DISPLAY", saved_);
     }
     NoDisplay(const NoDisplay&) = delete;
     NoDisplay& operator=(const NoDisplay&) = delete;
 
 private:
-    std::string saved_;
-    bool had_ = false;
+    std::optional<std::string> saved_;
 };
 
 TEST(X11EvdevVirtualDevice, ThePlatformServesControllersEvenWithoutADisplay)
