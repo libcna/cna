@@ -110,3 +110,8 @@ spikes/occlusion-count-spike/occlusion_count_probe
 # `ContentImporterContext` answers; run from the repository root, that leaves an `obj/` here.
 # Build output of a test run, never source.
 /obj/
+
+# plans/plan_wayland.md WAYLAND-0001/0003: the Wayland existence-gate spikes' built probes.
+spikes/wayland-spike/registry_dump
+spikes/wayland-spike/output_dump
+spikes/wayland-spike/remote_desktop_probe
