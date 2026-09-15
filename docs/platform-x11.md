@@ -57,6 +57,7 @@ would build something other than what you asked for.
 | MIT-SHM (`X11/extensions/XShm.h`) | optional | shared-memory presentation; `XPutImage` still works |
 | GLX (through `libglvnd` or Mesa) | optional | `openGlContext` |
 | Vulkan **headers** | optional | `vulkanSurface` |
+| Linux kernel headers (`linux/input.h`) | optional | `gamepad`, `joystick`, `gamepadRumble` — see [Gamepads and joysticks](#gamepads-and-joysticks) |
 
 Vulkan is headers-only on purpose. `vkCreateXlibSurfaceKHR` is resolved through the
 `vkGetInstanceProcAddr` the caller already has, so the platform links no Vulkan loader and a
@@ -93,9 +94,10 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `openGlContext` | conditional | true when the server provides GLX ≥ 1.3 |
 | `vulkanSurface` | conditional | true when the Vulkan headers were available at build time |
 | `relativeMouse` | conditional | true when XInput2 is present at build **and** run time |
+| `gamepad`, `joystick`, `gamepadRumble` | conditional | Linux only: the kernel's evdev nodes, true when the build has `linux/input.h` and the machine has `/dev/input` — **with or without a display** |
 | `ime` | ❌ | XIM here delivers *committed* text; the capability promises composition and candidate events |
 | `inputDeviceEnumeration` | ❌ | XI2 can answer it; not implemented |
-| `gamepad`, `joystick`, `gamepadRumble`, `gamepadSensors` | ❌ | not an X11 facility |
+| `gamepadSensors` | ❌ | a pad's motion sensors are a second evdev node; pairing it with its pad is not implemented |
 | `haptics`, `sensors`, `powerInfo` | ❌ | not an X11 facility |
 | `messageBox`, `nativeFileDialog` | ❌ | no core X11 facility; see below |
 | `tray` | ❌ | a desktop-environment protocol, not an X11 one |
@@ -265,6 +267,84 @@ windows would pass while proving nothing.
 
 ---
 
+## Gamepads and joysticks
+
+The X server has not delivered controller input to clients for decades, so controllers do not come
+from X at all. On Linux they come from the kernel's evdev nodes (`/dev/input/event*`), read with
+nothing but `<linux/input.h>`: no libudev, no libevdev, no SDL. The code is
+`modules/platform/src/Linux/`, compiled into the X11 platform wherever that header exists, and
+covered by the same SDL-containment scan and ratchet as `src/X11/`. Because none of it touches the
+X connection, a process that cannot reach an X server still has its controllers.
+
+**What counts as a controller is decided from sysfs, without opening anything.**
+`/sys/class/input/eventN/device/capabilities/*` states the same bitmaps the node's ioctls would
+(a test compares the two for every node on the machine it runs on). A device with the kernel's
+gamepad button set is a gamepad; one with the joystick button range, or "trigger happy" buttons
+together with sticks or a hat, is a joystick; everything else — keyboards, mice, touchpads, tablets,
+a DualSense's separate motion-sensor node — is never opened. Asking by opening would mean holding
+someone's keyboard open, and it is slow as well: closing an evdev node waits for an RCU grace
+period in the kernel, measured at 23–72 ms per node on a ThinkPad, which had the first controller
+query stall for 0.8 s before classification moved to sysfs. It now takes about 3 ms.
+
+**Hot-plug is one inotify watch** on `/dev/input`: `IN_CREATE` when a node appears, `IN_ATTRIB`
+when udev then grants the session access to it, `IN_DELETE` — or a read failing with `ENODEV` — on
+unplug. There is no thread; everything runs inside `PollEvents` and the services' `Update` on the
+caller's own thread. Where inotify is unavailable the directory is rescanned at most once a second.
+
+**Nothing is opened until a controller is asked about.** The first `GetGamepad()` or `GetJoystick()`
+acquires `PlatformSubsystem::Gamepad`, as on the SDL3 platform, so a game that never touches
+`GamePad` pays nothing. Releasing the subsystem to zero closes every node (stopping any rumble);
+the services and capabilities stay, reporting every slot empty.
+
+**Mapping follows the kernel's gamepad API**, which names face buttons by *position*, exactly as
+CNA's `GamepadButton` does: A is the bottom button whatever is printed on it, so a DualSense's cross
+is A and its square is X. `xpad` predates that convention and reports an Xbox pad's left button as
+`BTN_X` — the code the gamepad API calls `BTN_NORTH` — so for `xpad`, and for Microsoft pads through
+HID, the two are swapped back. `RX`/`RY` is the right stick and `Z`/`RZ` the triggers where both
+exist; without `RX`/`RY`, `Z`/`RZ` is the right stick and `BRAKE`/`GAS` the triggers; a pad whose
+triggers are only buttons (`BTN_TL2`/`BTN_TR2`, a Switch Pro's ZL/ZR) drives them to 0 or 1. The hat
+is the D-pad. Sticks are [-1, 1] with up positive, triggers [0, 1], with no dead zone: XNA applies
+its own, and applying one here as well would apply it twice.
+
+**Slots.** The first four gamepads, in connection order, take XNA's four `PlayerIndex` slots; a
+fifth waits without one and takes the first slot that frees up. Every controller, gamepads included,
+is also a raw device in the joystick service: axes in kernel code order with hats excluded, buttons
+in the order controller databases number them, hats as POV positions, and a GUID in the same
+bus/vendor/product/version layout SDL uses, so a mapping keyed on one names the same device.
+
+**Events.** `PollEvents` delivers, after the frame's X events, a `DeviceEvent` for each connection
+(joystick first, then gamepad, sharing one id; the reverse on disconnection) and a
+`ControllerButtonEvent`/`ControllerAxisEvent` for every mapped change. The state a pad is in when it
+is opened — a trigger already held — is its state, not a change, and produces no event.
+
+**When the kernel's queue overflows** (`SYN_DROPPED`: nobody read the pad for a while), the damaged
+packet is discarded and the pad's whole state is read back, so the snapshot ends on what the pad is
+really doing rather than on whichever event happened to survive.
+
+**Rumble** is `FF_RUMBLE`, one effect per pad updated in place rather than re-uploaded; a duration
+of 0 means "until changed", which is what XNA's `SetVibration` means, and the kernel caps a duration
+at 65 535 ms. It needs write access to the node; a pad opened read-only, or without `FF_RUMBLE`,
+reports `rumble = false` in its capabilities and `SetRumble` returns false for it. Closing a pad
+removes its effect, so a game that exits mid-rumble does not leave the pad buzzing.
+
+**Not supported:** motion sensors, trigger rumble, light bars, player LEDs, touchpads and battery
+state all return false or empty. And a pad that the kernel reports with only the joystick button
+range — common for generic HID pads that describe themselves as joysticks — is a raw joystick, not
+an XNA gamepad: nothing in the device says which of its buttons is A. SDL answers that with its
+community controller database; CNA does not ship one.
+
+**What has been tested, and what has not.** Everything above runs against devices the kernel really
+creates through uinput — real evdev nodes, real hot-plug, real `SYN_DROPPED`, the real
+force-feedback upload handshake (`CnaX11EvdevTests`). What uinput cannot reproduce is a particular
+driver: the `xpad`, `hid-playstation` and `hid-nintendo` layouts are taken from the kernel's own
+documentation and drivers and pinned in `X11EvdevLayoutTests.cpp`, but have **not** been exercised
+with physical pads.
+
+Other Unix systems running X have no `<linux/input.h>`; their X11 build reports no gamepad and no
+joystick.
+
+---
+
 ## Graphics bridges
 
 **OpenGL uses GLX**, not EGL. The window this must attach to is an Xlib window with an Xlib
@@ -329,9 +409,11 @@ is modified.
 
 ## Portability
 
-The backend is X11, not Linux. Nothing in it is named `Linux*`, and nothing outside
-`modules/platform/src/X11/` learns that the host is X11 — which is what keeps a future
-`CNA_PLATFORM=WAYLAND` an independent addition rather than a refactor.
+The backend is X11, not Linux. Nothing outside `modules/platform/src/X11/` learns that the host is
+X11 — which is what keeps a future `CNA_PLATFORM=WAYLAND` an independent addition rather than a
+refactor. The one Linux-specific part is the controller support in `modules/platform/src/Linux/`,
+which knows nothing about X and is compiled only where `<linux/input.h>` exists; a Wayland backend
+would take it unchanged.
 
 The only non-POSIX dependencies are the X client libraries themselves and `clock_gettime`/
 `clock_nanosleep` for timing, both of which are POSIX. MIT-SHM uses System V shared memory, and is
@@ -342,7 +424,7 @@ exist; that has **not** been tested, and is recorded as untested rather than cla
 
 ## Running the tests
 
-Three ctest entries, split by what each actually needs:
+Four ctest entries, split by what each actually needs:
 
 ```sh
 ctest --test-dir cmake-build-x11 -R 'CnaX11'
@@ -350,7 +432,8 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 
 | Test | Needs | Covers |
 |---|---|---|
-| `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan |
+| `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan, controller classification and mapping from synthetic device descriptions |
+| `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, the platform with no X server; each test skips where the machine grants neither |
 | `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
 
@@ -385,9 +468,10 @@ nm -uC cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -c SDL_   # 0
 Three independent checks keep it that way rather than leaving it to a note:
 
 1. `X11IsSdlFreeTests.cpp` `#error`s if an SDL header ever reaches a translation unit that also
-   includes this backend, and scans every file under `src/X11/` — with comments and string
-   literals stripped, so the documentation may explain SDL while the code may not call it.
-2. `tools/platform/sdl_ratchet.py` now **denylists** `modules/platform/src/X11/` from the
+   includes this backend, and scans every file under `src/X11/` and `src/Linux/` — with comments
+   and string literals stripped, so the documentation may explain SDL while the code may not call it.
+2. `tools/platform/sdl_ratchet.py` now **denylists** `modules/platform/src/X11/` and
+   `modules/platform/src/Linux/` from the
    module-wide exemption `modules/platform/` otherwise has. The platform module is allowlisted
    because it is the one place SDL may be linked at all; the X11 backend inside it is specifically
    a place where it may not.

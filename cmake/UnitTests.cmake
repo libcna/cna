@@ -1083,6 +1083,13 @@ if(CNA_BUILD_TESTS)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
             CNA_X11_BACKEND_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules/platform/src/X11"
         )
+        # plans/plan_x11.md X11-0150: the evdev controller tests include src/Linux/ and exist only
+        # where the platform compiled it (modules/platform/CMakeLists.txt).
+        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
+        if(_cna_have_evdev)
+            target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+                CNA_PLATFORM_HAVE_EVDEV=1)
+        endif()
     endif()
 
     if(TARGET cna_platform_terminal_resize_harness)
@@ -1210,10 +1217,12 @@ if(CNA_BUILD_TESTS)
     # DISPLAY the shell had -- a shared Xvfb, or a developer's own desktop -- taking its clipboard,
     # its focus and its window manager from each other: a paste test waited forever on an INCR
     # transfer another test had interrupted.
+    # plans/plan_x11.md X11-0150: the uinput suite likewise runs once, through CnaX11EvdevTests;
+    # discovered as well it would plug every one of its virtual pads in a second time.
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*")
     endif()
     cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
     if(_cna_unit_tests_vk_gate)
@@ -1464,8 +1473,18 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*
+            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*
             LABELS "platform" TIMEOUT 120)
+
+        # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No
+        # display either -- controllers are not an X facility -- but a writable /dev/uinput and
+        # readable event nodes; each test skips where the machine grants neither.
+        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
+        if(_cna_have_evdev)
+            cna_register_renderer_test(NAME CnaX11EvdevTests
+                COMMAND CnaTests --gtest_filter=X11EvdevVirtualDevice.*
+                LABELS "platform" TIMEOUT 120)
+        endif()
 
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh")
             # A private Xvfb per run, on a display number the launcher searches for rather than

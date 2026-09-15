@@ -7,11 +7,34 @@
 #include "X11EventMapper.hpp"
 #include "X11Window.hpp"
 
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+#include "../Linux/EvdevControllers.hpp"
+#endif
+
 #include <cerrno>
 #include <ctime>
+#include <filesystem>
 #include <unistd.h>
 
 namespace CNA::Platform::X11 {
+
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+    struct X11Platform::Controllers
+    {
+        Linux::EvdevControllerHub hub;
+        Linux::EvdevGamepad gamepad{hub};
+        Linux::EvdevJoystick joystick{hub};
+    };
+#else
+    struct X11Platform::Controllers
+    {
+    };
+#endif
+
+    void X11Platform::ControllersDeleter::operator()(Controllers* controllers) const
+    {
+        delete controllers;
+    }
 
     namespace {
 
@@ -107,6 +130,17 @@ namespace CNA::Platform::X11 {
             connectionError_ = error.GetDetail().empty() ? std::string(error.what())
                                                          : error.GetDetail();
         }
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // Nothing is opened here -- that waits for the first GetGamepad()/GetJoystick() -- but
+        // whether the services exist at all is settled now, because the capability set is. A
+        // system without /dev/input (a minimal container) has no controllers to offer, and saying
+        // so beats a service that could never report one.
+        std::error_code error;
+        if (std::filesystem::is_directory("/dev/input", error))
+        {
+            controllers_.reset(new Controllers());
+        }
+#endif
         capabilities_ = ComputeCapabilities();
     }
 
@@ -129,6 +163,8 @@ namespace CNA::Platform::X11 {
         }
         windows_.clear();
         CloseConnection();
+        // Closing the nodes stops any rumble still playing (EvdevDevice's destructor).
+        controllers_.reset();
     }
 
     const std::string& X11Platform::GetName() const
@@ -145,6 +181,17 @@ namespace CNA::Platform::X11 {
     PlatformCapabilities X11Platform::ComputeCapabilities() const
     {
         PlatformCapabilities capabilities;
+
+        // Controllers first, because they do not depend on the X server at all: they are the
+        // kernel's evdev nodes, readable by a process that has no display. Rumble is claimed for
+        // the service -- SetRumble is always reachable -- and each pad then answers for itself
+        // through GamepadCapabilities::rumble, which is how the SDL3 backend reports it too.
+        if (controllers_ != nullptr)
+        {
+            capabilities.gamepad = true;
+            capabilities.joystick = true;
+            capabilities.gamepadRumble = true;
+        }
 
         // Every flag below names what backs it. The contract's rule is that a service accessor is
         // non-null exactly when its presence capability is true, so a flag may only be set in the
@@ -182,7 +229,10 @@ namespace CNA::Platform::X11 {
         // Deliberately false, each for a stated reason rather than for want of effort:
         //   ime                    -- XIM here delivers committed text only; the capability
         //                             promises composition and candidate events (plan D16).
-        //   gamepad/joystick/...   -- not an X11 facility; they are evdev/HID concerns.
+        //   gamepadSensors         -- a pad's motion sensors are a second evdev node; pairing it
+        //                             with its pad is not implemented.
+        //   haptics                -- the standalone force-feedback service; pad rumble is
+        //                             gamepadRumble, above.
         //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or
         //   tray                      kdialog would not be a native backend (plan D15).
         //   camera, powerInfo      -- not an X11 facility.
@@ -252,7 +302,17 @@ namespace CNA::Platform::X11 {
                                         ? std::string("no X connection could be opened")
                                         : connectionError_);
         }
-        ++refCounts_[subsystem];
+        const int count = ++refCounts_[subsystem];
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (subsystem == PlatformSubsystem::Gamepad && count == 1 && controllers_ != nullptr)
+        {
+            // A /dev/input that cannot be read leaves the hub with no controllers, which is an
+            // answer ("nothing plugged in"), not a reason to refuse the subsystem.
+            controllers_->hub.Start();
+        }
+#else
+        (void) count;
+#endif
     }
 
     void X11Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
@@ -265,6 +325,17 @@ namespace CNA::Platform::X11 {
             return;
         }
         --found->second;
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (subsystem == PlatformSubsystem::Gamepad && found->second == 0 && controllers_ != nullptr)
+        {
+            // Unlike Video, releasing this changes no capability: the services stay, reporting
+            // every slot empty until the subsystem is acquired again. Closing the nodes is what
+            // a release is for -- it stops rumble and lets go of the devices.
+            controllers_->hub.Stop();
+            controllers_->gamepad.Update();
+            controllers_->joystick.Update();
+        }
+#endif
 
         // The connection is deliberately NOT closed when the Video count reaches zero. Closing it
         // would change the capability set mid-life -- every display-dependent capability would
@@ -551,10 +622,24 @@ namespace CNA::Platform::X11 {
     void X11Platform::PollEvents(std::vector<PlatformEvent>& destination)
     {
         destination.clear();
-        if (connection_ == nullptr)
+        if (connection_ != nullptr)
         {
-            return;
+            PollXEvents(destination);
         }
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // Controller events after the window system's, from the same once-per-frame call. Only
+        // once the controller subsystem is up: before that nothing is open, and a game that never
+        // asks about controllers pays nothing for them.
+        if (controllers_ != nullptr && controllers_->hub.IsStarted())
+        {
+            controllers_->hub.Pump();
+            controllers_->hub.TakeEvents(destination);
+        }
+#endif
+    }
+
+    void X11Platform::PollXEvents(std::vector<PlatformEvent>& destination)
+    {
         Display* display = connection_->GetDisplay();
 
         // XPending flushes the output buffer and then reports what has already arrived, so this
@@ -1170,6 +1255,51 @@ namespace CNA::Platform::X11 {
         while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, nullptr) == EINTR)
         {
         }
+    }
+
+    // The controller subsystem is started by the first question about controllers rather than at
+    // construction, as the SDL3 backend does: opening /dev/input reads every node's description,
+    // and a game that never asks about controllers should not pay for that. Game::UpdateInput()
+    // only pumps these services once the subsystem is initialised, so its per-frame call cannot be
+    // what starts it.
+    void X11Platform::EnsureControllerSubsystem()
+    {
+        if (controllerSubsystemEnsured_)
+        {
+            return;
+        }
+        controllerSubsystemEnsured_ = true;
+        AcquireSubsystem(PlatformSubsystem::Gamepad);
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // The pump has been skipped for every frame up to this one; without this the first query
+        // would answer about a device list nothing has read yet.
+        controllers_->gamepad.Update();
+        controllers_->joystick.Update();
+#endif
+    }
+
+    IPlatformGamepad* X11Platform::GetGamepad()
+    {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (controllers_ != nullptr)
+        {
+            EnsureControllerSubsystem();
+            return &controllers_->gamepad;
+        }
+#endif
+        return nullptr;
+    }
+
+    IPlatformJoystick* X11Platform::GetJoystick()
+    {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (controllers_ != nullptr)
+        {
+            EnsureControllerSubsystem();
+            return &controllers_->joystick;
+        }
+#endif
+        return nullptr;
     }
 
     IPlatformKeyboard* X11Platform::GetKeyboard() { return keyboard_.get(); }

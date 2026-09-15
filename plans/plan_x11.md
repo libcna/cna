@@ -7,12 +7,14 @@
 > SDL3 stays CNA's default and an excellent optional backend. Nothing here removes, deprecates or
 > degrades it. What changes is that SDL stops being the only way CNA can reach a desktop.
 >
-> **Status: every task in the ledger is implemented and verified.** 53 of 53 rows are ✅. The
-> SDL-free configuration is measured, not argued: `ldd` shows no `libSDL` and `nm` shows no
-> undefined `SDL_` symbol in a working CNA test binary, and its 427 tests pass. See
+> **Status: the original ledger is complete** -- its 53 rows are ✅. The SDL-free configuration is
+> measured, not argued: `ldd` shows no `libSDL` and `nm` shows no undefined `SDL_` symbol in a
+> working CNA test binary, and its 427 tests pass. **Phase M** (the owner approved it on
+> 2026-09-15, worked on branch `x11`) goes past that first delivery: **X11-0150, gamepads and
+> joysticks through Linux evdev, is ✅**; X11-0151..X11-0158 are ⬜. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the five defects found that belong to other parts of the tree, and
-> [§8](#8-defects-this-work-found-in-its-own-implementation) for the ten this work's own tests
+> [§8](#8-defects-this-work-found-in-its-own-implementation) for the twelve this work's own tests
 > caught in this work's own code.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
@@ -116,8 +118,9 @@ shared by three backends.
 | D12 | **The clipboard is a real selection owner with `TARGETS`, `UTF8_STRING`, `STRING`, `TEXT` and `INCR` for large transfers.** | An X11 clipboard that only works between two CNA windows is not a clipboard. Ownership, `SelectionRequest`, `SelectionNotify`, `SelectionClear` and incremental transfer are all handled, and paste from an external application is what the test asserts. |
 | D13 | **A GLX window's `Visual` and `Colormap` are chosen from the `FBConfig` *before* `XCreateWindow`.** | This is the one place where window creation and GL are genuinely coupled. `WindowDescription::renderIntent == OpenGl` plus `openGlFramebuffer` already carries exactly the information needed, so the coupling is resolved at the contract level that already exists — no generic change. A window created with `renderIntent != OpenGl` refuses to host a GL context rather than failing obscurely inside GLX. |
 | D14 | **Optional X extensions are optional at *build* time, individually.** | `X11` and `Xext` are mandatory. `Xi` (raw mouse), `Xrandr` (displays), `Xcursor` (shaped cursors), `Xfixes` (pointer barriers/hiding) are each detected separately, each guarded by its own `CNA_X11_HAVE_*` macro, and each turns off exactly one capability when absent. No extension is required because it is convenient. |
-| D15 | **`messageBox`, `nativeFileDialog`, `tray`, `camera`, `gamepad`, `joystick`, `haptics`, `sensors` are `false`.** | Core X11 has no standard facility for any of them, and shelling out to `zenity`/`kdialog` is not a native backend. Truthfulness beats checkbox count; the contract's rule is that a false capability *refuses*, which is exactly what these do. |
+| D15 | **`messageBox`, `nativeFileDialog`, `tray`, `camera`, `haptics`, `sensors` are `false`.** | Core X11 has no standard facility for any of them, and shelling out to `zenity`/`kdialog` is not a native backend. Truthfulness beats checkbox count; the contract's rule is that a false capability *refuses*, which is exactly what these do. (`gamepad` and `joystick` were on this list until X11-0150; see D17.) |
 | D16 | **`ime` is `false` even though XIM is used.** | XIM here delivers *committed* text via `Xutf8LookupString`. CNA's `Ime` capability promises composition and candidate-list events (`TextEditingEvent`, `TextEditingCandidatesEvent`), which need XIM preedit callbacks that are not implemented. `textInput` is `true`; `ime` is `false`. |
+| D17 | **Controllers come from the Linux kernel's evdev nodes directly -- no libudev, no libevdev, no SDL -- in `src/Linux/`, not `src/X11/`.** (X11-0150, 2026-09-15) | X delivers no controller input, so this was never going to be an X feature; it is a Linux one, and keeping it out of `src/X11/` is what lets a future Wayland backend take it unchanged. The kernel's own interfaces -- `<linux/input.h>`, sysfs, inotify -- are all it needs; libudev would add a link dependency for a hot-plug signal inotify already gives, and libevdev a dependency for ioctls that are a page of code. Classification reads sysfs rather than opening nodes (D-12). On a Unix without `<linux/input.h>` the capabilities are simply false. |
 
 ---
 
@@ -253,6 +256,23 @@ shared by three backends.
 | X11-0103 | Conformance | ✅ | `EveryImplementation/PlatformConformance.*` and `PlatformWindowConformance.*` green for `X11`. **Two real defects found and fixed, neither by weakening a test:** the capability set was being recomputed per call and reported `textInput`/`clipboard` true while their accessors were still null before `Video`; and `AcquireSubsystem` refused the subsystems X11 has no facility for, where the cross-implementation rule is that acquisition is bookkeeping and absence is reported through a null service. See the evidence log. |
 | X11-0104 | Regression matrix | ✅ | See §9. Every mechanical gate passes; the SDL3-platform baseline is unchanged; the X11 selection runs the whole `CnaTests` suite; and the platform suite additionally runs clean under AddressSanitizer + LeakSanitizer in three separate display environments (window manager, bare Xvfb, no `DISPLAY` at all). |
 | X11-0105 | `docs/platform-x11.md` | ✅ | `docs/platform-x11.md`: dependency table with what each optional library gates, the full capability boundary with a reason per row, the keyboard/text/mouse/display/fullscreen/clipboard/graphics designs, the DPI policy, the threading/locale/error-handler ownership rules, how to run the three suites, what Xvfb cannot cover, and the three independent mechanisms that keep SDL out. |
+
+### Phase M — past the first delivery (approved 2026-09-15, branch `x11`)
+
+The owner's list from `plans/plan_native_platform_validation.md` "Next steps", in the owner's order.
+Win32 and Wayland are out of scope for this phase.
+
+| ID | Task | Status | Acceptance criteria / Notes |
+|---|---|---|---|
+| X11-0150 | Gamepads and joysticks through Linux evdev | ✅ | `modules/platform/src/Linux/` (D17): `EvdevLayout` (classification, the gamepad mapping, normalisation -- pure), `EvdevDevice` (one node: ioctls, sysfs description, `SYN_DROPPED` resync, `FF_RUMBLE`), `EvdevControllers` (the hub over `/dev/input` with inotify hot-plug, and `IPlatformGamepad`/`IPlatformJoystick` over it). `X11Platform` reports `gamepad`/`joystick`/`gamepadRumble` wherever the build has `<linux/input.h>` and the machine `/dev/input` -- **independently of the X connection** -- starts the hub lazily on the first `GetGamepad()`/`GetJoystick()` like the SDL3 platform, closes every node when `PlatformSubsystem::Gamepad` is released, and delivers `DeviceEvent`/`ControllerButtonEvent`/`ControllerAxisEvent` from `PollEvents`. Tests: `X11EvdevLayoutTests.cpp` (25 cases, no device: classification of pads/keyboards/mice/touchpads/tablets/sensor nodes, xpad vs gamepad-API face buttons, sticks/triggers/hats, scaling, sysfs parsing, which nodes the hub opens) in `CnaX11MappingTests`; `X11EvdevVirtualDeviceTests.cpp` (11 cases against real kernel devices through uinput: hot-plug both ways, events and snapshots, held-at-open state, `SYN_DROPPED`, xpad identity, the whole force-feedback upload/play/stop/erase handshake, a flight stick as a raw joystick, the platform with no `DISPLAY`, sysfs vs ioctl agreement for every node on the machine) as `CnaX11EvdevTests`. Two defects caught on the way, D-11 and D-12. **Not covered:** physical pads -- the xpad/hid-playstation/hid-nintendo layouts follow the kernel's documentation and drivers but no physical controller was available. Not implemented: motion sensors, trigger rumble, light bar, player LEDs, touchpad, battery, a controller mapping database for pads outside the gamepad API. |
+| X11-0151 | Native audio for SDL-free builds | ⬜ | PipeWire/PulseAudio/ALSA output and a decoder/mixer without SDL; the largest gap of an SDL-free game. Verified on a null sink only (no audible output on this machine at night). |
+| X11-0152 | IME through XIM preedit callbacks | ⬜ | `TextEditingEvent`/`TextEditingCandidatesEvent`, making `ime` true truthfully (D16). |
+| X11-0153 | Exclusive fullscreen through XRandR | ⬜ | Mode switch with restore on exit, failure and abnormal termination; tested on private servers only -- the owner's displays are not reconfigured. |
+| X11-0154 | Drag and drop (XDND) | ⬜ | Files and text dropped from another client. |
+| X11-0155 | Touch and pen through XInput2 | ⬜ | `TouchEvent` from XI2 touch events. |
+| X11-0156 | Per-monitor DPI | ⬜ | Beyond the session-wide `Xft.dpi` of D10. |
+| X11-0157 | `PRIMARY` selection | ⬜ | Middle-click paste, both directions. |
+| X11-0158 | More clipboard formats | ⬜ | Beyond text. |
 ---
 
 ## 5. Capability matrix (target)
@@ -276,7 +296,8 @@ shared by three backends.
 | `cursorShapes` | ✅ true | core cursor font; Xcursor for custom images |
 | `globalPointer` | ✅ true | |
 | `inputDeviceEnumeration` | ✅ true when XI2 is present | keyboards, mice, touch from the XI2 device list |
-| `gamepad`, `joystick`, `gamepadRumble`, `gamepadSensors`, `haptics`, `sensors` | ❌ false | not an X11 facility |
+| `gamepad`, `joystick`, `gamepadRumble` | ✅ true on Linux with `/dev/input` | the kernel's evdev nodes, with or without a display (D17, X11-0150) |
+| `gamepadSensors`, `haptics`, `sensors` | ❌ false | not an X11 facility; a pad's sensor node is not paired with its pad |
 | `powerInfo` | ❌ false | not an X11 facility |
 | `messageBox`, `nativeFileDialog`, `tray`, `camera` | ❌ false | D15 |
 | `managedEntrypoint` | ❌ false | ordinary `main()` |
@@ -384,6 +405,9 @@ these was found by a test rather than by reading the code. None was fixed by wea
 | D-9 | `_NET_WM_STATE` was written **directly** on an iconified window. An iconified window is unmapped but still *managed*, so this raced the window manager's own update and `Restore()` intermittently left the window iconic -- about one run in three inside the full suite, every time green in isolation. | `X11WithWindowManager.MinimizeAndRestoreRoundTrip` | The guard said "not mapped right now" where EWMH means "never mapped". Looks like flakiness. |
 | D-10 | `Sync()` round-tripped the X server but not the **window manager**. `XResizeWindow` on a managed window is redirected: the server forwards a `ConfigureRequest` and the window manager decides. So `SetSize(); Sync(); GetClientBounds()` read the old size whenever a window manager was running. | `PlatformWindowConformance.SizeChangeLandsAfterSync/X11` under `openbox` | It passed under bare Xvfb, where there is no window manager to wait for. |
 
+| D-11 | **After a kernel queue overflow a button could stay stuck in a stale state** (X11-0150). The resync read the pad's key state and then went on applying the rest of the same `read()` -- events *older* than that state. Reading the key state makes the kernel drop the key events still queued (`EVIOCGKEY` flushes them), so nothing newer followed to correct the stale ones: 27 of 48 flood lengths ended with the wrong buttons held. | noticed while writing `X11EvdevVirtualDevice.AnOverflowedQueueEndsOnTheDevicesRealState`, whose first form passed with the bug in place; rewritten to vary the flood across a whole ring buffer, it fails 27/48 rounds without the fix and passes with it | Only when more than one read's worth of events is left after the `SYN_DROPPED`, which depends on where the kernel's ring last wrapped. |
+| D-12 | **The first controller query stalled for 0.8 s** (X11-0150): the hub opened every `/dev/input` node to classify it, and closing an evdev node waits for an RCU grace period (23-72 ms per node, measured). Classification now reads sysfs and never opens a keyboard or mouse: 3 ms. | every uinput test taking about a second; timing each node's open, ioctl and close | Correct output, just slow -- and it only shows on a machine with many input nodes. `X11EvdevHub.SysfsDecidesWhatIsOpenedAndAKeyboardNeverIs` watches the opens through inotify and fails without the fix. |
+
 D-10 is the one worth the extra sentence: it is exactly the failure the plan predicted when it
 split the Xvfb and window-manager suites, and it would have shipped green had the suite only ever
 run against a bare virtual server.
@@ -475,6 +499,32 @@ from a sanitizer that is not switched on proves nothing.
   and a click arriving as CNA button 1 with client coordinates;
 - a real external clipboard peer: `xclip` pasting what CNA copied and CNA pasting what `xclip`
   copied, including a 512 KB `INCR` transfer in both directions and the `TARGETS` list.
+
+### Controllers through evdev (X11-0150, 2026-09-15)
+
+Debian 13, kernel 6.12, a ThinkPad with sixteen input nodes and no physical controller; the user in
+the `input` group and `/dev/uinput` granted by ACL. `cmake-build-x11` (X11, SDL OFF, HEADLESS).
+
+```
+$ ctest -R 'CnaX11(Mapping|Evdev|Integration|WindowManager)Tests'
+CnaX11MappingTests ....... Passed      (includes 25 X11EvdevLayout/X11EvdevHub cases)
+CnaX11EvdevTests ......... Passed  16.7 s   (11 cases, real kernel devices through uinput)
+CnaX11IntegrationTests ... Passed
+CnaX11WindowManagerTests . Skipped (no openbox on this machine)
+```
+
+- **sysfs agrees with the kernel's ioctls for every node on the machine** -- keyboard, TrackPoint,
+  touchpad, ACPI buttons, audio jacks, and the test's own virtual pad
+  (`SysfsAndTheNodeItselfDescribeEveryDeviceAlike`), classification included.
+- **Hub start:** 830 ms before D-12's fix, 3 ms after (the same test, measured around `Start()`).
+- **D-11:** `AnOverflowedQueueEndsOnTheDevicesRealState` fails 27 of 48 rounds with the resync
+  change reverted, passes 5 of 5 runs with it.
+- **Under ASan + UBSan + LSan** (`build-asan`, `CnaPlatformModuleTests`): the evdev suites, the
+  SDL-containment scan and the conformance suite -- 96 passed, 1 skipped (X11 supports surface
+  presentation), no sanitizer report.
+- **The ratchet covers `src/Linux/`:** a planted `SDL_Init` there takes
+  `sdl_ratchet.py --check --strict` from 0 to 1 reference and fails it; removed, it is at budget again.
+- `sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet`, `hot_path_lint`: all pass.
 
 ### Regression
 

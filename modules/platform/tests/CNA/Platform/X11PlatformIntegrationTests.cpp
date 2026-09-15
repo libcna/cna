@@ -28,6 +28,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <sys/wait.h>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -644,11 +645,21 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_TRUE(capabilities.cursorShapes);
     EXPECT_TRUE(capabilities.clipboard);
 
+    // Controllers are not an X facility: they come from the kernel's evdev nodes, wherever the
+    // build has them and the machine has /dev/input (plans/plan_x11.md X11-0150).
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+    const bool evdev = std::filesystem::is_directory("/dev/input");
+#else
+    const bool evdev = false;
+#endif
+    EXPECT_EQ(capabilities.gamepad, evdev);
+    EXPECT_EQ(capabilities.joystick, evdev);
+    EXPECT_EQ(capabilities.gamepadRumble, evdev);
+    EXPECT_FALSE(capabilities.gamepadSensors);
+
     // Deliberately false, each because the facility does not exist in X11 rather than because it
     // was not finished. A future change turning one of these on without implementing it would
     // fail here rather than at a null dereference in a game.
-    EXPECT_FALSE(capabilities.gamepad);
-    EXPECT_FALSE(capabilities.joystick);
     EXPECT_FALSE(capabilities.haptics);
     EXPECT_FALSE(capabilities.sensors);
     EXPECT_FALSE(capabilities.messageBox);

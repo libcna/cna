@@ -171,8 +171,10 @@ TEST(X11IsSdlFree, StrippingCommentsKeepsCodeAndDiscardsProse)
 
 TEST(X11IsSdlFree, NoCodeInTheBackendReferencesSdl)
 {
-    const std::filesystem::path directory = BackendDirectory();
-    ASSERT_TRUE(std::filesystem::is_directory(directory));
+    // src/X11/ and the Linux evdev controllers in src/Linux/ it serves gamepads from: both are
+    // part of every SDL-free X11 build.
+    const std::vector<std::filesystem::path> directories = {
+        BackendDirectory(), BackendDirectory().parent_path() / "Linux"};
 
     // The tokens that constitute a use rather than a mention: SDL's own C identifiers, its
     // headers, CNA's SDL backend namespaces, and SDL_mixer's prefix.
@@ -180,22 +182,27 @@ TEST(X11IsSdlFree, NoCodeInTheBackendReferencesSdl)
 
     std::vector<std::string> offenders;
     int scanned = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(directory))
+    for (const std::filesystem::path& directory : directories)
     {
-        if (!entry.is_regular_file())
+        ASSERT_TRUE(std::filesystem::is_directory(directory)) << directory;
+        for (const auto& entry : std::filesystem::directory_iterator(directory))
         {
-            continue;
-        }
-        ++scanned;
-        std::ifstream file(entry.path());
-        const std::string source((std::istreambuf_iterator<char>(file)),
-                                 std::istreambuf_iterator<char>());
-        const std::string code = StripComments(source);
-        for (const std::string& token : tokens)
-        {
-            if (code.find(token) != std::string::npos)
+            if (!entry.is_regular_file())
             {
-                offenders.push_back(entry.path().filename().string() + " references " + token);
+                continue;
+            }
+            ++scanned;
+            std::ifstream file(entry.path());
+            const std::string source((std::istreambuf_iterator<char>(file)),
+                                     std::istreambuf_iterator<char>());
+            const std::string code = StripComments(source);
+            for (const std::string& token : tokens)
+            {
+                if (code.find(token) != std::string::npos)
+                {
+                    offenders.push_back(directory.filename().string() + "/" +
+                                        entry.path().filename().string() + " references " + token);
+                }
             }
         }
     }

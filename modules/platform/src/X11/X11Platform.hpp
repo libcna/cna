@@ -29,9 +29,10 @@ namespace CNA::Platform::X11 {
      *
      * That is this backend's whole reason for existing. Windows come from `XCreateWindow`, events
      * from `XNextEvent`, keys from XKB, text from XIM, the pointer from the core protocol and
-     * XInput2, monitors from XRandR, timing from `clock_gettime`. `modules/platform/src/X11/`
-     * contains no SDL header, no SDL symbol and no SDL build dependency, and a test asserts that
-     * rather than leaving it to a grep in a plan document.
+     * XInput2, monitors from XRandR, timing from `clock_gettime`, and on Linux gamepads and
+     * joysticks from the kernel's evdev nodes (`modules/platform/src/Linux/`), since X itself has
+     * no controller input. Neither directory contains an SDL header, an SDL symbol or an SDL build
+     * dependency, and a test asserts that rather than leaving it to a grep in a plan document.
      *
      * ### Xlib threading
      *
@@ -150,10 +151,16 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
         /** @brief Gets the mouse service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformMouse* GetMouse() override;
-        /** @brief Gets the gamepad service. @return Null; X11 has no gamepad facility. */
-        [[nodiscard]] IPlatformGamepad* GetGamepad() override { return nullptr; }
-        /** @brief Gets the joystick service. @return Null; X11 has no joystick facility. */
-        [[nodiscard]] IPlatformJoystick* GetJoystick() override { return nullptr; }
+        /**
+         * @brief Gets the gamepad service, starting the controller subsystem on first use.
+         * @return The Linux evdev service, or null where the kernel offers none.
+         */
+        [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /**
+         * @brief Gets the joystick service, starting the controller subsystem on first use.
+         * @return The Linux evdev service, or null where the kernel offers none.
+         */
+        [[nodiscard]] IPlatformJoystick* GetJoystick() override;
         /** @brief Gets the text input service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null; X11 has no sensor facility. */
@@ -195,6 +202,15 @@ namespace CNA::Platform::X11 {
         /// caller's wrapper must not destroy a window the platform's own registry still tracks.
         class BorrowedWindow;
 
+        /// The controller services. Opaque so this class's layout is the same whether or not
+        /// the build has evdev: tests include this header without the platform's private
+        /// definitions.
+        struct Controllers;
+        struct ControllersDeleter
+        {
+            void operator()(Controllers* controllers) const;
+        };
+
         /// X11WindowHost: drops a destroyed wrapper from the registry and from every service,
         /// matched on identity.
         void OnWindowDestroyed(X11Window& window) override;
@@ -207,9 +223,11 @@ namespace CNA::Platform::X11 {
         void ForgetWindow(WindowId id);
         [[nodiscard]] X11Window* FindWindow(WindowId id) const;
         [[nodiscard]] X11Window* FindWindowByXid(::Window xid) const;
+        void PollXEvents(std::vector<PlatformEvent>& destination);
         void TranslateEvent(XEvent& event, std::vector<PlatformEvent>& destination);
         void EmitWindowStateTransitions(X11Window& window,
                                         std::vector<PlatformEvent>& destination);
+        void EnsureControllerSubsystem();
 
         std::unique_ptr<X11Connection> connection_;
         /// Why the connection could not be opened, when it could not. Empty otherwise.
@@ -232,6 +250,12 @@ namespace CNA::Platform::X11 {
         std::unique_ptr<X11Displays> displays_;
         std::unique_ptr<X11GlContext> glContext_;
         std::unique_ptr<X11VulkanSurface> vulkanSurface_;
+
+        /// Null where the kernel offers no controller interface. Independent of the X
+        /// connection: controllers come from the kernel, not from the X server.
+        std::unique_ptr<Controllers, ControllersDeleter> controllers_;
+        /// Set by the first GetGamepad()/GetJoystick(), whether or not starting succeeded.
+        bool controllerSubsystemEnsured_ = false;
 
         Common::StandardFileSystem fileSystem_{"cna-x11"};
         Common::StandardSystemInfo systemInfo_;
