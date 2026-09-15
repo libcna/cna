@@ -693,6 +693,16 @@ namespace CNA::Platform::X11 {
         {
             mouse_->RefreshRelativeMode();
         }
+        // A focus loss held back because it came right after a display-mode change is decided
+        // here, once the grace period is over (X11Window::OnFocusChanged).
+        for (const auto& [id, window] : windows_)
+        {
+            (void) id;
+            if (window != nullptr)
+            {
+                window->CheckPendingFocusLoss();
+            }
+        }
     }
 
     void X11Platform::EmitWindowStateTransitions(X11Window& window,
@@ -966,6 +976,15 @@ namespace CNA::Platform::X11 {
                     }
                     return;
                 }
+                if (event.xproperty.atom == atoms.netWmState)
+                {
+                    // Before the transitions are reported: a window taken out of fullscreen by
+                    // someone else gives its display mode back first (X11-0153). The trap is for
+                    // the same destroy race EmitWindowStateTransitions guards against.
+                    X11ErrorTrap trap(display);
+                    window->OnNetWmStateChanged();
+                    trap.Sync();
+                }
                 if (event.xproperty.atom == atoms.netWmState ||
                     event.xproperty.atom == atoms.wmState)
                 {
@@ -983,6 +1002,9 @@ namespace CNA::Platform::X11 {
                 }
                 const bool gained = event.type == FocusIn;
                 window->SetFocused(gained);
+                // An exclusive-fullscreen window gives the desktop its mode back when it loses
+                // focus, and takes it again with focus (X11-0153).
+                window->OnFocusChanged(gained);
                 if (mouse_ != nullptr)
                 {
                     // Relative mode's grab is held only while its window has focus.

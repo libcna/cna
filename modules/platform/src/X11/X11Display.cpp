@@ -4,6 +4,7 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "X11Error.hpp"
+#include "X11ModeSwitch.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -60,10 +61,15 @@ namespace CNA::Platform::X11 {
         // RefreshWindowManagerState() reachable without polling.
         XSelectInput(display_, root_, PropertyChangeMask | StructureNotifyMask);
         RefreshWindowManagerState();
+
+        modeSwitcher_ = std::make_unique<X11ModeSwitcher>(*this);
     }
 
     X11Connection::~X11Connection()
     {
+        // Every display mode exclusive fullscreen still holds goes back while there is still a
+        // connection to send it over.
+        modeSwitcher_.reset();
         if (display_ != nullptr)
         {
             // XCloseDisplay FIRST, then unregister. Closing flushes the output buffer and reads
@@ -202,6 +208,34 @@ namespace CNA::Platform::X11 {
                 XRRSelectInput(display_, root_, RRScreenChangeNotifyMask | RRCrtcChangeNotifyMask |
                                                     RROutputChangeNotifyMask);
             }
+        }
+#endif
+
+        // Xwayland 21.1 and later announce themselves with an extension; older ones are known by
+        // the names they give their RandR outputs.
+        if (XQueryExtension(display_, "XWAYLAND", &opcode, &event, &error) == True)
+        {
+            isXwayland_ = true;
+        }
+#if defined(CNA_X11_HAVE_XRANDR)
+        else if (randrEventBase_ >= 0)
+        {
+            X11ErrorTrap trap(display_);
+            if (XRRScreenResources* resources = XRRGetScreenResourcesCurrent(display_, root_))
+            {
+                if (resources->noutput > 0)
+                {
+                    if (XRROutputInfo* output =
+                            XRRGetOutputInfo(display_, resources, resources->outputs[0]))
+                    {
+                        isXwayland_ = output->name != nullptr &&
+                                      std::strncmp(output->name, "XWAYLAND", 8) == 0;
+                        XRRFreeOutputInfo(output);
+                    }
+                }
+                XRRFreeScreenResources(resources);
+            }
+            trap.Sync();
         }
 #endif
     }

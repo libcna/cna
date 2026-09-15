@@ -79,7 +79,10 @@ from XKB key names and has no equivalent without it" PARENT_SCOPE)
     # Xrandr   -> multipleDisplays                       (monitor enumeration and hotplug)
     # Xcursor  -> custom cursor images                   (core X11 still gives shaped cursors)
     # Xfixes   -> pointer hiding without an owned pixmap
-    foreach(_ext Xi Xrandr Xcursor Xfixes)
+    # Xau      -> the exclusive-fullscreen mode guardian's own connection to a server that asks
+    #             for an authorisation cookie (plans/plan_x11.md X11-0153); libX11 already
+    #             depends on it, so it is present wherever libX11 is
+    foreach(_ext Xi Xrandr Xcursor Xfixes Xau)
         string(TOUPPER "${_ext}" _ext_upper)
         if(X11_${_ext}_FOUND AND X11_${_ext}_LIB)
             list(APPEND _libraries ${X11_${_ext}_LIB})

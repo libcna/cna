@@ -463,7 +463,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           set -euo pipefail
-          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests|InputMethodTests))$' --output-on-failure
+          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests|InputMethodTests|ExclusiveFullscreenTests))$' --output-on-failure
           ctest --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'
@@ -513,7 +513,7 @@ jobs:
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev \
             libgl1-mesa-dev libglx-dev libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers \
-            libasound2-dev
+            libasound2-dev openbox x11-xserver-utils
 
       - name: Cache compiler outputs
         uses: actions/cache@v4
@@ -571,6 +571,9 @@ jobs:
         run: |
           set -euo pipefail
           ctest --test-dir build -R '^X11_House3D_SmokeTest_' --output-on-failure
+          # plans/plan_x11.md X11-0153: the game in exclusive fullscreen -- the monitor of a
+          # private Xvfb switched through IsFullScreen, and given back on exit and after SIGKILL.
+          ctest --test-dir build -R '^X11_House3D_ExclusiveFullscreen_' --output-on-failure
           for renderer in OPENGL33 VULKAN SOFTWARE HEADLESS; do
             (cd build && CNA_GRAPHICS_RENDERER="$renderer" \
               sh ../tools/platform/x11_test_server.sh ./cna_demo_2d --smoke 6)

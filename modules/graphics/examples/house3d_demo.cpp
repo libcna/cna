@@ -60,6 +60,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -1277,6 +1278,16 @@ private:
 
 public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
+
+    // Starts in fullscreen at a back-buffer size, the way an XNA game asks for it -- IsFullScreen
+    // on the GraphicsDeviceManager -- which is exclusive fullscreen: the monitor switches to the
+    // display mode that fits (plans/plan_x11.md X11-0153).
+    void SetFullScreen(int width, int height)
+    {
+        graphics_->setPreferredBackBufferWidthProperty(width);
+        graphics_->setPreferredBackBufferHeightProperty(height);
+        graphics_->setIsFullScreenProperty(true);
+    }
 };
 
 int main(int argc, char* argv[]) {
@@ -1288,6 +1299,19 @@ int main(int argc, char* argv[]) {
             game.SetSmokeFrames(std::stoi(argv[++i]));
         else if (std::string(argv[i]) == "--smoke")
             game.SetSmokeFrames(3);
+        else if (std::string(argv[i]) == "--fullscreen" && i + 1 < argc)
+        {
+            // WIDTHxHEIGHT, e.g. 800x600.
+            const std::string size = argv[++i];
+            const std::size_t separator = size.find('x');
+            if (separator == std::string::npos)
+            {
+                std::cerr << "--fullscreen expects WIDTHxHEIGHT, e.g. 800x600\n";
+                return 2;
+            }
+            game.SetFullScreen(std::stoi(size.substr(0, separator)),
+                               std::stoi(size.substr(separator + 1)));
+        }
     }
 
     game.Run();

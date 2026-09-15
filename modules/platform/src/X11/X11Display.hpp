@@ -3,10 +3,13 @@
 
 #include "X11Headers.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace CNA::Platform::X11 {
+
+    class X11ModeSwitcher;
 
     /**
      * @brief Every atom this backend interns, cached once per connection.
@@ -198,6 +201,28 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] bool HasRandr() const { return randrEventBase_ >= 0; }
 
         /**
+         * @brief Gets whether the server is Xwayland rather than a server that owns its displays.
+         *
+         * Matters where Xwayland is different by design: it emulates display-mode changes for the
+         * client that asks, so there is no monitor mode to give back (plans/plan_x11.md X11-0153).
+         *
+         * @return True when the server announces the `XWAYLAND` extension, or names its outputs
+         * the way Xwayland does.
+         */
+        [[nodiscard]] bool IsXwayland() const { return isXwayland_; }
+
+        /**
+         * @brief Gets the display-mode switcher exclusive fullscreen uses on this connection.
+         *
+         * Owned here because a switched mode is a property of the server the connection reaches,
+         * and giving it back is part of closing the connection: the switcher is destroyed -- and
+         * every mode it still holds restored -- before `XCloseDisplay`.
+         *
+         * @return The switcher.
+         */
+        [[nodiscard]] X11ModeSwitcher& GetModeSwitcher() const { return *modeSwitcher_; }
+
+        /**
          * @brief Reads a whole window property.
          *
          * Handles the multi-request loop `XGetWindowProperty` requires for properties longer than
@@ -245,7 +270,9 @@ namespace CNA::Platform::X11 {
         int xkbEventBase_ = -1;
         int xi2Opcode_ = -1;
         int randrEventBase_ = -1;
+        bool isXwayland_ = false;
         float displayScale_ = 1.0f;
+        std::unique_ptr<X11ModeSwitcher> modeSwitcher_;
     };
 
 } // namespace CNA::Platform::X11

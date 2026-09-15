@@ -111,6 +111,9 @@ namespace CNA::Platform::X11 {
             /// in a build without the Xrandr headers. Zero when RandR is not in use.
             XID crtc = 0;
             XID output = 0;
+            /// The mode the monitor is in now. Differs from info.desktopMode only while exclusive
+            /// fullscreen holds a mode of its own on it (X11-0153).
+            DisplayMode currentMode;
         };
 
         void EnsureCache() const;
@@ -119,6 +122,8 @@ namespace CNA::Platform::X11 {
         X11Connection& connection_;
         mutable std::vector<CachedDisplay> cache_;
         mutable bool cacheValid_ = false;
+        /// The mode switcher's generation the cache was built at.
+        mutable std::uint64_t modeGeneration_ = 0;
         int savedScreenSaverTimeout_ = -1;
     };
 

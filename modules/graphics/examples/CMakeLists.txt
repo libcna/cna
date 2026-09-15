@@ -191,6 +191,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(NOT _cna_house3d_renderers)
             set(_cna_house3d_renderers ${CNA_GRAPHICS_RENDERER})
         endif()
+        set(_cna_house3d_windowless HEADLESS SOFTWARE STUB TINYGL PORTABLEGL)
         foreach(_cna_house3d_renderer IN LISTS _cna_house3d_renderers)
             add_test(NAME X11_House3D_SmokeTest_${_cna_house3d_renderer}
                 COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh"
@@ -198,8 +199,27 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             set_tests_properties(X11_House3D_SmokeTest_${_cna_house3d_renderer} PROPERTIES
                 ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_house3d_renderer}"
                 TIMEOUT 120 SKIP_RETURN_CODE 77 LABELS "GraphicsSmoke;platform")
+
+            # plans/plan_x11.md X11-0153: the same game with IsFullScreen -- the monitor switched
+            # to the back buffer's mode, and given back on exit and after a SIGKILL. It changes the
+            # display mode, so it runs only on the launcher's own server, and skips without
+            # openbox or xrandr. Only for renderers that draw into a window: the ones whose
+            # descriptor needs none (needsWindow = false) render off-screen and have no fullscreen
+            # to be in.
+            if(_cna_house3d_renderer IN_LIST _cna_house3d_windowless)
+                continue()
+            endif()
+            add_test(NAME X11_House3D_ExclusiveFullscreen_${_cna_house3d_renderer}
+                COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        --require-window-manager
+                        sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_exclusive_fullscreen_game.sh"
+                        $<TARGET_FILE:cna_house3d_demo>)
+            set_tests_properties(X11_House3D_ExclusiveFullscreen_${_cna_house3d_renderer} PROPERTIES
+                ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_house3d_renderer}"
+                TIMEOUT 180 SKIP_RETURN_CODE 77 LABELS "GraphicsSmoke;platform")
         endforeach()
         unset(_cna_house3d_renderers)
+        unset(_cna_house3d_windowless)
     endif()
 endif()
 

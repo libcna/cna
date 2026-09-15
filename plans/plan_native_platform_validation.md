@@ -29,9 +29,11 @@ is in "Next steps" -- first of all a CI that has been red for unrelated reasons 
 pass.
 
 **Continued on 2026-09-15 on branch `x11`** (the owner approved the X11 part of "Next steps", about
-120 hours; Win32 and Wayland out of scope): CI defects NPV-0124..NPV-0126 and NPV-0128..NPV-0130,
-the INCR follow-up NPV-0127, and **gamepads and joysticks through Linux evdev**
-(`plans/plan_x11.md` X11-0150) are done; the rest of the X11 list is `plans/plan_x11.md` Phase M.
+120 hours; Win32 and Wayland out of scope): CI defects NPV-0124..NPV-0126 and NPV-0128..NPV-0131,
+the INCR follow-up NPV-0127, **gamepads and joysticks through Linux evdev**, **sound for SDL-free
+builds**, **input-method composition** and **exclusive fullscreen through XRandR**
+(`plans/plan_x11.md` X11-0150..X11-0153) are done; the rest of the X11 list is
+`plans/plan_x11.md` Phase M.
 The session stayed locked throughout, so the desktop scenarios below remain unrun.
 
 Session events recorded honestly: gnome-shell crashed at 21:23:27 (untrapped BadWindow on its own
@@ -190,17 +192,18 @@ that fails without it.
 | NPV-0128 | The content pipeline's media decoder compiled only against FFmpeg 7: FFmpeg 6 (the CI runners) declares `swr_convert`'s input `const uint8_t **`. | CI, once past configure | explicit cast, valid against both declarations (as `VideoDecoder.cpp` already did) | `5e8f58707` |
 | NPV-0129 | The native MSVC job could not build the Win32 harness: UTF-8 literals read in the ANSI code page (C2015). | the job's first run in this pass | `/utf-8` under MSVC for the standalone harness | `860977a0c` |
 | NPV-0130 | **Every Linux CI build failed in `SpriteFontContentPipeline.cpp`** (`'RasterGlyph' was not declared`): XNASWEEP-131/137 made the font-sheet route use the atlas packer, which sat inside `#if defined(CNA_HAVE_FREETYPE)`, and the runners have no FreeType. Only builds with FreeType -- this workstation's -- compiled. | CI run 34942450340, all nine Linux cells | the guard covers only the FreeType code; the packer is compiled in every build. The translation unit compiles with and without `CNA_HAVE_FREETYPE`; 114 sprite-font tests unchanged (the one failure, a HEADLESS render-target readback, fails identically without the change) | `0a3f9a24a` |
-| NPV-0131 | **The SDL-free X11 cell could never pass its test step**: it builds the focused `CnaPlatformModuleTests` (not part of `all`), then runs ctest entries registered against `CnaTests`, which it never builds -- "Could not find executable", every entry Not Run. Hidden until now because the cell had never got past configure (NPV-0124) or compile (NPV-0128/0130). | CI run 34947184495 | `CNA_PLATFORM_CTEST_BINARY` (`CnaTests` by default) names the binary the CnaPlatform*/CnaX11* entries run; the cell sets `CnaPlatformModuleTests` and also runs `CnaX11EvdevTests`. Locally, the cell's ctest line through the focused binary: 6 passed, the window-manager suite skipped (no openbox here) | this commit |
+| NPV-0131 | **The SDL-free X11 cell could never pass its test step**: it builds the focused `CnaPlatformModuleTests` (not part of `all`), then runs ctest entries registered against `CnaTests`, which it never builds -- "Could not find executable", every entry Not Run. Hidden until now because the cell had never got past configure (NPV-0124) or compile (NPV-0128/0130). | CI run 34947184495 | `CNA_PLATFORM_CTEST_BINARY` (`CnaTests` by default) names the binary the CnaPlatform*/CnaX11* entries run; the cell sets `CnaPlatformModuleTests` and also runs `CnaX11EvdevTests`. Locally, the cell's ctest line through the focused binary: 6 passed, the window-manager suite skipped (no openbox here) | `41e8fc898` |
 
 ## Next steps (recommended order, 2026-09-15)
 
 Estimates are for this kind of work in this repository; each step lists what it needs from the
 owner.
 
-Progress on branch `x11` (2026-09-15): step 1 -- NPV-0124, 0125, 0126, 0128, 0129, 0130; what is
-left red is the one Win32 test below. Step 4 -- the INCR follow-up is NPV-0127; `globalPointer`
+Progress on branch `x11` (2026-09-15): step 1 -- NPV-0124, 0125, 0126, 0128, 0129, 0130, 0131;
+what is left red is the one Win32 test below. Step 4 -- the INCR follow-up is NPV-0127; `globalPointer`
 still waits for the owner. Step 5 -- Linux evdev is `plans/plan_x11.md` X11-0150; Win32 XInput is
-out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158.
+out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158:
+audio (0151), XIM (0152) and exclusive fullscreen (0153) are done.
 
 | # | Step | Estimate | Needs | Notes |
 |---|------|----------|-------|-------|

@@ -33,6 +33,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -1000,15 +1001,34 @@ TEST_F(X11Live, BorderlessIsAcceptedAndReported)
     EXPECT_FALSE(window_->IsBorderless());
 }
 
-TEST_F(X11Live, ExclusiveFullscreenRefusesRatherThanSilentlyGivingBorderless)
+TEST_F(X11Live, ExclusiveFullscreenWithoutAWindowManagerRefusesAndLeavesTheModeAlone)
 {
-    // plans/plan_x11.md design decision 11. Real exclusive mode means an XRandR mode switch with
-    // all the restore-on-crash obligations that carries. It is not implemented, and reporting
-    // borderless as exclusive would make GetFullscreenMode lie about what the display is doing.
+    // plans/plan_x11.md design decision 11 and X11-0153. Exclusive fullscreen is borderless
+    // fullscreen with a display mode of its own, and fullscreen is the window manager's to
+    // perform; this server has none. So it refuses -- before any display mode is touched, which
+    // is what the screen size read back afterwards shows. Exclusive fullscreen itself runs in
+    // X11ExclusiveFullscreenTests.cpp, on a private server with a window manager.
     window_ = MakeWindow();
+    ::Display* observer = XOpenDisplay(nullptr);
+    ASSERT_NE(observer, nullptr);
+    const ::Window root = DefaultRootWindow(observer);
+    const auto rootSize = [observer, root] {
+        ::Window rootReturn = CNA::Platform::X11::kNone;
+        int x = 0;
+        int y = 0;
+        unsigned int width = 0;
+        unsigned int height = 0;
+        unsigned int border = 0;
+        unsigned int depth = 0;
+        XGetGeometry(observer, root, &rootReturn, &x, &y, &width, &height, &border, &depth);
+        return std::pair<unsigned int, unsigned int>(width, height);
+    };
+    const auto before = rootSize();
     EXPECT_THROW(window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen),
                  PlatformNotSupportedException);
     EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::Windowed);
+    EXPECT_EQ(rootSize(), before);
+    XCloseDisplay(observer);
 }
 
 TEST_F(X11Live, ShowAndHideAreAcceptedAndVisibilityIsObservable)

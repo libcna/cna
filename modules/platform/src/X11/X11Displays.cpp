@@ -4,6 +4,7 @@
 
 #include "X11Display.hpp"
 #include "X11Error.hpp"
+#include "X11ModeSwitch.hpp"
 #include "X11Window.hpp"
 
 #include <algorithm>
@@ -57,7 +58,9 @@ namespace CNA::Platform::X11 {
 
     void X11Displays::EnsureCache() const
     {
-        if (!cacheValid_)
+        // A mode this process switched is a change the cache must reflect at once, not after the
+        // event pump reaches the server's notification of it.
+        if (!cacheValid_ || modeGeneration_ != connection_.GetModeSwitcher().GetGeneration())
         {
             BuildCache();
         }
@@ -67,6 +70,7 @@ namespace CNA::Platform::X11 {
     {
         cache_.clear();
         cacheValid_ = true;
+        modeGeneration_ = connection_.GetModeSwitcher().GetGeneration();
 
         Display* display = connection_.GetDisplay();
         const int screen = connection_.GetScreen();
@@ -237,11 +241,22 @@ namespace CNA::Platform::X11 {
             cache_.push_back(entry);
         }
 
+        const X11ModeSwitcher& switcher = connection_.GetModeSwitcher();
         for (CachedDisplay& entry : cache_)
         {
             if (entry.info.name.empty())
             {
                 entry.info.name = "Display " + std::to_string(entry.info.id);
+            }
+            // While exclusive fullscreen holds a mode of its own on a monitor, the monitor's
+            // geometry and current mode are that mode's -- it is what the screen shows -- but the
+            // DESKTOP mode is still the one the desktop will get back, which is what the contract
+            // means by it.
+            entry.currentMode = entry.info.desktopMode;
+            DisplayMode original;
+            if (entry.crtc != 0 && switcher.TryGetOriginalMode(entry.crtc, original))
+            {
+                entry.info.desktopMode = original;
             }
         }
     }
@@ -375,7 +390,7 @@ namespace CNA::Platform::X11 {
         {
             return false;
         }
-        mode = found->info.desktopMode;
+        mode = found->currentMode;
         return true;
     }
 

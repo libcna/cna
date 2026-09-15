@@ -54,7 +54,8 @@ would build something other than what you asked for.
 | `libXext` | **mandatory** | the backend is not offered at all |
 | `X11/XKBlib.h` | **mandatory** | layout-independent scancodes have no substitute |
 | `libXi` (XInput2) | optional | `relativeMouse` |
-| `libXrandr` (≥ 1.2) | optional | `multipleDisplays`, and `GetDisplays()` returns null |
+| `libXrandr` (≥ 1.2) | optional | `multipleDisplays`, and `GetDisplays()` returns null; exclusive fullscreen then has no mode to switch to and is borderless |
+| `libXau` | optional (installed with `libX11`) | the exclusive-fullscreen mode guardian's cookie, for a server that asks for one — see [Fullscreen](#fullscreen) |
 | `libXcursor` | optional | custom ARGB cursor images; the standard shapes still work |
 | `libXfixes` | optional | reserved; no capability depends on it today |
 | MIT-SHM (`X11/extensions/XShm.h`) | optional | shared-memory presentation; `XPutImage` still works |
@@ -268,11 +269,49 @@ always equal here. A resize therefore emits both `Resized` and `PixelSizeChanged
 `BorderlessFullscreen` uses `_NET_WM_STATE_FULLSCREEN`, and refuses when the running window
 manager does not advertise it.
 
-`ExclusiveFullscreen` **refuses**. Genuine exclusive mode means an XRandR mode switch that changes
-the user's desktop resolution, with the obligation to restore it on exit, on failure, and after an
-abnormal termination. It is implementable and is not implemented, so the call throws rather than
-quietly handing back borderless under an "exclusive" name — which would make `GetFullscreenMode()`
-lie about what the display is doing.
+`ExclusiveFullscreen` is borderless fullscreen with a **display mode of the window's own**, set
+through XRandR (`plans/plan_x11.md` X11-0153). It is what an XNA game's `IsFullScreen` asks for.
+Fullscreen itself is still the window manager's to perform, so exclusive refuses exactly where
+borderless does.
+
+- **Which mode.** SDL's rule, so a game gets the same mode it would under the SDL3 backend: the
+  smallest mode at least as large as the window, preferring the aspect ratio closest to the
+  window's; among modes of one size, the refresh rate closest to the desktop's. So XNA's default
+  800x480 back buffer gets a 16:9 mode over a smaller 4:3 one. `SetSize` while exclusive asks for
+  a new *mode*, not a new window size — the window manager keeps a fullscreen window the size of
+  its monitor — which is how `GraphicsDevice` applies a back buffer after `IsFullScreen`.
+- **When there is no mode** (the size is larger than every mode, the server has no RandR 1.2, the
+  monitor is scaled or transformed) the window is fullscreen on the desktop's own mode, and
+  `GetFullscreenMode()` says `BorderlessFullscreen`, because that is what the display is doing. SDL
+  makes the same substitution and reports it the same way.
+- **The screen** is resized around the change the way `xrandr` does it — to the bounding box of
+  the lit CRTCs, grown before and shrunk after — so on one monitor the pointer cannot wander off
+  the visible area, and on several the other monitors keep their place (SDL shrinks the screen to
+  the mode and fails with `BadMatch` there).
+- **The mode is in effect only while the window is on screen.** Hiding or minimising the window
+  gives the desktop its mode back; losing focus minimises the window and gives it back, as SDL
+  does, so a player who switches away from an 800x600 game does not find the desktop in 800x600.
+  Showing, restoring or refocusing the window takes the mode again. A focus loss within 400 ms of
+  a mode change is looked at again before it is believed: changing a monitor's mode makes some
+  window managers move focus while they lay the screen out again. Under Xwayland, where a mode
+  change is emulated for the requesting client alone, focus loss changes nothing.
+  `GetFullscreenMode()` says `ExclusiveFullscreen` throughout, including while minimised.
+- **The mode always goes back.** Leaving exclusive fullscreen, destroying the window, another
+  client destroying it, another client taking it out of fullscreen (a key binding, a pager) and
+  the platform closing its connection all restore the CRTC exactly. A mode *someone else* set in
+  the meantime — the user changing the resolution while the game runs — is left alone.
+- **Even when the process dies.** With the first mode change, the backend `fork()`s a small
+  **mode guardian** that waits on a socket. However the game ends — a crash, `abort()`,
+  `SIGKILL`, the OOM killer — the kernel closes the game's end, the guardian reads end-of-file,
+  restores the mode over a connection of its own and exits. A normal restore disarms it first. It
+  calls only async-signal-safe functions (it speaks the X protocol itself, since it is a fork of a
+  threaded process and cannot call Xlib), leaves the terminal's session so a Ctrl+C that kills the
+  game does not kill it too, keeps nothing of the game's open, and shows up as `cna-x11-mode` in
+  `ps`. It authenticates with the game's own cookie (libXau) and reaches the same address the
+  game's connection did. A game that `fork()`s a child which outlives it keeps the guardian's
+  end-of-file waiting until that child exits too.
+- **The display service** tells the two modes apart: `TryGetCurrentDisplayMode` reports the mode
+  the monitor is in, `DisplayInfo::desktopMode` the one the desktop gets back.
 
 ---
 
@@ -453,7 +492,7 @@ exist; that has **not** been tested, and is recorded as untested rather than cla
 
 ## Running the tests
 
-Five ctest entries, split by what each actually needs:
+Six ctest entries, split by what each actually needs:
 
 ```sh
 ctest --test-dir cmake-build-x11 -R 'CnaX11'
@@ -466,6 +505,12 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 | `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, the platform with no X server; each test skips where the machine grants neither |
 | `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
+| `CnaX11ExclusiveFullscreenTests` | `Xvfb` + `openbox`; **the launcher's own server only** | exclusive fullscreen changes the display mode, so it runs only where `CNA_X11_PRIVATE_TEST_SERVER` is set: mode choice, the screen around the CRTC, SetSize while exclusive, hide/show, focus loss and return, every restore path, a mode someone else set, and a process killed with `SIGKILL` having its mode restored by its guardian |
+
+Where the build has a renderer that draws into a window, `X11_House3D_ExclusiveFullscreen_<renderer>`
+runs a real game with `IsFullScreen` on the launcher's server
+(`tools/platform/x11_exclusive_fullscreen_game.sh`, needing `openbox` and `xrandr`): the monitor
+switches and the window covers it, a normal exit restores the mode, and so does a `SIGKILL`.
 
 `tools/platform/x11_test_server.sh` starts a private `Xvfb` on a display number it *searches for*
 rather than a hardcoded `:99` — a fixed number collides with a parallel ctest job and the collision
@@ -482,8 +527,8 @@ EWMH fullscreen and focus do not happen there at all; asserting them against one
 environment rather than the backend.
 
 **What Xvfb cannot cover**, and which therefore needs a real desktop: a physical GPU's GLX driver,
-a real compositor's fullscreen behaviour, multi-monitor XRandR layouts and hotplug, and real input
-devices. A real input-method server *is* covered — the launcher runs a private ibus — but only with
+a real compositor's fullscreen behaviour, multi-monitor XRandR layouts and hotplug, a real
+monitor's mode change (Xvfb has one CRTC and switches instantly), and real input devices. A real input-method server *is* covered — the launcher runs a private ibus — but only with
 its core engine; a language engine (Hangul, Pinyin, Anthy) in a user's session has not been driven. `plans/plan_x11.md` records those gaps
 rather than treating a green Xvfb run as equivalent.
 

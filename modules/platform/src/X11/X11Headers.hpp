@@ -47,6 +47,9 @@
 #if defined(CNA_X11_HAVE_XFIXES)
 #  include <X11/extensions/Xfixes.h>
 #endif
+#if defined(CNA_X11_HAVE_XAU)
+#  include <X11/Xauth.h>
+#endif
 #if defined(CNA_X11_HAVE_XSHM)
 #  include <X11/extensions/XShm.h>
 #  include <sys/ipc.h>

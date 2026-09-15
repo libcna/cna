@@ -5,10 +5,13 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "X11Display.hpp"
 #include "X11Error.hpp"
+#include "X11ModeSwitch.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -33,6 +36,11 @@ namespace CNA::Platform::X11 {
         constexpr long kNetWmStateRemove = 0;
         constexpr long kNetWmStateAdd = 1;
 
+        /// How long after a display-mode change a focus loss is held before it is believed.
+        /// Changing a monitor's mode makes some window managers move focus about while they lay
+        /// the screen out again; SDL holds focus changes for the same 400 ms after a mode switch.
+        constexpr std::chrono::milliseconds kModeChangeFocusGrace{400};
+
     } // namespace
 
     X11Window::X11Window(X11Connection& connection, const ::Window window, const WindowId id,
@@ -47,6 +55,8 @@ namespace CNA::Platform::X11 {
             cachedWidth_ = attributes.width;
             cachedHeight_ = attributes.height;
             mapped_ = attributes.map_state != IsUnmapped;
+            // An adopted window that is already on screen was shown by whoever created it.
+            shown_ = mapped_;
             if (visual_ == nullptr)
             {
                 visual_ = attributes.visual;
@@ -67,6 +77,10 @@ namespace CNA::Platform::X11 {
             host_ = nullptr;
             host->OnWindowDestroyed(*this);
         }
+
+        // The display mode first, while the window it was taken for still exists: a game that
+        // destroys its window without leaving fullscreen still gives the monitor back.
+        LeaveExclusive();
 
         // Order matters and is not interchangeable: an XIC holds a reference to the window inside
         // the input method, and destroying the window first leaves the IM with a dangling client
@@ -205,6 +219,20 @@ namespace CNA::Platform::X11 {
             throw PlatformException("X11Window::SetSize",
                                     "a window size must be positive; X11 rejects a zero extent");
         }
+        if (exclusive_)
+        {
+            // SDL's rule, and what XNA's GraphicsDevice relies on after IsFullScreen: in exclusive
+            // fullscreen a new size asks for a different DISPLAY MODE, not a different window --
+            // the window manager keeps a fullscreen window the size of its monitor.
+            EnterExclusive(width, height);
+            if (exclusive_)
+            {
+                return;
+            }
+            // No mode for the new size. The window stays fullscreen on the desktop's own mode --
+            // borderless, which GetFullscreenMode now reports -- and takes the size request the
+            // way a borderless fullscreen window does, below.
+        }
         Display* display = connection_.GetDisplay();
 
         // The size hints have to move with the request. A non-resizable window pins min == max ==
@@ -271,19 +299,11 @@ namespace CNA::Platform::X11 {
     {
         const X11Atoms& atoms = connection_.GetAtoms();
 
-        if (mode == WindowFullscreenMode::ExclusiveFullscreen)
-        {
-            // plans/plan_x11.md design decision 11. Genuine exclusive mode means an XRandR mode
-            // switch that changes the user's desktop resolution, with all the restore-on-crash
-            // obligations that carries. It is not implemented, so it refuses rather than silently
-            // giving the caller borderless fullscreen under an "exclusive" name -- which would
-            // make GetFullscreenMode() lie about what the display is doing.
-            throw PlatformNotSupportedException(PlatformCapability::BorderlessFullscreen,
-                                                "X11 (exclusive fullscreen is not implemented; "
-                                                "BorderlessFullscreen is available)");
-        }
-
-        if (mode == WindowFullscreenMode::BorderlessFullscreen &&
+        // plans/plan_x11.md design decision 11. Both kinds of fullscreen are the window manager's
+        // to perform -- exclusive is borderless plus a display mode of its own -- so both refuse
+        // when the window manager does not advertise _NET_WM_STATE_FULLSCREEN, rather than
+        // reporting a state nothing will put the window in.
+        if (mode != WindowFullscreenMode::Windowed &&
             !connection_.SupportsEwmhHint(atoms.netWmStateFullscreen))
         {
             throw PlatformNotSupportedException(
@@ -293,12 +313,29 @@ namespace CNA::Platform::X11 {
                     : "X11 (no EWMH window manager is running on this display)");
         }
 
-        const bool enable = mode == WindowFullscreenMode::BorderlessFullscreen;
+        const bool wasFullscreen = HasNetWmState(atoms.netWmStateFullscreen);
+        if (mode == WindowFullscreenMode::ExclusiveFullscreen)
+        {
+            // The size the display mode is chosen for. SDL's rule: the window's size as it is
+            // now, which is the back buffer's for an XNA game. A window already exclusive keeps
+            // the size its mode was chosen for -- its own size is now the monitor's.
+            const WindowBounds bounds = GetClientBounds();
+            EnterExclusive(exclusive_ ? exclusiveWidth_ : bounds.width,
+                           exclusive_ ? exclusiveHeight_ : bounds.height);
+        }
+        else
+        {
+            LeaveExclusive();
+        }
+
+        const bool enable = mode != WindowFullscreenMode::Windowed;
         if (!SetNetWmState(atoms.netWmStateFullscreen, kNone, enable))
         {
+            LeaveExclusive();
             throw PlatformException("X11Window::SetFullscreenMode",
                                     "the window manager did not accept the _NET_WM_STATE request");
         }
+        fullscreenConfirmed_ = enable && wasFullscreen;
         fullscreenMode_ = mode;
         XFlush(connection_.GetDisplay());
     }
@@ -307,17 +344,203 @@ namespace CNA::Platform::X11 {
     {
         // Read from the server rather than from the cached field: the window manager, the user or
         // another client can leave fullscreen, and a cached answer would then be wrong in exactly
-        // the situation a caller asks about.
+        // the situation a caller asks about. Exclusive is fullscreen with a display mode of the
+        // window's own -- reported while the window has one, including while that mode is given
+        // back because the window is hidden or minimised, as SDL reports it.
         if (HasNetWmState(connection_.GetAtoms().netWmStateFullscreen))
         {
-            return WindowFullscreenMode::BorderlessFullscreen;
+            return exclusive_ ? WindowFullscreenMode::ExclusiveFullscreen
+                              : WindowFullscreenMode::BorderlessFullscreen;
         }
         return WindowFullscreenMode::Windowed;
+    }
+
+    void X11Window::EnterExclusive(const int width, const int height)
+    {
+        const bool wasExclusive = exclusive_;
+        const int previousWidth = exclusiveWidth_;
+        const int previousHeight = exclusiveHeight_;
+
+        std::string whyNot;
+        if (!connection_.GetModeSwitcher().Resolve(this, GetClientBounds(), width, height, whyNot))
+        {
+            // No display mode for this size -- larger than every mode the monitor has, a server
+            // without RandR, a scaled monitor. Fullscreen then stays on the desktop's own mode,
+            // and GetFullscreenMode says BorderlessFullscreen, because that is what the display
+            // is doing. SDL makes the same substitution and reports it the same way.
+            LeaveExclusive();
+            return;
+        }
+        exclusive_ = true;
+        exclusiveWidth_ = width;
+        exclusiveHeight_ = height;
+        try
+        {
+            (void) UpdateExclusiveMode(true);
+        }
+        catch (...)
+        {
+            // The server refused the mode. The switcher kept whatever mode was in effect before,
+            // so the window goes back to describing that.
+            exclusive_ = wasExclusive;
+            exclusiveWidth_ = previousWidth;
+            exclusiveHeight_ = previousHeight;
+            throw;
+        }
+    }
+
+    void X11Window::LeaveExclusive()
+    {
+        exclusive_ = false;
+        exclusiveSuspended_ = false;
+        focusLossPending_ = false;
+        X11ModeSwitcher& switcher = connection_.GetModeSwitcher();
+        if (switcher.IsApplied(this))
+        {
+            switcher.Release(this);
+            modeChangedAt_ = std::chrono::steady_clock::now();
+        }
+    }
+
+    bool X11Window::UpdateExclusiveMode(const bool throwOnRefusal)
+    {
+        X11ModeSwitcher& switcher = connection_.GetModeSwitcher();
+        const bool wanted = exclusive_ && shown_ && !exclusiveSuspended_ && window_ != kNone;
+        if (!wanted)
+        {
+            if (switcher.IsApplied(this))
+            {
+                switcher.Release(this);
+                modeChangedAt_ = std::chrono::steady_clock::now();
+            }
+            return true;
+        }
+
+        std::string whyNot;
+        std::optional<X11AppliedMode> applied;
+        try
+        {
+            applied = switcher.Apply(this, GetClientBounds(), exclusiveWidth_, exclusiveHeight_,
+                                     whyNot);
+        }
+        catch (const PlatformException& refusal)
+        {
+            if (throwOnRefusal)
+            {
+                throw;
+            }
+            // Taking the mode back after focus returned, or at Show(): there is no caller to hand
+            // a refusal to. The window stays fullscreen on the desktop's mode, and says so.
+            std::fprintf(stderr, "CNA X11: exclusive fullscreen fell back to borderless: %s\n",
+                         refusal.what());
+            std::fflush(stderr);
+            exclusive_ = false;
+            return false;
+        }
+        if (!applied)
+        {
+            // The monitor changed under the window since the mode was chosen.
+            exclusive_ = false;
+            return false;
+        }
+        modeChangedAt_ = std::chrono::steady_clock::now();
+        // The window manager fits a fullscreen window to its monitor, whose size this now is.
+        // Sync() waits for that, which is what lets GraphicsDevice read the new size at once.
+        pendingWidth_ = applied->width;
+        pendingHeight_ = applied->height;
+        return true;
+    }
+
+    void X11Window::SuspendExclusive()
+    {
+        // Minimised first, so the game's window is not seen stretched over the desktop's mode for
+        // the moment between the two.
+        exclusiveSuspended_ = true;
+        focusLossPending_ = false;
+        XIconifyWindow(connection_.GetDisplay(), window_, connection_.GetScreen());
+        (void) UpdateExclusiveMode(false);
+        XFlush(connection_.GetDisplay());
+    }
+
+    void X11Window::OnFocusChanged(const bool gained)
+    {
+        if (!exclusive_)
+        {
+            return;
+        }
+        if (gained)
+        {
+            focusLossPending_ = false;
+            if (exclusiveSuspended_)
+            {
+                exclusiveSuspended_ = false;
+                (void) UpdateExclusiveMode(false);
+                XFlush(connection_.GetDisplay());
+            }
+            return;
+        }
+        // Under Xwayland the mode is an emulation shown only in this game's own window; the
+        // desktop never left its mode, so there is nothing to give back (SDL skips it there too).
+        if (!connection_.GetModeSwitcher().IsApplied(this) || connection_.IsXwayland())
+        {
+            return;
+        }
+        if (std::chrono::steady_clock::now() - modeChangedAt_ < kModeChangeFocusGrace)
+        {
+            focusLossPending_ = true;
+            return;
+        }
+        SuspendExclusive();
+    }
+
+    void X11Window::CheckPendingFocusLoss()
+    {
+        if (!focusLossPending_ ||
+            std::chrono::steady_clock::now() - modeChangedAt_ < kModeChangeFocusGrace)
+        {
+            return;
+        }
+        focusLossPending_ = false;
+        if (!focused_ && exclusive_ && connection_.GetModeSwitcher().IsApplied(this))
+        {
+            SuspendExclusive();
+        }
+    }
+
+    void X11Window::OnNetWmStateChanged()
+    {
+        if (!exclusive_ || window_ == kNone)
+        {
+            return;
+        }
+        if (HasNetWmState(connection_.GetAtoms().netWmStateFullscreen))
+        {
+            fullscreenConfirmed_ = true;
+            return;
+        }
+        if (!fullscreenConfirmed_)
+        {
+            // The request to enter fullscreen is still on its way; other state changes arrive
+            // first.
+            return;
+        }
+        // Taken out of fullscreen by someone else. The display gets its mode back, and the
+        // window is windowed now -- which GetFullscreenMode reports.
+        fullscreenConfirmed_ = false;
+        LeaveExclusive();
+        fullscreenMode_ = WindowFullscreenMode::Windowed;
     }
 
     void X11Window::Show()
     {
         Display* display = connection_.GetDisplay();
+        shown_ = true;
+        if (exclusive_)
+        {
+            // Before the map, so the window manager maps the window straight onto its monitor in
+            // the new mode rather than fitting it twice.
+            (void) UpdateExclusiveMode(false);
+        }
         XMapWindow(display, window_);
         XFlush(display);
     }
@@ -325,13 +548,26 @@ namespace CNA::Platform::X11 {
     void X11Window::Hide()
     {
         Display* display = connection_.GetDisplay();
+        shown_ = false;
         XUnmapWindow(display, window_);
+        if (exclusive_)
+        {
+            // A hidden window has no claim on the monitor's mode; Show() takes it again.
+            (void) UpdateExclusiveMode(false);
+        }
         XFlush(display);
     }
 
     void X11Window::Minimize()
     {
         Display* display = connection_.GetDisplay();
+        if (exclusive_)
+        {
+            // Minimised is not visible, and the desktop gets its mode back until the window is
+            // restored or focused again.
+            SuspendExclusive();
+            return;
+        }
         // XIconifyWindow sends WM_CHANGE_STATE with IconicState, which is the ICCCM way and works
         // with every window manager rather than only EWMH ones.
         XIconifyWindow(display, window_, connection_.GetScreen());
@@ -366,6 +602,7 @@ namespace CNA::Platform::X11 {
         if (minimized || !mapped_)
         {
             XMapRaised(display, window_);
+            shown_ = true;
         }
         if (minimized && connection_.SupportsEwmhHint(atoms.netActiveWindow))
         {
@@ -386,6 +623,12 @@ namespace CNA::Platform::X11 {
             HasNetWmState(atoms.netWmStateMaximizedHorz))
         {
             SetNetWmState(atoms.netWmStateMaximizedVert, atoms.netWmStateMaximizedHorz, false);
+        }
+        if (exclusive_)
+        {
+            // Back on screen: the window takes its display mode again.
+            exclusiveSuspended_ = false;
+            (void) UpdateExclusiveMode(false);
         }
         XFlush(display);
     }
@@ -532,6 +775,9 @@ namespace CNA::Platform::X11 {
 
     void X11Window::MarkDestroyedByServer()
     {
+        // Another client destroyed the window -- or killed this one's connection to it. The
+        // monitor's mode was taken for this window, and goes back with it.
+        LeaveExclusive();
         if (inputContext_ != nullptr)
         {
             // The input method holds this window as its client window. Destroying the context now
@@ -624,18 +870,26 @@ namespace CNA::Platform::X11 {
         }
         const X11Atoms& atoms = connection_.GetAtoms();
 
-        // Before the window has EVER been mapped, a _NET_WM_STATE client message has nobody to
-        // act on it: the window manager only starts managing the window at MapRequest. So a
-        // never-mapped window gets the property written directly, which is the sanctioned way to
-        // ask for an initial state.
+        // Before the window has ever been asked to map, a _NET_WM_STATE client message has
+        // nobody to act on it: the window manager only starts managing the window at MapRequest.
+        // So such a window gets the property written directly, which is the sanctioned way to ask
+        // for an initial state (EWMH: "the Client can set _NET_WM_STATE directly" while
+        // Withdrawn).
         //
-        // The condition is "never mapped", NOT "not mapped right now". An iconified window is
-        // unmapped and still managed, and writing the property directly under the window
+        // The condition is "never asked to map", NOT "not mapped right now". An iconified window
+        // is unmapped and still managed, and writing the property directly under the window
         // manager's feet -- which is what the first version did -- raced its own map request:
         // Restore() de-iconified and then overwrote the state the window manager was in the
         // middle of updating, so the window intermittently stayed iconic. It failed roughly one
         // run in three inside the full suite while passing every time in isolation.
-        if (!everMapped_)
+        //
+        // Nor is it "no MapNotify seen yet", which is what came next: a game shows its window and
+        // asks for fullscreen before it has pumped a single event, the window manager has managed
+        // the window by then, and a property written onto a managed window is ignored -- the
+        // window stayed windowed (plans/plan_x11.md X11-0153). Once Show() has sent the map
+        // request, the client message is right even if the window manager has not processed that
+        // request yet: the MapRequest reaches it first.
+        if (!everMapped_ && !shown_)
         {
             std::vector<unsigned char> data;
             int format = 0;

@@ -5,6 +5,7 @@
 
 #include "X11Headers.hpp"
 
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -327,6 +328,33 @@ namespace CNA::Platform::X11 {
         void SetBorderlessFlag(bool borderless) { borderless_ = borderless; }
 
         /**
+         * @brief Tells the window its keyboard focus changed, as the platform observed it.
+         *
+         * An exclusive-fullscreen window that loses focus minimises and gives the desktop its
+         * display mode back, and takes its mode again when focus returns -- what SDL does, so a
+         * user who switches away from a game in 800x600 does not find the desktop in 800x600
+         * (plans/plan_x11.md X11-0153).
+         *
+         * @param gained True for focus gained.
+         */
+        void OnFocusChanged(bool gained);
+
+        /**
+         * @brief Acts on a focus loss that arrived too close to a mode change to trust.
+         *
+         * Called by the platform once per event pump; does nothing unless a loss is pending.
+         */
+        void CheckPendingFocusLoss();
+
+        /**
+         * @brief Tells the window its `_NET_WM_STATE` changed.
+         *
+         * A window someone else took out of fullscreen -- a window-manager key binding, a pager --
+         * gives its display mode back.
+         */
+        void OnNetWmStateChanged();
+
+        /**
          * @brief Sets the platform to notify when this wrapper is destroyed.
          *
          * @param host The owning platform, or null for a wrapper nothing tracks.
@@ -339,6 +367,10 @@ namespace CNA::Platform::X11 {
         void DetachHost() { host_ = nullptr; }
 
     private:
+        void EnterExclusive(int width, int height);
+        void LeaveExclusive();
+        bool UpdateExclusiveMode(bool throwOnRefusal);
+        void SuspendExclusive();
         void ApplyNormalHints();
         void ApplyMotifDecorations(bool decorated);
         bool SetNetWmState(Atom first, Atom second, bool enabled);
@@ -380,6 +412,24 @@ namespace CNA::Platform::X11 {
         /// resize is outstanding.
         int pendingWidth_ = 0;
         int pendingHeight_ = 0;
+
+        // --- exclusive fullscreen (plans/plan_x11.md X11-0153) ----------------------------------
+        //
+        // `exclusive_` is the window's mode: fullscreen with a display mode of its own, found for
+        // `exclusiveWidth_` x `exclusiveHeight_`. The mode is IN EFFECT only while the window is
+        // shown and not suspended; hiding, minimising or losing focus gives it back, and the
+        // opposite takes it again. The connection's X11ModeSwitcher holds it.
+        bool exclusive_ = false;
+        int exclusiveWidth_ = 0;
+        int exclusiveHeight_ = 0;
+        /// Show() called and Hide() not since -- the application's intent, not the map state.
+        bool shown_ = false;
+        bool exclusiveSuspended_ = false;
+        /// The window manager has been seen to apply _NET_WM_STATE_FULLSCREEN since it was asked
+        /// to, so its absence now means someone took it away.
+        bool fullscreenConfirmed_ = false;
+        bool focusLossPending_ = false;
+        std::chrono::steady_clock::time_point modeChangedAt_{};
     };
 
 } // namespace CNA::Platform::X11
