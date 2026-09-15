@@ -394,7 +394,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils openbox \
+            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils openbox xclip xsel \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils
@@ -474,6 +474,95 @@ jobs:
           python3 tools/platform/renderer_sdl_audit.py --check
           python3 tools/platform/sdl_ratchet.py --check --strict
           python3 tools/platform/nonproduction_sdl_audit.py --check
+
+  # ---------------------------------------------------------------------------------------------
+  # plans/plan_native_platform_validation.md "Next steps", step 1: the SDL-free X11 cell above
+  # selects HEADLESS on purpose, and three defects lived exactly where it does not look -- an
+  # SDL-free configuration with a GPU renderer: it could not configure (NPV-0106), a sibling's
+  # find_package(SDL3) found an installed SDL3 (NPV-0114), and the platform linked libGLX into
+  # every build (NPV-0121). This cell configures that selection, builds two real games from it and
+  # runs them with every renderer compiled in, on Mesa's software GL and Vulkan drivers.
+  x11-sdl-free-gpu:
+    name: X11 + OpenGL33/Vulkan/Software/Headless + Null audio (CNA_ENABLE_SDL=OFF)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone public sibling repositories
+        run: |
+          set -euo pipefail
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
+
+      - name: Install build, X11, GL and Vulkan dependencies (no SDL packages)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils binutils \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libgl1-mesa-dev libglx-dev libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers
+
+      - name: Cache compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: platform-ccache-${{ runner.os }}-x11-sdl-free-gpu-${{ github.sha }}
+          restore-keys: |
+            platform-ccache-${{ runner.os }}-x11-sdl-free-gpu-
+
+      - name: Configure CNA_ENABLE_SDL=OFF + X11 + OPENGL33;VULKAN;SOFTWARE;HEADLESS + Null audio
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCNA_ENABLE_SDL=OFF \
+            -DCNA_PLATFORM=X11 \
+            -DCNA_GRAPHICS_RENDERER=OPENGL33 \
+            -DCNA_GRAPHICS_RENDERERS="OPENGL33;VULKAN;SOFTWARE;HEADLESS" \
+            -DCNA_AUDIO_PLATFORM=NULL \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=ON \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_USE_CCACHE=ON
+
+      - name: Build two real games
+        run: cmake --build build --target cna_demo_2d cna_house3d_demo --parallel "$(nproc)"
+
+      - name: Prove no SDL was found, built or linked
+        run: |
+          set -euo pipefail
+          if grep -E '^SDL[23]_DIR:PATH=' build/CMakeCache.txt | grep -v NOTFOUND; then
+            echo "::error::An SDL package was found by a CNA_ENABLE_SDL=OFF configuration." >&2
+            exit 1
+          fi
+          for exe in build/cna_demo_2d build/cna_house3d_demo; do
+            if readelf -d "$exe" | grep -i 'NEEDED.*sdl'; then
+              echo "::error::$exe links against SDL." >&2
+              exit 1
+            fi
+            if nm -D --undefined-only "$exe" | grep -q ' SDL_'; then
+              echo "::error::$exe references SDL symbols." >&2
+              exit 1
+            fi
+          done
+
+      - name: Run both games with every renderer compiled in (private Xvfb, Mesa software drivers)
+        run: |
+          set -euo pipefail
+          ctest --test-dir build -R '^X11_House3D_SmokeTest_' --output-on-failure
+          for renderer in OPENGL33 VULKAN SOFTWARE HEADLESS; do
+            (cd build && CNA_GRAPHICS_RENDERER="$renderer" \
+              sh ../tools/platform/x11_test_server.sh ./cna_demo_2d --smoke 6)
+          done
 
   # ---------------------------------------------------------------------------------------------
   # plans/plan_native_platforms_integration.md NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.
