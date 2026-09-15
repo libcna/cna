@@ -435,7 +435,8 @@ jobs:
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_ENABLE_NET=OFF \
             -DCNA_USE_CCACHE=ON \
-            -DCNA_TEST_DISPLAY=:99
+            -DCNA_TEST_DISPLAY=:99 \
+            -DCNA_PLATFORM_CTEST_BINARY=CnaPlatformModuleTests
 
       - name: Build the platform, audio and content test suites, and cna_content itself
         run: cmake --build build --target CnaPlatformModuleTests CnaAudioTests CnaContentTests CnaContentPipelineTests cna_content --parallel "$(nproc)"
@@ -461,7 +462,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           set -euo pipefail
-          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|IntegrationTests|WindowManagerTests))$' --output-on-failure
+          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests))$' --output-on-failure
           ctest --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'

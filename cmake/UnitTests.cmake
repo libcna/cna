@@ -1429,6 +1429,21 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlOffFindPackage.cmake)
     set_tests_properties(CnaSdlOffFindsNoSdlPackage PROPERTIES LABELS "platform;configuration")
 
+    # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
+    # entries below (CnaPlatform*, CnaX11*) run. CnaTests by default. A build that compiles only
+    # the platform module's tests -- CI's SDL-free X11 cell builds the focused
+    # CnaPlatformModuleTests, which is not part of `all` -- names it here instead; the entries then
+    # run every platform-module suite their filters name, and a suite that lives in another module
+    # (GraphicsDevicePlatformWindowTests, GameWindowPlatformTest) simply is not in that binary.
+    set(CNA_PLATFORM_CTEST_BINARY "CnaTests" CACHE STRING
+        "Test executable the CnaPlatform*/CnaX11* ctest entries run (CnaTests or CnaPlatformModuleTests)")
+    set_property(CACHE CNA_PLATFORM_CTEST_BINARY PROPERTY STRINGS CnaTests CnaPlatformModuleTests)
+    if(NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaTests"
+       AND NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaPlatformModuleTests")
+        message(FATAL_ERROR "CNA_PLATFORM_CTEST_BINARY must be CnaTests or CnaPlatformModuleTests, "
+                            "not '${CNA_PLATFORM_CTEST_BINARY}'")
+    endif()
+
     # plans/plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
@@ -1440,7 +1455,7 @@ if(CNA_BUILD_TESTS)
     # the display-independent suite would have exercised only the implementations that need no
     # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
     # token does not match the string "PlatformWindowConformance".
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # plans/plan_vulkan.md VULKAN-154/VULKAN-157: the Xlib error-handler regression is the one
@@ -1449,7 +1464,7 @@ if(CNA_BUILD_TESTS)
     # the display forced, because the gtest-discovered copy inside the shared binary inherits the
     # shell's DISPLAY (finding F-22) and usually finds SDL already committed to another driver.
     cna_register_renderer_test(NAME CnaPlatformXErrorHandlerTests
-        COMMAND CnaTests --gtest_filter=Sdl3XErrorHandlerTest.*
+        COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3XErrorHandlerTest.*
         LABELS "platform" TIMEOUT 60
         ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -1458,7 +1473,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
+        COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
@@ -1473,7 +1488,7 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*
             LABELS "platform" TIMEOUT 120)
 
         # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No
@@ -1482,7 +1497,7 @@ if(CNA_BUILD_TESTS)
         get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
         if(_cna_have_evdev)
             cna_register_renderer_test(NAME CnaX11EvdevTests
-                COMMAND CnaTests --gtest_filter=X11EvdevVirtualDevice.*
+                COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11EvdevVirtualDevice.*
                 LABELS "platform" TIMEOUT 120)
         endif()
 
@@ -1493,14 +1508,14 @@ if(CNA_BUILD_TESTS)
             # openbox is absent, so a machine without them records a skip rather than a failure.
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        $<TARGET_FILE:CnaTests>
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
                         --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         --require-window-manager
-                        $<TARGET_FILE:CnaTests>
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
                         --gtest_filter=X11WithWindowManager.*
                 LABELS "platform" TIMEOUT 300)
         endif()
