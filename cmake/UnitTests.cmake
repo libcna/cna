@@ -1228,7 +1228,7 @@ if(CNA_BUILD_TESTS)
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*")
     endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers. The test binary defaults to it on its own as well (see
@@ -1551,6 +1551,15 @@ if(CNA_BUILD_TESTS)
                         --require-window-manager
                         $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
                         --gtest_filter=X11WithWindowManager.*
+                LABELS "platform" TIMEOUT 300)
+
+            # plans/plan_x11.md X11-0152: input-method composition against a private ibus on the
+            # private server; skips (77) where ibus or its XIM server is not installed.
+            cna_register_renderer_test(NAME CnaX11InputMethodTests
+                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        --with-ibus
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                        --gtest_filter=X11InputMethod.*
                 LABELS "platform" TIMEOUT 300)
         endif()
     endif()

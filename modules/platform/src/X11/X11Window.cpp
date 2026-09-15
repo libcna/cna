@@ -76,6 +76,7 @@ namespace CNA::Platform::X11 {
             XDestroyIC(inputContext_);
             inputContext_ = nullptr;
         }
+        inputContextData_.reset();
         if (ownsWindow_ && window_ != kNone)
         {
             XDestroyWindow(connection_.GetDisplay(), window_);
@@ -514,7 +515,7 @@ namespace CNA::Platform::X11 {
         return connection_.GetDisplayName();
     }
 
-    void X11Window::SetInputContext(const XIC context)
+    void X11Window::SetInputContext(const XIC context, std::shared_ptr<void> contextData)
     {
         if (inputContext_ == context)
         {
@@ -525,6 +526,8 @@ namespace CNA::Platform::X11 {
             XDestroyIC(inputContext_);
         }
         inputContext_ = context;
+        // Only now: the old context's callbacks can run inside XDestroyIC above.
+        inputContextData_ = std::move(contextData);
     }
 
     void X11Window::MarkDestroyedByServer()
@@ -535,6 +538,7 @@ namespace CNA::Platform::X11 {
             // rather than in the destructor keeps the IM from using an XID the server has freed.
             XDestroyIC(inputContext_);
             inputContext_ = nullptr;
+            inputContextData_.reset();
         }
         window_ = kNone;
         ownsWindow_ = false;

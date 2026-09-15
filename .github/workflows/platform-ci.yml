@@ -397,7 +397,8 @@ jobs:
             g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils openbox xclip xsel \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils \
+            ibus dbus-x11 xdotool x11-xkb-utils
 
       - name: Cache compiler outputs
         uses: actions/cache@v4
@@ -462,7 +463,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           set -euo pipefail
-          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests))$' --output-on-failure
+          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests|InputMethodTests))$' --output-on-failure
           ctest --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'

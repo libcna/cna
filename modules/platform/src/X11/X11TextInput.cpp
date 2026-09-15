@@ -6,9 +6,13 @@
 #include "X11Display.hpp"
 #include "X11Window.hpp"
 
+#include <algorithm>
 #include <clocale>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace CNA::Platform::X11 {
@@ -40,6 +44,208 @@ namespace CNA::Platform::X11 {
             std::setlocale(LC_CTYPE, "");
         }
 
+        /// One window's composition: what the input method's callbacks point at. Owned by the
+        /// window together with its input context (X11Window::SetInputContext) and released only
+        /// after the context is destroyed, so it outlives every callback.
+        struct PreeditState
+        {
+            X11TextInput* owner = nullptr;
+            WindowId window = 0;
+            std::u32string text;
+            std::vector<XIMFeedback> feedback;
+            int caret = 0;
+            XIMCallback start{};
+            XIMCallback done{};
+            XIMCallback draw{};
+            XIMCallback caretMove{};
+        };
+
+        std::string ToUtf8(const std::u32string& text)
+        {
+            std::string utf8;
+            for (const char32_t code : text)
+            {
+                if (code < 0x80)
+                {
+                    utf8.push_back(static_cast<char>(code));
+                }
+                else if (code < 0x800)
+                {
+                    utf8.push_back(static_cast<char>(0xC0 | (code >> 6)));
+                    utf8.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+                }
+                else if (code < 0x10000)
+                {
+                    utf8.push_back(static_cast<char>(0xE0 | (code >> 12)));
+                    utf8.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+                    utf8.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+                }
+                else
+                {
+                    utf8.push_back(static_cast<char>(0xF0 | (code >> 18)));
+                    utf8.push_back(static_cast<char>(0x80 | ((code >> 12) & 0x3F)));
+                    utf8.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+                    utf8.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+                }
+            }
+            return utf8;
+        }
+
+        /// The characters of an XIMText. Its `length` is not trusted: input methods report it
+        /// wrongly (SDL counts the string itself for the same reason), so the characters are
+        /// counted off the string.
+        std::u32string DecodeXimText(const XIMText& text)
+        {
+            std::u32string decoded;
+            if (text.encoding_is_wchar)
+            {
+                if (text.string.wide_char != nullptr)
+                {
+                    for (const wchar_t* character = text.string.wide_char; *character != L'\0'; ++character)
+                    {
+                        decoded.push_back(static_cast<char32_t>(*character));
+                    }
+                }
+                return decoded;
+            }
+            if (text.string.multi_byte == nullptr)
+            {
+                return decoded;
+            }
+            // Multibyte text is in the locale's encoding -- UTF-8 wherever an IME is in use --
+            // and glibc's wchar_t is the Unicode code point.
+            std::mbstate_t state{};
+            const char* cursor = text.string.multi_byte;
+            const char* end = cursor + std::strlen(cursor);
+            while (cursor < end)
+            {
+                wchar_t character = 0;
+                const std::size_t used = std::mbrtowc(&character, cursor, static_cast<std::size_t>(end - cursor), &state);
+                if (used == 0 || used == static_cast<std::size_t>(-1) || used == static_cast<std::size_t>(-2))
+                {
+                    break;
+                }
+                decoded.push_back(static_cast<char32_t>(character));
+                cursor += used;
+            }
+            return decoded;
+        }
+
+        void EmitComposition(PreeditState& state)
+        {
+            TextEditingEvent event;
+            event.window = state.window;
+            event.text = ToUtf8(state.text);
+            // The selection is the run of reversed or highlighted characters -- the segment the
+            // input method is converting -- and otherwise there is none, at the caret; the same
+            // reading SDL3 gives XIM's feedback.
+            const int length = static_cast<int>(state.text.size());
+            int start = -1;
+            int run = 0;
+            for (int index = 0; index < length && index < static_cast<int>(state.feedback.size()); ++index)
+            {
+                if ((state.feedback[static_cast<std::size_t>(index)] & (XIMReverse | XIMHighlight)) != 0)
+                {
+                    if (start < 0)
+                    {
+                        start = index;
+                    }
+                    ++run;
+                }
+                else if (start >= 0)
+                {
+                    break;
+                }
+            }
+            event.cursor = start >= 0 ? start : std::clamp(state.caret, 0, length);
+            event.selectionLength = start >= 0 ? run : 0;
+            state.owner->QueueEditingEvent(std::move(event));
+        }
+
+        // The input method's callbacks. Declared with XIMProc's own parameters (an XIC is passed
+        // where XIMProc says XIM: both are pointers the callback does not use) and the call data
+        // cast inside, rather than with the typed signatures cast into XIMProc.
+        void PreeditStart(XIM, XPointer clientData, XPointer)
+        {
+            auto& state = *reinterpret_cast<PreeditState*>(clientData);
+            state.text.clear();
+            state.feedback.clear();
+            state.caret = 0;
+        }
+
+        void PreeditDone(XIM, XPointer clientData, XPointer)
+        {
+            auto& state = *reinterpret_cast<PreeditState*>(clientData);
+            const bool hadText = !state.text.empty();
+            state.text.clear();
+            state.feedback.clear();
+            state.caret = 0;
+            if (hadText)
+            {
+                EmitComposition(state);
+            }
+        }
+
+        void PreeditDraw(XIM, XPointer clientData, XPointer callData)
+        {
+            auto& state = *reinterpret_cast<PreeditState*>(clientData);
+            const auto& draw = *reinterpret_cast<const XIMPreeditDrawCallbackStruct*>(callData);
+            const int size = static_cast<int>(state.text.size());
+            const int first = std::clamp(draw.chg_first, 0, size);
+            const int changed = std::clamp(draw.chg_length, 0, size - first);
+
+            std::u32string inserted;
+            std::vector<XIMFeedback> insertedFeedback;
+            if (draw.text != nullptr)
+            {
+                inserted = DecodeXimText(*draw.text);
+                insertedFeedback.assign(inserted.size(), 0);
+                if (draw.text->feedback != nullptr)
+                {
+                    const std::size_t reported = std::min<std::size_t>(draw.text->length, inserted.size());
+                    std::copy_n(draw.text->feedback, reported, insertedFeedback.begin());
+                }
+            }
+            state.text.replace(static_cast<std::size_t>(first), static_cast<std::size_t>(changed), inserted);
+            state.feedback.resize(state.text.size() - inserted.size() + static_cast<std::size_t>(changed), 0);
+            state.feedback.erase(state.feedback.begin() + first, state.feedback.begin() + first + changed);
+            state.feedback.insert(state.feedback.begin() + first, insertedFeedback.begin(), insertedFeedback.end());
+            state.caret = std::clamp(draw.caret, 0, static_cast<int>(state.text.size()));
+            EmitComposition(state);
+        }
+
+        void PreeditCaret(XIM, XPointer clientData, XPointer callData)
+        {
+            auto& state = *reinterpret_cast<PreeditState*>(clientData);
+            auto& caret = *reinterpret_cast<XIMPreeditCaretCallbackStruct*>(callData);
+            const int size = static_cast<int>(state.text.size());
+            int position = state.caret;
+            switch (caret.direction)
+            {
+                case XIMAbsolutePosition: position = caret.position; break;
+                case XIMForwardChar: ++position; break;
+                case XIMBackwardChar: --position; break;
+                case XIMLineStart: position = 0; break;
+                case XIMLineEnd: position = size; break;
+                default: break;
+            }
+            position = std::clamp(position, 0, size);
+            caret.position = position;  // The callback reports where the caret ended up.
+            if (position != state.caret)
+            {
+                state.caret = position;
+                EmitComposition(state);
+            }
+        }
+
+        XIMCallback MakeCallback(PreeditState* state, void (*function)(XIM, XPointer, XPointer))
+        {
+            XIMCallback callback{};
+            callback.client_data = reinterpret_cast<XPointer>(state);
+            callback.callback = function;
+            return callback;
+        }
+
     } // namespace
 
     X11TextInput::X11TextInput(X11Connection& connection) : connection_(connection)
@@ -57,6 +263,58 @@ namespace CNA::Platform::X11 {
         // A null inputMethod_ is not an error. There may be no input-method server on this
         // display at all, which is the normal state of a test server -- LookupText falls back to
         // XLookupString and text input keeps working for ordinary keys.
+        if (inputMethod_ == nullptr)
+        {
+            return;
+        }
+
+        // The style: the input method drawing its own composition, unless the application said
+        // it draws it (see the class comment) and the input method can hand it over.
+        const char* ui = std::getenv("CNA_IME_IMPLEMENTED_UI");
+        const bool applicationDrawsComposition = ui != nullptr && std::strstr(ui, "composition") != nullptr;
+        XIMStyles* styles = nullptr;
+        if (XGetIMValues(inputMethod_, XNQueryInputStyle, &styles, nullptr) == nullptr && styles != nullptr)
+        {
+            const auto supports = [styles](const XIMStyle style) {
+                for (unsigned short index = 0; index < styles->count_styles; ++index)
+                {
+                    if (styles->supported_styles[index] == style)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const XIMStyle composition[] = {XIMPreeditCallbacks | XIMStatusNothing,
+                                            XIMPreeditCallbacks | XIMStatusNone};
+            const XIMStyle drawnByTheInputMethod[] = {XIMPreeditNothing | XIMStatusNothing,
+                                                     XIMPreeditNothing | XIMStatusNone,
+                                                     XIMPreeditNone | XIMStatusNone};
+            if (applicationDrawsComposition)
+            {
+                for (const XIMStyle style : composition)
+                {
+                    if (style_ == 0 && supports(style))
+                    {
+                        style_ = style;
+                    }
+                }
+            }
+            for (const XIMStyle style : drawnByTheInputMethod)
+            {
+                if (style_ == 0 && supports(style))
+                {
+                    style_ = style;
+                }
+            }
+            XFree(styles);
+        }
+        if (style_ == 0)
+        {
+            // The style this backend has always asked for; an input method that lists nothing
+            // better still accepts it or refuses the context, and a refused context is handled.
+            style_ = XIMPreeditNothing | XIMStatusNothing;
+        }
     }
 
     X11TextInput::~X11TextInput()
@@ -77,17 +335,53 @@ namespace CNA::Platform::X11 {
         {
             return;
         }
-        // XIMPreeditNothing|XIMStatusNothing is the "root window" style: the input method draws
-        // its own preedit and status windows. The alternatives (callbacks, or over-the-spot) are
-        // what an Ime capability would need, and this backend reports that capability false --
-        // see the class comment.
-        XIC context = XCreateIC(inputMethod_, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-                                XNClientWindow, window.GetXWindow(), XNFocusWindow,
-                                window.GetXWindow(), nullptr);
+        XIC context = nullptr;
+        std::shared_ptr<PreeditState> state;
+        if (HasCompositionEvents())
+        {
+            state = std::make_shared<PreeditState>();
+            state->owner = this;
+            state->window = window.GetId();
+            state->start = MakeCallback(state.get(), &PreeditStart);
+            state->done = MakeCallback(state.get(), &PreeditDone);
+            state->draw = MakeCallback(state.get(), &PreeditDraw);
+            state->caretMove = MakeCallback(state.get(), &PreeditCaret);
+            XVaNestedList preedit = XVaCreateNestedList(
+                0, XNPreeditStartCallback, &state->start, XNPreeditDoneCallback, &state->done,
+                XNPreeditDrawCallback, &state->draw, XNPreeditCaretCallback, &state->caretMove, nullptr);
+            if (preedit != nullptr)
+            {
+                context = XCreateIC(inputMethod_, XNInputStyle, style_, XNClientWindow,
+                                    window.GetXWindow(), XNFocusWindow, window.GetXWindow(),
+                                    XNPreeditAttributes, preedit, nullptr);
+                XFree(preedit);
+            }
+        }
+        else
+        {
+            // XIMPreeditNothing is the "root window" style: the input method draws its own
+            // preedit and status windows.
+            context = XCreateIC(inputMethod_, XNInputStyle, style_, XNClientWindow,
+                                window.GetXWindow(), XNFocusWindow, window.GetXWindow(), nullptr);
+        }
         if (context != nullptr)
         {
-            window.SetInputContext(context);
+            window.SetInputContext(context, std::move(state));
         }
+    }
+
+    void X11TextInput::QueueEditingEvent(TextEditingEvent event)
+    {
+        editing_.emplace_back(std::move(event));
+    }
+
+    void X11TextInput::TakeEditingEvents(std::vector<PlatformEvent>& destination)
+    {
+        for (PlatformEvent& event : editing_)
+        {
+            destination.push_back(std::move(event));
+        }
+        editing_.clear();
     }
 
     void X11TextInput::RegisterWindow(const WindowId id, X11Window* window)
@@ -104,6 +398,10 @@ namespace CNA::Platform::X11 {
                 // freed window.
                 SetFocusedWindow(nullptr);
             }
+            if (found != windows_.end() && found->second == contextFocused_)
+            {
+                contextFocused_ = nullptr;
+            }
             windows_.erase(id);
             active_.erase(id);
             return;
@@ -119,18 +417,55 @@ namespace CNA::Platform::X11 {
 
     void X11TextInput::SetFocusedWindow(X11Window* window)
     {
-        if (focused_ == window)
+        focused_ = window;
+        UpdateContextFocus();
+    }
+
+    void X11TextInput::UpdateContextFocus()
+    {
+        // Focus the input context only while its window has focus and text input is started for
+        // it -- see the class comment for the keys a focused context would otherwise swallow.
+        X11Window* wanted = focused_ != nullptr && focused_->GetInputContext() != nullptr &&
+                                    IsActive(focused_->GetId())
+                                ? focused_
+                                : nullptr;
+        if (wanted == contextFocused_)
         {
             return;
         }
-        if (focused_ != nullptr && focused_->GetInputContext() != nullptr)
+        if (contextFocused_ != nullptr && contextFocused_->GetInputContext() != nullptr)
         {
-            XUnsetICFocus(focused_->GetInputContext());
+            XUnsetICFocus(contextFocused_->GetInputContext());
         }
-        focused_ = window;
-        if (focused_ != nullptr && focused_->GetInputContext() != nullptr)
+        contextFocused_ = wanted;
+        if (contextFocused_ != nullptr)
         {
-            XSetICFocus(focused_->GetInputContext());
+            XSetICFocus(contextFocused_->GetInputContext());
+        }
+    }
+
+    void X11TextInput::EndComposition(X11Window& window)
+    {
+        const XIC context = window.GetInputContext();
+        if (context == nullptr)
+        {
+            return;
+        }
+        // Resetting discards what was being composed; what it hands back is not committed.
+        if (char* discarded = XmbResetIC(context); discarded != nullptr)
+        {
+            XFree(discarded);
+        }
+        if (HasCompositionEvents())
+        {
+            auto* state = static_cast<PreeditState*>(window.GetInputContextData());
+            if (state != nullptr && !state->text.empty())
+            {
+                state->text.clear();
+                state->feedback.clear();
+                state->caret = 0;
+                EmitComposition(*state);
+            }
         }
     }
 
@@ -141,11 +476,22 @@ namespace CNA::Platform::X11 {
             throw PlatformException("X11TextInput::Start", "unknown window id");
         }
         active_[window] = type;
+        UpdateContextFocus();
     }
 
     void X11TextInput::Stop(const WindowId window)
     {
+        if (IsActive(window))
+        {
+            if (X11Window* target = FindWindow(window); target != nullptr)
+            {
+                // A composition in progress ends with text input: an application that stopped
+                // listening must not be left with half a word the next time it starts.
+                EndComposition(*target);
+            }
+        }
         active_.erase(window);
+        UpdateContextFocus();
     }
 
     bool X11TextInput::IsActive(const WindowId window) const

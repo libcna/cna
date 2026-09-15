@@ -98,7 +98,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `vulkanSurface` | conditional | true when the Vulkan headers were available at build time |
 | `relativeMouse` | conditional | true when XInput2 is present at build **and** run time |
 | `gamepad`, `joystick`, `gamepadRumble` | conditional | Linux only: the kernel's evdev nodes, true when the build has `linux/input.h` and the machine has `/dev/input` — **with or without a display** |
-| `ime` | ❌ | XIM here delivers *committed* text; the capability promises composition and candidate events |
+| `ime` | conditional | true when the application asked to draw the composition (`CNA_IME_IMPLEMENTED_UI=composition`) and the input method offers on-the-spot composition; candidate lists stay with the input method — see [Input-method composition](#input-method-composition) |
 | `inputDeviceEnumeration` | ❌ | XI2 can answer it; not implemented |
 | `gamepadSensors` | ❌ | a pad's motion sensors are a second evdev node; pairing it with its pad is not implemented |
 | `haptics`, `sensors`, `powerInfo` | ❌ | not an X11 facility |
@@ -196,9 +196,35 @@ A display with no input-method server (a bare `Xvfb`, a minimal container, a ses
 than passed through. `textInput` stays true because text input genuinely works; what is lost is
 dead-key composition.
 
-`ime` stays **false**. CNA's `Ime` capability promises `TextEditingEvent` and
-`TextEditingCandidatesEvent` — the in-progress composition string and the candidate list — which
-need XIM preedit callbacks this backend does not implement.
+### Input-method composition
+
+By default the input method draws its own composition, in its own window, and only the committed
+text reaches the application. That is the behaviour an XNA game needs: XNA had no IME API, so no
+game draws a composition. `ime` is then **false**.
+
+An application that does draw the composition — through CNA's `TextInputEXT` editing events —
+says so with **`CNA_IME_IMPLEMENTED_UI=composition`** in its environment, read once when the
+platform is created (on the SDL3 backend the same choice is SDL's own IME-UI hint). If the input
+method offers the *on-the-spot* style (`XIMPreeditCallbacks`) — ibus and fcitx do — the backend
+asks for it, and the input method hands its composition over through its preedit callbacks: each
+change is a `TextEditingEvent` (the text, the caret, and the segment being converted as the
+selection), delivered from `PollEvents` in order with the key and text events around it, and the
+end of a composition is an editing event with empty text. `ime` is **true** exactly then.
+
+The candidate list is never delivered: XIM has no protocol for handing it to the client, so the
+input method draws its own candidate window at the spot `SetInputArea` gives it, as it does for
+every X application. `TextEditingCandidatesEvent` does not occur on this backend.
+
+**Outside text entry the input method gets no keys.** Key events are offered to it (`XFilterEvent`)
+only while text input is started for their window, and its input context is focused only then.
+Unfocusing alone would not do: Xlib forwards every key of a window with an input context to the
+input-method server, and ibus processes them focused or not — measured: with a dead-key layout
+the presses of a dead key and the letter after it never reached the game at all. A Hangul or
+Japanese input mode left on would otherwise turn a game's WASD into a composition.
+
+Stopping text input abandons a composition in progress (`XmbResetIC`) and reports it ended, so
+nothing half-typed resurfaces when text input starts again. A commit arrives from Xlib as a press
+of keycode 0; that is delivered as text and never as a key event for "no key".
 
 ---
 
@@ -427,7 +453,7 @@ exist; that has **not** been tested, and is recorded as untested rather than cla
 
 ## Running the tests
 
-Four ctest entries, split by what each actually needs:
+Five ctest entries, split by what each actually needs:
 
 ```sh
 ctest --test-dir cmake-build-x11 -R 'CnaX11'
@@ -436,6 +462,7 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 | Test | Needs | Covers |
 |---|---|---|
 | `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan, controller classification and mapping from synthetic device descriptions |
+| `CnaX11InputMethodTests` | `Xvfb` + ibus (with its XIM server), `xdotool`, `setxkbmap` | composition with and without the application drawing it, a commit, abandoning a composition, and no keys taken outside text entry — against a private ibus the launcher starts (`--with-ibus`) |
 | `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, the platform with no X server; each test skips where the machine grants neither |
 | `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
@@ -455,8 +482,9 @@ EWMH fullscreen and focus do not happen there at all; asserting them against one
 environment rather than the backend.
 
 **What Xvfb cannot cover**, and which therefore needs a real desktop: a physical GPU's GLX driver,
-a real compositor's fullscreen behaviour, multi-monitor XRandR layouts and hotplug, real input
-devices and a real input-method server (ibus, fcitx). `plans/plan_x11.md` records those gaps
+a real compositor's fullscreen behaviour, multi-monitor XRandR layouts and hotplug, and real input
+devices. A real input-method server *is* covered — the launcher runs a private ibus — but only with
+its core engine; a language engine (Hangul, Pinyin, Anthy) in a user's session has not been driven. `plans/plan_x11.md` records those gaps
 rather than treating a green Xvfb run as equivalent.
 
 ---

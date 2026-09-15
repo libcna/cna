@@ -225,10 +225,11 @@ namespace CNA::Platform::X11 {
         capabilities.openGlContext = glContext_ != nullptr && glContext_->IsAvailable();
         capabilities.vulkanSurface = vulkanSurface_ != nullptr;
         capabilities.relativeMouse = mouse_ != nullptr && mouse_->HasRawMotion();
+        // Composition events exist only when the application asked to draw them and the input
+        // method agreed to hand them over (X11TextInput's class comment, X11-0152).
+        capabilities.ime = textInput_ != nullptr && textInput_->HasCompositionEvents();
 
         // Deliberately false, each for a stated reason rather than for want of effort:
-        //   ime                    -- XIM here delivers committed text only; the capability
-        //                             promises composition and candidate events (plan D16).
         //   gamepadSensors         -- a pad's motion sensors are a second evdev node; pairing it
         //                             with its pad is not implemented.
         //   haptics                -- the standalone force-feedback service; pad rumble is
@@ -653,7 +654,27 @@ namespace CNA::Platform::X11 {
             // XFilterEvent gives the input method first refusal. An IME consumes the key presses
             // that make up a composition and produces one committed string at the end; delivering
             // those presses as key events too would type the composition twice.
-            if (XFilterEvent(&event, kNone) == True)
+            //
+            // Key events are offered to it only while text input is started for their window.
+            // Unfocusing the input context is not enough: Xlib forwards every key of a window with
+            // a context to the input-method server, and ibus processes them focused or not -- a
+            // dead key, or a whole Hangul or Japanese input mode, then swallowed keys a game was
+            // using as keys (plans/plan_x11.md X11-0152). Everything else -- the input method's
+            // own protocol traffic -- is always offered.
+            bool offer = true;
+            if ((event.type == KeyPress || event.type == KeyRelease) && textInput_ != nullptr)
+            {
+                const X11Window* target = FindWindowByXid(event.xkey.window);
+                offer = target != nullptr && textInput_->IsActive(target->GetId());
+            }
+            const bool filtered = offer && XFilterEvent(&event, kNone) == True;
+            if (textInput_ != nullptr)
+            {
+                // What the input method's composition callbacks produced while it handled that
+                // event (plans/plan_x11.md X11-0152), in order with everything around it.
+                textInput_->TakeEditingEvents(destination);
+            }
+            if (filtered)
             {
                 continue;
             }
@@ -662,6 +683,11 @@ namespace CNA::Platform::X11 {
                 continue;
             }
             TranslateEvent(event, destination);
+            if (textInput_ != nullptr)
+            {
+                // A commit looked up with Xutf8LookupString can end the composition too.
+                textInput_->TakeEditingEvents(destination);
+            }
         }
         if (mouse_ != nullptr)
         {
@@ -1027,6 +1053,22 @@ namespace CNA::Platform::X11 {
             {
                 if (keyboard_ == nullptr)
                 {
+                    return;
+                }
+                if (event.xkey.keycode == 0)
+                {
+                    // Keycode 0 is no key: it is how Xlib delivers an input method's commit, a
+                    // press whose only content is the committed string. Text, not a key event --
+                    // a game must not see a press of "no key" (plans/plan_x11.md X11-0152).
+                    std::string text;
+                    if (event.type == KeyPress && textInput_ != nullptr &&
+                        textInput_->IsActive(windowId) && textInput_->LookupText(window, event.xkey, text))
+                    {
+                        TextInputEvent input;
+                        input.window = windowId;
+                        input.text = std::move(text);
+                        destination.emplace_back(std::move(input));
+                    }
                     return;
                 }
                 if (event.type == KeyRelease && !connection_->HasDetectableAutoRepeat())

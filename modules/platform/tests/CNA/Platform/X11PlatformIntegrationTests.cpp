@@ -669,9 +669,10 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_FALSE(capabilities.powerInfo);
     EXPECT_FALSE(capabilities.managedEntrypoint);
 
-    // XIM is used for committed text, which is `textInput`. `ime` promises composition and
-    // candidate events, which are not implemented -- so it must stay false however much XIM
-    // appears in the implementation.
+    // XIM is used for committed text, which is `textInput`. `ime` promises composition events,
+    // and those reach the application only when it asked to draw the composition
+    // (CNA_IME_IMPLEMENTED_UI=composition) and the input method agreed -- neither of which holds
+    // here (plans/plan_x11.md X11-0152; X11InputMethodTests covers the case where both do).
     EXPECT_FALSE(capabilities.ime);
 }
 

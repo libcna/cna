@@ -5,6 +5,7 @@
 
 #include "X11Headers.hpp"
 
+#include <memory>
 #include <string>
 
 namespace CNA::Platform::X11 {
@@ -210,8 +211,14 @@ namespace CNA::Platform::X11 {
          * the order Xlib requires.
          *
          * @param context The context, or null to detach and destroy the current one.
+         * @param contextData What the context's callbacks point at (the input method's
+         *        composition state), released only after the context is destroyed: destroying a
+         *        context can still run one of its callbacks.
          */
-        void SetInputContext(XIC context);
+        void SetInputContext(XIC context, std::shared_ptr<void> contextData = {});
+
+        /** @brief Gets what the input context's callbacks point at, or null. @return The data. */
+        [[nodiscard]] void* GetInputContextData() const { return inputContextData_.get(); }
 
         /** @brief Records that the window gained or lost focus. @param focused The new state. */
         void SetFocused(bool focused) { focused_ = focused; }
@@ -346,6 +353,8 @@ namespace CNA::Platform::X11 {
         int depth_ = 0;
         bool ownsWindow_ = true;
         XIC inputContext_ = nullptr;
+        // Declared after inputContext_ and released after XDestroyIC; see SetInputContext.
+        std::shared_ptr<void> inputContextData_;
         void* glFbConfig_ = nullptr;
 
         bool resizable_ = true;
