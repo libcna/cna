@@ -505,11 +505,33 @@ at 65 535 ms. It needs write access to the node; a pad opened read-only, or with
 reports `rumble = false` in its capabilities and `SetRumble` returns false for it. Closing a pad
 removes its effect, so a game that exits mid-rumble does not leave the pad buzzing.
 
+**Controller mappings.** A pad that the kernel reports with only the joystick button range —
+common for generic HID pads that describe themselves as joysticks — says nothing about which of
+its buttons is A, so on its own it is a raw joystick, not an XNA gamepad. A mapping in the
+community controller database's format (`gamecontrollerdb.txt`, the one SDL-based games use) makes
+it one (`plans/plan_x11.md` X11-0160): the file named by `CNA_GAMECONTROLLERCONFIG_FILE`, then the
+entries in `CNA_GAMECONTROLLERCONFIG` (one per line), read when the controllers are first asked
+about. The same file works for both, byte for byte:
+
+```sh
+CNA_GAMECONTROLLERCONFIG_FILE=~/gamecontrollerdb.txt ./my-game
+```
+
+A mapping matches the device's bus, vendor, product and version — then any version of it — and,
+where the entry states one, the checksum of its name. Its button, axis and hat numbers are the
+database's: the joystick range and everything above it first, then the rest; hats that look digital
+(-1..1, or no fuzz, flat or resolution) as hats, the rest as axes. Every element kind is honoured —
+half axes (`+a2`), inverted axes (`a1~`), buttons on axes and axes on buttons (`-leftx:b4`), hat
+directions — with the database's rules: the first element whose range holds an axis's value
+decides, and the control of the element that decided before is let go. A labelled Nintendo-style
+entry is turned positional as other readers do; any other condition (`hint:`) takes the default the
+entry states. A mapping also overrides a pad the gamepad API already describes, which is how a user
+corrects one. CNA ships no database of its own: which one to use — the community file, a game's
+own — is the user's or the game's choice. All 269 Linux entries of the database SDL embeds are read
+(a test does, given the file).
+
 **Not supported:** motion sensors, trigger rumble, light bars, player LEDs, touchpads and battery
-state all return false or empty. And a pad that the kernel reports with only the joystick button
-range — common for generic HID pads that describe themselves as joysticks — is a raw joystick, not
-an XNA gamepad: nothing in the device says which of its buttons is A. SDL answers that with its
-community controller database; CNA does not ship one.
+state all return false or empty.
 
 **What has been tested, and what has not.** Everything above runs against devices the kernel really
 creates through uinput — real evdev nodes, real hot-plug, real `SYN_DROPPED`, the real

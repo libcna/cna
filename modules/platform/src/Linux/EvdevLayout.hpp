@@ -35,6 +35,10 @@ namespace CNA::Platform::Linux {
         int maximum = 0;
         /** @brief The kernel's suggested dead band around the centre (informational only). */
         int flat = 0;
+        /** @brief The noise the driver filters out; with @ref flat, a hint that an axis is analogue. */
+        int fuzz = 0;
+        /** @brief Units per millimetre or per radian; zero when the driver does not say. */
+        int resolution = 0;
     };
 
     /** @brief What the kernel says about one input device, read once when it is opened. */
@@ -116,6 +120,51 @@ namespace CNA::Platform::Linux {
         GamepadAxis axis = GamepadAxis::LeftTrigger;
     };
 
+    /**
+     * @brief One element of a controller-database mapping, resolved to the kernel's codes
+     * (plans/plan_x11.md X11-0160; EvdevMapping.hpp builds them).
+     *
+     * Values are on the database's [-32768, 32767] scale, positive down for the vertical sticks.
+     */
+    struct EvdevMappedBinding
+    {
+        /** @brief What the element reads. */
+        enum class Source : std::uint8_t
+        {
+            /** @brief A key code, pressed or not. */
+            Key,
+            /** @brief An absolute axis, over a range of it. */
+            Axis,
+            /** @brief One direction of a hat (an `ABS_HATnX`/`ABS_HATnY` pair). */
+            Hat
+        };
+
+        /** @brief What the element reads. */
+        Source source = Source::Key;
+        /** @brief The key code, the axis's `ABS_*` code, or the hat's `ABS_HATnX` code. */
+        std::uint16_t code = 0;
+        /** @brief The axis's raw range (for a hat, its X axis's). */
+        EvdevAxisRange range{};
+        /** @brief A hat's Y axis's raw range. */
+        EvdevAxisRange yRange{};
+        /** @brief An axis's range read, scaled; above @ref inputMaximum when inverted. */
+        int inputMinimum = 0;
+        /** @brief The other end of the range read. */
+        int inputMaximum = 0;
+        /** @brief A hat's direction: 1 up, 2 right, 4 down, 8 left. */
+        std::uint8_t hatMask = 0;
+        /** @brief True when the element drives a button, false for an axis. */
+        bool toButton = true;
+        /** @brief The button driven. */
+        GamepadButton button = GamepadButton::A;
+        /** @brief The axis driven. */
+        GamepadAxis axis = GamepadAxis::LeftThumbstickX;
+        /** @brief The range the axis is driven over. */
+        int outputMinimum = 0;
+        /** @brief The other end of it. */
+        int outputMaximum = 0;
+    };
+
     /** @brief Everything needed to turn one device's events into a gamepad snapshot. */
     struct EvdevGamepadLayout
     {
@@ -135,7 +184,20 @@ namespace CNA::Platform::Linux {
         GamepadModel model = GamepadModel::Standard;
         /** @brief Whether the driver uses xpad's face-button convention (BTN_X is the left one). */
         bool xpadFaceButtons = false;
+        /**
+         * @brief A controller-database mapping's elements; when there are any, they alone drive
+         * the state and the gamepad-API bindings above are empty.
+         */
+        std::vector<EvdevMappedBinding> mapped;
     };
+
+    /**
+     * @brief Names a device's controller family from its identity.
+     *
+     * @param description The device.
+     * @return The family; `Standard` when the vendor is not one with a family of its own.
+     */
+    [[nodiscard]] GamepadModel EvdevGamepadModel(const EvdevDescription& description);
 
     /**
      * @brief Builds the gamepad mapping for a device classified as a gamepad.
@@ -223,10 +285,29 @@ namespace CNA::Platform::Linux {
     private:
         void SetButton(GamepadButton button, bool pressed, std::vector<EvdevGamepadChange>& changes);
         void SetAxis(GamepadAxis axis, float value, std::vector<EvdevGamepadChange>& changes);
+        void ApplyMapped(std::uint16_t type, std::uint16_t code, std::int32_t value,
+                         std::vector<EvdevGamepadChange>& changes);
+        void Drive(const EvdevMappedBinding& binding, int value, std::vector<EvdevGamepadChange>& changes);
+        void Release(const EvdevMappedBinding& binding, std::vector<EvdevGamepadChange>& changes);
 
         EvdevGamepadLayout layout_;
         std::uint32_t buttons_ = 0;
         std::array<float, GamepadAxisCount> axes_{};
+        // A mapping's memory: each axis's last matching element (its output is released when the
+        // axis moves out of that element's range), and each hat's direction bits and raw values.
+        std::vector<int> lastAxisMatch_;
+        std::array<std::uint8_t, 4> hatMasks_{};
+        std::array<std::array<int, 2>, 4> hatValues_{};
     };
+
+    /**
+     * @brief Converts a value on the controller databases' scale to CNA's.
+     *
+     * @param axis The gamepad axis.
+     * @param value The value on [-32768, 32767] (a trigger's on [0, 32767]), positive down for the
+     * vertical sticks.
+     * @return Sticks on [-1, 1] with up positive; triggers on [0, 1].
+     */
+    [[nodiscard]] float NormalizeMappedGamepadAxis(GamepadAxis axis, int value);
 
 } // namespace CNA::Platform::Linux

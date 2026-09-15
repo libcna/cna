@@ -75,6 +75,11 @@ namespace CNA::Platform::Linux {
 
     } // namespace
 
+    GamepadModel EvdevGamepadModel(const EvdevDescription& description)
+    {
+        return ModelOf(description);
+    }
+
     EvdevDeviceClass ClassifyEvdevDevice(const EvdevDescription& description)
     {
         // A DualShock or DualSense exposes its motion sensors as a node of their own, with
@@ -246,12 +251,33 @@ namespace CNA::Platform::Linux {
         return std::clamp(IsVerticalStick(axis) ? -stick : stick, -1.0f, 1.0f);
     }
 
-    EvdevGamepadState::EvdevGamepadState(EvdevGamepadLayout layout) : layout_(std::move(layout)) {}
+    float NormalizeMappedGamepadAxis(const GamepadAxis axis, const int value)
+    {
+        if (IsTrigger(axis))
+        {
+            return std::clamp(static_cast<float>(value) / 32767.0f, 0.0f, 1.0f);
+        }
+        const float stick = std::clamp(static_cast<float>(value) / 32767.0f, -1.0f, 1.0f);
+        // Databases write the vertical sticks positive down, as the kernel reports them; CNA's
+        // are positive up.
+        return IsVerticalStick(axis) ? -stick : stick;
+    }
+
+    EvdevGamepadState::EvdevGamepadState(EvdevGamepadLayout layout)
+        : layout_(std::move(layout)), lastAxisMatch_(ABS_CNT, -1)
+    {
+    }
 
     void EvdevGamepadState::Reset()
     {
         buttons_ = 0;
         axes_.fill(0.0f);
+        std::fill(lastAxisMatch_.begin(), lastAxisMatch_.end(), -1);
+        hatMasks_.fill(0);
+        for (std::array<int, 2>& hat : hatValues_)
+        {
+            hat.fill(0);
+        }
     }
 
     void EvdevGamepadState::SetButton(const GamepadButton button, const bool pressed,
@@ -287,9 +313,185 @@ namespace CNA::Platform::Linux {
         changes.push_back(change);
     }
 
+    void EvdevGamepadState::Drive(const EvdevMappedBinding& binding, const int value,
+                                  std::vector<EvdevGamepadChange>& changes)
+    {
+        if (binding.toButton)
+        {
+            SetButton(binding.button, value != 0, changes);
+        }
+        else
+        {
+            SetAxis(binding.axis, NormalizeMappedGamepadAxis(binding.axis, value), changes);
+        }
+    }
+
+    void EvdevGamepadState::Release(const EvdevMappedBinding& binding,
+                                    std::vector<EvdevGamepadChange>& changes)
+    {
+        if (binding.toButton)
+        {
+            SetButton(binding.button, false, changes);
+        }
+        else
+        {
+            SetAxis(binding.axis, 0.0f, changes);
+        }
+    }
+
+    void EvdevGamepadState::ApplyMapped(const std::uint16_t type, const std::uint16_t code,
+                                        const std::int32_t value,
+                                        std::vector<EvdevGamepadChange>& changes)
+    {
+        const std::vector<EvdevMappedBinding>& bindings = layout_.mapped;
+        if (type == EV_KEY)
+        {
+            // The first element reading the key decides, as databases are written.
+            for (const EvdevMappedBinding& binding : bindings)
+            {
+                if (binding.source == EvdevMappedBinding::Source::Key && binding.code == code)
+                {
+                    Drive(binding, value != 0 ? (binding.toButton ? 1 : binding.outputMaximum)
+                                              : (binding.toButton ? 0 : binding.outputMinimum),
+                          changes);
+                    return;
+                }
+            }
+            return;
+        }
+        if (type != EV_ABS)
+        {
+            return;
+        }
+
+        if (code >= ABS_HAT0X && code <= ABS_HAT3Y)
+        {
+            const std::size_t hat = static_cast<std::size_t>(code - ABS_HAT0X) / 2;
+            const std::uint16_t xCode = static_cast<std::uint16_t>(ABS_HAT0X + 2 * hat);
+            bool isHat = false;
+            for (const EvdevMappedBinding& binding : bindings)
+            {
+                isHat = isHat || (binding.source == EvdevMappedBinding::Source::Hat &&
+                                  binding.code == xCode);
+            }
+            if (isHat)
+            {
+                hatValues_[hat][code == xCode ? 0 : 1] = value;
+                // Each axis as -1, 0 or 1 about the centre of its range: a digital hat reports
+                // exactly those; any other range is read by which third it is in.
+                const auto direction = [](const int raw, const EvdevAxisRange& range) {
+                    const double centre = (static_cast<double>(range.minimum) + range.maximum) / 2.0;
+                    const double third = (static_cast<double>(range.maximum) - range.minimum) / 3.0;
+                    if (range.maximum <= range.minimum)
+                    {
+                        return raw < 0 ? -1 : (raw > 0 ? 1 : 0);
+                    }
+                    return raw < centre - third / 2.0 ? -1 : (raw > centre + third / 2.0 ? 1 : 0);
+                };
+                const EvdevMappedBinding* any = nullptr;
+                for (const EvdevMappedBinding& binding : bindings)
+                {
+                    if (binding.source == EvdevMappedBinding::Source::Hat && binding.code == xCode)
+                    {
+                        any = &binding;
+                        break;
+                    }
+                }
+                const int x = direction(hatValues_[hat][0], any->range);
+                const int y = direction(hatValues_[hat][1], any->yRange);
+                const auto mask = static_cast<std::uint8_t>((y < 0 ? 1 : 0) | (x > 0 ? 2 : 0) |
+                                                            (y > 0 ? 4 : 0) | (x < 0 ? 8 : 0));
+                const auto changed = static_cast<std::uint8_t>(mask ^ hatMasks_[hat]);
+                for (const EvdevMappedBinding& binding : bindings)
+                {
+                    if (binding.source != EvdevMappedBinding::Source::Hat || binding.code != xCode ||
+                        (changed & binding.hatMask) == 0)
+                    {
+                        continue;
+                    }
+                    if ((mask & binding.hatMask) != 0)
+                    {
+                        Drive(binding, binding.toButton ? 1 : binding.outputMaximum, changes);
+                    }
+                    else
+                    {
+                        Release(binding, changes);
+                    }
+                }
+                hatMasks_[hat] = mask;
+                return;
+            }
+        }
+
+        // An axis: the first element whose range holds the value decides. When the axis leaves
+        // the range of the element that last decided, that element's control is released first --
+        // a half axis on each side of a stick, say, lets go of one as the other takes over.
+        int match = -1;
+        int scaled = 0;
+        for (std::size_t index = 0; index < bindings.size(); ++index)
+        {
+            const EvdevMappedBinding& binding = bindings[index];
+            if (binding.source != EvdevMappedBinding::Source::Axis || binding.code != code)
+            {
+                continue;
+            }
+            scaled = ScaleEvdevAxis(value, binding.range);
+            const int low = std::min(binding.inputMinimum, binding.inputMaximum);
+            const int high = std::max(binding.inputMinimum, binding.inputMaximum);
+            if (scaled >= low && scaled <= high)
+            {
+                match = static_cast<int>(index);
+                break;
+            }
+        }
+        int& last = lastAxisMatch_[code];
+        if (last >= 0 && last != match)
+        {
+            const EvdevMappedBinding& previous = bindings[static_cast<std::size_t>(last)];
+            const bool sameOutput =
+                match >= 0 && previous.toButton == bindings[static_cast<std::size_t>(match)].toButton &&
+                (previous.toButton ? previous.button == bindings[static_cast<std::size_t>(match)].button
+                                   : previous.axis == bindings[static_cast<std::size_t>(match)].axis);
+            if (!sameOutput)
+            {
+                Release(previous, changes);
+            }
+        }
+        last = match;
+        if (match < 0)
+        {
+            return;
+        }
+        const EvdevMappedBinding& binding = bindings[static_cast<std::size_t>(match)];
+        if (binding.toButton)
+        {
+            // Pressed past the middle of the range read, in its direction.
+            const int threshold =
+                binding.inputMinimum + (binding.inputMaximum - binding.inputMinimum) / 2;
+            const bool down = binding.inputMaximum < binding.inputMinimum ? scaled <= threshold
+                                                                          : scaled >= threshold;
+            SetButton(binding.button, down, changes);
+            return;
+        }
+        int output = scaled;
+        if (binding.inputMinimum != binding.outputMinimum || binding.inputMaximum != binding.outputMaximum)
+        {
+            const double position = static_cast<double>(scaled - binding.inputMinimum) /
+                                    (binding.inputMaximum - binding.inputMinimum);
+            output = binding.outputMinimum +
+                     static_cast<int>(position * (binding.outputMaximum - binding.outputMinimum));
+        }
+        SetAxis(binding.axis, NormalizeMappedGamepadAxis(binding.axis, output), changes);
+    }
+
     void EvdevGamepadState::Apply(const std::uint16_t type, const std::uint16_t code,
                                   const std::int32_t value, std::vector<EvdevGamepadChange>& changes)
     {
+        if (!layout_.mapped.empty())
+        {
+            ApplyMapped(type, code, value, changes);
+            return;
+        }
         if (type == EV_KEY)
         {
             for (const auto& [keyCode, button] : layout_.buttons)

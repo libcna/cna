@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <filesystem>
+#include <optional>
 
 #include <sys/inotify.h>
 #include <unistd.h>
@@ -105,6 +106,7 @@ namespace CNA::Platform::Linux {
         {
             return true;
         }
+        mappings_ = ControllerMappingDatabase::FromEnvironment();
         std::error_code error;
         if (!std::filesystem::is_directory(directory_, error))
         {
@@ -298,10 +300,27 @@ namespace CNA::Platform::Linux {
         auto controller = std::make_unique<Controller>();
         controller->id = nextId_++;
         controller->kind = kind;
-        if (kind == EvdevDeviceClass::Gamepad)
+        // A mapping for the device decides over what its driver reports: it is how a pad outside
+        // the kernel's gamepad API becomes a gamepad, and how a user corrects one inside it.
+        std::optional<EvdevGamepadLayout> layout;
+        if (const ControllerMapping* mapping = mappings_.Find(description); mapping != nullptr)
         {
-            controller->gamepad =
-                std::make_unique<EvdevGamepadState>(BuildEvdevGamepadLayout(description));
+            EvdevGamepadLayout mappedLayout = BuildMappedGamepadLayout(*mapping, description);
+            if (!mappedLayout.mapped.empty())
+            {
+                mappedLayout.model = EvdevGamepadModel(description);
+                layout = std::move(mappedLayout);
+                controller->kind = EvdevDeviceClass::Gamepad;
+                controller->mapped = true;
+            }
+        }
+        if (!layout && kind == EvdevDeviceClass::Gamepad)
+        {
+            layout = BuildEvdevGamepadLayout(description);
+        }
+        if (layout)
+        {
+            controller->gamepad = std::make_unique<EvdevGamepadState>(std::move(*layout));
             for (int slot = 0; slot < GamepadSlotCount; ++slot)
             {
                 if (FindBySlot(slot) == nullptr)

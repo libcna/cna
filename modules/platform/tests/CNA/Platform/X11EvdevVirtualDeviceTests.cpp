@@ -888,6 +888,115 @@ TEST(X11EvdevVirtualDevice, AFlightStickIsARawJoystickAndNotAGamepad)
     EXPECT_TRUE(EventsOf<ControllerButtonEvent>(events, id).empty());
 }
 
+// --- controller-database mappings (X11-0160) ---------------------------------------------------------
+
+/// Sets one environment variable for a scope.
+class ScopedVariable
+{
+public:
+    ScopedVariable(std::string name, const std::string& value)
+        : name_(std::move(name)), saved_(System::Environment::GetEnvironmentVariable(name_))
+    {
+        System::Environment::SetEnvironmentVariable(name_, value);
+    }
+    ~ScopedVariable() { System::Environment::SetEnvironmentVariable(name_, saved_); }
+    ScopedVariable(const ScopedVariable&) = delete;
+    ScopedVariable& operator=(const ScopedVariable&) = delete;
+
+private:
+    std::string name_;
+    std::optional<std::string> saved_;
+};
+
+TEST(X11EvdevVirtualDevice, AGenericPadBecomesAGamepadThroughAMapping)
+{
+    // A generic HID pad: joystick buttons from BTN_TRIGGER, byte-wide axes, a hat -- no
+    // gamepad-API code, so without a mapping it is only a joystick.
+    VirtualDevice::Spec spec;
+    spec.name = UniqueName("generic");
+    spec.product = 0x0003;
+    for (std::uint16_t code = BTN_TRIGGER; code <= BTN_BASE6; ++code)
+    {
+        spec.keys.push_back(code);
+    }
+    spec.axes = {{ABS_X, 0, 255},    {ABS_Y, 0, 255},    {ABS_Z, 0, 255},
+                 {ABS_RZ, 0, 255},   {ABS_HAT0X, -1, 1}, {ABS_HAT0Y, -1, 1}};
+    // Bus 3, vendor 0x1209, product 0x0003, version 0x0100, as databases write it.
+    const ScopedVariable mapping(
+        "CNA_GAMECONTROLLERCONFIG",
+        "03000000091200000300000000010000,CNA Generic Test Pad,a:b2,b:b1,x:b3,y:b0,back:b8,"
+        "start:b9,leftshoulder:b4,rightshoulder:b5,lefttrigger:b6,righttrigger:b7,leftx:a0,"
+        "lefty:a1,rightx:a2,righty:a3,dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8,"
+        "platform:Linux,");
+    EvdevControllerHub hub;
+    ASSERT_TRUE(hub.Start());
+    EvdevGamepad gamepad(hub);
+    CREATE_OR_SKIP(pad, spec);
+
+    ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, spec.name) != nullptr; }));
+    const EvdevControllerHub::Controller* controller = FindByName(hub, spec.name);
+    EXPECT_EQ(controller->kind, EvdevDeviceClass::Gamepad);
+    EXPECT_TRUE(controller->mapped);
+    ASSERT_GE(controller->slot, 0);
+    const DeviceId id = controller->id;
+
+    std::vector<PlatformEvent> events;
+    hub.TakeEvents(events);
+    const std::vector<DeviceEvent> connections = EventsOf<DeviceEvent>(events, id);
+    ASSERT_EQ(connections.size(), 2u);
+    EXPECT_EQ(connections[1].kind, InputDeviceKind::Gamepad);
+
+    gamepad.Update();
+    const int slot = FindSlot(gamepad, spec.name);
+    ASSERT_GE(slot, 0);
+    EXPECT_EQ(gamepad.GetCapabilities(slot).axes, 0x3F);
+
+    pad->Emit(EV_KEY, BTN_THUMB2, 1);  // b2: A
+    pad->Emit(EV_ABS, ABS_Y, 0);        // a1 up
+    pad->Emit(EV_ABS, ABS_HAT0Y, -1);   // hat up
+    pad->Emit(EV_KEY, BTN_BASE, 1);     // b6: the left trigger, fully
+    pad->Report();
+    ASSERT_TRUE(PumpUntil(hub, [&] {
+        gamepad.Update();
+        return (gamepad.GetSnapshot(slot).buttons & static_cast<std::uint32_t>(GamepadButton::A)) != 0;
+    }));
+    const GamepadSnapshot& snapshot = gamepad.GetSnapshot(slot);
+    EXPECT_NE(snapshot.buttons & static_cast<std::uint32_t>(GamepadButton::DPadUp), 0u);
+    EXPECT_EQ(snapshot.buttons & static_cast<std::uint32_t>(GamepadButton::Y), 0u);
+    EXPECT_EQ(Axis(snapshot, GamepadAxis::LeftThumbstickY), 1.0f);
+    EXPECT_EQ(Axis(snapshot, GamepadAxis::LeftTrigger), 1.0f);
+
+    events.clear();
+    hub.TakeEvents(events);
+    bool pressedA = false;
+    for (const ControllerButtonEvent& button : EventsOf<ControllerButtonEvent>(events, id))
+    {
+        pressedA = pressedA || (button.button == GamepadButton::A && button.pressed);
+    }
+    EXPECT_TRUE(pressedA) << "the mapped press is an event too";
+}
+
+TEST(X11EvdevVirtualDevice, WithoutAMappingTheSamePadIsOnlyAJoystick)
+{
+    VirtualDevice::Spec spec;
+    spec.name = UniqueName("unmapped");
+    spec.product = 0x0003;
+    for (std::uint16_t code = BTN_TRIGGER; code <= BTN_BASE6; ++code)
+    {
+        spec.keys.push_back(code);
+    }
+    spec.axes = {{ABS_X, 0, 255}, {ABS_Y, 0, 255}, {ABS_HAT0X, -1, 1}, {ABS_HAT0Y, -1, 1}};
+    const ScopedVariable noMapping("CNA_GAMECONTROLLERCONFIG", "");
+    EvdevControllerHub hub;
+    ASSERT_TRUE(hub.Start());
+    CREATE_OR_SKIP(pad, spec);
+    ASSERT_TRUE(PumpUntil(hub, [&] { return FindByName(hub, spec.name) != nullptr; }));
+    const EvdevControllerHub::Controller* controller = FindByName(hub, spec.name);
+    EXPECT_EQ(controller->kind, EvdevDeviceClass::Joystick);
+    EXPECT_FALSE(controller->mapped);
+    EXPECT_EQ(controller->slot, -1);
+}
+
 // --- the platform ------------------------------------------------------------------------------
 
 /// Takes DISPLAY away for one scope, so the platform is constructed with no X server at all.

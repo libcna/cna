@@ -3,6 +3,7 @@
 
 #include "EvdevDevice.hpp"
 #include "EvdevLayout.hpp"
+#include "EvdevMapping.hpp"
 
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformJoystick.hpp"
@@ -42,6 +43,8 @@ namespace CNA::Platform::Linux {
             std::unique_ptr<EvdevDevice> device;
             /** @brief Gamepad or joystick. */
             EvdevDeviceClass kind = EvdevDeviceClass::Joystick;
+            /** @brief Whether a controller-database mapping made it a gamepad, or remapped one. */
+            bool mapped = false;
             /** @brief The XNA player slot, or -1 for a joystick or when all four are taken. */
             int slot = -1;
             /** @brief The mapped state, for a gamepad. */
@@ -78,6 +81,10 @@ namespace CNA::Platform::Linux {
 
         /**
          * @brief Opens every controller present and starts watching for more.
+         *
+         * The controller mappings are read from the environment here, once
+         * (`CNA_GAMECONTROLLERCONFIG_FILE`, `CNA_GAMECONTROLLERCONFIG`): a device one of them
+         * describes is a gamepad through it, whatever its driver reports (X11-0160).
          *
          * @return False when the directory cannot be read at all; the hub then simply has no
          * controllers, which is an answer rather than an error.
@@ -124,6 +131,7 @@ namespace CNA::Platform::Linux {
 
         std::string directory_;
         std::string sysfsRoot_;
+        ControllerMappingDatabase mappings_;
         bool started_ = false;
         int watch_ = -1;
         std::chrono::steady_clock::time_point nextScan_{};

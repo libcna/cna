@@ -229,7 +229,8 @@ namespace CNA::Platform::Linux {
             input_absinfo info{};
             if (ioctl(descriptor, EVIOCGABS(code), &info) >= 0)
             {
-                description.ranges[code] = {info.minimum, info.maximum, info.flat};
+                description.ranges[code] = {info.minimum, info.maximum, info.flat, info.fuzz,
+                                            info.resolution};
             }
         }
         description.driver =

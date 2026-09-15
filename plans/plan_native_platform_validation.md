@@ -32,8 +32,8 @@ pass.
 120 hours; Win32 and Wayland out of scope): CI defects NPV-0124..NPV-0126 and NPV-0128..NPV-0131,
 the INCR follow-up NPV-0127, **gamepads and joysticks through Linux evdev**, **sound for SDL-free
 builds**, **input-method composition** and **exclusive fullscreen through XRandR**
-(`plans/plan_x11.md` X11-0150..X11-0153) are done; the rest of the X11 list is
-`plans/plan_x11.md` Phase M.
+(`plans/plan_x11.md` X11-0150..X11-0153) are done, and so is the rest of the X11 list,
+`plans/plan_x11.md` Phase M (X11-0154..X11-0158).
 The session stayed locked throughout, so the desktop scenarios below remain unrun.
 
 Session events recorded honestly: gnome-shell crashed at 21:23:27 (untrapped BadWindow on its own
@@ -202,8 +202,10 @@ owner.
 Progress on branch `x11` (2026-09-15): step 1 -- NPV-0124, 0125, 0126, 0128, 0129, 0130, 0131;
 what is left red is the one Win32 test below. Step 4 -- the INCR follow-up is NPV-0127; `globalPointer`
 still waits for the owner. Step 5 -- Linux evdev is `plans/plan_x11.md` X11-0150; Win32 XInput is
-out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158:
-audio (0151), XIM (0152) and exclusive fullscreen (0153) are done.
+out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158,
+all done: audio (0151), XIM (0152), exclusive fullscreen (0153), XDND (0154), touch and pens (0155),
+per-monitor scale (0156), `PRIMARY` (0157) and clipboard formats (0158). The gaps left after them
+are `plans/plan_x11.md` Phase N (X11-0160..).
 
 | # | Step | Estimate | Needs | Notes |
 |---|------|----------|-------|-------|
