@@ -84,10 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          for repo in sharp-runtime easy-gl meta-gl; do
-            git clone --depth 1 --branch develop \
-              "https://github.com/openeggbert/${repo}.git" "${repo}"
-          done
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       - name: Install build and native dependencies
         run: |
@@ -387,10 +384,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          for repo in sharp-runtime easy-gl meta-gl; do
-            git clone --depth 1 --branch develop \
-              "https://github.com/openeggbert/${repo}.git" "${repo}"
-          done
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       - name: Install build and native X11 dependencies (no SDL packages needed or installed)
         run: |
@@ -524,10 +518,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          for repo in sharp-runtime easy-gl meta-gl; do
-            git clone --depth 1 --branch develop \
-              "https://github.com/openeggbert/${repo}.git" "${repo}"
-          done
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       - name: Install build and native dependencies
         run: |

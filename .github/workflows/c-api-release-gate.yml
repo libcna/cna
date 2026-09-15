@@ -52,9 +52,7 @@ jobs:
 
       - name: Clone sharp-runtime parser dependency
         run: |
-          git clone --depth 1 --branch develop \
-            https://github.com/openeggbert/sharp-runtime.git \
-            "${GITHUB_WORKSPACE}/../sharp-runtime"
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime
 
       - name: Install Doxygen inventory dependency
         run: |
