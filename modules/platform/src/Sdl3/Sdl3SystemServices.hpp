@@ -15,6 +15,26 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::string GetText() const override;
         /** @brief Writes text to the clipboard. @param text The text to write. */
         void SetText(const std::string& text) override;
+        /** @brief Gets the offered formats. @return SDL's list of MIME types; empty when none. */
+        [[nodiscard]] std::vector<std::string> GetMimeTypes() const override;
+        /**
+         * @brief Gets whether one format is offered.
+         * @param mimeType The format.
+         * @return True when SDL reports data for it.
+         */
+        [[nodiscard]] bool HasData(const std::string& mimeType) const override;
+        /**
+         * @brief Reads one format.
+         * @param mimeType The format.
+         * @return The bytes; empty when there are none.
+         */
+        [[nodiscard]] std::vector<std::uint8_t> GetData(const std::string& mimeType) const override;
+        /**
+         * @brief Offers content in several formats, served from a copy SDL frees when replaced.
+         * @param offers The formats, most preferred first.
+         * @throws PlatformException If video is not initialised or SDL refuses.
+         */
+        void SetData(const std::vector<ClipboardOffer>& offers) override;
     };
 
     /**

@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
@@ -92,6 +93,8 @@ struct PeerScript
     std::string data;
     /// own: the largest property it writes in one piece; anything larger goes through INCR.
     std::size_t chunk = 65536;
+    /// own: when not empty, each type's own bytes, in the order of @ref types.
+    std::vector<std::string> perType;
 };
 
 class X11SelectionLive : public ::testing::Test
@@ -175,6 +178,14 @@ protected:
         environment.push_back("CNA_X11_PEER_TYPES=" + types);
         environment.push_back("CNA_X11_PEER_DATA=" + dataPath);
         environment.push_back("CNA_X11_PEER_CHUNK=" + std::to_string(script.chunk));
+        std::string dataList;
+        for (const std::string& bytes : script.perType)
+        {
+            const std::string path = TemporaryFile("cna-selection-data", bytes);
+            files_.push_back(path);
+            dataList += (dataList.empty() ? "" : ",") + path;
+        }
+        environment.push_back("CNA_X11_PEER_DATA_LIST=" + dataList);
         environment.push_back("CNA_X11_PEER_REPORT=" + peer.report);
         environment.push_back("CNA_X11_PEER_OUTPUT=" + peer.output);
         std::vector<char*> environmentPointers;
@@ -362,6 +373,160 @@ TEST_F(X11SelectionLive, ALargeSelectionCrossesThroughIncrBothWays)
     EXPECT_NE(ReadFile(owner.report).find("incr"), std::string::npos) << ReadFile(owner.report);
 }
 
+// --- formats other than text (X11-0158) -----------------------------------------------------------
+
+std::string EveryByteValue(const std::size_t size)
+{
+    std::string bytes(size, '\0');
+    for (std::size_t index = 0; index < size; ++index)
+    {
+        bytes[index] = static_cast<char>((index * 131u + (index >> 8)) & 0xFFu);
+    }
+    return bytes;
+}
+
+std::vector<std::uint8_t> Bytes(const std::string& text)
+{
+    return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
+TEST_F(X11SelectionLive, CnaOffersSeveralFormatsAtOnce)
+{
+    ASSERT_TRUE(platform_->GetCapabilities().clipboardData);
+    const std::string png = EveryByteValue(4096);
+    const std::string html = "<p>caf\xC3\xA9 <b>\xE2\x9C\x93</b></p>";
+    const std::string plain = "caf\xC3\xA9 \xE2\x9C\x93";
+    clipboard_->SetData({{"image/png", Bytes(png)},
+                         {"text/html", Bytes(html)},
+                         {"text/plain;charset=utf-8", Bytes(plain)}});
+
+    const std::vector<std::string> targets = Split(ReadAsAnotherClient("CLIPBOARD", "TARGETS"), ',');
+    for (const char* expected : {"TARGETS", "TIMESTAMP", "image/png", "text/html",
+                                 "text/plain;charset=utf-8", "UTF8_STRING", "STRING", "TEXT",
+                                 "text/plain"})
+    {
+        EXPECT_NE(std::find(targets.begin(), targets.end(), expected), targets.end()) << expected;
+    }
+    const auto position = [&targets](const char* name) {
+        return std::find(targets.begin(), targets.end(), name) - targets.begin();
+    };
+    EXPECT_LT(position("image/png"), position("text/html")) << "the application's order is kept";
+
+    std::string report;
+    EXPECT_TRUE(ReadAsAnotherClient("CLIPBOARD", "image/png", nullptr, &report) == png);
+    EXPECT_NE(report.find("type=image/png"), std::string::npos) << report;
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "text/html"), html);
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "UTF8_STRING"), plain);
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "text/plain;charset=utf-8"), plain);
+
+    // CNA's own view of what it offers, answered without asking itself.
+    const std::vector<std::string> formats = clipboard_->GetMimeTypes();
+    EXPECT_EQ(std::find(formats.begin(), formats.end(), "TARGETS"), formats.end());
+    ASSERT_GE(formats.size(), 3u);
+    EXPECT_EQ(formats[0], "image/png");
+    EXPECT_TRUE(clipboard_->GetData("image/png") == Bytes(png));
+    EXPECT_TRUE(clipboard_->HasData("text/html"));
+    EXPECT_EQ(clipboard_->GetText(), plain);
+}
+
+TEST_F(X11SelectionLive, CnaReadsAnotherApplicationsFormatsExactly)
+{
+    const std::string png = EveryByteValue(100000);
+    const std::string html = "<i>from elsewhere</i>";
+    PeerScript script{"own", "CLIPBOARD", {"image/png", "text/html"}, "", 65536};
+    script.perType = {png, html};
+    Peer owner = Start(script);
+
+    EXPECT_EQ(clipboard_->GetMimeTypes(), (std::vector<std::string>{"image/png", "text/html"}));
+    EXPECT_TRUE(clipboard_->HasData("image/png"));
+    EXPECT_FALSE(clipboard_->HasData("image/bmp"));
+    EXPECT_TRUE(clipboard_->GetData("image/png") == Bytes(png)) << "every byte value, NULs included";
+    EXPECT_TRUE(clipboard_->GetData("text/html") == Bytes(html));
+    EXPECT_TRUE(clipboard_->GetData("image/bmp").empty());
+    EXPECT_FALSE(clipboard_->HasText()) << "an image is not text";
+    EXPECT_EQ(clipboard_->GetText(), "");
+    Stop(owner);
+}
+
+TEST_F(X11SelectionLive, ALargeImageCrossesThroughIncrBothWays)
+{
+    const std::string out = EveryByteValue(5u << 19);
+    clipboard_->SetData({{"image/png", Bytes(out)}});
+    std::string report;
+    const std::string pasted = ReadAsAnotherClient("CLIPBOARD", "image/png", nullptr, &report);
+    EXPECT_EQ(pasted.size(), out.size());
+    EXPECT_TRUE(pasted == out);
+    EXPECT_NE(report.find("incr"), std::string::npos) << report;
+
+    const std::string in = EveryByteValue(3u << 19).substr(7);
+    PeerScript script{"own", "CLIPBOARD", {"image/png"}, in, 65536};
+    Peer owner = Start(script);
+    const std::vector<std::uint8_t> read = clipboard_->GetData("image/png");
+    EXPECT_EQ(read.size(), in.size());
+    EXPECT_TRUE(read == Bytes(in));
+    Stop(owner);
+    EXPECT_NE(ReadFile(owner.report).find("incr"), std::string::npos) << ReadFile(owner.report);
+}
+
+TEST_F(X11SelectionLive, StringIsLatinOneWhenCnaServesText)
+{
+    // D-17: STRING is Latin-1 by the ICCCM; UTF-8 bytes under it are two wrong characters each.
+    clipboard_->SetText("caf\xC3\xA9 \xE2\x9C\x93");
+    std::string report;
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "STRING", nullptr, &report), "caf\xE9 ?");
+    EXPECT_NE(report.find("type=STRING"), std::string::npos) << report;
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "UTF8_STRING"), "caf\xC3\xA9 \xE2\x9C\x93");
+}
+
+TEST_F(X11SelectionLive, TextFromAnApplicationThatNamesItOnlyByMimeType)
+{
+    const std::string text = "\xC3\xBCn\xC3\xAF" "code \xE2\x9C\x93";
+    Peer owner = Start({"own", "CLIPBOARD", {"text/plain;charset=utf-8"}, text});
+    EXPECT_TRUE(clipboard_->HasText());
+    EXPECT_EQ(clipboard_->GetText(), text);
+    Stop(owner);
+}
+
+TEST_F(X11SelectionLive, CopyingAnImageReplacesTheText)
+{
+    clipboard_->SetText("text first");
+    clipboard_->SetData({{"image/png", Bytes(EveryByteValue(64))}});
+    EXPECT_FALSE(clipboard_->HasText());
+    EXPECT_EQ(clipboard_->GetText(), "");
+    int code = 0;
+    EXPECT_EQ(ReadAsAnotherClient("CLIPBOARD", "UTF8_STRING", &code), "");
+    EXPECT_EQ(code, 3) << "the text must no longer be served";
+}
+
+TEST(X11TextEncoding, StringIsLatinOneBothWays)
+{
+    using CNA::Platform::X11::Latin1ToUtf8;
+    using CNA::Platform::X11::Utf8ToLatin1;
+    EXPECT_EQ(Utf8ToLatin1("plain ASCII"), "plain ASCII");
+    EXPECT_EQ(Utf8ToLatin1("caf\xC3\xA9 \xC3\xBF"), "caf\xE9 \xFF");
+    EXPECT_EQ(Utf8ToLatin1("\xE2\x9C\x93 \xF0\x9F\x98\x80"), "? ?") << "outside Latin-1";
+    EXPECT_EQ(Utf8ToLatin1("bad \xC3"), "bad ?") << "a truncated sequence";
+    EXPECT_EQ(Utf8ToLatin1("bad \x80\x80"), "bad ??") << "a stray continuation, per byte";
+    EXPECT_EQ(Latin1ToUtf8("caf\xE9 \xFF"), "caf\xC3\xA9 \xC3\xBF");
+    for (int value = 0; value < 256; ++value)
+    {
+        const std::string one(1, static_cast<char>(value));
+        EXPECT_EQ(Utf8ToLatin1(Latin1ToUtf8(one)), one) << value;
+    }
+}
+
+TEST(X11TextEncoding, Utf8TextIsRecognisedUnderEachOfItsNames)
+{
+    using CNA::Platform::X11::IsUtf8TextFormat;
+    EXPECT_TRUE(IsUtf8TextFormat("text/plain;charset=utf-8"));
+    EXPECT_TRUE(IsUtf8TextFormat("text/plain; charset=UTF-8"));
+    EXPECT_TRUE(IsUtf8TextFormat("text/plain"));
+    EXPECT_TRUE(IsUtf8TextFormat("UTF8_STRING"));
+    EXPECT_FALSE(IsUtf8TextFormat("text/html"));
+    EXPECT_FALSE(IsUtf8TextFormat("STRING")) << "Latin-1";
+    EXPECT_FALSE(IsUtf8TextFormat("text/plain;charset=iso-8859-1"));
+}
+
 // --- the peer: another X client, in a process of its own ---------------------------------------------
 
 TEST(X11SelectionPeer, DISABLED_Run)
@@ -490,6 +655,12 @@ TEST(X11SelectionPeer, DISABLED_Run)
     // "own".
     std::vector<Atom> offered = {targets};
     for (const std::string& type : typeNames) { offered.push_back(atom(type)); }
+    std::map<Atom, std::string> contents;
+    const std::vector<std::string> dataList = Split(std::getenv("CNA_X11_PEER_DATA_LIST"), ',');
+    for (std::size_t index = 0; index < typeNames.size(); ++index)
+    {
+        contents[offered[index + 1]] = index < dataList.size() ? ReadFile(dataList[index]) : data;
+    }
     XSetSelectionOwner(display, selection, window, kCurrentTime);
     ASSERT_EQ(XGetSelectionOwner(display, selection), window);
     report << "ready\n";
@@ -501,6 +672,7 @@ TEST(X11SelectionPeer, DISABLED_Run)
         Atom property;
         Atom type;
         std::size_t offset;
+        const std::string* bytes;
     };
     std::map<::Window, Send> sends;
     static volatile std::sig_atomic_t stop = 0;
@@ -525,9 +697,10 @@ TEST(X11SelectionPeer, DISABLED_Run)
             const auto found = sends.find(event.xproperty.window);
             if (found == sends.end() || found->second.property != event.xproperty.atom) { continue; }
             Send& send = found->second;
-            const std::size_t length = std::min(chunk, data.size() - send.offset);
+            const std::string& bytes = *send.bytes;
+            const std::size_t length = std::min(chunk, bytes.size() - send.offset);
             XChangeProperty(display, send.requestor, send.property, send.type, 8, PropModeReplace,
-                            reinterpret_cast<const unsigned char*>(data.data() + send.offset),
+                            reinterpret_cast<const unsigned char*>(bytes.data() + send.offset),
                             static_cast<int>(length));
             send.offset += length;
             if (length == 0)
@@ -555,22 +728,24 @@ TEST(X11SelectionPeer, DISABLED_Run)
                             PropModeReplace, reinterpret_cast<const unsigned char*>(offered.data()),
                             static_cast<int>(offered.size()));
         }
-        else if (std::find(offered.begin() + 1, offered.end(), request.target) != offered.end())
+        else if (const auto content = contents.find(request.target); content != contents.end())
         {
-            if (data.size() <= chunk)
+            const std::string& bytes = content->second;
+            if (bytes.size() <= chunk)
             {
                 XChangeProperty(display, request.requestor, request.property, request.target, 8,
-                                PropModeReplace, reinterpret_cast<const unsigned char*>(data.data()),
-                                static_cast<int>(data.size()));
+                                PropModeReplace, reinterpret_cast<const unsigned char*>(bytes.data()),
+                                static_cast<int>(bytes.size()));
             }
             else
             {
                 report << "incr\n";
                 XSelectInput(display, request.requestor, PropertyChangeMask);
-                const long total = static_cast<long>(data.size());
+                const long total = static_cast<long>(bytes.size());
                 XChangeProperty(display, request.requestor, request.property, incr, 32,
                                 PropModeReplace, reinterpret_cast<const unsigned char*>(&total), 1);
-                sends[request.requestor] = {request.requestor, request.property, request.target, 0};
+                sends[request.requestor] = {request.requestor, request.property, request.target, 0,
+                                            &bytes};
             }
         }
         else

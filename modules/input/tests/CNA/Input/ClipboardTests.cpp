@@ -7,8 +7,10 @@
 #include "CNA/Input/Clipboard.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 using CNA::Input::Clipboard;
 using CNA::Platform::GetCurrentPlatform;
@@ -175,4 +177,103 @@ TEST(CnaInputPrimarySelectionTest, WithoutOneItReadsAsEmptyAndIgnoresWrites)
     EXPECT_EQ(Clipboard::GetPrimarySelectionTextEXT(), std::string());
     EXPECT_FALSE(Clipboard::HasPrimarySelectionTextEXT());
     EXPECT_TRUE(platform.clipboard.text.empty()) << "and it never falls back to the clipboard";
+}
+
+// --- formats other than text (plans/plan_x11.md X11-0158) --------------------------------------------
+
+namespace
+{
+    /// A clipboard that keeps whatever formats it is given.
+    class FormatClipboard final : public CNA::Platform::IPlatformClipboard
+    {
+    public:
+        [[nodiscard]] bool HasText() const override { return !GetText().empty(); }
+        [[nodiscard]] std::string GetText() const override
+        {
+            for (const auto& offer : offers)
+            {
+                if (offer.mimeType == "text/plain;charset=utf-8")
+                {
+                    return std::string(offer.data.begin(), offer.data.end());
+                }
+            }
+            return {};
+        }
+        void SetText(const std::string& value) override
+        {
+            offers = {{"text/plain;charset=utf-8", std::vector<std::uint8_t>(value.begin(), value.end())}};
+        }
+        [[nodiscard]] std::vector<std::string> GetMimeTypes() const override
+        {
+            std::vector<std::string> types;
+            for (const auto& offer : offers) { types.push_back(offer.mimeType); }
+            return types;
+        }
+        [[nodiscard]] bool HasData(const std::string& mimeType) const override
+        {
+            return !GetData(mimeType).empty();
+        }
+        [[nodiscard]] std::vector<std::uint8_t> GetData(const std::string& mimeType) const override
+        {
+            for (const auto& offer : offers)
+            {
+                if (offer.mimeType == mimeType) { return offer.data; }
+            }
+            return {};
+        }
+        void SetData(const std::vector<CNA::Platform::ClipboardOffer>& value) override { offers = value; }
+        std::vector<CNA::Platform::ClipboardOffer> offers;
+    };
+
+    class FormatClipboardPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        [[nodiscard]] CNA::Platform::IPlatformClipboard* GetClipboard() override { return &clipboard; }
+        FormatClipboard clipboard;
+    };
+}
+
+TEST(CnaInputClipboardDataTest, FormatsReachTheClipboardInTheirOrderAndComeBackExactly)
+{
+    FormatClipboardPlatform platform;
+    const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+
+    const std::vector<std::uint8_t> png = {0x89, 'P', 'N', 'G', 0x00, 0xFF, 0x0D, 0x0A};
+    const std::string html = "<b>bold</b>";
+    const std::string plain = "bold";
+    EXPECT_TRUE(Clipboard::SetDataEXT({{"text/html", std::vector<std::uint8_t>(html.begin(), html.end())},
+                                       {"text/plain;charset=utf-8",
+                                        std::vector<std::uint8_t>(plain.begin(), plain.end())}}));
+    EXPECT_EQ(Clipboard::GetMimeTypesEXT(),
+              (std::vector<std::string>{"text/html", "text/plain;charset=utf-8"}));
+    EXPECT_TRUE(Clipboard::HasDataEXT("text/html"));
+    EXPECT_FALSE(Clipboard::HasDataEXT("image/png"));
+    EXPECT_EQ(Clipboard::GetTextEXT(), plain) << "the plain text beside it is the text";
+
+    EXPECT_TRUE(Clipboard::SetDataEXT("image/png", png));
+    EXPECT_EQ(Clipboard::GetDataEXT("image/png"), png);
+    EXPECT_TRUE(Clipboard::GetDataEXT("text/html").empty()) << "a new copy replaces every format";
+    EXPECT_FALSE(Clipboard::HasTextEXT());
+}
+
+TEST(CnaInputClipboardDataTest, ATextOnlyClipboardReadsAsNoFormatsAndSaysItDidNotTakeOne)
+{
+    ClipboardOnlyPlatform platform;  // its clipboard implements text alone
+    const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    platform.clipboard.text = "kept";
+
+    EXPECT_FALSE(Clipboard::SetDataEXT("image/png", {0x89, 'P', 'N', 'G'}));
+    EXPECT_TRUE(Clipboard::GetMimeTypesEXT().empty());
+    EXPECT_FALSE(Clipboard::HasDataEXT("image/png"));
+    EXPECT_TRUE(Clipboard::GetDataEXT("image/png").empty());
+    EXPECT_EQ(platform.clipboard.text, "kept");
+}
+
+TEST(CnaInputClipboardDataTest, WithoutAClipboardNothingIsTaken)
+{
+    ClipboardlessPlatform platform;
+    const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    EXPECT_FALSE(Clipboard::SetDataEXT("image/png", {1, 2, 3}));
+    EXPECT_TRUE(Clipboard::GetMimeTypesEXT().empty());
+    EXPECT_TRUE(Clipboard::GetDataEXT("image/png").empty());
 }

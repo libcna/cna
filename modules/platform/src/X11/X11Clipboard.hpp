@@ -5,6 +5,7 @@
 #include "X11Headers.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -42,6 +43,14 @@ namespace CNA::Platform::X11 {
      * value is the total size, then writes successive chunks each time the requestor deletes the
      * property, ending with a zero-length write. Both directions are implemented — a paste from
      * an application that sends a large document, and a copy of one this application owns.
+     *
+     * ### Formats
+     *
+     * A selection target is an atom, and for anything but text the atom's name is the format's
+     * MIME type (`image/png`, `text/html`) -- which is what `SetData`/`GetData` name. Text is served
+     * under every name X applications ask for it by: `UTF8_STRING`, `TEXT`, `STRING` (Latin-1, as
+     * the ICCCM defines it), `text/plain;charset=utf-8` and `text/plain` (plans/plan_x11.md
+     * X11-0158).
      */
     class X11Clipboard final : public IPlatformClipboard
     {
@@ -83,6 +92,38 @@ namespace CNA::Platform::X11 {
          * @throws PlatformException If the server refused to transfer ownership.
          */
         void SetText(const std::string& text) override;
+
+        /**
+         * @brief Gets the formats the selection offers.
+         *
+         * @return The owner's targets by name, without the protocol's own (`TARGETS`,
+         * `TIMESTAMP`, `MULTIPLE`, ...); empty when nobody owns the selection.
+         */
+        [[nodiscard]] std::vector<std::string> GetMimeTypes() const override;
+
+        /**
+         * @brief Gets whether the selection offers one format.
+         *
+         * @param mimeType The format.
+         * @return True when the owner lists it.
+         */
+        [[nodiscard]] bool HasData(const std::string& mimeType) const override;
+
+        /**
+         * @brief Reads the selection in one format.
+         *
+         * @param mimeType The format.
+         * @return The owner's bytes, `INCR` included; empty when it refused or never answered.
+         */
+        [[nodiscard]] std::vector<std::uint8_t> GetData(const std::string& mimeType) const override;
+
+        /**
+         * @brief Takes ownership of the selection and offers content in several formats.
+         *
+         * @param offers The formats, most preferred first.
+         * @throws PlatformException If the server refused to transfer ownership.
+         */
+        void SetData(const std::vector<ClipboardOffer>& offers) override;
 
         // --- driven by the event pump -----------------------------------------------------------
 
@@ -135,16 +176,22 @@ namespace CNA::Platform::X11 {
             Atom property = 0;
             Atom type = 0;
             std::size_t offset = 0;
-            // The transfer's own copy. A transfer that has started is finished with the text it
-            // started with, whatever happens to the clipboard meanwhile (NPV-0119).
-            std::string text;
+            // The transfer's own copy. A transfer that has started is finished with the content it
+            // started with, whatever happens to the selection meanwhile (NPV-0119).
+            std::string bytes;
         };
 
         void EnsureOwnerWindow();
+        void TakeOwnership(std::vector<ClipboardOffer> offers);
         [[nodiscard]] std::size_t MaximumChunkBytes() const;
         [[nodiscard]] bool ConvertAndWait(Atom target, Atom& actualType,
                                           std::vector<unsigned char>& data) const;
         [[nodiscard]] Atom PropertyType(Atom property) const;
+        [[nodiscard]] std::vector<Atom> OwnerTargets() const;
+        [[nodiscard]] std::vector<Atom> OwnedTargets() const;
+        [[nodiscard]] const ClipboardOffer* OwnedText() const;
+        [[nodiscard]] bool OwnedContent(Atom target, Atom& type, std::string& bytes) const;
+        [[nodiscard]] std::vector<std::string> AtomNames(const std::vector<Atom>& atoms) const;
         void AnswerSelectionRequest(const XSelectionRequestEvent& request);
         void SendSelectionNotify(const XSelectionRequestEvent& request, Atom property) const;
 
@@ -152,9 +199,38 @@ namespace CNA::Platform::X11 {
         Atom selection_;
         std::string selectionName_;
         ::Window owner_ = 0;
-        std::string ownedText_;
+        // What this client offers while it owns the selection, most preferred first; SetText is
+        // one UTF-8 text offer.
+        std::vector<ClipboardOffer> ownedOffers_;
+        std::vector<Atom> ownedOfferAtoms_;
         bool ownsSelection_ = false;
         std::map<::Window, IncrementalSend> incrementalSends_;
     };
+
+    /**
+     * @brief Gets whether a format name is UTF-8 text: `text/plain;charset=utf-8` in any case and
+     * spacing, `text/plain`, or X11's `UTF8_STRING`.
+     *
+     * @param name The MIME type or target name.
+     * @return True for UTF-8 text.
+     */
+    [[nodiscard]] bool IsUtf8TextFormat(const std::string& name);
+
+    /**
+     * @brief Encodes UTF-8 text as the ICCCM's `STRING`, Latin-1.
+     *
+     * @param utf8 The text.
+     * @return Latin-1 bytes; a character Latin-1 lacks becomes `?`, and a malformed sequence one
+     * `?` per byte.
+     */
+    [[nodiscard]] std::string Utf8ToLatin1(const std::string& utf8);
+
+    /**
+     * @brief Decodes the ICCCM's `STRING`, Latin-1, as UTF-8.
+     *
+     * @param latin1 The bytes.
+     * @return The text as UTF-8.
+     */
+    [[nodiscard]] std::string Latin1ToUtf8(const std::string& latin1);
 
 } // namespace CNA::Platform::X11

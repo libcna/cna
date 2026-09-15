@@ -3,7 +3,10 @@
 
 #include "CNA/CNAHelper.hpp"
 
+#include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace CNA::Input
 {
@@ -66,5 +69,54 @@ namespace CNA::Input
          * @return True if there is selected text to paste; false otherwise.
          */
         CNAEXT [[nodiscard]] static bool HasPrimarySelectionTextEXT();
+
+        /**
+         * @brief Returns the formats the clipboard offers now, as MIME types.
+         *
+         * `image/png`, `text/html`, `text/plain;charset=utf-8` and so on; on X11 an application's
+         * older format names (`UTF8_STRING`, `STRING`) appear as they are named.
+         *
+         * @return The formats, most preferred first; empty when the clipboard is empty or carries
+         * only text on this platform.
+         */
+        CNAEXT [[nodiscard]] static std::vector<std::string> GetMimeTypesEXT();
+
+        /**
+         * @brief Returns whether the clipboard offers one format.
+         * @param mimeType The format, e.g. `image/png`.
+         * @return True when it is offered.
+         */
+        CNAEXT [[nodiscard]] static bool HasDataEXT(const std::string& mimeType);
+
+        /**
+         * @brief Reads the clipboard in one format.
+         * @param mimeType The format, e.g. `image/png`.
+         * @return The bytes exactly as the application that copied them gave them; empty when the
+         * format is not offered or the platform carries only text.
+         */
+        CNAEXT [[nodiscard]] static std::vector<std::uint8_t> GetDataEXT(const std::string& mimeType);
+
+        /**
+         * @brief Copies content in one format, replacing what the clipboard held.
+         *
+         * @param mimeType The format, e.g. `image/png`.
+         * @param data The content.
+         * @return True when the clipboard took it; false where the platform carries only text (use
+         * SetTextEXT) or has no clipboard.
+         */
+        CNAEXT static bool SetDataEXT(const std::string& mimeType, const std::vector<std::uint8_t>& data);
+
+        /**
+         * @brief Copies content in several formats at once -- HTML and its plain text, say.
+         *
+         * A UTF-8 text format among them (`text/plain;charset=utf-8`) is also what a plain paste
+         * and GetTextEXT receive.
+         *
+         * @param formats Each format's MIME type and content, most preferred first.
+         * @return True when the clipboard took them; false where the platform carries only text or
+         * has no clipboard.
+         */
+        CNAEXT static bool SetDataEXT(
+            const std::vector<std::pair<std::string, std::vector<std::uint8_t>>>& formats);
     };
 }

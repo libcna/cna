@@ -1527,7 +1527,7 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*:X11TouchMath.*:X11ContentScaleParsing.*
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*:X11TouchMath.*:X11ContentScaleParsing.*:X11TextEncoding.*
             LABELS "platform" TIMEOUT 120)
 
         # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No

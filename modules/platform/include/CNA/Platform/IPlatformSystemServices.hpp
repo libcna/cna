@@ -14,7 +14,22 @@ namespace CNA::Platform {
 
     // --- Clipboard -----------------------------------------------------------------------------
 
-    /** @brief Reads and writes the system clipboard. */
+    /** @brief One format offered on the clipboard: a MIME type and the bytes in it. */
+    struct ClipboardOffer
+    {
+        /** @brief The format, as a MIME type (`image/png`, `text/html`, `text/plain;charset=utf-8`). */
+        std::string mimeType;
+        /** @brief The content in that format. */
+        std::vector<std::uint8_t> data;
+    };
+
+    /**
+     * @brief Reads and writes the system clipboard.
+     *
+     * Text is the part every platform has. Other formats -- an image, HTML beside its plain text --
+     * are the `ClipboardData` capability's (plans/plan_x11.md X11-0158); a clipboard without it
+     * inherits the defaults below, which read as empty and refuse to write.
+     */
     class IPlatformClipboard
     {
     public:
@@ -43,6 +58,47 @@ namespace CNA::Platform {
          * @throws PlatformNotSupportedException If the platform reports no `Clipboard` capability.
          */
         virtual void SetText(const std::string& text) = 0;
+
+        /**
+         * @brief Gets the formats the clipboard offers now.
+         *
+         * MIME types where the owner names its formats that way; a platform whose applications
+         * also use older names (X11's `UTF8_STRING`, `STRING`) reports those as they are named.
+         *
+         * @return The formats, in the owner's order; empty when the clipboard is empty or the
+         * platform reports no `ClipboardData` capability.
+         */
+        [[nodiscard]] virtual std::vector<std::string> GetMimeTypes() const;
+
+        /**
+         * @brief Gets whether the clipboard offers one format.
+         *
+         * @param mimeType The format.
+         * @return True when it is offered; false otherwise or without `ClipboardData`.
+         */
+        [[nodiscard]] virtual bool HasData(const std::string& mimeType) const;
+
+        /**
+         * @brief Reads the clipboard in one format.
+         *
+         * @param mimeType The format.
+         * @return The bytes, exactly as the owner gave them; empty when the format is not offered,
+         * the owner refused or never answered, or the platform reports no `ClipboardData`.
+         */
+        [[nodiscard]] virtual std::vector<std::uint8_t> GetData(const std::string& mimeType) const;
+
+        /**
+         * @brief Takes the clipboard and offers content in several formats at once.
+         *
+         * Replaces whatever was offered before, text included. A UTF-8 text format among them
+         * (`text/plain;charset=utf-8`, or `text/plain`) is also what `GetText()` and another
+         * application's plain paste receive.
+         *
+         * @param offers The formats, most preferred first; each MIME type once.
+         * @throws PlatformNotSupportedException If the platform reports no `ClipboardData`
+         * capability.
+         */
+        virtual void SetData(const std::vector<ClipboardOffer>& offers);
     };
 
     // --- Displays ------------------------------------------------------------------------------

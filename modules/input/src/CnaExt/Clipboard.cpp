@@ -82,4 +82,61 @@ namespace CNA::Input
             CNA::Platform::GetCurrentPlatform().GetPrimarySelection();
         return selection != nullptr && selection->HasText();
     }
+
+    // plans/plan_x11.md X11-0158: formats other than text. A clipboard that carries only text
+    // inherits the contract's defaults -- nothing to read, a refusal to write -- which read here
+    // as empty and as false.
+
+    std::vector<std::string> Clipboard::GetMimeTypesEXT()
+    {
+        CNA::Platform::IPlatformClipboard* clipboard =
+            CNA::Platform::GetCurrentPlatform().GetClipboard();
+        return clipboard != nullptr ? clipboard->GetMimeTypes() : std::vector<std::string>();
+    }
+
+    bool Clipboard::HasDataEXT(const std::string& mimeType)
+    {
+        CNA::Platform::IPlatformClipboard* clipboard =
+            CNA::Platform::GetCurrentPlatform().GetClipboard();
+        return clipboard != nullptr && clipboard->HasData(mimeType);
+    }
+
+    std::vector<std::uint8_t> Clipboard::GetDataEXT(const std::string& mimeType)
+    {
+        CNA::Platform::IPlatformClipboard* clipboard =
+            CNA::Platform::GetCurrentPlatform().GetClipboard();
+        return clipboard != nullptr ? clipboard->GetData(mimeType) : std::vector<std::uint8_t>();
+    }
+
+    bool Clipboard::SetDataEXT(const std::string& mimeType, const std::vector<std::uint8_t>& data)
+    {
+        return SetDataEXT({{mimeType, data}});
+    }
+
+    bool Clipboard::SetDataEXT(
+        const std::vector<std::pair<std::string, std::vector<std::uint8_t>>>& formats)
+    {
+        CNA::Platform::IPlatformClipboard* clipboard =
+            CNA::Platform::GetCurrentPlatform().GetClipboard();
+        if (clipboard == nullptr)
+        {
+            return false;
+        }
+        std::vector<CNA::Platform::ClipboardOffer> offers;
+        offers.reserve(formats.size());
+        for (const auto& [mimeType, data] : formats)
+        {
+            offers.push_back({mimeType, data});
+        }
+        try
+        {
+            clipboard->SetData(offers);
+            return true;
+        }
+        catch (const CNA::Platform::PlatformException&)
+        {
+            // A text-only clipboard's refusal, or ownership lost in the same instant.
+            return false;
+        }
+    }
 }

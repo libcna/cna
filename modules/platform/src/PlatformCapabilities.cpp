@@ -42,6 +42,7 @@ namespace CNA::Platform {
             case PlatformCapability::ManagedEntrypoint: return capabilities.managedEntrypoint;
             case PlatformCapability::DragAndDrop: return capabilities.dragAndDrop;
             case PlatformCapability::PrimarySelection: return capabilities.primarySelection;
+            case PlatformCapability::ClipboardData: return capabilities.clipboardData;
         }
 
         return false;
@@ -81,6 +82,7 @@ namespace CNA::Platform {
             PlatformCapability::ManagedEntrypoint,
             PlatformCapability::DragAndDrop,
             PlatformCapability::PrimarySelection,
+            PlatformCapability::ClipboardData,
         };
         return all;
     }

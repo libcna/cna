@@ -7,6 +7,7 @@
 #include "X11Error.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -28,7 +29,82 @@ namespace CNA::Platform::X11 {
         /// How long each step of an INCR transfer waits for the next chunk.
         constexpr auto kIncrementalChunkTimeout = std::chrono::milliseconds(1000);
 
+        /// The targets that are the protocol's own rather than a format: never reported as one.
+        bool IsProtocolTarget(const std::string& name)
+        {
+            return name == "TARGETS" || name == "TIMESTAMP" || name == "MULTIPLE" ||
+                   name == "SAVE_TARGETS" || name == "DELETE" || name == "INSERT_SELECTION" ||
+                   name == "INSERT_PROPERTY" || name == "INCR";
+        }
+
     } // namespace
+
+    bool IsUtf8TextFormat(const std::string& name)
+    {
+        std::string normalised;
+        for (const char character : name)
+        {
+            if (character != ' ' && character != '\t')
+            {
+                normalised.push_back(static_cast<char>(
+                    std::tolower(static_cast<unsigned char>(character))));
+            }
+        }
+        return normalised == "text/plain;charset=utf-8" || normalised == "text/plain" ||
+               normalised == "utf8_string";
+    }
+
+    std::string Utf8ToLatin1(const std::string& utf8)
+    {
+        std::string latin1;
+        latin1.reserve(utf8.size());
+        for (std::size_t index = 0; index < utf8.size();)
+        {
+            const auto lead = static_cast<unsigned char>(utf8[index]);
+            std::size_t length = 0;
+            std::uint32_t codePoint = 0;
+            if (lead < 0x80u) { length = 1; codePoint = lead; }
+            else if ((lead & 0xE0u) == 0xC0u) { length = 2; codePoint = lead & 0x1Fu; }
+            else if ((lead & 0xF0u) == 0xE0u) { length = 3; codePoint = lead & 0x0Fu; }
+            else if ((lead & 0xF8u) == 0xF0u) { length = 4; codePoint = lead & 0x07u; }
+            bool valid = length != 0 && index + length <= utf8.size();
+            for (std::size_t next = 1; valid && next < length; ++next)
+            {
+                const auto continuation = static_cast<unsigned char>(utf8[index + next]);
+                valid = (continuation & 0xC0u) == 0x80u;
+                codePoint = (codePoint << 6) | (continuation & 0x3Fu);
+            }
+            if (!valid)
+            {
+                latin1.push_back('?');
+                ++index;
+                continue;
+            }
+            latin1.push_back(codePoint <= 0xFFu ? static_cast<char>(codePoint) : '?');
+            index += length;
+        }
+        return latin1;
+    }
+
+    std::string Latin1ToUtf8(const std::string& latin1)
+    {
+        std::string text;
+        text.reserve(latin1.size());
+        for (const char character : latin1)
+        {
+            const auto byte = static_cast<unsigned char>(character);
+            if (byte < 0x80u)
+            {
+                text.push_back(character);
+            }
+            else
+            {
+                text.push_back(static_cast<char>(0xC0u | (byte >> 6)));
+                text.push_back(static_cast<char>(0x80u | (byte & 0x3Fu)));
+            }
+        }
+        return text;
+    }
 
     X11Clipboard::X11Clipboard(X11Connection& connection, const Atom selection,
                                std::string selectionName)
@@ -92,25 +168,17 @@ namespace CNA::Platform::X11 {
         }
         if (current == owner_)
         {
-            return !ownedText_.empty();
+            const ClipboardOffer* text = OwnedText();
+            return text != nullptr && !text->data.empty();
         }
         // Another client owns it. Asking for TARGETS is the only way to know whether it can give
         // us text without actually transferring the data -- which matters, because HasText() may
         // be called far more often than GetText().
-        Atom actualType = kNone;
-        std::vector<unsigned char> data;
-        if (!ConvertAndWait(connection_.GetAtoms().targets, actualType, data))
-        {
-            return false;
-        }
         const X11Atoms& atoms = connection_.GetAtoms();
-        const std::size_t count = data.size() / sizeof(long);
-        for (std::size_t index = 0; index < count; ++index)
+        for (const Atom target : OwnerTargets())
         {
-            long value = 0;
-            std::memcpy(&value, data.data() + index * sizeof(long), sizeof(long));
-            const auto target = static_cast<Atom>(value);
-            if (target == atoms.utf8String || target == XA_STRING || target == atoms.text)
+            if (target == atoms.utf8String || target == XA_STRING || target == atoms.text ||
+                target == atoms.textPlainUtf8 || target == atoms.textPlain)
             {
                 return true;
             }
@@ -132,13 +200,18 @@ namespace CNA::Platform::X11 {
             // Short-circuiting our own selection is not merely an optimisation: converting a
             // selection to ourselves would require the SelectionRequest to be answered from
             // inside this synchronous wait, which the single-threaded pump cannot do.
-            return ownedText_;
+            const ClipboardOffer* text = OwnedText();
+            return text != nullptr ? std::string(text->data.begin(), text->data.end())
+                                   : std::string();
         }
 
-        // UTF8_STRING first because it is the only target with an unambiguous encoding. STRING is
-        // Latin-1 by the ICCCM and is the fallback for an older application; TEXT lets the owner
-        // choose, which is the last resort precisely because it can answer with anything.
-        for (const Atom target : {atoms.utf8String, static_cast<Atom>(XA_STRING), atoms.text})
+        // UTF8_STRING first because it is the only target with an unambiguous encoding every X
+        // application knows; text/plain;charset=utf-8 is the same for one that names formats by
+        // MIME type only. STRING is Latin-1 by the ICCCM and is the fallback for an older
+        // application; TEXT lets the owner choose, and text/plain states no charset at all, which
+        // is why they come last (X11-0158).
+        for (const Atom target : {atoms.utf8String, atoms.textPlainUtf8,
+                                  static_cast<Atom>(XA_STRING), atoms.text, atoms.textPlain})
         {
             Atom actualType = kNone;
             std::vector<unsigned char> data;
@@ -146,29 +219,207 @@ namespace CNA::Platform::X11 {
             {
                 continue;
             }
-            if (actualType == atoms.utf8String)
+            const std::string bytes(reinterpret_cast<const char*>(data.data()), data.size());
+            if (actualType == atoms.utf8String || actualType == atoms.textPlainUtf8 ||
+                actualType == atoms.textPlain)
             {
-                return std::string(reinterpret_cast<const char*>(data.data()), data.size());
+                return bytes;
             }
             // Latin-1 to UTF-8. Returning the raw bytes would put an invalid sequence into a
             // std::string the rest of CNA treats as UTF-8.
-            std::string text;
-            text.reserve(data.size());
-            for (const unsigned char byte : data)
-            {
-                if (byte < 0x80u)
-                {
-                    text.push_back(static_cast<char>(byte));
-                }
-                else
-                {
-                    text.push_back(static_cast<char>(0xC0u | (byte >> 6)));
-                    text.push_back(static_cast<char>(0x80u | (byte & 0x3Fu)));
-                }
-            }
-            return text;
+            return Latin1ToUtf8(bytes);
         }
         return {};
+    }
+
+    std::vector<Atom> X11Clipboard::OwnerTargets() const
+    {
+        Atom actualType = kNone;
+        std::vector<unsigned char> data;
+        if (!ConvertAndWait(connection_.GetAtoms().targets, actualType, data))
+        {
+            return {};
+        }
+        // Format-32 property data comes back from Xlib as longs, whatever their wire size.
+        std::vector<Atom> targets;
+        const std::size_t count = data.size() / sizeof(long);
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            long value = 0;
+            std::memcpy(&value, data.data() + index * sizeof(long), sizeof(long));
+            targets.push_back(static_cast<Atom>(value));
+        }
+        return targets;
+    }
+
+    std::vector<std::string> X11Clipboard::AtomNames(const std::vector<Atom>& atoms) const
+    {
+        std::vector<std::string> names(atoms.size());
+        if (atoms.empty())
+        {
+            return names;
+        }
+        // One request for the lot; an atom another client made up and the server does not know
+        // is an error, trapped, and leaves that name empty.
+        std::vector<Atom> query = atoms;
+        std::vector<char*> raw(atoms.size(), nullptr);
+        X11ErrorTrap trap(connection_.GetDisplay());
+        const XStatus status = XGetAtomNames(connection_.GetDisplay(), query.data(),
+                                             static_cast<int>(query.size()), raw.data());
+        trap.Sync();
+        for (std::size_t index = 0; index < raw.size(); ++index)
+        {
+            if (raw[index] != nullptr)
+            {
+                if (status != 0) { names[index] = raw[index]; }
+                XFree(raw[index]);
+            }
+        }
+        return names;
+    }
+
+    const ClipboardOffer* X11Clipboard::OwnedText() const
+    {
+        for (const ClipboardOffer& offer : ownedOffers_)
+        {
+            if (IsUtf8TextFormat(offer.mimeType))
+            {
+                return &offer;
+            }
+        }
+        return nullptr;
+    }
+
+    std::vector<Atom> X11Clipboard::OwnedTargets() const
+    {
+        // The offers in the application's order, then text under every other name it is asked
+        // for by, each atom once.
+        const X11Atoms& atoms = connection_.GetAtoms();
+        std::vector<Atom> targets;
+        const auto add = [&targets](const Atom atom) {
+            if (std::find(targets.begin(), targets.end(), atom) == targets.end())
+            {
+                targets.push_back(atom);
+            }
+        };
+        for (const Atom atom : ownedOfferAtoms_)
+        {
+            add(atom);
+        }
+        if (OwnedText() != nullptr)
+        {
+            for (const Atom atom : {atoms.utf8String, atoms.textPlainUtf8, atoms.text,
+                                    static_cast<Atom>(XA_STRING), atoms.textPlain})
+            {
+                add(atom);
+            }
+        }
+        return targets;
+    }
+
+    bool X11Clipboard::OwnedContent(const Atom target, Atom& type, std::string& bytes) const
+    {
+        for (std::size_t index = 0; index < ownedOffers_.size(); ++index)
+        {
+            if (ownedOfferAtoms_[index] == target)
+            {
+                type = target;
+                bytes.assign(ownedOffers_[index].data.begin(), ownedOffers_[index].data.end());
+                return true;
+            }
+        }
+        const ClipboardOffer* text = OwnedText();
+        if (text == nullptr)
+        {
+            return false;
+        }
+        const X11Atoms& atoms = connection_.GetAtoms();
+        const std::string utf8(text->data.begin(), text->data.end());
+        if (target == atoms.utf8String || target == atoms.textPlainUtf8 || target == atoms.textPlain)
+        {
+            type = target;
+            bytes = utf8;
+            return true;
+        }
+        if (target == atoms.text)
+        {
+            // TEXT lets the owner choose the encoding, and says which by the reply's type.
+            type = atoms.utf8String;
+            bytes = utf8;
+            return true;
+        }
+        if (target == XA_STRING)
+        {
+            // STRING is Latin-1 by the ICCCM. Sending UTF-8 under it made every non-ASCII
+            // character two wrong ones in an application that honours that (X11-0158, D-17).
+            type = XA_STRING;
+            bytes = Utf8ToLatin1(utf8);
+            return true;
+        }
+        return false;
+    }
+
+    std::vector<std::string> X11Clipboard::GetMimeTypes() const
+    {
+        const ::Window current = XGetSelectionOwner(connection_.GetDisplay(), selection_);
+        if (current == kNone)
+        {
+            return {};
+        }
+        const std::vector<std::string> names =
+            AtomNames(current == owner_ ? OwnedTargets() : OwnerTargets());
+        std::vector<std::string> formats;
+        for (const std::string& name : names)
+        {
+            if (!name.empty() && !IsProtocolTarget(name) &&
+                std::find(formats.begin(), formats.end(), name) == formats.end())
+            {
+                formats.push_back(name);
+            }
+        }
+        return formats;
+    }
+
+    bool X11Clipboard::HasData(const std::string& mimeType) const
+    {
+        Display* display = connection_.GetDisplay();
+        const ::Window current = XGetSelectionOwner(display, selection_);
+        if (current == kNone || mimeType.empty() || IsProtocolTarget(mimeType))
+        {
+            return false;
+        }
+        // Compared as atoms: no names to fetch for a yes-or-no question.
+        const Atom target = XInternAtom(display, mimeType.c_str(), False);
+        const std::vector<Atom> targets = current == owner_ ? OwnedTargets() : OwnerTargets();
+        return std::find(targets.begin(), targets.end(), target) != targets.end();
+    }
+
+    std::vector<std::uint8_t> X11Clipboard::GetData(const std::string& mimeType) const
+    {
+        Display* display = connection_.GetDisplay();
+        const ::Window current = XGetSelectionOwner(display, selection_);
+        if (current == kNone || mimeType.empty() || IsProtocolTarget(mimeType))
+        {
+            return {};
+        }
+        const Atom target = XInternAtom(display, mimeType.c_str(), False);
+        if (current == owner_)
+        {
+            Atom type = kNone;
+            std::string bytes;
+            if (!OwnedContent(target, type, bytes))
+            {
+                return {};
+            }
+            return std::vector<std::uint8_t>(bytes.begin(), bytes.end());
+        }
+        Atom actualType = kNone;
+        std::vector<unsigned char> data;
+        if (!ConvertAndWait(target, actualType, data))
+        {
+            return {};
+        }
+        return std::vector<std::uint8_t>(data.begin(), data.end());
     }
 
     bool X11Clipboard::ConvertAndWait(const Atom target, Atom& actualType,
@@ -321,18 +572,40 @@ namespace CNA::Platform::X11 {
 
     void X11Clipboard::SetText(const std::string& text)
     {
+        std::vector<ClipboardOffer> offers;
+        if (!text.empty())
+        {
+            offers.push_back({"text/plain;charset=utf-8",
+                              std::vector<std::uint8_t>(text.begin(), text.end())});
+        }
+        TakeOwnership(std::move(offers));
+    }
+
+    void X11Clipboard::SetData(const std::vector<ClipboardOffer>& offers)
+    {
+        TakeOwnership(offers);
+    }
+
+    void X11Clipboard::TakeOwnership(std::vector<ClipboardOffer> offers)
+    {
         EnsureOwnerWindow();
         Display* display = connection_.GetDisplay();
-        const X11Atoms& atoms = connection_.GetAtoms();
 
-        ownedText_ = text;
+        std::vector<Atom> offerAtoms;
+        for (const ClipboardOffer& offer : offers)
+        {
+            offerAtoms.push_back(XInternAtom(display, offer.mimeType.c_str(), False));
+        }
+        ownedOffers_ = std::move(offers);
+        ownedOfferAtoms_ = std::move(offerAtoms);
         XSetSelectionOwner(display, selection_, owner_, kCurrentTime);
 
         // The server is the authority on who owns a selection, and XSetSelectionOwner has no
         // return value -- a request that lost a race is only visible by asking afterwards.
         if (XGetSelectionOwner(display, selection_) != owner_)
         {
-            ownedText_.clear();
+            ownedOffers_.clear();
+            ownedOfferAtoms_.clear();
             throw PlatformException("X11Clipboard::SetText",
                                     "the X server did not grant " + selectionName_ + " ownership");
         }
@@ -372,7 +645,7 @@ namespace CNA::Platform::X11 {
                 {
                     return true;
                 }
-                // Another client took the clipboard. Dropping the text is not optional
+                // Another client took the clipboard. Dropping the content is not optional
                 // bookkeeping: keeping it would make HasText()/GetText() answer from a stale copy
                 // of what the user copied several applications ago.
                 //
@@ -380,9 +653,10 @@ namespace CNA::Platform::X11 {
                 // owned the selection and is waiting for the rest; abandoning it left it waiting
                 // forever -- xclip has no timeout -- because a new owner does not take over a
                 // transfer it never started (plans/plan_native_platform_validation.md NPV-0119).
-                // Each transfer carries its own copy, so it finishes without ownedText_.
+                // Each transfer carries its own copy, so it finishes without ownedOffers_.
                 ownsSelection_ = false;
-                ownedText_.clear();
+                ownedOffers_.clear();
+                ownedOfferAtoms_.clear();
                 return true;
             }
             case DestroyNotify:
@@ -413,12 +687,12 @@ namespace CNA::Platform::X11 {
 
                 IncrementalSend& send = found->second;
                 const std::size_t chunkSize = MaximumChunkBytes();
-                const std::size_t remaining = send.text.size() - std::min(send.offset,
-                                                                          send.text.size());
+                const std::size_t remaining = send.bytes.size() - std::min(send.offset,
+                                                                           send.bytes.size());
                 const std::size_t length = std::min(chunkSize, remaining);
                 XChangeProperty(display, send.requestor, send.property, send.type, 8,
                                 PropModeReplace,
-                                reinterpret_cast<const unsigned char*>(send.text.data() +
+                                reinterpret_cast<const unsigned char*>(send.bytes.data() +
                                                                        send.offset),
                                 static_cast<int>(length));
                 send.offset += length;
@@ -460,11 +734,14 @@ namespace CNA::Platform::X11 {
             // Listing TARGETS itself is required: a requestor asks "what can you give me" and
             // then picks. Omitting TARGETS from its own answer is a common bug that makes
             // well-behaved applications conclude we offer nothing.
-            const Atom targets[] = {atoms.targets, atoms.timestamp, atoms.utf8String,
-                                    static_cast<Atom>(XA_STRING), atoms.text};
+            std::vector<Atom> targets = {atoms.targets, atoms.timestamp};
+            for (const Atom target : OwnedTargets())
+            {
+                targets.push_back(target);
+            }
             XChangeProperty(display, request.requestor, property, XA_ATOM, 32, PropModeReplace,
-                            reinterpret_cast<const unsigned char*>(targets),
-                            static_cast<int>(sizeof(targets) / sizeof(targets[0])));
+                            reinterpret_cast<const unsigned char*>(targets.data()),
+                            static_cast<int>(targets.size()));
             SendSelectionNotify(request, property);
             return;
         }
@@ -478,32 +755,31 @@ namespace CNA::Platform::X11 {
             return;
         }
 
-        if (request.target != atoms.utf8String && request.target != XA_STRING &&
-            request.target != atoms.text)
+        Atom type = kNone;
+        std::string bytes;
+        if (!OwnedContent(request.target, type, bytes))
         {
             // Refusing a target we cannot convert to, rather than sending something in the wrong
-            // encoding. property = None is the ICCCM way to say no.
+            // format. property = None is the ICCCM way to say no.
             SendSelectionNotify(request, kNone);
             return;
         }
 
-        const Atom type = request.target == atoms.text ? atoms.utf8String : request.target;
-
-        if (ownedText_.size() <= MaximumChunkBytes())
+        if (bytes.size() <= MaximumChunkBytes())
         {
             XChangeProperty(display, request.requestor, property, type, 8, PropModeReplace,
-                            reinterpret_cast<const unsigned char*>(ownedText_.data()),
-                            static_cast<int>(ownedText_.size()));
+                            reinterpret_cast<const unsigned char*>(bytes.data()),
+                            static_cast<int>(bytes.size()));
             SendSelectionNotify(request, property);
             return;
         }
 
         // Too large for one property: start an INCR transfer. The property value is the total
         // size, the type is INCR, and the chunks follow as the requestor deletes the property.
-        const long total = static_cast<long>(ownedText_.size());
+        const long total = static_cast<long>(bytes.size());
         // StructureNotify as well as PropertyChange: a requestor that is destroyed mid-transfer
         // will never delete the property again, and without its DestroyNotify the transfer -- and
-        // its copy of the text -- would be kept for good (NPV-0127). Counted, because the same
+        // its copy of the content -- would be kept for good (NPV-0127). Counted, because the same
         // window may be reading the other selection at the same time (X11-0157).
         if (incrementalSends_.find(request.requestor) == incrementalSends_.end())
         {
@@ -516,7 +792,7 @@ namespace CNA::Platform::X11 {
         send.property = property;
         send.type = type;
         send.offset = 0;
-        send.text = ownedText_;
+        send.bytes = std::move(bytes);
         incrementalSends_[request.requestor] = std::move(send);
         SendSelectionNotify(request, property);
     }

@@ -93,6 +93,7 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `globalPointer` | ✅ (see [Under Xwayland](#under-xwayland)) | `XQueryPointer` / `XWarpPointer` on the root window |
 | `clipboard` | ✅ | real ICCCM selection ownership, including `INCR` |
 | `primarySelection` | ✅ | `PRIMARY`, the middle-click selection, served and read like `CLIPBOARD` — see [The primary selection](#the-primary-selection) |
+| `clipboardData` | ✅ | any format by MIME type (`image/png`, `text/html`, ...), `INCR` both ways — see [Formats other than text](#formats-other-than-text) |
 | `dragAndDrop` | ✅ | XDND 5, target side: files and text dropped by another client — see [Drag and drop](#drag-and-drop) |
 | `highDpi` | ❌ by design | X11 has one coordinate space, so a window's display scale is 1; the session's scale is each display's `contentScale` — see [Displays and DPI](#displays-and-dpi) |
 | `multipleDisplays` | conditional | true when XRandR ≥ 1.2 is present |
@@ -350,9 +351,28 @@ answer `SelectionRequest` events for as long as this process owns the selection,
 event pump must be running for an external paste to succeed.
 
 `TARGETS` (including `TARGETS` itself, which is easy to omit and makes well-behaved clients
-conclude we offer nothing), `TIMESTAMP`, `UTF8_STRING`, `STRING` and `TEXT` are served, and the
+conclude we offer nothing), `TIMESTAMP`, and text under every name X applications ask for it by —
+`UTF8_STRING`, `TEXT`, `STRING`, `text/plain;charset=utf-8` and `text/plain` — are served, and the
 `INCR` protocol is implemented in both directions for payloads past the server's maximum request
-size. `STRING`'s Latin-1 is transcoded to UTF-8 on the way in.
+size. `STRING` is Latin-1, as the ICCCM defines it, both ways: transcoded to UTF-8 on the way in,
+and from UTF-8 on the way out, a character Latin-1 lacks becoming `?` (until `plans/plan_x11.md`
+X11-0158 the UTF-8 bytes were sent under `STRING` unchanged — D-17 there).
+
+### Formats other than text
+
+A selection target is an atom, and for anything but text the atom's name is the format's MIME type.
+So `IPlatformClipboard::SetData()` offers any formats at once — an image, HTML beside its plain
+text — each served under its MIME type, `INCR` included; a UTF-8 text format among them is also
+served under the text names above. `GetMimeTypes()` lists what the owner offers, by name, without
+the protocol's own targets (`TARGETS`, `TIMESTAMP`, `MULTIPLE`, ...); an older application's text
+names (`UTF8_STRING`, `STRING`) appear as they are named. `GetData()` returns the owner's bytes
+exactly. The capability is `clipboardData`; games reach it through the CNAEXT
+`CNA::Input::Clipboard::SetDataEXT()` / `GetDataEXT()` / `GetMimeTypesEXT()`. Converting between
+formats — decoding a PNG, stripping HTML — is not the platform's business and is not done.
+
+Not implemented: `MULTIPLE` (several targets in one request), which some clipboard managers use,
+and `SAVE_TARGETS`, the request to a clipboard manager to keep the content after the owner exits —
+so what CNA copied is gone when it quits, unless a clipboard manager took it already.
 
 This is verified against `xclip` — a genuinely external X client with its own connection and no
 CNA code in it — including a 512 KB `INCR` transfer. A clipboard tested only between two CNA

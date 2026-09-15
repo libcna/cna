@@ -115,7 +115,14 @@ namespace CNA::Platform {
          *
          * Appended for the same reason as `DragAndDrop`.
          */
-        PrimarySelection
+        PrimarySelection,
+        /**
+         * @brief The clipboard carries formats other than text -- an image, HTML beside its plain
+         * text -- through `IPlatformClipboard`'s data members.
+         *
+         * Appended for the same reason as `DragAndDrop`.
+         */
+        ClipboardData
     };
 
     /**

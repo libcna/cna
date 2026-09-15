@@ -87,6 +87,8 @@ namespace CNA::Platform {
         bool dragAndDrop = false;
         /** @brief The primary selection (middle-click paste) can be read and written. */
         bool primarySelection = false;
+        /** @brief The clipboard carries formats other than text, by MIME type. */
+        bool clipboardData = false;
     };
 
     /**

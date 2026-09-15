@@ -297,6 +297,8 @@ namespace CNA::Platform::Sdl3 {
 
         // System services: implemented.
         capabilities.clipboard = true;
+        // SDL_SetClipboardData and friends, by MIME type (plans/plan_x11.md X11-0158).
+        capabilities.clipboardData = true;
         capabilities.powerInfo = true;
         capabilities.managedEntrypoint = true;
         // SDL delivers its drop events on every platform it has them; Sdl3EventMapper maps them.

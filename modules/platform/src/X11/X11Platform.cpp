@@ -216,6 +216,7 @@ namespace CNA::Platform::X11 {
         capabilities.clipboard = true;            // Real ICCCM selection ownership with INCR.
         capabilities.dragAndDrop = true;          // XDND 5, target side: files and text.
         capabilities.primarySelection = true;     // PRIMARY, owned and read like CLIPBOARD.
+        capabilities.clipboardData = true;        // Any target, named by its MIME type.
 
         // highDpi promises a drawable that can exceed the logical size, and on X11 it never does:
         // one coordinate space. A session's scale is the displays' content scale (X11-0156).

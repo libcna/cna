@@ -255,6 +255,38 @@ TEST_F(Sdl3DisplayTest, ThePrimarySelectionIsSeparateFromTheClipboard)
 #endif
 }
 
+TEST_F(Sdl3DisplayTest, TheClipboardCarriesFormatsOtherThanText)
+{
+    // plans/plan_x11.md X11-0158, through SDL's clipboard-data calls. Takes the X server's
+    // clipboard, so only on the X11 test launcher's own server.
+    const char* privateServer = std::getenv("CNA_X11_PRIVATE_TEST_SERVER");
+    if (privateServer == nullptr || std::string(privateServer) != "1")
+    {
+        GTEST_SKIP() << "takes the server's clipboard; needs tools/platform/x11_test_server.sh";
+    }
+    ASSERT_TRUE(platform_->GetCapabilities().clipboardData);
+    IPlatformClipboard& clipboard = *platform_->GetClipboard();
+    const std::string html = "<b>bold</b>";
+    const std::string plain = "bold \xE2\x9C\x93";
+    clipboard.SetData({{"text/html", std::vector<std::uint8_t>(html.begin(), html.end())},
+                       {"text/plain;charset=utf-8", std::vector<std::uint8_t>(plain.begin(), plain.end())}});
+    const std::vector<std::string> types = clipboard.GetMimeTypes();
+    EXPECT_NE(std::find(types.begin(), types.end(), "text/html"), types.end());
+    EXPECT_TRUE(clipboard.HasData("text/html"));
+    EXPECT_FALSE(clipboard.HasData("image/png"));
+    EXPECT_EQ(clipboard.GetData("text/html"), std::vector<std::uint8_t>(html.begin(), html.end()));
+    EXPECT_EQ(clipboard.GetText(), plain);
+
+    std::vector<std::uint8_t> png(4096);
+    for (std::size_t index = 0; index < png.size(); ++index)
+    {
+        png[index] = static_cast<std::uint8_t>(index * 131u);
+    }
+    clipboard.SetData({{"image/png", png}});
+    EXPECT_EQ(clipboard.GetData("image/png"), png);
+    EXPECT_FALSE(clipboard.HasData("text/html")) << "a new copy replaces every format";
+}
+
 TEST_F(Sdl3DisplayTest, EnumeratedDisplaysAreWellFormed)
 {
     for (const DisplayInfo& display : platform_->GetDisplays()->GetDisplays())
