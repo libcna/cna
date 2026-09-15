@@ -20,8 +20,9 @@
 > battery state from Linux, X11-0164, the clipboard handed to a clipboard manager at exit, and
 > X11-0165, input-device enumeration, X11-0166, gamepad motion sensors, X11-0167, message boxes
 > drawn with Xlib, X11-0168, force feedback through the kernel, X11-0169, file dialogs and OpenUrl
-> through the desktop portal, X11-0170, the screen kept on by the desktop, and X11-0171, tray icons
-> through X11's own system tray protocol, are ✅ -- every Phase N row. See
+> through the desktop portal, X11-0170, the screen kept on by the desktop, X11-0171, tray icons
+> through X11's own system tray protocol, and X11-0172, a GL window with a depth buffer by default,
+> are ✅ -- every Phase N row. See
 > [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
 > for the eight defects found that belong to other parts of the tree, and
 > [§8](#8-defects-this-work-found-in-its-own-implementation) for the seventeen this work found in
@@ -359,6 +360,13 @@ Tests (`X11ScreenSaverTests.cpp`):
 - a released icon leaving the tray.
 
 The capability test still expects false: the bare Xvfb runs no tray. **Not covered:** a real panel, which sizes, scales and composites icons in its own way. |
+
+| X11-0172 | A GL window gets a depth buffer and double buffering unless told otherwise | ✅ | **Found by the owner, running the house demo on this desktop:** on X11 the walls were drawn through each other, and on SDL3 they were not. The EasyGL renderers (OPENGL33 and the rest of the set) leave `WindowDescription::openGlFramebuffer` zeroed, which the contract calls "the platform default", and ask for 24/8 and double buffering only when they create the context. On X11 the window's visual, and every buffer with it, is fixed when the window is made, and X11's default was whatever `glXChooseFBConfig` listed first: the `GLX_DOUBLEBUFFER False` it wrote for an unstated `doubleBuffered`, depth 0, stencil 0. SDL3's default has double buffering and 16-bit depth, so the same renderer drew correctly there. `ChooseVisual` now fills an unstated value with what a game's back buffer needs: double-buffered, depth 24, stencil 8. Where the server has nothing better it steps down to 24/0, 16, 0 depth, and only then single buffering, keeping the depth buffer before multisampling. An explicit request stays a minimum. A context asking for more than its window's visual has is still created, since nothing can be added to the window any more, and says so on standard error. Evidence:
+- `X11Live.AGlWindowWithoutAFramebufferRequestGetsWhatAGameNeeds` failed first: the granted context had depth 0, stencil 0 and was single-buffered. It passes now.
+- The house demo on the launcher's Xvfb, X11 against SDL3, both with OPENGL33 on the same server at the same moment: **0 differing pixels**.
+- The owner's original comparison set X11 with OPENGL33 against SDL3 with VULKAN. What still differs between those two is the renderers', and SDL3 shows it too.
+
+**A lesson recorded:** `X11_House3D_SmokeTest` rendered frames and passed. It does not look at them. |
 
 ---
 
@@ -923,6 +931,16 @@ bus (`unix:path=/run/user/1000/bus`); run from it, the test binary reports its o
 | `X11MessageBox*` after the font moved to `X11CoreFont` | 26 passed |
 | `build-asan` (`address,undefined`): the tray, the message boxes, conformance, capability | 120 passed, no report |
 | every X11 and platform ctest entry | 10/10 |
+
+### A GL window with a depth buffer (X11-0172, 2026-09-15)
+
+| Check | Result |
+|---|---|
+| `X11Live.AGlWindowWithoutAFramebufferRequestGetsWhatAGameNeeds` before the fix | failed: depth 0, stencil 0, single-buffered |
+| the same, and the other GL tests, after | 4 passed |
+| house demo, launcher's Xvfb, `cmake-build-multi` (X11, OPENGL33) against `cmake-build-vulkan` (SDL3, OPENGL33 added to it) | `compare -metric AE`: 0 pixels differ |
+| the same demo on the owner's desktop (XWayland, AMD Radeon 780M, radeonsi) | no visual warning; its window captured with `xwd`: opaque walls, the door, windows and steps in front of the interior -- where the capture before the fix showed the stairs through the front wall |
+| every X11 and platform ctest entry; `build-asan`: `X11Live.*` and conformance | 10/10; 138 passed, no report |
 
 ### Regression
 

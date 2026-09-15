@@ -1947,6 +1947,58 @@ TEST_F(X11Live, AGlContextRefusesOnAWindowWhoseVisualWasNotChosenForGl)
     EXPECT_THROW((void) gl->CreateContext(4242, description), PlatformException);
 }
 
+TEST_F(X11Live, AGlWindowWithoutAFramebufferRequestGetsWhatAGameNeeds)
+{
+    IPlatformGlContext* gl = platform_->GetGlContext();
+    if (gl == nullptr)
+    {
+        GTEST_SKIP() << "this server provides no GLX 1.3";
+    }
+    // plans/plan_x11.md X11-0172: the EasyGL renderers state no framebuffer when the window is
+    // made -- zero is "the platform default" -- and ask for 24/8 and double buffering only when they
+    // create the context. On X11 the window's visual, and with it the depth buffer, is fixed by
+    // then. A platform default of "whatever comes first" was a single-buffered visual without a
+    // depth buffer: the house demo drew every wall through every other.
+    WindowDescription description;
+    description.title = "CNA GL default";
+    description.width = 128;
+    description.height = 96;
+    description.centered = false;
+    description.renderIntent = WindowRenderIntent::OpenGl;
+    try
+    {
+        window_ = platform_->CreateWindow(description);
+    }
+    catch (const PlatformException& error)
+    {
+        GTEST_SKIP() << "no GL-capable visual on this server: " << error.what();
+    }
+    window_->Show();
+    window_->Sync();
+
+    GlContextDescription requested;
+    requested.majorVersion = 3;
+    requested.minorVersion = 3;
+    requested.profile = GlProfile::Core;
+    requested.depthBits = 24;
+    requested.stencilBits = 8;
+    requested.doubleBuffer = true;
+    GlContextHandle context = nullptr;
+    try
+    {
+        context = gl->CreateContext(window_->GetId(), requested);
+    }
+    catch (const PlatformException& error)
+    {
+        GTEST_SKIP() << "this driver refused a GL context: " << error.what();
+    }
+    const GlContextDescription granted = gl->GetContextAttributes(context);
+    EXPECT_GE(granted.depthBits, 24) << "a game's back buffer has a depth buffer";
+    EXPECT_GE(granted.stencilBits, 8) << "and XNA's Depth24Stencil8 a stencil buffer";
+    EXPECT_TRUE(granted.doubleBuffer) << "and it is double-buffered";
+    gl->DestroyContext(context);
+}
+
 TEST_F(X11Live, AGlWindowGetsARealContextThatCanBeMadeCurrentAndSwapped)
 {
     IPlatformGlContext* gl = platform_->GetGlContext();

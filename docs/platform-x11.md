@@ -722,6 +722,15 @@ exactly that information, which is why no generic contract change was needed. A 
 without `WindowRenderIntent::OpenGl` refuses to host a context, with a message saying so, rather
 than producing a `BadMatch` inside the driver several calls later.
 
+What a window leaves unstated in `openGlFramebuffer` is the platform default, and that default is
+what a game's back buffer needs: double-buffered, 24-bit depth, 8-bit stencil -- more than SDL's own
+default (double-buffered, 16-bit depth), never less -- asked for less only where the server has
+nothing better (`plans/plan_x11.md` X11-0172). The EasyGL renderers state their framebuffer only when
+they create the context, which on X11 is too late to change the window; with a default of "whatever
+GLX lists first" they got a single-buffered visual without a depth buffer, and the house demo drew
+every wall through every other. A context that asks for more than its window's visual has is created
+all the same -- nothing can be added to the window any more -- and says so on standard error.
+
 **Vulkan uses `VK_KHR_xlib_surface`.** `GetInstanceExtensions()` returns
 `{VK_KHR_surface, VK_KHR_xlib_surface}`, and `vkCreateXlibSurfaceKHR` is resolved through the
 caller's own `vkGetInstanceProcAddr`. Renderers that already obtain an X11 surface themselves from
