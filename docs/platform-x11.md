@@ -33,6 +33,9 @@ cmake -S . -B cmake-build-x11-nosdl -G Ninja \
       -DCNA_ENABLE_SDL=OFF
 ```
 
+`-DCNA_AUDIO_PLATFORM=ALSA` in place of `NULL` gives that configuration sound, still with no SDL
+anywhere: ALSA playback and CNA's own mixer — see [`docs/audio-alsa.md`](audio-alsa.md).
+
 `CNA_ENABLE_SDL` is `AUTO` by default, which is byte-for-byte the behaviour every existing build
 had. `OFF` skips the vendored SDL sub-build entirely and refuses, at configure time, any selection
 that genuinely needs SDL — naming which one. Nothing is ever substituted silently.
@@ -50,13 +53,17 @@ would build something other than what you asked for.
 | `libX11` | **mandatory** | the backend is not offered at all |
 | `libXext` | **mandatory** | the backend is not offered at all |
 | `X11/XKBlib.h` | **mandatory** | layout-independent scancodes have no substitute |
-| `libXi` (XInput2) | optional | `relativeMouse` |
-| `libXrandr` (≥ 1.2) | optional | `multipleDisplays`, and `GetDisplays()` returns null |
+| `libXi` (XInput2) | optional | `relativeMouse`; touchscreen and pen contacts (the server must speak XInput 2.2 for touch) |
+| `libXrandr` (≥ 1.2) | optional | `multipleDisplays`, and `GetDisplays()` returns null; exclusive fullscreen then has no mode to switch to and is borderless |
+| `libXau` | optional (installed with `libX11`) | the exclusive-fullscreen mode guardian's cookie, for a server that asks for one — see [Fullscreen](#fullscreen) |
 | `libXcursor` | optional | custom ARGB cursor images; the standard shapes still work |
 | `libXfixes` | optional | reserved; no capability depends on it today |
 | MIT-SHM (`X11/extensions/XShm.h`) | optional | shared-memory presentation; `XPutImage` still works |
 | GLX (through `libglvnd` or Mesa) | optional | `openGlContext` |
 | Vulkan **headers** | optional | `vulkanSurface` |
+| Linux kernel headers (`linux/input.h`) | optional | `gamepad`, `joystick`, `gamepadRumble`, `haptics` — see [Gamepads and joysticks](#gamepads-and-joysticks) |
+| D-Bus headers (`dbus/dbus.h`, Debian/Ubuntu `libdbus-1-dev`) | optional; headers only, `libdbus-1.so.3` is loaded at run time | `nativeFileDialog`, `OpenUrl`, the desktop's screen saver — see [File dialogs and URLs](#file-dialogs-and-urls) and [Keeping the screen on](#keeping-the-screen-on) |
+| libXss (`libxss-dev`) | optional | the X server's saver suspended for this client alone, where no desktop takes the request — see [Keeping the screen on](#keeping-the-screen-on) |
 
 Vulkan is headers-only on purpose. `vkCreateXlibSurfaceKHR` is resolved through the
 `vkGetInstanceProcAddr` the caller already has, so the platform links no Vulkan loader and a
@@ -87,25 +94,33 @@ CMake's own `find_package(X11)`, `find_package(OpenGL COMPONENTS GLX)` and `find
 | `cursorShapes` | ✅ | the core cursor font; Xcursor for custom ARGB images |
 | `globalPointer` | ✅ (see [Under Xwayland](#under-xwayland)) | `XQueryPointer` / `XWarpPointer` on the root window |
 | `clipboard` | ✅ | real ICCCM selection ownership, including `INCR` |
-| `highDpi` | conditional | true only when the session states an `Xft.dpi` |
+| `primarySelection` | ✅ | `PRIMARY`, the middle-click selection, served and read like `CLIPBOARD` — see [The primary selection](#the-primary-selection) |
+| `clipboardData` | ✅ | any format by MIME type (`image/png`, `text/html`, ...), `INCR` both ways — see [Formats other than text](#formats-other-than-text) |
+| `dragAndDrop` | ✅ | XDND 5, target side: files and text dropped by another client — see [Drag and drop](#drag-and-drop) |
+| `highDpi` | ❌ by design | X11 has one coordinate space, so a window's display scale is 1; the session's scale is each display's `contentScale` — see [Displays and DPI](#displays-and-dpi) |
 | `multipleDisplays` | conditional | true when XRandR ≥ 1.2 is present |
 | `borderlessFullscreen` | conditional | true when the running window manager advertises `_NET_WM_STATE_FULLSCREEN` |
 | `openGlContext` | conditional | true when the server provides GLX ≥ 1.3 |
 | `vulkanSurface` | conditional | true when the Vulkan headers were available at build time |
 | `relativeMouse` | conditional | true when XInput2 is present at build **and** run time |
-| `ime` | ❌ | XIM here delivers *committed* text; the capability promises composition and candidate events |
-| `inputDeviceEnumeration` | ❌ | XI2 can answer it; not implemented |
-| `gamepad`, `joystick`, `gamepadRumble`, `gamepadSensors` | ❌ | not an X11 facility |
-| `haptics`, `sensors`, `powerInfo` | ❌ | not an X11 facility |
-| `messageBox`, `nativeFileDialog` | ❌ | no core X11 facility; see below |
-| `tray` | ❌ | a desktop-environment protocol, not an X11 one |
+| `gamepad`, `joystick`, `gamepadRumble` | conditional | Linux only: the kernel's evdev nodes, true when the build has `linux/input.h` and the machine has `/dev/input` — **with or without a display** |
+| `ime` | conditional | true when the application asked to draw the composition (`CNA_IME_IMPLEMENTED_UI=composition`) and the input method offers on-the-spot composition; candidate lists stay with the input method — see [Input-method composition](#input-method-composition) |
+| `inputDeviceEnumeration` | conditional | true when XInput2 is present: keyboards, mice and touch devices from the server, controllers from the kernel — see [Input devices](#input-devices) |
+| `gamepadSensors` | conditional | Linux only, with the controllers: a pad's motion-sensor node paired with it — each pad's `GamepadCapabilities` says whether it has a gyroscope and an accelerometer |
+| `powerInfo` | conditional | Linux only: the kernel's power supplies in sysfs — **with or without a display** — see [Host facts](#host-facts) |
+| `haptics` | conditional | Linux only, with the controllers: every force-feedback node — a wheel, a stick, a pad, a vibrator — through the kernel's effect interface — see [Gamepads and joysticks](#gamepads-and-joysticks) |
+| `sensors` | ❌ | not an X11 facility |
+| `messageBox` | ✅ | drawn by the backend with Xlib, a dialog window of its own — see [Message boxes](#message-boxes) |
+| `nativeFileDialog` | conditional | true when the session bus has the desktop portal (`xdg-desktop-portal`), running or one the bus would start — see [File dialogs and URLs](#file-dialogs-and-urls) |
+| `tray` | conditional | true when a system tray (a client owning `_NET_SYSTEM_TRAY_S<n>`) is running when the platform is made — see [Tray icons](#tray-icons) |
 | `camera` | ❌ | not an X11 facility |
 | `managedEntrypoint` | ❌ | an ordinary `main()` |
 
 Nothing here is shelled out to `zenity` or `kdialog` to make a row turn green. A backend that
-launched another program to show a message box would not be a native X11 backend, and CNA has no
-abstraction for optional desktop-environment integration to hang that on. `false` here means the
-call refuses deterministically, which is what a false capability promises.
+launched another program to show a message box would not be a native X11 backend -- which is why
+the message box this backend has, it draws itself, and why its file chooser is the desktop portal's,
+a service the session bus already offers, asked over it. `false` here means the call refuses
+deterministically, which is what a false capability promises.
 
 **The capability set is fixed for the lifetime of a platform instance.** Half of these answers are
 about a particular X server — does it have RandR, does the window manager advertise fullscreen,
@@ -140,8 +155,8 @@ server whose screen belongs to someone else, and a few things behave differently
 - **Keyboard layouts are XKB groups.** The compositor hands Xwayland one keymap with every input
   source as a group and switches layouts by locking a group; key codes follow the active group.
 - **Scaling happens in the compositor.** With fractional scaling and Xwayland not in its native
-  scaling mode, X clients see the logical size and are upscaled; `Xft.dpi` stays 96, so
-  `highDpi` is false by this backend's documented policy.
+  scaling mode, X clients see the logical size and are upscaled; `Xft.dpi` stays 96, so the
+  displays report a content scale of 1 and the compositor does all of the scaling.
 - **Hidden windows are throttled.** Presentation to a window the compositor does not show (behind
   the lock screen, say) runs at a few frames per second with vsync on.
 - **Clipboard** interoperability with X clients is complete, including `INCR`. Native Wayland
@@ -191,9 +206,35 @@ A display with no input-method server (a bare `Xvfb`, a minimal container, a ses
 than passed through. `textInput` stays true because text input genuinely works; what is lost is
 dead-key composition.
 
-`ime` stays **false**. CNA's `Ime` capability promises `TextEditingEvent` and
-`TextEditingCandidatesEvent` — the in-progress composition string and the candidate list — which
-need XIM preedit callbacks this backend does not implement.
+### Input-method composition
+
+By default the input method draws its own composition, in its own window, and only the committed
+text reaches the application. That is the behaviour an XNA game needs: XNA had no IME API, so no
+game draws a composition. `ime` is then **false**.
+
+An application that does draw the composition — through CNA's `TextInputEXT` editing events —
+says so with **`CNA_IME_IMPLEMENTED_UI=composition`** in its environment, read once when the
+platform is created (on the SDL3 backend the same choice is SDL's own IME-UI hint). If the input
+method offers the *on-the-spot* style (`XIMPreeditCallbacks`) — ibus and fcitx do — the backend
+asks for it, and the input method hands its composition over through its preedit callbacks: each
+change is a `TextEditingEvent` (the text, the caret, and the segment being converted as the
+selection), delivered from `PollEvents` in order with the key and text events around it, and the
+end of a composition is an editing event with empty text. `ime` is **true** exactly then.
+
+The candidate list is never delivered: XIM has no protocol for handing it to the client, so the
+input method draws its own candidate window at the spot `SetInputArea` gives it, as it does for
+every X application. `TextEditingCandidatesEvent` does not occur on this backend.
+
+**Outside text entry the input method gets no keys.** Key events are offered to it (`XFilterEvent`)
+only while text input is started for their window, and its input context is focused only then.
+Unfocusing alone would not do: Xlib forwards every key of a window with an input context to the
+input-method server, and ibus processes them focused or not — measured: with a dead-key layout
+the presses of a dead key and the letter after it never reached the game at all. A Hangul or
+Japanese input mode left on would otherwise turn a game's WASD into a composition.
+
+Stopping text input abandons a composition in progress (`XmbResetIC`) and reports it ended, so
+nothing half-typed resurfaces when text input starts again. A commit arrives from Xlib as a press
+of keycode 0; that is delivered as text and never as a key event for "no key".
 
 ---
 
@@ -221,14 +262,39 @@ because it is the server's own notion of a monitor and correctly merges a pair o
 panel; active CRTCs (1.2) are the fallback; and only with no RandR at all is the whole screen
 reported as a single display — which is then the truth.
 
-**Display scale is `Xft.dpi / 96`, clamped to [0.5, 8.0], and exactly 1.0 otherwise.** X11 has no
-authoritative scale. `Xft.dpi` is the one value an X session sets deliberately. XRandR physical
-millimetres are deliberately *not* used: a 0×0 mm or 1×1 mm output is common enough that deriving
-DPI from it produces absurd numbers, and an absurd scale is worse than no scaling. `highDpi` is
-advertised only when the session actually states one.
+**A window's display scale is exactly 1.0.** X11 has one coordinate space, so a window's logical
+client size and its drawable pixel size are always equal, and the display scale — pixels per
+logical unit — is 1 whatever the session's settings say. `highDpi` is false. A resize emits both
+`Resized` and `PixelSizeChanged`. (Until `plans/plan_x11.md` X11-0156 the session's scale was
+reported here instead, which is D-16 there: a renderer dividing the drawable by it took an 800×600
+window at 192 dpi for a 400×300 one.)
 
-X11 has one coordinate space, so a window's logical client size and its drawable pixel size are
-always equal here. A resize therefore emits both `Resized` and `PixelSizeChanged`.
+**The session's scale is each display's `contentScale`** — a preference for sizing an interface,
+read in SDL3's order so the two backends agree on one desktop:
+
+1. `Xft.dpi` in the root window's live `RESOURCE_MANAGER` (what `xrdb` sets), over 96;
+2. the XSETTINGS manager's `Gdk/WindowScalingFactor`, then its `Xft/DPI` (in 1024ths) over 96 —
+   what `gsd-xsettings`, `xsettingsd` and Xfce's settings daemon publish;
+3. `GDK_SCALE`;
+4. 1.0.
+
+A value outside [0.5, 8.0] is ignored as a broken setting. XRandR physical millimetres are
+deliberately *not* used: a 0×0 mm or 1×1 mm output is common enough that deriving DPI from it
+produces absurd numbers, and an absurd scale is worse than no scaling.
+
+**Per monitor.** X11 itself has no per-monitor scale. The one a desktop sets is KDE's
+`QT_SCREEN_SCALE_FACTORS` (`eDP-1=2;HDMI-1=1;`, or a list in screen order): a display named there
+reports its own factor, the others the session's. It is an environment variable, read once when
+the platform starts.
+
+**Changes are followed.** A new `RESOURCE_MANAGER` (`xrdb -merge`), the settings manager's
+property, a manager going away or a new one announcing itself are all picked up while the game
+runs. A window whose content scale changes — because the setting changed, or because it moved onto
+a monitor with another factor — receives `DisplayScaleChanged`, as SDL3 delivers it.
+
+`CNA::Devices::DisplayInfo::getContentScaleProperty` combines the two: the larger of the window's
+pixel density and its display's content scale. So a game asking it gets 2.0 at 192 dpi on X11,
+while its back buffer stays one pixel per unit.
 
 ---
 
@@ -237,11 +303,49 @@ always equal here. A resize therefore emits both `Resized` and `PixelSizeChanged
 `BorderlessFullscreen` uses `_NET_WM_STATE_FULLSCREEN`, and refuses when the running window
 manager does not advertise it.
 
-`ExclusiveFullscreen` **refuses**. Genuine exclusive mode means an XRandR mode switch that changes
-the user's desktop resolution, with the obligation to restore it on exit, on failure, and after an
-abnormal termination. It is implementable and is not implemented, so the call throws rather than
-quietly handing back borderless under an "exclusive" name — which would make `GetFullscreenMode()`
-lie about what the display is doing.
+`ExclusiveFullscreen` is borderless fullscreen with a **display mode of the window's own**, set
+through XRandR (`plans/plan_x11.md` X11-0153). It is what an XNA game's `IsFullScreen` asks for.
+Fullscreen itself is still the window manager's to perform, so exclusive refuses exactly where
+borderless does.
+
+- **Which mode.** SDL's rule, so a game gets the same mode it would under the SDL3 backend: the
+  smallest mode at least as large as the window, preferring the aspect ratio closest to the
+  window's; among modes of one size, the refresh rate closest to the desktop's. So XNA's default
+  800x480 back buffer gets a 16:9 mode over a smaller 4:3 one. `SetSize` while exclusive asks for
+  a new *mode*, not a new window size — the window manager keeps a fullscreen window the size of
+  its monitor — which is how `GraphicsDevice` applies a back buffer after `IsFullScreen`.
+- **When there is no mode** (the size is larger than every mode, the server has no RandR 1.2, the
+  monitor is scaled or transformed) the window is fullscreen on the desktop's own mode, and
+  `GetFullscreenMode()` says `BorderlessFullscreen`, because that is what the display is doing. SDL
+  makes the same substitution and reports it the same way.
+- **The screen** is resized around the change the way `xrandr` does it — to the bounding box of
+  the lit CRTCs, grown before and shrunk after — so on one monitor the pointer cannot wander off
+  the visible area, and on several the other monitors keep their place (SDL shrinks the screen to
+  the mode and fails with `BadMatch` there).
+- **The mode is in effect only while the window is on screen.** Hiding or minimising the window
+  gives the desktop its mode back; losing focus minimises the window and gives it back, as SDL
+  does, so a player who switches away from an 800x600 game does not find the desktop in 800x600.
+  Showing, restoring or refocusing the window takes the mode again. A focus loss within 400 ms of
+  a mode change is looked at again before it is believed: changing a monitor's mode makes some
+  window managers move focus while they lay the screen out again. Under Xwayland, where a mode
+  change is emulated for the requesting client alone, focus loss changes nothing.
+  `GetFullscreenMode()` says `ExclusiveFullscreen` throughout, including while minimised.
+- **The mode always goes back.** Leaving exclusive fullscreen, destroying the window, another
+  client destroying it, another client taking it out of fullscreen (a key binding, a pager) and
+  the platform closing its connection all restore the CRTC exactly. A mode *someone else* set in
+  the meantime — the user changing the resolution while the game runs — is left alone.
+- **Even when the process dies.** With the first mode change, the backend `fork()`s a small
+  **mode guardian** that waits on a socket. However the game ends — a crash, `abort()`,
+  `SIGKILL`, the OOM killer — the kernel closes the game's end, the guardian reads end-of-file,
+  restores the mode over a connection of its own and exits. A normal restore disarms it first. It
+  calls only async-signal-safe functions (it speaks the X protocol itself, since it is a fork of a
+  threaded process and cannot call Xlib), leaves the terminal's session so a Ctrl+C that kills the
+  game does not kill it too, keeps nothing of the game's open, and shows up as `cna-x11-mode` in
+  `ps`. It authenticates with the game's own cookie (libXau) and reaches the same address the
+  game's connection did. A game that `fork()`s a child which outlives it keeps the guardian's
+  end-of-file waiting until that child exits too.
+- **The display service** tells the two modes apart: `TryGetCurrentDisplayMode` reports the mode
+  the monitor is in, `DisplayInfo::desktopMode` the one the desktop gets back.
 
 ---
 
@@ -253,17 +357,354 @@ answer `SelectionRequest` events for as long as this process owns the selection,
 event pump must be running for an external paste to succeed.
 
 `TARGETS` (including `TARGETS` itself, which is easy to omit and makes well-behaved clients
-conclude we offer nothing), `TIMESTAMP`, `UTF8_STRING`, `STRING` and `TEXT` are served, and the
+conclude we offer nothing), `TIMESTAMP`, and text under every name X applications ask for it by —
+`UTF8_STRING`, `TEXT`, `STRING`, `text/plain;charset=utf-8` and `text/plain` — are served, and the
 `INCR` protocol is implemented in both directions for payloads past the server's maximum request
-size. `STRING`'s Latin-1 is transcoded to UTF-8 on the way in.
+size. `STRING` is Latin-1, as the ICCCM defines it, both ways: transcoded to UTF-8 on the way in,
+and from UTF-8 on the way out, a character Latin-1 lacks becoming `?` (until `plans/plan_x11.md`
+X11-0158 the UTF-8 bytes were sent under `STRING` unchanged — D-17 there).
+
+### Formats other than text
+
+A selection target is an atom, and for anything but text the atom's name is the format's MIME type.
+So `IPlatformClipboard::SetData()` offers any formats at once — an image, HTML beside its plain
+text — each served under its MIME type, `INCR` included; a UTF-8 text format among them is also
+served under the text names above. `GetMimeTypes()` lists what the owner offers, by name, without
+the protocol's own targets (`TARGETS`, `TIMESTAMP`, `MULTIPLE`, ...); an older application's text
+names (`UTF8_STRING`, `STRING`) appear as they are named. `GetData()` returns the owner's bytes
+exactly. The capability is `clipboardData`; games reach it through the CNAEXT
+`CNA::Input::Clipboard::SetDataEXT()` / `GetDataEXT()` / `GetMimeTypesEXT()`. Converting between
+formats — decoding a PNG, stripping HTML — is not the platform's business and is not done.
+
+### When the game closes
+
+X keeps no copy of a selection: what a program copied is gone the moment it exits — unless the
+desktop runs a clipboard manager and the program hands the content over. CNA does, as GTK and Qt
+applications do (`plans/plan_x11.md` X11-0164): as the platform closes its connection, if it owns
+`CLIPBOARD` and some client owns `CLIPBOARD_MANAGER`, it converts that selection to `SAVE_TARGETS`
+naming the formats it offers, and keeps answering the manager — which usually fetches them all in
+one `MULTIPLE` request — until the manager confirms, for at most two seconds. With no manager
+running, nothing waits. `MULTIPLE` is answered for any requestor: each (target, property) pair
+converted, `INCR` included, and a target that cannot be converted marked `None` in the list that is
+written back; `TARGETS` lists it. SDL3's X11 backend does neither.
 
 This is verified against `xclip` — a genuinely external X client with its own connection and no
 CNA code in it — including a 512 KB `INCR` transfer. A clipboard tested only between two CNA
 windows would pass while proving nothing.
 
-`PRIMARY` is interned but not implemented; middle-click paste is future work.
+### The primary selection
+
+`PRIMARY` — what an X11 desktop pastes with the middle mouse button — is the same protocol on a
+second selection, and is served the same way through `IPlatform::GetPrimarySelection()`
+(`plans/plan_x11.md` X11-0157): the same targets, `INCR` both ways, Latin-1 transcoded. The two are
+independent, as they are for every X application: selecting does not copy and copying does not
+select. Each has an owner window of its own.
+
+The backend carries the text both ways and does nothing else. Selecting text in a text field and
+pasting on a middle click are the application's to do — through the CNAEXT
+`CNA::Input::Clipboard::SetPrimarySelectionTextEXT()` / `GetPrimarySelectionTextEXT()` — because only
+the application knows what is selected and where the pointer is.
+
+It is verified against another X client too: the test binary started again as a separate process,
+owning `PRIMARY` or pasting it, a 3 MB transfer included. It changes the server's selections, so
+it runs only on the test launcher's private server.
 
 ---
+
+## Touch and pens
+
+Where the server speaks XInput 2.2, every window CNA creates selects touch events, and each
+touchscreen contact becomes the contract's `TouchEvent` — `Down`, `Motion` with its delta, `Up` —
+in the window it began in, normalised against the client size it had then. XNA's `TouchPanel`
+reads them. A window destroyed mid-touch has its contacts `Cancelled`, so no finger stays down.
+
+- **The mouse keeps working on a touchscreen.** A window that selects touch events is no longer
+  sent the pointer events the server emulates from touches, so the backend drives the mouse from
+  the contact the server marks as emulating the pointer: motion, a left-button press and release,
+  and the mouse snapshot with them — once each, measured. SDL3 does the same by synthesising mouse
+  events from touches.
+- **Pens.** SDL3's rule finds them — an enabled slave pointer with an "Abs Pressure" valuator — at
+  start-up and whenever the device hierarchy changes. A pen whose tip is down is a touch with the
+  pressure it reports; a hovering pen is not. Its own XI2 events are selected per device, so the
+  core pointer events it drives — the mouse — arrive as they always did, also measured. Pressure is
+  1 for a finger, as SDL3 reports it.
+- **Not delivered:** a pen's tilt, its barrel buttons and eraser as such (an eraser touching is a
+  touch like the tip), touch-ownership and gesture grabs, and XInput 2.2 on a server that has only
+  2.0 or 2.1 (touch is then absent; the mouse still works through the server's own emulation).
+
+---
+
+## Drag and drop
+
+Every window CNA creates announces `XdndAware` (version 5), and a drag from another client — a
+file manager, a browser, a text editor — arrives as the contract's `DropEvent` sequence: `Begin`
+when the drag first comes over the window, `Position` as it moves, then on the drop one `File` per
+file or one `Text`, and `Complete`; a drag that leaves ends with `Complete` alone. An XNA game sees
+it as `GameWindow::FileDropEXT` (every file of a drop at once, MonoGame's shape) and `TextDropEXT`.
+
+- **What is taken.** `text/uri-list` first, then UTF-8 text (`text/plain;charset=utf-8`,
+  `UTF8_STRING`), then `text/plain`, `TEXT` and `STRING` (Latin-1, converted). A `file:` URI —
+  `file:///`, `file://localhost/`, `file://<this host>/` or `file:/` — is percent-decoded into a
+  local path; a URI that is not a local file, such as a link dragged out of a browser, arrives as
+  text rather than being dropped silently (SDL3 discards it). Text arrives whole, where SDL3's X11
+  backend splits it into one event per line.
+- **What is refused.** A drag offering none of those types is refused in the protocol
+  (`XdndStatus` "no") and produces no event at all — a game must not show a "drop here" highlight
+  for something it cannot receive. Only `XdndActionCopy` is performed: a move would ask the source
+  to delete its files.
+- **The data** is read through the clipboard's selection reader, `INCR` included, synchronously and
+  within its one-second timeouts: a source that dies mid-drop costs the event pump a bounded wait,
+  and the sequence still ends with `Complete`. Every drop is answered with `XdndFinished`.
+- **Not implemented:** dragging *from* a CNA window (the source side), and `XdndProxy`.
+
+---
+
+## Input devices
+
+`GetInputDevices()` answers from XInput2 each time it is asked (`plans/plan_x11.md` X11-0165):
+every enabled slave keyboard is a keyboard, every enabled slave pointer a mouse, and a slave pointer
+with an XInput 2.2 touch class a touch device as well — so `TouchPanel.GetCapabilities()` knows a
+touchscreen is there before anyone has touched it. The core pointer and keyboard every server has,
+the server's own `XTEST` devices, floating and disabled devices are left out: none is a device a
+user attached, and reporting them would tell a game a keyboard is attached to a machine with none.
+(Xvfb's own "Xvfb keyboard" and "Xvfb mouse" are slaves, and are listed.) Gamepads and joysticks
+are the Linux controllers, under the same ids as their `DeviceEvent`s; asking about them starts the
+controller hub as `GetGamepad()` does. X device ids are offset (`0x10000 +` the XInput id) so the two
+never meet. Plugging a device in or out changes the server's hierarchy, and each change is reported
+as `DeviceEvent`s for the classes that appeared or went. X has no haptic devices or sensors.
+
+## Host facts
+
+`GetSystemInfo()` answers from Linux itself on a Linux build (`plans/plan_x11.md` X11-0163), with
+or without an X server: memory and online processors from `sysconf`; the preferred locales from
+`LANG`, then each entry of `LANGUAGE` (codesets and modifiers dropped, `C`/`POSIX` skipped), as the
+SDL3 backend reads them; and battery state from `/sys/class/power_supply`. Only system batteries
+count — a supply whose `scope` is `Device` is a gamepad's or a mouse's — and with several, the one
+with the most time left, or else the fullest, is reported. No battery means plugged in; a battery
+that is "Not charging" while plugged in (held at a charge threshold) counts as charged; time left
+is `time_to_empty_now`, else energy over power, else charge over current. `OpenUrl` asks the desktop
+portal, where there is one (see [File dialogs and URLs](#file-dialogs-and-urls)); it never starts
+`xdg-open` or any other program on a game's behalf. Elsewhere the portable answers apply (no battery
+information, no locales).
+
+## Gamepads and joysticks
+
+The X server has not delivered controller input to clients for decades, so controllers do not come
+from X at all. On Linux they come from the kernel's evdev nodes (`/dev/input/event*`), read with
+nothing but `<linux/input.h>`: no libudev, no libevdev, no SDL. The code is
+`modules/platform/src/Linux/`, compiled into the X11 platform wherever that header exists, and
+covered by the same SDL-containment scan and ratchet as `src/X11/`. Because none of it touches the
+X connection, a process that cannot reach an X server still has its controllers.
+
+**What counts as a controller is decided from sysfs, without opening anything.**
+`/sys/class/input/eventN/device/capabilities/*` states the same bitmaps the node's ioctls would
+(a test compares the two for every node on the machine it runs on). A device with the kernel's
+gamepad button set is a gamepad; one with the joystick button range, or "trigger happy" buttons
+together with sticks or a hat, is a joystick; everything else — keyboards, mice, touchpads, tablets,
+a DualSense's separate motion-sensor node — is never opened. Asking by opening would mean holding
+someone's keyboard open, and it is slow as well: closing an evdev node waits for an RCU grace
+period in the kernel, measured at 23–72 ms per node on a ThinkPad, which had the first controller
+query stall for 0.8 s before classification moved to sysfs. It now takes about 3 ms.
+
+**Hot-plug is one inotify watch** on `/dev/input`: `IN_CREATE` when a node appears, `IN_ATTRIB`
+when udev then grants the session access to it, `IN_DELETE` — or a read failing with `ENODEV` — on
+unplug. There is no thread; everything runs inside `PollEvents` and the services' `Update` on the
+caller's own thread. Where inotify is unavailable the directory is rescanned at most once a second.
+
+**Nothing is opened until a controller is asked about.** The first `GetGamepad()` or `GetJoystick()`
+acquires `PlatformSubsystem::Gamepad`, as on the SDL3 platform, so a game that never touches
+`GamePad` pays nothing. Releasing the subsystem to zero closes every node (stopping any rumble);
+the services and capabilities stay, reporting every slot empty.
+
+**Mapping follows the kernel's gamepad API**, which names face buttons by *position*, exactly as
+CNA's `GamepadButton` does: A is the bottom button whatever is printed on it, so a DualSense's cross
+is A and its square is X. `xpad` predates that convention and reports an Xbox pad's left button as
+`BTN_X` — the code the gamepad API calls `BTN_NORTH` — so for `xpad`, and for Microsoft pads through
+HID, the two are swapped back. `RX`/`RY` is the right stick and `Z`/`RZ` the triggers where both
+exist; without `RX`/`RY`, `Z`/`RZ` is the right stick and `BRAKE`/`GAS` the triggers; a pad whose
+triggers are only buttons (`BTN_TL2`/`BTN_TR2`, a Switch Pro's ZL/ZR) drives them to 0 or 1. The hat
+is the D-pad. Sticks are [-1, 1] with up positive, triggers [0, 1], with no dead zone: XNA applies
+its own, and applying one here as well would apply it twice.
+
+**Slots.** The first four gamepads, in connection order, take XNA's four `PlayerIndex` slots; a
+fifth waits without one and takes the first slot that frees up. Every controller, gamepads included,
+is also a raw device in the joystick service: axes in kernel code order with hats excluded, buttons
+in the order controller databases number them, hats as POV positions, and a GUID in the same
+bus/vendor/product/version layout SDL uses, so a mapping keyed on one names the same device.
+
+**Events.** `PollEvents` delivers, after the frame's X events, a `DeviceEvent` for each connection
+(joystick first, then gamepad, sharing one id; the reverse on disconnection) and a
+`ControllerButtonEvent`/`ControllerAxisEvent` for every mapped change. The state a pad is in when it
+is opened — a trigger already held — is its state, not a change, and produces no event.
+
+**When the kernel's queue overflows** (`SYN_DROPPED`: nobody read the pad for a while), the damaged
+packet is discarded and the pad's whole state is read back, so the snapshot ends on what the pad is
+really doing rather than on whichever event happened to survive.
+
+**Rumble** is `FF_RUMBLE`, one effect per pad updated in place rather than re-uploaded; a duration
+of 0 means "until changed", which is what XNA's `SetVibration` means, and the kernel caps a duration
+at 65 535 ms. It needs write access to the node; a pad opened read-only, or without `FF_RUMBLE`,
+reports `rumble = false` in its capabilities and `SetRumble` returns false for it. Closing a pad
+removes its effect, so a game that exits mid-rumble does not leave the pad buzzing.
+
+**Controller mappings.** A pad that the kernel reports with only the joystick button range —
+common for generic HID pads that describe themselves as joysticks — says nothing about which of
+its buttons is A, so on its own it is a raw joystick, not an XNA gamepad. A mapping in the
+community controller database's format (`gamecontrollerdb.txt`, the one SDL-based games use) makes
+it one (`plans/plan_x11.md` X11-0160): the file named by `CNA_GAMECONTROLLERCONFIG_FILE`, then the
+entries in `CNA_GAMECONTROLLERCONFIG` (one per line), read when the controllers are first asked
+about. The same file works for both, byte for byte:
+
+```sh
+CNA_GAMECONTROLLERCONFIG_FILE=~/gamecontrollerdb.txt ./my-game
+```
+
+A mapping matches the device's bus, vendor, product and version — then any version of it — and,
+where the entry states one, the checksum of its name. Its button, axis and hat numbers are the
+database's: the joystick range and everything above it first, then the rest; hats that look digital
+(-1..1, or no fuzz, flat or resolution) as hats, the rest as axes. Every element kind is honoured —
+half axes (`+a2`), inverted axes (`a1~`), buttons on axes and axes on buttons (`-leftx:b4`), hat
+directions — with the database's rules: the first element whose range holds an axis's value
+decides, and the control of the element that decided before is let go. A labelled Nintendo-style
+entry is turned positional as other readers do; any other condition (`hint:`) takes the default the
+entry states. A mapping also overrides a pad the gamepad API already describes, which is how a user
+corrects one. CNA ships no database of its own: which one to use — the community file, a game's
+own — is the user's or the game's choice. All 269 Linux entries of the database SDL embeds are read
+(a test does, given the file).
+
+**Motion sensors** (`plans/plan_x11.md` X11-0166). `hid-playstation` and `hid-nintendo` give a pad
+a second node for its accelerometer and gyroscope (`INPUT_PROP_ACCELEROMETER`). It is opened with
+the pad — never on its own as a controller — and given to the pad with the same unique id (a
+Bluetooth address, a serial) or, failing one, the same physical path, whichever node appears first;
+`TryGetSensor` then answers in the SDL3 platform's units: metres per second squared, radians per
+second, `hid-nintendo`'s axis order turned into the gamepad convention. An axis group that states no
+resolution cannot be put into physical units and is not reported. The sensor can come and go on its
+own; the pad's capabilities follow.
+
+**Force feedback** (`plans/plan_x11.md` X11-0168). `GetHaptics()` serves every event node that can
+play an effect — a wheel, a flight stick, a pad, a phone's vibration motor — listed from sysfs
+without opening anything, as long as this user may write to it. Its id (above `0x20000`, apart from
+the controllers' and the X devices') lasts as long as the kernel's input device; a replug is a new
+device. `OpenFromJoystick` finds a controller's own node from its joystick id. Effects go to the
+kernel as SDL3's Linux backend puts them there — constant, the five periodic waveforms, ramp,
+spring, damper, inertia and friction on two axes, left/right as `FF_RUMBLE`, directions as the
+kernel's angle, the envelope and the trigger button — with three differences, each where SDL3's
+translation would do something the contract does not ask: a left/right magnitude is the kernel's
+full 16-bit range (SDL3 clamps it to half and doubles it, so everything above half strength is
+full); a length of 0 is the kernel's shortest, 1 ms (the kernel's 0 is "until stopped", which the
+contract spells `UINT32_MAX`); and a Custom waveform is refused rather than claimed. Simple rumble is
+a sine where the device has one, else both motors, as SDL3 chooses. Gain and autocenter are the
+kernel's `FF_GAIN` and `FF_AUTOCENTER`. The kernel reports neither how many effects play at once nor
+whether one is playing, and cannot pause: those answer -1, false and false. Effects belong to the
+open device: closing it — releasing the Haptic subsystem closes what the service opened — erases
+them, so nothing keeps pushing after a game quits. The default vibration device, for
+`VibrateController`, is the first that can rumble and is not a gamepad.
+
+**Not supported:** trigger rumble, light bars, player LEDs, touchpads and battery state all return
+false or empty.
+
+**What has been tested, and what has not.** Everything above runs against devices the kernel really
+creates through uinput — real evdev nodes, real hot-plug, real `SYN_DROPPED`, the real
+force-feedback upload handshake (`CnaX11EvdevTests`). What uinput cannot reproduce is a particular
+driver: the `xpad`, `hid-playstation` and `hid-nintendo` layouts are taken from the kernel's own
+documentation and drivers and pinned in `X11EvdevLayoutTests.cpp`, but have **not** been exercised
+with physical pads.
+
+Other Unix systems running X have no `<linux/input.h>`; their X11 build reports no gamepad and no
+joystick.
+
+---
+
+## Message boxes
+
+X has no dialog service, but a message box is only a window, and `GetDialogs()` draws one
+(`plans/plan_x11.md` X11-0167). It opens a connection of its own to the same server, used only by
+the calling thread: nothing of the platform's connection is touched, so the game's event queue is
+exactly as it was when the box closes. The call blocks until the box is answered, as on every
+backend.
+
+The window is what a window manager expects of a dialog: `_NET_WM_WINDOW_TYPE_DIALOG`;
+`WM_TRANSIENT_FOR` the parent and `_NET_WM_STATE_MODAL`, since the game is blocked on the box
+(neither when there is no parent, or the parent has gone); the keyboard asked for in `WM_HINTS`; a
+fixed size; the title in `_NET_WM_NAME` as UTF-8 and in `WM_NAME` as Latin-1; `WM_DELETE_WINDOW`. It is centred on its
+parent, or a third of the way down the screen without one, and never placed partly off the screen.
+A coloured band down its left edge gives the severity -- blue for information, amber for a warning,
+red for an error. The message keeps its own line breaks and is wrapped at spaces to about 520
+pixels (a word wider than that is broken, never inside a UTF-8 sequence); the buttons sit
+right-aligned along the bottom in the order given.
+
+Text is drawn in a Unicode core font -- the `-misc-fixed-...-iso10646-1` 6x13 face most servers
+carry, else any `iso10646-1` font -- through `XDrawString16`, which needs nothing of the process
+locale, so a box changes none of it (see [below](#what-the-backend-does-not-take-from-the-host-process)).
+A server with no Unicode font gets its built-in `fixed` and Latin-1, other characters shown as `?`;
+a character beyond U+FFFF, which a core font cannot index, and malformed UTF-8 are shown as U+FFFD.
+Core fonts are not anti-aliased: the box looks like an X application from before Xft, and needs no
+font library to do so.
+
+A click answers it (press and release on the same button), as do Return, keypad Enter and space on
+the focused button; Tab, Shift+Tab and the arrow keys move the focus ring. Escape and the window
+manager's close button answer "no choice" (-1). File dialogs refuse with
+`PlatformNotSupportedException` naming `NativeFileDialog`: a file chooser would have to be a
+toolkit, and starting one is starting another program.
+
+## File dialogs and URLs
+
+X has no file chooser, but every Linux desktop offers one on the session bus: `xdg-desktop-portal`,
+behind which GNOME, KDE, Xfce and the others put their own, the same one sandboxed applications
+use (`plans/plan_x11.md` X11-0169). The backend asks for it over D-Bus -- libdbus loaded at run
+time, nothing started: the bus starts the portal itself when it is first asked. Whether there is
+one is settled when the platform is made, without starting it: the bus says the portal is running,
+or that it would start it. Without a session bus, without libdbus, or without a portal,
+`nativeFileDialog` is false and the three file dialogs refuse. The session bus is
+`DBUS_SESSION_BUS_ADDRESS`, else the user bus at `$XDG_RUNTIME_DIR/bus`; libdbus's own way out --
+starting a bus with `dbus-launch` -- is never taken.
+
+A dialog is a request the portal answers when the user has chosen: `Show*` returns at once, and the
+callback runs from a later `PollEvents`, on the game's thread, with the chosen paths -- or none,
+when the user cancelled, the portal could not show a chooser, or the bus went away. Filters become
+the portal's case-insensitive globs (`png` is `*.[pP][nN][gG]`); a save dialog's default location
+is a folder, an existing file, or a name to suggest, in a folder or not; a folder dialog is
+`OpenFile` with `directory`. With a parent window the chooser is modal to it (`x11:<xid>`). A dialog
+still open when the platform is destroyed is never answered. `PollEvents` touches the bus only
+while a dialog is open.
+
+`OpenUrl` hands a URL to the portal's `OpenURI`, which opens it in the user's default handler; a
+`file:` URL is handed over as an open file descriptor (`OpenFile`), which is how the portal takes
+local files. It waits for the portal to accept the request (at most five seconds), not for the
+handler to start.
+
+## Keeping the screen on
+
+`SetScreenSaverEnabled(false)` -- XNA's `Guide.IsScreenSaverEnabled = false` -- keeps the screen from
+blanking while the game runs (`plans/plan_x11.md` X11-0170). The screen saver a user sees is the
+desktop's, not the X server's -- GNOME, for one, leaves the server's own saver off and blanks the
+screen itself -- and desktops take such requests on the session bus, so that is asked first:
+`org.freedesktop.ScreenSaver.Inhibit`, on a connection of its own that lasts exactly as long as the
+request. The desktop forgets the request the moment that connection closes, however the game ends.
+Without such a service the X server's saver is suspended for this client alone
+(`XScreenSaverSuspend`, MIT-SCREEN-SAVER 1.1, libXss), which the server also gives back when the
+client goes away -- a test kills a game holding it with `SIGKILL` and watches the saver come on. Only
+a server without that extension has its saver's timeout set to zero and restored afterwards, the one
+way that outlives a crashed game. `IsScreenSaverEnabled` is what the game asked for: false exactly
+while it keeps the screen on. The desktop's own idle settings are not a client's to read.
+
+## Tray icons
+
+`GetTray()` puts icons in the system tray through X11's own protocol, the freedesktop System Tray
+Protocol (`plans/plan_x11.md` X11-0171): an icon is a small window the tray embeds with XEmbed when
+the icon asks to be docked. Xfce, MATE, LXDE, i3bar, polybar and the like show such icons
+themselves; KDE Plasma shows them through its XEmbed bridge; GNOME has no tray, and `tray` is false
+where no client owns `_NET_SYSTEM_TRAY_S<screen>` when the platform is made. The contract gives an
+icon no picture, so it is a badge with the tooltip's first letter.
+
+A click on the icon opens its flat menu, a popup window drawn with Xlib like the message box: a check
+box for a checkable entry, greyed text for one that cannot be chosen, the entry under the pointer
+lit. A click on an entry toggles a checkable one first, then runs its callback from `PollEvents`, as
+the native menus of the other backends do. A click anywhere else closes the menu without choosing
+anything. The tooltip appears when the pointer has rested on the icon for 0.6 s. A tray that restarts
+announces itself, and every icon docks with it again, made anew if the old tray took it along. The
+service has a connection of its own, read by `PollEvents`; the game's windows and their events are
+not involved.
 
 ## Graphics bridges
 
@@ -280,6 +721,15 @@ GL-capable visual already chosen. `WindowDescription::renderIntent` and `openGlF
 exactly that information, which is why no generic contract change was needed. A window created
 without `WindowRenderIntent::OpenGl` refuses to host a context, with a message saying so, rather
 than producing a `BadMatch` inside the driver several calls later.
+
+What a window leaves unstated in `openGlFramebuffer` is the platform default, and that default is
+what a game's back buffer needs: double-buffered, 24-bit depth, 8-bit stencil -- more than SDL's own
+default (double-buffered, 16-bit depth), never less -- asked for less only where the server has
+nothing better (`plans/plan_x11.md` X11-0172). The EasyGL renderers state their framebuffer only when
+they create the context, which on X11 is too late to change the window; with a default of "whatever
+GLX lists first" they got a single-buffered visual without a depth buffer, and the house demo drew
+every wall through every other. A context that asks for more than its window's visual has is created
+all the same -- nothing can be added to the window any more -- and says so on standard error.
 
 **Vulkan uses `VK_KHR_xlib_surface`.** `GetInstanceExtensions()` returns
 `{VK_KHR_surface, VK_KHR_xlib_surface}`, and `vkCreateXlibSurfaceKHR` is resolved through the
@@ -322,6 +772,14 @@ effect of opening a window, and a program that started printing `3,14` after add
 no way to connect the two. So: only `LC_CTYPE`, only when it is still the startup `"C"` default,
 and only from the environment the user already set.
 
+**No session bus is started.** The desktop portal and the desktop's screen saver are asked for on
+the bus the session already has; where there is none, there are none, rather than a `dbus-launch`
+started on the game's behalf.
+
+**The X server's settings are left as they were.** Keeping the screen on suspends the server's saver
+for this client (or asks the desktop) instead of zeroing the server-wide timeout, which a crashed
+game would leave zeroed.
+
 No signal handler is installed, no environment variable is set, and no other process-global state
 is modified.
 
@@ -329,9 +787,11 @@ is modified.
 
 ## Portability
 
-The backend is X11, not Linux. Nothing in it is named `Linux*`, and nothing outside
-`modules/platform/src/X11/` learns that the host is X11 — which is what keeps a future
-`CNA_PLATFORM=WAYLAND` an independent addition rather than a refactor.
+The backend is X11, not Linux. Nothing outside `modules/platform/src/X11/` learns that the host is
+X11 — which is what keeps a future `CNA_PLATFORM=WAYLAND` an independent addition rather than a
+refactor. The one Linux-specific part is the controller support in `modules/platform/src/Linux/`,
+which knows nothing about X and is compiled only where `<linux/input.h>` exists; a Wayland backend
+would take it unchanged.
 
 The only non-POSIX dependencies are the X client libraries themselves and `clock_gettime`/
 `clock_nanosleep` for timing, both of which are POSIX. MIT-SHM uses System V shared memory, and is
@@ -342,7 +802,7 @@ exist; that has **not** been tested, and is recorded as untested rather than cla
 
 ## Running the tests
 
-Three ctest entries, split by what each actually needs:
+Seven ctest entries, split by what each actually needs:
 
 ```sh
 ctest --test-dir cmake-build-x11 -R 'CnaX11'
@@ -350,14 +810,36 @@ ctest --test-dir cmake-build-x11 -R 'CnaX11'
 
 | Test | Needs | Covers |
 |---|---|---|
-| `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan |
-| `CnaX11IntegrationTests` | `Xvfb` | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy |
+| `CnaX11MappingTests` | nothing | scancode and keysym tables, modifiers, wheel/button numbering, focus filtering, auto-repeat coalescing, the SDL-containment scan, controller classification and mapping from synthetic device descriptions |
+| `CnaX11InputMethodTests` | `Xvfb` + ibus (with its XIM server), `xdotool`, `setxkbmap` | composition with and without the application drawing it, a commit, abandoning a composition, and no keys taken outside text entry — against a private ibus the launcher starts (`--with-ibus`) |
+| `CnaX11EvdevTests` | a writable `/dev/uinput` and readable event nodes; no display | controllers the kernel really creates: hot-plug, events, snapshots, slots, `SYN_DROPPED`, rumble, raw joysticks, force-feedback wheels and vibrators, the platform with no X server; each test skips where the machine grants neither |
+| `CnaX11IntegrationTests` | `Xvfb`; `dbus-daemon` for the portal tests | connection, windows, geometry, events, native handles, displays, keyboard, pointer, text input, clipboard interop with `xclip`, GLX contexts, the surface presenter, the error policy, drag and drop against a real XDND source — a second process of the test binary — message boxes, and file dialogs and `OpenUrl` against a portal played on a private bus |
 | `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | EWMH fullscreen, maximise, minimise, restore, focus, multi-window close semantics |
+| `CnaX11TouchscreenTests` | writable `/dev/uinput`, readable event nodes, `Xorg` with the `dummy` video and `evdev` input drivers (`CNA_X11_XORG_MODULE_PATH` adds module directories) | real contacts: a uinput touchscreen and pen that a private, rootless Xorg takes **exclusively** — the suite checks that grab before every event it writes, so nothing reaches the desktop's own compositor; opt-in through the entry's `CNA_X11_TEST_TOUCHSCREEN=1` |
+| `CnaX11ExclusiveFullscreenTests` | `Xvfb` + `openbox`; **the launcher's own server only** | exclusive fullscreen changes the display mode, so it runs only where `CNA_X11_PRIVATE_TEST_SERVER` is set: mode choice, the screen around the CRTC, SetSize while exclusive, hide/show, focus loss and return, every restore path, a mode someone else set, and a process killed with `SIGKILL` having its mode restored by its guardian |
+
+`X11_House3D_SmokeTest_<renderer>` runs the house demo for a few frames on the launcher's server, once
+per renderer compiled in, and its last frame looks at what it drew (`--depth-probe`): two planes over
+the back buffer's centre, the nearer drawn first, must still show the nearer. Without that check the
+test passed while every wall showed through every other (`plans/plan_x11.md` X11-0172/X11-0173); it
+is skipped only for the renderers that keep no pixels to read back (`HEADLESS`, `STUB`). SDL3's
+`EasyGL_House3D_SmokeTest` does the same.
+
+Where the build has a renderer that draws into a window, `X11_House3D_ExclusiveFullscreen_<renderer>`
+runs a real game with `IsFullScreen` on the launcher's server
+(`tools/platform/x11_exclusive_fullscreen_game.sh`, needing `openbox` and `xrandr`): the monitor
+switches and the window covers it, a normal exit restores the mode, and so does a `SIGKILL`.
 
 `tools/platform/x11_test_server.sh` starts a private `Xvfb` on a display number it *searches for*
 rather than a hardcoded `:99` — a fixed number collides with a parallel ctest job and the collision
 looks like flakiness — and exits 77 (ctest's skip code) where `Xvfb` or `openbox` is absent, so a
 machine without them records a skip rather than a failure.
+
+**No test reaches the desktop's session bus.** A file chooser opened on it would open on the
+desktop of whoever runs the tests, so the launcher, ctest and the test binary itself (as it loads)
+all point `DBUS_SESSION_BUS_ADDRESS` at nothing. The portal tests start a private `dbus-daemon` --
+whose configuration names no service it could start, so no real portal can appear on it -- and play
+the portal on it themselves.
 
 The launcher owns the *server*; the window-manager suite's own fixture owns the *window manager*,
 because a test that needs one also needs to know when it became ready. Having both start `openbox`
@@ -369,8 +851,9 @@ EWMH fullscreen and focus do not happen there at all; asserting them against one
 environment rather than the backend.
 
 **What Xvfb cannot cover**, and which therefore needs a real desktop: a physical GPU's GLX driver,
-a real compositor's fullscreen behaviour, multi-monitor XRandR layouts and hotplug, real input
-devices and a real input-method server (ibus, fcitx). `plans/plan_x11.md` records those gaps
+a real compositor's fullscreen behaviour, multi-monitor XRandR layouts and hotplug, a real
+monitor's mode change (Xvfb has one CRTC and switches instantly), and real input devices. A real input-method server *is* covered — the launcher runs a private ibus — but only with
+its core engine; a language engine (Hangul, Pinyin, Anthy) in a user's session has not been driven. `plans/plan_x11.md` records those gaps
 rather than treating a green Xvfb run as equivalent.
 
 ---
@@ -385,9 +868,10 @@ nm -uC cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -c SDL_   # 0
 Three independent checks keep it that way rather than leaving it to a note:
 
 1. `X11IsSdlFreeTests.cpp` `#error`s if an SDL header ever reaches a translation unit that also
-   includes this backend, and scans every file under `src/X11/` — with comments and string
-   literals stripped, so the documentation may explain SDL while the code may not call it.
-2. `tools/platform/sdl_ratchet.py` now **denylists** `modules/platform/src/X11/` from the
+   includes this backend, and scans every file under `src/X11/` and `src/Linux/` — with comments
+   and string literals stripped, so the documentation may explain SDL while the code may not call it.
+2. `tools/platform/sdl_ratchet.py` now **denylists** `modules/platform/src/X11/` and
+   `modules/platform/src/Linux/` from the
    module-wide exemption `modules/platform/` otherwise has. The platform module is allowlisted
    because it is the one place SDL may be linked at all; the X11 backend inside it is specifically
    a place where it may not.

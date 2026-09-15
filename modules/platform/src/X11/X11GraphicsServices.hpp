@@ -73,9 +73,14 @@ namespace CNA::Platform::X11 {
         /**
          * @brief Chooses a visual for a window that will host a GL context.
          *
-         * @param depthBits Requested depth precision; zero for the platform default.
-         * @param stencilBits Requested stencil precision; zero for the platform default.
-         * @param doubleBuffered Whether the visual must support double buffering.
+         * The platform default, where a caller leaves something unstated, is what a game's back
+         * buffer needs: double-buffered, 24-bit depth, 8-bit stencil -- degraded step by step only
+         * where the server has nothing better (plans/plan_x11.md X11-0172).
+         *
+         * @param depthBits Requested depth precision, a minimum; zero for the platform default.
+         * @param stencilBits Requested stencil precision, a minimum; zero for the platform default.
+         * @param doubleBuffered Whether the visual must support double buffering; false still
+         * prefers it.
          * @param samples Requested MSAA sample count; zero or one disables it.
          * @return The chosen visual; its `visual` member is null when nothing matched.
          */
@@ -149,6 +154,9 @@ namespace CNA::Platform::X11 {
         };
 
         [[nodiscard]] X11Window* FindWindow(WindowId id) const;
+        /// One glXChooseFBConfig: exactly these minima, this buffering, these samples.
+        [[nodiscard]] X11GlVisual ChooseExactVisual(int depthBits, int stencilBits, bool doubleBuffered,
+                                                    int samples) const;
 
         X11Connection& connection_;
         bool available_ = false;

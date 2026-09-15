@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -48,6 +49,7 @@ TEST_F(Sdl3ServiceTest, ServicesTheCapabilitySetClaimsAreActuallyReturned)
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
 
     EXPECT_EQ(platform_->GetClipboard() != nullptr, capabilities.clipboard);
+    EXPECT_EQ(platform_->GetPrimarySelection() != nullptr, capabilities.primarySelection);
     EXPECT_EQ(platform_->GetDisplays() != nullptr, capabilities.multipleDisplays);
     EXPECT_NE(platform_->GetFileSystem(), nullptr) << "every platform can resolve paths";
     EXPECT_NE(platform_->GetSystemInfo(), nullptr) << "system info is always answerable";
@@ -228,6 +230,62 @@ protected:
 
     bool acquired_ = false;
 };
+
+TEST_F(Sdl3DisplayTest, ThePrimarySelectionIsSeparateFromTheClipboard)
+{
+    // plans/plan_x11.md X11-0157. It takes the X server's selections, so only on the X11 test
+    // launcher's own server -- never a desktop's.
+    const char* privateServer = std::getenv("CNA_X11_PRIVATE_TEST_SERVER");
+    if (privateServer == nullptr || std::string(privateServer) != "1")
+    {
+        GTEST_SKIP() << "takes the server's selections; needs tools/platform/x11_test_server.sh";
+    }
+#if defined(__unix__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    ASSERT_TRUE(platform_->GetCapabilities().primarySelection);
+    IPlatformClipboard* primary = platform_->GetPrimarySelection();
+    ASSERT_NE(primary, nullptr);
+    platform_->GetClipboard()->SetText("copied");
+    primary->SetText("selected \xE2\x9C\x93");
+    EXPECT_EQ(primary->GetText(), "selected \xE2\x9C\x93");
+    EXPECT_TRUE(primary->HasText());
+    EXPECT_EQ(platform_->GetClipboard()->GetText(), "copied");
+#else
+    EXPECT_FALSE(platform_->GetCapabilities().primarySelection);
+    EXPECT_EQ(platform_->GetPrimarySelection(), nullptr);
+#endif
+}
+
+TEST_F(Sdl3DisplayTest, TheClipboardCarriesFormatsOtherThanText)
+{
+    // plans/plan_x11.md X11-0158, through SDL's clipboard-data calls. Takes the X server's
+    // clipboard, so only on the X11 test launcher's own server.
+    const char* privateServer = std::getenv("CNA_X11_PRIVATE_TEST_SERVER");
+    if (privateServer == nullptr || std::string(privateServer) != "1")
+    {
+        GTEST_SKIP() << "takes the server's clipboard; needs tools/platform/x11_test_server.sh";
+    }
+    ASSERT_TRUE(platform_->GetCapabilities().clipboardData);
+    IPlatformClipboard& clipboard = *platform_->GetClipboard();
+    const std::string html = "<b>bold</b>";
+    const std::string plain = "bold \xE2\x9C\x93";
+    clipboard.SetData({{"text/html", std::vector<std::uint8_t>(html.begin(), html.end())},
+                       {"text/plain;charset=utf-8", std::vector<std::uint8_t>(plain.begin(), plain.end())}});
+    const std::vector<std::string> types = clipboard.GetMimeTypes();
+    EXPECT_NE(std::find(types.begin(), types.end(), "text/html"), types.end());
+    EXPECT_TRUE(clipboard.HasData("text/html"));
+    EXPECT_FALSE(clipboard.HasData("image/png"));
+    EXPECT_EQ(clipboard.GetData("text/html"), std::vector<std::uint8_t>(html.begin(), html.end()));
+    EXPECT_EQ(clipboard.GetText(), plain);
+
+    std::vector<std::uint8_t> png(4096);
+    for (std::size_t index = 0; index < png.size(); ++index)
+    {
+        png[index] = static_cast<std::uint8_t>(index * 131u);
+    }
+    clipboard.SetData({{"image/png", png}});
+    EXPECT_EQ(clipboard.GetData("image/png"), png);
+    EXPECT_FALSE(clipboard.HasData("text/html")) << "a new copy replaces every format";
+}
 
 TEST_F(Sdl3DisplayTest, EnumeratedDisplaysAreWellFormed)
 {

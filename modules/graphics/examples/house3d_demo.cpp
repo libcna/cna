@@ -41,9 +41,12 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -60,6 +63,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -209,6 +213,9 @@ void FontDrawText(std::vector<std::uint8_t>& buf, int bufW, int bufH,
 
 class House3DDemo final : public Game {
 public:
+    /** @brief What the smoke run's depth probe saw. */
+    enum class DepthProbe { NotRun, Occludes, SeenThrough, NoPixels };
+
     House3DDemo()
     {
         // A 3D scene with depth testing needs a depth buffer, and the XNA way to get one is to
@@ -261,7 +268,20 @@ protected:
 
         if (smokeFramesLeft_ > 0)
         {
-            if (--smokeFramesLeft_ == 0) { Exit(); return; }
+            if (smokeFramesLeft_ > 1)
+            {
+                --smokeFramesLeft_;
+            }
+            else if (!depthProbeRequested_ || depthProbe_ != DepthProbe::NotRun)
+            {
+                Exit();
+                return;
+            }
+            else
+            {
+                // The last frame is the depth probe's, however many updates a slow frame gets.
+                return;
+            }
         }
 
         const float dt = static_cast<float>(
@@ -404,6 +424,11 @@ protected:
 
     void Draw(const GameTime&) override {
         auto& device = getGraphicsDeviceProperty();
+        if (smokeFramesLeft_ == 1 && depthProbeRequested_ && depthProbe_ == DepthProbe::NotRun)
+        {
+            depthProbe_ = ProbeBackBufferDepth();
+            return;
+        }
         device.Clear(Color(135, 196, 230, 255), 1.0f); // sky blue
 
         // SpriteBatch applies its own XNA/FNA default render states and deliberately leaves them
@@ -1274,9 +1299,82 @@ private:
 
     // When >= 0, the demo exits after this many more frames (smoke-test mode).
     int smokeFramesLeft_ = -1;
+    DepthProbe depthProbe_ = DepthProbe::NotRun;
+    bool depthProbeRequested_ = false;
 
 public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
+
+    // The probe reads the back buffer, which XNA allows only on a HiDef device.
+    void RequestDepthProbe()
+    {
+        depthProbeRequested_ = true;
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+    }
+
+
+    [[nodiscard]] DepthProbe GetDepthProbe() const { return depthProbe_; }
+
+    // plans/plan_x11.md X11-0172: the smoke run looks at the back buffer as well as drawing into
+    // it. Frames were drawn and the test passed while every wall showed through every other: the
+    // window's GL visual had no depth buffer. Two planes over the back buffer's centre, the nearer
+    // drawn first under the default depth state -- what is seen must still be the nearer.
+    DepthProbe ProbeBackBufferDepth()
+    {
+        auto& device = getGraphicsDeviceProperty();
+        const auto& viewport = device.getViewportProperty();
+        const Rectangle centre(viewport.getWidthProperty() / 2, viewport.getHeightProperty() / 2, 1, 1);
+        const auto read = [&device, &centre] {
+            Color pixel(0, 0, 0, 0);
+            device.GetBackBufferData(&centre, &pixel, 0, 1);
+            return pixel;
+        };
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color::Blue, 1.0f, 0);
+        if (read() != Color::Blue)
+        {
+            return DepthProbe::NoPixels;  // A renderer that keeps no back buffer to read.
+        }
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        BasicEffect probe(device);
+        probe.VertexColorEnabled = true;
+        probe.World = Matrix::getIdentityProperty();
+        probe.View = Matrix::getIdentityProperty();
+        probe.Projection = Matrix::getIdentityProperty();
+        const auto plane = [](const float z, const Color& colour, VertexPositionColor* out) {
+            const Vector3 corners[6] = {{-0.5f, -0.5f, z}, {0.5f, -0.5f, z}, {-0.5f, 0.5f, z},
+                                        {0.5f, -0.5f, z},  {0.5f, 0.5f, z},  {-0.5f, 0.5f, z}};
+            for (int index = 0; index < 6; ++index) { out[index] = VertexPositionColor(corners[index], colour); }
+        };
+        VertexPositionColor vertices[12];
+        plane(0.25f, Color::Red, vertices);       // Nearer, drawn first...
+        plane(0.75f, Color::Lime, vertices + 6);  // ...and the farther one over it.
+        VertexBuffer buffer(device, 12);
+        buffer.SetData(vertices, 12);
+        device.SetVertexBuffer(&buffer);
+        for (auto& pass : probe.getCurrentTechniqueProperty()->getPassesProperty())
+        {
+            pass.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 4);
+        }
+        const Color seen = read();
+        std::cout << "house3d depth probe: centre R" << static_cast<int>(seen.getRProperty()) << " G"
+                  << static_cast<int>(seen.getGProperty()) << " B" << static_cast<int>(seen.getBProperty()) << "\n";
+        if (seen == Color::Red) { return DepthProbe::Occludes; }
+        if (seen == Color::Lime) { return DepthProbe::SeenThrough; }
+        return DepthProbe::NoPixels;  // Drew nothing there at all: a renderer that does not rasterize.
+    }
+
+    // Starts in fullscreen at a back-buffer size, the way an XNA game asks for it -- IsFullScreen
+    // on the GraphicsDeviceManager -- which is exclusive fullscreen: the monitor switches to the
+    // display mode that fits (plans/plan_x11.md X11-0153).
+    void SetFullScreen(int width, int height)
+    {
+        graphics_->setPreferredBackBufferWidthProperty(width);
+        graphics_->setPreferredBackBufferHeightProperty(height);
+        graphics_->setIsFullScreenProperty(true);
+    }
 };
 
 int main(int argc, char* argv[]) {
@@ -1284,12 +1382,42 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; ++i)
     {
-        if (std::string(argv[i]) == "--smoke" && i + 1 < argc)
+        if (std::string(argv[i]) == "--depth-probe")
+            game.RequestDepthProbe();  // With --smoke: the last frame checks the depth buffer.
+        else if (std::string(argv[i]) == "--smoke" && i + 1 < argc)
             game.SetSmokeFrames(std::stoi(argv[++i]));
         else if (std::string(argv[i]) == "--smoke")
             game.SetSmokeFrames(3);
+        else if (std::string(argv[i]) == "--fullscreen" && i + 1 < argc)
+        {
+            // WIDTHxHEIGHT, e.g. 800x600.
+            const std::string size = argv[++i];
+            const std::size_t separator = size.find('x');
+            if (separator == std::string::npos)
+            {
+                std::cerr << "--fullscreen expects WIDTHxHEIGHT, e.g. 800x600\n";
+                return 2;
+            }
+            game.SetFullScreen(std::stoi(size.substr(0, separator)),
+                               std::stoi(size.substr(separator + 1)));
+        }
     }
 
     game.Run();
+    switch (game.GetDepthProbe())
+    {
+        case House3DDemo::DepthProbe::SeenThrough:
+            std::cerr << "house3d depth probe FAILED: the farther plane was drawn over the nearer one; the "
+                         "back buffer has no working depth buffer\n";
+            return 1;
+        case House3DDemo::DepthProbe::NoPixels:
+            std::cerr << "house3d depth probe FAILED: what was drawn could not be read back from the back buffer\n";
+            return 1;
+        case House3DDemo::DepthProbe::Occludes:
+            std::cout << "house3d depth probe: the nearer plane occludes\n";
+            return 0;
+        case House3DDemo::DepthProbe::NotRun:
+            return 0;
+    }
     return 0;
 }

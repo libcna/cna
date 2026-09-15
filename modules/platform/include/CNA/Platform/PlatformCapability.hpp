@@ -101,7 +101,28 @@ namespace CNA::Platform {
          * as SDL does on Android. Applications must include the CNA entrypoint header for this
          * to work; see docs/platform-entrypoint-audit.md.
          */
-        ManagedEntrypoint
+        ManagedEntrypoint,
+        /**
+         * @brief Files and text dropped onto a window are delivered as `DropEvent`s.
+         *
+         * Last in the enumeration rather than next to `Clipboard`, so that no value an earlier
+         * build recorded changes meaning.
+         */
+        DragAndDrop,
+        /**
+         * @brief The primary selection -- the text most recently selected, which X11 and Wayland
+         * desktops paste with the middle mouse button -- can be read and written.
+         *
+         * Appended for the same reason as `DragAndDrop`.
+         */
+        PrimarySelection,
+        /**
+         * @brief The clipboard carries formats other than text -- an image, HTML beside its plain
+         * text -- through `IPlatformClipboard`'s data members.
+         *
+         * Appended for the same reason as `DragAndDrop`.
+         */
+        ClipboardData
     };
 
     /**

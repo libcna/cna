@@ -3,7 +3,9 @@
 #include "X11Display.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "X11ContentScale.hpp"
 #include "X11Error.hpp"
+#include "X11ModeSwitch.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -53,17 +55,24 @@ namespace CNA::Platform::X11 {
 
         InternAtoms();
         DetectExtensions();
-        ReadDisplayScale();
 
         // The root window's property set is how a window manager announces itself, including one
         // that starts after this application did. Selecting for it here is what makes
         // RefreshWindowManagerState() reachable without polling.
         XSelectInput(display_, root_, PropertyChangeMask | StructureNotifyMask);
         RefreshWindowManagerState();
+
+        modeSwitcher_ = std::make_unique<X11ModeSwitcher>(*this);
+        // After the root's input selection: the scale is followed through root property changes
+        // and the settings manager's announcements, which arrive through it.
+        contentScale_ = std::make_unique<X11ContentScale>(*this);
     }
 
     X11Connection::~X11Connection()
     {
+        // Every display mode exclusive fullscreen still holds goes back while there is still a
+        // connection to send it over.
+        modeSwitcher_.reset();
         if (display_ != nullptr)
         {
             // XCloseDisplay FIRST, then unregister. Closing flushes the output buffer and reads
@@ -81,7 +90,7 @@ namespace CNA::Platform::X11 {
     void X11Connection::InternAtoms()
     {
         // One round trip for the whole set rather than one per atom: XInternAtoms is the batched
-        // form, and this runs at connection time where 25 sequential round trips would be a
+        // form, and this runs at connection time where 37 sequential round trips would be a
         // visible startup cost on a remote display.
         static const char* const names[] = {
             "WM_PROTOCOLS",
@@ -109,6 +118,18 @@ namespace CNA::Platform::X11 {
             "INCR",
             "CNA_SELECTION",
             "XdndAware",
+            "XdndEnter",
+            "XdndPosition",
+            "XdndStatus",
+            "XdndLeave",
+            "XdndDrop",
+            "XdndFinished",
+            "XdndSelection",
+            "XdndTypeList",
+            "XdndActionCopy",
+            "text/uri-list",
+            "text/plain",
+            "text/plain;charset=utf-8",
         };
         constexpr int kCount = static_cast<int>(sizeof(names) / sizeof(names[0]));
         Atom interned[kCount] = {};
@@ -140,6 +161,18 @@ namespace CNA::Platform::X11 {
         atoms_.incr = interned[index++];
         atoms_.cnaSelection = interned[index++];
         atoms_.xdndAware = interned[index++];
+        atoms_.xdndEnter = interned[index++];
+        atoms_.xdndPosition = interned[index++];
+        atoms_.xdndStatus = interned[index++];
+        atoms_.xdndLeave = interned[index++];
+        atoms_.xdndDrop = interned[index++];
+        atoms_.xdndFinished = interned[index++];
+        atoms_.xdndSelection = interned[index++];
+        atoms_.xdndTypeList = interned[index++];
+        atoms_.xdndActionCopy = interned[index++];
+        atoms_.textUriList = interned[index++];
+        atoms_.textPlain = interned[index++];
+        atoms_.textPlainUtf8 = interned[index++];
     }
 
     void X11Connection::DetectExtensions()
@@ -179,11 +212,15 @@ namespace CNA::Platform::X11 {
 #if defined(CNA_X11_HAVE_XI)
         if (XQueryExtension(display_, "XInputExtension", &opcode, &event, &error) == True)
         {
+            // 2.2 is the version with touch events (X11-0155). The server answers with the version
+            // it will use -- the lower of the two -- and a client announces one version only, so
+            // this is the one call. Raw motion, the 2.0 feature relative mode uses, is unchanged.
             int xiMajor = 2;
-            int xiMinor = 0;
+            int xiMinor = 2;
             if (XIQueryVersion(display_, &xiMajor, &xiMinor) == Success)
             {
                 xi2Opcode_ = opcode;
+                xi2Touch_ = xiMajor > 2 || (xiMajor == 2 && xiMinor >= 2);
             }
         }
 #endif
@@ -204,46 +241,34 @@ namespace CNA::Platform::X11 {
             }
         }
 #endif
-    }
 
-    void X11Connection::ReadDisplayScale()
-    {
-        // plans/plan_x11.md design decision 10. Xft.dpi is the one scale value an X session sets
-        // deliberately; XRandR physical millimetres are routinely fiction (a 0x0 mm or 1x1 mm
-        // output is common enough that deriving DPI from it produces absurd numbers), so the
-        // fallback is exactly 1.0 rather than a heuristic.
-        displayScale_ = 1.0f;
-
-        char* resourceText = XResourceManagerString(display_);
-        if (resourceText == nullptr)
+        // Xwayland 21.1 and later announce themselves with an extension; older ones are known by
+        // the names they give their RandR outputs.
+        if (XQueryExtension(display_, "XWAYLAND", &opcode, &event, &error) == True)
         {
-            return;
+            isXwayland_ = true;
         }
-
-        XrmInitialize();
-        XrmDatabase database = XrmGetStringDatabase(resourceText);
-        if (database == nullptr)
+#if defined(CNA_X11_HAVE_XRANDR)
+        else if (randrEventBase_ >= 0)
         {
-            return;
-        }
-
-        char* type = nullptr;
-        XrmValue value{};
-        if (XrmGetResource(database, "Xft.dpi", "Xft.Dpi", &type, &value) == True &&
-            value.addr != nullptr)
-        {
-            const double dpi = std::atof(value.addr);
-            const double scale = dpi / 96.0;
-            // A scale outside this range is not a high-DPI monitor, it is a broken resource
-            // value, and honouring it would produce a window whose logical and pixel sizes have
-            // no sane relationship. The contract's own normalisation rule says an invalid native
-            // scale becomes 1.0.
-            if (scale >= 0.5 && scale <= 8.0)
+            X11ErrorTrap trap(display_);
+            if (XRRScreenResources* resources = XRRGetScreenResourcesCurrent(display_, root_))
             {
-                displayScale_ = static_cast<float>(scale);
+                if (resources->noutput > 0)
+                {
+                    if (XRROutputInfo* output =
+                            XRRGetOutputInfo(display_, resources, resources->outputs[0]))
+                    {
+                        isXwayland_ = output->name != nullptr &&
+                                      std::strncmp(output->name, "XWAYLAND", 8) == 0;
+                        XRRFreeOutputInfo(output);
+                    }
+                }
+                XRRFreeScreenResources(resources);
             }
+            trap.Sync();
         }
-        XrmDestroyDatabase(database);
+#endif
     }
 
     void X11Connection::RefreshWindowManagerState()
@@ -375,6 +400,39 @@ namespace CNA::Platform::X11 {
         event.xclient.data.l[4] = 1;
         return XSendEvent(display_, root_, False,
                           SubstructureNotifyMask | SubstructureRedirectMask, &event) != 0;
+    }
+
+    void X11Connection::WatchForeignWindow(const ::Window window)
+    {
+        if (window == kNone)
+        {
+            return;
+        }
+        if (foreignWatches_[window]++ == 0)
+        {
+            // Another client's window: the mask is this client's own and changes nothing for
+            // anyone else.
+            XSelectInput(display_, window, PropertyChangeMask | StructureNotifyMask);
+        }
+    }
+
+    void X11Connection::UnwatchForeignWindow(const ::Window window)
+    {
+        const auto found = foreignWatches_.find(window);
+        if (found == foreignWatches_.end())
+        {
+            return;
+        }
+        if (--found->second > 0)
+        {
+            return;
+        }
+        foreignWatches_.erase(found);
+        // Usually the window is already gone -- its destruction is why the watch ended -- and
+        // BadWindow is then the expected answer rather than a failure.
+        X11ErrorTrap trap(display_);
+        XSelectInput(display_, window, NoEventMask);
+        trap.Sync();
     }
 
 } // namespace CNA::Platform::X11

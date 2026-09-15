@@ -24,6 +24,26 @@ gaps". No physical person tested anything. Win32 evidence is MinGW + Wine only a
 Windows validation**; docs/testing-win32-native.md and tools/platform/validate_win32_native.ps1 are
 ready for the first native run (a Windows 10 VirtualBox VM the owner prepared).
 
+What comes next, in the recommended order with estimates and what each step needs from the owner,
+is in "Next steps" -- first of all a CI that has been red for unrelated reasons since before this
+pass.
+
+**Continued on 2026-09-15 on branch `x11`** (the owner approved the X11 part of "Next steps", about
+120 hours; Win32 and Wayland out of scope): CI defects NPV-0124..NPV-0126 and NPV-0128..NPV-0131,
+the INCR follow-up NPV-0127, **gamepads and joysticks through Linux evdev**, **sound for SDL-free
+builds**, **input-method composition** and **exclusive fullscreen through XRandR**
+(`plans/plan_x11.md` X11-0150..X11-0153) are done, and so is the rest of the X11 list,
+`plans/plan_x11.md` Phase M (X11-0154..X11-0158), and after it Phase N (X11-0160..X11-0173):
+controller mappings, MP3/FLAC, microphone capture, battery and host facts, the clipboard handed to a
+clipboard manager, input-device enumeration, motion sensors, message boxes, force feedback, file
+dialogs and OpenUrl through the desktop portal, screen-saver inhibition, the X11 tray -- and two
+from the real desktop: the owner ran the house demo there and found its walls drawn through each
+other, a GL window without a depth buffer (X11-0172, `plans/plan_x11.md` D-18), and the house smoke
+test now looks at its depth buffer (X11-0173). **The owner considers the X11 implementation complete
+(2026-09-15)**: what is left is battle-testing (`plans/plan_x11.md` §9, "Real-desktop validation"),
+not a missing subsystem. The session stayed locked through the automated work, so the desktop
+scenarios below remain unrun.
+
 Session events recorded honestly: gnome-shell crashed at 21:23:27 (untrapped BadWindow on its own
 X_SendEvent, core dump) and the owner logged in again -- no process of this validation was connected
 to `:0` then (the last had exited at 21:04:08); the second external monitor was disconnected during
@@ -173,6 +193,41 @@ that fails without it.
 | NPV-0121 | **Every X11 build linked libGLX**, so HEADLESS/SOFTWARE X11 binaries needed a GL implementation to start and all five `ModuleLinkClosure_NativeSdkFree_*` gates failed. | full ctest of the SDL-free X11 HEADLESS build | GLX 1.3 entry points resolved at run time (as the Vulkan loader already was); `openGlContext` false without a GL library; hardware GLX 15/15 afterwards | `12dbfedff` |
 | NPV-0122 | `X11IsSdlFree` scan failed from the source root: `__FILE__` is relative under the mandatory `CCACHE_BASEDIR`. | same full ctest | absolute backend path passed by CMake | `33a10f1af` |
 | NPV-0123 | **`cmake --build` of an SDL-free HEADLESS build failed**: five Headless example tests called SDL directly ("Not Run" in ctest). | same full build | smoke test's SDL check only where SDL exists (9 vs 10 checks); the four SDL-harness controls registered only with SDL3 | `2c6efc807` |
+| NPV-0124 | **Every CI workflow failed at configure on `next`**, long before this pass: sibling repositories were cloned from `develop`, and CNA `next` asks for a sharp-runtime component only sharp-runtime `next` has ("Unknown Sharp Runtime component 'Xml.Serialization'"). A topic branch cut from `next` then fell back to `develop` too. | CI runs 34929323742 and 34870105761 (same failing set) | `scripts/ci/clone_siblings.sh`: the pushed branch, a pull request's source and target, then `next`, then `develop` -- whichever each sibling actually has; all 13 pinned clones in 10 workflows | `608c9494b`, `2dbe8f847` |
+| NPV-0125 | The Wine job built everything and died with `wine64: command not found` before a test ran (Ubuntu 24.04's wine64 package installs no such command). | CI, once past configure | installs `wine` and calls the `wine` launcher, which picks the 64-bit loader itself | `f261cf644` |
+| NPV-0126 | **CI's SDL-free coverage missed where the defects were**: no xclip (so `X11ClipboardInterop` always skipped) and only HEADLESS, where NPV-0106/0114/0121 could not show. | reviewing the matrix against NPV-0106/0114/0121 | xclip + xsel in the SDL-free cell; new `x11-sdl-free-gpu` job (X11 + OPENGL33;VULKAN;SOFTWARE;HEADLESS, SDL OFF) that fails on any SDL in the cache, `NEEDED` or symbols and runs both games with every renderer on Xvfb; green on its first run | `ccd20214c` |
+| NPV-0127 | An INCR requestor that died mid-transfer kept its transfer (and, since NPV-0119, its copy of the text) for the life of the process. | the NPV-0119 follow-up list | StructureNotify on the requestor, transfer dropped at its DestroyNotify; real INCR paste from another connection destroyed after one chunk | `f14d5ea85` |
+| NPV-0128 | The content pipeline's media decoder compiled only against FFmpeg 7: FFmpeg 6 (the CI runners) declares `swr_convert`'s input `const uint8_t **`. | CI, once past configure | explicit cast, valid against both declarations (as `VideoDecoder.cpp` already did) | `5e8f58707` |
+| NPV-0129 | The native MSVC job could not build the Win32 harness: UTF-8 literals read in the ANSI code page (C2015). | the job's first run in this pass | `/utf-8` under MSVC for the standalone harness | `860977a0c` |
+| NPV-0130 | **Every Linux CI build failed in `SpriteFontContentPipeline.cpp`** (`'RasterGlyph' was not declared`): XNASWEEP-131/137 made the font-sheet route use the atlas packer, which sat inside `#if defined(CNA_HAVE_FREETYPE)`, and the runners have no FreeType. Only builds with FreeType -- this workstation's -- compiled. | CI run 34942450340, all nine Linux cells | the guard covers only the FreeType code; the packer is compiled in every build. The translation unit compiles with and without `CNA_HAVE_FREETYPE`; 114 sprite-font tests unchanged (the one failure, a HEADLESS render-target readback, fails identically without the change) | `0a3f9a24a` |
+| NPV-0131 | **The SDL-free X11 cell could never pass its test step**: it builds the focused `CnaPlatformModuleTests` (not part of `all`), then runs ctest entries registered against `CnaTests`, which it never builds -- "Could not find executable", every entry Not Run. Hidden until now because the cell had never got past configure (NPV-0124) or compile (NPV-0128/0130). | CI run 34947184495 | `CNA_PLATFORM_CTEST_BINARY` (`CnaTests` by default) names the binary the CnaPlatform*/CnaX11* entries run; the cell sets `CnaPlatformModuleTests` and also runs `CnaX11EvdevTests`. Locally, the cell's ctest line through the focused binary: 6 passed, the window-manager suite skipped (no openbox here) | `41e8fc898` |
+
+## Next steps (recommended order, 2026-09-15)
+
+Estimates are for this kind of work in this repository; each step lists what it needs from the
+owner.
+
+Progress on branch `x11` (2026-09-15): step 1 -- NPV-0124, 0125, 0126, 0128, 0129, 0130, 0131;
+what is left red is the one Win32 test below. Step 4 -- the INCR follow-up is NPV-0127; `globalPointer`
+still waits for the owner. Step 5 -- Linux evdev is `plans/plan_x11.md` X11-0150; Win32 XInput is
+out of this branch's scope. Steps 6-8 (X11 parts) are `plans/plan_x11.md` X11-0151..X11-0158,
+all done: audio (0151), XIM (0152), exclusive fullscreen (0153), XDND (0154), touch and pens (0155),
+per-monitor scale (0156), `PRIMARY` (0157) and clipboard formats (0158). The gaps left after them
+are `plans/plan_x11.md` Phase N (X11-0160..X11-0173), done as well. **Every X11 step of the table
+is done** except the owner's `globalPointer` decision in step 4; what the table still offers is
+the desktop validation (2), native Windows (3), and the Win32 halves of 5, 7 and 8. The X11 halves
+are kept below as they were proposed, marked with where they were done.
+
+| # | Step | Estimate | Needs | Notes |
+|---|------|----------|-------|-------|
+| 1 | **Make `platform-ci.yml` green** | 1-2 h | nothing | Almost every cell of "Platform implementation matrix" fails at configure, on `next` and long before this pass (run 34929323742 has the same failing set as 34870105761 at the starting HEAD): the workflow clones the sibling `sharp-runtime` from `develop`, which lacks the `Xml.Serialization` component CNA `next` asks for ("Unknown Sharp Runtime component 'Xml.Serialization'"); sharp-runtime has a `next` branch that has it. The native Windows job (`windows-latest`, real Windows Server, WARP rather than a GPU) runs only on `workflow_dispatch`, so it never runs on a push. The Wine job fails at "Run the platform contract and Win32 suites under Wine" -- cause not yet investigated. While there: install `xclip` in the SDL-free X11 cell (X11ClipboardInterop skips without it) and add an SDL-free cell with a GPU renderer (OPENGL33), the configuration NPV-0106, NPV-0114 and NPV-0121 slipped through. |
+| 2 | **Finish the X11 desktop validation** | 1-2 h | an unlocked session left alone for the run (or 20-30 min of the owner's time for `interactive`) | the commands under "Remaining gaps"; includes NPV-0113 on mutter |
+| 3 | **Native Windows validation of Win32** | 3-6 h, plus fixing what it finds | the Windows 10 VirtualBox VM (disk attached) and a way in: `VBoxManage guestcontrol` with Guest Additions, a shared folder, or SSH; about an hour of the owner's time for the interactive checklist | docs/testing-win32-native.md; the script's first run is also its own test |
+| 4 | X11 follow-ups | 2-4 h | owner's decision on `globalPointer` | `globalPointer` under Xwayland -- **still open, the owner's decision**; INCR entries of a requestor that died -- ✅ NPV-0127 |
+| 5 | Controllers on both platforms | Win32 XInput 6-10 h; Linux evdev 15-25 h | owner's go-ahead | Linux evdev ✅ X11-0150, with mappings, motion sensors and force feedback (X11-0160, 0166, 0168); it serves a Wayland backend unchanged. Win32 XInput open, for the Win32 phase: design in plans/plan_win32.md §15 |
+| 6 | Native audio for SDL-free builds | 30-50 h | owner's go-ahead | ✅ X11-0151 (ALSA and CNA's own mixer), X11-0161 (MP3, FLAC), X11-0162 (capture) |
+| 7 | IME | Win32 8-12 h (plans/plan_win32.md §15); X11 via XIM 10-15 h | owner's go-ahead | X11 ✅ X11-0152; Win32 open, for the Win32 phase |
+| 8 | The rest of the deferred list | X11: exclusive fullscreen 6-10 h, XDND + touch 12-18 h, per-monitor DPI/PRIMARY/formats 7-11 h; Win32: tray 2 h | owner's go-ahead | X11 ✅ X11-0153..X11-0158; Win32 tray open. Wayland backend (50-80 h) only on explicit permission |
 
 ## Win32: NOT NATIVE WINDOWS VALIDATION
 
@@ -286,18 +341,27 @@ ibus.
 
 **Needs native Windows**: the list above.
 
+**Found later on the real desktop, and fixed:** the house demo's walls drawn through each other --
+a GL window without a depth buffer (`plans/plan_x11.md` X11-0172, D-18); its smoke test now checks
+the depth buffer (X11-0173).
+
 **Follow-ups found here, not done** (each a decision for its owner):
 - `globalPointer` under Xwayland: report false there, or narrow the contract.
 - Examples that clear depth without a GraphicsDeviceManager since SOFTWARE-333 (NPV-0118 fixed only
   the 3D house demo): an audit for the graphics owners.
-- An INCR requestor that dies mid-transfer leaves its entry (and copy) until the next transfer to
-  that window.
-- The CI SDL-free cell does not install xclip, so `X11ClipboardInterop` skips there; it runs a fixed
-  test subset, which is how NPV-0121/0122/0123 went unnoticed.
+- ~~An INCR requestor that dies mid-transfer leaves its entry (and copy) until the next transfer to
+  that window.~~ Fixed, NPV-0127.
+- ~~The CI SDL-free cell does not install xclip~~ (fixed, NPV-0126); it still runs a fixed test
+  subset, which is how NPV-0121/0122/0123 went unnoticed.
+- **Win32, for the Win32 phase:** `Win32RendererBridge.TheHandleSurvivesAResizeUnchanged` fails on
+  the native `windows-latest` runner as well as under Wine (client height 749 where 768 was asked;
+  CI run 34942450340). Most likely the runner's 1024x768 desktop -- Windows keeps a captioned window
+  within the screen, so a 1024x768 client area cannot exist there -- which would make it the test's
+  assumption rather than a backend defect; not investigated further on this branch.
 
-**Deferred on the owner's decision (2026-09-14) -- planned, not started**, estimates as given:
-gamepad over Linux evdev with hotplug, XNA mapping and rumble (15-25 h); native audio without SDL --
-PipeWire/Pulse/ALSA output plus a non-SDL decoder/mixer, the largest gap of SDL-free builds (30-50 h);
-IME through XIM (10-15 h); exclusive fullscreen through XRandR (6-10 h); XDND and XI2 touch/pen
-(12-18 h); per-monitor DPI, PRIMARY selection, more clipboard formats (7-11 h). A native Wayland
+**Deferred on the owner's decision (2026-09-14), approved and done on 2026-09-15** (branch `x11`):
+gamepads over Linux evdev (X11-0150), native audio without SDL through ALSA and CNA's own mixer
+(X11-0151), IME through XIM (X11-0152), exclusive fullscreen through XRandR (X11-0153), XDND and XI2
+touch/pen (X11-0154, X11-0155), per-monitor scale, PRIMARY and clipboard formats (X11-0156..0158) --
+and the rest of the gaps an SDL-free Linux game had, `plans/plan_x11.md` Phase N. A native Wayland
 backend (50-80 h) waits for the owner's explicit go-ahead.

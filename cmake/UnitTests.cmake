@@ -135,8 +135,10 @@ if(CNA_BUILD_TESTS)
         # suite with a non-SDL3 audio selection: the plan's own HEADLESS regression runs kept the
         # default SDL3 audio, and the CI cell that does select NULL audio builds CnaTests without
         # running it. Both gaps are closed alongside this line.
-        foreach(_cna_sdl3_mixer_test IN ITEMS
-                AudioCategoryTests
+        # plans/plan_x11.md X11-0151: under ALSA a mixer exists -- CNA's own -- and
+        # AudioCategoryTests asserts XACT playback through the public API alone, so it runs there.
+        # The rest read SDL3_mixer's own track handles and stay SDL3-only.
+        set(_cna_sdl3_mixer_tests
                 AudioMixerTests
                 CueTests
                 DynamicSoundEffectInstanceTests
@@ -145,6 +147,10 @@ if(CNA_BUILD_TESTS)
                 SoundEffectInstanceTests
                 SoundEffectTests
                 WaveBankTests)
+        if(NOT CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+            list(APPEND _cna_sdl3_mixer_tests AudioCategoryTests)
+        endif()
+        foreach(_cna_sdl3_mixer_test IN LISTS _cna_sdl3_mixer_tests)
             list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
                 ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
         endforeach()
@@ -1083,6 +1089,13 @@ if(CNA_BUILD_TESTS)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
             CNA_X11_BACKEND_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules/platform/src/X11"
         )
+        # plans/plan_x11.md X11-0150: the evdev controller tests include src/Linux/ and exist only
+        # where the platform compiled it (modules/platform/CMakeLists.txt).
+        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
+        if(_cna_have_evdev)
+            target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+                CNA_PLATFORM_HAVE_EVDEV=1)
+        endif()
     endif()
 
     if(TARGET cna_platform_terminal_resize_harness)
@@ -1210,20 +1223,49 @@ if(CNA_BUILD_TESTS)
     # DISPLAY the shell had -- a shared Xvfb, or a developer's own desktop -- taking its clipboard,
     # its focus and its window manager from each other: a paste test waited forever on an INCR
     # transfer another test had interrupted.
+    # plans/plan_x11.md X11-0150: the uinput suite likewise runs once, through CnaX11EvdevTests;
+    # discovered as well it would plug every one of its virtual pads in a second time.
+    # plans/plan_x11.md X11-0153: the exclusive-fullscreen suite changes display modes and runs
+    # only through CnaX11ExclusiveFullscreenTests, on the launcher's private server; X11-0154's
+    # drag-and-drop suite runs through CnaX11IntegrationTests, where its drag source has a server;
+    # so do X11-0156's content scale and X11-0157's selections, which change the server's
+    # resources and take its selections.
     set(_cna_unit_tests_discovery_filter)
     if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
         set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*")
+            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11ScreenSaverPeer.*:X11TrayLive.*")
+    endif()
+    # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
+    # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
+    # the machine's microphone. The test binary defaults to both on its own as well (see
+    # CnaMixerXnaTests.cpp); this states it where ctest runs them.
+    set(_cna_unit_tests_audio_environment)
+    set(_cna_unit_tests_audio_properties)
+    set(_cna_unit_tests_environment)
+    if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+        list(APPEND _cna_unit_tests_environment "CNA_AUDIO_DEVICE=null" "CNA_AUDIO_RECORDING_DEVICE=null")
+    endif()
+    # plans/plan_x11.md X11-0169: an X11 platform asks the session bus for the desktop portal, and
+    # no test may reach the portal of the desktop it runs on -- a file chooser would open there.
+    # The test binary says the same on its own (X11DesktopPortalTests.cpp).
+    if(CNA_PLATFORM STREQUAL "X11")
+        list(APPEND _cna_unit_tests_environment "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/cna-test-no-session-bus")
+    endif()
+    if(_cna_unit_tests_environment)
+        set(_cna_unit_tests_audio_environment ENVIRONMENT "${_cna_unit_tests_environment}")
+        set(_cna_unit_tests_audio_properties PROPERTIES ENVIRONMENT "${_cna_unit_tests_environment}")
     endif()
     cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
     if(_cna_unit_tests_vk_gate)
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ${_cna_unit_tests_discovery_filter}
-            PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]")
+            PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]"
+                       ${_cna_unit_tests_audio_environment})
     else()
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            ${_cna_unit_tests_discovery_filter})
+            ${_cna_unit_tests_discovery_filter}
+            ${_cna_unit_tests_audio_properties})
     endif()
     unset(_cna_unit_tests_discovery_filter)
 
@@ -1310,7 +1352,22 @@ if(CNA_BUILD_TESTS)
     # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
     cna_register_renderer_test(NAME CnaAudioPlatformTests
         COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl2AudioDeviceTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
-        LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+        LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy;CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
+
+    # plans/plan_x11.md X11-0151: the ALSA device, CNA's own mixer, the XNA audio classes over the
+    # two, and the XACT category suite that needs a real mixer -- all on ALSA's silent device.
+    if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+        cna_register_renderer_test(NAME CnaAudioAlsaTests
+            COMMAND CnaTests --gtest_filter=CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AlsaAudioRecordingDevice.*:AudioCategory*:Microphone*
+            LABELS "audio;platform" TIMEOUT 300 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
+        # The whole chain in its own process: its mixer plays to ALSA's `file` device, and the
+        # test measures what was recorded.
+        cna_register_renderer_test(NAME CnaAudioAlsaRecordingTest
+            COMMAND CnaTests --gtest_filter=CnaMixerXnaRecording.*
+            LABELS "audio;platform" TIMEOUT 120
+            ENVIRONMENT "CNA_AUDIO_DEVICE=file:FILE=${CMAKE_BINARY_DIR}/cna-alsa-recording.raw,FORMAT=raw")
+    endif()
 
     # plans/plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
     # future identifier, and an unknown value without spawning six full nested project configs.
@@ -1323,6 +1380,8 @@ if(CNA_BUILD_TESTS)
             set(_cna_audio_selection_expected "Using SDL2 audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "NULL")
             set(_cna_audio_selection_expected "Using NULL audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "ALSA")
+            set(_cna_audio_selection_expected "Using ALSA audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "BOGUS")
             set(_cna_audio_selection_expected "not a known audio platform")
         else()
@@ -1420,6 +1479,21 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlOffFindPackage.cmake)
     set_tests_properties(CnaSdlOffFindsNoSdlPackage PROPERTIES LABELS "platform;configuration")
 
+    # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
+    # entries below (CnaPlatform*, CnaX11*) run. CnaTests by default. A build that compiles only
+    # the platform module's tests -- CI's SDL-free X11 cell builds the focused
+    # CnaPlatformModuleTests, which is not part of `all` -- names it here instead; the entries then
+    # run every platform-module suite their filters name, and a suite that lives in another module
+    # (GraphicsDevicePlatformWindowTests, GameWindowPlatformTest) simply is not in that binary.
+    set(CNA_PLATFORM_CTEST_BINARY "CnaTests" CACHE STRING
+        "Test executable the CnaPlatform*/CnaX11* ctest entries run (CnaTests or CnaPlatformModuleTests)")
+    set_property(CACHE CNA_PLATFORM_CTEST_BINARY PROPERTY STRINGS CnaTests CnaPlatformModuleTests)
+    if(NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaTests"
+       AND NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaPlatformModuleTests")
+        message(FATAL_ERROR "CNA_PLATFORM_CTEST_BINARY must be CnaTests or CnaPlatformModuleTests, "
+                            "not '${CNA_PLATFORM_CTEST_BINARY}'")
+    endif()
+
     # plans/plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
@@ -1431,7 +1505,7 @@ if(CNA_BUILD_TESTS)
     # the display-independent suite would have exercised only the implementations that need no
     # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
     # token does not match the string "PlatformWindowConformance".
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # plans/plan_vulkan.md VULKAN-154/VULKAN-157: the Xlib error-handler regression is the one
@@ -1440,7 +1514,7 @@ if(CNA_BUILD_TESTS)
     # the display forced, because the gtest-discovered copy inside the shared binary inherits the
     # shell's DISPLAY (finding F-22) and usually finds SDL already committed to another driver.
     cna_register_renderer_test(NAME CnaPlatformXErrorHandlerTests
-        COMMAND CnaTests --gtest_filter=Sdl3XErrorHandlerTest.*
+        COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3XErrorHandlerTest.*
         LABELS "platform" TIMEOUT 60
         ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -1449,7 +1523,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
+        COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
@@ -1464,8 +1538,18 @@ if(CNA_BUILD_TESTS)
         # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
         # scan are pure functions over committed source.
         cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:X11EvdevLayout.*:X11EvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:X11DropTarget.*:X11UriList.*:X11TouchMath.*:X11ContentScaleParsing.*:X11TextEncoding.*:X11EvdevMapping.*:LinuxSystemInfo.*:X11InputDeviceClassification.*:X11MessageBoxGeometry.*:X11EvdevHapticEffect.*:X11PortalRequest.*:X11ScreenSaverName.*
             LABELS "platform" TIMEOUT 120)
+
+        # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No
+        # display either -- controllers are not an X facility -- but a writable /dev/uinput and
+        # readable event nodes; each test skips where the machine grants neither.
+        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
+        if(_cna_have_evdev)
+            cna_register_renderer_test(NAME CnaX11EvdevTests
+                COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11EvdevVirtualDevice.*
+                LABELS "platform" TIMEOUT 120)
+        endif()
 
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh")
             # A private Xvfb per run, on a display number the launcher searches for rather than
@@ -1474,15 +1558,45 @@ if(CNA_BUILD_TESTS)
             # openbox is absent, so a machine without them records a skip rather than a failure.
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        $<TARGET_FILE:CnaTests>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11TrayLive.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         --require-window-manager
-                        $<TARGET_FILE:CnaTests>
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
                         --gtest_filter=X11WithWindowManager.*
+                LABELS "platform" TIMEOUT 300)
+
+            # plans/plan_x11.md X11-0152: input-method composition against a private ibus on the
+            # private server; skips (77) where ibus or its XIM server is not installed.
+            cna_register_renderer_test(NAME CnaX11InputMethodTests
+                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        --with-ibus
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                        --gtest_filter=X11InputMethod.*
+                LABELS "platform" TIMEOUT 300)
+
+            # plans/plan_x11.md X11-0155: real touchscreen contacts, through a uinput touchscreen a
+            # private rootless Xorg takes EXCLUSIVELY -- the suite verifies the grab before it
+            # injects anything, so nothing reaches the desktop's own compositor. Opt-in by this
+            # entry's environment; skips where uinput, Xorg or its dummy/evdev drivers are missing
+            # (CNA_X11_XORG_MODULE_PATH adds module directories).
+            cna_register_renderer_test(NAME CnaX11TouchscreenTests
+                COMMAND ${CMAKE_COMMAND} -E env CNA_X11_TEST_TOUCHSCREEN=1
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                        --gtest_filter=X11Touchscreen.*
+                LABELS "platform" TIMEOUT 300)
+
+            # plans/plan_x11.md X11-0153: exclusive fullscreen changes the display mode, so it
+            # runs only here -- on the launcher's own server, with a window manager -- and never
+            # on a desktop; the suite skips anywhere CNA_X11_PRIVATE_TEST_SERVER is not set.
+            cna_register_renderer_test(NAME CnaX11ExclusiveFullscreenTests
+                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        --require-window-manager
+                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                        --gtest_filter=X11ExclusiveFullscreen.*
                 LABELS "platform" TIMEOUT 300)
         endif()
     endif()

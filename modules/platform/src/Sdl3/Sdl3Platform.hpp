@@ -105,6 +105,11 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformInputDevices* GetInputDevices() override;
         /** @brief Gets the clipboard service. @return The SDL3 clipboard; never null. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
+        /**
+         * @brief Gets the primary selection.
+         * @return The SDL3 primary selection where SDL has X11/Wayland drivers, otherwise null.
+         */
+        [[nodiscard]] IPlatformClipboard* GetPrimarySelection() override;
         /** @brief Gets the display service. @return The SDL3 display enumerator; never null. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
         /** @brief Gets the dialog service. @return The SDL3 dialog service; never null. */
@@ -154,6 +159,7 @@ namespace CNA::Platform::Sdl3 {
         /// Services are owned by the platform and outlive every caller's use of them, which is
         /// what makes returning a raw pointer safe: a caller never owns what it is handed.
         Sdl3Clipboard clipboard_;
+        Sdl3PrimarySelection primarySelection_;
         Sdl3Displays displays_;
         Sdl3FileSystem fileSystem_;
         Sdl3SystemInfo systemInfo_;

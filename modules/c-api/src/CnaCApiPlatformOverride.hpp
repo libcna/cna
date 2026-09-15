@@ -208,6 +208,11 @@ public:
         return inner_->GetClipboard();
     }
 
+    [[nodiscard]] CNA::Platform::IPlatformClipboard* GetPrimarySelection() override
+    {
+        return inner_->GetPrimarySelection();
+    }
+
     [[nodiscard]] CNA::Platform::IPlatformDisplays* GetDisplays() override
     {
         return inner_->GetDisplays();

@@ -8,10 +8,16 @@
 #include "X11Clipboard.hpp"
 #include "X11Display.hpp"
 #include "X11Displays.hpp"
+#include "X11ContentScale.hpp"
+#include "X11DragAndDrop.hpp"
+#include "X11InputDevices.hpp"
+#include "X11MessageBox.hpp"
+#include "X11Tray.hpp"
 #include "X11GraphicsServices.hpp"
 #include "X11Keyboard.hpp"
 #include "X11Mouse.hpp"
 #include "X11TextInput.hpp"
+#include "X11Touch.hpp"
 #include "X11Window.hpp"
 
 #include <chrono>
@@ -29,9 +35,10 @@ namespace CNA::Platform::X11 {
      *
      * That is this backend's whole reason for existing. Windows come from `XCreateWindow`, events
      * from `XNextEvent`, keys from XKB, text from XIM, the pointer from the core protocol and
-     * XInput2, monitors from XRandR, timing from `clock_gettime`. `modules/platform/src/X11/`
-     * contains no SDL header, no SDL symbol and no SDL build dependency, and a test asserts that
-     * rather than leaving it to a grep in a plan document.
+     * XInput2, monitors from XRandR, timing from `clock_gettime`, and on Linux gamepads and
+     * joysticks from the kernel's evdev nodes (`modules/platform/src/Linux/`), since X itself has
+     * no controller input. Neither directory contains an SDL header, an SDL symbol or an SDL build
+     * dependency, and a test asserts that rather than leaving it to a grep in a plan document.
      *
      * ### Xlib threading
      *
@@ -150,32 +157,55 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
         /** @brief Gets the mouse service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformMouse* GetMouse() override;
-        /** @brief Gets the gamepad service. @return Null; X11 has no gamepad facility. */
-        [[nodiscard]] IPlatformGamepad* GetGamepad() override { return nullptr; }
-        /** @brief Gets the joystick service. @return Null; X11 has no joystick facility. */
-        [[nodiscard]] IPlatformJoystick* GetJoystick() override { return nullptr; }
+        /**
+         * @brief Gets the gamepad service, starting the controller subsystem on first use.
+         * @return The Linux evdev service, or null where the kernel offers none.
+         */
+        [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /**
+         * @brief Gets the joystick service, starting the controller subsystem on first use.
+         * @return The Linux evdev service, or null where the kernel offers none.
+         */
+        [[nodiscard]] IPlatformJoystick* GetJoystick() override;
         /** @brief Gets the text input service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null; X11 has no sensor facility. */
         [[nodiscard]] IPlatformSensors* GetSensors() override { return nullptr; }
-        /** @brief Gets the haptics service. @return Null; X11 has no haptics facility. */
-        [[nodiscard]] IPlatformHaptics* GetHaptics() override { return nullptr; }
-        /** @brief Gets the input device service. @return Null until XI2 enumeration lands. */
-        [[nodiscard]] IPlatformInputDevices* GetInputDevices() override { return nullptr; }
+        /**
+         * @brief Gets the haptics service: force feedback through the kernel (X11-0168).
+         * @return The Linux evdev service, or null where the kernel offers none.
+         */
+        [[nodiscard]] IPlatformHaptics* GetHaptics() override;
+        /**
+         * @brief Gets the input device service (X11-0165).
+         * @return XInput2's enumeration, or null without XInput2 or before `Video`.
+         */
+        [[nodiscard]] IPlatformInputDevices* GetInputDevices() override;
         /** @brief Gets the clipboard service. @return The service, or null before `Video`. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
+        /**
+         * @brief Gets the primary selection, `PRIMARY` (X11-0157).
+         * @return The service, or null before `Video`.
+         */
+        [[nodiscard]] IPlatformClipboard* GetPrimarySelection() override;
         /** @brief Gets the display service. @return The service, or null without XRandR. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
-        /** @brief Gets the dialog service. @return Null; X11 has no native dialogs. */
-        [[nodiscard]] IPlatformDialogs* GetDialogs() override { return nullptr; }
-        /** @brief Gets the tray service. @return Null; a tray is a desktop-environment protocol. */
-        [[nodiscard]] IPlatformTray* GetTray() override { return nullptr; }
+        /**
+         * @brief Gets the dialog service: Xlib message boxes, no file dialogs (X11-0167).
+         * @return The service; null without a display.
+         */
+        [[nodiscard]] IPlatformDialogs* GetDialogs() override { return dialogs_.get(); }
+        /**
+         * @brief Gets the tray service: XEmbed icons in the system tray (X11-0171).
+         * @return The service, or null where no tray was running when the platform was made.
+         */
+        [[nodiscard]] IPlatformTray* GetTray() override { return tray_.get(); }
         /** @brief Gets the camera provider. @return Null; X11 has no camera facility. */
         [[nodiscard]] IPlatformCameraProvider* GetCamera() override { return nullptr; }
         /** @brief Gets the filesystem service. @return The portable implementation; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override { return &fileSystem_; }
         /** @brief Gets the system information service. @return The portable implementation. */
-        [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return &systemInfo_; }
+        [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return systemInfo_.get(); }
         /** @brief Gets the GL context service. @return The service, or null without GLX. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
         /** @brief Gets the Vulkan surface service. @return The service, or null before `Video`. */
@@ -195,9 +225,24 @@ namespace CNA::Platform::X11 {
         /// caller's wrapper must not destroy a window the platform's own registry still tracks.
         class BorrowedWindow;
 
+        /// The controller services. Opaque so this class's layout is the same whether or not
+        /// the build has evdev: tests include this header without the platform's private
+        /// definitions.
+        struct Controllers;
+        struct ControllersDeleter
+        {
+            void operator()(Controllers* controllers) const;
+        };
+        struct PortalDeleter
+        {
+            void operator()(X11DesktopPortal* portal) const;
+        };
+
         /// X11WindowHost: drops a destroyed wrapper from the registry and from every service,
         /// matched on identity.
         void OnWindowDestroyed(X11Window& window) override;
+        void UpdateContentScale(X11Window& window, std::vector<PlatformEvent>& destination);
+        [[nodiscard]] std::vector<InputDeviceInfo> ControllerDevices(InputDeviceKind kind);
 
         [[nodiscard]] PlatformCapabilities ComputeCapabilities() const;
         void OpenConnection();
@@ -207,9 +252,11 @@ namespace CNA::Platform::X11 {
         void ForgetWindow(WindowId id);
         [[nodiscard]] X11Window* FindWindow(WindowId id) const;
         [[nodiscard]] X11Window* FindWindowByXid(::Window xid) const;
+        void PollXEvents(std::vector<PlatformEvent>& destination);
         void TranslateEvent(XEvent& event, std::vector<PlatformEvent>& destination);
         void EmitWindowStateTransitions(X11Window& window,
                                         std::vector<PlatformEvent>& destination);
+        void EnsureControllerSubsystem();
 
         std::unique_ptr<X11Connection> connection_;
         /// Why the connection could not be opened, when it could not. Empty otherwise.
@@ -227,14 +274,30 @@ namespace CNA::Platform::X11 {
 
         std::unique_ptr<X11Keyboard> keyboard_;
         std::unique_ptr<X11Mouse> mouse_;
+        std::unique_ptr<X11Touch> touch_;
         std::unique_ptr<X11TextInput> textInput_;
         std::unique_ptr<X11Clipboard> clipboard_;
+        std::unique_ptr<X11Clipboard> primarySelection_;
+        std::unique_ptr<X11InputDevices> inputDevices_;
+        std::unique_ptr<X11Dialogs> dialogs_;
+        std::unique_ptr<X11Tray> tray_;
+        std::unique_ptr<X11DragAndDrop> dragAndDrop_;
         std::unique_ptr<X11Displays> displays_;
         std::unique_ptr<X11GlContext> glContext_;
         std::unique_ptr<X11VulkanSurface> vulkanSurface_;
 
+        /// Null where the kernel offers no controller interface. Independent of the X
+        /// connection: controllers come from the kernel, not from the X server.
+        std::unique_ptr<Controllers, ControllersDeleter> controllers_;
+        // The desktop portal on the session bus (X11-0169); null without one, or without D-Bus.
+        std::unique_ptr<X11DesktopPortal, PortalDeleter> portal_;
+        /// Set by the first GetGamepad()/GetJoystick(), whether or not starting succeeded.
+        bool controllerSubsystemEnsured_ = false;
+
         Common::StandardFileSystem fileSystem_{"cna-x11"};
-        Common::StandardSystemInfo systemInfo_;
+        // Linux's own where the Linux facilities are compiled in (X11-0163), the portable one
+        // elsewhere; held by pointer so the class is the same in every translation unit.
+        std::unique_ptr<IPlatformSystemInfo> systemInfo_;
 
         std::chrono::steady_clock::time_point epoch_ = std::chrono::steady_clock::now();
 

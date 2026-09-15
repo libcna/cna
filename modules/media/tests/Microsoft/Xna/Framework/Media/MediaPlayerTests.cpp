@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 #include "System/Environment.hpp"
+
+#include <chrono>
+#include <thread>
 
 using Microsoft::Xna::Framework::Media::MediaPlayer;
 using Microsoft::Xna::Framework::Media::Song;
@@ -315,3 +319,35 @@ TEST_F(MediaPlayerTest, VisualizationEnabledStateStaysConsistentWithGetVisualiza
     MediaPlayer::setIsVisualizationEnabledProperty(false);
     EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty());
 }
+
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+// plans/plan_x11.md X11-0161: an MP3 and a FLAC song stream through CNA's own mixer to their end.
+// MediaPlayer's position is a clock, not the mixer's, so what proves the file was decoded and
+// played is the song finishing on its own -- which only the mixer, reaching the stream's last
+// frame on ALSA's real-time `null` device, can make happen.
+TEST_F(MediaPlayerTest, Mp3AndFlacSongsPlayThroughCnasOwnMixerToTheirEnd)
+{
+    using Microsoft::Xna::Framework::FrameworkDispatcher;
+    using Microsoft::Xna::Framework::Media::MediaState;
+    for (const auto& [fixture, seconds] : {std::pair<const char*, double>{kFixtureB, 2.0376},
+                                          {"tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac", 1.0}})
+    {
+        Song song(fixture, "song");
+        const auto start = std::chrono::steady_clock::now();
+        MediaPlayer::Play(&song);
+        ASSERT_EQ(MediaPlayer::getStateProperty(), MediaState::Playing) << fixture;
+        while (MediaPlayer::getStateProperty() == MediaState::Playing &&
+               std::chrono::steady_clock::now() - start < std::chrono::seconds(8))
+        {
+            FrameworkDispatcher::Update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        const double elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Stopped) << fixture << " never ended";
+        EXPECT_GE(elapsed, seconds - 0.25) << fixture << " ended before it could have been played";
+        EXPECT_LE(elapsed, seconds + 2.0) << fixture;
+        MediaPlayer::Stop();
+    }
+}
+#endif

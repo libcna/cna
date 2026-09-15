@@ -98,7 +98,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioEngine::Init(const std::string& settingsFile)
     {
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+        // plans/plan_x11.md X11-0151: CNA's own mixer, playing through ALSA.
+        rendererDetails_.push_back(RendererDetail(std::string("CNA mixer (ALSA)"), std::string("ALSA")));
+#else
         rendererDetails_.push_back(RendererDetail(std::string("SDL3_mixer"), std::string("SDL3_mixer")));
+#endif
 
         xactImpl_ = std::make_unique<XactEngineImpl>();
 

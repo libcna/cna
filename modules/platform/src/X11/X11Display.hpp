@@ -3,10 +3,15 @@
 
 #include "X11Headers.hpp"
 
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace CNA::Platform::X11 {
+
+    class X11ContentScale;
+    class X11ModeSwitcher;
 
     /**
      * @brief Every atom this backend interns, cached once per connection.
@@ -66,8 +71,32 @@ namespace CNA::Platform::X11 {
         Atom incr = kNone;
         /** @brief `CNA_SELECTION`: this backend's own property for receiving selection data. */
         Atom cnaSelection = kNone;
-        /** @brief `XdndAware`, interned so a future drag-and-drop task has the vocabulary. */
+        /** @brief `XdndAware`: the XDND version a window accepts drops with. */
         Atom xdndAware = kNone;
+        /** @brief `XdndEnter`: a drag came over the window. */
+        Atom xdndEnter = kNone;
+        /** @brief `XdndPosition`: where the drag is, and the reply it wants. */
+        Atom xdndPosition = kNone;
+        /** @brief `XdndStatus`: the target's answer to a position. */
+        Atom xdndStatus = kNone;
+        /** @brief `XdndLeave`: the drag left without dropping. */
+        Atom xdndLeave = kNone;
+        /** @brief `XdndDrop`: the drag was dropped. */
+        Atom xdndDrop = kNone;
+        /** @brief `XdndFinished`: the target is done with the drop. */
+        Atom xdndFinished = kNone;
+        /** @brief `XdndSelection`: the selection a drop's data is read through. */
+        Atom xdndSelection = kNone;
+        /** @brief `XdndTypeList`: the source's types, when there are more than three. */
+        Atom xdndTypeList = kNone;
+        /** @brief `XdndActionCopy`: the only action this backend performs. */
+        Atom xdndActionCopy = kNone;
+        /** @brief `text/uri-list`: files, as URIs. */
+        Atom textUriList = kNone;
+        /** @brief `text/plain`. */
+        Atom textPlain = kNone;
+        /** @brief `text/plain;charset=utf-8`. */
+        Atom textPlainUtf8 = kNone;
     };
 
     /**
@@ -150,16 +179,16 @@ namespace CNA::Platform::X11 {
         void RefreshWindowManagerState();
 
         /**
-         * @brief Gets the display scale this connection reports.
+         * @brief Gets the session's content scale, and each monitor's.
          *
-         * See plans/plan_x11.md design decision 10 for the policy: `Xft.dpi` from the resource
-         * database divided by 96, clamped to a sane range, and exactly 1.0 when the session does
-         * not state one. X11 has no authoritative scale, and a value derived from a monitor's
-         * claimed physical size is frequently fiction.
+         * See plans/plan_x11.md design decision 10, as revised by X11-0156: the settings a session
+         * makes -- `Xft.dpi`, the XSETTINGS manager's, `GDK_SCALE`, KDE's per-screen factors --
+         * never a monitor's claimed physical size, which is frequently fiction. A preference for
+         * sizing an interface, not a pixel density: that is 1 on X11, whatever this says.
          *
-         * @return The scale, where 1.0 means one logical unit per physical pixel.
+         * @return The content scale, followed live.
          */
-        [[nodiscard]] float GetDisplayScale() const { return displayScale_; }
+        [[nodiscard]] X11ContentScale& GetContentScale() const { return *contentScale_; }
 
         /** @brief Gets whether the XKB extension is usable on this connection. */
         [[nodiscard]] bool HasXkb() const { return hasXkb_; }
@@ -198,6 +227,35 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] bool HasRandr() const { return randrEventBase_ >= 0; }
 
         /**
+         * @brief Gets whether the server speaks XInput 2.2, the version with touch events.
+         *
+         * @return True when touchscreen contacts can be selected on a window.
+         */
+        [[nodiscard]] bool HasXInput2Touch() const { return xi2Touch_; }
+
+        /**
+         * @brief Gets whether the server is Xwayland rather than a server that owns its displays.
+         *
+         * Matters where Xwayland is different by design: it emulates display-mode changes for the
+         * client that asks, so there is no monitor mode to give back (plans/plan_x11.md X11-0153).
+         *
+         * @return True when the server announces the `XWAYLAND` extension, or names its outputs
+         * the way Xwayland does.
+         */
+        [[nodiscard]] bool IsXwayland() const { return isXwayland_; }
+
+        /**
+         * @brief Gets the display-mode switcher exclusive fullscreen uses on this connection.
+         *
+         * Owned here because a switched mode is a property of the server the connection reaches,
+         * and giving it back is part of closing the connection: the switcher is destroyed -- and
+         * every mode it still holds restored -- before `XCloseDisplay`.
+         *
+         * @return The switcher.
+         */
+        [[nodiscard]] X11ModeSwitcher& GetModeSwitcher() const { return *modeSwitcher_; }
+
+        /**
          * @brief Reads a whole window property.
          *
          * Handles the multi-request loop `XGetWindowProperty` requires for properties longer than
@@ -228,10 +286,32 @@ namespace CNA::Platform::X11 {
         bool SendRootClientMessage(::Window window, Atom type, long data0, long data1 = 0,
                                    long data2 = 0, long data3 = 0) const;
 
+        /**
+         * @brief Starts watching another client's window for property changes and destruction.
+         *
+         * Several parts of the backend watch windows they do not own -- a requestor an `INCR`
+         * transfer is being sent to, the XSETTINGS manager -- and the same window can be several
+         * of those at once. An event mask is per client and per window, and `XSelectInput`
+         * replaces it, so a part that finished would clear what another still needs. Watches are
+         * therefore counted, and only the last one to stop clears the mask.
+         *
+         * @param window The other client's window.
+         */
+        void WatchForeignWindow(::Window window);
+
+        /**
+         * @brief Stops one watch started with @ref WatchForeignWindow.
+         *
+         * The last one clears the mask. A window that no longer exists is not an error: the
+         * watch usually ends because it was destroyed.
+         *
+         * @param window The window.
+         */
+        void UnwatchForeignWindow(::Window window);
+
     private:
         void InternAtoms();
         void DetectExtensions();
-        void ReadDisplayScale();
 
         Display* display_ = nullptr;
         int screen_ = 0;
@@ -244,8 +324,12 @@ namespace CNA::Platform::X11 {
         bool detectableAutoRepeat_ = false;
         int xkbEventBase_ = -1;
         int xi2Opcode_ = -1;
+        bool xi2Touch_ = false;
         int randrEventBase_ = -1;
-        float displayScale_ = 1.0f;
+        bool isXwayland_ = false;
+        std::map<::Window, int> foreignWatches_;
+        std::unique_ptr<X11ContentScale> contentScale_;
+        std::unique_ptr<X11ModeSwitcher> modeSwitcher_;
     };
 
 } // namespace CNA::Platform::X11

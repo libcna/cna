@@ -33,6 +33,7 @@ namespace CNA::Platform {
         static const std::string controllerAxis = "ControllerAxisEvent";
         static const std::string controllerButton = "ControllerButtonEvent";
         static const std::string appLifecycle = "AppLifecycleEvent";
+        static const std::string drop = "DropEvent";
 
         // std::visit over every alternative: adding a PlatformEvent alternative without naming it
         // here fails to compile, the same guarantee the enum switches elsewhere provide.
@@ -52,6 +53,7 @@ namespace CNA::Platform {
             [&](const ControllerAxisEvent&) -> const std::string& { return controllerAxis; },
             [&](const ControllerButtonEvent&) -> const std::string& { return controllerButton; },
             [&](const AppLifecycleEvent&) -> const std::string& { return appLifecycle; },
+            [&](const DropEvent&) -> const std::string& { return drop; },
         }, event);
     }
 
@@ -67,6 +69,8 @@ namespace CNA::Platform {
             [](const MouseButtonEvent& e) { return e.window; },
             [](const MouseWheelEvent& e) { return e.window; },
             [](const TouchEvent& e) { return e.window; },
+            // Zero for a drop aimed at no window, which the event itself says.
+            [](const DropEvent& e) { return e.window; },
             // Quit, device/sensor/controller and application events are process-scoped, not
             // window-scoped: there is no window to report, and inventing one would be a lie.
             [](const QuitEvent&) { return WindowId{0}; },
@@ -238,6 +242,25 @@ namespace CNA::Platform {
             case AppLifecycleKind::Terminating:         return terminating;
         }
         return willEnterBackground;
+    }
+
+    const std::string& ToString(const DropEventKind kind)
+    {
+        static const std::string begin = "Begin";
+        static const std::string position = "Position";
+        static const std::string file = "File";
+        static const std::string text = "Text";
+        static const std::string complete = "Complete";
+
+        switch (kind)
+        {
+            case DropEventKind::Begin:    return begin;
+            case DropEventKind::Position: return position;
+            case DropEventKind::File:     return file;
+            case DropEventKind::Text:     return text;
+            case DropEventKind::Complete: return complete;
+        }
+        return begin;
     }
 
 } // namespace CNA::Platform

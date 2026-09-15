@@ -3,15 +3,56 @@
 #include "X11Platform.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "X11DesktopPortal.hpp"
 #include "X11Error.hpp"
 #include "X11EventMapper.hpp"
 #include "X11Window.hpp"
 
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+#include "../Linux/EvdevControllers.hpp"
+#include "../Linux/EvdevHaptics.hpp"
+#include "../Linux/LinuxSystemInfo.hpp"
+#endif
+
 #include <cerrno>
 #include <ctime>
+#include <filesystem>
 #include <unistd.h>
 
 namespace CNA::Platform::X11 {
+
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+    struct X11Platform::Controllers
+    {
+        Linux::EvdevControllerHub hub;
+        Linux::EvdevGamepad gamepad{hub};
+        Linux::EvdevJoystick joystick{hub};
+        // Force feedback is the same nodes' (X11-0168); a joystick's node is found through the hub.
+        Linux::EvdevHaptics haptics{[this](const DeviceId id) {
+            const Linux::EvdevControllerHub::Controller* controller = hub.FindById(id);
+            return controller != nullptr && controller->device != nullptr ? controller->device->GetPath()
+                                                                           : std::string();
+        }};
+    };
+#else
+    struct X11Platform::Controllers
+    {
+    };
+#endif
+
+    void X11Platform::ControllersDeleter::operator()(Controllers* controllers) const
+    {
+        delete controllers;
+    }
+
+    void X11Platform::PortalDeleter::operator()(X11DesktopPortal* portal) const
+    {
+#if defined(CNA_X11_HAVE_DBUS)
+        delete portal;
+#else
+        (void) portal;  // Never made without D-Bus.
+#endif
+    }
 
     namespace {
 
@@ -96,6 +137,23 @@ namespace CNA::Platform::X11 {
 
     X11Platform::X11Platform()
     {
+#if defined(CNA_X11_HAVE_DBUS)
+        // The desktop portal is the session bus's, not the X server's: looked for once, without
+        // starting it, whatever the display (X11-0169).
+        portal_.reset(X11DesktopPortal::Connect().release());
+#endif
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        systemInfo_ = std::make_unique<Linux::LinuxSystemInfo>([this](const std::string& url) {
+#if defined(CNA_X11_HAVE_DBUS)
+            return portal_ != nullptr && portal_->OpenUri(url, 0);
+#else
+            (void) url;
+            return false;
+#endif
+        });
+#else
+        systemInfo_ = std::make_unique<Common::StandardSystemInfo>();
+#endif
         try
         {
             OpenConnection();
@@ -107,6 +165,17 @@ namespace CNA::Platform::X11 {
             connectionError_ = error.GetDetail().empty() ? std::string(error.what())
                                                          : error.GetDetail();
         }
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // Nothing is opened here -- that waits for the first GetGamepad()/GetJoystick() -- but
+        // whether the services exist at all is settled now, because the capability set is. A
+        // system without /dev/input (a minimal container) has no controllers to offer, and saying
+        // so beats a service that could never report one.
+        std::error_code error;
+        if (std::filesystem::is_directory("/dev/input", error))
+        {
+            controllers_.reset(new Controllers());
+        }
+#endif
         capabilities_ = ComputeCapabilities();
     }
 
@@ -129,6 +198,8 @@ namespace CNA::Platform::X11 {
         }
         windows_.clear();
         CloseConnection();
+        // Closing the nodes stops any rumble still playing (EvdevDevice's destructor).
+        controllers_.reset();
     }
 
     const std::string& X11Platform::GetName() const
@@ -145,6 +216,27 @@ namespace CNA::Platform::X11 {
     PlatformCapabilities X11Platform::ComputeCapabilities() const
     {
         PlatformCapabilities capabilities;
+
+        // Controllers first, because they do not depend on the X server at all: they are the
+        // kernel's evdev nodes, readable by a process that has no display. Rumble is claimed for
+        // the service -- SetRumble is always reachable -- and each pad then answers for itself
+        // through GamepadCapabilities::rumble, which is how the SDL3 backend reports it too.
+        if (controllers_ != nullptr)
+        {
+            capabilities.gamepad = true;
+            capabilities.joystick = true;
+            capabilities.gamepadRumble = true;
+            // Motion sensors likewise: the service answers, and each pad says whether it has
+            // them in GamepadCapabilities (X11-0166).
+            capabilities.gamepadSensors = true;
+            // Force feedback through the same nodes: the service lists what can play (X11-0168).
+            capabilities.haptics = true;
+        }
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // Battery state is the kernel's power-supply class, which needs no display either
+        // (X11-0163).
+        capabilities.powerInfo = true;
+#endif
 
         // Every flag below names what backs it. The contract's rule is that a service accessor is
         // non-null exactly when its presence capability is true, so a flag may only be set in the
@@ -167,26 +259,33 @@ namespace CNA::Platform::X11 {
         capabilities.cursorShapes = true;         // The core cursor font; Xcursor for ARGB images.
         capabilities.globalPointer = true;        // XQueryPointer/XWarpPointer on the root.
         capabilities.clipboard = true;            // Real ICCCM selection ownership with INCR.
+        capabilities.dragAndDrop = true;          // XDND 5, target side: files and text.
+        capabilities.primarySelection = true;     // PRIMARY, owned and read like CLIPBOARD.
+        capabilities.clipboardData = true;        // Any target, named by its MIME type.
 
-        // High DPI is claimed only when the session actually states a scale. Reporting it true
-        // with a scale permanently pinned at 1.0 would tell a caller to expect a pixel size that
-        // differs from the logical size, which on X11 it never does.
-        capabilities.highDpi = connection_->GetDisplayScale() != 1.0f;
+        // highDpi promises a drawable that can exceed the logical size, and on X11 it never does:
+        // one coordinate space. A session's scale is the displays' content scale (X11-0156).
+        capabilities.highDpi = false;
         capabilities.multipleDisplays = connection_->HasRandr();
         capabilities.borderlessFullscreen =
             connection_->SupportsEwmhHint(connection_->GetAtoms().netWmStateFullscreen);
         capabilities.openGlContext = glContext_ != nullptr && glContext_->IsAvailable();
         capabilities.vulkanSurface = vulkanSurface_ != nullptr;
         capabilities.relativeMouse = mouse_ != nullptr && mouse_->HasRawMotion();
+        // Composition events exist only when the application asked to draw them and the input
+        // method agreed to hand them over (X11TextInput's class comment, X11-0152).
+        capabilities.ime = textInput_ != nullptr && textInput_->HasCompositionEvents();
+        // Keyboards, mice and touch devices through XInput2, controllers through the hub (X11-0165).
+        capabilities.inputDeviceEnumeration = inputDevices_ != nullptr;
+        // Message boxes drawn with Xlib in a window of their own (X11-0167); file dialogs the
+        // desktop portal's, where the session bus has one (X11-0169).
+        capabilities.messageBox = dialogs_ != nullptr;
+        capabilities.nativeFileDialog = dialogs_ != nullptr && portal_ != nullptr;
+        // Icons in the system tray, where a tray was running when the platform was made (X11-0171).
+        capabilities.tray = tray_ != nullptr;
 
         // Deliberately false, each for a stated reason rather than for want of effort:
-        //   ime                    -- XIM here delivers committed text only; the capability
-        //                             promises composition and candidate events (plan D16).
-        //   gamepad/joystick/...   -- not an X11 facility; they are evdev/HID concerns.
-        //   messageBox/fileDialog  -- no core X11 facility, and shelling out to zenity or
-        //   tray                      kdialog would not be a native backend (plan D15).
-        //   camera, powerInfo      -- not an X11 facility.
-        //   inputDeviceEnumeration -- XI2 can answer it; not implemented yet, so it stays false.
+        //   camera                 -- not an X11 facility.
         //   managedEntrypoint      -- an ordinary main().
         return capabilities;
     }
@@ -204,8 +303,24 @@ namespace CNA::Platform::X11 {
         // false" honest for the services that depend on a live display.
         keyboard_ = std::make_unique<X11Keyboard>(*connection_);
         mouse_ = std::make_unique<X11Mouse>(*connection_);
+        touch_ = std::make_unique<X11Touch>(*connection_, mouse_.get());
         textInput_ = std::make_unique<X11TextInput>(*connection_);
-        clipboard_ = std::make_unique<X11Clipboard>(*connection_);
+        clipboard_ = std::make_unique<X11Clipboard>(*connection_, connection_->GetAtoms().clipboard,
+                                                    "CLIPBOARD");
+        primarySelection_ = std::make_unique<X11Clipboard>(
+            *connection_, connection_->GetAtoms().primary, "PRIMARY");
+        dragAndDrop_ = std::make_unique<X11DragAndDrop>(*connection_, *clipboard_);
+        dialogs_ = std::make_unique<X11Dialogs>(*connection_, portal_.get());
+        // A tray is a client owning the selection; there is one or there is not, now (X11-0171).
+        if (HasSystemTray(connection_->GetDisplay(), connection_->GetScreen()))
+        {
+            tray_ = std::make_unique<X11Tray>(connection_->GetDisplayName());
+        }
+        if (connection_->GetXInput2Opcode() >= 0)
+        {
+            inputDevices_ = std::make_unique<X11InputDevices>(
+                *connection_, [this](const InputDeviceKind kind) { return ControllerDevices(kind); });
+        }
         displays_ = std::make_unique<X11Displays>(*connection_);
         glContext_ = std::make_unique<X11GlContext>(*connection_);
         vulkanSurface_ = std::make_unique<X11VulkanSurface>(*connection_);
@@ -213,14 +328,27 @@ namespace CNA::Platform::X11 {
 
     void X11Platform::CloseConnection()
     {
+        // What the game copied is its own until now: X has no clipboard storage. A clipboard
+        // manager, where the desktop runs one, is offered it before the owner goes away, so the
+        // copy outlives the game (X11-0164).
+        if (clipboard_ != nullptr)
+        {
+            (void) clipboard_->HandOverToClipboardManager();
+        }
         // Reverse construction order. The clipboard owns a window on the connection and the text
         // input owns an XIM, so both must go before XCloseDisplay; the graphics services hold
         // GLX contexts, which must be destroyed while their display is alive.
         vulkanSurface_.reset();
         glContext_.reset();
         displays_.reset();
+        tray_.reset();
+        dialogs_.reset();
+        inputDevices_.reset();
+        dragAndDrop_.reset();
+        primarySelection_.reset();
         clipboard_.reset();
         textInput_.reset();
+        touch_.reset();
         mouse_.reset();
         keyboard_.reset();
         connection_.reset();
@@ -252,7 +380,17 @@ namespace CNA::Platform::X11 {
                                         ? std::string("no X connection could be opened")
                                         : connectionError_);
         }
-        ++refCounts_[subsystem];
+        const int count = ++refCounts_[subsystem];
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (subsystem == PlatformSubsystem::Gamepad && count == 1 && controllers_ != nullptr)
+        {
+            // A /dev/input that cannot be read leaves the hub with no controllers, which is an
+            // answer ("nothing plugged in"), not a reason to refuse the subsystem.
+            controllers_->hub.Start();
+        }
+#else
+        (void) count;
+#endif
     }
 
     void X11Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
@@ -265,6 +403,22 @@ namespace CNA::Platform::X11 {
             return;
         }
         --found->second;
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (subsystem == PlatformSubsystem::Gamepad && found->second == 0 && controllers_ != nullptr)
+        {
+            // Unlike Video, releasing this changes no capability: the services stay, reporting
+            // every slot empty until the subsystem is acquired again. Closing the nodes is what
+            // a release is for -- it stops rumble and lets go of the devices.
+            controllers_->hub.Stop();
+            controllers_->gamepad.Update();
+            controllers_->joystick.Update();
+        }
+        if (subsystem == PlatformSubsystem::Haptic && found->second == 0 && controllers_ != nullptr)
+        {
+            // Closing a device erases what it played: nothing is left buzzing.
+            controllers_->haptics.CloseAll();
+        }
+#endif
 
         // The connection is deliberately NOT closed when the Video count reaches zero. Closing it
         // would change the capability set mid-life -- every display-dependent capability would
@@ -303,6 +457,14 @@ namespace CNA::Platform::X11 {
         if (found == windows_.end() || found->second != &window)
         {
             return;
+        }
+        if (dragAndDrop_ != nullptr)
+        {
+            dragAndDrop_->ForgetWindow(window.GetXWindow());
+        }
+        if (touch_ != nullptr)
+        {
+            touch_->ForgetWindow(window.GetId(), window.GetXWindow());
         }
         ForgetWindow(window.GetId());
     }
@@ -478,6 +640,21 @@ namespace CNA::Platform::X11 {
         {
             textInput_->AttachWindow(*raw);
         }
+        if (dragAndDrop_ != nullptr)
+        {
+            // Only windows CNA created: an adopted window belongs to a host that may run its own
+            // drag and drop.
+            dragAndDrop_->AttachWindow(*raw);
+        }
+        if (touch_ != nullptr)
+        {
+            // Likewise: taking a window's touch events takes its emulated pointer events away.
+            touch_->AttachWindow(*raw);
+        }
+        if (displays_ != nullptr)
+        {
+            raw->SetContentScale(displays_->ContentScaleAt({x, y, description.width, description.height}));
+        }
 
         if (description.visible)
         {
@@ -551,10 +728,36 @@ namespace CNA::Platform::X11 {
     void X11Platform::PollEvents(std::vector<PlatformEvent>& destination)
     {
         destination.clear();
-        if (connection_ == nullptr)
+        if (connection_ != nullptr)
         {
-            return;
+            PollXEvents(destination);
         }
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // Controller events after the window system's, from the same once-per-frame call. Only
+        // once the controller subsystem is up: before that nothing is open, and a game that never
+        // asks about controllers pays nothing for them.
+        if (controllers_ != nullptr && controllers_->hub.IsStarted())
+        {
+            controllers_->hub.Pump();
+            controllers_->hub.TakeEvents(destination);
+        }
+#endif
+#if defined(CNA_X11_HAVE_DBUS)
+        // A file dialog's answer, and its callback, from the same call; nothing when none is open.
+        if (portal_ != nullptr)
+        {
+            portal_->Pump();
+        }
+#endif
+        // The tray's clicks and menus, from the same call too (X11-0171).
+        if (tray_ != nullptr)
+        {
+            tray_->Pump();
+        }
+    }
+
+    void X11Platform::PollXEvents(std::vector<PlatformEvent>& destination)
+    {
         Display* display = connection_->GetDisplay();
 
         // XPending flushes the output buffer and then reports what has already arrived, so this
@@ -568,20 +771,85 @@ namespace CNA::Platform::X11 {
             // XFilterEvent gives the input method first refusal. An IME consumes the key presses
             // that make up a composition and produces one committed string at the end; delivering
             // those presses as key events too would type the composition twice.
-            if (XFilterEvent(&event, kNone) == True)
+            //
+            // Key events are offered to it only while text input is started for their window.
+            // Unfocusing the input context is not enough: Xlib forwards every key of a window with
+            // a context to the input-method server, and ibus processes them focused or not -- a
+            // dead key, or a whole Hangul or Japanese input mode, then swallowed keys a game was
+            // using as keys (plans/plan_x11.md X11-0152). Everything else -- the input method's
+            // own protocol traffic -- is always offered.
+            bool offer = true;
+            if ((event.type == KeyPress || event.type == KeyRelease) && textInput_ != nullptr)
+            {
+                const X11Window* target = FindWindowByXid(event.xkey.window);
+                offer = target != nullptr && textInput_->IsActive(target->GetId());
+            }
+            const bool filtered = offer && XFilterEvent(&event, kNone) == True;
+            if (textInput_ != nullptr)
+            {
+                // What the input method's composition callbacks produced while it handled that
+                // event (plans/plan_x11.md X11-0152), in order with everything around it.
+                textInput_->TakeEditingEvents(destination);
+            }
+            if (filtered)
             {
                 continue;
             }
-            if (clipboard_ != nullptr && clipboard_->HandleEvent(event))
+            // Both selections see every event: one requestor can be reading both at once, and
+            // neither consumes what the other needs.
+            bool selectionEvent = clipboard_ != nullptr && clipboard_->HandleEvent(event);
+            if (primarySelection_ != nullptr && primarySelection_->HandleEvent(event))
+            {
+                selectionEvent = true;
+            }
+            if (selectionEvent)
             {
                 continue;
             }
             TranslateEvent(event, destination);
+            if (textInput_ != nullptr)
+            {
+                // A commit looked up with Xutf8LookupString can end the composition too.
+                textInput_->TakeEditingEvents(destination);
+            }
         }
         if (mouse_ != nullptr)
         {
             mouse_->RefreshRelativeMode();
         }
+        if (touch_ != nullptr)
+        {
+            // Contacts of a window that went away since the last pump (X11Touch::ForgetWindow).
+            touch_->TakePendingEvents(destination);
+        }
+        // A focus loss held back because it came right after a display-mode change is decided
+        // here, once the grace period is over (X11Window::OnFocusChanged).
+        for (const auto& [id, window] : windows_)
+        {
+            (void) id;
+            if (window != nullptr)
+            {
+                window->CheckPendingFocusLoss();
+            }
+        }
+    }
+
+    void X11Platform::UpdateContentScale(X11Window& window, std::vector<PlatformEvent>& destination)
+    {
+        if (displays_ == nullptr)
+        {
+            return;
+        }
+        const float scale = displays_->ContentScaleAt(window.GetCachedBounds());
+        if (scale == window.GetContentScale())
+        {
+            return;
+        }
+        window.SetContentScale(scale);
+        WindowEvent changed;
+        changed.window = window.GetId();
+        changed.kind = WindowEventKind::DisplayScaleChanged;
+        destination.emplace_back(changed);
     }
 
     void X11Platform::EmitWindowStateTransitions(X11Window& window,
@@ -665,6 +933,44 @@ namespace CNA::Platform::X11 {
                     }
                     mouse_->AccumulateRawMotion(deltaX, deltaY);
                 }
+                else if ((event.xcookie.evtype == XI_TouchBegin ||
+                          event.xcookie.evtype == XI_TouchUpdate ||
+                          event.xcookie.evtype == XI_TouchEnd) &&
+                         touch_ != nullptr)
+                {
+                    // plans/plan_x11.md X11-0155: a touchscreen contact on one of our windows.
+                    const auto* device = static_cast<const XIDeviceEvent*>(event.xcookie.data);
+                    if (X11Window* target = FindWindowByXid(device->event))
+                    {
+                        touch_->HandleEvent(*device, *target, destination);
+                    }
+                }
+                else if ((event.xcookie.evtype == XI_ButtonPress ||
+                          event.xcookie.evtype == XI_ButtonRelease ||
+                          event.xcookie.evtype == XI_Motion) &&
+                         touch_ != nullptr)
+                {
+                    // A pen's own events: only pens' are selected. The core pointer events the
+                    // pen drives -- the mouse -- arrive separately, as for any pointer.
+                    const auto* device = static_cast<const XIDeviceEvent*>(event.xcookie.data);
+                    if (X11Window* target = FindWindowByXid(device->event))
+                    {
+                        (void) touch_->HandlePenEvent(*device, *target, destination);
+                    }
+                }
+                else if (event.xcookie.evtype == XI_HierarchyChanged)
+                {
+                    // A device plugged in or out: pens for touch, and every class for the
+                    // enumeration's DeviceEvents (X11-0165).
+                    if (touch_ != nullptr)
+                    {
+                        touch_->RefreshPens();
+                    }
+                    if (inputDevices_ != nullptr)
+                    {
+                        inputDevices_->HandleHierarchyChanged(destination);
+                    }
+                }
                 XFreeEventData(display, &event.xcookie);
             }
             return;
@@ -690,6 +996,18 @@ namespace CNA::Platform::X11 {
             return;
         }
 #endif
+
+        // plans/plan_x11.md X11-0156: the session's scale changed -- a new Xft.dpi, the settings
+        // manager's property, a manager arriving or leaving. The event goes on to its ordinary
+        // handling afterwards; nothing else here consumes these.
+        if (connection_->GetContentScale().HandleEvent(event))
+        {
+            if (displays_ != nullptr) { displays_->InvalidateCache(); }
+            for (const auto& [id, window] : windows_)
+            {
+                if (window != nullptr) { UpdateContentScale(*window, destination); }
+            }
+        }
 
         if (connection_->HasXkb() && connection_->GetXkbEventBase() >= 0 &&
             event.type == connection_->GetXkbEventBase())
@@ -801,6 +1119,13 @@ namespace CNA::Platform::X11 {
                     moved.data2 = event.xconfigure.y;
                     destination.emplace_back(moved);
                 }
+                // Onto a monitor with a scale of its own (X11-0156). Only where the session gives
+                // monitors their own scales: otherwise every monitor has the session's, and a
+                // move cannot change it.
+                if (connection_->GetContentScale().HasPerMonitorScales())
+                {
+                    UpdateContentScale(*window, destination);
+                }
                 return;
             }
             case MapNotify:
@@ -855,6 +1180,15 @@ namespace CNA::Platform::X11 {
                     }
                     return;
                 }
+                if (event.xproperty.atom == atoms.netWmState)
+                {
+                    // Before the transitions are reported: a window taken out of fullscreen by
+                    // someone else gives its display mode back first (X11-0153). The trap is for
+                    // the same destroy race EmitWindowStateTransitions guards against.
+                    X11ErrorTrap trap(display);
+                    window->OnNetWmStateChanged();
+                    trap.Sync();
+                }
                 if (event.xproperty.atom == atoms.netWmState ||
                     event.xproperty.atom == atoms.wmState)
                 {
@@ -872,6 +1206,9 @@ namespace CNA::Platform::X11 {
                 }
                 const bool gained = event.type == FocusIn;
                 window->SetFocused(gained);
+                // An exclusive-fullscreen window gives the desktop its mode back when it loses
+                // focus, and takes it again with focus (X11-0153).
+                window->OnFocusChanged(gained);
                 if (mouse_ != nullptr)
                 {
                     // Relative mode's grab is held only while its window has focus.
@@ -896,6 +1233,12 @@ namespace CNA::Platform::X11 {
             }
             case ClientMessage:
             {
+                // A drag from another client (plans/plan_x11.md X11-0154).
+                if (window != nullptr && dragAndDrop_ != nullptr &&
+                    dragAndDrop_->HandleClientMessage(event.xclient, *window, destination))
+                {
+                    return;
+                }
                 if (event.xclient.message_type != atoms.wmProtocols ||
                     static_cast<Atom>(event.xclient.data.l[0]) != atoms.wmDeleteWindow)
                 {
@@ -934,6 +1277,14 @@ namespace CNA::Platform::X11 {
                 // dropping it from the registry then stops a later event resolving to a window
                 // whose XID has since been handed to somebody else.
                 window->MarkDestroyedByServer();
+                if (dragAndDrop_ != nullptr)
+                {
+                    dragAndDrop_->ForgetWindow(event.xdestroywindow.window);
+                }
+                if (touch_ != nullptr)
+                {
+                    touch_->ForgetWindow(windowId, event.xdestroywindow.window);
+                }
                 ForgetWindow(windowId);
                 return;
             }
@@ -942,6 +1293,24 @@ namespace CNA::Platform::X11 {
             {
                 if (keyboard_ == nullptr)
                 {
+                    return;
+                }
+                if (event.xkey.keycode == 0)
+                {
+                    // Keycode 0 is no key: it is how Xlib delivers an input method's commit, a
+                    // press whose only content is the committed string. Text, not a key event --
+                    // a game must not see a press of "no key" (plans/plan_x11.md X11-0152).
+                    std::string text;
+                    if (event.type == KeyPress && textInput_ != nullptr &&
+                        textInput_->IsActive(windowId) && textInput_->LookupText(window, event.xkey, text))
+                    {
+                        // The composition the commit ended goes first (LookupText).
+                        textInput_->TakeEditingEvents(destination);
+                        TextInputEvent input;
+                        input.window = windowId;
+                        input.text = std::move(text);
+                        destination.emplace_back(std::move(input));
+                    }
                     return;
                 }
                 if (event.type == KeyRelease && !connection_->HasDetectableAutoRepeat())
@@ -970,6 +1339,7 @@ namespace CNA::Platform::X11 {
                             if (textInput_ != nullptr && textInput_->IsActive(windowId) &&
                                 textInput_->LookupText(window, next.xkey, text))
                             {
+                                textInput_->TakeEditingEvents(destination);
                                 TextInputEvent input;
                                 input.window = windowId;
                                 input.text = std::move(text);
@@ -998,6 +1368,8 @@ namespace CNA::Platform::X11 {
                     std::string text;
                     if (textInput_->LookupText(window, event.xkey, text))
                     {
+                        // The composition the commit ended goes first (LookupText).
+                        textInput_->TakeEditingEvents(destination);
                         TextInputEvent input;
                         input.window = windowId;
                         input.text = std::move(text);
@@ -1172,10 +1544,102 @@ namespace CNA::Platform::X11 {
         }
     }
 
+    // The controller subsystem is started by the first question about controllers rather than at
+    // construction, as the SDL3 backend does: opening /dev/input reads every node's description,
+    // and a game that never asks about controllers should not pay for that. Game::UpdateInput()
+    // only pumps these services once the subsystem is initialised, so its per-frame call cannot be
+    // what starts it.
+    void X11Platform::EnsureControllerSubsystem()
+    {
+        if (controllerSubsystemEnsured_)
+        {
+            return;
+        }
+        controllerSubsystemEnsured_ = true;
+        AcquireSubsystem(PlatformSubsystem::Gamepad);
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        // The pump has been skipped for every frame up to this one; without this the first query
+        // would answer about a device list nothing has read yet.
+        controllers_->gamepad.Update();
+        controllers_->joystick.Update();
+#endif
+    }
+
+    IPlatformGamepad* X11Platform::GetGamepad()
+    {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (controllers_ != nullptr)
+        {
+            EnsureControllerSubsystem();
+            return &controllers_->gamepad;
+        }
+#endif
+        return nullptr;
+    }
+
+    IPlatformJoystick* X11Platform::GetJoystick()
+    {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (controllers_ != nullptr)
+        {
+            EnsureControllerSubsystem();
+            return &controllers_->joystick;
+        }
+#endif
+        return nullptr;
+    }
+
+    IPlatformHaptics* X11Platform::GetHaptics()
+    {
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        return controllers_ != nullptr ? &controllers_->haptics : nullptr;
+#else
+        return nullptr;
+#endif
+    }
+
     IPlatformKeyboard* X11Platform::GetKeyboard() { return keyboard_.get(); }
     IPlatformMouse* X11Platform::GetMouse() { return mouse_.get(); }
     IPlatformTextInput* X11Platform::GetTextInput() { return textInput_.get(); }
     IPlatformClipboard* X11Platform::GetClipboard() { return clipboard_.get(); }
+    IPlatformInputDevices* X11Platform::GetInputDevices() { return inputDevices_.get(); }
+
+    std::vector<InputDeviceInfo> X11Platform::ControllerDevices(const InputDeviceKind kind)
+    {
+        std::vector<InputDeviceInfo> devices;
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+        if (controllers_ == nullptr)
+        {
+            return devices;
+        }
+        if (kind == InputDeviceKind::Haptic)
+        {
+            // Force feedback, from sysfs; nothing is opened to list it (X11-0168).
+            for (const HapticInfo& haptic : controllers_->haptics.GetHaptics())
+            {
+                devices.push_back({haptic.id, kind, haptic.name});
+            }
+            return devices;
+        }
+        // Asking what controllers are attached is asking about controllers: the hub starts as it
+        // does for GetGamepad(), and is read now, since enumeration answers for this moment.
+        EnsureControllerSubsystem();
+        controllers_->hub.Pump();
+        for (const auto& controller : controllers_->hub.GetControllers())
+        {
+            // Every controller is a joystick; a gamepad is also a gamepad, under the same id -- as
+            // the DeviceEvents say.
+            if (kind == InputDeviceKind::Joystick || controller->kind == Linux::EvdevDeviceClass::Gamepad)
+            {
+                devices.push_back({controller->id, kind, controller->device->GetDescription().name});
+            }
+        }
+#else
+        (void) kind;
+#endif
+        return devices;
+    }
+    IPlatformClipboard* X11Platform::GetPrimarySelection() { return primarySelection_.get(); }
 
     IPlatformDisplays* X11Platform::GetDisplays()
     {

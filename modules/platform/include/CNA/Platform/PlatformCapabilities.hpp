@@ -83,6 +83,12 @@ namespace CNA::Platform {
         bool camera = false;
         /** @brief The platform manages the application entry point (SDL-on-Android style). */
         bool managedEntrypoint = false;
+        /** @brief Files and text dropped onto a window are delivered as `DropEvent`s. */
+        bool dragAndDrop = false;
+        /** @brief The primary selection (middle-click paste) can be read and written. */
+        bool primarySelection = false;
+        /** @brief The clipboard carries formats other than text, by MIME type. */
+        bool clipboardData = false;
     };
 
     /**

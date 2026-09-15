@@ -13,6 +13,22 @@ endif()
 if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL2")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Sdl2/.*\\.cpp$")
 endif()
+# plans/plan_x11.md X11-0151: ALSA playback and CNA's own mixer, the SDL-free pair. The mixer is
+# the other implementation of MixerEngine.hpp, so it must never be compiled beside Sdl3Mixer.
+if(NOT CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+    list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Alsa/.*\\.cpp$")
+    list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Backend/CnaMixer/.*\\.cpp$")
+endif()
+if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+    # Headers only: libasound is loaded at run time (Platform/Alsa/AlsaAudioDevice.cpp), so a
+    # machine without it still runs the program and reports no audio hardware instead.
+    find_package(ALSA QUIET)
+    if(NOT ALSA_INCLUDE_DIR OR NOT EXISTS "${ALSA_INCLUDE_DIR}/alsa/asoundlib.h")
+        message(FATAL_ERROR
+            "CNA: CNA_AUDIO_PLATFORM=ALSA needs the ALSA development headers "
+            "(Debian/Ubuntu: libasound2-dev; Fedora: alsa-lib-devel).")
+    endif()
+endif()
 cna_add_module(cna_audio Audio ${CNA_AUDIO_SOURCES})
 target_include_directories(cna_audio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(cna_audio PUBLIC cna_core cna_math)
@@ -24,6 +40,15 @@ if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 elseif(CNA_AUDIO_PLATFORM STREQUAL "SDL2")
     target_link_libraries(cna_audio PRIVATE SDL2::SDL2)
+elseif(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+    target_include_directories(cna_audio PRIVATE ${ALSA_INCLUDE_DIR} ${CNA_SOURCE_DIR}/third_party/stb
+        ${CNA_SOURCE_DIR}/third_party/dr_libs)
+    target_link_libraries(cna_audio PRIVATE ${CMAKE_DL_LIBS})
+    # stb_vorbis and dr_libs (plans/plan_x11.md X11-0161) are third-party code kept identical to
+    # upstream; their warnings are not ours to fix.
+    set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Backend/CnaMixer/StbVorbis.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Backend/CnaMixer/DrLibs.cpp"
+        PROPERTIES COMPILE_OPTIONS "-w")
 elseif(NOT CNA_AUDIO_PLATFORM STREQUAL "NULL")
     message(FATAL_ERROR "CNA: cna_audio has no link rule for CNA_AUDIO_PLATFORM=${CNA_AUDIO_PLATFORM}")
 endif()

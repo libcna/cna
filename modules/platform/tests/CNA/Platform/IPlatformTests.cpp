@@ -288,8 +288,38 @@ TEST(IPlatformTests, UnsupportedServicesReturnNullRatherThanASilentStub)
     const PlatformCapabilities capabilities = platform.GetCapabilities();
     EXPECT_FALSE(capabilities.clipboard);
     EXPECT_EQ(platform.GetClipboard(), nullptr);
+    // The inherited default, which every platform without one relies on (X11-0157).
+    EXPECT_FALSE(capabilities.primarySelection);
+    EXPECT_EQ(platform.GetPrimarySelection(), nullptr);
     EXPECT_FALSE(capabilities.gamepad);
     EXPECT_EQ(platform.GetGamepad(), nullptr);
+}
+
+TEST(IPlatformTests, ATextOnlyClipboardHasNoOtherFormatsAndRefusesThem)
+{
+    // plans/plan_x11.md X11-0158: a clipboard that implements only text inherits these.
+    class TextOnlyClipboard final : public IPlatformClipboard
+    {
+    public:
+        [[nodiscard]] bool HasText() const override { return !text.empty(); }
+        [[nodiscard]] std::string GetText() const override { return text; }
+        void SetText(const std::string& value) override { text = value; }
+        std::string text = "some text";
+    };
+    TextOnlyClipboard clipboard;
+    EXPECT_TRUE(clipboard.GetMimeTypes().empty());
+    EXPECT_FALSE(clipboard.HasData("text/plain;charset=utf-8"));
+    EXPECT_TRUE(clipboard.GetData("image/png").empty());
+    try
+    {
+        clipboard.SetData({{"image/png", {0x89, 0x50, 0x4E, 0x47}}});
+        FAIL() << "a write the clipboard cannot keep must be refused, not dropped";
+    }
+    catch (const PlatformNotSupportedException& refusal)
+    {
+        EXPECT_EQ(refusal.GetCapability(), PlatformCapability::ClipboardData);
+    }
+    EXPECT_EQ(clipboard.GetText(), "some text") << "and the refusal changes nothing";
 }
 
 TEST(IPlatformTests, UnsupportedOperationsRefuseNamingTheCapability)

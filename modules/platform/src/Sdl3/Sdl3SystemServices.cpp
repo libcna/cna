@@ -214,6 +214,119 @@ namespace CNA::Platform::Sdl3 {
         }
     }
 
+    namespace {
+
+        /// What SDL serves while the application's data is on the clipboard. SDL owns it from the
+        /// moment SDL_SetClipboardData accepts the call, and frees it through the cleanup callback
+        /// when the clipboard is replaced or cleared.
+        struct HeldClipboardOffers
+        {
+            std::vector<ClipboardOffer> offers;
+        };
+
+        const void* SDLCALL ServeClipboardOffer(void* userdata, const char* mimeType, std::size_t* size)
+        {
+            const auto* held = static_cast<const HeldClipboardOffers*>(userdata);
+            for (const ClipboardOffer& offer : held->offers)
+            {
+                if (mimeType != nullptr && offer.mimeType == mimeType)
+                {
+                    *size = offer.data.size();
+                    return offer.data.data();
+                }
+            }
+            *size = 0;
+            return nullptr;
+        }
+
+        void SDLCALL ReleaseClipboardOffers(void* userdata)
+        {
+            delete static_cast<HeldClipboardOffers*>(userdata);
+        }
+
+    } // namespace
+
+    std::vector<std::string> Sdl3Clipboard::GetMimeTypes() const
+    {
+        std::size_t count = 0;
+        char** types = SDL_GetClipboardMimeTypes(&count);
+        std::vector<std::string> result;
+        if (types != nullptr)
+        {
+            for (std::size_t index = 0; index < count; ++index)
+            {
+                result.emplace_back(types[index]);
+            }
+            SDL_free(types);
+        }
+        return result;
+    }
+
+    bool Sdl3Clipboard::HasData(const std::string& mimeType) const
+    {
+        return SDL_HasClipboardData(mimeType.c_str());
+    }
+
+    std::vector<std::uint8_t> Sdl3Clipboard::GetData(const std::string& mimeType) const
+    {
+        std::size_t size = 0;
+        void* data = SDL_GetClipboardData(mimeType.c_str(), &size);
+        if (data == nullptr)
+        {
+            return {};
+        }
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t> result(bytes, bytes + size);
+        SDL_free(data);
+        return result;
+    }
+
+    void Sdl3Clipboard::SetData(const std::vector<ClipboardOffer>& offers)
+    {
+        // Checked here rather than left to SDL: SDL takes ownership of the callback's data only
+        // once video is up and the arguments are valid, and a refusal before that point would
+        // leave the copy with nobody to free it.
+        if (SDL_WasInit(SDL_INIT_VIDEO) == 0)
+        {
+            throw PlatformException("Clipboard::SetData", "the Video subsystem is not initialized");
+        }
+        if (offers.empty())
+        {
+            if (!SDL_ClearClipboardData())
+            {
+                throw PlatformException("Clipboard::SetData", SDL_GetError());
+            }
+            return;
+        }
+        auto* held = new HeldClipboardOffers{offers};
+        std::vector<const char*> types;
+        for (const ClipboardOffer& offer : held->offers)
+        {
+            types.push_back(offer.mimeType.c_str());
+        }
+        // From here SDL owns `held`, success or not.
+        if (!SDL_SetClipboardData(ServeClipboardOffer, ReleaseClipboardOffers, held, types.data(),
+                                  types.size()))
+        {
+            throw PlatformException("Clipboard::SetData", SDL_GetError());
+        }
+    }
+
+    bool Sdl3PrimarySelection::HasText() const { return SDL_HasPrimarySelectionText(); }
+
+    std::string Sdl3PrimarySelection::GetText() const
+    {
+        return TakeSdlString(SDL_GetPrimarySelectionText());
+    }
+
+    void Sdl3PrimarySelection::SetText(const std::string& text)
+    {
+        if (!SDL_SetPrimarySelectionText(text.c_str()))
+        {
+            throw PlatformException("PrimarySelection::SetText", SDL_GetError());
+        }
+    }
+
     // --- displays ---------------------------------------------------------------------------------
 
     std::vector<DisplayInfo> Sdl3Displays::GetDisplays() const

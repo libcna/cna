@@ -69,6 +69,9 @@ It is built with MSVC and with mingw-w64. Nothing in it is MSVC-only.
 | `tray` | ❌ | `Shell_NotifyIconW` is not wired up |
 | `camera` | ❌ | Media Foundation capture is out of scope |
 | `managedEntrypoint` | ❌ | This backend never renames the host's `main()` |
+| `dragAndDrop` | ❌ | `WM_DROPFILES` / OLE drop targets are not wired up (the capability was added with X11-0154) |
+| `primarySelection` | ❌ | Windows has no primary selection (the capability was added with X11-0157) |
+| `clipboardData` | ❌ | registered clipboard formats (`CF_DIB`, `HTML Format`, ...) are not wired up; text only (the capability was added with X11-0158) |
 
 Every ❌ is a capability reported **false** with a service accessor that returns `nullptr` and a
 capability-gated call that raises `PlatformNotSupportedException` naming the capability. None is a

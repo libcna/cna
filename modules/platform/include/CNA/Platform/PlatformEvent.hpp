@@ -55,7 +55,7 @@ namespace CNA::Platform {
         Restored,
         /** @brief The window moved. */
         Moved,
-        /** @brief The window's display scale changed. */
+        /** @brief The window's display scale, or the content scale of the display it is on, changed. */
         DisplayScaleChanged,
         /** @brief The window moved to a different display. */
         DisplayChanged
@@ -391,6 +391,51 @@ namespace CNA::Platform {
         AppLifecycleKind kind = AppLifecycleKind::WillEnterBackground;
     };
 
+    /** @brief The step of a drag-and-drop a `DropEvent` reports. */
+    enum class DropEventKind : std::uint8_t
+    {
+        /** @brief A drag carrying something the window can take has come over it. */
+        Begin,
+        /** @brief The drag moved over the window; `x` and `y` say where. */
+        Position,
+        /** @brief A file was dropped; `data` is its local path. */
+        File,
+        /** @brief Text was dropped; `data` is the text, whole. */
+        Text,
+        /**
+         * @brief The drag is over: after what was dropped, or on its own when the drag left the
+         * window, was cancelled, or carried nothing the window could take after all.
+         */
+        Complete
+    };
+
+    /**
+     * @brief One step of a drag-and-drop onto a window.
+     *
+     * A drop arrives as a sequence. `Begin` comes when a drag the window can take first comes
+     * over it, `Position` as it moves; then, if it is dropped, one `File` per file or one `Text`,
+     * and `Complete`. A drag that leaves without being dropped ends with `Complete` alone. This is
+     * the sequence SDL3 delivers, which is what lets the SDL3 implementation map it directly.
+     *
+     * Delivered where `PlatformCapabilities::dragAndDrop` is true.
+     */
+    struct DropEvent
+    {
+        /**
+         * @brief The window the drag is over or was dropped on; zero for a request not aimed at
+         * any window (a desktop's "open this file with").
+         */
+        WindowId window = 0;
+        /** @brief Which step this is. */
+        DropEventKind kind = DropEventKind::Begin;
+        /** @brief Where, in window coordinates (logical units); zero for `Begin` and `Complete`. */
+        float x = 0.0f;
+        /** @brief Where, in window coordinates (logical units); zero for `Begin` and `Complete`. */
+        float y = 0.0f;
+        /** @brief For `File` the local path, for `Text` the text, both UTF-8; empty otherwise. */
+        std::string data;
+    };
+
     /**
      * @brief One event from the platform, in CNA's own vocabulary.
      *
@@ -420,7 +465,8 @@ namespace CNA::Platform {
         SensorEvent,
         ControllerAxisEvent,
         ControllerButtonEvent,
-        AppLifecycleEvent>;
+        AppLifecycleEvent,
+        DropEvent>;
 
     /**
      * @brief Returns the stable, human-readable name of an event's alternative.
@@ -489,5 +535,13 @@ namespace CNA::Platform {
      * @return A stable name such as `"WillEnterBackground"`.
      */
     [[nodiscard]] const std::string& ToString(AppLifecycleKind kind);
+
+    /**
+     * @brief Returns the stable, human-readable name of a drop event kind.
+     *
+     * @param kind The kind to name.
+     * @return A stable name such as `"File"`.
+     */
+    [[nodiscard]] const std::string& ToString(DropEventKind kind);
 
 } // namespace CNA::Platform

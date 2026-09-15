@@ -146,6 +146,12 @@ TEST(RendererDetailTest, ObtainedFromAudioEngineRendererDetails)
 
     ASSERT_FALSE(engine.getRendererDetailsProperty().empty());
     const RendererDetail& rd = engine.getRendererDetailsProperty()[0];
+#if defined(CNA_AUDIO_PLATFORM_ALSA)
+    // plans/plan_x11.md X11-0151: an ALSA build's one backend is CNA's own mixer.
+    EXPECT_EQ(rd.getFriendlyNameProperty(), "CNA mixer (ALSA)");
+    EXPECT_EQ(rd.getRendererIdProperty(), "ALSA");
+#else
     EXPECT_EQ(rd.getFriendlyNameProperty(), "SDL3_mixer");
     EXPECT_EQ(rd.getRendererIdProperty(), "SDL3_mixer");
+#endif
 }

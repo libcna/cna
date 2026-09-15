@@ -23,7 +23,28 @@ namespace CNA::Devices
             return 0.0f;
         }
 
-        return platformWindow->GetDisplayScale();
+        // The window's pixel density combined with its display's content scale, as documented.
+        // A platform states high density one way or the other -- as pixel density (macOS,
+        // Wayland) or as the display's content scale (Windows, X11, where a window's pixels are
+        // its logical units) -- so the larger of the two is the scale to size content by; a
+        // product would double-count a backend reporting the same density both ways.
+        // (plans/plan_x11.md X11-0156: X11 reported the session's Xft.dpi as the window's display
+        // scale, which it is not; the content scale now comes from the display.)
+        float scale = platformWindow->GetDisplayScale();
+        if (CNA::Platform::HasCurrentPlatform())
+        {
+            if (const CNA::Platform::IPlatformDisplays* displays =
+                    CNA::Platform::GetCurrentPlatform().GetDisplays())
+            {
+                CNA::Platform::DisplayInfo display;
+                if (displays->TryGetDisplayForWindow(*platformWindow, display) &&
+                    display.contentScale > scale)
+                {
+                    scale = display.contentScale;
+                }
+            }
+        }
+        return scale;
     }
 
     Rectangle DisplayInfo::getSafeAreaProperty(const GameWindow& window)

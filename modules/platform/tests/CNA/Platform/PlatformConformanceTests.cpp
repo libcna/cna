@@ -71,6 +71,8 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     EXPECT_EQ(platform_->GetInputDevices() != nullptr, capabilities_.inputDeviceEnumeration)
         << "inputDevices";
     EXPECT_EQ(platform_->GetClipboard() != nullptr, capabilities_.clipboard) << "clipboard";
+    EXPECT_EQ(platform_->GetPrimarySelection() != nullptr, capabilities_.primarySelection)
+        << "primary selection";
     EXPECT_EQ(platform_->GetDisplays() != nullptr, capabilities_.multipleDisplays) << "displays";
     EXPECT_EQ(platform_->GetTray() != nullptr, capabilities_.tray) << "tray";
     EXPECT_EQ(platform_->GetCamera() != nullptr, capabilities_.camera) << "camera";

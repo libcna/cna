@@ -71,8 +71,12 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
     // The SDL "dummy" driver (forced above) always exposes exactly one recording device, so
     // real enumeration never sees zero microphones here, unlike a genuine headless machine.
     EXPECT_FALSE(Microphone::getAllProperty().empty());
+#elif defined(CNA_AUDIO_PLATFORM_ALSA)
+    // plans/plan_x11.md X11-0162: ALSA captures. The test binaries point it at ALSA's `null`
+    // device (CNA_AUDIO_RECORDING_DEVICE), never at the machine's microphone.
+    EXPECT_FALSE(Microphone::getAllProperty().empty());
 #elif defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
-    // SDL2 and NULL currently advertise no recording provider and must never fall back to SDL3.
+    // SDL2 and NULL advertise no recording provider and must never fall back to SDL3.
     EXPECT_TRUE(Microphone::getAllProperty().empty());
 #else
 #error "CNA audio platform selection did not define an implementation"

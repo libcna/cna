@@ -166,6 +166,11 @@ namespace CNA::Platform::Testing {
         }
         /** @brief Gets the inner clipboard service. @return The service, or null. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override { return inner_->GetClipboard(); }
+        /** @brief Gets the inner primary selection. @return The service, or null. */
+        [[nodiscard]] IPlatformClipboard* GetPrimarySelection() override
+        {
+            return inner_->GetPrimarySelection();
+        }
         /** @brief Gets the inner display service. @return The service, or null. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override { return inner_->GetDisplays(); }
         /** @brief Gets the inner dialog service. @return The service, or null. */

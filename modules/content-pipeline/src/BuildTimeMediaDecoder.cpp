@@ -232,9 +232,14 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
             }
             converted.assign(static_cast<std::size_t>(capacity) * decoded.channels * 2u, 0u);
             std::uint8_t* output = converted.data();
-            const int written = swr_convert(resampler.get(), &output, capacity,
-                                            input == nullptr ? nullptr : input->extended_data,
-                                            input == nullptr ? 0 : input->nb_samples);
+            // FFmpeg 6 declares the input as `const uint8_t **`, FFmpeg 7 as
+            // `const uint8_t * const *`; the frame's `uint8_t **` converts implicitly only to the
+            // second, so without the cast this compiled against Debian 13's FFmpeg 7 and failed
+            // against Ubuntu 24.04's FFmpeg 6. VideoDecoder.cpp makes the same cast.
+            const int written = swr_convert(
+                resampler.get(), &output, capacity,
+                input == nullptr ? nullptr : const_cast<const std::uint8_t**>(input->extended_data),
+                input == nullptr ? 0 : input->nb_samples);
             if (written <= 0)
             {
                 return;

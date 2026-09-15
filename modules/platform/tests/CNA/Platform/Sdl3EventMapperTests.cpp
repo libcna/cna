@@ -401,6 +401,73 @@ TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
 
 // --- devices (PLAT-36) ---------------------------------------------------------------------------------
 
+// --- drag and drop (plans/plan_x11.md X11-0154) -----------------------------------------------------
+
+TEST(Sdl3EventMapperTests, DropEventsMapToTheirKindsWithPositionAndData)
+{
+    SDL_Event position = MakeEvent(SDL_EVENT_DROP_POSITION);
+    position.drop.windowID = 4;
+    position.drop.x = 12.5f;
+    position.drop.y = 40.0f;
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(position, mapped));
+    const auto& moved = std::get<DropEvent>(mapped);
+    EXPECT_EQ(moved.window, 4u);
+    EXPECT_EQ(moved.kind, DropEventKind::Position);
+    EXPECT_FLOAT_EQ(moved.x, 12.5f);
+    EXPECT_FLOAT_EQ(moved.y, 40.0f);
+    EXPECT_TRUE(moved.data.empty());
+
+    SDL_Event file = MakeEvent(SDL_EVENT_DROP_FILE);
+    file.drop.windowID = 4;
+    file.drop.x = 3.0f;
+    file.drop.y = 5.0f;
+    file.drop.data = "/home/player/Úroveň 2.xnb";
+    ASSERT_TRUE(MapSdlEvent(file, mapped));
+    const auto& dropped = std::get<DropEvent>(mapped);
+    EXPECT_EQ(dropped.kind, DropEventKind::File);
+    EXPECT_EQ(dropped.data, "/home/player/Úroveň 2.xnb");
+    EXPECT_FLOAT_EQ(dropped.x, 3.0f);
+
+    SDL_Event text = MakeEvent(SDL_EVENT_DROP_TEXT);
+    text.drop.data = "two\nlines";
+    ASSERT_TRUE(MapSdlEvent(text, mapped));
+    EXPECT_EQ(std::get<DropEvent>(mapped).kind, DropEventKind::Text);
+    EXPECT_EQ(std::get<DropEvent>(mapped).data, "two\nlines");
+}
+
+TEST(Sdl3EventMapperTests, DropBeginAndCompleteCarryNeitherPositionNorData)
+{
+    // SDL documents the coordinates as meaningless on BEGIN; whatever it left there must not
+    // reach the game as a position.
+    for (const SDL_EventType type : {SDL_EVENT_DROP_BEGIN, SDL_EVENT_DROP_COMPLETE})
+    {
+        SDL_Event source = MakeEvent(type);
+        source.drop.windowID = 2;
+        source.drop.x = 99.0f;
+        source.drop.y = 77.0f;
+        source.drop.data = "stale";
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped));
+        const auto& drop = std::get<DropEvent>(mapped);
+        EXPECT_EQ(drop.kind,
+                  type == SDL_EVENT_DROP_BEGIN ? DropEventKind::Begin : DropEventKind::Complete);
+        EXPECT_EQ(drop.window, 2u);
+        EXPECT_EQ(drop.x, 0.0f);
+        EXPECT_EQ(drop.y, 0.0f);
+        EXPECT_TRUE(drop.data.empty());
+    }
+}
+
+TEST(Sdl3EventMapperTests, ADroppedFileWithNoDataDoesNotCrash)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_DROP_FILE);
+    source.drop.data = nullptr;
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    EXPECT_TRUE(std::get<DropEvent>(mapped).data.empty());
+}
+
 TEST(Sdl3EventMapperTests, DeviceAddAndRemoveMapToTheRightKindAndConnectedFlag)
 {
     const struct

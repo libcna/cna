@@ -3,7 +3,9 @@
 #include "X11Displays.hpp"
 
 #include "X11Display.hpp"
+#include "X11ContentScale.hpp"
 #include "X11Error.hpp"
+#include "X11ModeSwitch.hpp"
 #include "X11Window.hpp"
 
 #include <algorithm>
@@ -48,7 +50,7 @@ namespace CNA::Platform::X11 {
 
     } // namespace
 
-    X11Displays::X11Displays(X11Connection& connection) : connection_(connection) {}
+    X11Displays::X11Displays(X11Connection& connection) : connection_(connection), screenSaver_(connection) {}
 
     void X11Displays::InvalidateCache()
     {
@@ -57,7 +59,9 @@ namespace CNA::Platform::X11 {
 
     void X11Displays::EnsureCache() const
     {
-        if (!cacheValid_)
+        // A mode this process switched is a change the cache must reflect at once, not after the
+        // event pump reaches the server's notification of it.
+        if (!cacheValid_ || modeGeneration_ != connection_.GetModeSwitcher().GetGeneration())
         {
             BuildCache();
         }
@@ -67,6 +71,7 @@ namespace CNA::Platform::X11 {
     {
         cache_.clear();
         cacheValid_ = true;
+        modeGeneration_ = connection_.GetModeSwitcher().GetGeneration();
 
         Display* display = connection_.GetDisplay();
         const int screen = connection_.GetScreen();
@@ -96,7 +101,6 @@ namespace CNA::Platform::X11 {
                     entry.info.y = monitor.y;
                     entry.info.width = monitor.width;
                     entry.info.height = monitor.height;
-                    entry.info.contentScale = connection_.GetDisplayScale();
                     entry.info.desktopMode.width = monitor.width;
                     entry.info.desktopMode.height = monitor.height;
 
@@ -184,7 +188,6 @@ namespace CNA::Platform::X11 {
                             entry.info.y = crtcInfo->y;
                             entry.info.width = static_cast<int>(crtcInfo->width);
                             entry.info.height = static_cast<int>(crtcInfo->height);
-                            entry.info.contentScale = connection_.GetDisplayScale();
                             entry.info.desktopMode.width = entry.info.width;
                             entry.info.desktopMode.height = entry.info.height;
                             entry.crtc = resources->crtcs[index];
@@ -231,17 +234,31 @@ namespace CNA::Platform::X11 {
             entry.info.y = 0;
             entry.info.width = DisplayWidth(display, screen);
             entry.info.height = DisplayHeight(display, screen);
-            entry.info.contentScale = connection_.GetDisplayScale();
             entry.info.desktopMode.width = entry.info.width;
             entry.info.desktopMode.height = entry.info.height;
             cache_.push_back(entry);
         }
 
-        for (CachedDisplay& entry : cache_)
+        const X11ModeSwitcher& switcher = connection_.GetModeSwitcher();
+        const X11ContentScale& scale = connection_.GetContentScale();
+        for (std::size_t index = 0; index < cache_.size(); ++index)
         {
+            CachedDisplay& entry = cache_[index];
             if (entry.info.name.empty())
             {
                 entry.info.name = "Display " + std::to_string(entry.info.id);
+            }
+            // The session's scale, or the monitor's own where the session sets one (X11-0156).
+            entry.info.contentScale = scale.ForMonitor(entry.info.name, index);
+            // While exclusive fullscreen holds a mode of its own on a monitor, the monitor's
+            // geometry and current mode are that mode's -- it is what the screen shows -- but the
+            // DESKTOP mode is still the one the desktop will get back, which is what the contract
+            // means by it.
+            entry.currentMode = entry.info.desktopMode;
+            DisplayMode original;
+            if (entry.crtc != 0 && switcher.TryGetOriginalMode(entry.crtc, original))
+            {
+                entry.info.desktopMode = original;
             }
         }
     }
@@ -298,6 +315,27 @@ namespace CNA::Platform::X11 {
         }
         display = best->info;
         return true;
+    }
+
+    float X11Displays::ContentScaleAt(const WindowBounds& bounds) const
+    {
+        EnsureCache();
+        const CachedDisplay* best = nullptr;
+        int bestArea = 0;
+        for (const CachedDisplay& entry : cache_)
+        {
+            const int area = OverlapArea(bounds, entry.info);
+            if (area > bestArea)
+            {
+                bestArea = area;
+                best = &entry;
+            }
+        }
+        if (best == nullptr && !cache_.empty())
+        {
+            best = &cache_.front();
+        }
+        return best != nullptr ? best->info.contentScale : connection_.GetContentScale().Global();
     }
 
     bool X11Displays::TryGetSafeAreaForWindow(const IPlatformWindow& window,
@@ -375,50 +413,28 @@ namespace CNA::Platform::X11 {
         {
             return false;
         }
-        mode = found->info.desktopMode;
+        mode = found->currentMode;
         return true;
     }
 
     bool X11Displays::IsScreenSaverEnabled() const
     {
-        int timeout = 0;
-        int interval = 0;
-        int preferBlanking = 0;
-        int allowExposures = 0;
-        XGetScreenSaver(connection_.GetDisplay(), &timeout, &interval, &preferBlanking,
-                        &allowExposures);
-        // Timeout 0 means the server's screen saver is disabled. This describes the X server's
-        // own saver, not a desktop environment's separate screen locker, which no client can
-        // observe -- which is why this is a query about the server and says so.
-        return timeout != 0;
+        // What this game asked for. The desktop's own idle settings are not a client's to read, and
+        // the X server's timeout says nothing about them -- GNOME, for one, leaves it at zero and
+        // blanks the screen itself.
+        return screenSaver_.GetMethod() == X11ScreenSaverInhibitor::Method::None;
     }
 
     void X11Displays::SetScreenSaverEnabled(const bool enabled)
     {
-        Display* display = connection_.GetDisplay();
-        int timeout = 0;
-        int interval = 0;
-        int preferBlanking = 0;
-        int allowExposures = 0;
-        XGetScreenSaver(display, &timeout, &interval, &preferBlanking, &allowExposures);
-
-        if (!enabled)
+        if (enabled)
         {
-            if (savedScreenSaverTimeout_ < 0)
-            {
-                // Remembered so the user's own timeout comes back, rather than a hardcoded
-                // default that would silently change their session settings.
-                savedScreenSaverTimeout_ = timeout;
-            }
-            XSetScreenSaver(display, 0, interval, preferBlanking, allowExposures);
+            screenSaver_.Lift();
         }
         else
         {
-            const int restored = savedScreenSaverTimeout_ >= 0 ? savedScreenSaverTimeout_ : timeout;
-            XSetScreenSaver(display, restored, interval, preferBlanking, allowExposures);
-            savedScreenSaverTimeout_ = -1;
+            screenSaver_.Inhibit();
         }
-        XFlush(display);
     }
 
 } // namespace CNA::Platform::X11

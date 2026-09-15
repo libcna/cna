@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "X11Headers.hpp"
+#include "X11ScreenSaver.hpp"
 
 #include <map>
 #include <vector>
@@ -90,18 +91,33 @@ namespace CNA::Platform::X11 {
 
         /**
          * @brief Gets whether the host screen saver may activate.
-         * @return True when the server's screen saver timeout is non-zero.
+         * @return False exactly while this game keeps the screen on (SetScreenSaverEnabled(false)).
          */
         [[nodiscard]] bool IsScreenSaverEnabled() const override;
 
         /**
-         * @brief Allows or prevents the host screen saver from activating.
+         * @brief Allows or prevents the host screen saver from activating: the desktop's, asked
+         * over the session bus, else the X server's (X11-0170; see X11ScreenSaverInhibitor).
          * @param enabled True to allow screen saving.
          */
         void SetScreenSaverEnabled(bool enabled) override;
 
+        /** @brief Gets how the screen is kept on, for tests. @return The method, or None. */
+        [[nodiscard]] X11ScreenSaverInhibitor::Method GetScreenSaverMethod() const { return screenSaver_.GetMethod(); }
+
         /** @brief Discards the cached enumeration after a RandR configuration change. */
         void InvalidateCache();
+
+        /**
+         * @brief Gets the content scale of the display showing most of an area.
+         *
+         * From the cached enumeration, with no server round trip: called as windows move, to
+         * notice one crossing onto a monitor with a scale of its own (X11-0156).
+         *
+         * @param bounds The area, in root coordinates.
+         * @return That display's content scale.
+         */
+        [[nodiscard]] float ContentScaleAt(const WindowBounds& bounds) const;
 
     private:
         struct CachedDisplay
@@ -111,6 +127,9 @@ namespace CNA::Platform::X11 {
             /// in a build without the Xrandr headers. Zero when RandR is not in use.
             XID crtc = 0;
             XID output = 0;
+            /// The mode the monitor is in now. Differs from info.desktopMode only while exclusive
+            /// fullscreen holds a mode of its own on it (X11-0153).
+            DisplayMode currentMode;
         };
 
         void EnsureCache() const;
@@ -119,7 +138,9 @@ namespace CNA::Platform::X11 {
         X11Connection& connection_;
         mutable std::vector<CachedDisplay> cache_;
         mutable bool cacheValid_ = false;
-        int savedScreenSaverTimeout_ = -1;
+        /// The mode switcher's generation the cache was built at.
+        mutable std::uint64_t modeGeneration_ = 0;
+        X11ScreenSaverInhibitor screenSaver_;
     };
 
 } // namespace CNA::Platform::X11

@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../../src/X11/X11Clipboard.hpp"
 #include "../../../src/X11/X11Error.hpp"
 #include "../../../src/X11/X11Mouse.hpp"
 #include "../../../src/X11/X11Platform.hpp"
@@ -27,10 +28,12 @@
 #include <chrono>
 #include <cstdlib>
 #include <sys/wait.h>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -261,8 +264,9 @@ private:
 class IncrementalRequestor
 {
 public:
-    explicit IncrementalRequestor(std::function<void()> afterFirstChunk)
-        : afterFirstChunk_(std::move(afterFirstChunk))
+    explicit IncrementalRequestor(std::function<void()> afterFirstChunk,
+                                  const bool abandonAfterFirstChunk = false)
+        : afterFirstChunk_(std::move(afterFirstChunk)), abandon_(abandonAfterFirstChunk)
     {
     }
 
@@ -353,6 +357,12 @@ private:
                 {
                     first = false;
                     afterFirstChunk_();
+                    if (abandon_)
+                    {
+                        // A requestor that dies mid-transfer: its window goes, with the
+                        // connection, and it never asks for another chunk.
+                        break;
+                    }
                 }
             }
         }
@@ -362,6 +372,7 @@ private:
     }
 
     std::function<void()> afterFirstChunk_;
+    bool abandon_ = false;
     std::thread thread_;
     std::string text_;
     std::atomic<bool> done_{false};
@@ -634,24 +645,46 @@ TEST_F(X11Live, CapabilitiesDescribeThisServerRatherThanX11InGeneral)
     EXPECT_TRUE(capabilities.globalPointer);
     EXPECT_TRUE(capabilities.cursorShapes);
     EXPECT_TRUE(capabilities.clipboard);
+    // X has no dialog service; the backend draws its own boxes (plans/plan_x11.md X11-0167).
+    EXPECT_TRUE(capabilities.messageBox);
+    EXPECT_NE(platform_->GetDialogs(), nullptr);
+
+    // Controllers are not an X facility: they come from the kernel's evdev nodes, wherever the
+    // build has them and the machine has /dev/input (plans/plan_x11.md X11-0150).
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+    const bool evdev = std::filesystem::is_directory("/dev/input");
+#else
+    const bool evdev = false;
+#endif
+    EXPECT_EQ(capabilities.gamepad, evdev);
+    EXPECT_EQ(capabilities.joystick, evdev);
+    EXPECT_EQ(capabilities.gamepadRumble, evdev);
+    EXPECT_EQ(capabilities.gamepadSensors, evdev);  // Each pad says whether it has them (X11-0166).
+    EXPECT_EQ(capabilities.haptics, evdev);         // Force feedback through the same nodes (X11-0168).
+    EXPECT_EQ(platform_->GetHaptics() != nullptr, evdev);
 
     // Deliberately false, each because the facility does not exist in X11 rather than because it
     // was not finished. A future change turning one of these on without implementing it would
     // fail here rather than at a null dereference in a game.
-    EXPECT_FALSE(capabilities.gamepad);
-    EXPECT_FALSE(capabilities.joystick);
-    EXPECT_FALSE(capabilities.haptics);
     EXPECT_FALSE(capabilities.sensors);
-    EXPECT_FALSE(capabilities.messageBox);
+    // File dialogs are the desktop portal's (X11-0169), and no test reaches a session bus that
+    // has one (X11DesktopPortalTests.cpp).
     EXPECT_FALSE(capabilities.nativeFileDialog);
+    // A tray is a client owning _NET_SYSTEM_TRAY_S0 (X11-0171), and this server runs none.
     EXPECT_FALSE(capabilities.tray);
     EXPECT_FALSE(capabilities.camera);
-    EXPECT_FALSE(capabilities.powerInfo);
     EXPECT_FALSE(capabilities.managedEntrypoint);
+    // Battery state is Linux's, not X's: the kernel's power supplies (plans/plan_x11.md X11-0163).
+#ifdef CNA_PLATFORM_HAVE_EVDEV
+    EXPECT_TRUE(capabilities.powerInfo);
+#else
+    EXPECT_FALSE(capabilities.powerInfo);
+#endif
 
-    // XIM is used for committed text, which is `textInput`. `ime` promises composition and
-    // candidate events, which are not implemented -- so it must stay false however much XIM
-    // appears in the implementation.
+    // XIM is used for committed text, which is `textInput`. `ime` promises composition events,
+    // and those reach the application only when it asked to draw the composition
+    // (CNA_IME_IMPLEMENTED_UI=composition) and the input method agreed -- neither of which holds
+    // here (plans/plan_x11.md X11-0152; X11InputMethodTests covers the case where both do).
     EXPECT_FALSE(capabilities.ime);
 }
 
@@ -979,15 +1012,34 @@ TEST_F(X11Live, BorderlessIsAcceptedAndReported)
     EXPECT_FALSE(window_->IsBorderless());
 }
 
-TEST_F(X11Live, ExclusiveFullscreenRefusesRatherThanSilentlyGivingBorderless)
+TEST_F(X11Live, ExclusiveFullscreenWithoutAWindowManagerRefusesAndLeavesTheModeAlone)
 {
-    // plans/plan_x11.md design decision 11. Real exclusive mode means an XRandR mode switch with
-    // all the restore-on-crash obligations that carries. It is not implemented, and reporting
-    // borderless as exclusive would make GetFullscreenMode lie about what the display is doing.
+    // plans/plan_x11.md design decision 11 and X11-0153. Exclusive fullscreen is borderless
+    // fullscreen with a display mode of its own, and fullscreen is the window manager's to
+    // perform; this server has none. So it refuses -- before any display mode is touched, which
+    // is what the screen size read back afterwards shows. Exclusive fullscreen itself runs in
+    // X11ExclusiveFullscreenTests.cpp, on a private server with a window manager.
     window_ = MakeWindow();
+    ::Display* observer = XOpenDisplay(nullptr);
+    ASSERT_NE(observer, nullptr);
+    const ::Window root = DefaultRootWindow(observer);
+    const auto rootSize = [observer, root] {
+        ::Window rootReturn = CNA::Platform::X11::kNone;
+        int x = 0;
+        int y = 0;
+        unsigned int width = 0;
+        unsigned int height = 0;
+        unsigned int border = 0;
+        unsigned int depth = 0;
+        XGetGeometry(observer, root, &rootReturn, &x, &y, &width, &height, &border, &depth);
+        return std::pair<unsigned int, unsigned int>(width, height);
+    };
+    const auto before = rootSize();
     EXPECT_THROW(window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen),
                  PlatformNotSupportedException);
     EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::Windowed);
+    EXPECT_EQ(rootSize(), before);
+    XCloseDisplay(observer);
 }
 
 TEST_F(X11Live, ShowAndHideAreAcceptedAndVisibilityIsObservable)
@@ -1055,11 +1107,10 @@ TEST_F(X11Live, LogicalAndPixelSizeAgreeBecauseX11HasOnlyOneCoordinateSpace)
     EXPECT_EQ(bounds.width, pixels.width);
     EXPECT_EQ(bounds.height, pixels.height);
 
-    // Whatever the scale is, it must be a usable positive number -- never zero, never negative,
-    // never an absurd value derived from a monitor's claimed physical size.
-    const float scale = window_->GetDisplayScale();
-    EXPECT_GE(scale, 0.5f);
-    EXPECT_LE(scale, 8.0f);
+    // X11-0156, D-16: the display scale is pixels per logical unit, and with one coordinate space
+    // that is 1 whatever the session's scale preference is -- that belongs to the display's
+    // content scale (X11ContentScaleLive).
+    EXPECT_EQ(window_->GetDisplayScale(), 1.0f);
 }
 
 // --- timing ---------------------------------------------------------------------------------------
@@ -1632,6 +1683,31 @@ TEST_F(X11Live, AnIncrementalTransferUnderWayKeepsTheTextItStartedWith)
     EXPECT_TRUE(requestor.Text() == text) << "the transfer switched to the newer text part-way";
 }
 
+// plans/plan_native_platform_validation.md NPV-0127: a requestor that went away in the middle of
+// an INCR transfer left the transfer -- and, since NPV-0119, its copy of the text -- behind for
+// good: nothing told the clipboard the window was gone.
+TEST_F(X11Live, AnIncrementalTransferWhoseRequestorDiesIsForgotten)
+{
+    IPlatformClipboard* clipboard = platform_->GetClipboard();
+    ASSERT_NE(clipboard, nullptr);
+    auto* x11Clipboard = dynamic_cast<CNA::Platform::X11::X11Clipboard*>(clipboard);
+    ASSERT_NE(x11Clipboard, nullptr);
+    clipboard->SetText(LargeClipboardText('d'));
+
+    IncrementalRequestor requestor([] {}, true);
+    requestor.Start();
+    ASSERT_TRUE(PumpUntil([&](const std::vector<PlatformEvent>&) { return requestor.Done(); },
+                          std::chrono::milliseconds(20000)));
+    ASSERT_TRUE(requestor.SawIncr()) << "the payload did not go through INCR";
+    EXPECT_TRUE(PumpUntil(
+        [&](const std::vector<PlatformEvent>&) {
+            return x11Clipboard->GetIncrementalTransferCount() == 0;
+        },
+        std::chrono::milliseconds(2000)))
+        << x11Clipboard->GetIncrementalTransferCount()
+        << " transfer(s) still kept for a requestor that no longer exists";
+}
+
 TEST_F(X11Live, AClipboardPayloadTooLargeForOnePropertyStillRoundTrips)
 {
     // Past the server's maximum request size, which is what forces the INCR path on any external
@@ -1869,6 +1945,58 @@ TEST_F(X11Live, AGlContextRefusesOnAWindowWhoseVisualWasNotChosenForGl)
     GlContextDescription description;
     EXPECT_THROW((void) gl->CreateContext(window_->GetId(), description), PlatformException);
     EXPECT_THROW((void) gl->CreateContext(4242, description), PlatformException);
+}
+
+TEST_F(X11Live, AGlWindowWithoutAFramebufferRequestGetsWhatAGameNeeds)
+{
+    IPlatformGlContext* gl = platform_->GetGlContext();
+    if (gl == nullptr)
+    {
+        GTEST_SKIP() << "this server provides no GLX 1.3";
+    }
+    // plans/plan_x11.md X11-0172: the EasyGL renderers state no framebuffer when the window is
+    // made -- zero is "the platform default" -- and ask for 24/8 and double buffering only when they
+    // create the context. On X11 the window's visual, and with it the depth buffer, is fixed by
+    // then. A platform default of "whatever comes first" was a single-buffered visual without a
+    // depth buffer: the house demo drew every wall through every other.
+    WindowDescription description;
+    description.title = "CNA GL default";
+    description.width = 128;
+    description.height = 96;
+    description.centered = false;
+    description.renderIntent = WindowRenderIntent::OpenGl;
+    try
+    {
+        window_ = platform_->CreateWindow(description);
+    }
+    catch (const PlatformException& error)
+    {
+        GTEST_SKIP() << "no GL-capable visual on this server: " << error.what();
+    }
+    window_->Show();
+    window_->Sync();
+
+    GlContextDescription requested;
+    requested.majorVersion = 3;
+    requested.minorVersion = 3;
+    requested.profile = GlProfile::Core;
+    requested.depthBits = 24;
+    requested.stencilBits = 8;
+    requested.doubleBuffer = true;
+    GlContextHandle context = nullptr;
+    try
+    {
+        context = gl->CreateContext(window_->GetId(), requested);
+    }
+    catch (const PlatformException& error)
+    {
+        GTEST_SKIP() << "this driver refused a GL context: " << error.what();
+    }
+    const GlContextDescription granted = gl->GetContextAttributes(context);
+    EXPECT_GE(granted.depthBits, 24) << "a game's back buffer has a depth buffer";
+    EXPECT_GE(granted.stencilBits, 8) << "and XNA's Depth24Stencil8 a stencil buffer";
+    EXPECT_TRUE(granted.doubleBuffer) << "and it is double-buffered";
+    gl->DestroyContext(context);
 }
 
 TEST_F(X11Live, AGlWindowGetsARealContextThatCanBeMadeCurrentAndSwapped)

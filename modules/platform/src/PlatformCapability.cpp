@@ -35,6 +35,9 @@ namespace CNA::Platform {
         static const std::string tray = "Tray";
         static const std::string camera = "Camera";
         static const std::string managedEntrypoint = "ManagedEntrypoint";
+        static const std::string dragAndDrop = "DragAndDrop";
+        static const std::string primarySelection = "PrimarySelection";
+        static const std::string clipboardData = "ClipboardData";
 
         // Exhaustive switch with no default arm: a new PlatformCapability without a name here
         // is a compiler diagnostic, not a silent fallback string.
@@ -69,6 +72,9 @@ namespace CNA::Platform {
             case PlatformCapability::Tray: return tray;
             case PlatformCapability::Camera: return camera;
             case PlatformCapability::ManagedEntrypoint: return managedEntrypoint;
+            case PlatformCapability::DragAndDrop: return dragAndDrop;
+            case PlatformCapability::PrimarySelection: return primarySelection;
+            case PlatformCapability::ClipboardData: return clipboardData;
         }
 
         return multipleWindows;

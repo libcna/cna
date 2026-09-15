@@ -41,6 +41,22 @@ endif()
 if(CNA_PLATFORM STREQUAL "X11")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/X11/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+
+    # Controllers come from the kernel, not from X: the X server has not delivered joystick input
+    # to clients for decades. On Linux that is evdev, reached through nothing but the kernel's own
+    # <linux/input.h> -- no libudev, no libevdev. Another Unix running X (FreeBSD, say) has no
+    # such header and its X11 build simply reports no gamepad and no joystick.
+    include(CheckIncludeFileCXX)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        check_include_file_cxx("linux/input.h" CNA_PLATFORM_HAVE_LINUX_INPUT_H)
+    endif()
+    if(CNA_PLATFORM_HAVE_LINUX_INPUT_H)
+        file(GLOB CNA_PLATFORM_LINUX_SOURCES CONFIGURE_DEPENDS "src/Linux/*.cpp")
+        list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_LINUX_SOURCES})
+        set(CNA_PLATFORM_HAVE_EVDEV TRUE)
+        # For the test registration, which lives outside this directory's scope.
+        set_property(GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV TRUE)
+    endif()
 endif()
 
 # Implementation pieces shared between implementations that have no platform library to ask --
@@ -135,4 +151,7 @@ if(CNA_PLATFORM STREQUAL "X11")
     # than linking; libdl is folded into glibc on modern Linux but is a separate library on
     # several other Unix hosts, so it is asked for rather than assumed.
     target_link_libraries(cna_platform PRIVATE ${CMAKE_DL_LIBS})
+    if(CNA_PLATFORM_HAVE_EVDEV)
+        target_compile_definitions(cna_platform PRIVATE CNA_PLATFORM_HAVE_EVDEV=1)
+    endif()
 endif()

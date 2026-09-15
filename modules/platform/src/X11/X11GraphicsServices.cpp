@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
 #include <type_traits>
@@ -243,6 +244,70 @@ namespace CNA::Platform::X11 {
         {
             return chosen;
         }
+        // "Zero leaves the platform default" (WindowDescription), and this platform's default is
+        // what a game's back buffer needs: double-buffered, with XNA's Depth24Stencil8 -- more than
+        // SDL's own default (double-buffered, 16-bit depth), never less. The renderers that state
+        // their framebuffer only when they create the context (EasyGL) get it from here, because on
+        // X11 the window's visual, and every buffer with it, is fixed when the window is made
+        // (plans/plan_x11.md X11-0172). A server that cannot give that much is asked for less, one
+        // step at a time; what a caller asked for explicitly is a minimum, never lowered. Keeping a
+        // depth buffer wins over keeping multisampling.
+        struct Candidate
+        {
+            int depth;
+            int stencil;
+            bool doubleBuffer;
+        };
+        std::vector<Candidate> candidates;
+        const int depth = depthBits > 0 ? depthBits : 24;
+        const int stencil = stencilBits > 0 ? stencilBits : 8;
+        candidates.push_back({depth, stencil, true});
+        if (stencilBits == 0)
+        {
+            candidates.push_back({depth, 0, true});
+        }
+        if (depthBits == 0)
+        {
+            candidates.push_back({16, stencilBits, true});
+            candidates.push_back({0, stencilBits, true});
+        }
+        if (!doubleBuffered)
+        {
+            // Double buffering was not required: a single-buffered visual, but only as a last resort.
+            const std::size_t doubled = candidates.size();
+            for (std::size_t index = 0; index < doubled; ++index)
+            {
+                candidates.push_back({candidates[index].depth, candidates[index].stencil, false});
+            }
+        }
+        for (const Candidate& candidate : candidates)
+        {
+            chosen = ChooseExactVisual(candidate.depth, candidate.stencil, candidate.doubleBuffer, samples);
+            if (chosen.visual == nullptr && samples > 1)
+            {
+                // A driver that cannot give the requested sample count refuses the whole config
+                // rather than degrading, and a window without antialiasing is better than none.
+                chosen = ChooseExactVisual(candidate.depth, candidate.stencil, candidate.doubleBuffer, 0);
+            }
+            if (chosen.visual != nullptr)
+            {
+                return chosen;
+            }
+        }
+#else
+        (void) depthBits;
+        (void) stencilBits;
+        (void) doubleBuffered;
+        (void) samples;
+#endif
+        return chosen;
+    }
+
+    X11GlVisual X11GlContext::ChooseExactVisual(const int depthBits, const int stencilBits,
+                                                const bool doubleBuffered, const int samples) const
+    {
+        X11GlVisual chosen;
+#if defined(CNA_X11_HAVE_GLX)
         Display* display = connection_.GetDisplay();
         const int screen = connection_.GetScreen();
 
@@ -282,13 +347,6 @@ namespace CNA::Platform::X11 {
         if (configs == nullptr || configCount == 0)
         {
             if (configs != nullptr) { XFree(configs); }
-            // A second attempt without MSAA. A driver that cannot give the requested sample count
-            // refuses the whole config rather than degrading, and a window with no GL visual at
-            // all is a worse outcome than a window without antialiasing.
-            if (samples > 1)
-            {
-                return ChooseVisual(depthBits, stencilBits, doubleBuffered, 0);
-            }
             return chosen;
         }
 
@@ -426,6 +484,21 @@ namespace CNA::Platform::X11 {
         if (Glx().GetFBConfigAttrib(display, fbConfig, GLX_DOUBLEBUFFER, &value) == 0)
         {
             record.granted.doubleBuffer = value != 0;
+        }
+        if (record.granted.depthBits < description.depthBits || record.granted.stencilBits < description.stencilBits ||
+            (description.doubleBuffer && !record.granted.doubleBuffer))
+        {
+            // The window's visual was fixed when the window was made; a context cannot add a depth
+            // buffer to it. Said out loud, because the symptom -- walls drawn through walls -- does
+            // not point here (plans/plan_x11.md X11-0172).
+            std::fprintf(stderr,
+                         "[CNA][X11] The GL window's visual has %d depth bits, %d stencil bits and is %s, "
+                         "but the context asked for %d, %d and %s. A window's visual is fixed when it is "
+                         "made: state the framebuffer in WindowDescription::openGlFramebuffer.\n",
+                         record.granted.depthBits, record.granted.stencilBits,
+                         record.granted.doubleBuffer ? "double-buffered" : "single-buffered", description.depthBits,
+                         description.stencilBits, description.doubleBuffer ? "double buffering" : "either");
+            std::fflush(stderr);
         }
 
         const auto handle = static_cast<GlContextHandle>(context);

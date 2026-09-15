@@ -84,10 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          for repo in sharp-runtime easy-gl meta-gl; do
-            git clone --depth 1 --branch develop \
-              "https://github.com/openeggbert/${repo}.git" "${repo}"
-          done
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       - name: Install build and native dependencies
         run: |
@@ -256,8 +253,11 @@ jobs:
           sudo apt-get update
           sudo dpkg --add-architecture i386
           sudo apt-get update
+          # `wine`, not only `wine64`: on Ubuntu 24.04 the wine64 package no longer puts a `wine64`
+          # command on PATH (the job failed with "wine64: command not found"); the `wine`
+          # launcher picks the 64-bit loader for a PE32+ executable itself.
           sudo apt-get install -y --no-install-recommends \
-            g++-mingw-w64-x86-64 cmake ninja-build xvfb wine64
+            g++-mingw-w64-x86-64 cmake ninja-build xvfb wine wine64
 
       - name: Configure the standalone platform harness for WIN32
         run: |
@@ -281,8 +281,8 @@ jobs:
           export WINEPREFIX="${RUNNER_TEMP}/wineprefix"
           # Let Wine create and settle its prefix before the run, so first-boot chatter is not
           # mistaken for a test failure.
-          wine64 wineboot --init || true
-          wine64 build-win32/cna_platform_tests.exe
+          wine wineboot --init || true
+          wine build-win32/cna_platform_tests.exe
 
       - name: Probe real Direct3D on the produced window
         # Wine's D3D12 needs vkd3d over a Vulkan driver and its D3D11 needs a GL or Vulkan path, so
@@ -295,7 +295,7 @@ jobs:
           export WINEDEBUG=-all
           export WINEPREFIX="${RUNNER_TEMP}/wineprefix"
           set +e
-          wine64 build-win32/cna_win32_directx_probe.exe
+          wine build-win32/cna_win32_directx_probe.exe
           status=$?
           set -e
           if [ "$status" -eq 2 ]; then
@@ -387,20 +387,19 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          for repo in sharp-runtime easy-gl meta-gl; do
-            git clone --depth 1 --branch develop \
-              "https://github.com/openeggbert/${repo}.git" "${repo}"
-          done
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       - name: Install build and native X11 dependencies (no SDL packages needed or installed)
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils openbox \
+            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils openbox xclip xsel \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev binutils \
+            ibus dbus-x11 xdotool x11-xkb-utils libdbus-1-dev dbus-daemon \
+            xserver-xorg-core xserver-xorg-video-dummy xserver-xorg-input-evdev
 
       - name: Cache compiler outputs
         uses: actions/cache@v4
@@ -409,6 +408,23 @@ jobs:
           key: platform-ccache-${{ runner.os }}-x11-sdl-free-${{ github.sha }}
           restore-keys: |
             platform-ccache-${{ runner.os }}-x11-sdl-free-
+
+      # plans/plan_x11.md X11-0150/X11-0155: the controller suite's virtual pads and the
+      # touchscreen suite's virtual touchscreen and pen are uinput devices, read back through
+      # their event nodes. On this throwaway VM the nodes are simply opened to everyone; where the
+      # runner's kernel has no uinput, both suites skip as they always did.
+      - name: Give the runner uinput and readable input nodes (CI VM only)
+        run: |
+          set -euo pipefail
+          if sudo modprobe uinput && [ -e /dev/uinput ]; then
+            sudo chmod 0666 /dev/uinput
+            echo 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0666"' \
+              | sudo tee /etc/udev/rules.d/99-cna-ci-input.rules
+            sudo udevadm control --reload-rules
+            echo "CNA_CI_HAS_UINPUT=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::no uinput on this runner; the evdev and touchscreen suites will skip"
+          fi
 
       - name: Start an isolated X11 display (Xvfb + openbox)
         run: |
@@ -438,7 +454,8 @@ jobs:
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_ENABLE_NET=OFF \
             -DCNA_USE_CCACHE=ON \
-            -DCNA_TEST_DISPLAY=:99
+            -DCNA_TEST_DISPLAY=:99 \
+            -DCNA_PLATFORM_CTEST_BINARY=CnaPlatformModuleTests
 
       - name: Build the platform, audio and content test suites, and cna_content itself
         run: cmake --build build --target CnaPlatformModuleTests CnaAudioTests CnaContentTests CnaContentPipelineTests cna_content --parallel "$(nproc)"
@@ -462,13 +479,51 @@ jobs:
       - name: Run platform, audio, content and WAV-decoder tests
         env:
           SDL_AUDIODRIVER: dummy
+          # plans/plan_x11.md X11-0166: a virtual accelerometer is safe only on this VM.
+          CNA_X11_TEST_MOTION_SENSOR: "1"
         run: |
           set -euo pipefail
-          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|IntegrationTests|WindowManagerTests))$' --output-on-failure
+          ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests|XErrorHandlerTests)|X11(MappingTests|EvdevTests|IntegrationTests|WindowManagerTests|InputMethodTests|ExclusiveFullscreenTests|TouchscreenTests))$' --output-on-failure
           ctest --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'
           ./build/CnaContentTests --gtest_filter='*Wav*:*SoundEffect*'
+
+      # plans/plan_x11.md X11-0166: ctest counts a suite whose every case skipped as passed, and
+      # the uinput suites skip wherever the machine lacks what they need. On this runner nothing
+      # is lacking, so they run once more with their output kept, and any skip fails the job --
+      # what they prove on CI is then read in the log, not inferred from a green tick. Since
+      # X11-0169/X11-0170 the same goes for the suites that need a private D-Bus and the
+      # launcher's own X server.
+      - name: The uinput, D-Bus and private-server suites ran rather than skipped
+        if: env.CNA_CI_HAS_UINPUT == '1'
+        env:
+          CNA_X11_TEST_MOTION_SENSOR: "1"
+          CNA_X11_TEST_TOUCHSCREEN: "1"
+          CNA_AUDIO_RECORDING_DEVICE: "null"
+        run: |
+          set -euo pipefail
+          run_without_skips() {
+            local label="$1"
+            shift
+            local status=0
+            local output
+            output="$("$@" 2>&1)" || status=$?
+            printf '%s\n' "$output"
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+            if grep -q '^\[  SKIPPED \]' <<<"$output"; then
+              echo "::error::$label skipped on a runner that has what it needs; the reasons are above" >&2
+              exit 1
+            fi
+          }
+          for filter in 'X11EvdevVirtualDevice.*' 'X11Touchscreen.*' 'X11DesktopPortalBus.*'; do
+            run_without_skips "$filter" ./build/CnaPlatformModuleTests --gtest_filter="$filter"
+          done
+          run_without_skips "the private-server suites" sh tools/platform/x11_test_server.sh \
+            ./build/CnaPlatformModuleTests \
+            --gtest_filter='X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11MessageBoxLive.*:X11TrayLive.*'
 
       - name: Run SDL containment gates
         run: |
@@ -477,6 +532,116 @@ jobs:
           python3 tools/platform/renderer_sdl_audit.py --check
           python3 tools/platform/sdl_ratchet.py --check --strict
           python3 tools/platform/nonproduction_sdl_audit.py --check
+
+  # ---------------------------------------------------------------------------------------------
+  # plans/plan_native_platform_validation.md "Next steps", step 1: the SDL-free X11 cell above
+  # selects HEADLESS on purpose, and three defects lived exactly where it does not look -- an
+  # SDL-free configuration with a GPU renderer: it could not configure (NPV-0106), a sibling's
+  # find_package(SDL3) found an installed SDL3 (NPV-0114), and the platform linked libGLX into
+  # every build (NPV-0121). This cell configures that selection, builds two real games from it and
+  # runs them with every renderer compiled in, on Mesa's software GL and Vulkan drivers.
+  x11-sdl-free-gpu:
+    name: X11 + OpenGL33/Vulkan/Software/Headless + ALSA audio (CNA_ENABLE_SDL=OFF)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone public sibling repositories
+        run: |
+          set -euo pipefail
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
+
+      - name: Install build, X11, GL, Vulkan and ALSA dependencies (no SDL packages)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils binutils \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libgl1-mesa-dev libglx-dev libgl1-mesa-dri libvulkan-dev mesa-vulkan-drivers \
+            libasound2-dev openbox x11-xserver-utils libdbus-1-dev dbus-daemon
+
+      - name: Cache compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: platform-ccache-${{ runner.os }}-x11-sdl-free-gpu-${{ github.sha }}
+          restore-keys: |
+            platform-ccache-${{ runner.os }}-x11-sdl-free-gpu-
+
+      # plans/plan_x11.md X11-0151: the SDL-free games with sound -- ALSA playback and CNA's own
+      # mixer. The runner has no sound card; everything plays to ALSA's silent `null` device.
+      - name: Configure CNA_ENABLE_SDL=OFF + X11 + OPENGL33;VULKAN;SOFTWARE;HEADLESS + ALSA audio
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCNA_ENABLE_SDL=OFF \
+            -DCNA_PLATFORM=X11 \
+            -DCNA_GRAPHICS_RENDERER=OPENGL33 \
+            -DCNA_GRAPHICS_RENDERERS="OPENGL33;VULKAN;SOFTWARE;HEADLESS" \
+            -DCNA_AUDIO_PLATFORM=ALSA \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=ON \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_USE_CCACHE=ON
+
+      - name: Build two real games and the audio test suite
+        run: cmake --build build --target cna_demo_2d cna_house3d_demo CnaAudioTests --parallel "$(nproc)"
+
+      - name: Prove no SDL was found, built or linked
+        run: |
+          set -euo pipefail
+          if grep -E '^SDL[23]_DIR:PATH=' build/CMakeCache.txt | grep -v NOTFOUND; then
+            echo "::error::An SDL package was found by a CNA_ENABLE_SDL=OFF configuration." >&2
+            exit 1
+          fi
+          for exe in build/cna_demo_2d build/cna_house3d_demo build/CnaAudioTests; do
+            if readelf -d "$exe" | grep -i 'NEEDED.*sdl'; then
+              echo "::error::$exe links against SDL." >&2
+              exit 1
+            fi
+            if nm -D --undefined-only "$exe" | grep -q ' SDL_'; then
+              echo "::error::$exe references SDL symbols." >&2
+              exit 1
+            fi
+            # libasound is loaded at run time, never linked: a machine without it must still start.
+            if readelf -d "$exe" | grep -i 'NEEDED.*asound'; then
+              echo "::error::$exe links libasound instead of loading it at run time." >&2
+              exit 1
+            fi
+          done
+
+      - name: Run both games with every renderer compiled in (private Xvfb, Mesa software drivers)
+        env:
+          CNA_AUDIO_DEVICE: "null"
+        run: |
+          set -euo pipefail
+          ctest --test-dir build -R '^X11_House3D_SmokeTest_' --output-on-failure
+          # plans/plan_x11.md X11-0153: the game in exclusive fullscreen -- the monitor of a
+          # private Xvfb switched through IsFullScreen, and given back on exit and after SIGKILL.
+          ctest --test-dir build -R '^X11_House3D_ExclusiveFullscreen_' --output-on-failure
+          for renderer in OPENGL33 VULKAN SOFTWARE HEADLESS; do
+            (cd build && CNA_GRAPHICS_RENDERER="$renderer" \
+              sh ../tools/platform/x11_test_server.sh ./cna_demo_2d --smoke 6)
+          done
+
+      - name: Run the ALSA device, CNA mixer and XNA audio suites on ALSA's null device
+        env:
+          CNA_AUDIO_DEVICE: "null"
+          CNA_AUDIO_RECORDING_DEVICE: "null"
+        run: |
+          set -euo pipefail
+          ./build/CnaAudioTests --gtest_filter='CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AlsaAudioRecordingDevice.*:Microphone*:AudioCategory*:*AudioDeviceConformanceTests*:AudioEngine*:RendererDetail*'
 
   # ---------------------------------------------------------------------------------------------
   # plans/plan_native_platforms_integration.md NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.
@@ -524,10 +689,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          for repo in sharp-runtime easy-gl meta-gl; do
-            git clone --depth 1 --branch develop \
-              "https://github.com/openeggbert/${repo}.git" "${repo}"
-          done
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       - name: Install build and native dependencies
         run: |

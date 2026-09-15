@@ -13,7 +13,7 @@
 #   CNA_X11_UNAVAILABLE_REASON   why not, when it is not
 #   CNA_X11_LIBRARIES            the link closure for cna_platform (PRIVATE)
 #   CNA_X11_INCLUDE_DIRS         include roots for cna_platform (PRIVATE)
-#   CNA_X11_DEFINITIONS          CNA_X11_HAVE_<EXT> for each optional piece found
+#   CNA_X11_DEFINITIONS          CNA_X11_HAVE_<EXT> for each optional piece found (D-Bus too)
 #   CNA_X11_SUMMARY              one human-readable line for the configure log
 #
 # No distro-specific include or library path is hardcoded anywhere: the search is
@@ -79,7 +79,12 @@ from XKB key names and has no equivalent without it" PARENT_SCOPE)
     # Xrandr   -> multipleDisplays                       (monitor enumeration and hotplug)
     # Xcursor  -> custom cursor images                   (core X11 still gives shaped cursors)
     # Xfixes   -> pointer hiding without an owned pixmap
-    foreach(_ext Xi Xrandr Xcursor Xfixes)
+    # Xau      -> the exclusive-fullscreen mode guardian's own connection to a server that asks
+    #             for an authorisation cookie (plans/plan_x11.md X11-0153); libX11 already
+    #             depends on it, so it is present wherever libX11 is
+    # Xss      -> a screen saver suspended for this client alone, and given back if it dies
+    #             (MIT-SCREEN-SAVER 1.1, plans/plan_x11.md X11-0170)
+    foreach(_ext Xi Xrandr Xcursor Xfixes Xau Xss)
         string(TOUPPER "${_ext}" _ext_upper)
         if(X11_${_ext}_FOUND AND X11_${_ext}_LIB)
             list(APPEND _libraries ${X11_${_ext}_LIB})
@@ -133,6 +138,22 @@ from XKB key names and has no equivalent without it" PARENT_SCOPE)
         list(APPEND _found_optional "Vulkan headers")
     else()
         list(APPEND _missing_optional "Vulkan headers")
+    endif()
+
+    # D-Bus: HEADERS ONLY, like Vulkan. The desktop portal -- file dialogs and OpenUrl
+    # (plans/plan_x11.md X11-0169) -- is reached through libdbus loaded at run time, so a machine
+    # without it (a container, a bare X server) builds and runs everything else, and simply has
+    # no portal to offer.
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(_cna_dbus QUIET dbus-1)
+    endif()
+    if(_cna_dbus_FOUND)
+        list(APPEND _includes ${_cna_dbus_INCLUDE_DIRS})
+        list(APPEND _definitions "CNA_X11_HAVE_DBUS=1")
+        list(APPEND _found_optional "D-Bus headers")
+    else()
+        list(APPEND _missing_optional "D-Bus headers")
     endif()
 
     list(REMOVE_DUPLICATES _includes)

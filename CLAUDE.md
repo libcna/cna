@@ -494,8 +494,10 @@ Platform, renderer and audio selection are three independent CMake axes:
   refuses, at configure time, any platform/audio/renderer selection that genuinely needs SDL --
   naming which one. Nothing is ever silently substituted.
 - `CNA_GRAPHICS_RENDERER` selects the renderer.
-- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `SDL2` or `NULL`). Only `SDL3` defines
-  `SOUND_ENABLED`, because the high-level XNA decoder/mixer is an SDL3_mixer engine.
+- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `SDL2`, `NULL` or `ALSA`). `SOUND_ENABLED`
+  means a mixer exists behind `MixerEngine.hpp`: SDL3_mixer for `SDL3`, CNA's own mixer
+  (`modules/audio/src/Backend/CnaMixer/`) for `ALSA`, the SDL-free Linux backend -- see
+  `docs/audio-alsa.md`. `SDL2` and `NULL` have no mixer and do not define it.
 
 New production code must use `CNA::Platform::IPlatform` and its narrow services. Do **not** include
 SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:

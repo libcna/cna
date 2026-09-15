@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>
 #include <vector>
@@ -33,6 +34,28 @@ using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
 {
+    // Every discovered test runs in its own process, and a parallel ctest runs many of them at
+    // once, all writing the same fixture files. Written in place, one process could read another's
+    // half-written file ("Engine initialization failed!"); written beside it and renamed over it,
+    // a reader sees either no file or a whole one. The contents are identical, so which process's
+    // rename wins does not matter (plans/plan_x11.md X11-0151).
+    void WriteFileAtomically(const std::filesystem::path& file, const std::vector<uint8_t>& bytes)
+    {
+        std::random_device entropy;
+        const std::filesystem::path partial =
+            file.string() + ".partial." + std::to_string(entropy()) + std::to_string(entropy());
+        {
+            std::ofstream f(partial, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        }
+        std::error_code error;
+        std::filesystem::rename(partial, file, error);
+        if (error)
+        {
+            std::filesystem::remove(partial, error);
+        }
+    }
+
     void AppendU8(std::vector<uint8_t>& buf, uint8_t v) { buf.push_back(v); }
 
     void AppendU16(std::vector<uint8_t>& buf, uint16_t v)
@@ -139,9 +162,7 @@ namespace
             auto dir = std::filesystem::temp_directory_path() / "cna_audio_category_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
-            const auto bytes = BuildXgsFixtureBytes();
-            std::ofstream f(file, std::ios::binary);
-            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            WriteFileAtomically(file, BuildXgsFixtureBytes());
             return file.string();
         }();
         static AudioEngine engine(path);
@@ -227,9 +248,7 @@ namespace
             auto dir = std::filesystem::temp_directory_path() / "cna_audio_category_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xsb";
-            const auto bytes = BuildXsbFixtureBytes();
-            std::ofstream f(file, std::ios::binary);
-            f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            WriteFileAtomically(file, BuildXsbFixtureBytes());
             return file.string();
         }();
         return path;
@@ -375,8 +394,7 @@ namespace
         auto dir = std::filesystem::temp_directory_path() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
-        std::ofstream f(file, std::ios::binary);
-        f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        WriteFileAtomically(file, bytes);
         return file.string();
     }
 
@@ -909,8 +927,10 @@ namespace
 
     constexpr const char* kHierarchyWaveBankName = "HierarchyWaveBank";
 
-    // Same layout as BuildVolXwbFixtureBytes above -- one mono 16-bit PCM entry, 200 bytes of
-    // silence.
+    // Same layout as BuildVolXwbFixtureBytes above -- one mono 16-bit PCM entry of silence, but a
+    // full second of it: the hierarchy tests assert IsPlaying right after Play(), and 200 bytes
+    // (~2 ms) finished before the assertion whenever the thread was preempted under a parallel
+    // ctest (plans/plan_x11.md X11-0151, where this suite first ran on a non-SDL3 mixer).
     std::vector<uint8_t> BuildCategoryHierarchyXwbFixtureBytes()
     {
         constexpr uint32_t headerSize        = 48;
@@ -918,7 +938,7 @@ namespace
         constexpr uint32_t entryCount        = 1;
         constexpr uint32_t entryMetaDataSize = 4;
         constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
-        constexpr uint32_t waveDataLength    = 200;
+        constexpr uint32_t waveDataLength    = 44100u * 2u; // 1 second, mono 16-bit @ 44100Hz
         constexpr uint32_t alignment         = 4;
 
         const uint32_t segOffset[5] = {
