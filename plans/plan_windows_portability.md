@@ -667,3 +667,36 @@ across roughly 300 call sites, moved nothing on the platform where every one of 
 byte identity. The intermediate run's single mover — a stress test that declares its own run
 inconclusive when the threads fail to interleave — did not recur once the host was not also building
 Windows.
+
+## 14. What is not done, and why
+
+Listed so the next reader does not have to infer it from silence.
+
+**The test corpus is not Unicode-clean.** Roughly 1 100 `.string()` calls in
+`modules/content/tests` and `modules/content-pipeline/tests` narrow a fixture path before handing
+it to CNA. Under a non-ASCII `TEMP` they throw in the test body. This is WINPORT-F5, it is the
+`F31` class at a larger scale, and it is its own pass — the library is not implicated by it.
+
+**F31 itself.** 18 of the remaining 33 Windows-only failures are tests that ask for `/bin/echo` or
+redirect to `/dev/null`. The finding to carry forward is not the 18: it is that `RunHostProcess`
+has a Windows `CreateProcess` path with **no test behind it**. Doing that properly needs a program
+that echoes its `argv` without a shell re-parsing it, because routing through `cmd.exe` would test
+cmd's quoting instead.
+
+**Long paths.** Measured (`MAX_PATH` enforced at 260 with `LongPathsEnabled=0`) and deliberately
+**not** solved. Unicode correctness and long-path support are different problems and this workstream
+claims only the first.
+
+**F24 and F29 are untouched**, as instructed. F24's cascade is still 1 536 of the 1 585 Windows
+failures; nothing here altered Direct3D11 or WGL, and no new evidence about either was produced, so
+both stand exactly as the preceding workstream left them.
+
+**Three text-mode failures** (`"hello\r"`) and **one UNC case** (`SongTest.FromUri` with a remote
+authority) are genuinely open, genuinely Windows-only, and genuinely CNA's. Neither is a path
+*encoding* defect, which is why they survived this workstream.
+
+**`ContentPipelineCoreTest`'s `@shared/folder\escape.bin`** is analysed and is **not** a containment
+breach: on Windows `\` is a separator, so the path is contained rather than escaping, and the
+backslash normalisation is unchanged from before this branch. What differs across platforms is
+whether that spelling is one filename or two components — a semantics question worth deciding
+deliberately rather than as a side effect.
