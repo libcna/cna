@@ -456,6 +456,26 @@ if(CNA_BUILD_TESTS)
     list(SORT _cna_test_groups)
 
     add_executable(CnaTests)
+
+    # plans/plan_win32_native_validation.md WINNATIVE-0014. Windows reserves 1 MB of stack for a
+    # thread; Linux reserves 8. This binary links every module's tests into one process, and the
+    # content-pipeline suite's in-process content build crosses that 1 MB -- measured by bisection
+    # with editbin, it needs a little over 1.2 MB and is comfortable at 1.5. Below that it dies
+    # with STATUS_STACK_OVERFLOW (0xC00000FD) before GoogleTest can even write its XML, so the
+    # whole run is lost rather than one test failing.
+    #
+    # This is the test binary's size and NOT a defect in the pipeline: cna-content.exe -- the
+    # shipping tool, doing the same build through the same RunContentCompiler -- completes it in
+    # well under the default and refuses the undecodable source cleanly, exit 1, on the same
+    # machine. Verified before changing anything here, precisely so the flag could not paper over
+    # a real overflow.
+    #
+    # 8 MB rather than 2 to match the Linux default, so the two platforms give this suite the same
+    # room and a test that fits on one fits on the other.
+    if(MSVC)
+        target_link_options(CnaTests PRIVATE /STACK:8388608)
+    endif()
+
     set(CNA_FOCUSED_TEST_TARGETS)
     foreach(_cna_test_group IN LISTS _cna_test_groups)
         set(_cna_test_object_target "cna_${_cna_test_group}_test_objects")
