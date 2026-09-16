@@ -96,6 +96,16 @@ Windows and the other way round.
 never resolves `.` or `..`, never canonicalises, never touches case, and never applies Unicode
 normalisation. Those are separate decisions with separate call sites.
 
+> **Do not validate authored text through a conversion that rewrites it.** `PathToGenericUtf8()`
+> turns `\` into `/` on Windows, so a check that looks for a `\` in its *output* can never find
+> one there and is dead code on exactly the platform it was written for. This is not hypothetical:
+> the external-content-dependency check did that, and `@shared/folder\escape.bin` was one rejected
+> filename on POSIX and two accepted path components on Windows — one authored manifest with two
+> meanings. A rule about how text was *written* has to be applied to the text as written, before
+> any conversion. The corollary: a logical content identifier (`@alias/path`, an asset name, a
+> manifest key) has one separator, `/`, on every platform — see
+> `plans/plan_windows_portability_closeout.md` WINCLOSE-0006.
+
 **8. What happens with invalid UTF-8?** `PathFromUtf8()` does not validate, and the two platforms
 then differ because they genuinely differ (see question 9). On Windows the standard library throws
 `std::filesystem::filesystem_error` — measured, deterministic, never silent mojibake. On POSIX the

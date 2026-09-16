@@ -700,15 +700,29 @@ claims only the first.
 failures; nothing here altered Direct3D11 or WGL, and no new evidence about either was produced, so
 both stand exactly as the preceding workstream left them.
 
+> Superseded for F29 by `plans/plan_windows_portability_closeout.md` WINCLOSE-0002, which produced
+> that evidence: F29 is F24 seen through OpenGL. F24 itself is still open.
+
 **Three text-mode failures** (`"hello\r"`) and **one UNC case** (`SongTest.FromUri` with a remote
 authority) are genuinely open, genuinely Windows-only, and genuinely CNA's. Neither is a path
 *encoding* defect, which is why they survived this workstream.
+
+> Both closed in the closeout: WINCLOSE-0004 (the fixtures were written in text mode and read in
+> binary) and WINCLOSE-0005 (the UNC spelling was resolved correctly, but `exists()`'s throwing
+> overload turned "I cannot answer" into a `filesystem_error` instead of the documented
+> not-found).
 
 **`ContentPipelineCoreTest`'s `@shared/folder\escape.bin`** is analysed and is **not** a containment
 breach: on Windows `\` is a separator, so the path is contained rather than escaping, and the
 backslash normalisation is unchanged from before this branch. What differs across platforms is
 whether that spelling is one filename or two components — a semantics question worth deciding
 deliberately rather than as a side effect.
+
+> Decided in WINCLOSE-0006, and the analysis above was one step short. The check that should have
+> settled it read the dependency's *generic* UTF-8 spelling, and `ContentPathToUtf8()` is
+> `PathToGenericUtf8()` — so on Windows the `\` had already become `/` before the check looked for
+> it. The rejection was dead code there. A content dependency is a logical asset identifier, so
+> its one separator is `/` on every platform, and the check now reads the authored text as written.
 
 ## 15. Unicode integration on native Windows — WINPORT-0012, 0013, 0014
 

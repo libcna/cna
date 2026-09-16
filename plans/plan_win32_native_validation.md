@@ -92,7 +92,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
-| WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | ⚠️ | passes in the **standalone** platform suite (a real WGL 3.3 core context created, made current, swapped, destroyed); **crashes with an access violation in the full-suite run** — see F29. Not claimed as validated |
+| WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | ✅ | a real WGL 3.3 core context created, made current, swapped and destroyed, and every ownership path exercised in one process (`ContextLifetimeSurvivesEveryOwnershipPath…`). The full-suite access violation is **not CNA's**: it happens only once the virtual GPU has stopped serving D3D11 devices, which is F24 — measured in `plan_windows_portability_closeout.md` WINCLOSE-0002 |
 | WINNATIVE-0021 | A real CNA application, and a soak run | ✅ | `cna_demo_2d.exe` links and runs natively (D3D11, feature level 11.0, exit 0) after F28; 300 s soak: **USER, GDI and thread counts exactly flat**, clean `WM_CLOSE` exit (§3) |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ✅ | HEADLESS **161 · 0 failures**; SDL3 **336 · 0 failures · 7 skipped**; SDL2 **195 · 0 failures · 0 skipped** (§3) |
@@ -275,7 +275,16 @@ default, so a test that fits on one platform fits on the other.
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
 
-### WINNATIVE-F31 — POSIX hardcoded in tests, hiding untested Windows production code *(open)*
+### WINNATIVE-F31 — POSIX hardcoded in tests, hiding untested Windows production code *(closed)*
+
+> **Closed by `plans/plan_windows_portability_closeout.md` WINCLOSE-0003.** The finding this
+> section asks to be carried forward — that `RunHostProcess` has a Windows `CreateProcessW` path
+> with no test behind it — is answered: `tools/content/argv_echo.cpp` reports the argument vector
+> it actually received, and the `HostProcessTest` cases now run on both platforms and cover
+> quoting, backslashes, empty and non-ASCII arguments, a non-ASCII executable path, exit status,
+> the over-a-pipe-buffer drain and handle hygiene. Two Windows-path defects were found while
+> writing them. The text below is the original finding, kept because it is what asked for the
+> right program rather than a search-and-replace.
 
 Eighteen of the 44 Windows-only failures are tests that could never have passed on Windows, and one
 of them matters more than the count suggests.
@@ -349,7 +358,19 @@ runtime modules**, against exactly 2 existing uses of `u8string`. That is a migr
 review, its own test matrix and its own risk of changing behaviour on Linux, and doing it as a side
 effect of a Win32 validation run would be the wrong way to land it. Recorded, measured, and left.
 
-### WINNATIVE-F29 — the WGL context test crashes in a full run *(open, NOT claimed as validated)*
+### WINNATIVE-F29 — the WGL context test crashes in a full run *(closed: the fault is the guest driver)*
+
+> **Closed by `plans/plan_windows_portability_closeout.md` WINCLOSE-0002.** The open question
+> below — "which side of the boundary the fault is on has not been established" — was answered by
+> bisecting test order. WGL passes alone, passes with its neighbours, and passes after 15 graphics
+> tests; it crashes when exactly one more test is added, and that test is the first one at which
+> the virtual GPU stops handing out Direct3D 11 devices. The same single test repeated 20 times in
+> one process passes 7 and fails 13, so the budget is consumed per device rather than by anything
+> WGL does. CNA's own WGL ownership is now covered end to end by
+> `ContextLifetimeSurvivesEveryOwnershipPathWithoutLeavingStaleState`, which passes on native
+> Windows. The remaining crash is the guest's OpenGL implementation faulting in the exhausted
+> state, and the exhaustion itself is F24. The suspicion recorded below turned out to be right;
+> what follows is the reasoning that could not yet prove it.
 
 `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` **passes** in the
 standalone platform suite and **fails with `SEH exception 0xC0000005`** — an access violation — in
@@ -1023,7 +1044,7 @@ Across the full run there are **199 Win32-specific tests in 15 suites: 1 failure
 | `borderlessFullscreen` | `Win32FullscreenState` (9) | measured |
 | `nativeWindowHandle` | `Win32RendererBridge` (8); `TryGetWin32` feeding a real D3D11 swap chain | measured |
 | `surfacePresentation` | D3D11 device + swap chain + present on a CNA HWND; `cna_demo_2d` rendering frames | measured (**virtual GPU**) |
-| `openGlContext` | `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` | **NOT validated — F29** |
+| `openGlContext` | `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` plus `ContextLifetimeSurvivesEveryOwnershipPathWithoutLeavingStaleState` | measured (the full-suite fault is the guest driver in F24's exhausted state — WINCLOSE-0002) |
 | `vulkanSurface` | host-decided; reports false here, no `vulkan-1.dll` | correctly false |
 | `clipboard` | 10/10 against **Notepad**, both directions, including non-ASCII | measured |
 | `textInput` | `Win32InputServices` (20); `SendInput` text on the real desktop | measured |
@@ -1042,8 +1063,10 @@ The nine declined — `ime`, `gamepad`, `joystick`, `gamepadRumble`, `gamepadSen
 `plans/plan_win32.md` §15, and this workstream's non-goals say so explicitly: a capability reported
 true and backed by a stub is worse than an honest false, because a caller branches on it.
 
-Two entries above are deliberately not marked "measured". `openGlContext` passes alone and crashes
-in company (F29). `messageBox` and `nativeFileDialog` are exercised as contracts but were never put
+One entry above is deliberately not marked "measured" — `openGlContext` was the second, until
+WINCLOSE-0002 established that its full-suite fault is the guest's OpenGL implementation in the
+state F24 describes rather than anything WGL does. `messageBox` and `nativeFileDialog` are
+exercised as contracts but were never put
 in front of a real modal dialog, so what is proved is that they refuse and return correctly, not
 that a user can dismiss one.
 
@@ -1067,7 +1090,8 @@ here.
 through VBoxSVGA and the guest's Mesa SVGA3D stack. That a CNA `HWND` carries a D3D11 device, a swap
 chain and presented frames is real integration evidence. It is **not** evidence about a physical
 Windows GPU driver, and the two D3D-shaped unknowns left open (F24, F29) are both on this side of
-the line.
+the line. WINCLOSE-0002 later showed how tightly coupled they are: F29 *is* F24 seen through
+OpenGL, and both wait on hardware this machine does not have.
 
 **PHYSICAL WINDOWS GPU VALIDATION — NOT DONE.** No part of this workstream ran on a physical Windows
 machine with a vendor GPU driver. Nothing here says anything about how CNA behaves on a Radeon 780M,
@@ -1116,11 +1140,15 @@ is a place where "it builds on Windows" had meant "it builds with the compiler w
   `.string()` sites across six modules; a migration with its own review and its own risk to Linux.
   The prescription is written down.
 * **F31 — `RunHostProcess` has a Windows code path no test exercises**, because every test hands it
-  `/bin/sh`.
+  `/bin/sh`. *Closed in WINCLOSE-0003: it has one now, on both platforms, and it found two defects.*
 * **F24 — the D3D11 refusal**, reproduced by neither control and left recorded as unexplained rather
-  than blamed on CNA or on VirtualBox.
+  than blamed on CNA or on VirtualBox. *Still open, and now measured rather than described: the same
+  single test repeated in one process passes 7 times and fails 13, so the budget is spent per device
+  (WINCLOSE-0002).*
 * **F29 — WGL passes alone and crashes in company**, so it is recorded as *not validated* rather
-  than as a driver bug.
+  than as a driver bug. *Closed in WINCLOSE-0002: one test — the first that cannot get a D3D11
+  device — is the whole difference, so the fault is the guest driver in F24's state, and CNA's WGL
+  ownership is now covered by its own lifetime test.*
 * **F26 — case resolution on a case-insensitive filesystem**, a contract question rather than a bug.
 * The **nine declined capabilities** stay declined. A capability reported true and backed by a stub
   is worse than an honest false.
