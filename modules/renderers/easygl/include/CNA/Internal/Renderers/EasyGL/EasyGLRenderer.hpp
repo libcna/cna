@@ -405,6 +405,13 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
         [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
+        /**
+         * @brief Returns the XNA SurfaceFormat ordinal this cube target stores.
+         *
+         * WINCLOSE-0036. Inherited as 0 (Color) before, so GraphicsDevice's draw validation saw a
+         * float cube as Color and let XNA's no-filtering rule for float formats pass unchecked.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         // ITextureCubeRenderer — bind and upload to the shared cube texture.
         void BindGL(int unit) const override;
