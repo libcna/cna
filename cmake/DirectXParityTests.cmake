@@ -32,6 +32,19 @@ function(cna_register_d3d_parity_tests)
         if(DEFINED _cna_d3d_fixture_${F_NAME}_SOURCE)
             message(FATAL_ERROR "DirectX parity fixture ${F_NAME} is listed more than once")
         endif()
+        # plans/plan_win32_native_validation.md WINNATIVE-0009: this inventory names sources that
+        # live in other modules, so a commit that MOVES one of them and does not come back here
+        # leaves a dangling path. Without this check the generate step fails much later, with
+        # "No SOURCES given to target: cna_test_directx11_<something>" and no mention of the file
+        # or of this file -- which is exactly how a DIRECTX11 configure broke between 2026-09-08
+        # and this workstream noticed. Say which fixture, which path, and where to fix it.
+        if(NOT EXISTS "${F_SOURCE}")
+            message(FATAL_ERROR
+                "DirectX parity fixture ${F_NAME} names a source that does not exist:\n"
+                "    ${F_SOURCE}\n"
+                "Either the file moved and this inventory (cmake/DirectXParityTests.cmake) was not "
+                "updated with it, or the fixture should be removed.")
+        endif()
 
         math(EXPR _cna_d3d_fixture_order "${_cna_d3d_fixture_order} + 10")
         set(_cna_d3d_fixture_${F_NAME}_SOURCE "${F_SOURCE}")
@@ -659,7 +672,7 @@ function(cna_register_d3d_parity_tests)
     cna_d3d_parity_fixture(
         NAME RenderTargetCube_SampleAfterUnbind TARGET rendertargetcube_sample
         DIRECTX12_ORDER 2140
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_sample_test.cpp"
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_sample_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME RenderTargetCube_DepthFormat TARGET rendertargetcube_depthformat
