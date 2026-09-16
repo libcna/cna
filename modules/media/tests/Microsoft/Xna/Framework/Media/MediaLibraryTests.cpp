@@ -181,7 +181,9 @@ TEST_F(MediaLibraryTestFixture, ObjectGraphIsInternallyConsistent)
             walk(child);
         }
     };
-    walk(library->getRootPictureAlbumProperty());
+    PictureAlbum* pictureRoot = library->getRootPictureAlbumProperty();
+    ASSERT_NE(pictureRoot, nullptr);
+    walk(pictureRoot);
 
     // Every Song in the top-level SongCollection is reachable, and no Genre/Artist/Album song list
     // contains a Song absent from the top-level collection.

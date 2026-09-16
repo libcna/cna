@@ -63,6 +63,7 @@ TEST_F(MediaLibraryTestFixture, MultiLevelParentWalkReachesRootInExpectedSteps)
 TEST_F(MediaLibraryTestFixture, VacationAlbumHasOnePictureAndFamilyHasOne)
 {
     PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
     PictureAlbum* vacation = FindChildAlbum(root->getAlbumsProperty(), "Vacation");
     PictureAlbum* family = FindChildAlbum(root->getAlbumsProperty(), "Family");
     ASSERT_NE(vacation, nullptr);
@@ -74,6 +75,7 @@ TEST_F(MediaLibraryTestFixture, VacationAlbumHasOnePictureAndFamilyHasOne)
 TEST_F(MediaLibraryTestFixture, PictureAlbumEqualitySetForEqualAndUnequalAlbums)
 {
     PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
     PictureAlbum* vacation = FindChildAlbum(root->getAlbumsProperty(), "Vacation");
     PictureAlbum* family = FindChildAlbum(root->getAlbumsProperty(), "Family");
     ASSERT_NE(vacation, nullptr);
@@ -90,6 +92,7 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumEqualitySetForEqualAndUnequalAlbums)
 TEST_F(MediaLibraryTestFixture, PictureAlbumObjectEqualsChecksRuntimeTypeAndValue)
 {
     PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
     PictureAlbum* vacation = FindChildAlbum(root->getAlbumsProperty(), "Vacation");
     PictureAlbum* family = FindChildAlbum(root->getAlbumsProperty(), "Family");
     ASSERT_NE(vacation, nullptr);
@@ -116,6 +119,7 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumGetTypeNameIsFullyQualified)
 TEST_F(MediaLibraryTestFixture, PictureAlbumDisposeFlipsIsDisposed)
 {
     PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
     PictureAlbum* vacation = FindChildAlbum(root->getAlbumsProperty(), "Vacation");
     ASSERT_NE(vacation, nullptr);
     ASSERT_FALSE(vacation->getIsDisposedProperty());
@@ -130,7 +134,9 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumDisposeFlipsIsDisposed)
 // via FindChildAlbum, and only implicitly, never Dispose()).
 TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionIndexerThrowsOutOfRange)
 {
-    auto* albums = library->getRootPictureAlbumProperty()->getAlbumsProperty();
+    PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
+    auto* albums = root->getAlbumsProperty();
     EXPECT_THROW((void)(*albums)[-1], System::ArgumentOutOfRangeException);
     EXPECT_THROW((void)(*albums)[static_cast<SharpRuntime::intcs>(albums->getCountProperty())],
                  System::ArgumentOutOfRangeException);
@@ -138,7 +144,9 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionIndexerThrowsOutOfRange)
 
 TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionDisposeFlipsIsDisposed)
 {
-    auto* albums = library->getRootPictureAlbumProperty()->getAlbumsProperty();
+    PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
+    auto* albums = root->getAlbumsProperty();
     ASSERT_FALSE(albums->getIsDisposedProperty());
 
     albums->Dispose();
@@ -150,6 +158,8 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionDisposeFlipsIsDisposed)
 // GetTypeName().
 TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionGetTypeNameIsFullyQualified)
 {
-    auto* albums = library->getRootPictureAlbumProperty()->getAlbumsProperty();
+    PictureAlbum* root = library->getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
+    auto* albums = root->getAlbumsProperty();
     EXPECT_EQ(albums->GetTypeName(), "Microsoft.Xna.Framework.Media.PictureAlbumCollection");
 }
