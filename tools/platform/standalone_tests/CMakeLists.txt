@@ -264,6 +264,17 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     add_executable(cna_win32_native_stress win32_native_stress.cpp)
     target_link_libraries(cna_win32_native_stress PRIVATE cna_platform user32 gdi32 psapi)
     target_compile_options(cna_win32_native_stress PRIVATE ${CNA_HARNESS_WARNINGS})
+
+    # --- the real-desktop checks ----------------------------------------------------------------
+    # The questions that need a logged-on Windows desktop and a real Windows kernel: what the
+    # backend does to process-global state it does not own, what DPI reports at a scaling factor
+    # other than 100 %, whether the clipboard it writes is the one other programs read, and whether
+    # repeated cursor changes leak USER objects. None of these can be answered from inside a single
+    # process on an invisible window station, which is where an SSH session lives -- see
+    # tools/platform/win32_run_interactive.ps1.
+    add_executable(cna_win32_native_desktop win32_native_desktop.cpp)
+    target_link_libraries(cna_win32_native_desktop PRIVATE cna_platform user32 gdi32 ole32)
+    target_compile_options(cna_win32_native_desktop PRIVATE ${CNA_HARNESS_WARNINGS})
 endif()
 
 # --- MinGW runtime ------------------------------------------------------------------------------
@@ -274,7 +285,8 @@ endif()
 # so every object carries the inline std::type_info::operator== that GCC 13's mingw-w64
 # libstdc++.a also defines in tinfo.o; a static link reports it as multiply defined.
 if(MINGW)
-    foreach(_cna_target IN ITEMS cna_platform_tests cna_win32_directx_probe cna_win32_native_stress)
+    foreach(_cna_target IN ITEMS cna_platform_tests cna_win32_directx_probe cna_win32_native_stress
+                              cna_win32_native_desktop)
         if(NOT TARGET ${_cna_target})
             continue()
         endif()
