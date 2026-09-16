@@ -368,8 +368,24 @@ if (Want 'app') {
                 try { $p.Kill() } catch { }
                 Add-Result 'unicode.app' 'FAIL' 'the program did not exit within 600s from a non-ASCII path'
             } else {
-                Add-Result 'unicode.app' $(if ($p.ExitCode -eq 0) { 'PASS' } else { 'FAIL' }) `
-                    ("$([System.IO.Path]::GetFileName($harness)) ran from a non-ASCII path, exit $($p.ExitCode)")
+                # The timed WaitForExit returns as soon as the process object signals, but the
+                # exit code is not necessarily populated yet; the untimed call and a Refresh are
+                # what make $p.ExitCode readable. Without them this reported an EMPTY exit code
+                # for a run that had in fact passed 379 tests.
+                $p.WaitForExit()
+                $p.Refresh()
+                $code = $p.ExitCode
+                # A gtest binary run away from the repository skips the suites that need the
+                # source tree; what is being asserted is that it RAN and reported no failure.
+                $summary = ''
+                if (Test-Path $out) {
+                    $summary = (Select-String -Path $out -Pattern '^\[  (PASSED|FAILED) ' |
+                                ForEach-Object { $_.Line.Trim() }) -join '; '
+                }
+                Add-Result 'unicode.app' $(if ($code -eq 0) { 'PASS' } else { 'FAIL' }) `
+                    ("{0} ran from a non-ASCII path, exit {1}{2}" -f `
+                     [System.IO.Path]::GetFileName($harness), $code,
+                     $(if ($summary) { " -- $summary" } else { '' }))
             }
             Copy-Item -Force $out (Join-Path $OutDir 'unicode-app-stdout.txt') -ErrorAction SilentlyContinue
         } catch {
