@@ -242,7 +242,11 @@ $script:Configurations = @(
                     '-DCNA_AUDIO_PLATFORM=NULL',
                     '-DCNA_GRAPHICS_RENDERER=DIRECTX11',
                     '-DCNA_BUILD_TESTS=ON',
-                    '-DCNA_BUILD_EXAMPLES=OFF',
+                    # Examples ON: every example in this configuration builds with MSVC (measured
+                    # 2026-09-16), and OFF left whatever example binaries an earlier manual build
+                    # had produced in the tree, stale, for the next person to launch -- the demo
+                    # that ran without its sprites was one. The PE import check covers them too.
+                    '-DCNA_BUILD_EXAMPLES=ON',
                     '-DCNA_ENABLE_NET=OFF',
                     # Draco is 84 MB of third-party source that decodes a glTF extension; the
                     # documented decoder-free build is the honest way to keep it out of a Win32
