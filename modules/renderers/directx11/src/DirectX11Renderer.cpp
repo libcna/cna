@@ -1040,12 +1040,77 @@ namespace CNA::Internal::Renderers::DirectX11
 
     RendererFormatVerdict DirectX11Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
     {
-        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
-            D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
+        if (D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
             return RendererFormatVerdict::Supported;
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat))
+        {
+            // Asked of the device, not assumed. Every mapping here is faithful, but not every DXGI
+            // format is required of every adapter -- B4G4R4A4_UNORM is optional -- and answering
+            // Supported regardless told GraphicsDevice a texture could be made that CreateTexture2D
+            // would then refuse. The render-target classifier below has always asked; this one
+            // now asks the one question this verdict answers -- can the texture be created. Not
+            // SHADER_SAMPLE: linear filtering of 32-bit float formats is optional where creating
+            // and point-sampling them is not, and XNA requires point filtering for them anyway.
+            if (!device_)
+                return RendererFormatVerdict::Supported;
+            UINT support = 0;
+            constexpr UINT required = D3D11_FORMAT_SUPPORT_TEXTURE2D;
+            const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+            if (FAILED(device_->CheckFormatSupport(format, &support)) ||
+                (support & required) != required)
+                return RendererFormatVerdict::Unsupported;
+            return RendererFormatVerdict::Supported;
+        }
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX11Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        // WINCLOSE-0013: the default defers to the framework's Color-only volume rule, so every
+        // other volume format was refused ("SurfaceFormat 12 is not implemented") although
+        // D3D11Texture3DRenderer has stored them in their declared DXGI format since DX-225. The
+        // set is Software's (SoftwareRenderer2DState.cpp), the renderer the volume format tests
+        // were written against; each entry is still asked of the device, since not every DXGI
+        // format is required as a 3D texture.
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+            {
+                if (!device_)
+                    return RendererFormatVerdict::Supported;
+                UINT support = 0;
+                const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+                if (FAILED(device_->CheckFormatSupport(format, &support)) ||
+                    (support & D3D11_FORMAT_SUPPORT_TEXTURE3D) == 0)
+                    return RendererFormatVerdict::Unsupported;
+                return RendererFormatVerdict::Supported;
+            }
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
     }
 
     RendererFormatVerdict DirectX11Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const

@@ -228,6 +228,14 @@ namespace CNA::Internal::Renderers::DirectX11
         /** @brief Classifies core XNA surface formats backed by native D3D11 storage. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
+         * @brief Classifies a volume texture format: the HiDef volume formats this renderer stores
+         *        exactly, where the device can create them as 3D textures.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported, Unsupported (block-compressed, signed-normalized, or refused by the
+         *         device), or Defer for an ordinal outside XNA's formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(int surfaceFormat) const override;
+        /**
          * @brief Classifies XNA render-target formats using actual D3D11 device support.
          * @param surfaceFormat SurfaceFormat ordinal.
          * @return Supported only when the format is an XNA render-target format that this device

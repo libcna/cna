@@ -787,7 +787,9 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // (Vulkan_NormalizedByteFormat), which is the only thing that distinguishes SNORM storage from
     // UNORM storage of the same bytes.
     // Software retains the signed values in its canonical CPU sampling plane.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl))
+    // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
+    // FNA3D's D3D11 mapping (WINCLOSE-0013).
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl, DirectX11))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -799,8 +801,9 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl))
+    // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM; DirectX11 as
+    // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013).
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl, DirectX11))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -817,7 +820,8 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field -- core 1.0, no extension. Verified by a real
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, Rlgl))
+    // DirectX11: DXGI_FORMAT_B5G5R5A1_UNORM, a<<15|r<<10|g<<5|b field for field (WINCLOSE-0013).
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, Rlgl, DirectX11))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -1197,8 +1201,15 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // wrong on every device with one. Everything else here stays named on purpose -- deriving
         // the WHOLE predicate from ClassifySurfaceFormatEXT would turn this sweep into a tautology
         // against Texture2D's own gate and stop it asserting anything about the renderer.
+        // WINCLOSE-0013: DirectX11 stores the packed 16-bit and signed-normalized pairs through the
+        // same DXGI formats FNA3D's D3D11 driver uses -- B5G6R5, B5G5R5A1, R8G8_SNORM,
+        // R8G8B8A8_SNORM -- each matching CNA's packing field for field. Named, like the flags
+        // above, and kept separate because its set is its own. Bgra4444 is the device-dependent
+        // one here too: B4G4R4A4_UNORM is optional on D3D11 hardware, so it is asked of the
+        // renderer below, which now asks the device.
+        const bool d3d11Packed16AndSignedNormalized = CNA_RENDERER_IS(DirectX11);
         const bool vulkanA4R4G4B4 =
-            CNA_RENDERER_IS(Vulkan, SdlGpu) &&
+            CNA_RENDERER_IS(Vulkan, SdlGpu, DirectX11) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
@@ -1231,6 +1242,10 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || (vulkanPacked16 && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551))
             || (vulkanA4R4G4B4 && format == SurfaceFormat::Bgra4444)
+            || (d3d11Packed16AndSignedNormalized && (format == SurfaceFormat::Bgr565
+                                                     || format == SurfaceFormat::Bgra5551
+                                                     || format == SurfaceFormat::NormalizedByte2
+                                                     || format == SurfaceFormat::NormalizedByte4))
             || (vulkanSignedNormalized && (format == SurfaceFormat::NormalizedByte2
                                            || format == SurfaceFormat::NormalizedByte4))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
