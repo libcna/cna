@@ -273,7 +273,7 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     # process on an invisible window station, which is where an SSH session lives -- see
     # tools/platform/win32_run_interactive.ps1.
     add_executable(cna_win32_native_desktop win32_native_desktop.cpp)
-    target_link_libraries(cna_win32_native_desktop PRIVATE cna_platform user32 gdi32 ole32)
+    target_link_libraries(cna_win32_native_desktop PRIVATE cna_platform user32 gdi32 ole32 opengl32)
     target_compile_options(cna_win32_native_desktop PRIVATE ${CNA_HARNESS_WARNINGS})
 endif()
 

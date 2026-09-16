@@ -282,6 +282,22 @@ add_library(CNA::ProjectOptions ALIAS cna_project_options)
 target_compile_options(cna_project_options INTERFACE
     "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
+# plans/plan_win32_native_validation.md WINNATIVE-0009. <windows.h> -- reached here through
+# <d3d11.h>, <d3d12.h>, <dxgi.h> and every other Windows SDK header -- defines min and max as
+# function-like macros unless NOMINMAX is defined first. Every std::max(...) in a translation unit
+# that includes one is then parsed as a macro invocation:
+#
+#   D3D11RenderTargets.cpp(33): error C2589: '(': illegal token on right side of '::'
+#
+# This never appeared in the MinGW cross-builds because mingw-w64's libstdc++ defines NOMINMAX for
+# you in os_defines.h. The Microsoft toolchain does not, so the first native-MSVC build of the
+# DirectX 11 renderer failed on it in four files. Declared once, here, beside /utf-8, rather than
+# in each renderer that happens to include a Windows header: modules/platform already centralises
+# the same decision for the platform backend in src/Win32/Win32Common.hpp, and the reasoning is
+# identical. WIN32_LEAN_AND_MEAN is deliberately NOT set -- it removes whole headers rather than
+# two macros, and some CNA code legitimately wants what it excludes.
+target_compile_definitions(cna_project_options INTERFACE "$<$<PLATFORM_ID:Windows>:NOMINMAX>")
+
 # Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias>, the
 # shared public build surface, and the calling module's own public include/ root. No module
 # needs another module's src/ as an include root: every cross-module internal header lives

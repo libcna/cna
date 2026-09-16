@@ -49,6 +49,7 @@
 #include <vector>
 
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
@@ -66,6 +67,7 @@
 #endif
 #include <windows.h>
 #include <objbase.h>
+#include <GL/gl.h>
 
 #undef CreateWindow
 #undef CreateDirectory
@@ -543,6 +545,83 @@ namespace
         ++checksRun;
     }
 
+
+    void CheckWgl(IPlatform& platform, int iterations)
+    {
+        // WGL through the guest's OpenGL stack. On this VM that is Mesa's SVGA3D driver, so what
+        // this proves is CNA's Windows WGL integration, not a GPU vendor's driver -- the context
+        // it reports is recorded rather than asserted, precisely so the two are not confused.
+        IPlatformGlContext* gl = platform.GetGlContext();
+        if (gl == nullptr) { Report("wgl.service", false, "no GL service"); return; }
+
+        WindowDescription description = Described("wgl");
+        description.renderIntent = WindowRenderIntent::OpenGl;
+        auto window = platform.CreateWindow(description);
+        std::vector<PlatformEvent> events;
+        Pump(platform, events);
+
+        GlContextDescription wanted;
+        wanted.majorVersion = 3;
+        wanted.minorVersion = 3;
+        wanted.profile = GlProfile::Core;
+
+        GlContextHandle context = nullptr;
+        try { context = gl->CreateContext(window->GetId(), wanted); }
+        catch (const std::exception& error)
+        {
+            // An absent or unusable OpenGL driver is an environment limitation; it is reported as
+            // one rather than as a CNA failure.
+            Info("wgl.environment", std::string("no usable OpenGL driver: ") + error.what());
+            ++checksRun;
+            return;
+        }
+        Report("wgl.contextIsReal", context != nullptr, "");
+        gl->MakeCurrent(window->GetId(), context);
+
+        auto str = [](GLenum name) {
+            const GLubyte* value = glGetString(name);
+            return value != nullptr ? std::string(reinterpret_cast<const char*>(value)) : std::string("(null)");
+        };
+        Info("wgl.version", str(GL_VERSION));
+        Info("wgl.renderer", str(GL_RENDERER));
+        Info("wgl.vendor", str(GL_VENDOR));
+        const GlContextDescription granted = gl->GetContextAttributes(context);
+        Info("wgl.granted", std::to_string(granted.majorVersion) + "." +
+                                std::to_string(granted.minorVersion));
+        Report("wgl.glGetStringWorksOnTheCurrentContext", str(GL_VERSION) != "(null)", "");
+
+        glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        gl->SwapBuffers(window->GetId());
+        Report("wgl.clearAndSwap", glGetError() == GL_NO_ERROR, "");
+
+        gl->MakeCurrent(window->GetId(), nullptr);
+        gl->DestroyContext(context);
+        Report("wgl.unbindAndDestroy", gl->GetCurrentBinding().context == nullptr, "");
+
+        // Repeated create/destroy: a context or DC leaked per cycle is the classic WGL defect, and
+        // only a real driver allocates anything to leak.
+        const HANDLE self = GetCurrentProcess();
+        const DWORD gdiBefore = GetGuiResources(self, GR_GDIOBJECTS);
+        int cycles = 0;
+        for (int i = 0; i < iterations / 20 + 1; ++i)
+        {
+            GlContextHandle each = nullptr;
+            try { each = gl->CreateContext(window->GetId(), wanted); }
+            catch (const std::exception&) { break; }
+            gl->MakeCurrent(window->GetId(), each);
+            gl->MakeCurrent(window->GetId(), nullptr);
+            gl->DestroyContext(each);
+            ++cycles;
+        }
+        Pump(platform, events, 16);
+        const DWORD gdiAfter = GetGuiResources(self, GR_GDIOBJECTS);
+        Report("wgl.noGdiLeakAcrossContexts", gdiAfter <= gdiBefore + 4,
+               std::to_string(cycles) + " context cycles, GDI " + std::to_string(gdiBefore) +
+                   " -> " + std::to_string(gdiAfter));
+        ++checksRun;
+    }
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -561,7 +640,7 @@ int main(int argc, char** argv)
         else if (arg == "--clipboard-get-file" && i + 1 < argc) clipboardGetFile = argv[++i];
         else if (arg == "--list")
         {
-            std::cout << "host-ownership dpi displays clipboard cursors handles close\n";
+            std::cout << "host-ownership dpi displays clipboard cursors handles close wgl\n";
             return 0;
         }
     }
@@ -601,7 +680,8 @@ int main(int argc, char** argv)
     }
 
     if (checks.empty())
-        checks = {"host-ownership", "dpi", "displays", "clipboard", "cursors", "handles", "close"};
+        checks = {"host-ownership", "dpi", "displays", "clipboard",
+                  "cursors",        "handles", "close",     "wgl"};
 
     // Captured BEFORE the platform exists: that is the whole point of the host-ownership check.
     const HostState before = CaptureHostState();
@@ -634,6 +714,7 @@ int main(int argc, char** argv)
             else if (check == "cursors") CheckCursors(*platform, iterations);
             else if (check == "handles") CheckNativeHandles(*platform);
             else if (check == "close") CheckCloseIsARequest(*platform);
+            else if (check == "wgl") CheckWgl(*platform, iterations);
             else Report(check, false, "no such check (try --list)");
         }
         catch (const std::exception& error)
