@@ -228,6 +228,40 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
     std::vector<Color> level0(64 * 64, sentinel);
     Color onePixel = sentinel;
+    // WINCLOSE-0013: a cube kept as Dxt1 is read back as the blocks it holds. Reading it as Color
+    // asks the shared layer to decode DXT on GetData, which it deliberately refuses (SOFTWARE-277/
+    // 282, TextureCubeTest.CompressedTransfersRejectNonByteElementTypes -- FNA does not decode
+    // there either), so this test failed on every renderer that preserves the blocks, Software
+    // included, while asserting a contract the framework had already reversed.
+    if (preservesDxt1 && CubeLevel0ReadbackSupported())
+    {
+        constexpr std::uint8_t kSentinelByte = 0xA5;
+        std::vector<std::uint8_t> level0Blocks(16u * 16u * 8u, kSentinelByte); // 64x64 as 4x4 blocks
+        ASSERT_NO_THROW(cube.GetData(CubeMapFace::PositiveX, level0Blocks.data(),
+                                     static_cast<int>(level0Blocks.size())));
+        bool sawDistinctBlock = false;
+        for (std::size_t block = 8; block < level0Blocks.size(); block += 8)
+        {
+            if (!std::equal(level0Blocks.begin(), level0Blocks.begin() + 8,
+                            level0Blocks.begin() + static_cast<std::ptrdiff_t>(block)))
+            {
+                sawDistinctBlock = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(sawDistinctBlock) << "level 0 should not be one repeated DXT1 block";
+
+        if (CubeMipReadbackSupported())
+        {
+            // The 1x1 level is still exactly one 8-byte block -- the sub-4x4 rounding edge case.
+            std::vector<std::uint8_t> oneBlock(8u, kSentinelByte);
+            ASSERT_NO_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, oneBlock.data(), 0, 8));
+            EXPECT_TRUE(std::any_of(oneBlock.begin(), oneBlock.end(),
+                                    [](std::uint8_t b) { return b != kSentinelByte; }))
+                << "the 1x1 mip level should hold a real DXT1 block";
+        }
+        return;
+    }
     if (CubeLevel0ReadbackSupported())
     {
         ASSERT_NO_THROW(cube.GetData(CubeMapFace::PositiveX, level0.data(),
