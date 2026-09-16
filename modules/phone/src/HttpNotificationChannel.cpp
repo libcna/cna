@@ -21,6 +21,16 @@ using socket_t = int;
 #    define CNA_CLOSE_SOCKET ::close
 #endif
 
+// The same pitfall CNA/Internal/Net/ENetHostHandle.hpp records, reached by a different route:
+// <winsock2.h> pulls in <windows.h>, which defines the macro ERROR (wingdi.h), which collides with
+// CNA::LogLevel::ERROR and CNA::LogCategory::ERROR in the CNA/Logger.hpp below -- so this file did
+// not compile on any Windows toolchain. Undefined locally, the standard idiom; non-Windows builds
+// are unaffected because the macro is never defined there.
+// plans/plan_win32_native_validation.md WINNATIVE-0009.
+#ifdef ERROR
+#undef ERROR
+#endif
+
 #include "CNA/Logger.hpp"
 
 namespace Microsoft::Phone::Notification {

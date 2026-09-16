@@ -12,8 +12,16 @@
 #include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 
-#if SHARP_RUNTIME_HAS_NATIVE_INT128
+// OrderedDictionary is used unconditionally below (the dictionary writers at the bottom of this
+// file), and has nothing to do with 128-bit integers -- it was inside the guard by proximity to
+// System::Decimal, which does. Every compiler with native __int128 therefore compiled this file
+// and MSVC, which has none, did not: plans/plan_win32_native_validation.md WINNATIVE-0009.
 #include "System/Collections/Generic/OrderedDictionary.hpp"
+
+// System::Decimal genuinely is guarded: sharp-runtime provides it only where it has native 128-bit
+// integers, and the DecimalReader identity and writer below are registered under the same
+// condition.
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
 #include "System/Decimal.hpp"
 #endif
 
