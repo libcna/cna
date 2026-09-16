@@ -84,7 +84,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0011 | `PlatformConformanceTests` on native Win32 | ✅ | 38 + 20 parameterized cases in the run above, 1 skip by design |
 | WINNATIVE-0012 | Direct3D 11/12 probe on a CNA platform HWND | ✅ | D3D11 complete; D3D12 `DXGI_ERROR_UNSUPPORTED` (environment) |
 | WINNATIVE-0013 | Window-lifecycle stress and leak harness | ✅ | 9 250 operations, every counter flat (§3) |
-| WINNATIVE-0014 | Full `CnaTests` on native Windows | ⬜ | |
+| WINNATIVE-0014 | Full `CnaTests` on native Windows | ✅ | **8123 tests run to completion, 0 errors**; the stack-overflow crash fixed (F17), failures classified (§2, §3) |
 | WINNATIVE-0015 | SDL-free proof by PE dependency inspection | ✅ | 38 executables, `dumpbin /dependents`: no SDL artifact built, no SDL import (§3) |
 | WINNATIVE-0016 | DPI at 100/125/150/200 % | ⬜ | |
 | WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
@@ -270,6 +270,42 @@ default, so a test that fits on one platform fits on the other.
 **Separately:** that test fails on Linux too — this build has no audio decoder, so the importer
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
+
+### WINNATIVE-F18 — a D3D11 device costs ~6 kernel handles that never come back *(not CNA's)*
+
+The repo-root `CnaTests` run began reporting `D3D11CreateDevice failed, hr=0x887A0004` partway
+through, while a freshly launched probe on the same machine at the same moment created a device
+without trouble. Something accumulates in a long-lived process.
+
+`cna_win32_d3d11_cycle` answers it by measurement rather than inference. Each cycle creates a CNA
+window, a device, a swap chain and a render-target view, clears, presents, releases all of it in a
+renderer's order, destroys the window, and samples the process's own counters. Three runs:
+
+| run | cycles | USER | GDI | handles | private |
+|---|---|---|---|---|---|
+| **control — windows only, no D3D** | 300 | 2 → 2 | 2 → 2 | **114 → 114** | **1.7 → 1.7 MB** |
+| HARDWARE (VBoxSVGA) | 300 | 2 → 2 | 2 → 2 | 144 → 1938 | 2.5 → 64 MB |
+| WARP (software rasteriser) | 300 | 2 → 2 | 2 → 2 | 144 → 1938 | 2.5 → 64 MB |
+
+Read together these settle the attribution:
+
+* **CNA is not responsible.** The control is the identical loop with the device creation removed,
+  and it is perfectly flat over 300 cycles — matching the window-lifecycle stress, which is flat
+  over 500. CNA's window create/destroy costs nothing.
+* **VirtualBox is not responsible.** WARP is Microsoft's own rasteriser with no vendor driver
+  underneath, and it leaks at exactly the same rate — ~6 handles and ~205 KB per device.
+* **It is not lazy reclamation.** The settle phase pumps messages and waits two seconds before
+  re-sampling; the count does not move (1938 before, 1938 after).
+
+What remains is the Direct3D 11 / DXGI runtime as used here. This machine has no debugger
+installed, so attributing it further — Microsoft's runtime versus something this harness does not
+release — is beyond what was measured, and is left as that rather than asserted.
+
+**Consequence, which is the part that matters.** A real application creates one device and is
+unaffected. A *test binary* that creates a device per test accumulates handles until the runtime
+refuses more, which is exactly what the native `CnaTests` run hit after several thousand graphics
+tests. The graphics failures in that run are therefore an artefact of one process making thousands
+of devices, not evidence about CNA's renderer.
 
 ### WINNATIVE-F7 — the clipboard interop harness was measuring PowerShell *(fixed)*
 
