@@ -49,6 +49,16 @@ namespace CNA::Internal::Xnb
                                                            const int assetDirectoryDepth)
         {
             if (reference.empty()) { return {}; }
+            // An external reference is written as a length-prefixed UTF-8 .NET string, so text
+            // that is not valid UTF-8 cannot be written at all. Checked here, explicitly, rather
+            // than left to the writer underneath: that refusal happened to hold on POSIX because
+            // the bytes reached it untouched, and stopped holding on Windows the moment the path
+            // round trip re-encoded them into something that IS valid UTF-8 and therefore
+            // acceptable -- a refusal turning into an acceptance without anything saying so.
+            if (!CNA::Internal::IsWellFormedUtf8(reference))
+            {
+                return "it is not valid UTF-8";
+            }
             // A NUL or a control character in a path is never authored on purpose. It survives
             // this format's length-prefixed strings intact, and then truncates or misbehaves in
             // whatever consumes the path as a C string on the other side.
@@ -252,8 +262,17 @@ namespace CNA::Internal::Xnb
             WriteExternalReference(logicalName);
             return;
         }
-        const std::filesystem::path referenced(logicalName);
-        const std::filesystem::path directory = std::filesystem::path(assetName_).parent_path();
+        // Refuse before converting: the conversion below would otherwise re-encode invalid text
+        // into valid UTF-8 and hide the problem. WriteExternalReference does the refusing so that
+        // every route into it reports the same reason.
+        if (!CNA::Internal::IsWellFormedUtf8(logicalName))
+        {
+            WriteExternalReference(logicalName);
+            return;
+        }
+        const std::filesystem::path referenced = CNA::Internal::PathFromUtf8(logicalName);
+        const std::filesystem::path directory =
+            CNA::Internal::PathFromUtf8(assetName_).parent_path();
         if (directory.empty())
         {
             WriteExternalReference(CNA::Internal::PathToGenericUtf8(referenced));
