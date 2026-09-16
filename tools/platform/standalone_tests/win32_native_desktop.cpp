@@ -897,8 +897,21 @@ namespace
             }
             Report("input.relativeMode.togglesCleanly", recovered, "8 enable/disable cycles");
 
-            // Left enabled, then the window is destroyed under it: the cursor must come back and
-            // the clip must be released, or the desktop is left unusable.
+            // Left enabled, then the window is destroyed under it: the clip must be released and
+            // the cursor must be no less visible than it was, or the desktop is left unusable.
+            //
+            // The cursor question is asked as "did CNA change it", not "is it showing". Cursor
+            // visibility is session-global and moves for reasons that have nothing to do with this
+            // process -- on this VM it reads hidden whenever the guest pointer is not over a window
+            // of the session, which is the normal state for an unattended run. Asserting the
+            // absolute state made this check fail for a reason that was not CNA's; asserting that
+            // the state is unchanged is the property the backend actually owes.
+            CURSORINFO cursorBefore{};
+            cursorBefore.cbSize = sizeof(cursorBefore);
+            GetCursorInfo(&cursorBefore);
+            const bool shownBefore = (cursorBefore.flags & CURSOR_SHOWING) != 0;
+            Info("input.relativeMode.cursorBefore", shownBefore ? "showing" : "hidden");
+
             mouse->SetRelativeMode(window->GetId(), true);
             Pump(platform, events, 6);
             window.reset();
@@ -916,7 +929,10 @@ namespace
             CURSORINFO cursor{};
             cursor.cbSize = sizeof(cursor);
             GetCursorInfo(&cursor);
-            Report("input.relativeMode.cursorVisibleAgain", (cursor.flags & CURSOR_SHOWING) != 0, "");
+            const bool shownAfter = (cursor.flags & CURSOR_SHOWING) != 0;
+            Report("input.relativeMode.cursorNoLessVisibleThanBefore", shownAfter || !shownBefore,
+                   std::string(shownBefore ? "showing" : "hidden") + " -> " +
+                       (shownAfter ? "showing" : "hidden"));
         }
         else { Info("input.relativeMode", "the platform does not claim relativeMouse"); }
         ++checksRun;

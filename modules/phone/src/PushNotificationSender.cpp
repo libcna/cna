@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Phone/Notification/PushNotificationSender.hpp"
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -91,12 +92,19 @@ bool Post(const System::Uri& clientUri, const std::string& body, const std::stri
     request += "\r\nContent-Length: " + std::to_string(body.size()) +
                "\r\nConnection: close\r\n\r\n" + body;
 
-    const bool sent =
-        ::send(connection, request.c_str(), request.size(), 0) ==
-        static_cast<ssize_t>(request.size());
+    // ::send takes its length as size_t and returns ssize_t on POSIX, and takes int and returns
+    // int on Windows -- where ssize_t is not defined at all, POSIX being the only place it comes
+    // from. MinGW-w64 supplies it anyway, which is why only MSVC reported
+    // "syntax error: identifier 'ssize_t'". One expression serves both: narrow the length once for
+    // the Windows signature, and compare the result as a signed 64-bit count.
+    // plans/plan_win32_native_validation.md WINNATIVE-0009.
+    const auto requestLength = static_cast<int>(request.size());
+    const std::int64_t sentBytes =
+        static_cast<std::int64_t>(::send(connection, request.c_str(), requestLength, 0));
+    const bool sent = sentBytes == static_cast<std::int64_t>(request.size());
 
     char discard[512];
-    (void)::recv(connection, discard, sizeof(discard), 0);
+    (void)::recv(connection, discard, static_cast<int>(sizeof(discard)), 0);
     CNA_CLOSE_SOCKET(connection);
     return sent;
 }
