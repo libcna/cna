@@ -101,10 +101,32 @@ namespace Microsoft::Xna::Framework::Content
          */
         T Read(ContentReader& input, std::optional<T> existingInstance) override
         {
-            T value = existingInstance.has_value() ? std::move(*existingInstance) : T{};
-            for (const FieldReader& field : fields_)
-                field(value, input);
-            return value;
+            if constexpr (std::is_abstract_v<T>)
+            {
+                // An abstract T is read through AbstractReflectiveTypeReader, which returns a
+                // shared_ptr to a concrete subclass; this value-shaped reader cannot serve one,
+                // and `T value = ... : T{}` below is not even a valid expression for it.
+                //
+                // The branch exists because a class template's virtual members are instantiated
+                // with the class -- the vtable needs them -- so merely NAMING
+                // ReflectiveTypeReader<Abstract> instantiates this function. The suite does name
+                // it, for the static CanonicalReaderName(), which is a string builder that has
+                // nothing to do with reading. MSVC instantiates eagerly enough to fail on it;
+                // GCC and Clang did not, which is why the shape stood until
+                // plans/plan_win32_native_validation.md WINNATIVE-0014.
+                (void) input;
+                (void) existingInstance;
+                throw ContentLoadException(
+                    "Cannot deserialize abstract reflective type '" +
+                    this->getTargetTypeNameProperty() + "'.");
+            }
+            else
+            {
+                T value = existingInstance.has_value() ? std::move(*existingInstance) : T{};
+                for (const FieldReader& field : fields_)
+                    field(value, input);
+                return value;
+            }
         }
 
     private:

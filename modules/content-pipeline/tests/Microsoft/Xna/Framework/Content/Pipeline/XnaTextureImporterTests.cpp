@@ -19,6 +19,7 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <array>
 #include <vector>
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
