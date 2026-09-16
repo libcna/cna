@@ -25,7 +25,14 @@
 // the graphics driver rather than to the D3D11 runtime -- and on this VM the "graphics driver" is
 // VirtualBox's.
 //
-// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--warp] [--quiet]
+// --hold answers a different question from the rest of this program. The cycling loop creates and
+// destroys one device at a time, and 400 of those succeed on this machine, so a sequential budget
+// is not what CnaTests runs out of. --hold never releases anything, which is what a process that
+// leaks GraphicsDevice objects actually does, and reports the cycle at which creation starts
+// failing. The two numbers together say whether a limit is on devices alive at once or on devices
+// ever created.
+//
+// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--warp] [--hold] [--quiet]
 // Exit:  0 every cycle succeeded; 1 creation began failing while our own counts stayed flat
 //        (environment limit -- reported, not a defect); 2 our counts grew (a leak); 3 no D3D11 at
 //        all on this machine.
@@ -93,11 +100,13 @@ int main(int argc, char** argv)
     bool quiet = false;
     bool warp = false;
     bool noD3d = false;
+    bool hold = false;
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--cycles") == 0 && i + 1 < argc) cycles = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--warp") == 0) warp = true;
         else if (std::strcmp(argv[i], "--no-d3d") == 0) noD3d = true;
+        else if (std::strcmp(argv[i], "--hold") == 0) hold = true;
         else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
     }
     const D3D_DRIVER_TYPE driverType = warp ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_HARDWARE;
@@ -116,6 +125,12 @@ int main(int argc, char** argv)
     }
     platform->AcquireSubsystem(PlatformSubsystem::Video);
     std::vector<PlatformEvent> events;
+
+    // Held alive deliberately when --hold: this is the leak being simulated, not an oversight.
+    std::vector<ID3D11Device*> heldDevices;
+    std::vector<ID3D11DeviceContext*> heldContexts;
+    std::vector<IDXGISwapChain*> heldSwapChains;
+    std::vector<std::unique_ptr<IPlatformWindow>> heldWindows;
 
     Counts baseline{};
     int firstFailure = -1;
@@ -204,16 +219,30 @@ int main(int argc, char** argv)
         }
         swapChain->Present(0, 0);
 
-        // Everything released, in the order a renderer would: views and buffers first, then the
-        // swap chain, then the context, then the device. A leak of any one of them is what this
-        // program exists to notice.
-        if (view != nullptr) view->Release();
-        if (backBuffer != nullptr) backBuffer->Release();
-        if (context != nullptr) { context->ClearState(); context->Flush(); context->Release(); }
-        if (swapChain != nullptr) swapChain->Release();
-        if (device != nullptr) device->Release();
+        if (hold)
+        {
+            // Keep the device, its context, its swap chain and its window alive, exactly as a
+            // process that never releases a GraphicsDevice would.
+            if (view != nullptr) view->Release();
+            if (backBuffer != nullptr) backBuffer->Release();
+            heldContexts.push_back(context);
+            heldSwapChains.push_back(swapChain);
+            heldDevices.push_back(device);
+            heldWindows.push_back(std::move(window));
+        }
+        else
+        {
+            // Everything released, in the order a renderer would: views and buffers first, then the
+            // swap chain, then the context, then the device. A leak of any one of them is what this
+            // program exists to notice.
+            if (view != nullptr) view->Release();
+            if (backBuffer != nullptr) backBuffer->Release();
+            if (context != nullptr) { context->ClearState(); context->Flush(); context->Release(); }
+            if (swapChain != nullptr) swapChain->Release();
+            if (device != nullptr) device->Release();
 
-        window.reset();
+            window.reset();
+        }
         events.clear();
         platform->PollEvents(events);
 
@@ -254,6 +283,29 @@ int main(int argc, char** argv)
                 static_cast<unsigned long>(end.user), static_cast<unsigned long>(end.gdi),
                 static_cast<unsigned long>(end.handles),
                 static_cast<unsigned long long>(end.privateBytes / 1024));
+
+    // --hold is not a leak test -- it IS the leak -- so it answers only the question it was asked:
+    // how many devices can be alive at once before the next one is refused.
+    if (hold)
+    {
+        if (firstFailure >= 0)
+        {
+            std::printf("\nRESULT (--hold): creation failed with hr=0x%08lX after %d devices were "
+                        "held alive at once. A process that never releases a device gets this many "
+                        "and no more.\n",
+                        static_cast<unsigned long>(firstFailureHr), firstFailure);
+        }
+        else
+        {
+            std::printf("\nRESULT (--hold): %d devices were held alive at once without a single "
+                        "refusal, so the limit is higher than this run asked for.\n", cycles);
+        }
+        for (auto* c : heldContexts) { if (c != nullptr) c->Release(); }
+        for (auto* sc : heldSwapChains) { if (sc != nullptr) sc->Release(); }
+        for (auto* d : heldDevices) { if (d != nullptr) d->Release(); }
+        heldWindows.clear();
+        return firstFailure >= 0 ? 1 : 0;
+    }
 
     if (firstFailure >= 0)
     {
