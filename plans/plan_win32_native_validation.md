@@ -880,12 +880,17 @@ baseline — and the same 13 fail both ways.
 Recorded because a Windows run of the same suite will show them too, and a reader who does not know
 they predate this branch would attribute them to it.
 
-**The whole-suite Linux baseline**, collected on this branch after the F19 corpus fix, from the
-repository root under Xvfb (`DISPLAY=:99`):
+**The whole-suite Linux baseline**, from the repository root under Xvfb (`DISPLAY=:99`), measured
+**after every fix on this branch** so it is the number the Windows run is actually comparable to:
 
 ```
 8939 tests · 25 failures · 0 errors · 479 skipped
 ```
+
+Measured twice, before and after the fixes, with an **identical failure set** — no test newly fails
+and none newly passes on Linux because of this work. That is the regression answer, and it is a set
+comparison rather than a count comparison on purpose: two runs can agree on 25 and still have
+swapped a failure for a different one.
 
 Two suites are **excluded**, and the exclusion is part of the measurement rather than a footnote:
 
