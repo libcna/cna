@@ -231,6 +231,46 @@ wrong". They are places where one toolchain was quietly covering for the code �
 libstdc++ defines `NOMINMAX` and `ssize_t` for you, GCC has `__int128`, ELF has no section limit,
 Linux's `path::native()` is narrow — and the cover was mistaken for portability.
 
+### WINNATIVE-F17 — CnaTests overflowed the Windows stack, and the product did not *(fixed)*
+
+**Symptom.** The first native run of `CnaTests` died at
+`XnaContentProjectCommandLine.TheProcessorDecidesWhichReadingOfAnAudioSourceIsBuilt` with exit
+`-1073741571` = `0xC00000FD`, **STATUS_STACK_OVERFLOW** — taking the whole run with it, before
+GoogleTest could write its XML. Reproducible in isolation, and in both tests whose content project
+names a `.wma`.
+
+**Measurement.** Windows reserves 1 MB of stack per thread; Linux reserves 8. Bisected by rewriting
+the header of the built executable with `editbin /STACK:`:
+
+```
+1024 KB  ->  0xC00000FD   stack overflow
+1536 KB  ->  exit 1       runs, and fails the same way Linux does
+2048 KB+ ->  exit 1
+```
+
+So a little over 1.2 MB — a large binary's ordinary appetite, not a runaway recursion.
+
+**The check that decided the fix.** A linker flag on the test binary would have made the suite
+green either way, so before adding one: the same content project was built through
+**`cna-content.exe`**, the shipping tool, which runs the same `RunContentCompiler` on the same
+machine. It completed inside the default 1 MB and refused the undecodable source cleanly —
+`exit 1`, with the identical message Linux prints:
+
+```
+error:   Import (CNA.CompressedSoundImporter): this build has no audio decoder, so a compressed
+         source cannot be read as a sound effect; build it as a song, or use a build with a decoder.
+```
+
+Had that crashed too, the defect would have been in the pipeline and `/STACK:` would have **hidden**
+it — every Windows application doing a content build would still have crashed while the suite
+reported success. It did not, so the finding is exactly what it appears to be, and
+`target_link_options(CnaTests PRIVATE /STACK:8388608)` is the right answer. 8 MB to match the Linux
+default, so a test that fits on one platform fits on the other.
+
+**Separately:** that test fails on Linux too — this build has no audio decoder, so the importer
+refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
+predates this branch, not something introduced or fixed here.
+
 ### WINNATIVE-F7 — the clipboard interop harness was measuring PowerShell *(fixed)*
 
 The first Notepad interop run reported six failures on non-ASCII samples, and **none of them were
