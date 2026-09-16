@@ -223,6 +223,35 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
+        /**
+         * @brief Seeds a region of one face's mip level with format-native texels.
+         *
+         * WINCLOSE-0017. XNA's RenderTargetCube is a TextureCube, so SetData is part of its API;
+         * this renderer inherited IRenderTargetCubeRenderer's refusal although the colour
+         * resource is an ordinary sampleable cube. The upload is D3D11TextureCubeRenderer's own:
+         * UpdateSubresource into the face/level subresource. A multisampled cube still refuses --
+         * its sampleable content is the resolve copy UnbindAsRenderTarget() overwrites.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the region, in texels.
+         * @param y          Top edge of the region, in texels.
+         * @param w          Width of the region, in texels.
+         * @param h          Height of the region, in texels.
+         * @param data       Tightly packed rows in the target's SurfaceFormat, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * format bytes per texel.
+         * @return True once the whole region was stored; false for an out-of-range
+         *         face/level/region, a short buffer, or a multisampled target.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /** @brief Declared-format upload; the same exact bytes SetData() stores. */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /** @brief Declared-format readback; the same exact bytes GetData() returns. */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
+
     private:
         /// DX-152: ResolveSubresource() the active face from the MSAA color array into
         /// `resolveTexture_`, called from UnbindAsRenderTarget() before mip regeneration. No-op

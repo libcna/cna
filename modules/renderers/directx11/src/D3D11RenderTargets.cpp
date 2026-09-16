@@ -517,6 +517,46 @@ namespace CNA::Internal::Renderers::DirectX11
         return true;
     }
 
+    bool D3D11RenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
+                                               const void* data, int dataLength)
+    {
+        if (!device_ || !context_ || isMsaa_ || data == nullptr) return false;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel_);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(h);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes) return false;
+
+        const UINT subresource = D3D11CalcSubresource(static_cast<UINT>(level),
+                                                      static_cast<UINT>(face),
+                                                      static_cast<UINT>(levelCount_));
+        D3D11_BOX box{};
+        box.left = static_cast<UINT>(x);
+        box.top = static_cast<UINT>(y);
+        box.front = 0;
+        box.right = static_cast<UINT>(x + w);
+        box.bottom = static_cast<UINT>(y + h);
+        box.back = 1;
+        context_->UpdateSubresource(texture_.Get(), subresource, &box, data,
+                                    static_cast<UINT>(rowBytes), static_cast<UINT>(requiredBytes));
+        return true;
+    }
+
+    bool D3D11RenderTargetCubeRenderer::SetDataBytesEXT(int face, int level, int x, int y, int w,
+                                                       int h, const void* data, int dataLength)
+    {
+        return SetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool D3D11RenderTargetCubeRenderer::GetDataBytesEXT(int face, int level, int x, int y, int w,
+                                                       int h, void* data, int dataLength) const
+    {
+        return GetData(face, level, x, y, w, h, data, dataLength);
+    }
+
     void D3D11RenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
         ResolveMsaaEXT();

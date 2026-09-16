@@ -174,6 +174,7 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
@@ -220,8 +221,11 @@ namespace
         // renderer deliberately does not make.
         // SOFTWARE-119 writes into the same CPU face/mip storage its rasterizer and GetData use;
         // the shared set-data contract asserts the exact round trip rather than mere acceptance.
+        // WINCLOSE-0017: DirectX11's single-sample cube colour resource is an ordinary sampleable
+        // TEXTURECUBE, and its RenderTargetCube renderer now uploads into it with the plain
+        // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, Magnum, OpenGL4, Wicked, Igl, Rlgl);
+                               Software, Magnum, OpenGL4, Wicked, Igl, Rlgl, DirectX11);
     }
 }
 
@@ -271,6 +275,63 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
     else
         EXPECT_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16),
                      System::NotSupportedException);
+}
+
+// WINCLOSE-0017: "does not throw" is not "stored". A seeded face and a seeded sub-rectangle of a
+// second face must read back exactly, and writing one face must not touch another. Measured on
+// the renderers this closure could run; the others in RenderTargetCubeAcceptsSetData() assert
+// their round trip in their own suites.
+TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11);
+
+    GraphicsDevice gd;
+    RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                        RenderTargetUsage::PreserveContents);
+
+    std::vector<Color> positiveX(16);
+    std::vector<Color> negativeY(16);
+    for (int i = 0; i < 16; ++i)
+    {
+        positiveX[static_cast<std::size_t>(i)] =
+            Color(i * 13, 255 - i * 7, 40 + i, 200 + i % 3);
+        negativeY[static_cast<std::size_t>(i)] =
+            Color(90 + i, i * 11, 17, 255);
+    }
+    rt.SetData(CubeMapFace::PositiveX, positiveX.data(), 16);
+    rt.SetData(CubeMapFace::NegativeY, negativeY.data(), 16);
+
+    const std::vector<Color> region{Color(1, 2, 3, 4), Color(5, 6, 7, 8),
+                                    Color(9, 10, 11, 12), Color(13, 14, 15, 16)};
+    const Microsoft::Xna::Framework::Rectangle rect(1, 2, 2, 2);
+    rt.SetData(CubeMapFace::NegativeY, 0, &rect, region.data(), 0, 4);
+
+    std::vector<Color> gotX(16);
+    rt.GetData(CubeMapFace::PositiveX, gotX.data(), 16);
+    for (int i = 0; i < 16; ++i)
+        EXPECT_EQ(gotX[static_cast<std::size_t>(i)], positiveX[static_cast<std::size_t>(i)])
+            << "+X texel " << i;
+
+    std::vector<Color> gotRegion(4);
+    rt.GetData(CubeMapFace::NegativeY, 0, &rect, gotRegion.data(), 0, 4);
+    for (int i = 0; i < 4; ++i)
+        EXPECT_EQ(gotRegion[static_cast<std::size_t>(i)], region[static_cast<std::size_t>(i)])
+            << "-Y region texel " << i;
+
+    std::vector<Color> gotY(16);
+    rt.GetData(CubeMapFace::NegativeY, gotY.data(), 16);
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 4; ++x)
+        {
+            const bool inRegion = x >= 1 && x < 3 && y >= 2 && y < 4;
+            const Color expected = inRegion
+                ? region[static_cast<std::size_t>((y - 2) * 2 + (x - 1))]
+                : negativeY[static_cast<std::size_t>(y * 4 + x)];
+            EXPECT_EQ(gotY[static_cast<std::size_t>(y * 4 + x)], expected)
+                << "-Y texel (" << x << ',' << y << ')';
+        }
+    }
 }
 
 TEST(RenderTargetCubeSetDataContractTest, SetDataAfterDisposeThrowsObjectDisposed)
