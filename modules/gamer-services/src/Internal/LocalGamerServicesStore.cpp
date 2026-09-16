@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
@@ -28,7 +29,9 @@ namespace CNA::Internal::GamerServices
         // new one - a plain "GamerServices" subdirectory under it.
         fs::path StoreRoot()
         {
-            return fs::path(Microsoft::Xna::Framework::Storage::StorageDevice::GetStorageRootEXT()) / "GamerServices";
+            return CNA::Internal::PathFromUtf8(
+                Microsoft::Xna::Framework::Storage::StorageDevice::GetStorageRootEXT())
+                / "GamerServices";
         }
 
         fs::path AchievementsDir() { return StoreRoot() / "achievements"; }
@@ -64,7 +67,12 @@ namespace CNA::Internal::GamerServices
             // a half-written, unparseable store file behind - a fresh process would otherwise
             // permanently lose every previously-earned achievement/leaderboard entry to a single
             // torn write, not just the one being written at the time.
-            const fs::path tmp = path.string() + ".tmp";
+            // concat on the path, not on a narrowed copy of it: path.string() + ".tmp" narrowed through
+        // the ANSI code page purely to append four ASCII characters, so the atomic-write temp file
+        // landed somewhere else (or threw) and the rename below then fell back to a non-atomic
+        // write. The path is already in hand.
+        fs::path tmp = path;
+        tmp += ".tmp";
             {
                 std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
                 out << CNA::Internal::WriteJson(value);
@@ -84,7 +92,7 @@ namespace CNA::Internal::GamerServices
     {
         std::error_code ec;
         fs::create_directories(StoreRoot(), ec);
-        return StoreRoot().string();
+        return CNA::Internal::PathToGenericUtf8(StoreRoot());
     }
 
     std::string SanitizeStoreFileNameComponent(const std::string& raw)

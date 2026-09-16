@@ -2,6 +2,7 @@
 #pragma once
 
 #include <memory>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -198,6 +199,7 @@ namespace Microsoft::Xna::Framework::Storage
         bool isDisposed_ = false;
 
         [[nodiscard]] std::string ResolvePath(const std::string& relative) const;
+        [[nodiscard]] std::filesystem::path ResolveNativePath(const std::string& relative) const;
     };
 
 } // namespace Microsoft::Xna::Framework::Storage

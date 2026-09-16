@@ -10,8 +10,18 @@
 #include <stdexcept>
 
 #include <cstdlib>
+#include <optional>
+
+#if defined(_WIN32)
+// Contained in this translation unit deliberately: <windows.h> in a header is what produced the
+// ERROR / min / max macro collisions recorded as WINNATIVE-F5 and F11.
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX
+#  include <windows.h>
+#endif
 
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 
 namespace Microsoft::Xna::Framework::Storage
@@ -67,6 +77,32 @@ namespace Microsoft::Xna::Framework::Storage
     // Storage root resolution
     // -------------------------------------------------------------------------
 
+    namespace
+    {
+        // std::getenv on Windows reads the ANSI environment block, which substitutes '?' for every
+        // character the code page cannot spell -- so %LOCALAPPDATA% for a user named with anything
+        // outside it is already destroyed before std::filesystem sees it, and no downstream
+        // conversion can recover the name. The wide environment is the only correct read.
+        std::optional<std::string> EnvironmentVariableUtf8(const char* name)
+        {
+#if defined(_WIN32)
+            const std::wstring wideName(name, name + std::char_traits<char>::length(name));
+            const DWORD needed = ::GetEnvironmentVariableW(wideName.c_str(), nullptr, 0);
+            if (needed == 0) return std::nullopt;
+            std::wstring value(needed, L'\0');
+            const DWORD written = ::GetEnvironmentVariableW(wideName.c_str(), value.data(), needed);
+            if (written == 0 || written >= needed) return std::nullopt;
+            value.resize(written);
+            if (value.empty()) return std::nullopt;
+            return CNA::Internal::PathToUtf8(std::filesystem::path(value));
+#else
+            const char* value = std::getenv(name);
+            if (value == nullptr || *value == '\0') return std::nullopt;
+            return std::string(value);
+#endif
+        }
+    }
+
     const std::string& StorageDevice::EnsureStorageRoot()
     {
         if (storageRootInitialized_) return storageRoot_;
@@ -87,26 +123,27 @@ namespace Microsoft::Xna::Framework::Storage
         SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride({});
         root = SharpRuntime::Storage::StoragePaths::GetIsolatedStorageRoot().parent_path() / app;
 #else
-        if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0')
+        const fs::path appComponent = CNA::Internal::PathFromUtf8(app);
+        if (const std::optional<std::string> xdg = EnvironmentVariableUtf8("XDG_DATA_HOME"); xdg)
         {
-            root = fs::path(xdg) / app;
+            root = CNA::Internal::PathFromUtf8(*xdg) / appComponent;
         }
-        else if (const char* localAppData = std::getenv("LOCALAPPDATA");
-                 localAppData != nullptr && *localAppData != '\0')
+        else if (const std::optional<std::string> localAppData =
+                     EnvironmentVariableUtf8("LOCALAPPDATA"); localAppData)
         {
-            root = fs::path(localAppData) / app;
+            root = CNA::Internal::PathFromUtf8(*localAppData) / appComponent;
         }
-        else if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0')
+        else if (const std::optional<std::string> home = EnvironmentVariableUtf8("HOME"); home)
         {
 #if defined(__APPLE__)
-            root = fs::path(home) / "Library" / "Application Support" / app;
+            root = CNA::Internal::PathFromUtf8(*home) / "Library" / "Application Support" / appComponent;
 #else
-            root = fs::path(home) / ".local" / "share" / app;
+            root = CNA::Internal::PathFromUtf8(*home) / ".local" / "share" / appComponent;
 #endif
         }
         else
         {
-            root = fs::current_path() / app;
+            root = fs::current_path() / appComponent;
         }
 #endif
 
@@ -119,7 +156,7 @@ namespace Microsoft::Xna::Framework::Storage
                 std::make_exception_ptr(std::filesystem::filesystem_error(
                     "create_directories", root, code)));
         }
-        storageRoot_ = root.string();
+        storageRoot_ = CNA::Internal::PathToGenericUtf8(root);
         return storageRoot_;
     }
 

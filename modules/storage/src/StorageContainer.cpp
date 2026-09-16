@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileStream.hpp"
 
 namespace
@@ -91,11 +92,17 @@ namespace Microsoft::Xna::Framework::Storage
         return name;
     }
 
-    std::string StorageContainer::ResolvePath(const std::string& relative) const
+    std::filesystem::path StorageContainer::ResolveNativePath(const std::string& relative) const
     {
         // Intentional security deviation from FNA: its unchecked Path.Combine calls can escape
         // the logical container through absolute paths, parent traversal or an existing symlink.
-        const auto contained = CNA::Internal::ResolveContainedPath(storagePath_, relative);
+        //
+        // The native form exists so the filesystem calls below never narrow: ResolvePath's string
+        // was being handed straight back to fs::exists / fs::remove / directory_iterator, whose
+        // narrow overloads re-read it as ANSI code page bytes on Windows.
+        const auto contained = CNA::Internal::ResolveContainedNativePathFromBase(
+            CNA::Internal::PathFromUtf8(storagePath_), CNA::Internal::PathFromUtf8(storagePath_),
+            relative);
         if (!contained.ok)
         {
             throw std::invalid_argument(
@@ -104,13 +111,18 @@ namespace Microsoft::Xna::Framework::Storage
         return contained.resolvedPath;
     }
 
+    std::string StorageContainer::ResolvePath(const std::string& relative) const
+    {
+        return CNA::Internal::PathToGenericUtf8(ResolveNativePath(relative));
+    }
+
     // ---- Directory ----
 
     void StorageContainer::CreateDirectory(const std::string& directory)
     {
         if (directory.empty())
             throw std::invalid_argument("Parameter directory must contain a value.");
-        fs::path p = ResolvePath(directory);
+        fs::path p = ResolveNativePath(directory);
         if (!fs::exists(p)) fs::create_directories(p);
     }
 
@@ -118,22 +130,22 @@ namespace Microsoft::Xna::Framework::Storage
     {
         if (directory.empty())
             throw std::invalid_argument("Parameter directory must contain a value.");
-        return fs::is_directory(ResolvePath(directory));
+        return fs::is_directory(ResolveNativePath(directory));
     }
 
     void StorageContainer::DeleteDirectory(const std::string& directory)
     {
         if (directory.empty())
             throw std::invalid_argument("Parameter directory must contain a value.");
-        fs::remove(ResolvePath(directory));
+        fs::remove(ResolveNativePath(directory));
     }
 
     std::vector<std::string> StorageContainer::GetDirectoryNames() const
     {
         std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(storagePath_))
+        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
             if (e.is_directory())
-                result.push_back(e.path().filename().string());
+                result.push_back(CNA::Internal::PathToUtf8(e.path().filename()));
         return result;
     }
 
@@ -143,11 +155,11 @@ namespace Microsoft::Xna::Framework::Storage
         if (searchPattern.empty())
             throw std::invalid_argument("Parameter searchPattern must contain a value.");
         std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(storagePath_))
+        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
         {
             if (!e.is_directory()) continue;
             // Simple glob: '*' matches anything, '?' matches one char
-            const std::string name = e.path().filename().string();
+            const std::string name = CNA::Internal::PathToUtf8(e.path().filename());
             if (GlobMatch(searchPattern, name)) result.push_back(name);
         }
         return result;
@@ -168,22 +180,22 @@ namespace Microsoft::Xna::Framework::Storage
     {
         if (file.empty())
             throw std::invalid_argument("Parameter file must contain a value.");
-        return fs::is_regular_file(ResolvePath(file));
+        return fs::is_regular_file(ResolveNativePath(file));
     }
 
     void StorageContainer::DeleteFile(const std::string& file)
     {
         if (file.empty())
             throw std::invalid_argument("Parameter file must contain a value.");
-        fs::remove(ResolvePath(file));
+        fs::remove(ResolveNativePath(file));
     }
 
     std::vector<std::string> StorageContainer::GetFileNames() const
     {
         std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(storagePath_))
+        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
             if (e.is_regular_file())
-                result.push_back(e.path().filename().string());
+                result.push_back(CNA::Internal::PathToUtf8(e.path().filename()));
         return result;
     }
 
@@ -193,10 +205,10 @@ namespace Microsoft::Xna::Framework::Storage
         if (searchPattern.empty())
             throw std::invalid_argument("Parameter searchPattern must contain a value.");
         std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(storagePath_))
+        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
         {
             if (!e.is_regular_file()) continue;
-            const std::string name = e.path().filename().string();
+            const std::string name = CNA::Internal::PathToUtf8(e.path().filename());
             if (GlobMatch(searchPattern, name)) result.push_back(name);
         }
         return result;
