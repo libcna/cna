@@ -258,7 +258,11 @@ if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
     $worktree = Join-Path $srcRoot "CNA-$Japanese"
     try {
         $head = (Invoke-Git @('-C', $SourceDir, 'rev-parse', 'HEAD')).Output.Trim()
-        $added = Invoke-Git @('-C', $SourceDir, 'worktree', 'add', '--detach', $worktree, $head)
+        # A run that died before its cleanup leaves the worktree REGISTERED but gone, and git then
+        # refuses to reuse the path. Prune first, and -f so a stale registration cannot make this
+        # step fail for a reason that has nothing to do with Unicode.
+        [void](Invoke-Git @('-C', $SourceDir, 'worktree', 'prune'))
+        $added = Invoke-Git @('-C', $SourceDir, 'worktree', 'add', '-f', '--detach', $worktree, $head)
         if ($added.ExitCode -ne 0) {
             Add-Result 'unicode.source.worktree' 'FAIL' ($added.Output.Trim() -replace '\s+', ' ')
         }
@@ -314,9 +318,13 @@ if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
 # =================================================================================================
 if (Want 'app') {
     $harness = ''
-    foreach ($candidate in @((Join-Path $uniBuild 'cna_win32_platform_tests.exe'),
-                             (Join-Path $uniBuild 'cna_platform_tests.exe'),
-                             (Join-Path $BuildRoot 'standalone-win32/cna_win32_platform_tests.exe'))) {
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($uniBuild)) {
+        $candidates += (Join-Path $uniBuild 'cna_win32_platform_tests.exe')
+        $candidates += (Join-Path $uniBuild 'cna_platform_tests.exe')
+    }
+    $candidates += (Join-Path $BuildRoot 'standalone-win32/cna_win32_platform_tests.exe')
+    foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) { $harness = $candidate; break }
     }
     if (-not $harness) {
