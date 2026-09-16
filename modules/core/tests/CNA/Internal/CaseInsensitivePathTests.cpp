@@ -68,6 +68,9 @@ TEST(CaseInsensitivePathTest, ResolvesEveryCaseVariantComponent)
               CNA::Internal::PathToGenericUtf8(expected));
 }
 
+// Also expected to FAIL on Windows, and for the same reason as ResolvesEveryCaseVariantComponent
+// above: its input is lower-cased as well as backslash-spelled, so it asks for the on-disk casing
+// too. WINNATIVE-F26 covers both. The separator half of what it checks does hold on Windows.
 TEST(CaseInsensitivePathTest, NormalizesWindowsSeparators)
 {
     ScratchPath scratch;

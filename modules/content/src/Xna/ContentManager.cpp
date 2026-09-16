@@ -316,8 +316,15 @@ namespace Microsoft::Xna::Framework::Content
         namespace fs = std::filesystem;
         std::unordered_map<std::string, ContentManifestEntry> entriesByBase;
 
+        // The root is UTF-8. Handed to the narrow fs:: overloads it was read as ANSI code page
+        // bytes, so on Windows a content root with any character outside that code page simply did
+        // not exist: the manifest came back EMPTY, every asset's real extension went undiscovered,
+        // and Load<T>() then failed with "cannot open file" naming an extension-less path -- a
+        // symptom several steps away from its cause.
+        const std::optional<fs::path> root = CNA::Internal::TryPathFromUtf8(rootDirectory_);
+
         std::error_code ec;
-        if (!fs::exists(rootDirectory_, ec) || ec)
+        if (!root || !fs::exists(*root, ec) || ec)
         {
             contentManifest_.clear();
             contentManifestBuilt_ = true;
@@ -325,7 +332,7 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         auto it = fs::recursive_directory_iterator(
-            rootDirectory_, fs::directory_options::skip_permission_denied, ec);
+            *root, fs::directory_options::skip_permission_denied, ec);
         const auto end = fs::recursive_directory_iterator();
         for (; !ec && it != end; it.increment(ec))
         {
@@ -335,7 +342,7 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             const fs::path& path = it->path();
-            fs::path relative = fs::relative(path, CNA::Internal::PathFromUtf8(rootDirectory_), ec);
+            fs::path relative = fs::relative(path, *root, ec);
             if (ec)
             {
                 continue;

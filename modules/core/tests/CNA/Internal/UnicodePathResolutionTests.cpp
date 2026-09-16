@@ -239,20 +239,30 @@ TEST_F(UnicodeTree, ResolvesANonAsciiNameSpelledWithTheWrongAsciiCase)
     EXPECT_EQ(Read(resolved), "mixed-case-ok");
 }
 
-TEST_F(UnicodeTree, DoesNotFoldNonAsciiCaseWhenResolving)
+// The fold the walker applies is ASCII-only, and that is asserted on the fold itself rather than
+// through the filesystem. Going through the filesystem would be asserting the filesystem's rule,
+// not CNA's: NTFS is case-insensitive over the whole of Unicode, so it matches Z-caron to z-caron
+// and the walker's early exists() check succeeds before any folding of ours is reached. ext4 does
+// not. An earlier version of this test asserted "the file is not found" and therefore claimed, on
+// Windows, that CNA had folded a character the operating system folded for it.
+TEST(FoldAsciiCaseTest, LowersAsciiLettersAndLeavesEveryOtherByteAlone)
 {
-    // A locale-aware tolower() over UTF-8 bytes could rewrite continuation bytes and match the
-    // wrong entry. Ž (U+017D) and ž (U+017E) must stay distinct.
-    Write("\xc5\xbd" "ID.bin", "upper");            // ŽID.bin
-    const fs::path lower = root_ / PathFromUtf8("\xc5\xbe" "id.bin");   // zid.bin, a different file
+    using CNA::Internal::Detail::FoldAsciiCase;
 
-    // Asserted positively as well: with a narrow join the requested path would not exist for
-    // an unrelated reason, and the EXPECT_FALSE below would pass without testing anything.
-    ASSERT_TRUE(fs::exists(root_ / PathFromUtf8("\xc5\xbd" "ID.bin")))
-        << "the upper-case fixture must exist, or the negative assertion proves nothing";
+    EXPECT_EQ(FoldAsciiCase("SpaceWar.XGS"), "spacewar.xgs");
+    EXPECT_EQ(FoldAsciiCase("ABC_123-xyz"), "abc_123-xyz");
 
-    const fs::path resolved = ResolveExistingNativePath(lower);
-    EXPECT_FALSE(fs::exists(resolved)) << "non-ASCII case must not fold";
+    // Z-caron (U+017D, "\xc5\xbd") must NOT become z-caron (U+017E, "\xc5\xbe"): a
+    // locale-aware tolower() over UTF-8 can rewrite a continuation byte and fold two distinct
+    // names onto one.
+    EXPECT_EQ(FoldAsciiCase("\xc5\xbd" "ID.bin"), "\xc5\xbd" "id.bin");
+    EXPECT_NE(FoldAsciiCase("\xc5\xbd" "ID.bin"), FoldAsciiCase("\xc5\xbe" "id.bin"));
+
+    // Every byte of a multi-byte sequence survives unchanged.
+    for (const char* text : {kCzech, kJapanese, kCyrillic, kEmoji})
+    {
+        EXPECT_EQ(FoldAsciiCase(text), std::string(text)) << text;
+    }
 }
 
 TEST_F(UnicodeTree, TheUtf8SpellingReturnsGenericFormAndStillNamesTheFile)
