@@ -647,3 +647,23 @@ through `cmd.exe` would test cmd's quoting rather than `RunHostProcess`'s — an
 forward is unchanged and more important than the count: **`RunHostProcess` has a Windows
 `CreateProcess` path with no test behind it**, on a project that ships a content pipeline which
 shells out.
+
+## 13. Final Linux regression — WINPORT-0017
+
+Same command, same exclusions, same host, after every change on this branch and both sharp-runtime
+commits:
+
+```
+                      tests   failures
+baseline (WINPORT-M1)  8961         26
+final                  8990         26
+```
+
+**The failure sets are identical.** Zero tests newly failing, zero newly passing — compared as sets,
+name by name, not as counts. The 29 extra tests are this branch's own new coverage.
+
+That is the whole Linux answer: a migration that touched 10 CNA modules and 2 sharp-runtime ones,
+across roughly 300 call sites, moved nothing on the platform where every one of these conversions is
+byte identity. The intermediate run's single mover — a stress test that declares its own run
+inconclusive when the threads fail to interleave — did not recur once the host was not also building
+Windows.
