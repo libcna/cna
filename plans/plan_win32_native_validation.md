@@ -92,7 +92,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
 | WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | 🔄 | a real WGL 3.3 core context is created, made current, swapped and destroyed by `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` in the native suite run (it is not among the skips); the `wgl` check in the desktop harness records the driver and the context-cycle GDI count |
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
-| WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ⬜ | |
+| WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ⬜ | |
 | WINNATIVE-0024 | Linux regression after every generic fix | 🔄 | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; `CnaContentTests` at its pre-existing 13 |
 
@@ -442,6 +442,27 @@ com apartment    uninitialised -> main-STA    (CNA adds a reference; it took not
 The timer figure is the one Wine could not produce: 15.625 ms is Windows' real default tick, and a
 stray `timeBeginPeriod(1)` would show here as 1000 us. Under Wine the same probe reads 1000 us
 before *and* after, so the promise was untestable there.
+
+### Under MSVC's AddressSanitizer
+
+`/fsanitize=address`, RelWithDebInfo, the whole platform module and its whole suite, run on the
+interactive desktop:
+
+```
+cna_platform_tests      389 tests, 0 failures, 3 skipped     0 AddressSanitizer reports
+cna_win32_native_stress 400-iteration lifecycle budget       0 AddressSanitizer reports
+cna_win32_native_desktop 9 check groups, 0 failures          0 AddressSanitizer reports
+```
+
+Nothing in the window registry, the adopted-window path, the `WM_NCCREATE`/`WM_NCDESTROY` pointer
+discipline, the UTF conversions, the clipboard's global memory or the COM wrappers is touched after
+it is freed, or written past its end.
+
+One caveat worth stating, because it nearly invalidated the run: `-DCMAKE_CXX_FLAGS=` *replaces*
+CMake's MSVC default rather than adding to it, and that default carries `/EHsc`. The first
+configure therefore produced a sanitized binary whose exceptions did not unwind — in a codebase
+that reports refusals by throwing, that is not the program under test. cl.exe warned about it
+(C4530) forty times. The script restates the defaults now.
 
 ### DPI, and why the first run of it proved nothing
 
