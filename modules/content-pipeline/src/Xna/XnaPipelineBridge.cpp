@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
+#include "CNA/Internal/PathContainment.hpp"
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
 
@@ -326,7 +327,7 @@ namespace CNA::Content::Pipeline
     void XnaBridgeImporterContext::AddDependency(const std::string& filename)
     {
         std::filesystem::path authored = CNA::Internal::PathFromUtf8(filename);
-        if (authored.is_absolute())
+        if (CNA::Internal::IsRootedPath(authored))
         {
             // The canonical context resolves relative to the primary source; an absolute path is
             // handed through as such and still has to be contained by a source root.
@@ -389,7 +390,7 @@ namespace CNA::Content::Pipeline
     void XnaBridgeProcessorContext::AddDependency(const std::string& filename)
     {
         std::filesystem::path authored = CNA::Internal::PathFromUtf8(filename);
-        if (authored.is_absolute())
+        if (CNA::Internal::IsRootedPath(authored))
         {
             std::error_code error;
             const std::filesystem::path relative =

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/XnaModelSourceContentPipeline.hpp"
+#include "CNA/Internal/PathContainment.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -60,7 +61,7 @@ namespace CNA::Content::Pipeline
                                                      const std::string& authored)
         {
             std::filesystem::path path = CNA::Internal::ContentPathFromUtf8(authored);
-            if (!outputRoot.empty() && path.is_absolute())
+            if (!outputRoot.empty() && CNA::Internal::IsRootedPath(path))
             {
                 std::error_code error;
                 const std::filesystem::path relative =

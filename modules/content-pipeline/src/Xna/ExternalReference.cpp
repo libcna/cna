@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
+#include "CNA/Internal/PathContainment.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -78,7 +79,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             throw System::ArgumentException("An external reference needs a filename.", "filename");
         }
         const std::filesystem::path authored = CNA::Internal::PathFromUtf8(filename);
-        if (authored.is_absolute())
+        if (CNA::Internal::IsRootedPath(authored))
         {
             return CNA::Internal::PathToGenericUtf8(authored.lexically_normal());
         }

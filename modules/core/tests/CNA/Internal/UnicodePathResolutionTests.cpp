@@ -272,3 +272,55 @@ TEST_F(UnicodeTree, BackslashSpellingsAreNormalisedEvenWithNonAsciiComponents)
 
     EXPECT_EQ(Read(PathFromUtf8(resolved)), "sep-ok");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Rootedness. `is_absolute()` answers a different question on Windows than it does on POSIX, and
+// the sites that used it as a containment gate therefore refused different inputs per platform.
+// ---------------------------------------------------------------------------------------------
+
+TEST(IsRootedPathTest, CatchesEveryFormThisPlatformTreatsAsRooted)
+{
+    using CNA::Internal::IsRootedPath;
+
+    // Rooted on both platforms: a leading separator is a root directory everywhere. On Windows
+    // this is the case is_absolute() alone MISSES -- it has a root directory and no root name, so
+    // the standard calls it relative, while operator/ still discards the base's directory for it.
+    EXPECT_TRUE(IsRootedPath(fs::path("/etc/passwd")));
+    EXPECT_TRUE(IsRootedPath(fs::path("//server/share/a.png")));
+
+    // Rooted only where the platform parses a drive letter as a root name. This is deliberately
+    // not a cross-platform answer: on POSIX "C:/Windows" is an ordinary relative name, and
+    // treating it as rooted would be inventing a Windows rule the platform does not have.
+    // Untrusted text that may have been authored on the other platform goes through
+    // IsDisallowedAbsolutePath() instead, which checks the string before any path is built.
+    const bool windowsPathRules = (fs::path::preferred_separator == L'\\');
+    EXPECT_EQ(IsRootedPath(fs::path("C:/Windows/win.ini")), windowsPathRules);
+    EXPECT_EQ(IsRootedPath(fs::path("C:asset.png")), windowsPathRules);
+
+    // ... and the string-level gate does catch them, on every platform.
+    EXPECT_TRUE(IsDisallowedAbsolutePath("C:/Windows/win.ini"));
+    EXPECT_TRUE(IsDisallowedAbsolutePath("C:asset.png"));
+    EXPECT_TRUE(IsDisallowedAbsolutePath("/etc/passwd"));
+    EXPECT_TRUE(IsDisallowedAbsolutePath("//server/share/a.png"));
+}
+
+TEST(IsRootedPathTest, LeavesGenuinelyRelativePathsAlone)
+{
+    using CNA::Internal::IsRootedPath;
+
+    EXPECT_FALSE(IsRootedPath(fs::path("textures/a.png")));
+    EXPECT_FALSE(IsRootedPath(fs::path("../textures/a.png")));
+    EXPECT_FALSE(IsRootedPath(fs::path("./a.png")));
+    EXPECT_FALSE(IsRootedPath(fs::path("a.png")));
+    EXPECT_FALSE(IsRootedPath(fs::path()));
+    // A directory whose name merely begins with two dots is not rooted and not an escape.
+    EXPECT_FALSE(IsRootedPath(fs::path("..config/a.png")));
+}
+
+TEST(IsRootedPathTest, IsNotConfusedByNonAsciiComponents)
+{
+    using CNA::Internal::IsRootedPath;
+
+    EXPECT_FALSE(IsRootedPath(PathFromUtf8(std::string(kCzech) + "/" + kJapanese + ".png")));
+    EXPECT_TRUE(IsRootedPath(PathFromUtf8(std::string("/") + kCzech + "/" + kJapanese + ".png")));
+}

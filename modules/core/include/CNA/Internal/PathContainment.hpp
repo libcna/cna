@@ -50,6 +50,32 @@ namespace CNA::Internal
         return looksRooted || looksLikeDriveLetter;
     }
 
+    /**
+     * @brief Reports whether a native path is rooted, in the sense every platform agrees on.
+     *
+     * `path::is_absolute()` is not that test on Windows, and the difference is not cosmetic. There
+     * a path is absolute only when it has **both** a root name and a root directory, so
+     * `"/etc/passwd"` -- which has a root directory and no drive -- answers **false**, and so does
+     * the drive-relative `"C:asset.png"`, which has a root name and no root directory. Both are
+     * nonetheless rooted enough for `operator/` to discard most of the left-hand base, which is
+     * exactly what a containment check is trying to prevent.
+     *
+     * Asking for all three catches every form **this platform** treats as rooted, which the
+     * `is_absolute()` subset does not. It is deliberately *not* a cross-platform answer and cannot
+     * be one: `path` parses according to the platform it was compiled for, so `"C:/Windows"` is
+     * rooted on Windows and an ordinary relative name on POSIX. That is the correct answer to the
+     * question this asks -- "will `operator/` discard my base here?" -- and it is why untrusted
+     * *text*, which may have been authored on the other platform, is checked with
+     * IsDisallowedAbsolutePath() instead, on the string, before any path is built.
+     *
+     * @param path The native path to inspect.
+     * @return True when the path is absolute, has a root name, or has a root directory.
+     */
+    [[nodiscard]] inline bool IsRootedPath(const std::filesystem::path& path)
+    {
+        return path.is_absolute() || path.has_root_name() || path.has_root_directory();
+    }
+
     /** @brief Result of the shared path-containment helpers. */
     struct ContainedPathResult
     {

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <filesystem>
+#include "CNA/Internal/PathContainment.hpp"
 #include <string>
 #include <system_error>
 
@@ -64,7 +65,7 @@ namespace CNA::Internal
         }
 
         const fs::path sourceFilePath = CNA::Internal::ContentPathFromUtf8(sourceFile);
-        if (sourceFilePath.is_absolute())
+        if (CNA::Internal::IsRootedPath(sourceFilePath))
         {
             throw ContentLoadException(
                 "ContentManager: '" + referringCnjPath + "' has an absolute 'sourceFile' path ('" +
