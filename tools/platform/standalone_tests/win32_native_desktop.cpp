@@ -944,6 +944,7 @@ int main(int argc, char** argv)
 {
     std::vector<std::string> checks;
     int iterations = 500;
+    bool dpiAware = false;
     std::string clipboardPutFile;
     std::string clipboardGetFile;
 
@@ -952,6 +953,7 @@ int main(int argc, char** argv)
         const std::string arg = argv[i];
         if (arg == "--check" && i + 1 < argc) checks.emplace_back(argv[++i]);
         else if (arg == "--iterations" && i + 1 < argc) iterations = std::atoi(argv[++i]);
+        else if (arg == "--dpi-aware") dpiAware = true;
         else if (arg == "--clipboard-put-file" && i + 1 < argc) clipboardPutFile = argv[++i];
         else if (arg == "--clipboard-get-file" && i + 1 < argc) clipboardGetFile = argv[++i];
         else if (arg == "--list")
@@ -998,6 +1000,28 @@ int main(int argc, char** argv)
     if (checks.empty())
         checks = {"host-ownership", "dpi",     "displays", "clipboard", "cursors",
                   "handles",        "close",   "wgl",      "input"};
+
+    // --dpi-aware makes this program behave like a DPI-aware HOST: it declares per-monitor-v2
+    // awareness for the process BEFORE creating the platform, exactly as a game would in its
+    // manifest or its first lines of main(). CNA never declares it -- docs/platform-win32.md is
+    // explicit that the process-wide policy is the host's -- so without a host that declares it,
+    // every DPI reading is Windows' virtualised 96, whatever the desktop is actually scaled to.
+    // That is correct behaviour and it tests almost nothing, which is why this switch exists.
+    if (dpiAware)
+    {
+        using SetCtxFn = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
+        const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        const auto setCtx = Resolve<SetCtxFn>(user32, "SetProcessDpiAwarenessContext");
+        if (setCtx != nullptr &&
+            setCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) != FALSE)
+        {
+            std::cout << "host declared per-monitor-v2 DPI awareness before creating the platform\n";
+        }
+        else
+        {
+            std::cout << "host could not declare DPI awareness on this Windows\n";
+        }
+    }
 
     // Captured BEFORE the platform exists: that is the whole point of the host-ownership check.
     const HostState before = CaptureHostState();
