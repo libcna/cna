@@ -228,7 +228,12 @@ TEST_F(UnicodeTree, ResolvesANonAsciiNameSpelledWithTheWrongAsciiCase)
     // Only the ASCII letters fold; the non-ASCII part must match exactly.
     Write(std::string("Data/") + kCzech + "_LEVEL.cnb", "mixed-case-ok");
 
-    const fs::path wrongCase = root_ / "data" / (std::string(kCzech) + "_level.cnb");
+    // PathFromUtf8, not the narrow operator/ overload: on Windows the latter reads these UTF-8
+    // bytes as ANSI code page bytes, so the test would ask the walker for a path that does not
+    // exist and blame the walker for not finding it. Caught by the native Windows run -- this test
+    // committed, in its own setup, exactly the defect it exists to check for.
+    const fs::path wrongCase =
+        root_ / "data" / PathFromUtf8(std::string(kCzech) + "_level.cnb");
     const fs::path resolved = ResolveExistingNativePath(wrongCase);
 
     EXPECT_EQ(Read(resolved), "mixed-case-ok");
@@ -239,7 +244,12 @@ TEST_F(UnicodeTree, DoesNotFoldNonAsciiCaseWhenResolving)
     // A locale-aware tolower() over UTF-8 bytes could rewrite continuation bytes and match the
     // wrong entry. Ž (U+017D) and ž (U+017E) must stay distinct.
     Write("\xc5\xbd" "ID.bin", "upper");            // ŽID.bin
-    const fs::path lower = root_ / "\xc5\xbe" "id.bin";   // žid.bin -- different file
+    const fs::path lower = root_ / PathFromUtf8("\xc5\xbe" "id.bin");   // zid.bin, a different file
+
+    // Asserted positively as well: with a narrow join the requested path would not exist for
+    // an unrelated reason, and the EXPECT_FALSE below would pass without testing anything.
+    ASSERT_TRUE(fs::exists(root_ / PathFromUtf8("\xc5\xbd" "ID.bin")))
+        << "the upper-case fixture must exist, or the negative assertion proves nothing";
 
     const fs::path resolved = ResolveExistingNativePath(lower);
     EXPECT_FALSE(fs::exists(resolved)) << "non-ASCII case must not fold";
