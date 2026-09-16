@@ -365,11 +365,16 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
     }
 
     EXPECT_EQ(window.getTitleProperty(), CNA::Internal::GetDefaultWindowTitle());
-    EXPECT_TRUE(window.getAllowUserResizingProperty());
+    // XNA's GameWindow.AllowUserResizing defaults to false, and GraphicsDevice creates the native
+    // window that way (SAMPLE-152). This line still expected the WindowDescription default of true
+    // it replaced, on every platform.
+    EXPECT_FALSE(window.getAllowUserResizingProperty());
     EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 800, 480));
 
     window.setTitleProperty("platform-window");
     EXPECT_EQ(window.getTitleProperty(), "platform-window");
+    window.setAllowUserResizingProperty(true);
+    EXPECT_TRUE(window.getAllowUserResizingProperty());
     window.setAllowUserResizingProperty(false);
     EXPECT_FALSE(window.getAllowUserResizingProperty());
     window.setIsBorderlessEXTProperty(true);
