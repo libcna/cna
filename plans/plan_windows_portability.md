@@ -301,3 +301,45 @@ narrow `std::fstream` overload.
 Six new tests. **IO suite: 1022/1022 pass.** The five `Xml.Linq::XLinqNamespaceTests` failures in
 the full sharp-runtime run are **pre-existing and unrelated** — verified by stashing the change and
 reproducing them.
+
+---
+
+## 7. Linux regression — WINPORT-0017
+
+The rule the preceding workstream set, and this one keeps: compare the failure **set**, not the
+count. Two runs can agree on a number and still have swapped one failure for a different one.
+
+| | Tests | Failures |
+|---|---|---|
+| Baseline, conversion layer only (WINPORT-M1) | 8 961 | 26 |
+| After the whole migration, commit `187ea8b6` | 8 977 | 27 |
+
+The 16 extra tests are `UnicodePathResolutionTests`. The set difference is **one test newly
+failing and none newly passing**:
+
+```
++ DynamicSoundEffectInstanceTest.StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream
+```
+
+**It is not a regression, and the test says so itself.** Its assertion is
+`EXPECT_GT(callsThrown.load(), 0)` with the message *"expected at least some submissions to
+genuinely race a live Play()'d stream in the other format and be rejected — zero here would mean
+this test never actually exercised the guard it exists to verify"*. Zero is the test declaring its
+own run inconclusive, not the product misbehaving. It happened because the native Windows build was
+saturating the host's CPUs at the time, so the threads never interleaved.
+
+Checked rather than assumed: 3/3 in isolation, and 57/57 twice for the whole
+`DynamicSoundEffectInstanceTest` suite. The API it exercises, `SubmitFloatBufferEXT`, takes a
+memory buffer and touches no path at all; the only audio changes on this branch are three
+`ifstream` widenings in file-loading code this test never reaches.
+
+Everything else is identical: all 26 baseline failures still fail, for the same reasons, and
+nothing that passed before now fails.
+
+## 8. Windows — WINPORT-0012
+
+**The whole framework builds on native Windows with MSVC after the migration**, at commit
+`187ea8b6` against sharp-runtime `ef75cd18`, in the SDL-free `WIN32` + `DIRECTX11` configuration —
+two distinct warning codes (`C4005`, `C4834`), no errors. That is the first thing the migration had
+to not break, since the preceding workstream's F9–F16 showed how much of CNA had never been
+compiled by this toolchain at all.
