@@ -337,8 +337,8 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else
         {
-            auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite3d);
-            auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite3d);
+            ID3D11VertexShader* vs = owner_->GetStockVertexShaderEXT(D3DCommon::D3DShaderVariant::Sprite3d);
+            ID3D11PixelShader* ps = owner_->GetStockPixelShaderEXT(D3DCommon::D3DShaderVariant::Sprite3d);
             if (!vs || !ps)
                 throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite3d shader objects");
 
@@ -367,8 +367,8 @@ namespace CNA::Internal::Renderers::DirectX11
                 throw std::runtime_error("D3D11SpriteBatchRenderer: failed to prepare the sprite3d channel expansion buffer");
 
             context_->IASetInputLayout(layout);
-            context_->VSSetShader(vs.Get(), nullptr, 0);
-            context_->PSSetShader(ps.Get(), nullptr, 0);
+            context_->VSSetShader(vs, nullptr, 0);
+            context_->PSSetShader(ps, nullptr, 0);
             context_->VSSetConstantBuffers(0, 1, &cb);
             context_->PSSetConstantBuffers(0, 1, &channelExpansion);
 

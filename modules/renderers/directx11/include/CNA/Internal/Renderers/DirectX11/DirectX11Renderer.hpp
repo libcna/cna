@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
@@ -208,6 +209,28 @@ namespace CNA::Internal::Renderers::DirectX11
         /// draw calls without duplicating this renderer's own context-creation path (CNAEXT,
         /// DX-30/DX-31's buffer renderers both need this).
         [[nodiscard]] ID3D11DeviceContext* GetContextEXT() const { return context_.Get(); }
+        /**
+         * @brief Returns this device's vertex shader object for a stock shader variant.
+         *
+         * WINCLOSE-0024. Every stock draw and every SpriteBatch flush used to create a fresh
+         * ID3D11VertexShader and ID3D11PixelShader from the embedded DXBC and release them again:
+         * a bytecode parse and a driver allocation per draw call for objects that never change.
+         * They are created once per device now, on first use, and dropped when the device is
+         * recreated. A creation that fails is not cached, so it is attempted again.
+         *
+         * @param variant The stock variant.
+         * @return The shader object, or nullptr if the device refused to create it.
+         */
+        [[nodiscard]] ID3D11VertexShader* GetStockVertexShaderEXT(D3DCommon::D3DShaderVariant variant);
+        /**
+         * @brief Returns this device's pixel shader object for a stock shader variant.
+         *
+         * The pixel-stage counterpart of GetStockVertexShaderEXT(), with the same lifetime.
+         *
+         * @param variant The stock variant.
+         * @return The shader object, or nullptr if the device refused to create it.
+         */
+        [[nodiscard]] ID3D11PixelShader* GetStockPixelShaderEXT(D3DCommon::D3DShaderVariant variant);
         /** @brief Registers a live resource for D3D11 device recreation. */
         void RegisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource);
         /** @brief Removes a live resource from the D3D11 recovery registry. */
@@ -485,6 +508,9 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
         ComPtr<IDXGIFactory2> factory_;
+        /// WINCLOSE-0024: stock shader objects, keyed by D3DShaderVariant, for this device only.
+        std::unordered_map<int, ComPtr<ID3D11VertexShader>> stockVertexShaders_;
+        std::unordered_map<int, ComPtr<ID3D11PixelShader>> stockPixelShaders_;
         bool allowTearingSupported_ = false;
         bool debugLayerEnabled_ = false;
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;

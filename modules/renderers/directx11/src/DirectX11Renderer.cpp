@@ -705,6 +705,8 @@ namespace CNA::Internal::Renderers::DirectX11
         context_.Reset();
         device_.Reset();
         factory_.Reset();
+        stockVertexShaders_.clear();
+        stockPixelShaders_.clear();
         debugLayerEnabled_ = false;
         allowTearingSupported_ = false;
 
@@ -1253,6 +1255,30 @@ namespace CNA::Internal::Renderers::DirectX11
             return SupportsIndirectDrawEXT();
         }
         return false;
+    }
+
+    ID3D11VertexShader* DirectX11Renderer::GetStockVertexShaderEXT(D3DCommon::D3DShaderVariant variant)
+    {
+        const int key = static_cast<int>(variant);
+        const auto found = stockVertexShaders_.find(key);
+        if (found != stockVertexShaders_.end())
+            return found->second.Get();
+        ComPtr<ID3D11VertexShader> shader = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
+        if (!shader)
+            return nullptr;
+        return stockVertexShaders_.emplace(key, std::move(shader)).first->second.Get();
+    }
+
+    ID3D11PixelShader* DirectX11Renderer::GetStockPixelShaderEXT(D3DCommon::D3DShaderVariant variant)
+    {
+        const int key = static_cast<int>(variant);
+        const auto found = stockPixelShaders_.find(key);
+        if (found != stockPixelShaders_.end())
+            return found->second.Get();
+        ComPtr<ID3D11PixelShader> shader = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        if (!shader)
+            return nullptr;
+        return stockPixelShaders_.emplace(key, std::move(shader)).first->second.Get();
     }
 
     bool DirectX11Renderer::SupportsHalfFloatTextureLinearFilteringEXT() const
@@ -1907,8 +1933,8 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         constexpr auto variant = D3DCommon::D3DShaderVariant::Colored3d;
-        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
-        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        ID3D11VertexShader* vs = GetStockVertexShaderEXT(variant);
+        ID3D11PixelShader* ps = GetStockPixelShaderEXT(variant);
         if (!vs || !ps)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d shader objects");
 
@@ -1942,8 +1968,8 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->IASetVertexBuffers(0, 1, &vbRaw, &strideU, &offset);
         context_->IASetInputLayout(layout.Get());
         context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
-        context_->VSSetShader(vs.Get(), nullptr, 0);
-        context_->PSSetShader(ps.Get(), nullptr, 0);
+        context_->VSSetShader(vs, nullptr, 0);
+        context_->PSSetShader(ps, nullptr, 0);
 
         ID3D11Buffer* cbs[2] = { perDrawCB, fogCB };
         context_->VSSetConstantBuffers(0, 2, cbs);
@@ -1970,8 +1996,8 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         constexpr auto variant = D3DCommon::D3DShaderVariant::Colored3d;
-        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
-        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        ID3D11VertexShader* vs = GetStockVertexShaderEXT(variant);
+        ID3D11PixelShader* ps = GetStockPixelShaderEXT(variant);
         if (!vs || !ps)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d shader objects");
 
@@ -2002,8 +2028,8 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
         context_->IASetInputLayout(layout.Get());
         context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
-        context_->VSSetShader(vs.Get(), nullptr, 0);
-        context_->PSSetShader(ps.Get(), nullptr, 0);
+        context_->VSSetShader(vs, nullptr, 0);
+        context_->PSSetShader(ps, nullptr, 0);
 
         ID3D11Buffer* cbs[2] = { perDrawCB, fogCB };
         context_->VSSetConstantBuffers(0, 2, cbs);
@@ -2492,8 +2518,8 @@ namespace CNA::Internal::Renderers::DirectX11
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
         }
 
-        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
-        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        ID3D11VertexShader* vs = GetStockVertexShaderEXT(variant);
+        ID3D11PixelShader* ps = GetStockPixelShaderEXT(variant);
         if (!vs || !ps)
             throw std::runtime_error("DrawPrimitivesEx: failed to create shader objects for the selected variant");
 
@@ -3008,8 +3034,8 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         context_->IASetInputLayout(layout.Get());
         context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
-        context_->VSSetShader(vs.Get(), nullptr, 0);
-        context_->PSSetShader(ps.Get(), nullptr, 0);
+        context_->VSSetShader(vs, nullptr, 0);
+        context_->PSSetShader(ps, nullptr, 0);
 
         // Always rebind the full 3-slot-cbuffer/7-slot-SRV range (unused slots explicitly null,
         // see cbs'/srvs' own declaration comments above) -- no variant can see a stale binding
@@ -3096,8 +3122,8 @@ namespace CNA::Internal::Renderers::DirectX11
         const auto variant = hasColor
             ? D3DCommon::D3DShaderVariant::InstancedColored3d
             : D3DCommon::D3DShaderVariant::Instanced3d;
-        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
-        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        ID3D11VertexShader* vs = GetStockVertexShaderEXT(variant);
+        ID3D11PixelShader* ps = GetStockPixelShaderEXT(variant);
         if (!vs || !ps)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d shader objects");
 
@@ -3127,8 +3153,8 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
         context_->IASetInputLayout(layout.Get());
         context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
-        context_->VSSetShader(vs.Get(), nullptr, 0);
-        context_->PSSetShader(ps.Get(), nullptr, 0);
+        context_->VSSetShader(vs, nullptr, 0);
+        context_->PSSetShader(ps, nullptr, 0);
         context_->VSSetConstantBuffers(0, 1, &perDrawCB);
         context_->PSSetConstantBuffers(0, 1, &perDrawCB);
 
