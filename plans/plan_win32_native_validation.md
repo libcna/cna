@@ -573,6 +573,29 @@ baseline — and the same 13 fail both ways.
 Recorded because a Windows run of the same suite will show them too, and a reader who does not know
 they predate this branch would attribute them to it.
 
+**The whole-suite Linux baseline**, collected on this branch after the F19 corpus fix, from the
+repository root under Xvfb (`DISPLAY=:99`):
+
+```
+8939 tests · 25 failures · 0 errors · 479 skipped
+```
+
+Two suites are **excluded**, and the exclusion is part of the measurement rather than a footnote:
+
+* `Sdl3XErrorHandlerTest` — it **ends the process** (F22), so nothing after it is measured at all;
+* `XnaDifferentialBuildTest` — it invokes the DirectX SDK's `fxc.exe` under Wine, and the shared
+  Wine prefix on this host wedges in `wineboot --init`. Not a CNA defect and not reproducible on
+  demand; the same suite had completed in an earlier run on the same binary.
+
+The 25 failures are the 13 content ones above plus `XnaBuildDeterminism` (3), `XnaSourceToOutput`
+(3), `XnaAudioContent`/`XnaAudioProcessors`/`XnaContentProjectCommandLine` (3, all of which name a
+build configured without a media decoder), `GltfRendererIndexWidthPolicy`,
+`XnbContainerFuzzTest`, `XnbContentPipelineTest`, `GraphicsDeviceCapabilityTest` and
+`MediaLibraryTestFixture` (2, both about song durations).
+
+That last pair matters for reading the Windows run: **`MediaLibraryTestFixture` already fails twice
+on Linux**, so a Windows failure in that fixture is only interesting if it is a *different* test.
+
 ### The host-ownership promises, measured
 
 `docs/platform-win32.md` says the backend never touches process-global policy. Captured before the
