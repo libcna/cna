@@ -179,6 +179,17 @@ namespace
         return root;
     }
 
+    // Writes a fixture byte-for-byte, which a bare std::ofstream does not do on Windows: without
+    // std::ios::binary the CRT expands every '\n' to CRLF, while GreetingImporter below reads in
+    // binary and splits on '\n' -- so "hello\n" came back as "hello\r" and the comparison failed
+    // for a reason that had nothing to do with what the test was checking. Same class as
+    // WINNATIVE-F27, and the same answer: these bytes are the measurement, so binary is the mode.
+    void WriteFixture(const std::filesystem::path& file, const std::string& bytes)
+    {
+        std::ofstream stream(file, std::ios::binary);
+        stream << bytes;
+    }
+
     // ---- ContentIdentity / ContentItem ------------------------------------------------------
 
     TEST(XnaContentIdentity, ConstructorsFillTheThreeStringsInOrder)
@@ -532,7 +543,7 @@ namespace
     TEST(XnaPipelineBridge, RegisteredXnaComponentsImportAndProcessThroughCanonicalContexts)
     {
         const std::filesystem::path root = MakeTempRoot("bridge");
-        { std::ofstream(root / "hello.greet") << "hello\n"; }
+        WriteFixture(root / "hello.greet", "hello\n");
 
         auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
         Xna::ContentImporterAttribute attribute(".greet");
@@ -606,7 +617,7 @@ namespace
         EXPECT_TRUE(view.getIntermediateDirectoryProperty().empty());
 
         // Dependencies declared through the XNA context reach the canonical collector.
-        { std::ofstream(root / "extra.txt") << "x"; }
+        WriteFixture(root / "extra.txt", "x");
         view.AddDependency("extra.txt");
         bool recorded = false;
         for (const auto& dependency : dependencies.Dependencies())
@@ -622,7 +633,7 @@ namespace
     TEST(XnaPipelineBridge, ConvertRunsARegisteredProcessorInProcess)
     {
         const std::filesystem::path root = MakeTempRoot("convert");
-        { std::ofstream(root / "c.greet") << "c\n"; }
+        WriteFixture(root / "c.greet", "c\n");
         auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
         Canon::RegisterXnaImporter<GreetingImporter>(*registry, "GreetingImporter", Xna::ContentImporterAttribute(".greet"));
         Canon::RegisterXnaProcessor<GreetingProcessor>(*registry, "GreetingProcessor", Xna::ContentProcessorAttribute{});
@@ -725,9 +736,9 @@ namespace
     {
         const std::filesystem::path root = MakeTempRoot("nested");
         std::filesystem::create_directories(root / "nested");
-        { std::ofstream(root / "outer.greet") << "outer\n"; }
-        { std::ofstream(root / "nested" / "first.greet") << "first\n"; }
-        { std::ofstream(root / "nested" / "second.greet") << "second\n"; }
+        WriteFixture(root / "outer.greet", "outer\n");
+        WriteFixture(root / "nested" / "first.greet", "first\n");
+        WriteFixture(root / "nested" / "second.greet", "second\n");
         auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
         Xna::ContentImporterAttribute attribute(".greet");
         Canon::RegisterXnaImporter<GreetingImporter>(*registry, "GreetingImporter", attribute);
@@ -801,7 +812,7 @@ namespace
     TEST(XnaPipelineBridge, DefaultProcessorIsHonouredByTheCanonicalBuild)
     {
         const std::filesystem::path root = MakeTempRoot("default");
-        { std::ofstream(root / "a.greet") << "a\n"; }
+        WriteFixture(root / "a.greet", "a\n");
         auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
         Xna::ContentImporterAttribute attribute(".greet");
         attribute.setDefaultProcessorProperty("GreetingProcessor");
@@ -885,7 +896,7 @@ namespace
     TEST(XnaContentImporter, TypedImportAndUntypedInterfaceAgree)
     {
         const std::filesystem::path root = MakeTempRoot("importer");
-        { std::ofstream(root / "x.greet") << "typed\n"; }
+        WriteFixture(root / "x.greet", "typed\n");
         GreetingImporter importer;
         TestImporterContext context;
         std::shared_ptr<GreetingContent> typed = importer.Import((root / "x.greet").string(), context);
