@@ -86,7 +86,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0013 | Window-lifecycle stress and leak harness | ✅ | 9 250 operations, every counter flat (§3) |
 | WINNATIVE-0014 | Full `CnaTests` on native Windows | ✅ | **8123 tests run to completion, 0 errors**; the stack-overflow crash fixed (F17), failures classified (§2, §3) |
 | WINNATIVE-0015 | SDL-free proof by PE dependency inspection | ✅ | 38 executables, `dumpbin /dependents`: no SDL artifact built, no SDL import (§3) |
-| WINNATIVE-0016 | DPI at 100/125/150/200 % | ⬜ | |
+| WINNATIVE-0016 | DPI at 100/125/150/200 % | ✅ | measured against both an unaware and a DPI-aware host; §3 |
 | WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
@@ -442,6 +442,33 @@ com apartment    uninitialised -> main-STA    (CNA adds a reference; it took not
 The timer figure is the one Wine could not produce: 15.625 ms is Windows' real default tick, and a
 stray `timeBeginPeriod(1)` would show here as 1000 us. Under Wine the same probe reads 1000 us
 before *and* after, so the promise was untestable there.
+
+### DPI, and why the first run of it proved nothing
+
+Setting the desktop to 125, 150 and 200 % and re-measuring gave scale 1.0 and 96 dpi every time.
+That is not a defect: Windows **virtualises** DPI for a process that has not declared awareness, and
+CNA deliberately never declares it — `docs/platform-win32.md` makes the process-wide policy the
+host's. The scaling was genuinely applied; the display CNA enumerated shrank 1920x1080 → 1280x720 →
+960x540 as the scale rose, which is exactly the virtual screen an unaware process is given.
+
+So the run was consistent, and it exercised one half of the contract. The other half needs a host
+that behaves like a real game: `--dpi-aware` declares per-monitor-v2 for the process **before** the
+platform is created. Both, on the same desktop at 150 %:
+
+| | unaware host | **DPI-aware host** |
+|---|---|---|
+| `GetDpiForWindow` | 96 (100 %) | **144 (150 %)** |
+| `IPlatformWindow::GetDisplayScale` | 1.000 | **1.500** |
+| agreement with Windows | ok | **ok — 1.5 vs 1.5** |
+| `GetPixelSize` vs `GetClientRect` | ok, 640x480 | **ok, 640x480** |
+| display CNA enumerates | 1280x720, contentScale 1.0 | **1920x1080, contentScale 1.5** |
+| DPI awareness, before → after creating the platform | unaware → unaware | **per-monitor-v2 → per-monitor-v2** |
+
+Four things at once: CNA reports the **real** DPI when the host declares awareness; the
+**virtualised** one when it does not; it never changes the policy in either direction; and the
+display enumeration follows the same rule as the window. The last row is the host-ownership promise
+verified from the demanding side — not merely "CNA left the default alone", but "CNA respected a
+policy the host had already set".
 
 ### Synthetic input on the real desktop
 
