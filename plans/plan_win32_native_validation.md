@@ -41,6 +41,7 @@
 | Automation | OpenSSH Server (`OpenSSH.Server~~~~0.0.1.0`), **public-key only**, default shell PowerShell 5.1 |
 | Snapshot | `clean-ssh-no-devtools` — the guest with SSH configured and no development tools |
 | Toolchain | MSVC **19.44.35229** (VS Build Tools 2022 17.14, `C:\BuildTools`), Windows SDK **10.0.26100.0**, CMake 3.31.6, Ninja 1.12.1, Git 2.47.1, Python 3.12.8 |
+| Effect compiler | DirectX SDK (June 2010) **fxc 9.29.952.3111** at `C:\cna\tools\fxc\fxc.exe` with `d3dx9_43.dll` and `D3DCompiler_43.dll` beside it; `CNA_FXC` set at User scope. **Running natively**, not through Wine — which is the point |
 | Disk | 85.9 GB free before; 77.3 GB after the page file grew with the RAM increase; **66.4 GB** after the toolchain |
 
 **The VM has a virtual GPU.** Everything this workstream records is therefore one of two different
@@ -272,6 +273,31 @@ default, so a test that fits on one platform fits on the other.
 **Separately:** that test fails on Linux too — this build has no audio decoder, so the importer
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
+
+### WINNATIVE-F27 — a record written in text mode, and fxc running for real *(fixed)*
+
+Seven `EffectSourceCommandLineTest` failures on Windows, and they were two different things.
+
+**Six were one missing flag.** `tools/content/fake_effect_compiler.cpp` records the argument vector
+it was invoked with through a `std::ofstream` opened without `std::ios::binary`, so the Windows CRT
+expanded every `"\n"` to CRLF — while the tests read that file in binary and search for
+`"launcher\t...\n"`, which then matches nothing. The recorded text was correct and present the
+whole time; only its line endings were not what was being searched for, which is why the failure
+output read as though the argument were missing. The file is a record of an argument vector rather
+than console output, so its bytes are the measurement and binary is the right mode.
+
+**The seventh was a missing compiler**, and fixing it produced better evidence than the test was
+asking for. `.fx` compilation for XNA needs Microsoft's legacy `fxc` at profile `fx_2_0`; on Linux
+this project runs it under Wine (`--fx-compiler-launcher wine`). The guest was given the DirectX SDK
+(June 2010) `fxc` with its two DLLs, and it runs there **natively**:
+
+```
+Microsoft (R) Direct3D Shader Compiler 9.29.952.3111
+```
+
+So effect compilation is now validated with the genuine Microsoft compiler on real Windows rather
+than through Wine — one of the specific Wine-shaped gaps this workstream exists to close.
+`EffectSourceCommandLineTest` is **28/28** there.
 
 ### WINNATIVE-F25 — the path-containment guard did not hold on Windows *(fixed)*
 
