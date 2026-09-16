@@ -298,6 +298,12 @@ TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
     GraphicsDevice gd;
+    // RLGL-040 made the answer the renderer's capability AND the profile's limit, and a default
+    // device is Reach, which permits one target. Asked as it was, this expected the renderer's
+    // answer from a Reach device and failed on every MRT-capable renderer since (WINCLOSE-0028).
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets))
+        << "Reach permits a single render target, whatever the renderer can do";
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), ExpectedCapabilities().multipleRenderTargets);
 }
 
