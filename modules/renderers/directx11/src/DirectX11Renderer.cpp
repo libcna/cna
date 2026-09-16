@@ -689,7 +689,24 @@ namespace CNA::Internal::Renderers::DirectX11
 
         const HRESULT hr = swapChain_->Present(syncInterval, flags);
         if (FAILED(hr))
+        {
             CheckDeviceRemoved(hr);
+            return;
+        }
+
+        // The swap chain is DXGI_SWAP_EFFECT_FLIP_DISCARD (DX-45), and a flip-model Present unbinds
+        // the back buffer from the output merger. Clear() never noticed, because it names its
+        // render target view explicitly; every draw renders into whatever OMSetRenderTargets last
+        // bound, which after a Present is nothing. So from the second frame on, a game showed a
+        // correct clear colour and none of its geometry -- sprites and primitives alike -- and no
+        // test caught it, because every readback test reads the back buffer before its first
+        // Present. Rebind exactly the tracked set rather than restoring the back buffer: that
+        // leaves the viewport, and any render target the game bound itself, as they were.
+        if (currentRTVCount_ > 0)
+        {
+            context_->OMSetRenderTargets(static_cast<UINT>(currentRTVCount_), currentColorRTVs_,
+                                         currentDSV_);
+        }
     }
 
     void DirectX11Renderer::GetViewportSize(int& width, int& height)
