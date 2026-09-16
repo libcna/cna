@@ -304,6 +304,25 @@ namespace CNA::Content::Pipeline
 #if defined(CNA_HAVE_FREETYPE)
     namespace
     {
+        /**
+         * @brief Reads a whole font file through a native path.
+         *
+         * @param path The font file.
+         * @return Its bytes, or an empty vector when it could not be read.
+         */
+        [[nodiscard]] std::vector<FT_Byte> ReadWholeFile(const std::filesystem::path& path)
+        {
+            std::ifstream stream(path, std::ios::binary | std::ios::ate);
+            if (!stream.good()) { return {}; }
+            const std::streamsize length = stream.tellg();
+            if (length <= 0) { return {}; }
+            stream.seekg(0, std::ios::beg);
+
+            std::vector<FT_Byte> bytes(static_cast<std::size_t>(length));
+            if (!stream.read(reinterpret_cast<char*>(bytes.data()), length)) { return {}; }
+            return bytes;
+        }
+
         /** @brief RAII owner for the FreeType library handle. */
         class FreeTypeLibrary
         {
@@ -333,10 +352,21 @@ namespace CNA::Content::Pipeline
         public:
             FreeTypeFace(const FT_Library library, const std::filesystem::path& path)
             {
-                const std::string native = CNA::Internal::ContentPathToUtf8(path);
-                if (FT_New_Face(library, native.c_str(), 0, &face_) != 0)
+                // FT_New_Face, not FT_New_Memory_Face, is the tempting call -- and FreeType's own
+                // header says its pathname "should be recognizable as such by a standard fopen
+                // call on your system", i.e. the ANSI code page on Windows. In practice a
+                // CMake-built FreeType compiles builds/windows/ftsystem.c and accepts UTF-8, so
+                // which behaviour CNA gets depends on how the host's FreeType happened to be
+                // built. Reading the bytes here and handing over memory removes the question;
+                // FreeType's own documentation recommends exactly this for the case.
+                //
+                // The buffer must outlive the face: FreeType does not copy it.
+                bytes_ = ReadWholeFile(path);
+                if (bytes_.empty()
+                    || FT_New_Memory_Face(library, bytes_.data(),
+                                          static_cast<FT_Long>(bytes_.size()), 0, &face_) != 0)
                 {
-                    throw std::runtime_error("'" + native +
+                    throw std::runtime_error("'" + CNA::Internal::ContentPathToUtf8(path) +
                                              "' could not be opened as a font file");
                 }
             }
@@ -349,6 +379,7 @@ namespace CNA::Content::Pipeline
             [[nodiscard]] FT_Face Handle() const noexcept { return face_; }
 
         private:
+            std::vector<FT_Byte> bytes_;
             FT_Face face_ = nullptr;
         };
     }
@@ -1055,12 +1086,16 @@ namespace CNA::Content::Pipeline
 #if defined(CNA_HAVE_FREETYPE)
             FT_Library library = nullptr;
             if (FT_Init_FreeType(&library) != 0) { return faces; }
-            const std::string native = CNA::Internal::ContentPathToUtf8(path);
+            // Same reasoning as FreeTypeFace: memory rather than a filename, so the result does
+            // not depend on how the host's FreeType was configured. Read once, reused per face.
+            const std::vector<FT_Byte> bytes = ReadWholeFile(path);
+            if (bytes.empty()) { FT_Done_FreeType(library); return faces; }
             long count = 1;
             for (long index = 0; index < count; ++index)
             {
                 FT_Face face = nullptr;
-                if (FT_New_Face(library, native.c_str(), index, &face) != 0) { break; }
+                if (FT_New_Memory_Face(library, bytes.data(), static_cast<FT_Long>(bytes.size()),
+                                       index, &face) != 0) { break; }
                 count = face->num_faces > 0 ? face->num_faces : 1;
                 std::string family = SfntName(face, 1u);
                 if (family.empty() && face->family_name != nullptr) { family = face->family_name; }
