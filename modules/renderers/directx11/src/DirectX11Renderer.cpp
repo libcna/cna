@@ -153,11 +153,20 @@ namespace CNA::Internal::Renderers::DirectX11
                     throw System::NotSupportedException(
                         "DirectX11 multi-stream input requires every per-vertex buffer to carry "
                         "a VertexDeclaration.");
-                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
                 {
-                    auto combined = source;
+                    auto combined = elements[elementIndex];
                     combined.setOffsetProperty(
-                        source.getOffsetProperty() + stream.combinedByteBase);
+                        combined.getOffsetProperty() + stream.combinedByteBase);
+                    // WINCLOSE-0033: the shared layer moves a (usage, index) pair that an earlier
+                    // bound stream already claimed to that usage's first free index, as XNA and
+                    // FNA3D do (REMED-GFX-201/SOFTWARE-320). Using the declaration's own index
+                    // instead handed CreateInputLayout two POSITION0 or COLOR0 elements, which it
+                    // refuses -- so any draw binding a duplicate-semantic decoy stream failed.
+                    if (static_cast<int>(elementIndex) < stream.effectiveUsageIndexCount)
+                        combined.setUsageIndexProperty(
+                            stream.effectiveUsageIndices[elementIndex]);
                     combinedElements.push_back(combined);
                 }
             }
