@@ -19,7 +19,13 @@
 #   * incremental linking is incompatible with it too;
 #   * with the dynamic CRT the instrumented binary needs clang_rt.asan_dynamic-x86_64.dll, which
 #     lives beside cl.exe and is not on PATH by default -- so it is copied next to the executables
-#     rather than left to a PATH that a scheduled task will not inherit.
+#     rather than left to a PATH that a scheduled task will not inherit;
+#   * setting CMAKE_CXX_FLAGS REPLACES CMake's MSVC default, which is "/DWIN32 /D_WINDOWS /EHsc".
+#     Dropping /EHsc builds a binary whose exceptions do not unwind -- every destructor between a
+#     throw and its catch is skipped -- which in a codebase that reports refusals by throwing means
+#     the sanitizer would be watching a program that no longer behaves like the one under test.
+#     The defaults are therefore restated here rather than overwritten; the first version of this
+#     script overwrote them and cl.exe said so, 40 times, as warning C4530.
 #
 # Usage: win32_asan_build.ps1 [-Build C:\cna\build\win32-standalone-asan] [-Run]
 
@@ -53,8 +59,8 @@ Write-Output '--- configure ---'
 cmake -S $Source -B $Build -G Ninja `
       -DCNA_PLATFORM=WIN32 `
       -DCMAKE_BUILD_TYPE=RelWithDebInfo `
-      "-DCMAKE_CXX_FLAGS=/fsanitize=address /Zi" `
-      "-DCMAKE_C_FLAGS=/fsanitize=address /Zi" `
+      "-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /EHsc /fsanitize=address /Zi" `
+      "-DCMAKE_C_FLAGS=/DWIN32 /D_WINDOWS /fsanitize=address /Zi" `
       "-DCMAKE_EXE_LINKER_FLAGS=/INCREMENTAL:NO" 2>&1 | Select-Object -Last 12
 if ($LASTEXITCODE -ne 0) { Write-Output "CONFIGURE FAILED ($LASTEXITCODE)"; exit 1 }
 
