@@ -4,6 +4,7 @@
 #include <any>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -142,7 +143,25 @@ namespace Microsoft::Xna::Framework::Content
          */
         std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
         {
-            if constexpr (std::is_copy_constructible_v<T>)
+            if constexpr (std::is_abstract_v<T>)
+            {
+                // An abstract T has no value representation to box or unbox. A reader for one
+                // exists only so that a .xnb naming it can be refused, which is what the caller
+                // does with this throw.
+                //
+                // The branch is also what makes this header compile at all under MSVC, which
+                // instantiates a class template's virtual members eagerly because it needs the
+                // vtable: without it, `std::optional<T>` and `T result` below are instantiated for
+                // an abstract T and neither is possible. GCC and Clang defer far enough that the
+                // impossible code was never instantiated, so the shape stood until
+                // plans/plan_win32_native_validation.md WINNATIVE-0014 compiled it with cl.exe.
+                (void) input;
+                (void) existingInstance;
+                throw std::runtime_error(
+                    "ContentTypeReader: the asset names an abstract type, which has no value "
+                    "representation to read into");
+            }
+            else if constexpr (std::is_copy_constructible_v<T>)
             {
                 std::optional<T> existing = existingInstance.has_value()
                     ? std::optional<T>(std::any_cast<T>(std::move(existingInstance)))

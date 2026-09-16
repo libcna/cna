@@ -67,7 +67,7 @@ namespace
     {
         return Color(static_cast<SharpRuntime::bytecs>(10 + x * 9),
                      static_cast<SharpRuntime::bytecs>(20 + y * 13),
-                     static_cast<SharpRuntime::bytecs>(30 + z * 17), 255);
+                     static_cast<SharpRuntime::bytecs>(30 + z * 17), static_cast<SharpRuntime::bytecs>(255));
     }
 
     /// The patch texel, from a palette that cannot collide with any Background value in the sizes
@@ -76,7 +76,7 @@ namespace
     {
         return Color(static_cast<SharpRuntime::bytecs>(200 + x * 5),
                      static_cast<SharpRuntime::bytecs>(120 + y * 7),
-                     static_cast<SharpRuntime::bytecs>(60 + z * 11), 255);
+                     static_cast<SharpRuntime::bytecs>(60 + z * 11), static_cast<SharpRuntime::bytecs>(255));
     }
 
     [[nodiscard]] std::vector<Color> FillBackground(int width, int height)

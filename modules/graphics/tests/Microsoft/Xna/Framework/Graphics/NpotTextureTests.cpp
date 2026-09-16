@@ -60,7 +60,7 @@ namespace
         return Color(static_cast<SharpRuntime::bytecs>(10 + x * 7),
                      static_cast<SharpRuntime::bytecs>(20 + y * 11),
                      static_cast<SharpRuntime::bytecs>(30 + x * 3 + y * 5),
-                     255);
+                     static_cast<SharpRuntime::bytecs>(255));
     }
 
     [[nodiscard]] std::vector<Color> MakePattern(int width, int height)

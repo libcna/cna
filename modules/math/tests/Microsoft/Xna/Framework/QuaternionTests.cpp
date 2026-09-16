@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
+#include <numbers>
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -141,7 +142,7 @@ TEST(QuaternionTest, CreateFromAxisAngleZeroAngleIsIdentity)
 TEST(QuaternionTest, CreateFromAxisAngleHalfTurnAroundZ)
 {
     // angle = π → sin(π/2)=1, cos(π/2)≈0
-    Quaternion q = Quaternion::CreateFromAxisAngle(Vector3::UnitZ, static_cast<float>(M_PI));
+    Quaternion q = Quaternion::CreateFromAxisAngle(Vector3::UnitZ, static_cast<float>(std::numbers::pi_v<double>));
     EXPECT_NEAR(q.X, 0.0f, kEps);
     EXPECT_NEAR(q.Y, 0.0f, kEps);
     EXPECT_NEAR(q.Z, 1.0f, kEps);
@@ -203,7 +204,7 @@ TEST(QuaternionTest, QuaternionTimesItsInverseIsIdentity)
 TEST(QuaternionTest, LerpAtZeroReturnsFirst)
 {
     Quaternion q1 = Quaternion::CreateFromAxisAngle(Vector3::UnitX, 0.0f);
-    Quaternion q2 = Quaternion::CreateFromAxisAngle(Vector3::UnitX, static_cast<float>(M_PI));
+    Quaternion q2 = Quaternion::CreateFromAxisAngle(Vector3::UnitX, static_cast<float>(std::numbers::pi_v<double>));
     Quaternion result = Quaternion::Lerp(q1, q2, 0.0f);
     EXPECT_NEAR(result.W, q1.W, kEps);
 }

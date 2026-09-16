@@ -188,6 +188,15 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Win32.*\\.cpp$")
     endif()
 
+    # plans/plan_win32_native_validation.md WINNATIVE-0014: HttpNotificationChannelTests stands up
+    # a listening socket with <arpa/inet.h>, <netinet/in.h> and <sys/socket.h> to receive what the
+    # channel sends. Those are POSIX headers; Winsock is a different API, not a spelling. The
+    # channel ITSELF is built on Windows -- PushNotificationSender.cpp has the #if _WIN32 arm --
+    # so this excludes the test's POSIX listener, not the feature.
+    if(WIN32)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Phone/Notification/HttpNotificationChannelTests\\.cpp$")
+    endif()
+
     # plans/plan_win32_native_validation.md WINNATIVE-0009: System::Decimal exists only where the
     # compiler provides a native 128-bit integer -- sharp-runtime's header hard-errors otherwise,
     # and sharp-runtime itself drops Decimal.cpp from Core.Base on such a target. CNA's production

@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
+#include <numbers>
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -209,7 +210,7 @@ TEST(MatrixTest, CreateRotationZByZeroIsIdentity)
 TEST(MatrixTest, CreateRotationZByHalfPi)
 {
     // cos(π/2)≈0, sin(π/2)=1 → M11=0, M12=1, M21=-1, M22=0
-    Matrix m = Matrix::CreateRotationZ(static_cast<float>(M_PI) / 2.0f);
+    Matrix m = Matrix::CreateRotationZ(static_cast<float>(std::numbers::pi_v<double>) / 2.0f);
     EXPECT_NEAR(m.M11, 0.0f, kEps);
     EXPECT_NEAR(m.M12, 1.0f, kEps);
     EXPECT_NEAR(m.M21, -1.0f, kEps);
@@ -508,7 +509,7 @@ TEST(MatrixTest, CreateRotationXByZeroIsIdentity)
 
 TEST(MatrixTest, CreateRotationXByHalfPi)
 {
-    Matrix m = Matrix::CreateRotationX(static_cast<float>(M_PI) / 2.0f);
+    Matrix m = Matrix::CreateRotationX(static_cast<float>(std::numbers::pi_v<double>) / 2.0f);
     EXPECT_NEAR(m.M22,  0.0f, kEps);
     EXPECT_NEAR(m.M23,  1.0f, kEps);
     EXPECT_NEAR(m.M32, -1.0f, kEps);
@@ -526,7 +527,7 @@ TEST(MatrixTest, CreateRotationYByZeroIsIdentity)
 
 TEST(MatrixTest, CreateRotationYByHalfPi)
 {
-    Matrix m = Matrix::CreateRotationY(static_cast<float>(M_PI) / 2.0f);
+    Matrix m = Matrix::CreateRotationY(static_cast<float>(std::numbers::pi_v<double>) / 2.0f);
     EXPECT_NEAR(m.M11,  0.0f, kEps);
     EXPECT_NEAR(m.M13, -1.0f, kEps);
     EXPECT_NEAR(m.M31,  1.0f, kEps);
@@ -646,7 +647,7 @@ TEST(MatrixTest, CreatePerspectiveFieldOfViewThrowsBadFov)
 TEST(MatrixTest, CreatePerspectiveFieldOfViewM34IsMinusOne)
 {
     Matrix m = Matrix::CreatePerspectiveFieldOfView(
-        static_cast<float>(M_PI) / 4.0f, 16.0f / 9.0f, 0.1f, 1000.0f
+        static_cast<float>(std::numbers::pi_v<double>) / 4.0f, 16.0f / 9.0f, 0.1f, 1000.0f
     );
     EXPECT_NEAR(m.M34, -1.0f, kEps);
 }

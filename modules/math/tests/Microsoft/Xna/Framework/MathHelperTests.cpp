@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include <bit>
 #include <cmath>
+#include <numbers>
 #include <cstdint>
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
@@ -38,7 +39,7 @@ TEST(MathHelperTest, MinAndMaxEqual)
 
 TEST(MathHelperTest, PiConstant)
 {
-    EXPECT_NEAR(MathHelper::Pi, static_cast<float>(M_PI), 1e-6f);
+    EXPECT_NEAR(MathHelper::Pi, static_cast<float>(std::numbers::pi_v<double>), 1e-6f);
 }
 
 TEST(MathHelperTest, TwoPiIsTwicePI)

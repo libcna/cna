@@ -241,7 +241,7 @@ TEST(RenderTargetSemantics, EachRenderTargetCubeFaceKeepsItsOwnContent)
     const auto faceColour = [](int face) {
         return Color(static_cast<SharpRuntime::bytecs>(30 + face * 35),
                      static_cast<SharpRuntime::bytecs>(200 - face * 25),
-                     static_cast<SharpRuntime::bytecs>(60 + face * 15), 255);
+                     static_cast<SharpRuntime::bytecs>(60 + face * 15), static_cast<SharpRuntime::bytecs>(255));
     };
 
     for (int face = 0; face < 6; ++face)
