@@ -172,10 +172,18 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// REMED-GFX-234 describes above. The families this plan has not converted yet -- alpha test, dual
 /// texture, environment map, skinned, PBR, instanced -- still infer from the stride and still
 /// refuse by name what they cannot express; none of the cases below reaches them.
+///
+/// plans/plan_dx.md DX-221/DX-222: DirectX11 does the same. Its ordinary and instanced draws build
+/// the D3D11 input layout from the declaration's own elements and offsets
+/// (D3DVertexFormatHelper), key the layout cache on the whole declaration, and no longer call
+/// RequireFaithfulDeclarationEXT. This predicate was not updated when that landed, so DirectX11 was
+/// still expected to refuse the colliding declarations it now renders -- ten failures on native
+/// Windows that were the test's, not the renderer's (plans/plan_windows_portability_closeout.md
+/// WINCLOSE-0013). DirectX12 lost its guard in the same change but has not been measured here.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           Software);
+                           Software, DirectX11);
 }
 
 
@@ -668,7 +676,8 @@ protected:
     ///
     ///   * every renderer except bgfx and EasyGL left `SetVertexDeclaration` an empty override
     ///     (Vulkan, WebGPU, Software, SdlGpu, D3D9, D3D11, D3D12), so the declaration was discarded
-    ///     and a layout selected by stride -- REMED-GFX-217;
+    ///     and a layout selected by stride -- REMED-GFX-217 (since translated by Vulkan, WebGPU,
+    ///     Software and, per DX-221/DX-222, D3D11 -- see TranslatesDeclarations());
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
     ///     the element list rather than from its semantic, so any declaration whose element order
     ///     differs from the selected stock program's input order binds the wrong attributes --
