@@ -138,7 +138,10 @@ function Judge([string] $what, [double] $from, [double] $to, [double] $tolerance
     Write-Output ("  {0} {1,-10} {2} -> {3} (tolerance +{4})" -f $(if ($grew) { 'LEAK' } else { 'ok  ' }), $what, $from, $to, $tolerance)
 }
 Write-Output ''
-Write-Output "verdict (settled sample at {0}s vs final at {1}s):" -f $baseline.second, $final.second
+# Parenthesised: without them PowerShell binds -f as a parameter of Write-Output rather than as the
+# format operator, and prints the template literally followed by "-f" and the arguments on lines of
+# their own. The verdict header did exactly that until this run.
+Write-Output ("verdict (settled sample at {0}s vs final at {1}s):" -f $baseline.second, $final.second)
 Judge 'handles'  $baseline.handles $final.handles 24
 Judge 'USER'     $baseline.user    $final.user    8
 Judge 'GDI'      $baseline.gdi     $final.gdi     12

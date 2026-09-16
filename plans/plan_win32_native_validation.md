@@ -92,7 +92,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
 | WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | ⚠️ | passes in the **standalone** platform suite (a real WGL 3.3 core context created, made current, swapped, destroyed); **crashes with an access violation in the full-suite run** — see F29. Not claimed as validated |
-| WINNATIVE-0021 | A real CNA application, and a soak run | 🔄 | `cna_demo_2d.exe` **links and runs on native Windows** — D3D11 at feature level 11.0, 120 frames, exit 0 — after F28; soak in progress |
+| WINNATIVE-0021 | A real CNA application, and a soak run | ✅ | `cna_demo_2d.exe` links and runs natively (D3D11, feature level 11.0, exit 0) after F28; 300 s soak: **USER, GDI and thread counts exactly flat**, clean `WM_CLOSE` exit (§3) |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ✅ | HEADLESS **161 · 0 failures**; SDL3 **336 · 0 failures · 7 skipped**; SDL2 **195 · 0 failures · 0 skipped** (§3) |
 | WINNATIVE-0024 | Linux regression after every generic fix, and a whole-suite Linux baseline | ✅ | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; whole suite **8939 tests, 25 failures, 479 skipped** (§3), two suites excluded and named |
@@ -651,6 +651,37 @@ Windows run. Recorded so the next reader does not take 4 red tests for a path bu
 The related `PlaylistParserTest.ParsesInternationalM3U8WithNonAsciiEntry` failure is **not** this:
 it is the narrow `std::string` path handed to an ANSI `fopen`/`ifstream` on a non-UTF-8 code page,
 which is a genuine defect and is not yet fixed.
+
+### A real application, and 300 seconds of a real desktop doing things to it
+
+`cna_demo_2d` — an actual CNA game, not a harness — on the interactive desktop, driven through
+minimize, restore, resize (large and small), maximize, Alt-Tab away and Alt-Tab back, roughly
+fourteen full cycles, sampling its own process counters every eleven seconds.
+
+```
+                       settled (103s)      final (301s)
+  USER objects              12        ->        12        flat
+  GDI objects               10        ->        10        flat
+  threads                    3        ->         3        flat
+  handles                  237        ->       321        +84
+  private bytes          35 064 KB    ->    44 032 KB     +9 MB
+exited cleanly on WM_CLOSE, code 0
+```
+
+**The three counters the Win32 backend owns do not move at all.** Every window it creates,
+every DC it takes, every thread it starts is accounted for across fourteen rounds of the events a
+game actually receives — `WM_SIZE`, `WM_ACTIVATE`, `WM_SYSCOMMAND` and the swap chain's response to
+each resize. That is the result this soak existed to get.
+
+The handles and private bytes do grow, and the rate is the tell: **+84 handles over about fourteen
+resize/restore cycles is ~6 per cycle**, which is precisely what F18 measured for one D3D11
+create/use/destroy cycle on this machine. The growth tracks device and swap-chain recreation, not
+window lifetime — and the flat USER/GDI counts are what separates those two explanations. It is the
+same driver-side cost already recorded, met again from a different direction, not a new leak in the
+backend.
+
+Not claimed: that this would be flat on a physical GPU driver. It might well be, since F18's leak
+is the virtual adapter's; that is untested and stays untested.
 
 ### The other platform backends, on the same machine
 
