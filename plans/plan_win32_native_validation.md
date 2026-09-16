@@ -93,7 +93,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | 🔄 | a real WGL 3.3 core context is created, made current, swapped and destroyed by `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` in the native suite run (it is not among the skips); the `wgl` check in the desktop harness records the driver and the context-cycle GDI count |
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
-| WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ⬜ | |
+| WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | 🔄 | HEADLESS **161 tests, 0 failures**; SDL3 **336 tests, 0 failures, 7 skipped**; SDL2 in progress (§3) |
 | WINNATIVE-0024 | Linux regression after every generic fix | 🔄 | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; `CnaContentTests` at its pre-existing 13 |
 
 ---
@@ -319,6 +319,56 @@ Recorded because the conclusion nearly went the other way: a harness defect that
 an encoding bug in the thing under test is the most expensive kind. The transport is now a file of
 UTF-8 bytes with an explicit no-BOM encoding on the PowerShell side, and all ten checks pass.
 
+### WINNATIVE-F19 — the oracle corpora were read with a regex MSVC cannot run *(fixed)*
+
+**174 of the 761 `CnaTests` failures on Windows were one defect**, and it was not in any product
+code. Sixteen fixtures each carried a copy of the same corpus reader, which picked apart a line of
+`{"case": "...", "result": "..."}` with
+
+```
+std::regex("\\{\"case\": \"([^\"]*)\", \"result\": \"((?:[^\"\\\\]|\\\\.)*)\"\\}")
+```
+
+MSVC's `<regex>` matches by **recursing once per repetition**. A `result` of any length therefore
+exhausts the thread's stack and throws `regex_error(error_stack)` rather than matching. libstdc++
+matches the same pattern iteratively, which is why Linux has never seen it in the years this
+pattern has been copied from fixture to fixture. This is the same class of defect as F17: a
+platform-dependent stack budget, found only by running on the platform.
+
+Two things made it cost more than its count:
+
+* the throw happens inside a function-local `static`'s initializer, so GoogleTest attributed all
+  174 to **"unknown file"** rather than to any test — which is why they did not group with the
+  suites they belong to when the failures were first counted;
+* the reader that throws returns an **empty corpus**, so the fixtures compared against nothing. A
+  reader that answers nothing looks exactly like a product that answers wrongly, and the first
+  reading of these failures was that Windows content handling was broken.
+
+`tests/support/CNA/TestSupport/OracleCorpus.hpp` replaces the pattern with a scan of the grammar
+the corpora actually use, shared by all sixteen. It preserves the distinction the two regex
+spellings made — a field written `[^"]*` holds no escapes and ends at the first quotation mark, one
+written `(?:[^"\\]|\\.)*` ends at the first **unescaped** one — because collapsing them changes what
+a value containing a backslash means.
+
+Equivalence was measured rather than argued: a probe ran the old regex and the new scan over every
+`.json` line under `tests/reference` — **208 614 lines, 985 two-field and 265 four-field records,
+0 disagreements**. `tests/OracleCorpusTests.cpp` (13 cases) then pins the edges the shipped corpora
+never reach, including a 200 000-character result that is read rather than refused.
+
+### WINNATIVE-F20 — the sync deleted the prebuilt SDL prefix on every run *(fixed, tooling)*
+
+A second defect in this workstream's own tooling, recorded for the same reason as F4. The guest-side
+checkout ends in `git clean -qfdx`, and `.sdl-prebuilt-<system>-<arch>/` — the prefix both the real
+configure and the standalone harness resolve SDL from — is untracked and inside the repository. Every
+sync removed it.
+
+It presented as a **regression that was not one**: the SDL3 harness configured successfully, a fix
+was committed for an unrelated missing-DLL failure, and the very next configure of the *same build
+directory* failed with `Could not find SDL3`. Nothing about SDL had changed; the sync in between had
+deleted the prefix. The clean now excludes it. The SDL build tree lives outside the repository under
+`C:\cna\build\sdl3`, so `git clean` never reached it and restoring the prefix cost one install step
+rather than a full SDL compile.
+
 ---
 
 ## 3. Measurements
@@ -334,6 +384,28 @@ UTF-8 bytes with an explicit no-BOM encoding on the PowerShell side, and all ten
 
 The three tests that fail under Wine on the Linux host pass here. Windows is authoritative, and it
 says the backend is right and the Wine environment was the problem.
+
+### The other platform backends, on the same machine
+
+Hardening Win32 must not have cost the backends that already worked. The standalone harness is the
+platform module plus its own suite, so each of these is a statement about the platform layer and
+nothing else. All three run on the interactive desktop, through `win32_standalone_suite.ps1`.
+
+```
+HEADLESS : 161 tests, 0 failures, 0 errors, 0 skipped   (exit 0)
+SDL3     : 336 tests, 0 failures, 0 errors, 7 skipped   (exit 0)
+```
+
+SDL3's seven skips are all capabilities this environment does not have, not behaviours that failed:
+two sensor tests, two Vulkan tests (no `vulkan-1.dll`), two for a **primary selection**, which is an
+X11 concept Windows has no equivalent of, and the conformance case that needs an unsupported
+capability to name.
+
+The SDL3 run also produced the one genuine defect in this phase: the harness copied the SDL runtime
+DLL next to the executable only under `if(MINGW)`, so the MSVC build linked correctly and then died
+at startup with `0xC0000135` (`STATUS_DLL_NOT_FOUND`) — as an exit code of `-1073741515` and no test
+XML at all. The copy is now done for any Windows toolchain, and the runner prints a missing-XML exit
+code in hex, because the decimal spelling says nothing and the hex one names the problem.
 
 ### Direct3D on a CNA platform HWND
 
