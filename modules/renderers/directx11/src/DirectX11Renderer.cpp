@@ -3175,7 +3175,11 @@ namespace CNA::Internal::Renderers::DirectX11
         // first field is named "Vp" (view*projection only, world comes from the per-instance
         // buffer instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
+        // WINCLOSE-0034: the effect's World composes AFTER each instance's own matrix --
+        // instanceWorld * World * View * Projection, the order EasyGL, Software and Vulkan apply
+        // (InstancedVertexColorTest.EffectWorldComposesAfterTheInstanceWorld). This used to upload
+        // View * Projection alone, so an Effect.World set on an instanced draw was ignored.
+        const Matrix vp = ApplyXnaPixelCenterEXT(world * view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];
