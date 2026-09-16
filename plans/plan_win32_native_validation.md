@@ -273,6 +273,39 @@ default, so a test that fits on one platform fits on the other.
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
 
+### WINNATIVE-F24 — the D3D11 refusal is reproduced by neither control *(open, environment-side)*
+
+> Recorded as **not explained**, because the two obvious explanations were tested and both are
+> wrong. This is the largest single open question in the Windows measurement: it accounts for
+> **1 426 of roughly 1 500 failures** in the run that got furthest.
+
+In the full `CnaTests` run, `D3D11CreateDevice` starts returning `0x887A0004`
+(`DXGI_ERROR_UNSUPPORTED`) after **898 tests**, in `GltfConformanceL6`, and **never recovers** for
+the life of the process. It is per-process, not machine-wide: a probe launched immediately after
+such a run creates a hardware device on the first try.
+
+Two controls, both with `cna_win32_d3d11_cycle` on the interactive desktop:
+
+| Control | What it asks | Result |
+|---|---|---|
+| `--cycles 400` | how many devices can be created **and destroyed** | **400/400 succeeded**, no refusal; leaks 6 handles and ~206 KB per cycle |
+| `--cycles 400 --hold` | how many can be **alive at once** | refused after **242**, `hr=0x8876017C` (`D3DERR_OUTOFVIDEOMEMORY`), 4.1 GB private |
+
+Neither matches. Sequential creation does not get refused at all at four times the count that
+breaks `CnaTests`, and holding devices alive is refused with a **different HRESULT** for a reason
+that is plainly memory. So the tempting conclusion — "CNA leaks `GraphicsDevice`, so it runs out" —
+is not supported: if it were holding devices, the error would be the out-of-video-memory one.
+
+What is established: the handle and memory leak per create/destroy cycle is real and is in the
+driver rather than in CNA (F18's controls), the refusal is per-process and permanent, and it is not
+a count of devices in either sense. What is **not** established is what actually exhausts. The
+suspects that remain untested are the heavy `GltfConformanceL6` workloads immediately preceding the
+first refusal — several take 7–8 seconds each — and the possibility of a driver reset in the guest's
+Mesa SVGA3D stack.
+
+**This is a virtual GPU on a VM, and nothing here should be read as a statement about Direct3D on
+real Windows hardware.** It is recorded so the number is not quietly attributed to CNA.
+
 ### WINNATIVE-F18 — a D3D11 device costs ~6 kernel handles that never come back *(not CNA's)*
 
 The repo-root `CnaTests` run began reporting `D3D11CreateDevice failed, hr=0x887A0004` partway
