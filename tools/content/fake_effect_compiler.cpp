@@ -223,7 +223,11 @@ int main(int argc, char** argv)
     const Directives directives = ReadDirectives(source);
     if (!directives.record.empty())
     {
-        std::ofstream record(directives.record, std::ios::app);
+        // Binary, so "\n" stays one byte. In text mode the Windows CRT expands every newline to
+        // CRLF, and the tests read this file in binary and look for "launcher\t...\n" -- which
+        // then never matches, on all seven of them. The file is a record of an argument vector,
+        // not console output; its bytes are the measurement.
+        std::ofstream record(directives.record, std::ios::app | std::ios::binary);
         record << "launcher\t" << launched << "\n";
         for (const std::string& argument : arguments) { record << "arg\t" << argument << "\n"; }
         record << "\n";
