@@ -1,0 +1,44 @@
+=== CNA path semantics probe ===
+platform : POSIX
+
+### Phase 20: malformed UTF-8 -> path(std::u8string) -> u8string()
+  valid ascii  in=[6f 6b]  -> path built, u8string()=[6f 6b]  ROUND-TRIP
+  valid 2-byte  in=[c3 a9]  -> path built, u8string()=[c3 a9]  ROUND-TRIP
+  lone continuation  in=[80]  -> path built, u8string()=[80]  ROUND-TRIP
+  truncated 2-byte  in=[c3]  -> path built, u8string()=[c3]  ROUND-TRIP
+  truncated 3-byte  in=[e6 97]  -> path built, u8string()=[e6 97]  ROUND-TRIP
+  overlong slash  in=[c0 af]  -> path built, u8string()=[c0 af]  ROUND-TRIP
+  lone high surrogate  in=[ed a0 80]  -> path built, u8string()=[ed a0 80]  ROUND-TRIP
+  lone low surrogate  in=[ed b0 80]  -> path built, u8string()=[ed b0 80]  ROUND-TRIP
+  beyond U+10FFFF  in=[f5 80 80 80]  -> path built, u8string()=[f5 80 80 80]  ROUND-TRIP
+  embedded NUL  in=[61 00 62]  -> path built, u8string()=[61 00 62]  ROUND-TRIP
+  latin1 e-acute (0xe9)  in=[e9]  -> path built, u8string()=[e9]  ROUND-TRIP
+
+### Phase 30: path semantics
+  | path | is_absolute | root_name | root_dir | lexically_normal |
+  | /usr/share/cna | ABS | '' | '/' | /usr/share/cna |
+  | C:\CNA test\asset.png | rel | '' | '' | C:\CNA test\asset.png |
+  | C:/CNA test/asset.png | rel | '' | '' | C:/CNA test/asset.png |
+  | C:asset.png | rel | '' | '' | C:asset.png |
+  | \\server\share\a.png | rel | '' | '' | \\server\share\a.png |
+  | \absolute-no-drive | rel | '' | '' | \absolute-no-drive |
+  | relative/asset.png | rel | '' | '' | relative/asset.png |
+  | ./a/../b | rel | '' | '' | b |
+  | trailing/ | rel | '' | '' | trailing/ |
+  | a/b/../../../escape | rel | '' | '' | ../escape |
+  | CON | rel | '' | '' | CON |
+  | asset.png. | rel | '' | '' | asset.png. |
+  | asset.png  | rel | '' | '' | asset.png  |
+
+### Phase 30b: lexically_relative for containment
+  C:/content root/tex/a.png  -> rel='tex/a.png'  escapes=no
+  C:/content root/../evil.png  -> rel='../evil.png'  escapes=YES
+  C:/other/a.png  -> rel='../other/a.png'  escapes=YES
+  C:/content root/..config/a.png  -> rel='..config/a.png'  escapes=no
+
+### Phase 22: long paths
+  deepest created: depth 7, length 310
+  ofstream(path) at length 322: open
+  exists(): yes
+
+=== done ===

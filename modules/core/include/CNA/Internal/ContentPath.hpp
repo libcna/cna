@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#include "CNA/Internal/PathUtf8.hpp"
+
 namespace CNA::Internal
 {
     /**
@@ -14,29 +16,28 @@ namespace CNA::Internal
      * manifests. It is not used to reopen the path without first converting it back through
      * ContentPathFromUtf8().
      *
+     * Retained as the content pipeline's spelling of PathToGenericUtf8(), which it forwards to
+     * unchanged; see PathUtf8.hpp for the path model the two share.
+     *
      * @param path Native filesystem path.
      * @return Generic path text encoded as UTF-8.
      */
     [[nodiscard]] inline std::string ContentPathToUtf8(const std::filesystem::path& path)
     {
-        const std::u8string value = path.generic_u8string();
-        return {reinterpret_cast<const char*>(value.data()), value.size()};
+        return PathToGenericUtf8(path);
     }
 
     /**
      * @brief Reconstructs a native filesystem path from persistent UTF-8 path text.
+     *
+     * Retained as the content pipeline's spelling of PathFromUtf8(), which it forwards to
+     * unchanged.
      *
      * @param value Generic path text encoded as UTF-8.
      * @return Native filesystem path.
      */
     [[nodiscard]] inline std::filesystem::path ContentPathFromUtf8(std::string_view value)
     {
-        std::u8string utf8;
-        utf8.reserve(value.size());
-        for (const unsigned char byte : value)
-        {
-            utf8.push_back(static_cast<char8_t>(byte));
-        }
-        return std::filesystem::path(utf8);
+        return PathFromUtf8(value);
     }
 }
