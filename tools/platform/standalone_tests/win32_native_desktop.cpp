@@ -23,8 +23,14 @@
 // Usage:
 //   cna_win32_native_desktop.exe --check <name> [--check <name>...] [--iterations N]
 //   cna_win32_native_desktop.exe --list
-//   cna_win32_native_desktop.exe --clipboard-put <utf8 text>
-//   cna_win32_native_desktop.exe --clipboard-get
+//   cna_win32_native_desktop.exe --clipboard-put-file <path>   (file holds UTF-8 bytes)
+//   cna_win32_native_desktop.exe --clipboard-get-file <path>   (file receives UTF-8 bytes)
+//
+// The clipboard modes take and give a FILE rather than an argument and stdout. Text handed to a
+// native process on a PowerShell command line is re-encoded in the ANSI code page, and its stdout
+// is decoded in the console code page, so a Czech or emoji sample measured through those was
+// measuring PowerShell: the round trip lost characters that CNA had handled correctly. A file of
+// UTF-8 bytes, written and read with an explicit encoding on both sides, measures CNA.
 //
 // Exit codes: 0 every selected check passed; 1 one failed; 2 the platform could not be created.
 
@@ -33,7 +39,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -541,16 +549,16 @@ int main(int argc, char** argv)
 {
     std::vector<std::string> checks;
     int iterations = 500;
-    std::string clipboardPut;
-    bool clipboardGet = false;
+    std::string clipboardPutFile;
+    std::string clipboardGetFile;
 
     for (int i = 1; i < argc; ++i)
     {
         const std::string arg = argv[i];
         if (arg == "--check" && i + 1 < argc) checks.emplace_back(argv[++i]);
         else if (arg == "--iterations" && i + 1 < argc) iterations = std::atoi(argv[++i]);
-        else if (arg == "--clipboard-put" && i + 1 < argc) clipboardPut = argv[++i];
-        else if (arg == "--clipboard-get") clipboardGet = true;
+        else if (arg == "--clipboard-put-file" && i + 1 < argc) clipboardPutFile = argv[++i];
+        else if (arg == "--clipboard-get-file" && i + 1 < argc) clipboardGetFile = argv[++i];
         else if (arg == "--list")
         {
             std::cout << "host-ownership dpi displays clipboard cursors handles close\n";
@@ -560,7 +568,7 @@ int main(int argc, char** argv)
 
     // The two clipboard modes exist so that a script can put this process on one side of a real
     // cross-process exchange with Notepad or a terminal, and check the other side itself.
-    if (clipboardGet || !clipboardPut.empty())
+    if (!clipboardGetFile.empty() || !clipboardPutFile.empty())
     {
         std::unique_ptr<IPlatform> platform;
         try { platform = PlatformFactory::Create("Win32"); }
@@ -572,8 +580,23 @@ int main(int argc, char** argv)
         platform->AcquireSubsystem(PlatformSubsystem::Video);
         IPlatformClipboard* clipboard = platform->GetClipboard();
         if (clipboard == nullptr) { std::cerr << "no clipboard service\n"; return 2; }
-        if (!clipboardPut.empty()) { clipboard->SetText(clipboardPut); std::cout << "put " << clipboardPut.size() << " bytes\n"; }
-        if (clipboardGet) { std::cout << clipboard->GetText() << '\n'; }
+        if (!clipboardPutFile.empty())
+        {
+            std::ifstream in(clipboardPutFile, std::ios::binary);
+            if (!in) { std::cerr << "cannot read " << clipboardPutFile << '\n'; return 2; }
+            const std::string text((std::istreambuf_iterator<char>(in)),
+                                   std::istreambuf_iterator<char>());
+            clipboard->SetText(text);
+            std::cout << "put " << text.size() << " bytes\n";
+        }
+        if (!clipboardGetFile.empty())
+        {
+            std::ofstream out(clipboardGetFile, std::ios::binary | std::ios::trunc);
+            if (!out) { std::cerr << "cannot write " << clipboardGetFile << '\n'; return 2; }
+            const std::string text = clipboard->GetText();
+            out.write(text.data(), static_cast<std::streamsize>(text.size()));
+            std::cout << "got " << text.size() << " bytes\n";
+        }
         return 0;
     }
 
