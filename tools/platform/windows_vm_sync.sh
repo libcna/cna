@@ -68,8 +68,11 @@ sync_one() {
   bundle="$WORK/$name.bundle"
   if [ -n "$have" ] && git -C "$local_root" cat-file -e "$have^{commit}" 2>/dev/null; then
     say "$name: ${have:0:12} -> ${head:0:12} (incremental bundle)"
-    git -C "$local_root" bundle create "$bundle" "^$have" "$head" --branches="$branch" 2>/dev/null \
-      || git -C "$local_root" bundle create "$bundle" "^$have" "$head" || die "bundle failed"
+    # A bundle records REFS, not commits: `git bundle create f ^A <sha>` names no ref at all and
+    # git refuses it as empty. The branch is bundled by name, with the guest's commit as the
+    # prerequisite, so only the new objects travel.
+    git -C "$local_root" bundle create "$bundle" "^$have" "refs/heads/$branch" \
+      || die "bundle failed"
   else
     say "$name: full bundle (guest has ${have:-nothing})"
     git -C "$local_root" bundle create "$bundle" --all || die "bundle failed"
