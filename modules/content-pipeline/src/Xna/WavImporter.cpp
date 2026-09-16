@@ -2,7 +2,9 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/WavImporter.hpp"
 
 #include <filesystem>
+#include <optional>
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -12,7 +14,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     {
         (void)context;
         std::error_code error;
-        if (!std::filesystem::exists(filename, error) || error)
+        // The filename is UTF-8; text that cannot name a path here takes the same refusal an
+        // absent file does, rather than throwing out of a lookup.
+        const std::optional<std::filesystem::path> source = CNA::Internal::TryPathFromUtf8(filename);
+        if (!source.has_value() || !std::filesystem::exists(*source, error) || error)
         {
             // XNA's own message keeps its unformatted placeholder; this reproduces what the
             // runtime says rather than what it meant to say (measured, wav/importer_refusals).

@@ -11,12 +11,14 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "CNA/Content/Pipeline/FbxFileReader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
@@ -1189,14 +1191,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                                ContentImporterContext& context)
     {
         std::error_code error;
-        if (!std::filesystem::exists(filename, error) || error)
+        // The filename is UTF-8; text that cannot name a path here takes the same refusal an
+        // absent file does, rather than throwing out of a lookup.
+        const std::optional<std::filesystem::path> source = CNA::Internal::TryPathFromUtf8(filename);
+        if (!source.has_value() || !std::filesystem::exists(*source, error) || error)
         {
             throw System::IO::FileNotFoundException("Cannot import the specified mesh. The file \"" +
                                                     filename + "\" could not be found.");
         }
         std::vector<std::uint8_t> bytes;
         {
-            std::ifstream file(filename, std::ios::binary);
+            std::ifstream file(*source, std::ios::binary);
             const std::vector<char> read((std::istreambuf_iterator<char>(file)),
                                          std::istreambuf_iterator<char>());
             bytes.assign(read.begin(), read.end());
@@ -1448,7 +1453,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // `engine_diff_tex.tga`, so one instance per (material, texture) is both what XNA writes --
         // two effects for twelve meshes -- and what keeps two models that name different textures
         // apart (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
-        const std::filesystem::path sourceDirectory = std::filesystem::path(filename).parent_path();
+        const std::filesystem::path sourceDirectory = source->parent_path();
         // A `Texture` names its file twice and the two do not have to agree. The SDK resolves the
         // absolute `FileName` first and falls back to `RelativeFilename` when that names nothing,
         // and the reference XNA writes is whichever one *resolved*. Three files in the sample
@@ -1517,7 +1522,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 if (named.empty()) { continue; }
                 // Spelled the way the tool that wrote the file spells a path, as the `.x` route does.
                 std::replace(named.begin(), named.end(), '\\', '/');
-                resolved.emplace_back(name, (sourceDirectory / named).lexically_normal().string());
+                resolved.emplace_back(
+                    name, CNA::Internal::PathToUtf8(
+                              (sourceDirectory / CNA::Internal::PathFromUtf8(named)).lexically_normal()));
             }
             if (resolved.empty()) { return base; }
             std::string key = std::to_string(materialIdentity);

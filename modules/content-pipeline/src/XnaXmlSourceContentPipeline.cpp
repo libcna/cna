@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/XmlImporter.hpp"
 
 namespace CNA::Content::Pipeline
@@ -96,7 +97,7 @@ namespace CNA::Content::Pipeline
                 Xna::XmlImporter importer{};
                 XnaBridgeImporterContext xnaContext(context);
                 Xna::IContentImporter& untyped = importer;
-                return untyped.Import(context.SourcePath().string(), xnaContext);
+                return untyped.Import(CNA::Internal::PathToUtf8(context.SourcePath()), xnaContext);
             }
 
             [[nodiscard]] const std::string& XnaClassName() const noexcept override

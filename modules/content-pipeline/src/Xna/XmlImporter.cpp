@@ -3,7 +3,9 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "System/Exception.hpp"
@@ -18,7 +20,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // A file that is not there is refused before the serializer sees it, with the runtime's
         // own exception rather than a content one (measured, importer_missing_file).
         std::error_code error;
-        if (!std::filesystem::exists(filename, error) || error)
+        // The filename is UTF-8; text that cannot name a path here takes the same refusal an
+        // absent file does, rather than throwing out of a lookup.
+        const std::optional<std::filesystem::path> source = CNA::Internal::TryPathFromUtf8(filename);
+        if (!source.has_value() || !std::filesystem::exists(*source, error) || error)
         {
             throw System::IO::FileNotFoundException("Could not find file '" + filename + "'.");
         }

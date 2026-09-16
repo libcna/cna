@@ -4,7 +4,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
@@ -14,8 +16,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                                     ContentImporterContext& context)
     {
         (void)context;
-        std::ifstream file(filename, std::ios::binary);
-        if (!file)
+        // The filename is UTF-8, and the stream is opened on the native path it names; text that
+        // cannot name a path here takes the same refusal an unopenable file does.
+        const std::optional<std::filesystem::path> sourcePath = CNA::Internal::TryPathFromUtf8(filename);
+        std::ifstream file;
+        if (sourcePath.has_value()) { file.open(*sourcePath, std::ios::binary); }
+        if (!sourcePath.has_value() || !file)
         {
             // XNA's message names the file twice, once as it was asked for and once as it looked
             // for it (measured, effectimporter/refusals).

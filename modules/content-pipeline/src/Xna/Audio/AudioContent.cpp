@@ -13,6 +13,7 @@
 #include "CNA/Content/Pipeline/XmaEncoderService.hpp"
 #include "CNA/Internal/Audio/MsAdpcmEncoder.hpp"
 #include "CNA/Internal/Audio/WavFormatReader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
@@ -24,7 +25,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
         {
             try
             {
-                return std::filesystem::path(fileName).filename().string();
+                return CNA::Internal::PathToUtf8(
+                    CNA::Internal::PathFromUtf8(fileName).filename());
             }
             catch (const std::exception&)
             {
@@ -58,7 +60,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
                 // refusals/wrong_file_type).
                 throw std::runtime_error("unsupported");
             }
-            std::ifstream file(audioFileName, std::ios::binary);
+            std::ifstream file(CNA::Internal::PathFromUtf8(audioFileName), std::ios::binary);
             if (!file)
             {
                 throw std::runtime_error("unreadable");

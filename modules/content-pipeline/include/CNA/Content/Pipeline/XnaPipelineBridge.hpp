@@ -12,6 +12,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterAttribute.hpp"
@@ -308,7 +309,7 @@ namespace CNA::Content::Pipeline
             TImporter importer{};
             XnaBridgeImporterContext xnaContext(context);
             Xna::IContentImporter& untyped = importer;
-            return untyped.Import(context.SourcePath().string(), xnaContext);
+            return untyped.Import(CNA::Internal::PathToUtf8(context.SourcePath()), xnaContext);
         }
 
         [[nodiscard]] const std::string& XnaClassName() const noexcept override { return className_; }

@@ -68,8 +68,10 @@ namespace CNA::Content::Pipeline
                 if (!error && !relative.empty() && *relative.begin() != "..") { path = relative; }
             }
             path.replace_extension();
+            // The path stays native into the conversion: narrowing it first went through the ANSI
+            // code page and was widened straight back.
             const std::string logical =
-                CNA::Internal::ContentPathToUtf8(path.lexically_normal().generic_string());
+                CNA::Internal::ContentPathToUtf8(path.lexically_normal());
             if (logical.empty())
             {
                 throw ContentLoadException(

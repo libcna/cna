@@ -11,6 +11,7 @@
 #include <string>
 
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
@@ -309,7 +310,7 @@ namespace CNA::Content::Pipeline
 
     std::string XnaBridgeImporterContext::getIntermediateDirectoryProperty() const
     {
-        return context_->Environment().intermediateDirectory.string();
+        return CNA::Internal::PathToUtf8(context_->Environment().intermediateDirectory);
     }
 
     Xna::ContentBuildLogger& XnaBridgeImporterContext::getLoggerProperty() const
@@ -319,12 +320,12 @@ namespace CNA::Content::Pipeline
 
     std::string XnaBridgeImporterContext::getOutputDirectoryProperty() const
     {
-        return context_->Environment().outputDirectory.string();
+        return CNA::Internal::PathToUtf8(context_->Environment().outputDirectory);
     }
 
     void XnaBridgeImporterContext::AddDependency(const std::string& filename)
     {
-        std::filesystem::path authored(filename);
+        std::filesystem::path authored = CNA::Internal::PathFromUtf8(filename);
         if (authored.is_absolute())
         {
             // The canonical context resolves relative to the primary source; an absolute path is
@@ -349,7 +350,7 @@ namespace CNA::Content::Pipeline
 
     std::string XnaBridgeProcessorContext::getIntermediateDirectoryProperty() const
     {
-        return context_->Environment().intermediateDirectory.string();
+        return CNA::Internal::PathToUtf8(context_->Environment().intermediateDirectory);
     }
 
     Xna::ContentBuildLogger& XnaBridgeProcessorContext::getLoggerProperty() const
@@ -359,15 +360,15 @@ namespace CNA::Content::Pipeline
 
     std::string XnaBridgeProcessorContext::getOutputDirectoryProperty() const
     {
-        return context_->Environment().outputDirectory.string();
+        return CNA::Internal::PathToUtf8(context_->Environment().outputDirectory);
     }
 
     std::string XnaBridgeProcessorContext::getOutputFilenameProperty() const
     {
-        const std::filesystem::path relative =
-            std::filesystem::path(context_->LogicalName() + ContentOutputFormatExtension(context_->OutputFormat()));
+        const std::filesystem::path relative = CNA::Internal::PathFromUtf8(
+            context_->LogicalName() + ContentOutputFormatExtension(context_->OutputFormat()));
         const std::filesystem::path& root = context_->Environment().outputDirectory;
-        return root.empty() ? relative.generic_string() : (root / relative).generic_string();
+        return CNA::Internal::PathToGenericUtf8(root.empty() ? relative : root / relative);
     }
 
     const Xna::OpaqueDataDictionary& XnaBridgeProcessorContext::getParametersProperty() const
@@ -387,7 +388,7 @@ namespace CNA::Content::Pipeline
 
     void XnaBridgeProcessorContext::AddDependency(const std::string& filename)
     {
-        std::filesystem::path authored(filename);
+        std::filesystem::path authored = CNA::Internal::PathFromUtf8(filename);
         if (authored.is_absolute())
         {
             std::error_code error;
@@ -403,8 +404,8 @@ namespace CNA::Content::Pipeline
         // XNA's AddOutputFile names a file the processor wrote beside the compiled asset so the
         // host deploys and cleans it. The canonical equivalent is a deployment file: the source
         // is the file the processor produced, the destination is its name below the output root.
-        const std::filesystem::path path(filename);
-        context_->AddDeploymentFile(path, path.filename().generic_string());
+        const std::filesystem::path path = CNA::Internal::PathFromUtf8(filename);
+        context_->AddDeploymentFile(path, CNA::Internal::PathToGenericUtf8(path.filename()));
     }
 
     namespace
@@ -427,21 +428,22 @@ namespace CNA::Content::Pipeline
             {
                 throw Xna::PipelineException(
                     "BuildAsset: '{0}' is outside the content root '{1}', so no asset name can be derived; pass assetName.",
-                    source.generic_string(), root.generic_string());
+                    CNA::Internal::PathToGenericUtf8(source), CNA::Internal::PathToGenericUtf8(root));
             }
             std::filesystem::path stem = relative;
             stem.replace_extension();
-            return stem.generic_string();
+            return CNA::Internal::PathToGenericUtf8(stem);
         }
 
-        ContentBuildRequest NestedRequest(const CanonicalProcessorContext& context, const std::string& sourceFilename,
+        ContentBuildRequest NestedRequest(const CanonicalProcessorContext& context,
+                                          const std::filesystem::path& source,
                                           const std::string& logicalName, const std::string& processorName,
                                           const Xna::OpaqueDataDictionary& processorParameters,
                                           const std::string& importerName)
         {
             ContentBuildRequest request;
             request.sourceRoot = context.SourceRoot();
-            request.source = sourceFilename;
+            request.source = source;
             request.externalSourceRoots = context.ExternalSourceRoots();
             request.logicalName = logicalName;
             request.importer = importerName;
@@ -593,12 +595,13 @@ namespace CNA::Content::Pipeline
                 "ContentProcessorContext::BuildAndLoadAsset needs a running pipeline; this context was "
                 "created outside a coordinator.");
         }
-        const std::string logicalName = DeriveAssetName(std::filesystem::path(sourceFilename), context_->SourceRoot());
+        const std::filesystem::path source = CNA::Internal::PathFromUtf8(sourceFilename);
+        const std::string logicalName = DeriveAssetName(source, context_->SourceRoot());
         ContentProcessResult nested;
         try
         {
             nested = pipeline->ImportAndProcess(
-                NestedRequest(*context_, sourceFilename, logicalName,
+                NestedRequest(*context_, source, logicalName,
                               NestedProcessorName(*pipeline, processorName), processorParameters,
                               importerName),
                 context_->Dependencies());
@@ -644,19 +647,19 @@ namespace CNA::Content::Pipeline
         // `..\textures\asteroid1.tga` beside a directory called `Textures`, and XNA's own build
         // reads that file and writes the asset to `Content/textures/asteroid1_0.xnb` -- the
         // authored case, not the disk's (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
-        std::string opened = sourceFilename;
+        const std::filesystem::path authored = CNA::Internal::PathFromUtf8(sourceFilename);
+        std::filesystem::path opened = authored;
         {
             std::error_code error;
             if (!std::filesystem::is_regular_file(opened, error))
             {
                 const std::filesystem::path root = context_->SourceRoot();
-                const std::filesystem::path relative =
-                    std::filesystem::path(sourceFilename).lexically_relative(root);
-                if (!relative.empty() && relative.begin()->string() != "..")
+                const std::filesystem::path relative = authored.lexically_relative(root);
+                if (!relative.empty() && *relative.begin() != std::filesystem::path(".."))
                 {
-                    const std::filesystem::path found =
-                        Xna::ResolveNamedSourceFileEXT(root, relative.generic_string());
-                    if (std::filesystem::is_regular_file(found, error)) { opened = found.string(); }
+                    const std::filesystem::path found = Xna::ResolveNamedSourceFileEXT(
+                        root, CNA::Internal::PathToGenericUtf8(relative));
+                    if (std::filesystem::is_regular_file(found, error)) { opened = found; }
                 }
             }
         }
@@ -665,8 +668,10 @@ namespace CNA::Content::Pipeline
         const std::filesystem::path& outputRoot = context_->Environment().outputDirectory;
         const auto outputPath = [&extension, &outputRoot](const std::string& name)
         {
-            return outputRoot.empty() ? name + extension
-                                      : (outputRoot / (name + extension)).generic_string();
+            return outputRoot.empty()
+                       ? name + extension
+                       : CNA::Internal::PathToGenericUtf8(
+                             outputRoot / CNA::Internal::PathFromUtf8(name + extension));
         };
 
         // An asset another item of this build already asks for in exactly this way *is* that item
@@ -718,8 +723,7 @@ namespace CNA::Content::Pipeline
             }
             else
             {
-                const std::string derived =
-                    DeriveAssetName(std::filesystem::path(sourceFilename), context_->SourceRoot());
+                const std::string derived = DeriveAssetName(authored, context_->SourceRoot());
                 std::size_t index = 0;
                 for (const auto& [existingKey, existingName] : generatedNames_)
                 {

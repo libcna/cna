@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -13,6 +14,7 @@
 #include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
 #include "CNA/Internal/Graphics/PfmDecoder.hpp"
 #include "CNA/Internal/Graphics/RadianceHdrDecoder.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
@@ -24,7 +26,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     namespace
     {
         /** @brief The whole file, as bytes. */
-        [[nodiscard]] std::vector<std::uint8_t> ReadAll(const std::string& filename)
+        [[nodiscard]] std::vector<std::uint8_t> ReadAll(const std::filesystem::path& filename)
         {
             std::ifstream file(filename, std::ios::binary);
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)),
@@ -58,12 +60,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         (void)context;
         const std::string tool(XnaTypeName);
         std::error_code error;
-        if (!std::filesystem::exists(filename, error) || error)
+        // The filename is UTF-8; text that cannot name a path here takes the same refusal an
+        // absent file does, rather than throwing out of a lookup.
+        const std::optional<std::filesystem::path> source = CNA::Internal::TryPathFromUtf8(filename);
+        if (!source.has_value() || !std::filesystem::exists(*source, error) || error)
         {
             throw System::IO::FileNotFoundException("Can not read the texture \"" + filename +
                                                     "\". The file could not be found.");
         }
-        const std::vector<std::uint8_t> bytes = ReadAll(filename);
+        const std::vector<std::uint8_t> bytes = ReadAll(*source);
         auto texture = std::make_shared<Graphics::Texture2DContent>();
         texture->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
         if (CNA::Internal::Graphics::IsRadianceHdr(bytes))
@@ -248,7 +253,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // A `.dib` reaches this the same way a `.bmp` does: the shared decoder puts the
             // missing file header back itself, so there is no second decoder and no temporary
             // file here (measured, textureimporter/formats accepts one).
-            decoded = CNA::Content::Cnb::ImportImageAsCnbTexture2D(filename);
+            decoded = CNA::Content::Cnb::ImportImageAsCnbTexture2D(*source);
         }
         catch (const std::exception&)
         {

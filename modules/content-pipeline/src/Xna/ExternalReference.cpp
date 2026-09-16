@@ -5,6 +5,8 @@
 #include <cctype>
 #include <system_error>
 
+#include "CNA/Internal/PathUtf8.hpp"
+
 namespace Microsoft::Xna::Framework::Content::Pipeline
 {
     namespace
@@ -24,14 +26,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     {
         std::string spelled(named);
         std::replace(spelled.begin(), spelled.end(), '\\', '/');
-        const std::filesystem::path authored =
-            (directory / std::filesystem::path(spelled)).lexically_normal();
+        const std::filesystem::path spelledPath = CNA::Internal::PathFromUtf8(spelled);
+        const std::filesystem::path authored = (directory / spelledPath).lexically_normal();
         std::error_code error;
         if (std::filesystem::exists(authored, error)) { return authored; }
 
         std::filesystem::path walked = directory.lexically_normal();
-        for (const std::filesystem::path& part :
-             std::filesystem::path(spelled).lexically_normal())
+        for (const std::filesystem::path& part : spelledPath.lexically_normal())
         {
             if (part == "." ) { continue; }
             if (part == "..")
@@ -44,7 +45,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 walked /= part;
                 continue;
             }
-            const std::string wanted = Folded(part.string());
+            // Every enumerated sibling is folded against this, so the conversion has to hold a
+            // name the ANSI code page cannot spell.
+            const std::string wanted = Folded(CNA::Internal::PathToUtf8(part));
             std::filesystem::path match;
             std::size_t matches = 0u;
             if (std::filesystem::is_directory(walked, error))
@@ -52,7 +55,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 for (const std::filesystem::directory_entry& entry :
                      std::filesystem::directory_iterator(walked, error))
                 {
-                    if (Folded(entry.path().filename().string()) != wanted) { continue; }
+                    if (Folded(CNA::Internal::PathToUtf8(entry.path().filename())) != wanted)
+                    {
+                        continue;
+                    }
                     match = entry.path();
                     ++matches;
                 }
@@ -71,10 +77,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             throw System::ArgumentException("An external reference needs a filename.", "filename");
         }
-        const std::filesystem::path authored(filename);
+        const std::filesystem::path authored = CNA::Internal::PathFromUtf8(filename);
         if (authored.is_absolute())
         {
-            return authored.lexically_normal().generic_string();
+            return CNA::Internal::PathToGenericUtf8(authored.lexically_normal());
         }
         const std::string& source = relativeToContent.getSourceFilenameProperty();
         if (source.empty())
@@ -84,7 +90,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 "source filename to resolve against.",
                 "relativeToContent");
         }
-        const std::filesystem::path base = std::filesystem::path(source).parent_path();
-        return (base / authored).lexically_normal().generic_string();
+        const std::filesystem::path base = CNA::Internal::PathFromUtf8(source).parent_path();
+        return CNA::Internal::PathToGenericUtf8((base / authored).lexically_normal());
     }
 }

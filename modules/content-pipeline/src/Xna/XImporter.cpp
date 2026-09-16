@@ -11,11 +11,13 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <tuple>
 #include <set>
 #include <vector>
 
 #include "CNA/Content/Pipeline/DirectXFileReader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -293,7 +295,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 std::string named = texture->strings.front();
                 std::replace(named.begin(), named.end(), '\\', '/');
                 material.setTextureProperty(std::make_shared<ExternalReference<Graphics::TextureContent>>(
-                    (importing.directory / named).lexically_normal().string()));
+                    CNA::Internal::PathToUtf8(
+                        (importing.directory / CNA::Internal::PathFromUtf8(named)).lexically_normal())));
             }
         }
 
@@ -311,7 +314,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::string named = instance->strings.front();
             std::replace(named.begin(), named.end(), '\\', '/');
             effect->setEffectProperty(std::make_shared<ExternalReference<Graphics::EffectContent>>(
-                (importing.directory / named).lexically_normal().string()));
+                CNA::Internal::PathToUtf8(
+                    (importing.directory / CNA::Internal::PathFromUtf8(named)).lexically_normal())));
             for (const Canon::DirectXFileObject& parameter : instance->children)
             {
                 if (parameter.strings.empty())
@@ -329,7 +333,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     std::replace(value.begin(), value.end(), '\\', '/');
                     effect->getTexturesProperty().Set(
                         key, std::make_shared<ExternalReference<Graphics::TextureContent>>(
-                                 (importing.directory / value).lexically_normal().string()));
+                                 CNA::Internal::PathToUtf8(
+                                     (importing.directory / CNA::Internal::PathFromUtf8(value))
+                                         .lexically_normal())));
                 }
                 else if (parameter.TypeIs("EffectParamDWord"))
                 {
@@ -1419,13 +1425,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     {
         (void)context;
         std::error_code error;
-        if (!std::filesystem::exists(filename, error) || error)
+        // The filename is UTF-8; text that cannot name a path here takes the same refusal an
+        // absent file does, rather than throwing out of a lookup.
+        const std::optional<std::filesystem::path> source = CNA::Internal::TryPathFromUtf8(filename);
+        if (!source.has_value() || !std::filesystem::exists(*source, error) || error)
         {
             throw System::IO::FileNotFoundException("Could not locate model file \"" + filename + "\".");
         }
         std::vector<std::uint8_t> bytes;
         {
-            std::ifstream file(filename, std::ios::binary);
+            std::ifstream file(*source, std::ios::binary);
             const std::vector<char> read((std::istreambuf_iterator<char>(file)),
                                          std::istreambuf_iterator<char>());
             bytes.assign(read.begin(), read.end());
@@ -1441,7 +1450,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         Importing importing;
-        importing.directory = std::filesystem::path(filename).parent_path();
+        importing.directory = source->parent_path();
         for (const Canon::DirectXFileObject& object : parsed.objects)
         {
             if (object.TypeIs("AnimTicksPerSecond") && !object.numbers.empty())
