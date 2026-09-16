@@ -285,6 +285,31 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     target_compile_options(cna_win32_native_desktop PRIVATE ${CNA_HARNESS_WARNINGS})
 endif()
 
+# --- the SDL runtime, for any Windows toolchain --------------------------------------------------
+# plans/plan_win32_native_validation.md WINNATIVE-0023: SDL3 is resolved from a prebuilt prefix
+# whose DLL is not next to the executables and not on PATH, so an SDL3 or SDL2 harness built with
+# MSVC linked cleanly and then died at startup with 0xC0000135, STATUS_DLL_NOT_FOUND -- before
+# main(), so with no output to explain itself. The MinGW branch below already copied these; it was
+# the only branch that did.
+if(WIN32)
+    foreach(_cna_sdl_target IN ITEMS SDL3::SDL3 SDL2::SDL2)
+        if(TARGET ${_cna_sdl_target})
+            get_target_property(_cna_sdl_type ${_cna_sdl_target} TYPE)
+            if(_cna_sdl_type STREQUAL "SHARED_LIBRARY")
+                foreach(_cna_target IN ITEMS cna_platform_tests)
+                    if(TARGET ${_cna_target})
+                        add_custom_command(TARGET ${_cna_target} POST_BUILD
+                                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                                        $<TARGET_FILE:${_cna_sdl_target}>
+                                        $<TARGET_FILE_DIR:${_cna_target}>
+                                VERBATIM)
+                    endif()
+                endforeach()
+            endif()
+        endif()
+    endforeach()
+endif()
+
 # --- MinGW runtime ------------------------------------------------------------------------------
 # The DYNAMIC C++ runtime, with the DLLs copied next to each executable.
 # cmake/ThirdPartySDL.cmake already records the reason in cna_copy_mingw_cxx_runtime -- "targets
