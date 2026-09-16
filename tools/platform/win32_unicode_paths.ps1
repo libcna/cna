@@ -357,36 +357,30 @@ if (Want 'app') {
             [System.IO.Directory]::CreateDirectory($contentDir) | Out-Null
             [System.IO.File]::WriteAllText((Join-Path $contentDir "$Czech.txt"), 'CNA-APP-CONTENT-OK')
 
-            # Run it with the working directory somewhere else entirely, so nothing can be passing
-            # by accident because cwd happened to be the right place.
+            # Run it with the working directory somewhere else entirely, so nothing can be
+            # passing by accident because cwd happened to be the right place.
+            #
+            # Through cmd rather than Start-Process -PassThru: in PowerShell 5.1 the exit code of
+            # a -PassThru process is not reliably readable even after WaitForExit and Refresh, and
+            # this step spent two runs reporting an EMPTY exit code -- and therefore a failure --
+            # for a run that had passed 379 tests. $LASTEXITCODE after cmd /c is unambiguous.
             $out = Join-Path $appRoot 'app-stdout.txt'
-            $p = Start-Process -FilePath $exeCopy -WorkingDirectory ([System.IO.Path]::GetTempPath()) `
-                               -RedirectStandardOutput $out -RedirectStandardError (Join-Path $appRoot 'app-stderr.txt') `
-                               -PassThru -NoNewWindow
-            $exited = $p.WaitForExit(600000)
-            if (-not $exited) {
-                try { $p.Kill() } catch { }
-                Add-Result 'unicode.app' 'FAIL' 'the program did not exit within 600s from a non-ASCII path'
-            } else {
-                # The timed WaitForExit returns as soon as the process object signals, but the
-                # exit code is not necessarily populated yet; the untimed call and a Refresh are
-                # what make $p.ExitCode readable. Without them this reported an EMPTY exit code
-                # for a run that had in fact passed 379 tests.
-                $p.WaitForExit()
-                $p.Refresh()
-                $code = $p.ExitCode
-                # A gtest binary run away from the repository skips the suites that need the
-                # source tree; what is being asserted is that it RAN and reported no failure.
-                $summary = ''
-                if (Test-Path $out) {
-                    $summary = (Select-String -Path $out -Pattern '^\[  (PASSED|FAILED) ' |
-                                ForEach-Object { $_.Line.Trim() }) -join '; '
-                }
-                Add-Result 'unicode.app' $(if ($code -eq 0) { 'PASS' } else { 'FAIL' }) `
-                    ("{0} ran from a non-ASCII path, exit {1}{2}" -f `
-                     [System.IO.Path]::GetFileName($harness), $code,
-                     $(if ($summary) { " -- $summary" } else { '' }))
+            $elsewhere = [System.IO.Path]::GetTempPath()
+            cmd /c "cd /d `"$elsewhere`" && `"$exeCopy`" > `"$out`" 2>&1"
+            $code = $LASTEXITCODE
+
+            # A gtest binary run away from the repository skips the suites that need the source
+            # tree; what is asserted is that it RAN and reported no failure.
+            $summary = ''
+            if (Test-Path $out) {
+                $summary = (Select-String -Path $out -Pattern '^\[  (PASSED|FAILED) ' |
+                            ForEach-Object { $_.Line.Trim() }) -join '; '
             }
+            $ran = $summary -match 'PASSED'
+            Add-Result 'unicode.app' $(if ($code -eq 0 -and $ran) { 'PASS' } else { 'FAIL' }) `
+                ("{0} ran from a non-ASCII path, exit {1}{2}" -f `
+                 [System.IO.Path]::GetFileName($harness), $code,
+                 $(if ($summary) { " -- $summary" } else { '' }))
             Copy-Item -Force $out (Join-Path $OutDir 'unicode-app-stdout.txt') -ErrorAction SilentlyContinue
         } catch {
             Add-Result 'unicode.app' 'FAIL' $_.Exception.Message
