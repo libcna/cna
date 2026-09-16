@@ -18,6 +18,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
@@ -509,7 +510,7 @@ namespace Microsoft::Xna::Framework::Content
 
             T Read(const std::string& path, ContentManager& cm) override
             {
-                std::ifstream file(path, std::ios::binary);
+                std::ifstream file(CNA::Internal::PathFromUtf8(path), std::ios::binary);
                 if (!file.is_open())
                 {
                     throw ContentLoadException("Cannot open file: " + path);

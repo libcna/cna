@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Cnb/CnbWriter.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -411,7 +412,7 @@ namespace CNA::Content::Cnb
     void CnbWriter::WriteToFile(const std::string& path) const
     {
         const std::vector<std::uint8_t> bytes = Build();
-        std::ofstream file(path, std::ios::binary | std::ios::trunc);
+        std::ofstream file(CNA::Internal::ContentPathFromUtf8(path), std::ios::binary | std::ios::trunc);
         if (!file.is_open())
         {
             throw ContentLoadException("CnbWriter: cannot open '" + path + "' for writing.");

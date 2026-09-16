@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/VideoContentTypeReader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <array>
 #include <filesystem>
@@ -80,10 +81,11 @@ namespace CNA::Internal::Xnb
         const std::string& contentRoot = contentManager->getRootDirectoryProperty();
         const std::string normalizedAssetName =
             CNA::Internal::NormalizeXnaPathSeparators(input.getAssetNameProperty());
-        fs::path assetPath = fs::path(contentRoot) / normalizedAssetName;
+        fs::path assetPath =
+            CNA::Internal::PathFromUtf8(contentRoot) / CNA::Internal::PathFromUtf8(normalizedAssetName);
         assetPath += ".xnb";
         std::string path = ResolveRelativeFilePath(
-            contentRoot, assetPath.string(), decoded.mediaPath);
+            contentRoot, CNA::Internal::PathToGenericUtf8(assetPath), decoded.mediaPath);
 
         if (path.size() > 4)
         {
@@ -98,9 +100,10 @@ namespace CNA::Internal::Xnb
         // Normalize() may select an extension-probed sibling that is a symlink, so validate the
         // final selected candidate as well as the embedded spelling before constructing Video.
         const fs::path selectedRelative =
-            fs::path(path).lexically_relative(assetPath.parent_path());
+            CNA::Internal::PathFromUtf8(path).lexically_relative(assetPath.parent_path());
         path = ResolveRelativeFilePath(
-            contentRoot, assetPath.string(), selectedRelative.generic_string());
+            contentRoot, CNA::Internal::PathToGenericUtf8(assetPath),
+            CNA::Internal::PathToGenericUtf8(selectedRelative));
 
         GraphicsDevice* device = &contentManager->getGraphicsDeviceInternal();
         return Video(

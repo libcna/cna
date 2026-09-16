@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "CNA/Internal/CaseInsensitivePath.hpp"
+#include "CNA/Internal/ContentPath.hpp"
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/IServiceProvider.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -65,6 +69,7 @@
 #include <cmath>
 #include <limits>
 #include <filesystem>
+#include <optional>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -273,7 +278,8 @@ namespace Microsoft::Xna::Framework::Content
             System::IO::MemoryStream headerStream(
                 reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
             System::IO::BinaryReader headerReader(&headerStream, true);
-            const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath.string());
+            const auto header =
+                CNA::Internal::Xnb::ParseXnbHeader(headerReader, CNA::Internal::PathToUtf8(xnbPath));
 
             if (header.compression != CNA::Internal::Xnb::XnbCompression::None)
             {
@@ -288,7 +294,8 @@ namespace Microsoft::Xna::Framework::Content
                 reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
                 static_cast<int32_t>(bytes.size()) - 10);
             System::IO::BinaryReader bodyReader(&bodyStream, true);
-            const auto table = CNA::Internal::Xnb::ParseXnbTypeReaderTable(bodyReader, xnbPath.string());
+            const auto table = CNA::Internal::Xnb::ParseXnbTypeReaderTable(
+                bodyReader, CNA::Internal::PathToUtf8(xnbPath));
             names.reserve(table.size());
             for (const auto& entry : table)
             {
@@ -328,14 +335,16 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             const fs::path& path = it->path();
-            fs::path relative = fs::relative(path, rootDirectory_, ec);
+            fs::path relative = fs::relative(path, CNA::Internal::PathFromUtf8(rootDirectory_), ec);
             if (ec)
             {
                 continue;
             }
 
-            const std::string ext = path.extension().string();
-            std::string relStr = relative.generic_string();
+            const std::string ext = CNA::Internal::PathToUtf8(path.extension());
+            // relStr becomes ContentManifestEntry::relativePath and the entriesByBase key, so it is
+            // generic-form UTF-8: the identity has to match one produced on another platform.
+            std::string relStr = CNA::Internal::PathToGenericUtf8(relative);
             const std::string base = relStr.substr(0, relStr.size() - ext.size());
 
             ContentManifestEntry& entry = entriesByBase[base];
@@ -420,79 +429,37 @@ namespace Microsoft::Xna::Framework::Content
             return normalizedAssetName;
         }
         namespace fs = std::filesystem;
-        return (fs::path(normalizedRootDirectory) / normalizedAssetName).string();
+        // RootDirectory and the asset name are UTF-8 (docs/filesystem-path-model.md); the narrow
+        // path constructor read them as ANSI code page bytes and .string() then threw on the way
+        // back out, so a content root a Czech or Japanese user actually has stopped existing here.
+        return CNA::Internal::PathToGenericUtf8(
+            CNA::Internal::PathFromUtf8(normalizedRootDirectory)
+            / CNA::Internal::PathFromUtf8(normalizedAssetName));
     }
 
     std::string ContentManager::ResolveExistingAssetPath(const std::string& path) const
     {
         namespace fs = std::filesystem;
 
-        std::error_code ec;
-        const fs::path requested(path);
+        const std::optional<fs::path> requested = CNA::Internal::TryPathFromUtf8(path);
+        if (!requested)
+        {
+            return path;
+        }
 #if defined(__ANDROID__)
         // Relative content paths belong to SDL's packaged-asset namespace on Android. They are
         // resolved by TryReadAssetBytes through the platform filesystem; walking the process
         // working directory here would instead enumerate `/`, which is unrelated and sandboxed.
-        if (requested.is_relative())
+        if (requested->is_relative())
         {
-            return requested.generic_string();
+            return CNA::Internal::PathToGenericUtf8(*requested);
         }
 #endif
-        if (fs::exists(requested, ec) && !ec)
-        {
-            return requested.string();
-        }
-
-        fs::path resolved = requested.is_absolute() ? requested.root_path() : fs::path{};
-        for (const fs::path& component : requested.relative_path())
-        {
-            const fs::path exact = resolved / component;
-            ec.clear();
-            if (fs::exists(exact, ec) && !ec)
-            {
-                resolved = exact;
-                continue;
-            }
-
-            const fs::path parent = resolved.empty() ? fs::path(".") : resolved;
-            ec.clear();
-            fs::directory_iterator entry(parent, ec);
-            if (ec)
-            {
-                return requested.string();
-            }
-
-            std::string wanted = component.string();
-            std::transform(wanted.begin(), wanted.end(), wanted.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-            fs::path matchedComponent;
-            const fs::directory_iterator end;
-            for (; entry != end; entry.increment(ec))
-            {
-                if (ec)
-                {
-                    return requested.string();
-                }
-                std::string candidate = entry->path().filename().string();
-                std::transform(candidate.begin(), candidate.end(), candidate.begin(),
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (candidate == wanted)
-                {
-                    if (!matchedComponent.empty())
-                    {
-                        return requested.string();
-                    }
-                    matchedComponent = entry->path().filename();
-                }
-            }
-            if (matchedComponent.empty())
-            {
-                return requested.string();
-            }
-            resolved /= matchedComponent;
-        }
-        return resolved.string();
+        // The component-by-component case-insensitive walk used to be open-coded here -- the third
+        // byte-for-byte copy of it in the repository, each one narrowing every directory entry it
+        // enumerated, so a single non-ASCII sibling broke the lookup of an ordinary ASCII asset.
+        return CNA::Internal::PathToGenericUtf8(
+            CNA::Internal::ResolveExistingNativePath(*requested));
     }
 
     bool ContentManager::TryReadAssetBytes(
@@ -500,17 +467,22 @@ namespace Microsoft::Xna::Framework::Content
     {
         namespace fs = std::filesystem;
 
+        const std::optional<fs::path> native = CNA::Internal::TryPathFromUtf8(path);
+        if (!native)
+        {
+            return false;
+        }
 #if defined(__ANDROID__)
-        if (fs::path(path).is_relative())
+        if (native->is_relative())
         {
             return CNA::Platform::GetCurrentPlatform().GetFileSystem()
                 ->TryLoadFileIgnoringCase(path, bytes);
         }
 #endif
         std::error_code ec;
-        if (fs::exists(path, ec) && !ec)
+        if (fs::exists(*native, ec) && !ec)
         {
-            std::ifstream file(path, std::ios::binary | std::ios::ate);
+            std::ifstream file(*native, std::ios::binary | std::ios::ate);
             if (!file.is_open())
             {
                 throw ContentLoadException("ContentManager: cannot open '" + path + "'.");
@@ -616,16 +588,19 @@ namespace Microsoft::Xna::Framework::Content
                                               const std::string& resolvedPath)
         {
             namespace fs = std::filesystem;
+            // A cache key and a name that is handed back to Load<T>(), so both exits are
+            // generic-form UTF-8 -- .string() would additionally have spelled the separators backslash
+            // on Windows, which no other producer of this key does.
+            const fs::path resolved = CNA::Internal::PathFromUtf8(resolvedPath).lexically_normal();
             if (!CNA::Internal::ValidateContainedPath(root, resolvedPath, false).ok)
             {
-                return fs::path(resolvedPath).lexically_normal().string();
+                return CNA::Internal::PathToGenericUtf8(resolved);
             }
 
             const fs::path rootPath =
-                (root.empty() ? fs::path(".") : fs::path(root)).lexically_normal();
-            return fs::path(resolvedPath).lexically_normal()
-                .lexically_relative(rootPath)
-                .generic_string();
+                (root.empty() ? fs::path(".") : CNA::Internal::PathFromUtf8(root))
+                    .lexically_normal();
+            return CNA::Internal::PathToGenericUtf8(resolved.lexically_relative(rootPath));
         }
 
         std::string ResolveRootRelativeAssetName(
@@ -696,7 +671,7 @@ namespace Microsoft::Xna::Framework::Content
             {
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
 
-                if (std::filesystem::path(path).extension() == ".cnj")
+                if (CNA::Internal::PathFromUtf8(path).extension() == ".cnj")
                 {
                     return ReadCnj(path, cm);
                 }
@@ -751,7 +726,7 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::TextureCube Read(const std::string& path, ContentManager& cm) override
             {
-                if (std::filesystem::path(path).extension() == ".cnj")
+                if (CNA::Internal::PathFromUtf8(path).extension() == ".cnj")
                 {
                     return ReadCnj(path, cm);
                 }
@@ -860,7 +835,7 @@ namespace Microsoft::Xna::Framework::Content
 
             Audio::SoundEffect Read(const std::string& path, ContentManager& cm) override
             {
-                if (std::filesystem::path(path).extension() == ".cnj")
+                if (CNA::Internal::PathFromUtf8(path).extension() == ".cnj")
                 {
                     return ReadCnj(path, cm);
                 }
@@ -894,7 +869,7 @@ namespace Microsoft::Xna::Framework::Content
 
         std::string ReadTextFile(const std::string& path)
         {
-            std::ifstream file(path);
+            std::ifstream file(CNA::Internal::PathFromUtf8(path));
             if (!file.is_open())
             {
                 throw ContentLoadException("Cannot open file: " + path);
@@ -1473,7 +1448,7 @@ namespace Microsoft::Xna::Framework::Content
 
         std::vector<std::uint8_t> ReadBinaryFile(const std::string& path)
         {
-            std::ifstream file(path, std::ios::binary);
+            std::ifstream file(CNA::Internal::PathFromUtf8(path), std::ios::binary);
             if (!file.is_open())
                 throw ContentLoadException("Cannot open binary file: " + path);
             return std::vector<std::uint8_t>(
@@ -2781,6 +2756,10 @@ namespace Microsoft::Xna::Framework::Content
             using namespace CNA::Internal::GltfImport;
 
             cgltf_options parseOptions{};
+            // cgltf's default reader is a bare fopen(), so without these it opens through the ANSI
+            // code page on Windows -- for the document and for every external .bin and image
+            // cgltf_load_buffers() resolves relative to it.
+            UseCnaFileCallbacks(parseOptions);
             cgltf_data* data = nullptr;
             cgltf_result parseResult = cgltf_parse_file(&parseOptions, path.c_str(), &data);
             if (parseResult != cgltf_result_success)
@@ -2797,7 +2776,8 @@ namespace Microsoft::Xna::Framework::Content
             // itself and offers no hook to veto one, so the only place to stand is in front of it.
             try
             {
-                ValidateExternalUriContainmentEXT(data, fs::path(path).parent_path());
+                ValidateExternalUriContainmentEXT(
+                    data, CNA::Internal::PathFromUtf8(path).parent_path());
             }
             catch (const std::exception& e)
             {
@@ -2977,7 +2957,7 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
-            const fs::path gltfDir = fs::path(path).parent_path();
+            const fs::path gltfDir = CNA::Internal::PathFromUtf8(path).parent_path();
 
             auto res = std::make_shared<ModelResources>();
             std::vector<Graphics::ModelBone*> boneRawPtrs;
@@ -4203,7 +4183,8 @@ namespace Microsoft::Xna::Framework::Content
 
                 // CNB-70/71 (Phase 13D): a .gltf/.glb path is parsed directly, with no .cnj/binary
                 // sidecar files at all -- see ReadGltfModel()'s own doc comment.
-                const std::string ext = fs::path(path).extension().string();
+                const std::string ext =
+                    CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(path).extension());
                 if (ext == ".gltf" || ext == ".glb")
                 {
                     return ReadGltfModel(path, cm);
@@ -5941,7 +5922,7 @@ namespace Microsoft::Xna::Framework::Content
             Media::Song Read(const std::string& path, ContentManager& /*cm*/) override
             {
                 const std::string name =
-                    std::filesystem::path(path).stem().string();
+                    CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(path).stem());
                 return Media::Song(path, name);
             }
         };

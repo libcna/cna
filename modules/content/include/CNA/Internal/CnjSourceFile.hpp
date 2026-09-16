@@ -6,6 +6,7 @@
 #include <system_error>
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 
 namespace CNA::Internal
 {
@@ -62,7 +63,7 @@ namespace CNA::Internal
                 "ContentManager: '" + referringCnjPath + "' has an empty 'sourceFile' field.");
         }
 
-        const fs::path sourceFilePath(sourceFile);
+        const fs::path sourceFilePath = CNA::Internal::ContentPathFromUtf8(sourceFile);
         if (sourceFilePath.is_absolute())
         {
             throw ContentLoadException(
@@ -70,10 +71,12 @@ namespace CNA::Internal
                 sourceFile + "'), which is not allowed.");
         }
 
-        const fs::path referringDir = fs::path(referringCnjPath).parent_path();
+        const fs::path referringDir = CNA::Internal::ContentPathFromUtf8(referringCnjPath).parent_path();
         const fs::path joined = (referringDir / sourceFilePath).lexically_normal();
 
-        const fs::path rootBase = rootDirectory.empty() ? fs::current_path() : fs::path(rootDirectory);
+        const fs::path rootBase =
+            rootDirectory.empty() ? fs::current_path()
+                                  : CNA::Internal::ContentPathFromUtf8(rootDirectory);
 
         std::error_code rootEc;
         std::error_code joinedEc;
@@ -120,7 +123,7 @@ namespace CNA::Internal
         {
             throw ContentLoadException(
                 "ContentManager: '" + referringCnjPath + "' has a 'sourceFile' ('" + sourceFile +
-                "') that would resolve to a .cnj file ('" + cnjSibling.string() +
+                "') that would resolve to a .cnj file ('" + CNA::Internal::ContentPathToUtf8(cnjSibling) +
                 "') via the normal resolver; sourceFile chaining is not allowed.");
         }
 
@@ -132,8 +135,11 @@ namespace CNA::Internal
         }
 
         CnjSourceFileResult result;
-        result.logicalName = relative.lexically_normal().string();
-        result.resolvedNativePath = canonicalJoined.string();
+        // The logical name is an identity handed to ContentManager::Load, so generic UTF-8; the
+        // resolved path is reopened by the caller, so it is UTF-8 too rather than ANSI-narrowed
+        // despite the field being called "native".
+        result.logicalName = CNA::Internal::ContentPathToUtf8(relative.lexically_normal());
+        result.resolvedNativePath = CNA::Internal::ContentPathToUtf8(canonicalJoined);
         return result;
     }
 }

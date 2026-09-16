@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -36,7 +37,7 @@ namespace CNA::Content::Cnb
     {
         std::string ReadWholeTextFile(const std::string& path)
         {
-            std::ifstream file(path, std::ios::binary);
+            std::ifstream file(CNA::Internal::ContentPathFromUtf8(path), std::ios::binary);
             if (!file.is_open())
             {
                 throw ContentLoadException("cnj-to-cnb: cannot open '" + path + "'.");
@@ -78,7 +79,8 @@ namespace CNA::Content::Cnb
         /// once a document names one in a subdirectory.
         void RecordAbsorbed(std::vector<std::string>& absorbed, const std::string& authoredName)
         {
-            absorbed.push_back(std::filesystem::path(authoredName).generic_string());
+            absorbed.push_back(CNA::Internal::ContentPathToUtf8(
+                CNA::Internal::ContentPathFromUtf8(authoredName)));
         }
 
         std::vector<std::uint8_t> CompileTexture2DCnj(const std::string& json,
@@ -127,7 +129,7 @@ namespace CNA::Content::Cnb
 
             const std::string sidecarPath =
                 ResolveSidecar(cnjPath, root, description.dataFile, "data");
-            std::ifstream sidecar(sidecarPath, std::ios::binary);
+            std::ifstream sidecar(CNA::Internal::ContentPathFromUtf8(sidecarPath), std::ios::binary);
             if (!sidecar.is_open())
             {
                 throw ContentLoadException("cnj-to-cnb: cannot open '" + sidecarPath + "'.");
@@ -247,10 +249,13 @@ namespace CNA::Content::Cnb
     {
         namespace fs = std::filesystem;
 
-        const fs::path source = fs::path(cnjPath).lexically_normal();
+        const fs::path source = CNA::Internal::ContentPathFromUtf8(cnjPath).lexically_normal();
         const std::string root =
-            contentRoot.empty() ? source.parent_path().string() : contentRoot;
-        const std::string name = contentName.empty() ? source.stem().string() : contentName;
+            contentRoot.empty() ? CNA::Internal::ContentPathToUtf8(source.parent_path())
+                                : contentRoot;
+        const std::string name = contentName.empty()
+                                     ? CNA::Internal::ContentPathToUtf8(source.stem())
+                                     : contentName;
 
         const std::string json = ReadWholeTextFile(cnjPath);
         const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
@@ -272,7 +277,7 @@ namespace CNA::Content::Cnb
                                                     static_cast<int>(maxVersion));
 
         CnjToCnbResult result;
-        result.absorbedFiles.push_back(source.filename().string());
+        result.absorbedFiles.push_back(CNA::Internal::ContentPathToUtf8(source.filename()));
 
         if (envelope.type == "Curve")
         {

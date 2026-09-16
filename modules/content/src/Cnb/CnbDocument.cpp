@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Cnb/CnbChunkCompression.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 
 #include <algorithm>
@@ -413,7 +414,7 @@ namespace CNA::Content::Cnb
         namespace fs = std::filesystem;
 
         std::error_code ec;
-        const std::uintmax_t size = fs::file_size(path, ec);
+        const std::uintmax_t size = fs::file_size(CNA::Internal::ContentPathFromUtf8(path), ec);
         if (ec)
         {
             throw ContentLoadException("CNB: cannot stat '" + path + "': " + ec.message() + ".");
@@ -426,7 +427,7 @@ namespace CNA::Content::Cnb
                 std::to_string(limits.maxFileSize) + " bytes.");
         }
 
-        std::ifstream file(path, std::ios::binary);
+        std::ifstream file(CNA::Internal::ContentPathFromUtf8(path), std::ios::binary);
         if (!file.is_open())
         {
             throw ContentLoadException("CNB: cannot open '" + path + "'.");

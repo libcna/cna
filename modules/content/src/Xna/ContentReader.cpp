@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -64,9 +65,13 @@ namespace Microsoft::Xna::Framework::Content
                     filePath + "') resolves outside the content root.");
             }
 
-            const fs::path base = fs::path(normalizeSeparators(filePath)).parent_path();
-            const fs::path combined = base / normalizedRelativeFile;
-            const std::string resolved = combined.lexically_normal().generic_string();
+            // filePath and the reference spelling are both UTF-8 -- an XNB external reference is a
+            // .NET string -- so they are widened as UTF-8 rather than read as ANSI code page bytes.
+            const fs::path base =
+                CNA::Internal::PathFromUtf8(normalizeSeparators(filePath)).parent_path();
+            const fs::path combined = base / CNA::Internal::PathFromUtf8(normalizedRelativeFile);
+            const std::string resolved =
+                CNA::Internal::PathToGenericUtf8(combined.lexically_normal());
 
             // Reject a reference that climbs above the content root's own logical space outright.
             if (resolved == ".." || resolved.rfind("../", 0) == 0)
