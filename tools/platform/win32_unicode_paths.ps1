@@ -93,6 +93,19 @@ function Test-PayloadAt([string] $path, [string] $payload) {
     return ([System.IO.File]::ReadAllText($path) -eq $payload)
 }
 
+# The set of "Suite.Case" names that failed in a gtest XML, or $null when there is no file.
+function Get-FailureSet([string] $xmlPath) {
+    if (-not (Test-Path $xmlPath)) { return $null }
+    [xml] $doc = Get-Content $xmlPath
+    $names = @()
+    foreach ($suite in $doc.testsuites.testsuite) {
+        foreach ($case in $suite.testcase) {
+            if ($case.failure) { $names += ('{0}.{1}' -f $suite.name, $case.name) }
+        }
+    }
+    return ,$names
+}
+
 function New-UnicodeRoot([string] $tag) {
     $root = Join-Path ([System.IO.Path]::GetTempPath()) "cna-uni-$tag-$Czech-$Japanese"
     if ([System.IO.Directory]::Exists($root)) { [System.IO.Directory]::Delete($root, $true) }
@@ -155,28 +168,44 @@ if (Want 'temp') {
     if (-not (Test-Path $exe)) {
         Add-Result 'unicode.temp' 'NOT-RUN' "$exe was not built"
     } else {
-        $tempRoot = New-UnicodeRoot 'temp'
-        $savedTemp = $env:TEMP; $savedTmp = $env:TMP
-        try {
-            $env:TEMP = $tempRoot
-            $env:TMP  = $tempRoot
-            $xml = Join-Path $OutDir 'unicode-temp.xml'
             # The content and media suites are the ones whose fixtures live in TEMP.
             $filter = 'Content*:*Content*:*Xnb*:*Cnb*:*Cnj*:*Gltf*:*Texture2D*:*SpriteFont*:*Media*:*Playlist*:*AudioTag*:*Storage*:*Path*:*Title*'
-            & $exe "--gtest_output=xml:$xml" "--gtest_filter=$filter" | Out-Null
-            $code = $LASTEXITCODE
-            if (Test-Path $xml) {
-                [xml] $r = Get-Content $xml
-                $t = [int] $r.testsuites.tests; $f = [int] $r.testsuites.failures
-                Add-Result 'unicode.temp' $(if ($f -eq 0) { 'PASS' } else { 'FAIL' }) `
-                    "$t tests, $f failures, with TEMP under a non-ASCII directory"
-            } else {
-                Add-Result 'unicode.temp' 'FAIL' "no results file; exit $code"
+
+            # A control first, with the machine's own TEMP. A raw failure count from the Unicode
+            # run means nothing on its own: much of this corpus fails here for reasons that have
+            # no connection to paths -- no FreeType on this machine, no video decoder, and the
+            # D3D11 cascade. What is being measured is the DIFFERENCE between the two runs.
+            $controlXml = Join-Path $OutDir 'unicode-temp-control.xml'
+            & $exe "--gtest_output=xml:$controlXml" "--gtest_filter=$filter" | Out-Null
+            $controlFailures = Get-FailureSet $controlXml
+
+            $tempRoot = New-UnicodeRoot 'temp'
+            $savedTemp = $env:TEMP; $savedTmp = $env:TMP
+            $xml = Join-Path $OutDir 'unicode-temp.xml'
+            try {
+                $env:TEMP = $tempRoot
+                $env:TMP  = $tempRoot
+                & $exe "--gtest_output=xml:$xml" "--gtest_filter=$filter" | Out-Null
+            } finally {
+                $env:TEMP = $savedTemp; $env:TMP = $savedTmp
             }
-        } finally {
-            $env:TEMP = $savedTemp; $env:TMP = $savedTmp
+            $unicodeFailures = Get-FailureSet $xml
+
+            if ($null -eq $controlFailures -or $null -eq $unicodeFailures) {
+                Add-Result 'unicode.temp' 'FAIL' 'one of the two runs produced no results file'
+            } else {
+                $extra = @($unicodeFailures | Where-Object { $controlFailures -notcontains $_ })
+                $fixed = @($controlFailures | Where-Object { $unicodeFailures -notcontains $_ })
+                $detail = ("control {0} failures, non-ASCII TEMP {1}; {2} fail ONLY under the " +
+                           "non-ASCII TEMP, {3} only under the ASCII one") -f `
+                          $controlFailures.Count, $unicodeFailures.Count, $extra.Count, $fixed.Count
+                Add-Result 'unicode.temp' $(if ($extra.Count -eq 0) { 'PASS' } else { 'FAIL' }) $detail
+                if ($extra.Count -gt 0) {
+                    $extra | Set-Content (Join-Path $OutDir 'unicode-temp-only-failures.txt')
+                    $extra | Select-Object -First 25 | ForEach-Object { "    only-under-unicode: $_" | Write-Output }
+                }
+            }
             Remove-Tree $tempRoot
-        }
     }
 }
 
@@ -208,7 +237,8 @@ if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
                 $from = Join-Path $SourceDir $payload
                 $to   = Join-Path $worktree  $payload
                 if ((Test-Path $from) -and -not (Test-Path (Join-Path $to 'CMakeLists.txt'))) {
-                    New-Item -ItemType Directory -Force -Path (Split-Path $to) | Out-Null
+                    $toParent = Split-Path $to
+                    if ($toParent) { New-Item -ItemType Directory -Force -Path $toParent | Out-Null }
                     Copy-Item -Recurse -Force $from $to
                 }
             }
@@ -319,7 +349,8 @@ if ($worktree -and -not $KeepWorktree) {
     try {
         & git -C $SourceDir worktree remove --force $worktree 2>&1 | Out-Null
     } catch { }
-    Remove-Tree (Split-Path $worktree -Parent)
+    $parent = Split-Path $worktree -Parent
+    if ($parent) { Remove-Tree $parent }
     & git -C $SourceDir worktree prune 2>&1 | Out-Null
 }
 
