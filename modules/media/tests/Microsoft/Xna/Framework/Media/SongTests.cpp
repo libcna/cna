@@ -297,6 +297,26 @@ TEST(SongTest, FromUriTreatsARemoteAuthorityAsUncRatherThanSilentlyDroppingIt)
         << "a remote authority was silently dropped, resolving a remote URI to a LOCAL file";
 }
 
+// The other half of the UNC case, and the reason it was Windows-only: a path the platform refuses
+// to answer about at all must still leave here as FileNotFoundException.
+//
+// The constructor asks std::filesystem::exists(), which has two overloads with different failure
+// behaviour -- the throwing one turns "I could not find out" into a filesystem_error that escapes
+// past every caller's catch. Windows reaches that state through the UNC spelling above
+// (`//remotehost/C:/...` is not a legal share name, so it fails with ERROR_INVALID_NAME rather
+// than as not-found); POSIX reaches it with an over-long component (ENAMETOOLONG). Neither names
+// an existing file, so both take the not-found exit.
+//
+// Spelled with an over-long component so the check runs on every platform rather than only on the
+// one where the defect was first seen.
+TEST(SongTest, APathThePlatformRefusesToStatIsNotFoundRatherThanAFilesystemError)
+{
+    const std::string overLongComponent(600u, 'n');
+    EXPECT_THROW((void)Song::FromUri("S", "file:///" + overLongComponent + "/song.ogg"),
+                 System::IO::FileNotFoundException)
+        << "a path the platform cannot stat escaped as std::filesystem::filesystem_error";
+}
+
 // A drive-letter path must not be mistaken for a URI scheme ("C:" is a path, not a scheme).
 TEST(SongTest, FromUriDoesNotMistakeAWindowsDriveLetterForAScheme)
 {

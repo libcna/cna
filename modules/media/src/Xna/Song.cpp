@@ -5,6 +5,7 @@
 #include <cctype>
 #include <filesystem>
 #include <optional>
+#include <system_error>
 #include <utility>
 
 #include "CNA/Internal/PathUtf8.hpp"
@@ -26,9 +27,17 @@ namespace Microsoft::Xna::Framework::Media
         // handle_ is UTF-8 path text and is widened before it is stat-ed. Text that cannot name a
         // path on this platform names no existing file either, so it takes the same exit as a
         // genuinely missing one rather than surfacing a filesystem_error here.
+        // exists() is asked through its error_code overload, which is what actually delivers the
+        // guarantee above. The throwing overload reports "I could not find out" as an exception,
+        // and a path the platform rejects outright takes that exit rather than the not-found one:
+        // on Windows a UNC spelling whose share name is not a legal one (`//host/C:/...`, which is
+        // what a `file://host/C:/...` URI resolves to) fails with ERROR_INVALID_NAME, and on POSIX
+        // an over-long component fails with ENAMETOOLONG. Neither names an existing file, so both
+        // belong on the FileNotFoundException path a caller already handles.
         const std::optional<std::filesystem::path> nativeHandle =
             CNA::Internal::TryPathFromUtf8(handle_);
-        if (!nativeHandle || !std::filesystem::exists(*nativeHandle))
+        std::error_code existsError;
+        if (!nativeHandle || !std::filesystem::exists(*nativeHandle, existsError))
         {
             throw System::IO::FileNotFoundException(
                 "Could not find file '" + handle_ + "'.", handle_);
