@@ -91,7 +91,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
-| WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | 🔄 | a real WGL 3.3 core context is created, made current, swapped and destroyed by `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` in the native suite run (it is not among the skips); the `wgl` check in the desktop harness records the driver and the context-cycle GDI count |
+| WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | ⚠️ | passes in the **standalone** platform suite (a real WGL 3.3 core context created, made current, swapped, destroyed); **crashes with an access violation in the full-suite run** — see F29. Not claimed as validated |
 | WINNATIVE-0021 | A real CNA application, and a soak run | 🔄 | `cna_demo_2d.exe` **links and runs on native Windows** — D3D11 at feature level 11.0, 120 frames, exit 0 — after F28; soak in progress |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ✅ | HEADLESS **161 · 0 failures**; SDL3 **336 · 0 failures · 7 skipped**; SDL2 **195 · 0 failures · 0 skipped** (§3) |
@@ -273,6 +273,28 @@ default, so a test that fits on one platform fits on the other.
 **Separately:** that test fails on Linux too — this build has no audio decoder, so the importer
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
+
+### WINNATIVE-F29 — the WGL context test crashes in a full run *(open, NOT claimed as validated)*
+
+`Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` **passes** in the
+standalone platform suite and **fails with `SEH exception 0xC0000005`** — an access violation — in
+the full `CnaTests` run. It is the only crash left in that run, and the only failure among the
+**199 Win32-specific tests** (the other two Win32 results are Vulkan skips, for want of a loader).
+
+The obvious suspicion — that CNA dereferences a null context on the failure path — was checked and
+**does not hold**: `Win32GraphicsServices.cpp` tests the result of `wglCreateContext`,
+`wglCreateContextAttribsARB`, `wglMakeCurrent` and every `GetDC` in between, and throws rather than
+continuing. There is no unguarded pointer on that path.
+
+What is left is that the fault is inside the guest's GL implementation once the graphics stack is
+in the state F24 describes — the crash appears only in the run where D3D11 has already stopped
+handing out devices. **That is a suspicion, not a measurement**, and the honest position is that
+WGL on this machine is *not* validated: it works in isolation and crashes in company, and which
+side of the boundary the fault is on has not been established.
+
+This corrects an earlier entry in this plan, which read the test's absence from the skip list in
+the standalone run as evidence that WGL was exercised and fine. It was exercised; "fine" did not
+survive a longer run.
 
 ### WINNATIVE-F28 — every CNA example application was unlinkable with MSVC *(fixed)*
 
