@@ -29,6 +29,7 @@ closeout, not another expansion plan.
 | WINCLOSE-0008 | SDL-free + Unicode-path + ASan re-proof | ✅ done; D3D11 ⛔ environment |
 | WINCLOSE-0009 | Linux / X11 / Wayland / SDL matrix regression | ✅ zero new failures |
 | WINCLOSE-0010 | Git authorship audit and integration into `next` | ✅ clean, fast-forwarded |
+| WINCLOSE-0011 | **Post-closeout:** DirectX11 drew nothing after the first `Present` | ✅ fixed — found by running the demo, see below |
 
 ---
 
@@ -429,3 +430,60 @@ F31 class at a larger scale and its own pass; the library is not implicated by i
 
 Neither keeps the Windows portability **implementation** open. What this pass was asked to close —
 F29, F31, three text-mode failures, one UNC case and one backslash question — is closed.
+
+---
+
+## WINCLOSE-0011 — DirectX11 drew nothing after the first Present *(found after the closeout, fixed)*
+
+**This corrects the closeout above.** It reported Direct3D 11 as green on the strength of the
+`directx.probe` stages (device, swap chain, clear, present, resize) and of the earlier record that
+`cna_demo_2d` was "rendering frames". Both were true and neither was what they were read as:
+frames were being *presented*, and nothing was ever checked to be *drawn* in them. Asked to run a
+demo on the VM after integration, `cna_demo_2d` showed an animated clear colour and none of its
+fifty sprites.
+
+**Symptom.** From its second frame on, every draw on DirectX11 — sprites and primitives alike —
+reached no pixel. `Clear` kept working. No error, no log line.
+
+**Root cause.** The swap chain is `DXGI_SWAP_EFFECT_FLIP_DISCARD` (DX-45), and a flip-model
+`Present` unbinds the back buffer from the output merger. `DirectX11Renderer::Present()` never
+rebound it. `Clear()` names its render target view explicitly and so never noticed; `DrawIndexed`
+renders into whatever `OMSetRenderTargets` last bound, which after a `Present` is nothing.
+
+**How it was isolated**, each step measured on native Windows with MSVC before the next:
+
+| Experiment | DirectX11 | Conclusion |
+|---|---|---|
+| sprite drawn, pixel read back (64 px buffer) | fails | the renderer, not the demo |
+| plain `BasicEffect` primitive, same device | passes | not the device, target or viewport |
+| sprite with `CullNone` | fails | not winding |
+| red clear, white sprite, `Opaque` | reads red | never rasterized, not a zero texture |
+| same cases at 256 px | **all pass** | the 64 px failure was the letterbox path |
+| `cna_demo_2d` with `FlushBatch` instrumented | no log line at all | **the demo binary on the VM was stale** |
+| demo rebuilt, instrumented | 306 flushes, correct vertices/viewport/constants/SRV, no sprites | the draw is right and goes nowhere |
+| depth buffer; rotation with centre origin | pass | neither |
+| draw in the frame **after** `Present` — sprite, and primitive | **both fail**; OpenGL33 passes | **the defect** |
+
+**Fix.** `Present()` rebinds the tracked render target set after a successful present — not the
+back buffer, so the viewport and any game-bound render target stay as they were.
+
+**Validation.** `SpriteBatchRasterizationTest` 9/9 on DirectX11 in three consecutive runs (the first
+run after the build had one intermittent failure in the red/white/opaque case, not reproduced in
+the three runs after it — recorded, not hidden); 9/9 on OPENGL33; skipped on HEADLESS.
+`cna_demo_2d` draws its sprites, captured **from inside the guest with GDI** on the interactive
+desktop rather than taken from the VirtualBox framebuffer, whose screenshots of a 3D-accelerated
+guest were not trusted as evidence here.
+
+**Three things this leaves on record:**
+
+- **No readback test in the repository covered DirectX11.** Every pixel-reading suite was gated to
+  `Software, OpenGL33, OpenGLES3`. The new suite includes DirectX11; the older suites still do not,
+  and are worth re-gating on their own merits.
+- **The validation harness builds with `CNA_BUILD_EXAMPLES=OFF`**, so an example binary left in the
+  build tree by an earlier configuration survives every later run untouched. `cna_demo_2d.exe` on
+  the VM was from 12:01 while the tests beside it were from 19:34, and several measurements were
+  taken against it before that was noticed.
+- **Open, not fixed:** with a back buffer narrower than the narrowest captioned window (64 px), the
+  presentation layer letterboxes it, and a sprite at logical (8..56) did not appear at logical
+  (32, 32) on readback. Whether `GetBackBufferData` or the sprite placement fails to apply the
+  letterbox offset was not determined.

@@ -1043,7 +1043,7 @@ Across the full run there are **199 Win32-specific tests in 15 suites: 1 failure
 | `multipleDisplays` | `Win32SystemServices` (18); the `displays` desktop check | measured, **one monitor only** |
 | `borderlessFullscreen` | `Win32FullscreenState` (9) | measured |
 | `nativeWindowHandle` | `Win32RendererBridge` (8); `TryGetWin32` feeding a real D3D11 swap chain | measured |
-| `surfacePresentation` | D3D11 device + swap chain + present on a CNA HWND; `cna_demo_2d` rendering frames | measured (**virtual GPU**) |
+| `surfacePresentation` | D3D11 device + swap chain + present on a CNA HWND; `cna_demo_2d` presenting frames — and, since WINCLOSE-0011, drawing geometry in them, which it had not been doing after the first `Present` | measured (**virtual GPU**) |
 | `openGlContext` | `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` plus `ContextLifetimeSurvivesEveryOwnershipPathWithoutLeavingStaleState` | measured (the full-suite fault is the guest driver in F24's exhausted state — WINCLOSE-0002) |
 | `vulkanSurface` | host-decided; reports false here, no `vulkan-1.dll` | correctly false |
 | `clipboard` | 10/10 against **Notepad**, both directions, including non-ASCII | measured |
