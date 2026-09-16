@@ -22,15 +22,17 @@
 
 #include "Win32/Win32Common.hpp"
 
+#include "Win32TestDesktop.hpp"
+
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <memory>
 #include <vector>
 
 namespace {
 
 using namespace CNA::Platform;
+using CNA::Platform::Testing::SizeThatFitsTheWorkArea;
 
 /// Exactly what a D3D renderer does with the handle it is given, reproduced here so the assertion
 /// is about the call the renderer actually makes rather than about a paraphrase of it.
@@ -41,29 +43,6 @@ bool RendererWouldAccept(const NativeWindowHandle& handle, HWND& hwnd)
         return false;
     hwnd = static_cast<HWND>(nativeWindow.hwnd);
     return true;
-}
-
-/// The largest client size not exceeding the requested one that this desktop can actually give a
-/// window: Windows clamps a client area to what fits the work area once the frame is added, so a
-/// test that names an absolute size is really naming a minimum screen size for the suite.
-WindowSize SizeThatFitsTheWorkArea(const int desiredWidth, const int desiredHeight)
-{
-    RECT workArea{};
-    if (SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0) == FALSE)
-        return WindowSize{desiredWidth, desiredHeight};
-
-    // Leave room for the frame the client area sits inside. The exact metrics differ with DPI and
-    // theme, so this asks the system for them rather than assuming any.
-    RECT frame{0, 0, desiredWidth, desiredHeight};
-    if (AdjustWindowRectEx(&frame, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_APPWINDOW) == FALSE)
-        return WindowSize{desiredWidth, desiredHeight};
-    const int frameWidth = (frame.right - frame.left) - desiredWidth;
-    const int frameHeight = (frame.bottom - frame.top) - desiredHeight;
-
-    const int availableWidth = (workArea.right - workArea.left) - frameWidth;
-    const int availableHeight = (workArea.bottom - workArea.top) - frameHeight;
-    return WindowSize{std::max(320, std::min(desiredWidth, availableWidth)),
-                      std::max(240, std::min(desiredHeight, availableHeight))};
 }
 
 class Win32RendererBridge : public ::testing::Test

@@ -15,6 +15,8 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 
 #include "Win32/Win32Common.hpp"
+
+#include "Win32TestDesktop.hpp"
 #include "Win32/Win32Window.hpp"
 
 #include <gtest/gtest.h>
@@ -156,10 +158,15 @@ TEST_F(Win32WindowTest, ResizeAlsoMeansTheClientArea)
 {
     const std::unique_ptr<IPlatformWindow> window = Create(640, 480);
     ASSERT_NE(window, nullptr);
-    window->SetSize(800, 600);
+
+    // Not a literal 800x600: Windows clamps a client area to what the work area can hold, so a
+    // fixed size would make this an assertion about the screen rather than about SetSize. See
+    // Win32TestDesktop.hpp for the two environments where that difference is real.
+    const WindowSize target = CNA::Platform::Testing::SizeThatFitsTheWorkArea(800, 600);
+    window->SetSize(target.width, target.height);
     window->Sync();
-    EXPECT_EQ(window->GetClientBounds().width, 800);
-    EXPECT_EQ(window->GetClientBounds().height, 600);
+    EXPECT_EQ(window->GetClientBounds().width, target.width);
+    EXPECT_EQ(window->GetClientBounds().height, target.height);
 }
 
 TEST_F(Win32WindowTest, PixelSizeAndDisplayScaleAreInternallyConsistent)
