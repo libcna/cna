@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "CNA/TestSupport/OracleCorpus.hpp"
 #include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
@@ -102,13 +103,13 @@ namespace
             std::map<std::string, std::string> map;
             std::ifstream in(Locate("tests/reference/xna40/media/media-content-oracle.json"));
             std::string line;
-            const std::regex pattern("\\{\"case\": \"([^\"]*)\", \"result\": \"((?:[^\"\\\\]|\\\\.)*)\"\\}");
-            while (std::getline(in, line))
+                        while (std::getline(in, line))
             {
-                std::smatch match;
-                if (std::regex_search(line, match, pattern))
+                std::string name;
+                std::string result;
+                if (CNA::TestSupport::ReadOracleCase(line, name, result))
                 {
-                    map[match[1]] = Unescape(match[2]);
+                    map[name] = Unescape(result);
                 }
             }
             return map;

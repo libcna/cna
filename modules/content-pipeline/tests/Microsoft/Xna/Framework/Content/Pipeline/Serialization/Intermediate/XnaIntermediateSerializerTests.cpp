@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/TestSupport/OracleCorpus.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -847,14 +848,16 @@ namespace
     {
         std::vector<ManifestCase> cases;
         std::istringstream lines(ReadCorpus("manifest.json"));
-        const std::regex pattern("\\{\"case\": \"([^\"]*)\", \"rootType\": \"((?:[^\"\\\\]|\\\\.)*)\", \"status\": \"([^\"]*)\", \"note\": \"((?:[^\"\\\\]|\\\\.)*)\"\\}");
         std::string line;
         while (std::getline(lines, line))
         {
-            std::smatch match;
-            if (std::regex_search(line, match, pattern))
+            std::vector<std::string> fields;
+            if (CNA::TestSupport::ReadOracleFields(
+                    line, {{"case", false}, {"rootType", true}, {"status", false}, {"note", true}},
+                    fields))
             {
-                cases.push_back(ManifestCase{match[1], Unescape(match[2]), match[3], Unescape(match[4])});
+                cases.push_back(
+                    ManifestCase{fields[0], Unescape(fields[1]), fields[2], Unescape(fields[3])});
             }
         }
         return cases;

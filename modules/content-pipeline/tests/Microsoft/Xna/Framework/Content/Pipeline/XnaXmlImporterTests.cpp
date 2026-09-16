@@ -17,11 +17,11 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "CNA/TestSupport/OracleCorpus.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
@@ -97,15 +97,16 @@ namespace
             std::map<std::string, Measurement> map;
             std::ifstream in(CorpusDirectory() / "manifest.json");
             std::string line;
-            const std::regex pattern(
-                "\\{\"case\": \"([^\"]*)\", \"rootType\": \"(?:[^\"\\\\]|\\\\.)*\", \"status\": \"([^\"]*)\", "
-                "\"note\": \"((?:[^\"\\\\]|\\\\.)*)\"\\}");
             while (std::getline(in, line))
             {
-                std::smatch match;
-                if (std::regex_search(line, match, pattern))
+                // rootType is read and discarded, as the pattern this replaces did with its
+                // non-capturing group: the manifest writes it, this fixture does not use it.
+                std::vector<std::string> fields;
+                if (CNA::TestSupport::ReadOracleFields(
+                        line, {{"case", false}, {"rootType", true}, {"status", false}, {"note", true}},
+                        fields))
                 {
-                    map[match[1]] = Measurement{match[2], Unescape(match[3])};
+                    map[fields[0]] = Measurement{fields[2], Unescape(fields[3])};
                 }
             }
             return map;

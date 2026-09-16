@@ -23,12 +23,12 @@
 #include <functional>
 #include <limits>
 #include <map>
-#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "CNA/TestSupport/OracleCorpus.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -98,13 +98,13 @@ namespace
             std::map<std::string, std::string> map;
             std::ifstream in(CorpusFile());
             std::string line;
-            const std::regex pattern("\\{\"case\": \"([^\"]*)\", \"result\": \"((?:[^\"\\\\]|\\\\.)*)\"\\}");
-            while (std::getline(in, line))
+                        while (std::getline(in, line))
             {
-                std::smatch match;
-                if (std::regex_search(line, match, pattern))
+                std::string name;
+                std::string result;
+                if (CNA::TestSupport::ReadOracleCase(line, name, result))
                 {
-                    map[match[1]] = match[2];
+                    map[name] = result;
                 }
             }
             return map;
