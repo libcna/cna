@@ -415,6 +415,35 @@ X11 backend or the error handler.
 The Linux baseline in §3 is therefore collected with `--gtest_filter=-Sdl3XErrorHandlerTest.*`, and
 says so.
 
+### WINNATIVE-F23 — one escaped exception discarded an entire Windows run *(fixed)*
+
+`CnaTests` ended on native Windows at **exit 3, with no results XML at all**, twice, at the same
+test. An aborting process does not write its report, so the exit code was very nearly the only
+evidence there was.
+
+`GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout` captures stdout and stderr and
+then constructs a `GraphicsDevice`. GoogleTest's capturers are **process-global** and are released
+only by `GetCaptured*()`, so when that construction throws — which it does here, once the D3D11
+device budget is spent (F18) — both stay installed. The next test in the process to capture
+anything hits `Only one stdout capturer can exist at a time`, which is a `GTEST_CHECK_`, so it calls
+`abort()`. One test's escaped exception silently discarded **every test after it**, about 4 400 of
+them.
+
+Both captures are now released on every path, and a device that cannot be constructed skips this
+test naming the reason. The audio suite already had exactly this shape
+(`SoundEffectTests.cpp:1020-1030`) — it is the house pattern, and this was the one place missing it.
+A survey of the other 5 files that use capture found no further instance.
+
+This does not fix the exhaustion underneath it. It stops the exhaustion from costing the whole
+measurement — which is the difference between a suite that reports 600 failures and one that reports
+nothing.
+
+**Why it appeared only now.** The first full Windows run completed 8 123 tests. The difference is
+F19: with the corpus reader fixed, 174 tests that used to throw out of a static initializer before
+doing anything now actually run — and a number of them build content and create graphics devices.
+Fixing one defect pushed the process past a limit that had never been reached, which is worth
+recording as its own lesson: the run that gets further is the run that finds the next defect.
+
 ---
 
 ## 3. Measurements
