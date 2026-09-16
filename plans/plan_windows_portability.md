@@ -370,3 +370,60 @@ nothing that passed before now fails.
 two distinct warning codes (`C4005`, `C4834`), no errors. That is the first thing the migration had
 to not break, since the preceding workstream's F9–F16 showed how much of CNA had never been
 compiled by this toolchain at all.
+
+## 9. The Windows measurement — WINPORT-0015
+
+Whole suite, native Windows, MSVC `RelWithDebInfo`, `WIN32` + `DIRECTX11`, SDL off, **run from the
+repository root** (see WINPORT-F1 for why that sentence is load-bearing):
+
+```
+                              baseline        after
+tests                             8136         8174
+failures                          1537         1585
+  F24 D3D11 cascade               1480         1536      deferred, environment-side
+  also failing on Linux             13           12      not Windows-portability defects
+  genuinely Windows-only            44           37
+```
+
+The failure total went **up** while the thing being measured went **down**, and both facts are real:
+F24's cascade is nondeterministic in how far it spreads, and it swamps the number it shares. That is
+the whole reason the partition exists rather than a headline count.
+
+### F30 is fixed, measured rather than assumed
+
+All five Windows-only failures the preceding workstream attributed to F30 now **pass on native
+Windows**:
+
+```
+AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly                      pass
+CnjContentPipelineTest.ResolvesUtf8AuthoredSidecarsThroughNativePaths            pass
+MediaLibraryTestFixture.InternationalResolvesTheNonAsciiEntry                    pass
+PlaylistParserTest.ParsesInternationalM3U8WithNonAsciiEntry                      pass
+Texture2DContentPipelineTest.ReadsANativeNonAsciiFilesystemPathWithoutNarrowing  pass
+```
+
+So F30 explains **5 of the 44**, not the larger share it might have been given credit for. The rest
+of the 44 were always something else, and §10 says what.
+
+The new coverage passes on Windows too: `PathUtf8Test` 10/10, `IsWellFormedUtf8Test` 10/10,
+`ContentPathCompatibilityTest` 2/2, `PathContainmentTest` 30/30.
+
+## 10. Triage of the 37 — WINPORT-0016
+
+One row per **root cause**, not per manifestation.
+
+| Root cause | Tests | Status |
+|---|---|---|
+| **F31 — POSIX hardcoded in tests.** `HostProcessTest` asks for `/bin/echo`; `CnbGltfDirectToolTest` and `LargeModelScalingTest` redirect to `/dev/null`; `XmaEncoderService`'s stub encoder is not a PE, so `CreateProcess` refuses it with `ERROR_BAD_EXE_FORMAT`. | 18 | inherited, **not** a product defect — and the finding to carry is still that `RunHostProcess` has a Windows `CreateProcess` path with no test behind it |
+| **F26 — case resolution on a case-insensitive filesystem.** | 1 | inherited divergence, deliberately not "fixed" |
+| Separator assertions in `CaseInsensitivePathTest` that predate the contract | 3 | **fixed** — they asserted `path::string()` where the function documents generic UTF-8 |
+| A defect in this branch's own new test (a narrow `operator/` on UTF-8 bytes) | 1 | **fixed** |
+| `XnaDifferentialBuildTest` | 1 | **not comparable** — it is excluded from the Linux run (its Wine prefix wedges), so it has no baseline to be "Windows-only" against |
+| Windows text mode: `XnaContentImporter` reads `"typed\r"` | 1 | the `WINNATIVE-F27` class, not a path defect |
+| UNC: `SongTest.FromUriTreatsARemoteAuthorityAsUncRatherThanSilentlyDroppingIt` | 1 | Phase 21; genuinely Windows-only, analysed below |
+| Not yet analysed: `SpriteFontFamilyResolutionTest` ×2, `XnaPipelineBridge` ×2, `ContentPipelineCoreTest`, `XnaBuildContent`, `XnaErrorParityTest`, `XnaContentProjectCommandLine`, `XnbWriterInputFuzzTest`, `CnaInputClipboardTest`, `StandardFileSystemTests` | 11 | open |
+
+**18 of the 37 are F31**, which is a test-portability problem the preceding workstream already
+recorded and declined to paper over. Fixing it properly needs a program that echoes its `argv`
+without a shell re-parsing it — routing through `cmd.exe` would test cmd's quoting rather than
+`RunHostProcess`'s — and that is its own piece of work, not a side effect of this one.
