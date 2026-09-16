@@ -256,14 +256,18 @@ namespace CNA::Platform::Wayland {
     void WaylandDialogs::ShowMessageBox(MessageBoxSeverity, const std::string&, const std::string&, IPlatformWindow*)
     {
         throw PlatformNotSupportedException(PlatformCapability::MessageBox,
-                                            "Wayland (no message box: plans/plan_wayland.md WAYLAND-0094)");
+                                            "Wayland (no protocol puts a dialog on the screen and CNA carries no "
+                                            "toolkit; draw the message in the game with SpriteFont, or use the "
+                                            "portal file dialogs)");
     }
 
     int WaylandDialogs::ShowMessageBoxWithButtons(MessageBoxSeverity, const std::string&, const std::string&,
                                                   const std::vector<std::string>&, IPlatformWindow*)
     {
         throw PlatformNotSupportedException(PlatformCapability::MessageBox,
-                                            "Wayland (no message box: plans/plan_wayland.md WAYLAND-0094)");
+                                            "Wayland (no protocol puts a dialog on the screen and CNA carries no "
+                                            "toolkit; draw the message in the game with SpriteFont, or use the "
+                                            "portal file dialogs)");
     }
 
     void WaylandDialogs::ShowOpenFileDialog(FileDialogCallback onResult, const std::vector<FileDialogFilter>& filters,

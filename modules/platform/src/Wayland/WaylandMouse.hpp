@@ -153,6 +153,12 @@ namespace CNA::Platform::Wayland {
          */
         [[nodiscard]] bool HasSystemCursors() const;
 
+        /**
+         * @brief Gets whether a custom cursor image can be shown (the compositor offers `wl_shm`).
+         * @return True when it can.
+         */
+        [[nodiscard]] bool HasCustomCursors() const;
+
         /** @brief Copies the per-seat state into the snapshot. */
         void Update() override;
         /** @brief Gets the snapshot. @return The state as of the last Update(). */

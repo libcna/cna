@@ -10,6 +10,30 @@
 # This file also runs through `cmake -P` in the lightweight gate test.
 cmake_policy(SET CMP0057 NEW)
 
+# Two SDL major versions in one process is the hazard this whole file exists for (see the
+# comment below), so the two selections that produce one are refused before anything is
+# generated. Found by plans/plan_wayland.md WAYLAND-0128's regression matrix: `CNA_PLATFORM=SDL2`
+# with the *default* audio platform built and linked both libraries and then died with a jump
+# through a null vtable on the first window, and the reverse pair failed with CMake's own
+# "SDL2::SDL2 target not found" rather than a diagnostic anyone could act on.
+if(CNA_PLATFORM STREQUAL "SDL2" AND CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=SDL2 with CNA_AUDIO_PLATFORM=SDL3 puts SDL2 and SDL3 in one process. "
+        "They export identically named entry points (SDL_Init, SDL_GetError, SDL_PollEvent and "
+        "many more), so each backend's calls bind to whichever library the loader reached first "
+        "and neither implementation is the one running.\n"
+        "Choose an audio platform this platform can share a process with: "
+        "-DCNA_AUDIO_PLATFORM=SDL2 (the same library), NULL (silent) or ALSA (CNA's own mixer).")
+endif()
+if(CNA_PLATFORM STREQUAL "SDL3" AND CNA_AUDIO_PLATFORM STREQUAL "SDL2")
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=SDL3 with CNA_AUDIO_PLATFORM=SDL2 puts SDL2 and SDL3 in one process, "
+        "which cannot work: they export identically named entry points and each backend's calls "
+        "would bind to whichever library the loader reached first.\n"
+        "Choose -DCNA_AUDIO_PLATFORM=SDL3 (the same library), NULL (silent) or ALSA (CNA's own "
+        "mixer), or select -DCNA_PLATFORM=SDL2 to keep SDL2 audio.")
+endif()
+
 if(CNA_PLATFORM STREQUAL "SDL2" AND CNA_AUDIO_PLATFORM STREQUAL "SDL2")
     set(_cna_renderers_with_direct_sdl3 SDL_RENDERER SDL_GPU FNA3D FREEDIRECT)
     if(CNA_GRAPHICS_RENDERER IN_LIST _cna_renderers_with_direct_sdl3)

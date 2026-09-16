@@ -98,12 +98,12 @@ when its capability is true.
 | `textInput` | ✅ | committed text through xkbcommon and the locale's compose table |
 | `exactKeyboardState` | ✅ | real releases; focus loss releases held keys |
 | `pixelAccurateMouse` | ✅ | surface coordinates in `wl_fixed_t` |
-| `cursorShapes` | conditional | `wp_cursor_shape_manager_v1`, else a loadable cursor theme; custom images always |
+| `cursorShapes` | conditional | either half: `wp_cursor_shape_manager_v1` or a loadable cursor theme for the system shapes, `wl_shm` for custom images. The half a compositor does not offer refuses by name, as under X11 |
 | `relativeMouse` | conditional | `zwp_relative_pointer_manager_v1` **and** `zwp_pointer_constraints_v1` |
 | `ime` | conditional | `zwp_text_input_manager_v3` (GNOME and KDE offer it) |
 | `clipboard`, `clipboardData`, `dragAndDrop` | conditional | a seat and `wl_data_device_manager` |
 | `primarySelection` | conditional | `zwp_primary_selection_device_manager_v1` |
-| `openGlContext` | conditional | libEGL and libwayland-egl load and an EGL display for the connection initialises |
+| `openGlContext` | conditional | libEGL and libwayland-egl load, one of them offers a Wayland platform extension, and an EGL display on this connection initialises -- all three asked when the platform is created, so the capability is a promise and not a guess |
 | `vulkanSurface` | conditional | the build had the Vulkan headers |
 | `nativeFileDialog` | conditional | the session bus has the desktop portal |
 | `inputDeviceEnumeration` | ✅ | the seats' keyboards, pointers, touchscreens and tablet tools, and the evdev controllers |
@@ -220,6 +220,12 @@ destruction and when the pointer goes away, always before its surface, so the de
 left trapped. While locked the cursor is hidden and `SetPosition` becomes the position the
 compositor leaves the pointer at on unlock.
 
+**`SetPosition` moves no pointer** (D-19). Wayland gives no client that power, and outside relative
+mode all it does is record the position the snapshot reports until the pointer next moves -- which
+is what a game that re-centres the cursor every frame reads back. It does not throw, because a
+game doing that is not asking for the desktop's pointer; if you need to know that the warp did not
+happen, `globalPointer` is the capability that says so, and it is false.
+
 **Cursors** (D-20): `wp_cursor_shape_device_v1` for the system shapes, so the compositor draws its
 own theme at the right scale; the `wl_cursor` theme (`XCURSOR_THEME`, `XCURSOR_SIZE`) where the
 protocol is absent; custom images on a `wl_shm` cursor surface.
@@ -331,6 +337,23 @@ recorded error, destroying windows and the platform is clean.
 readable, and flushes what the socket takes, leaving the rest for later. Blocking exists only where
 the contract asks for it (`CreateWindow`, `Show`, `Sync`, clipboard reads), and every such wait is
 bounded; `wl_display_roundtrip()`, which waits forever for a hung compositor, is never called.
+
+**Nothing throws out of a protocol callback.** Every `wl_*` listener runs inside
+`wl_display_dispatch*`, between libwayland's own C frames, so a C++ exception thrown there would
+unwind through them. Audited (WAYLAND-0129): of the backend's refusals and failures none is
+reachable from a listener -- a listener that cannot do its work drops it (a cursor shape that the
+theme lacks falls back to the arrow, a title bar that cannot be built says so once on stderr, a
+clipboard transfer whose reader hung up is closed) and an event is posted for the game to read
+instead. The one thing a listener can still do is run out of memory, which is left to terminate the
+process as it would anywhere else.
+
+**A capability is decided once, and a global the compositor withdraws is reported as a refusal.**
+`PlatformCapabilities` is computed when the platform is created and never changes, as the contract
+requires. A compositor may still withdraw a global while the game runs: `wl_data_device_manager`
+and the primary selection then make `SetText`/`SetData` throw `PlatformNotSupportedException`
+naming the capability and the withdrawn global, and a withdrawn `wl_shm` makes the presenter's
+`Present` throw `PlatformException`. That is deliberate -- the alternative is a capability set that
+lies for the rest of the process -- and it is the only way an advertised capability can refuse.
 
 ---
 

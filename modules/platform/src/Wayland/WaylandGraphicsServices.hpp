@@ -104,9 +104,14 @@ namespace CNA::Platform::Wayland {
         WaylandGlContext& operator=(const WaylandGlContext&) = delete;
 
         /**
-         * @brief Gets whether EGL for Wayland can be loaded here (both libraries, and a client
-         * extension for the Wayland platform) -- without initialising a display.
-         * @return True when contexts can be attempted.
+         * @brief Gets whether EGL for Wayland works here: both libraries load, a client extension
+         * for the Wayland platform exists, and an EGL display on this connection initialised.
+         *
+         * Answered in the constructor, because `openGlContext` is a promise: a machine where
+         * libEGL loads but no display initialises must report the capability false rather than
+         * accept a GL window and fail at the context (WAYLAND-0129).
+         *
+         * @return True when a context can be created.
          */
         [[nodiscard]] bool IsAvailable() const { return available_; }
 
@@ -166,8 +171,9 @@ namespace CNA::Platform::Wayland {
         [[nodiscard]] bool EnsureDisplay();
         [[nodiscard]] WindowRecord* Find(WindowId id);
         void DestroySurface(WindowRecord& record);
-        void ChooseConfig(WindowRecord& record, const GlContextDescription& description, bool es);
-        void EnsureSurface(WindowRecord& record);
+        void ChooseConfig(WindowRecord& record, const GlContextDescription& description, bool es,
+                          const char* operation);
+        void EnsureSurface(WindowRecord& record, const char* operation);
 
         WaylandConnection& connection_;
         bool available_ = false;

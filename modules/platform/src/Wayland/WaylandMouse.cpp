@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 
 #include <linux/input-event-codes.h>
 
@@ -364,6 +365,12 @@ namespace CNA::Platform::Wayland {
 #endif
     }
 
+    bool WaylandMouse::HasCustomCursors() const
+    {
+        // wl_shm and nothing else: every compositor that can show a window offers it.
+        return host_.connection().GetGlobals().shm != nullptr;
+    }
+
     bool WaylandMouse::HasSystemCursors() const
     {
 #if defined(CNA_WAYLAND_HAVE_CURSOR_SHAPE)
@@ -575,19 +582,43 @@ namespace CNA::Platform::Wayland {
 
     void WaylandMouse::SetCursor(const CursorImage& cursor)
     {
-        if (cursor.width <= 0 || cursor.height <= 0 ||
-            cursor.rgba.size() != static_cast<std::size_t>(cursor.width) * static_cast<std::size_t>(cursor.height) ||
-            cursor.hotSpotX < 0 || cursor.hotSpotY < 0 || cursor.hotSpotX >= cursor.width ||
+        if (cursor.width <= 0 || cursor.height <= 0)
+        {
+            throw PlatformException("WaylandMouse::SetCursor",
+                                    "the cursor image is " + std::to_string(cursor.width) + "x" +
+                                        std::to_string(cursor.height) + "; both must be positive");
+        }
+        const std::size_t expected = static_cast<std::size_t>(cursor.width) * static_cast<std::size_t>(cursor.height);
+        if (cursor.rgba.size() != expected)
+        {
+            throw PlatformException("WaylandMouse::SetCursor",
+                                    "the cursor image has " + std::to_string(cursor.rgba.size()) + " pixels for a " +
+                                        std::to_string(cursor.width) + "x" + std::to_string(cursor.height) +
+                                        " image, which needs " + std::to_string(expected));
+        }
+        if (cursor.hotSpotX < 0 || cursor.hotSpotY < 0 || cursor.hotSpotX >= cursor.width ||
             cursor.hotSpotY >= cursor.height)
         {
-            throw PlatformException("WaylandMouse::SetCursor", "the cursor image is malformed");
+            throw PlatformException("WaylandMouse::SetCursor",
+                                    "the hot spot " + std::to_string(cursor.hotSpotX) + "," +
+                                        std::to_string(cursor.hotSpotY) + " is outside the " +
+                                        std::to_string(cursor.width) + "x" + std::to_string(cursor.height) + " image");
         }
         WaylandConnection& connection = host_.connection();
         const WaylandGlobals& globals = connection.GetGlobals();
+        if (globals.shm == nullptr)
+        {
+            // The one thing a custom cursor needs, and the reason the capability can be false
+            // while the system shapes work: a refusal naming the capability, not a failure.
+            throw PlatformNotSupportedException(PlatformCapability::CursorShapes,
+                                                "Wayland (the compositor offers no wl_shm to put a cursor image in)");
+        }
         auto buffer = WaylandShmBuffer::Create(globals.shm, cursor.width, cursor.height, WL_SHM_FORMAT_ARGB8888);
         if (buffer == nullptr)
         {
-            throw PlatformException("WaylandMouse::SetCursor", "no shared memory for the cursor image");
+            throw PlatformException("WaylandMouse::SetCursor",
+                                    "no shared memory for a " + std::to_string(cursor.width) + "x" +
+                                        std::to_string(cursor.height) + " cursor image");
         }
         // 0xAABBGGRR in, premultiplied ARGB8888 (0xAARRGGBB in the machine's word) out: wl_shm's
         // ARGB is premultiplied, and an unpremultiplied edge would show as a bright fringe.
@@ -683,7 +714,10 @@ namespace CNA::Platform::Wayland {
 #endif
         EnsureTheme();
         WaylandCursorImage image;
-        if (theme_ != nullptr && theme_->Get(systemCursor_, image))
+        // A theme without the shape asked for still has an arrow -- WaylandCursorTheme::Load
+        // refuses a theme that has not even that -- and showing the arrow is closer to the truth
+        // than leaving whatever the last shape was on screen (WAYLAND-0129).
+        if (theme_ != nullptr && (theme_->Get(systemCursor_, image) || theme_->Get(SystemCursor::Arrow, image)))
         {
             if (pointer.themeSurface == nullptr)
             {
@@ -721,7 +755,7 @@ namespace CNA::Platform::Wayland {
 #endif
         EnsureTheme();
         WaylandCursorImage image;
-        if (theme_ != nullptr && theme_->Get(cursor, image))
+        if (theme_ != nullptr && (theme_->Get(cursor, image) || theme_->Get(SystemCursor::Arrow, image)))
         {
             if (pointer->themeSurface == nullptr)
             {

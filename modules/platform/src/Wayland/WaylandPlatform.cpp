@@ -518,7 +518,10 @@ namespace CNA::Platform::Wayland {
         capabilities.textInput = true;            // xkbcommon committed text
         capabilities.exactKeyboardState = true;   // real releases; leave releases held keys
         capabilities.pixelAccurateMouse = true;   // surface coordinates in wl_fixed_t
-        capabilities.cursorShapes = mouse_->HasSystemCursors();
+        // Either half of what the capability promises: the compositor's own shapes (cursor-shape
+        // or a loadable theme) or a custom image on wl_shm. The half that is missing refuses by
+        // name, as X11's does (WAYLAND-0129).
+        capabilities.cursorShapes = mouse_->HasSystemCursors() || mouse_->HasCustomCursors();
         capabilities.relativeMouse = mouse_->HasRelativeSupport();
 #if defined(CNA_WAYLAND_HAVE_TEXT_INPUT_V3)
         capabilities.ime = globals.textInputManager != nullptr;  // text-input-v3 (D-16)
@@ -872,10 +875,10 @@ namespace CNA::Platform::Wayland {
 
     void WaylandPlatform::SetScreenSaverEnabled(const bool enabled)
     {
-        screenSaverEnabled_ = enabled;
         if (idleInhibitor_ != nullptr && idleInhibitor_->IsSupported())
         {
             idleInhibitor_->SetInhibited(!enabled);
+            screenSaverEnabled_ = enabled;
             return;
         }
         // Without the protocol, the session bus's org.freedesktop.ScreenSaver -- shared with X11.
@@ -885,12 +888,18 @@ namespace CNA::Platform::Wayland {
             {
                 screenSaverBus_ = std::make_unique<Freedesktop::ScreenSaverBusInhibition>();
             }
-            (void) screenSaverBus_->Inhibit();
+            // What happened, not what was asked for: with neither the protocol nor the bus there
+            // is nothing to inhibit the screen saver with, and `IsScreenSaverEnabled` must keep
+            // saying so -- the X11 backend answers from the live inhibition the same way
+            // (X11Displays::IsScreenSaverEnabled, WAYLAND-0129).
+            screenSaverEnabled_ = !screenSaverBus_->Inhibit();
+            return;
         }
-        else if (screenSaverBus_ != nullptr)
+        if (screenSaverBus_ != nullptr)
         {
             screenSaverBus_->Lift();
         }
+        screenSaverEnabled_ = true;
     }
 
     void WaylandPlatform::EnsureControllerSubsystem()

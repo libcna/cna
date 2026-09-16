@@ -65,6 +65,8 @@ namespace CNA::Platform::Wayland {
             decltype(&wl_egl_window_destroy) windowDestroy = nullptr;
             decltype(&wl_egl_window_resize) windowResize = nullptr;
             bool platformIsKhr = false;
+            /// Why not, when `loaded` is false: the refusal repeats it instead of guessing.
+            std::string reason;
         };
 
         bool HasToken(const char* list, const char* token)
@@ -96,6 +98,9 @@ namespace CNA::Platform::Wayland {
                 void* waylandEgl = dlopen("libwayland-egl.so.1", RTLD_NOW | RTLD_LOCAL);
                 if (egl == nullptr || waylandEgl == nullptr)
                 {
+                    const char* error = dlerror();
+                    result.reason = std::string(egl == nullptr ? "libEGL.so.1" : "libwayland-egl.so.1") +
+                                    " could not be opened" + (error != nullptr ? std::string(": ") + error : std::string());
                     return result;
                 }
                 const auto get = [](void* library, const char* name, auto& function) {
@@ -124,6 +129,8 @@ namespace CNA::Platform::Wayland {
                 all = get(waylandEgl, "wl_egl_window_resize", result.windowResize) && all;
                 if (!all)
                 {
+                    result.reason = "libEGL.so.1 or libwayland-egl.so.1 is missing an entry point this "
+                                    "backend needs";
                     return result;
                 }
                 // The Wayland platform must be a client extension: EGL 1.5's core
@@ -143,6 +150,11 @@ namespace CNA::Platform::Wayland {
                         result.getProcAddress("eglGetPlatformDisplayEXT"));
                 }
                 result.loaded = result.getPlatformDisplay != nullptr;
+                if (!result.loaded)
+                {
+                    result.reason = "this EGL has neither EGL_KHR_platform_wayland nor "
+                                    "EGL_EXT_platform_wayland, so it cannot address a Wayland display";
+                }
                 return result;
             }();
             return library;
@@ -305,7 +317,11 @@ namespace CNA::Platform::Wayland {
     WaylandGlContext::WaylandGlContext(WaylandConnection& connection) : connection_(connection)
     {
 #if defined(CNA_WAYLAND_HAVE_EGL)
-        available_ = Egl().loaded;
+        // The capability is a promise, so it is answered by initialising EGL on this connection
+        // rather than by finding the libraries and hoping (WAYLAND-0129). The X11 backend asks
+        // GLX the same question before it reports `openGlContext`; EGL has no cheaper answer than
+        // eglInitialize, and a display that initialises is needed by the first context anyway.
+        available_ = Egl().loaded && EnsureDisplay();
 #endif
     }
 
@@ -344,7 +360,7 @@ namespace CNA::Platform::Wayland {
         {
             return true;
         }
-        if (displayTried_ || !available_)
+        if (displayTried_ || !Egl().loaded)
         {
             return false;
         }
@@ -424,7 +440,8 @@ namespace CNA::Platform::Wayland {
 #endif
     }
 
-    void WaylandGlContext::ChooseConfig(WindowRecord& record, const GlContextDescription& description, const bool es)
+    void WaylandGlContext::ChooseConfig(WindowRecord& record, const GlContextDescription& description, const bool es,
+                                        const char* const operation)
     {
 #if defined(CNA_WAYLAND_HAVE_EGL)
         const EglLibrary& egl = Egl();
@@ -522,17 +539,18 @@ namespace CNA::Platform::Wayland {
             record.granted = granted;
             return;
         }
-        throw PlatformException("WaylandGlContext::CreateContext",
+        throw PlatformException(operation,
                                 "no EGL config matches the requested framebuffer (" + DescribeEglError(egl.getError()) +
                                     ")");
 #else
         (void) record;
         (void) description;
         (void) es;
+        (void) operation;
 #endif
     }
 
-    void WaylandGlContext::EnsureSurface(WindowRecord& record)
+    void WaylandGlContext::EnsureSurface(WindowRecord& record, const char* const operation)
     {
 #if defined(CNA_WAYLAND_HAVE_EGL)
         if (record.surface != EGL_NO_SURFACE)
@@ -544,7 +562,7 @@ namespace CNA::Platform::Wayland {
         record.eglWindow = egl.windowCreate(record.window->GetSurface(), std::max(1, size.width), std::max(1, size.height));
         if (record.eglWindow == nullptr)
         {
-            throw PlatformException("WaylandGlContext::CreateContext", "wl_egl_window_create failed");
+            throw PlatformException(operation, "wl_egl_window_create failed");
         }
         const EGLint opaque[] = {EGL_PRESENT_OPAQUE_EXT, EGL_TRUE, EGL_NONE};
         record.surface = egl.createWindowSurface(eglDisplay_, record.config,
@@ -555,8 +573,7 @@ namespace CNA::Platform::Wayland {
             const EGLint error = egl.getError();
             egl.windowDestroy(record.eglWindow);
             record.eglWindow = nullptr;
-            throw PlatformException("WaylandGlContext::CreateContext",
-                                    "eglCreateWindowSurface failed (" + DescribeEglError(error) + ")");
+            throw PlatformException(operation, "eglCreateWindowSurface failed (" + DescribeEglError(error) + ")");
         }
         // Every new pixel size -- a configure, a scale change -- resizes the EGL window before the
         // next frame is drawn, so the buffer that frame commits already has it.
@@ -580,9 +597,13 @@ namespace CNA::Platform::Wayland {
 #else
         if (!available_)
         {
-            throw PlatformNotSupportedException(PlatformCapability::OpenGlContext,
-                                                "Wayland (libEGL or libwayland-egl is not installed, or EGL has no "
-                                                "Wayland platform)");
+            const EglLibrary& probe = Egl();
+            throw PlatformNotSupportedException(
+                PlatformCapability::OpenGlContext,
+                "Wayland (" + (!probe.reason.empty() ? probe.reason
+                                                     : std::string("EGL could not initialise a display on this "
+                                                                   "Wayland connection")) +
+                    ")");
         }
         WindowRecord* record = Find(window);
         if (record == nullptr)
@@ -597,20 +618,21 @@ namespace CNA::Platform::Wayland {
         if (!EnsureDisplay())
         {
             throw PlatformException("WaylandGlContext::CreateContext",
-                                    "EGL could not initialise a display on this Wayland connection");
+                                    "EGL could not initialise a display on this Wayland connection (" +
+                                        DescribeEglError(Egl().getError()) + ")");
         }
         const EglLibrary& egl = Egl();
         const bool es = description.profile == GlProfile::Es;
         if (record->config == nullptr)
         {
-            ChooseConfig(*record, description, es);
+            ChooseConfig(*record, description, es, "WaylandGlContext::CreateContext");
         }
         else if (record->es != es)
         {
             throw PlatformException("WaylandGlContext::CreateContext",
                                     "the window already has a context of the other API (OpenGL vs OpenGL ES)");
         }
-        EnsureSurface(*record);
+        EnsureSurface(*record, "WaylandGlContext::CreateContext");
 
         egl.bindApi(es ? EGL_OPENGL_ES_API : EGL_OPENGL_API);
         std::vector<EGLint> attributes = {
@@ -720,9 +742,9 @@ namespace CNA::Platform::Wayland {
         }
         if (record->config == nullptr)
         {
-            ChooseConfig(*record, found->second.granted, found->second.es);
+            ChooseConfig(*record, found->second.granted, found->second.es, "WaylandGlContext::MakeCurrent");
         }
-        EnsureSurface(*record);
+        EnsureSurface(*record, "WaylandGlContext::MakeCurrent");
         egl.bindApi(found->second.es ? EGL_OPENGL_ES_API : EGL_OPENGL_API);
         if (egl.makeCurrent(eglDisplay_, record->surface, record->surface, static_cast<EGLContext>(context)) != EGL_TRUE)
         {

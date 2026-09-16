@@ -371,7 +371,15 @@ namespace CNA::Platform::Wayland {
         // Our copy of the write end goes: the owner has its own, and its close is our end of file.
         ::close(ends[1]);
         connection_.Flush();
-        (void) fcntl(ends[0], F_SETFL, fcntl(ends[0], F_GETFL) | O_NONBLOCK);
+        // A read end that cannot be made non-blocking would turn the bounded wait below into an
+        // unbounded one, so the transfer is given up instead (the caller gets no data, which is
+        // what every other failure of this read reports too).
+        const int readFlags = fcntl(ends[0], F_GETFL);
+        if (readFlags < 0 || fcntl(ends[0], F_SETFL, readFlags | O_NONBLOCK) < 0)
+        {
+            ::close(ends[0]);
+            return data;
+        }
 
         auto& connection = const_cast<WaylandConnection&>(connection_);
         auto lastProgress = std::chrono::steady_clock::now();
@@ -508,8 +516,16 @@ namespace CNA::Platform::Wayland {
             ::close(descriptor);
             return;
         }
-        // Never blocking: what the reader does not take now is written from Pump.
-        (void) fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL) | O_NONBLOCK);
+        // Never blocking: what the reader does not take now is written from Pump. This runs
+        // inside the compositor's `send` callback, so a descriptor that could not be made
+        // non-blocking is dropped rather than written to -- a blocking write here would stop the
+        // game until the reader drained the pipe (WAYLAND-0129).
+        const int flags = fcntl(descriptor, F_GETFL);
+        if (flags < 0 || fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) < 0)
+        {
+            ::close(descriptor);
+            return;
+        }
         Transfer transfer;
         transfer.descriptor = descriptor;
         transfer.data = found->second;

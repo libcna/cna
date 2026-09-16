@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 #include <linux/input-event-codes.h>
@@ -203,6 +204,20 @@ namespace CNA::Platform::Wayland {
         const WaylandGlobals& globals = connection.GetGlobals();
         if (globals.subcompositor == nullptr || globals.shm == nullptr)
         {
+            // Nothing can draw a title bar here, and the compositor already said it draws none
+            // either (a window is only asked for this frame when xdg-decoration is absent or
+            // refused). Said once, because a window nobody can move or close otherwise looks
+            // like a bug in the game (WAYLAND-0129).
+            static bool reported = false;
+            if (!reported)
+            {
+                reported = true;
+                std::fprintf(stderr,
+                             "[CNA][Wayland] this compositor draws no window decorations and offers no %s, so "
+                             "windows have no title bar: they can be moved, resized and closed only through the "
+                             "compositor's own keyboard shortcuts.\n",
+                             globals.subcompositor == nullptr ? "wl_subcompositor" : "wl_shm");
+            }
             return;
         }
         for (Surface& part : parts_)

@@ -128,7 +128,13 @@ namespace CNA::Platform::Wayland {
         surface_ = wl_compositor_create_surface(globals.compositor);
         if (surface_ == nullptr)
         {
-            throw PlatformException("WaylandWindow", "wl_compositor.create_surface failed");
+            // libwayland only fails this when the connection is already gone, so say which
+            // (WAYLAND-0129): an empty reason for a failure with an obvious cause is the one
+            // thing a report of it cannot recover.
+            const std::string& error = host.GetConnection().GetError();
+            throw PlatformException("WaylandWindow", error.empty()
+                                                         ? std::string("wl_compositor.create_surface failed")
+                                                         : "wl_compositor.create_surface failed: " + error);
         }
         wl_surface_add_listener(surface_, &kSurfaceListener, this);
         host.MapSurface(surface_, id_);
