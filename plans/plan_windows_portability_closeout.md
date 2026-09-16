@@ -509,3 +509,69 @@ should run first as the CNA-free baseline.
 
 Re-measured the same day: `cna_win32_directx_probe` — all seven D3D11 stages pass; **D3D12 device
 `hr=0x887A0004` (`DXGI_ERROR_UNSUPPORTED`)**, unchanged.
+
+---
+
+## WINCLOSE-0012 — DirectX11 in the pixel-readback suites *(post-closeout)*
+
+Every pixel-reading suite was gated to Software/OpenGL33/OpenGLES3, so DirectX11 rasterization had
+no coverage until WINCLOSE-0011's first readback test found a real defect. DirectX11 was added to
+106 such gates (not to the Software-only point-list gates, the two EasyGL pins, or ~39
+`CNA_RENDERER_IS` capability predicates, each of which needs its own judgement). Each affected suite
+was then run on native Windows in **its own process**, with `SpriteBatchRasterizationTest` last as
+a canary for an exhausted GPU (9/9 every time).
+
+| | Tests |
+|---|---|
+| previously skipped on DX11, now **passing** | 72 |
+| newly exposed and failing | 23 → **7** after the two fixes below |
+| already failing on DX11 before, unchanged | 20 |
+
+**Two defects fixed** (`modules/renderers/directx11/src/DirectX11Renderer.cpp`):
+
+1. **Letterboxed back buffer readback read the letterbox bars.** Windows will not create a captioned
+   window narrower than ~120 px, so a 16×16 back buffer is presented inside a 120×16 surface.
+   Draws are placed through `GetDefaultViewportRect()`; `ReadBackbuffer` read physical `(x, y)`.
+   Measured: a left-half draw read back as `########........` on OpenGL33 and `................` on
+   DirectX11. It now samples the same presentation geometry at logical pixel centres, and is the
+   untouched direct copy whenever logical and physical agree. This also affected any game whose
+   window is not the size of its back buffer.
+2. **The back buffer ignored `PresentationParameters.DepthStencilFormat`** and always allocated
+   D24S8, while reporting Depth24Stencil8 as applied. So `DepthFormat::None` still depth-tested,
+   Depth24 carried a usable stencil, and depth/stencil clears on surfaces without them never threw.
+   It now allocates what was asked (render targets already did), reports it honestly, recreates it
+   on a Reset that changes it, and — because DXGI has no 24-bit depth-only format — disables the
+   stencil test while a Depth24 back buffer is bound.
+
+Fixed by those two: `StateEnumFallbackTest` 6, `StateNumericFallbackTest` 1,
+`GraphicsProfileDrawStateFormatTest` 2, `BackBufferDepthStencilContractTest` 7.
+
+**Still failing, a third and separate cause (not fixed):** 7 `BackBufferDepthStencilContractTest`
+SpriteBatch cases — `layerDepth` in depth testing, a `Begin` transform's W, near-plane clipping,
+perspective-correct interpolation, viewport depth range, float-domain source endpoints. With
+`CNA_DIRECTX11_COMPILED_EFFECTS=OFF` the D3D11 sprite path uses its own shader, whose vertex is
+`(x, y, u, v, rgba)` and whose output is `float4(ndc.x, -ndc.y, 0, 1)`: depth is always 0 and W
+always 1, so this XNA SpriteBatch semantics cannot be expressed on that path at all.
+
+**Pre-existing on DX11, unchanged:** Texture3D/TextureCube reader 6 (incomplete 3D/cube storage for
+classic formats), `UnsupportedFormatConstruction` 4 (DX11 accepts NormalizedByte2/4 and Bgra5551
+where the test expects a refusal — whether the test or the renderer is wrong is not determined),
+`VertexDeclarationLayout` 6 + `DeclarationGuard` 4 (`rendered == true` where `false` is expected;
+not analysed).
+
+### A finding that reframes the Windows full-suite numbers
+
+The full Windows run with these changes showed 104 newly failing tests. Every one of them failed
+with `DIRECTX11: initialization failed (forced by CNA_DEBUG_FAIL_RENDERER_INIT)` — and **so did
+1 214 of the 1 520 failures in the baseline run**, before any change today. They are not F24.
+
+`GraphicsRendererFallbackTest`/`GraphicsDeviceSubsystemLifecycleTest` force a renderer failure by
+setting that variable and clear it in `TearDown` with an empty string. sharp-runtime's Windows
+`Environment::SetEnvironmentVariable` writes an empty value **only** to the Win32 environment block
+(`_wputenv_s` would delete it), so the CRT copy keeps `"DIRECTX11"` — and `GraphicsDevice` reads
+the variable with `std::getenv`, i.e. from the CRT copy. From that test on, every device in the
+process fails to initialise. POSIX `setenv(name, "")` leaves nothing stale, so it is Windows-only.
+The 104 were simply tests that now run on DX11, or that a relink moved, after that point; none is
+a regression from the two fixes (the per-suite isolated runs above are clean). The real F24 GPU
+exhaustion is still genuine where it was measured, much earlier in the run (`GltfConformanceL6`).
+**Not fixed here** — it belongs to sharp-runtime.
