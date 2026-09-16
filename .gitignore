@@ -115,3 +115,8 @@ spikes/occlusion-count-spike/occlusion_count_probe
 spikes/wayland-spike/registry_dump
 spikes/wayland-spike/output_dump
 spikes/wayland-spike/remote_desktop_probe
+
+# Native-Windows validation runs (tools/platform/windows_vm_validate.sh) drop their raw
+# console logs, GoogleTest XML and dxdiag output here. The conclusions belong in
+# plans/plan_win32_native_validation.md; the raw dumps do not belong in the history.
+/reports/

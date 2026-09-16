@@ -255,6 +255,15 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     add_executable(cna_win32_directx_probe win32_directx_probe.cpp)
     target_link_libraries(cna_win32_directx_probe PRIVATE cna_platform d3d11 d3d12 dxgi)
     target_compile_options(cna_win32_directx_probe PRIVATE ${CNA_HARNESS_WARNINGS})
+
+    # --- the lifecycle stress and leak harness -------------------------------------------------
+    # plans/plan_win32_native_validation.md. Also a separate program rather than a test case, for
+    # a different reason: it asks whether ten thousand repetitions cost the process anything, which
+    # needs Windows' own USER/GDI object accounting (Wine keeps its own, so this question could not
+    # be asked before) and takes minutes rather than milliseconds.
+    add_executable(cna_win32_native_stress win32_native_stress.cpp)
+    target_link_libraries(cna_win32_native_stress PRIVATE cna_platform user32 gdi32 psapi)
+    target_compile_options(cna_win32_native_stress PRIVATE ${CNA_HARNESS_WARNINGS})
 endif()
 
 # --- MinGW runtime ------------------------------------------------------------------------------
@@ -265,7 +274,7 @@ endif()
 # so every object carries the inline std::type_info::operator== that GCC 13's mingw-w64
 # libstdc++.a also defines in tinfo.o; a static link reports it as multiply defined.
 if(MINGW)
-    foreach(_cna_target IN ITEMS cna_platform_tests cna_win32_directx_probe)
+    foreach(_cna_target IN ITEMS cna_platform_tests cna_win32_directx_probe cna_win32_native_stress)
         if(NOT TARGET ${_cna_target})
             continue()
         endif()
