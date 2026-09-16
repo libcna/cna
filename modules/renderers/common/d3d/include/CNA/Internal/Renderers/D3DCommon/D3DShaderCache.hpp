@@ -96,6 +96,10 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// Reuses Sprite2d's pixel shader. Appended last so no existing value, and no D3D12
         /// pipeline key built from one, moves.
         Sprite3d,
+        /// WINCLOSE-0015: Colored3d over a declaration with POSITION0 and no COLOR0 -- BasicEffect
+        /// with VertexColorEnabled off, which XNA draws in DiffuseColor. Reuses Colored3d's pixel
+        /// shader. Appended last for the same reason as Sprite3d.
+        Colored3dPositionOnly,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.

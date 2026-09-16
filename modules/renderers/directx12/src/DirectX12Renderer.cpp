@@ -3233,8 +3233,16 @@ namespace CNA::Internal::Renderers::DirectX12
                 variant = D3DShaderVariant::ColoredTextured3d;
             else if (hasTexCoord)
                 variant = D3DShaderVariant::Textured3d;
-            else if (hasColor || hasDeclaration)
+            else if (hasColor)
                 variant = D3DShaderVariant::Colored3d;
+            else if (hasDeclaration && !params.vertexColorEnabled)
+                // WINCLOSE-0015: XNA draws BasicEffect over POSITION0 alone in DiffuseColor.
+                // Colored3d's signature names COLOR0, so this declaration never got a pipeline.
+                variant = D3DShaderVariant::Colored3dPositionOnly;
+            else if (hasDeclaration)
+                throw std::runtime_error(
+                    "DirectX12Renderer::DrawPrimitivesEx: VertexColorEnabled requires COLOR0 in the "
+                    "vertex declaration");
             else
                 throw std::runtime_error(
                     "DirectX12Renderer::DrawPrimitivesEx: unsupported vertex stride " +

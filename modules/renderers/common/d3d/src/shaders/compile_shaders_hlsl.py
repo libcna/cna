@@ -99,6 +99,8 @@ SHADERS = [
     # WINCLOSE-0014: SpriteBatch with XNA's full vertex semantics -- layerDepth and the Begin
     # transform's depth and W. Appended, so every existing array keeps its bytes and its place.
     ("sprite3d.vert.hlsl",                     "main", "vs_5_0", "kSprite3dVertDxbc"),
+    # WINCLOSE-0015: BasicEffect over a Position-only declaration (no COLOR0 in the input signature).
+    ("colored3d.vert.hlsl",                    "main", "vs_5_0", "kColored3dPositionOnlyVertDxbc", "CNA_COLORED3D_POSITION_ONLY_INPUT"),
 ]
 
 

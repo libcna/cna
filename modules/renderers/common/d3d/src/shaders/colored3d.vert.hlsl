@@ -31,10 +31,15 @@ cbuffer FogParams : register(b1)
     float4 FogVector;      // CPU-prepared FNA view-space fog vector
 };
 
+// CNA_COLORED3D_POSITION_ONLY_INPUT is BasicEffect's plain VSBasic input: a declaration with no
+// COLOR0 is legal in XNA while VertexColorEnabled is false, but D3D refuses an input layout that
+// lacks an element the vertex shader's signature names, so that declaration needs its own DXBC.
 struct VSInput
 {
     float3 Position : POSITION0;
+#ifndef CNA_COLORED3D_POSITION_ONLY_INPUT
     float4 Color    : COLOR0;
+#endif
 };
 
 struct VSOutput
@@ -53,7 +58,11 @@ VSOutput main(VSInput input)
 
     // Mix vertex color and diffuse based on VertexColorEnabled flag (matches
     // colored_textured3d.vert.hlsl's convention for the same flag).
+#ifdef CNA_COLORED3D_POSITION_ONLY_INPUT
+    output.Color = DiffuseColor;
+#else
     output.Color = (VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor;
+#endif
 
     // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
