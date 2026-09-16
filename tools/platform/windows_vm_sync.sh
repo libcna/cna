@@ -95,7 +95,9 @@ if (-not (Test-Path \"\$d/.git\")) {
 git -C \$d fetch --quiet \$b '+refs/heads/*:refs/remotes/bundle/*'
 git -C \$d checkout --quiet --detach $head
 git -C \$d reset --quiet --hard $head
-git -C \$d clean -qfdx -e 'cmake-build-*' -e '.cna-keep' -e 'vendor' -e 'third_party'
+# .sdl-prebuilt-* is the persistent prefix the SDL sub-build installs into; wiping it on
+# every sync would mean rebuilding SDL from source each time, which is minutes, not seconds.
+git -C \$d clean -qfdx -e 'cmake-build-*' -e '.cna-keep' -e 'vendor' -e 'third_party' -e '.sdl-prebuilt-*'
 \"HEAD  = \$(git -C \$d rev-parse HEAD)\"
 \"clean = \$(( git -C \$d status --porcelain | Measure-Object ).Count -eq 0)\"
 " || die "guest-side checkout of $name failed"
