@@ -92,16 +92,57 @@ if (-not (Test-Path \"\$d/.git\")) {
 git -C \$d fetch --quiet \$b '+refs/heads/*:refs/remotes/bundle/*'
 git -C \$d checkout --quiet --detach $head
 git -C \$d reset --quiet --hard $head
-git -C \$d clean -qfdx -e 'cmake-build-*' -e '.cna-keep'
+git -C \$d clean -qfdx -e 'cmake-build-*' -e '.cna-keep' -e 'vendor' -e 'third_party'
 \"HEAD  = \$(git -C \$d rev-parse HEAD)\"
 \"clean = \$(( git -C \$d status --porcelain | Measure-Object ).Count -eq 0)\"
 " || die "guest-side checkout of $name failed"
+}
+
+# --- vendored payloads -------------------------------------------------------------------------
+# The submodule paths (vendor/googletest, third_party/SDL, ...) hold real content in this working
+# copy but are gitlinks in the history, so a bundle carries none of it and a fresh guest checkout
+# would be missing googletest entirely. They are shipped as a tar stream instead, and only when
+# their content has actually changed -- the stamp is a hash of the tree, so a re-sync of an
+# unchanged payload costs one comparison rather than a transfer.
+#
+# CNA_WIN_PAYLOADS overrides the list. The default is what a Win32 + SDL-OFF build needs and no
+# more: the SDL submodules are hundreds of megabytes that this configuration deliberately never
+# compiles.
+PAYLOADS="${CNA_WIN_PAYLOADS:-vendor/googletest}"
+
+payload_stamp() {
+  ( cd "$CNA_ROOT/$1" && find . -type f -printf '%P %s\n' 2>/dev/null | LC_ALL=C sort | sha1sum | cut -c1-40 )
+}
+
+push_payload() {
+  local rel="$1"
+  [ -d "$CNA_ROOT/$rel" ] || { say "payload $rel: not present locally, skipped"; return 0; }
+  local stamp guest_stamp
+  stamp="$(payload_stamp "$rel")"
+  guest_stamp="$("$EXEC" -- "\$p='C:/src/cna/$rel/.cna-payload-stamp'; if (Test-Path \$p) { (Get-Content \$p -Raw).Trim() } else { '' }" 2>/dev/null | tr -d '\r' | tail -1)"
+  if [ "$stamp" = "$guest_stamp" ]; then
+    say "payload $rel: already current ($stamp)"
+    return 0
+  fi
+  say "payload $rel: shipping ($(du -sh "$CNA_ROOT/$rel" | cut -f1))"
+  tar -C "$CNA_ROOT" -czf "$WORK/payload.tgz" "$rel" || die "could not archive $rel"
+  win_exec "New-Item -ItemType Directory -Force -Path C:/cna/payloads | Out-Null" >/dev/null
+  "$EXEC" --push "$WORK/payload.tgz" "C:/cna/payloads/payload.tgz" >/dev/null || die "scp of $rel failed"
+  win_exec "
+\$ErrorActionPreference = 'Stop'
+Remove-Item -Recurse -Force 'C:/src/cna/$rel' -ErrorAction SilentlyContinue
+tar -xzf C:/cna/payloads/payload.tgz -C C:/src/cna
+Set-Content -Path 'C:/src/cna/$rel/.cna-payload-stamp' -Value '$stamp'
+\"$rel = \$((Get-ChildItem -Recurse -File 'C:/src/cna/$rel' | Measure-Object).Count) files\"
+" || die "guest-side extraction of $rel failed"
+  rm -f "$WORK/payload.tgz"
 }
 
 sync_one cna "$CNA_ROOT" "C:/src/cna"
 if [ "${1:-}" != "--cna-only" ]; then
   sync_one sharp-runtime "$SR_ROOT" "C:/src/sharp-runtime"
 fi
+for p in $PAYLOADS; do push_payload "$p"; done
 
 rm -rf "$WORK"
 say "done"

@@ -53,6 +53,16 @@
 #include <psapi.h>
 #include <tlhelp32.h>
 
+// docs/platform-win32.md, "what a host must undo": <windows.h> defines CreateWindow, MessageBox,
+// CreateDirectory and GetClassName as macros that rewrite any identically named identifier to its
+// A/W variant. IPlatform::CreateWindow is one of those names, so without this every call below
+// would be compiled as a call to a member function called CreateWindowA that does not exist. That
+// is precisely the hazard the documentation tells hosts about, and this harness is a host.
+#undef CreateWindow
+#undef CreateDirectory
+#undef MessageBox
+#undef GetClassName
+
 namespace
 {
     using CNA::Platform::IPlatform;
@@ -310,7 +320,11 @@ namespace
         auto window = platform.CreateWindow(Described("stress title"));
         // Non-ASCII on purpose: every iteration is a UTF-8 -> UTF-16 -> UTF-8 round trip through
         // the real Windows title, and a conversion that allocates and forgets shows up here.
-        const std::string base = u8"stress část — \U0001F300 ";
+        // A plain narrow literal, not u8"": since C++20 that would be char8_t[] and would not
+        // convert to std::string. The source is UTF-8 and both toolchains are told so, so these
+        // bytes reach Windows as UTF-8 either way -- and the escapes keep the encoding of this
+        // file from being the thing under test.
+        const std::string base = "stress \xC4\x8D\xC3\xA1st \xE2\x80\x94 \xF0\x9F\x8C\x80 ";
         for (int i = 0; i < iterations; ++i)
         {
             const std::string title = base + std::to_string(i);

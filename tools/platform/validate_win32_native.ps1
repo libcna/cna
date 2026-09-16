@@ -51,14 +51,9 @@ $script:failed  = 0
 function Add-Result([string] $Check, [string] $Outcome, [string] $Detail) {
     $script:results.Add([pscustomobject]@{ check = $Check; outcome = $Outcome; detail = $Detail })
     if ($Outcome -eq 'FAIL') { $script:failed++ }
-    $colour = switch ($Outcome) {
-        'PASS'        { 'Green' }
-        'FAIL'        { 'Red' }
-        'NOT-RUN'     { 'Yellow' }
-        'ENVIRONMENT' { 'Cyan' }
-        default       { 'Gray' }
-    }
-    Write-Host ('{0,-12} {1,-34} {2}' -f $Outcome, $Check, $Detail) -ForegroundColor $colour
+    # Write-Output, never Write-Host: this script's stdout is a pipe back to Linux, and
+    # PowerShell serialises host writes as CLIXML into it.
+    Write-Output ('{0,-12} {1,-34} {2}' -f $Outcome, $Check, $Detail)
 }
 
 function Want([string] $step) {
@@ -328,10 +323,10 @@ function Step-NoSdl([string] $buildDir) {
 
 # ================================================================= run
 
-Write-Host ''
-Write-Host "CNA Win32 native validation -- $(Get-Date -Format s) on $env:COMPUTERNAME" -ForegroundColor White
-Write-Host ("source=$SourceDir  build=$BuildRoot  out=$OutDir  steps=" + ($Steps -join ',')) -ForegroundColor DarkGray
-Write-Host ''
+Write-Output ''
+Write-Output "CNA Win32 native validation -- $(Get-Date -Format s) on $env:COMPUTERNAME"
+Write-Output ("source=$SourceDir  build=$BuildRoot  out=$OutDir  steps=" + ($Steps -join ','))
+Write-Output ''
 
 if (Want 'environment') { Step-Environment }
 
@@ -435,7 +430,6 @@ $lines += @('', '## Still to be checked by a person', '',
     'real application -- are not in this script and are recorded there.')
 $lines | Set-Content -LiteralPath (Join-Path $OutDir 'report.md') -Encoding UTF8
 
-Write-Host ''
-Write-Host ("report: $(Join-Path $OutDir 'report.md')  --  $script:failed FAIL") `
-           -ForegroundColor $(if ($script:failed) { 'Red' } else { 'Green' })
+Write-Output ''
+Write-Output ("report: $(Join-Path $OutDir 'report.md')  --  $script:failed FAIL")
 exit $(if ($script:failed -gt 0) { 1 } else { 0 })
