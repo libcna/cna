@@ -473,3 +473,63 @@ One row per **root cause**, not per manifestation.
 recorded and declined to paper over. Fixing it properly needs a program that echoes its `argv`
 without a shell re-parsing it — routing through `cmd.exe` would test cmd's quoting rather than
 `RunHostProcess`'s — and that is its own piece of work, not a side effect of this one.
+
+## 11. Final report
+
+### Git
+
+| | |
+|---|---|
+| Baseline branch / SHA | `win32-native-validation` / `db7852c6eff5d49e37be0f2e90c167801e9bec16` |
+| This branch | `windows-portability` |
+| sharp-runtime | `33da53f5` → `ef75cd18a47351e89e6c76d610c049ccb2e89c6e` (one focused commit) |
+| Authorship | every commit `Robert Vokac <robertvokac@robertvokac.com>`, author **and** committer, both repositories |
+| Attribution scan | zero matches for claude / anthropic / co-authored-by / generated-by / assisted-by |
+| Push status | **not pushed**; `next` untouched; no history rewritten; no force-push |
+
+### Path architecture
+
+Three rules, in `docs/filesystem-path-model.md`:
+
+1. `std::filesystem::path` is what touches the filesystem, carried **native** all the way to the
+   call. Nothing is narrowed in order to open, stat, create, enumerate or delete.
+2. A narrow `std::string` holding a path means **UTF-8** — public API, logs, manifests, serialized
+   references, map keys — and is converted back to a `path` before it touches the filesystem again.
+3. `path::string()` and `path::generic_string()` are never how CNA obtains path text.
+
+`PathToUtf8` keeps the path's own separators (display, logs, a string that will be widened again);
+`PathToGenericUtf8` spells them `/` (identities, keys, anything another platform reads);
+`PathFromUtf8` is the exact inverse of both; `TryPathFromUtf8` is the total form for untrusted
+input; `IsWellFormedUtf8` lets a public boundary refuse deterministically.
+
+Serialization did **not** change: what was generic-form text stayed generic-form text, and the
+`XnbWriter` refusal of non-UTF-8 external references was restored after the migration briefly
+removed it. Logging is UTF-8 in the path's own spelling. Third-party boundaries are met per library
+against that library's own source, and five libraries were checked and deliberately left alone.
+
+### F30
+
+| | |
+|---|---|
+| Sites a `.string()` search finds (production) | **210** — not the inherited 165, which missed `modules/renderers/` |
+| Of those, already correct before this work | ~100 (the canonical pipeline's `ContentPath*` helpers) |
+| Of those, category I, deliberately unchanged | ~50 (`/dev/input/eventN`, `/proc/self/comm`, `"."`, hashes, extensions) |
+| Sites a `.string()` search **cannot** find | the larger half — the narrow `path(std::string)` constructor and the narrow `ifstream`/`exists`/`create_directories` overloads |
+| Modules changed | core, platform, runtime, storage, gamer-services, content, content-pipeline, media, audio, graphics, plus sharp-runtime's `io` |
+
+The number that matters is not how many calls were replaced. `StandardFileSystem::TryLoadFile` —
+the platform's primary asset read — and `RefreshContentManifest` both contained **no `.string()`
+at all** and were both completely broken for a non-ASCII path.
+
+### Unicode evidence
+
+Tested path classes, each as a directory component *and* a filename, each proved by reading a known
+payload back out of the file rather than by comparing rendered text: ASCII, spaces, Latin-1 (`café`),
+Czech (`žluťoučký`), a combining sequence (`e`+U+0301), its precomposed twin (`étude`), Cyrillic
+(`кириллица`), Japanese (`日本語`), Chinese (`中文`), emoji (U+1F600, a surrogate pair), and a mixed
+string containing four scripts at once.
+
+Also measured: malformed UTF-8 at the conversion boundary (11 classes), Windows path semantics
+(`is_absolute`, `root_name`, `root_directory`, drive-relative, UNC, `lexically_normal`), and
+`MAX_PATH` behaviour with `LongPathsEnabled=0`. Long paths are recorded as a **separate** concern,
+not claimed as solved by the Unicode work.
