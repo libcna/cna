@@ -737,8 +737,9 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 
 TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract)
 {
-    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
-        GTEST_SKIP() << "the audited volume capability belongs to Software and EasyGL";
+    // WINCLOSE-0013: DirectX11's ClassifyTexture3DFormatEXT states this same contract.
+    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11))
+        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL and DirectX11";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -754,6 +755,15 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
              SurfaceFormat::HdrBlendable})
     {
         SCOPED_TRACE(static_cast<int>(format));
+        // WINCLOSE-0016: DirectX11 verifies the optional B4G4R4A4_UNORM per device, and a device
+        // that does not keep its texels refuses Bgra4444 -- loudly, which is the contract too.
+        if (CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
+            device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)) ==
+                RendererFormatVerdict::Unsupported)
+        {
+            EXPECT_THROW(Texture3D(device, 2, 2, 2, false, format), System::NotSupportedException);
+            continue;
+        }
         EXPECT_EQ(device.GetRenderer().ClassifyTexture3DFormatEXT(
                       static_cast<int>(format)),
                   RendererFormatVerdict::Supported);

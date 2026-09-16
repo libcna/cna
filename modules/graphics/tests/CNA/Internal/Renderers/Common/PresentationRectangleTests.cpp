@@ -70,8 +70,10 @@ namespace
     /// in the set now and passes the same 5/5 the other renderers do.
     [[nodiscard]] bool HasVirtualResolution()
     {
+        // WINCLOSE-0020: DirectX11 computes the same rectangle through ComputeD3DPresentationGeometry
+        // and letterboxes its readback with it (WINCLOSE-0012).
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, OpenGL2, SdlGpu,
-                               WebGPU);
+                               WebGPU, DirectX11);
     }
 
     [[nodiscard]] std::string RendererName()

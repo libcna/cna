@@ -833,13 +833,20 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreExact)
 {
-    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
+    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11))
         GTEST_SKIP() << "The active renderer has not promoted packed-16 Texture2D storage";
 
     using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
     ExpectPacked16TransferContract<Bgr565>(gd, SurfaceFormat::Bgr565);
     ExpectPacked16TransferContract<Bgra5551>(gd, SurfaceFormat::Bgra5551);
-    ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
+    // WINCLOSE-0016: on DirectX11, B4G4R4A4_UNORM is optional and verified per device; a device
+    // that does not keep its texels refuses the format at construction instead.
+    if (CNA_RENDERER_IS(DirectX11) &&
+        gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
+            CNA::Internal::Renderers::RendererFormatVerdict::Unsupported)
+        EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Bgra4444), std::runtime_error);
+    else
+        ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialAndMipTransfersAreExact)

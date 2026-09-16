@@ -198,7 +198,8 @@ namespace
 
     [[nodiscard]] bool IsCampaignRenderer()
     {
-        return CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+        // WINCLOSE-0020: DirectX11 stores all three as native DXGI render-target formats.
+        return CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11);
     }
 
     [[nodiscard]] bool HasCompleteNormalizedTargetMatrix(const GraphicsDevice& device)
