@@ -296,6 +296,18 @@ after CNA's wrapper is destroyed.
 
 ---
 
+### The Linux baseline, so a Windows number can be read against something
+
+`CnaContentTests` has **13 failures on Linux at the baseline commit `4cf33c2b`**, unrelated to this
+workstream: `CnbTextureContentManagerTest` (2), `CnbTextureCubeProducerTest`,
+`CnjCapabilityMatrixTest`, `CnjEffectTest`, `CnjStockEffectTest`, `CnjTexture3DTest`,
+`ContentManagerSkinnedModelTest` (3) and their duplicates in the summary. Measured twice — once
+with this branch's sources and once after checking the three touched files back out to the
+baseline — and the same 13 fail both ways.
+
+Recorded because a Windows run of the same suite will show them too, and a reader who does not know
+they predate this branch would attribute them to it.
+
 ### The host-ownership promises, measured
 
 `docs/platform-win32.md` says the backend never touches process-global policy. Captured before the
