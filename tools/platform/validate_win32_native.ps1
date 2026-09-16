@@ -45,6 +45,25 @@ $ProgressPreference    = 'SilentlyContinue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 
+# powershell -File binds "a,b,c" to a [string[]] parameter as ONE string, not three -- which is
+# how this script is invoked by windows_vm_validate.sh, and how a first run silently executed no
+# steps at all and still reported success. Normalised here so both spellings work.
+$Steps = @($Steps | ForEach-Object { $_ -split '\s*,\s*' } | Where-Object { $_ })
+if ($Steps.Count -eq 0) { $Steps = @('all') }
+
+$KnownSteps = @('all','environment','toolchain','source','standalone','platform-tests','directx',
+                'stress','full','cnatests','ctest','nosdl')
+$unknown = @($Steps | Where-Object { $KnownSteps -notcontains $_ })
+if ($unknown.Count -gt 0) {
+    Write-Output ("validate_win32_native: unknown step(s): {0}" -f ($unknown -join ', '))
+    Write-Output ("known steps: {0}" -f ($KnownSteps -join ', '))
+    exit 2
+}
+
+# Not $false: "this is not a virtual machine" is a claim, and the report must not make it before
+# the environment step has looked.
+$script:isVirtual = $null
+
 $script:results = New-Object System.Collections.Generic.List[object]
 $script:failed  = 0
 
@@ -416,7 +435,9 @@ foreach ($o in @('PASS','FAIL','NOT-RUN','ENVIRONMENT','INFO')) {
 $lines = @(
     '# CNA Win32 native validation', '',
     "Recorded $(Get-Date -Format s) on ``$env:COMPUTERNAME``.", '',
-    $(if ($script:isVirtual) {
+    $(if ($null -eq $script:isVirtual) {
+        'Whether this machine is virtual was **not determined** -- the environment step did not run.'
+    } elseif ($script:isVirtual) {
         'This **is** native Windows, inside a virtual machine. The Windows API, the message loop, ' +
         'the clipboard, the shell and the MSVC ABI are the real ones. The **GPU is virtual**: ' +
         'Direct3D, WGL and Vulkan results below describe the VM''s virtual adapter and are not ' +
