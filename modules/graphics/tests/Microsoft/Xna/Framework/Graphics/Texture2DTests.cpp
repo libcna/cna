@@ -374,7 +374,7 @@ namespace
 
 TEST(Texture2DTest, SetDataSourceWindowOverloadCoversLogicalAndRawValueTypes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
 
     GraphicsDevice device;
 

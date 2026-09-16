@@ -140,7 +140,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx,
-                           Vulkan, WebGPU, Software, SdlGpu, Wicked);
+                           Vulkan, WebGPU, Software, SdlGpu, Wicked, DirectX11);
 }
 
 /// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?
