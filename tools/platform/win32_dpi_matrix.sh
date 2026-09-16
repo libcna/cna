@@ -66,7 +66,7 @@ for scale in "${SCALES[@]}"; do
 \$ProgressPreference='SilentlyContinue'
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 & C:\src\cna\tools\platform\win32_run_interactive.ps1 \`
-    -Exe '$HARNESS' -Arguments @('--check','dpi','--check','displays') \`
+    -Exe '$HARNESS' -Arguments @('--dpi-aware','--check','dpi','--check','displays','--check','host-ownership') \`
     -WorkingDirectory 'C:\cna\build\win32-standalone' \`
     -Name 'dpi-$scale' -TimeoutSeconds 300
 "harness exit: \$LASTEXITCODE"
