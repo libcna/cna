@@ -101,6 +101,8 @@ SHADERS = [
     ("sprite3d.vert.hlsl",                     "main", "vs_5_0", "kSprite3dVertDxbc"),
     # WINCLOSE-0015: BasicEffect over a Position-only declaration (no COLOR0 in the input signature).
     ("colored3d.vert.hlsl",                    "main", "vs_5_0", "kColored3dPositionOnlyVertDxbc", "CNA_COLORED3D_POSITION_ONLY_INPUT"),
+    # WINCLOSE-0019: Sprite3d's own pixel shader, with Direct3D 9's one/two-channel expansion.
+    ("sprite3d.frag.hlsl",                     "main", "ps_5_0", "kSprite3dFragDxbc"),
 ]
 
 

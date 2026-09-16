@@ -83,6 +83,9 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11InputLayout* GetOrCreateSprite3DInputLayout();
         ID3D11Buffer* GetOrCreatePerDrawBuffer();
         ID3D11Buffer* GetOrCreateMatrixBuffer();
+        /// WINCLOSE-0019: sprite3d.frag.hlsl's ChannelExpansion buffer, rewritten only when the
+        /// batch texture's SurfaceFormat changes the Direct3D 9 expansion it needs.
+        ID3D11Buffer* GetChannelExpansionBuffer(int surfaceFormat);
         /// The pending batch as CPU-transformed 2D vertices, for the custom-effect paths.
         const std::vector<Sprite2DVertex>& TransformedSprite2DVertices();
         void GetCurrentViewportSize(float& width, float& height) const;
@@ -102,6 +105,8 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11InputLayout> sprite3DInputLayout_;
         ComPtr<ID3D11Buffer> perDrawBuffer_;
         ComPtr<ID3D11Buffer> matrixBuffer_;
+        ComPtr<ID3D11Buffer> channelExpansionBuffer_;
+        int channelExpansionChannels_ = -1;
 
         std::vector<SpriteVertex> pendingVertices_;
         std::vector<Sprite2DVertex> transformedVertices_;

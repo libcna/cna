@@ -13,6 +13,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -239,6 +240,59 @@ namespace CNA::Internal::Renderers::DirectX11
         return matrixBuffer_.Get();
     }
 
+    ID3D11Buffer* D3D11SpriteBatchRenderer::GetChannelExpansionBuffer(int surfaceFormat)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // Direct3D 9's expansion, by the stored format's channel count (EasyGL's table). Every
+        // other format stores four channels, or is Alpha8, which both APIs expand as (0, 0, 0, A).
+        int channels = 4;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Single:
+            case SurfaceFormat::HalfSingle:
+                channels = 1;
+                break;
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::Rg32:
+                channels = 2;
+                break;
+            default:
+                break;
+        }
+
+        if (!channelExpansionBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = 32; // float4 ChannelMask, float4 ChannelFill
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            if (FAILED(device_->CreateBuffer(&desc, nullptr,
+                                             channelExpansionBuffer_.ReleaseAndGetAddressOf())))
+                return nullptr;
+            channelExpansionChannels_ = -1;
+        }
+        if (channels != channelExpansionChannels_)
+        {
+            float values[8] = {1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+            for (int channel = channels; channel < 4; ++channel)
+            {
+                values[channel] = 0.0f;
+                values[4 + channel] = 1.0f;
+            }
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            if (FAILED(context_->Map(channelExpansionBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0,
+                                     &mapped)))
+                return nullptr;
+            std::memcpy(mapped.pData, values, sizeof(values));
+            context_->Unmap(channelExpansionBuffer_.Get(), 0);
+            channelExpansionChannels_ = channels;
+        }
+        return channelExpansionBuffer_.Get();
+    }
+
     const std::vector<D3D11SpriteBatchRenderer::Sprite2DVertex>&
     D3D11SpriteBatchRenderer::TransformedSprite2DVertices()
     {
@@ -324,10 +378,16 @@ namespace CNA::Internal::Renderers::DirectX11
                 context_->Unmap(cb, 0);
             }
 
+            ID3D11Buffer* channelExpansion = GetChannelExpansionBuffer(
+                currentTexture_ != nullptr ? currentTexture_->GetSurfaceFormatEXT() : 0);
+            if (!channelExpansion)
+                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to prepare the sprite3d channel expansion buffer");
+
             context_->IASetInputLayout(layout);
             context_->VSSetShader(vs.Get(), nullptr, 0);
             context_->PSSetShader(ps.Get(), nullptr, 0);
             context_->VSSetConstantBuffers(0, 1, &cb);
+            context_->PSSetConstantBuffers(0, 1, &channelExpansion);
 
             vb3d_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
                           sizeof(SpriteVertex));

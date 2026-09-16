@@ -63,7 +63,8 @@ namespace
     /// The renderers whose SpriteBatch rasterizes and whose RenderTarget2D::GetData reads back.
     [[nodiscard]] bool SpriteBatchRasterizes()
     {
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, OpenGL4, SdlGpu, Software);
+        // WINCLOSE-0019: DirectX11's stock sprite pixel shader applies the same expansion.
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, OpenGL4, SdlGpu, Software, DirectX11);
     }
 
     class SingleChannelExpansionTest : public ::testing::Test
