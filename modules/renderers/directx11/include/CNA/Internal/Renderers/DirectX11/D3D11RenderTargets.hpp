@@ -87,6 +87,29 @@ namespace CNA::Internal::Renderers::DirectX11
 
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
+        /**
+         * @brief Stores a whole level-0 image in this target's declared format.
+         *
+         * WINCLOSE-0025. RenderTarget2D is a Texture2D, and Texture2D::SetData hands its result to
+         * these two hooks. They were ITextureRenderer's empty defaults here, so SetData on a
+         * DirectX11 render target returned normally and stored nothing -- the next GetData read
+         * whatever the GPU texture held before. The texels go into GetSampleableTextureEXT(), the
+         * resource GetData reads and a shader samples.
+         *
+         * @param data   Tightly packed rows of format-native texels, top row first.
+         * @param stride Bytes per source row; the target's own row size when zero or negative.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+        /**
+         * @brief Stores a whole mip level in this target's declared format.
+         *
+         * @param level  Mip level to replace.
+         * @param data   Tightly packed rows of format-native texels, top row first.
+         * @param levelW Width of that level, in texels.
+         * @param levelH Height of that level, in texels.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
+
         /// DX-143: the real MSAA-resolve/mip-regeneration work UnbindAsRenderTarget() does,
         /// extracted so DirectX11Renderer::SetRenderTargets()'s MRT (N>1) path can finalize
         /// each bound target individually when the MRT set itself is replaced/unbound, without

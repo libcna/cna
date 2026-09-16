@@ -226,6 +226,34 @@ namespace CNA::Internal::Renderers::DirectX11
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
+    void D3D11RenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        if (!context_ || data == nullptr)
+            return;
+        ID3D11Texture2D* const target = GetSampleableTextureEXT();
+        if (target == nullptr)
+            return;
+        const UINT rowPitch = stride > 0 ? static_cast<UINT>(stride)
+                                         : static_cast<UINT>(width_ * bytesPerTexel_);
+        context_->UpdateSubresource(target, 0, nullptr, data, rowPitch,
+                                    rowPitch * static_cast<UINT>(height_));
+    }
+
+    void D3D11RenderTargetRenderer::UpdatePixelsLevel(int level, const uint8_t* data,
+                                                      int levelW, int levelH)
+    {
+        if (!context_ || data == nullptr || level < 0 || level >= levelCount_)
+            return;
+        if (levelW != std::max(1, width_ >> level) || levelH != std::max(1, height_ >> level))
+            return;
+        ID3D11Texture2D* const target = GetSampleableTextureEXT();
+        if (target == nullptr)
+            return;
+        const UINT rowPitch = static_cast<UINT>(levelW * bytesPerTexel_);
+        context_->UpdateSubresource(target, static_cast<UINT>(level), nullptr, data, rowPitch,
+                                    rowPitch * static_cast<UINT>(levelH));
+    }
+
     bool D3D11RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
