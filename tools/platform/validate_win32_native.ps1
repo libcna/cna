@@ -305,17 +305,25 @@ function Invoke-Interactive([string] $Name, [string] $Exe, [string[]] $Arguments
     return $LASTEXITCODE
 }
 
-function Invoke-GTest([string] $Check, [string] $Exe, [string[]] $ExtraArgs = @(), [int] $Timeout = 0) {
+function Invoke-GTest([string] $Check, [string] $Exe, [string[]] $ExtraArgs = @(), [int] $Timeout = 0,
+                     [string] $WorkDir = '') {
     if (-not (Test-Path $Exe)) { Add-Result $Check 'NOT-RUN' "$Exe was not built"; return }
     if ($Timeout -le 0) { $Timeout = $TimeoutSeconds }
+    # The working directory is part of the measurement, not a detail. A large part of the suite
+    # names its fixtures relative to the repository root ("tests/assets/media/..."), and the build
+    # tree holds only the generated ones -- so running from the build directory fails hundreds of
+    # tests for want of a file rather than for any defect, and the result is not comparable with
+    # the Linux run, which is measured from the repository root. Callers that need the repository
+    # root pass it; the rest keep the binary's own directory.
+    if (-not $WorkDir) { $WorkDir = Split-Path $Exe -Parent }
     $xml  = Join-Path $OutDir "$Check.xml"
     $code = Invoke-Interactive "gtest-$Check" $Exe (@("--gtest_output=xml:$xml") + $ExtraArgs) `
-                               (Split-Path $Exe -Parent) $Timeout
+                               $WorkDir $Timeout
     if ($null -eq $code) {
         # No launcher: fall back to this session, and say so, because the result means less.
         Add-Result "$Check.session" 'INFO' 'run in session 0 -- no interactive launcher found'
         $code = Invoke-Logged "gtest-$Check" $Exe (@("--gtest_output=xml:$xml") + $ExtraArgs) `
-                              (Split-Path $Exe -Parent) $Timeout
+                              $WorkDir $Timeout
     }
     $summary = ''
     if (Test-Path $xml) {
@@ -429,7 +437,7 @@ if ($toolchainOk -and $sourceOk) {
     if (Want 'full') {
         if (Invoke-Configuration ($script:Configurations | Where-Object Name -eq 'full-win32-d3d11-nosdl')) {
             if (Want 'cnatests') {
-                Invoke-GTest 'cnatests' (Join-Path $fullBuild 'CnaTests.exe') @() 5400
+                Invoke-GTest 'cnatests' (Join-Path $fullBuild 'CnaTests.exe') @() 5400 $SourceDir
             }
             if (Want 'ctest') {
                 $code = Invoke-Logged 'ctest' 'ctest' @('--test-dir', $fullBuild, '--output-on-failure', '-j', '2') $SourceDir 5400
