@@ -561,3 +561,44 @@ Also measured: malformed UTF-8 at the conversion boundary (11 classes), Windows 
 (`is_absolute`, `root_name`, `root_directory`, drive-relative, UNC, `lexically_normal`), and
 `MAX_PATH` behaviour with `LongPathsEnabled=0`. Long paths are recorded as a **separate** concern,
 not claimed as solved by the Unicode work.
+
+## 12. Windows, after every fix — WINPORT-0015 final
+
+```
+                              baseline      first run      final
+tests                             8136           8174        8187
+failures                          1537           1585        1581
+  F24 D3D11 cascade               1480           1536        1536
+  also failing on Linux             13             12          12
+  genuinely Windows-only            44             37          33
+```
+
+Gone between the first run and the final one: `UnicodeContentRootTest` (9 — the empty-manifest
+defect, WINPORT-F3), `UnicodeTree` (1 — a defect in the test itself), `XnbWriterInputFuzzTest`
+(1 — the refusal this branch briefly removed), and two `CaseInsensitivePathTest` assertion defects.
+
+### The 33, by root cause
+
+| Root cause | Tests | |
+|---|---|---|
+| **F31** — POSIX hardcoded in tests: `/bin/echo`, `>/dev/null`, a stub encoder that is not a PE | **18** | inherited; `CnbGltfDirectToolTest` 7, `XmaEncoderService` 4, `HostProcessTest` 4, `LargeModelScalingTest` 3 |
+| **F26** — case resolution on a case-insensitive filesystem | 2 | inherited divergence, deliberately not "fixed", and each test now says so in a comment |
+| Windows text mode (`"hello\r"`) — the `WINNATIVE-F27` class | 3 | `XnaPipelineBridge` 2, `XnaContentImporter` 1. Not a path defect |
+| This VM has no FreeType, so the font pipeline is off | 4 | `SpriteFontFamilyResolutionTest` 2, `XnaContentProjectCommandLine` 1, `XnaErrorParityTest` 1. Configuration, not a defect |
+| `StandardFileSystemTests` | 1 | **fixed** by the sharp-runtime `Environment` commit (WINPORT-F4); not in this run's build |
+| `XnaDifferentialBuildTest` | 1 | **not comparable** — excluded from the Linux run, so it has no baseline to be "Windows-only" against |
+| `ContentPipelineCoreTest` — `@shared/folder\escape.bin` | 1 | Windows treats `\` as a separator, so the path is *contained*, not an escape. Analysed: **not a containment breach**, and the backslash normalisation is unchanged from before this branch |
+| `CnaInputClipboardTest` | 1 | clipboard state, not a path |
+| `SongTest` — a `file://remotehost/...` URI | 1 | Phase 21, UNC. Genuinely Windows-only; open |
+| | **33** | |
+
+**Of the 33, 18 are F31 and 4 are a missing optional dependency**, neither of which is a Windows
+portability defect in CNA. What is left that is genuinely open and genuinely CNA's is **three
+text-mode tests, one UNC case, and one backslash-semantics question** — plus the two divergences
+that are recorded on purpose.
+
+Fixing F31 properly needs a program that echoes its `argv` without a shell re-parsing it — routing
+through `cmd.exe` would test cmd's quoting rather than `RunHostProcess`'s — and the finding to carry
+forward is unchanged and more important than the count: **`RunHostProcess` has a Windows
+`CreateProcess` path with no test behind it**, on a project that ships a content pipeline which
+shells out.
