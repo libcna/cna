@@ -653,3 +653,32 @@ tools/platform/windows_vm_validate.sh         # configure, build, test, collect 
 
 `windows_vm_validate.sh` does all three and copies `report.md`/`summary.json` back into
 `reports/win32-native/<timestamp>/` (gitignored — the conclusions belong in this file).
+
+The individual instruments, each runnable on its own once the guest is synced:
+
+| Tool | What it does |
+|---|---|
+| `windows_vm_exec.sh` | one command in the guest over SSH; `--stdin`, `--push`, `--pull`, `--reboot`, `--start` |
+| `windows_vm_sync.sh` | this exact commit into `C:\src\cna` by git bundle; `CNA_WIN_PAYLOADS` ships gitlink trees |
+| `win32_run_interactive.ps1` | runs a program on **WinSta0\Default** via a scheduled task with an interactive token |
+| `win32_build_sdl_prebuilt.ps1` | builds SDL3 (`-Version 3`, default) or SDL 2.30.11 (`-Version 2`) into the shared prefix |
+| `win32_standalone_suite.ps1` | `-Platform WIN32\|SDL3\|SDL2\|HEADLESS` — configure, build and run the platform harness |
+| `win32_asan_build.ps1` | the harness under MSVC's AddressSanitizer; `-Run` also runs stress and desktop checks |
+| `win32_dpi_matrix.sh` | sets `LogPixels`, reboots, measures, and restores the original scaling on exit |
+| `win32_clipboard_interop.ps1` | drives Notepad's edit control to check the clipboard against a real application |
+| `win32_soak.ps1` | the long-running lifecycle soak |
+
+Two of these encode a lesson rather than a convenience, and changing them back would re-open a
+defect this workstream already paid for: `win32_dpi_matrix.sh` **rebuilds the harness in the guest
+first** (the sync ships source, not binaries, and two runs silently measured a stale executable),
+and `windows_vm_sync.sh` **excludes `.sdl-prebuilt-*` from its `git clean`** (F20).
+
+Everything the guest builds lives under `C:\cna\build\`, outside the repository, so a sync's
+`git clean -x` cannot reach it and an incremental rebuild stays incremental:
+
+```
+C:\cna\build\full-win32-d3d11-nosdl   the whole framework + CnaTests, WIN32 + DIRECTX11, SDL off
+C:\cna\build\win32-standalone[-asan]  the standalone platform harness, plain and sanitized
+C:\cna\build\std-{sdl3,sdl2,headless} the harness for the other platform selections
+C:\cna\build\{sdl3,sdl2}              the SDL sub-builds that install into the shared prefix
+```
