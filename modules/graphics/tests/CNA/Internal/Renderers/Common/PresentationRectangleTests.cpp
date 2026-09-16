@@ -27,6 +27,7 @@
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
@@ -414,6 +415,27 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
         device.GetBackBufferData(&region, &pixel, 0, 1);
         return pixel;
     };
+
+    // WINCLOSE-0032: DirectX11's GetBackBufferData returns the LOGICAL back buffer, sampled through
+    // the presentation rectangle (WINCLOSE-0012) -- the game's own pixels, which is what XNA's
+    // GetBackBufferData means for a letterboxed game -- where the renderers above read raw physical
+    // drawable pixels. So probe it through its own contract. A sprite covering the whole logical
+    // area must read back as ink at the logical centre AND at the far logical corner: the corner
+    // placement this test exists to catch leaves that corner at the clear colour. The bars have no
+    // logical pixels, so they are not readable here.
+    if (CNA_RENDERER_IS(DirectX11))
+    {
+        for (const auto& [x, y] : {std::pair{virtualSize / 2, virtualSize / 2},
+                                   std::pair{virtualSize - 1, virtualSize - 1}})
+        {
+            const Color logical = read(x, y);
+            EXPECT_NEAR(logical.getRProperty(), ink.getRProperty(), 12)
+                << RendererName() << " logical (" << x << ',' << y << ") read ("
+                << int(logical.getRProperty()) << ',' << int(logical.getGProperty()) << ','
+                << int(logical.getBProperty()) << "); the sprite does not cover the logical area";
+        }
+        return;
+    }
     // Where public readback reports pixels matching the sprite ink, so a failure has useful spatial
     // evidence instead of only saying the expected pixel was empty. Match the ink itself rather
     // than merely "not clear": a failed out-of-range backend read can leave a zero-filled transfer
