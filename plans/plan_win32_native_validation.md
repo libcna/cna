@@ -1,6 +1,7 @@
 # CNA Win32 backend — native Windows validation and hardening
 
-> **Status: IN PROGRESS.** This workstream takes the `CNA_PLATFORM=WIN32` backend that
+> **Status: COMPLETE for what it set out to do — see §5 for what is proved, what is environment,
+> and what is explicitly not done.** This workstream takes the `CNA_PLATFORM=WIN32` backend that
 > [`plan_win32.md`](plan_win32.md) built and validated *under Wine on Linux*, and re-establishes
 > every one of its claims on **real Windows 10 with the real Microsoft toolchain**. Where Wine and
 > Windows disagree, Windows is authoritative and the difference is a defect to fix, not a note to
@@ -1047,6 +1048,94 @@ in front of a real modal dialog, so what is proved is that they refuse and retur
 that a user can dismiss one.
 
 ---
+
+---
+
+## 5. Final report
+
+### What kind of evidence this is
+
+Three categories, never mixed:
+
+**NATIVE WINDOWS API VALIDATION — done.** `user32`, `gdi32`, `ole32`, `shell32`, the real message
+loop, the real clipboard, the real window-station and session model, the real MSVC ABI and CRT.
+A VM does not weaken any of this; it *is* Windows, running Microsoft's own binaries. Everything in
+§3 about windows, DPI, input, the clipboard, COM lifetime, host ownership and the toolchain belongs
+here.
+
+**VIRTUAL GPU VALIDATION — done, and worth exactly what it is worth.** D3D11, D3D12 and WGL here go
+through VBoxSVGA and the guest's Mesa SVGA3D stack. That a CNA `HWND` carries a D3D11 device, a swap
+chain and presented frames is real integration evidence. It is **not** evidence about a physical
+Windows GPU driver, and the two D3D-shaped unknowns left open (F24, F29) are both on this side of
+the line.
+
+**PHYSICAL WINDOWS GPU VALIDATION — NOT DONE.** No part of this workstream ran on a physical Windows
+machine with a vendor GPU driver. Nothing here says anything about how CNA behaves on a Radeon 780M,
+or any other real adapter, under its real Windows driver. The D3D11 refusal in F24 in particular
+must **not** be read as a statement about Direct3D on real hardware, and the leak in F18 is the
+virtual adapter's.
+
+### The numbers
+
+| | Native Windows | Linux, same commit |
+|---|---|---|
+| Whole suite | 8136 · **1537 failures** · 195 skipped | 8939 · **25 failures** · 479 skipped |
+| minus the F24 D3D11 cascade (1 480) | **57** | — |
+| minus failures Linux has too (13) | **44 genuinely Windows-only** | — |
+| Win32-specific suites | **199 tests · 1 failure · 2 skips** | n/a |
+| Standalone platform harness | 389 · 386 pass · 3 skip · **0 fail** | — |
+| HEADLESS / SDL3 / SDL2 harness | 161 · 0 · **0 fail** / 336 · 7 skip · **0 fail** / 195 · **0 fail** | — |
+| MSVC AddressSanitizer | 389 tests, **0 reports** | — |
+| Lifecycle stress | 9 250 operations, counters flat | — |
+| 300 s soak, real application | **USER, GDI, threads exactly flat** | — |
+
+Linux was measured before and after every fix with an **identical failure set**: this work changed
+nothing on Linux.
+
+### What was wrong, and is now fixed
+
+Thirty-one findings are recorded in §2. The ones that matter most:
+
+* **CNA had never been fully built for Windows by any toolchain** (F9–F16) — sixteen build defects
+  between the first MSVC configure and a linking `CnaTests.exe`.
+* **Every CNA example application was unlinkable with MSVC** (F28) — 27 targets, `unresolved
+  external symbol WinMain`. The most user-facing defect here: a person starting a CNA game on
+  Windows would have hit it on their first build.
+* **The path-containment guard did not hold on Windows** (F25) — `is_absolute()` answers *false* for
+  `"/etc/passwd"` there, so a rooted path was accepted. The only finding with a security character.
+* **174 tests failed on one unrunnable regex** (F19), and two escaped exceptions each discarded
+  thousands of tests by aborting the process (F23 and the `std::thread` one).
+
+Repeatedly, one toolchain had been standing in for a platform: MinGW's CRT bridges `main()` to
+`WinMain`, libstdc++ matches a regex iteratively, POSIX `path::string()` cannot fail. Each of those
+is a place where "it builds on Windows" had meant "it builds with the compiler we happened to use".
+
+### What is wrong and is NOT fixed, deliberately
+
+* **F30 — non-ASCII paths are broken on Windows.** The largest genuine defect found. 165
+  `.string()` sites across six modules; a migration with its own review and its own risk to Linux.
+  The prescription is written down.
+* **F31 — `RunHostProcess` has a Windows code path no test exercises**, because every test hands it
+  `/bin/sh`.
+* **F24 — the D3D11 refusal**, reproduced by neither control and left recorded as unexplained rather
+  than blamed on CNA or on VirtualBox.
+* **F29 — WGL passes alone and crashes in company**, so it is recorded as *not validated* rather
+  than as a driver bug.
+* **F26 — case resolution on a case-insensitive filesystem**, a contract question rather than a bug.
+* The **nine declined capabilities** stay declined. A capability reported true and backed by a stub
+  is worse than an honest false.
+
+### Audit
+
+* **74 commits**, every one authored **and** committed by `Robert Vokac <robertvokac@robertvokac.com>`.
+* No `Co-Authored-By`, `Generated by`, `Assisted-by`, or `Anthropic` string in any message or diff.
+* No secret, password or key in any commit, log or plan.
+* `origin/next` **never pushed** and still at the baseline `4cf33c2b`. Only
+  `win32-native-validation` was pushed, and never force-pushed. sharp-runtime's two MSVC fixes were
+  pushed to its `next` under explicit authorization, and that fact is recorded here.
+* Guest SSH is reachable **only** on `127.0.0.1:2222`, verified at the VirtualBox forward and at the
+  listening socket.
+* Guest disk never went below **56 GB free**; no user document or unrelated VM data was touched.
 
 ## 4. How to repeat this
 
