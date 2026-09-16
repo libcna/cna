@@ -11,7 +11,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
 
     macro(cna_directx11_test target src)
         add_executable(${target} ${src})
-        target_link_libraries(${target} PRIVATE CNA SDL3::SDL3)
+        target_link_libraries(${target} PRIVATE CNA)
+        # plans/plan_win32_native_validation.md WINNATIVE-0015: SDL3 is linked here because it used
+        # to be the only platform CNA had, and these fixtures still use it where it is configured.
+        # With CNA_ENABLE_SDL=OFF the target does not exist -- which is the whole point of that
+        # option -- so an unconditional link made
+        #     CNA_PLATFORM=WIN32 + CNA_ENABLE_SDL=OFF + DIRECTX11 + tests
+        # impossible to configure at all. Same idiom as the headless renderer's examples.
+        if(TARGET SDL3::SDL3)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3)
+        endif()
         cna_link_sharp_runtime(${target} PRIVATE)
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)

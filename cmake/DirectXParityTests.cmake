@@ -15,7 +15,7 @@ function(cna_register_d3d_parity_tests)
 
     macro(cna_d3d_parity_fixture)
         cmake_parse_arguments(F
-            "DIRECTX11_ONLY;DIRECTX12_ONLY;DIRECTX12_NO_HEADLESS;DIRECTX12_PROTON"
+            "DIRECTX11_ONLY;DIRECTX12_ONLY;DIRECTX12_NO_HEADLESS;DIRECTX12_PROTON;REQUIRES_SDL"
             "NAME;TARGET;SOURCE;DIRECTX11_TIMEOUT;DIRECTX12_TIMEOUT;DIRECTX12_ORDER;REASON;DIRECTX11_ENVIRONMENT;WORKING_DIRECTORY"
             ""
             ${ARGN})
@@ -44,6 +44,15 @@ function(cna_register_d3d_parity_tests)
         # DIRECTX12_ONLY fixture names a file in the D3D12 examples directory, which a DIRECTX11
         # configure neither resolves nor needs.
         set(_cna_d3d_fixture_applies TRUE)
+        # plans/plan_win32_native_validation.md WINNATIVE-0015: a fixture that reaches into an
+        # SDL_Window to cross-check what CNA reported needs SDL to exist. With CNA_ENABLE_SDL=OFF
+        # it cannot be built -- which is a boundary to state, not a build to break.
+        if(F_REQUIRES_SDL AND NOT TARGET SDL3::SDL3)
+            message(STATUS
+                "CNA: D3D parity fixture ${F_NAME} needs SDL3 and CNA_ENABLE_SDL is off -- skipped")
+            set(_cna_d3d_fixture_applies FALSE)
+            set(_cna_d3d_fixture_${F_NAME}_SKIPPED TRUE)
+        endif()
         if(F_DIRECTX11_ONLY AND NOT CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             set(_cna_d3d_fixture_applies FALSE)
         endif()
@@ -72,6 +81,7 @@ function(cna_register_d3d_parity_tests)
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_ONLY "${F_DIRECTX12_ONLY}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_NO_HEADLESS "${F_DIRECTX12_NO_HEADLESS}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_PROTON "${F_DIRECTX12_PROTON}")
+        set(_cna_d3d_fixture_${F_NAME}_REQUIRES_SDL "${F_REQUIRES_SDL}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX11_ENVIRONMENT "${F_DIRECTX11_ENVIRONMENT}")
         set(_cna_d3d_fixture_${F_NAME}_WORKING_DIRECTORY "${F_WORKING_DIRECTORY}")
         set(_cna_d3d_fixture_${F_NAME}_REASON "${F_REASON}")
@@ -976,13 +986,16 @@ function(cna_register_d3d_parity_tests)
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
     cna_d3d_parity_fixture(
         NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
-        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp"
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp" REQUIRES_SDL
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)
         string(REGEX REPLACE "^[0-9]+:" "" _cna_d3d_fixture "${_cna_d3d_fixture_key}")
 
+        if(_cna_d3d_fixture_${_cna_d3d_fixture}_SKIPPED)
+            continue()
+        endif()
         if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             if(_cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_ONLY)
                 continue()
