@@ -723,7 +723,7 @@ which is what makes it a hard test rather than an easy one.
 | `unicode.source.worktree` | **PASS** — git creates a worktree at `…/cna-uni-src-žluťoučký-日本語/CNA-日本語` |
 | `unicode.source.configure` | **PASS** — CMake configures from that non-ASCII source path |
 | `unicode.source.build` | **PASS** — **MSVC builds CNA from a non-ASCII source path** |
-| `unicode.app` | **PASS** — the built binary, copied to `…/CNA test žluťoučký 日本語 😀/` and run with its working directory deliberately elsewhere: **389 tests ran, 379 passed, 10 skipped, 0 failed** |
+| `unicode.app` | **PASS** — the built binary, copied to `…/CNA test žluťoučký 日本語 😀/` and run with its working directory deliberately elsewhere: **exit 0, 389 tests ran, 379 passed, 10 skipped, 0 failed** |
 | `unicode.nosdl` | **PASS** — the PE import table names no SDL DLL |
 | `unicode.temp.delta` | INFO — see WINPORT-F5; it measures the test corpus, not the library |
 
@@ -741,7 +741,12 @@ Recorded because both would have produced a confident, wrong answer:
 
 - The app step's first version took the first `.exe` under the build tree, which is CMake's own
   `CMakeCXXCompilerId.exe`, and duly reported having "run it from a non-ASCII path".
-- A timed `WaitForExit` returns before `ExitCode` is populated, so the step reported an **empty**
-  exit code — and therefore a failure — for a run that had passed 379 tests. The result line now
-  carries gtest's own summary, so the check says what happened rather than only whether a number
-  was zero.
+- `Start-Process -PassThru` does not reliably expose an exit code in PowerShell 5.1, even after an
+  untimed `WaitForExit` and a `Refresh`. The step spent two runs reporting an **empty** exit code —
+  and therefore a failure — for a run that had passed 379 tests. It goes through `cmd /c` now, and
+  requires **both** a zero exit code and gtest's own `PASSED` line: a crash that produces no summary
+  cannot pass by returning zero, and a clean run cannot fail because a number could not be read.
+
+Final state: **6 checks, 0 failed.** The step removes its own worktree and every temporary root —
+verified afterwards: zero leftover directories, no registered worktree, and `C:` at 49.5 GiB free
+against 50.1 GiB at the start of the workstream.
