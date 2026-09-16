@@ -162,12 +162,49 @@ arrived empty. (c) `git bundle create f ^A <sha>` names no ref and git refuses i
 every sync after the first silently left the guest on the previous commit — the one way this tool
 could have lied about what was being tested. It bundles `refs/heads/<branch>` now.
 
-### WINNATIVE-F5 — `<windows.h>` collisions, in the harness this time *(fixed)*
+### WINNATIVE-F5 — `<windows.h>` collisions, and `NOMINMAX` missing repo-wide *(fixed)*
 
 The new stress harness hit both hazards `docs/platform-win32.md` warns hosts about, and one of them
 only under MSVC: `CreateWindow` is rewritten to `CreateWindowA` (both toolchains), and `min`/`max`
 become function-like macros unless `NOMINMAX` is defined first — which mingw-w64's libstdc++ does
-for you and cl.exe does not. The documentation was right; the harness now does what it says.
+for you in `os_defines.h` and cl.exe does not.
+
+Then the same defect appeared in **production code**. `NOMINMAX` was defined nowhere for CNA's own
+targets, and the DirectX 11 renderer reaches `<windows.h>` through `<d3d11.h>`:
+
+```
+D3D11RenderTargets.cpp(33): error C2589: '(': illegal token on right side of '::'
+D3D11RenderTargets.cpp(33): error C2059: syntax error: ')'
+```
+
+— which is what `std::max(1, w / 2)` becomes. Four files, none of which had ever been compiled by
+cl.exe. It is now declared once on `cna_project_options`, beside `/utf-8`.
+`WIN32_LEAN_AND_MEAN` is deliberately *not* set with it: that removes whole headers rather than two
+macros.
+
+This is the shape of most of what this workstream finds — not that the code is wrong, but that one
+toolchain was quietly covering for it.
+
+### WINNATIVE-F6 — sharp-runtime's `XmlWriter` cannot be compiled by MSVC *(fixed, in sharp-runtime)*
+
+`XmlWriter::Flush` used `std::fopen`, cl.exe reports that as C4996 ("consider `fopen_s`"), and
+sharp-runtime compiles every module with `/W4 /WX`. The full build stopped at 129 of 2109 targets.
+Fixed in the sibling repository (`5beb70cf`) with `std::ofstream` rather than a suppression: the
+code is standard either way, and the stream closes itself on every path out of the function —
+including the throw the old code left a `FILE*` open on. The other `std::fopen`/`std::getenv` call
+sites there are inside POSIX-only blocks and are untouched.
+
+### WINNATIVE-F7 — the clipboard interop harness was measuring PowerShell *(fixed)*
+
+The first Notepad interop run reported six failures on non-ASCII samples, and **none of them were
+CNA's**. Text handed to a native process on a PowerShell command line is re-encoded in the ANSI
+code page, and a native process's stdout is decoded in the console code page, so both ends of the
+harness's own transport were lossy — a Czech sample came back as "17 characters", which is its
+UTF-8 byte count read as single bytes.
+
+Recorded because the conclusion nearly went the other way: a harness defect that looks exactly like
+an encoding bug in the thing under test is the most expensive kind. The transport is now a file of
+UTF-8 bytes with an explicit no-BOM encoding on the PowerShell side, and all ten checks pass.
 
 ---
 
