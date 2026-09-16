@@ -852,6 +852,17 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(TARGET cna_argv_echo)
+        # plans/plan_windows_portability_closeout.md WINCLOSE-0003: the HostProcessTest cases in
+        # EffectSourceTests.cpp launch this to read back the argument vector RunHostProcess
+        # delivered. Baked in unconditionally, for the reason given just above: the repository
+        # supplies the prerequisite, so skipping would only hide a regression.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content_pipeline} cna_argv_echo)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content_pipeline} PRIVATE
+            CNA_ARGV_ECHO_PATH="$<TARGET_FILE:cna_argv_echo>"
+        )
+    endif()
+
     if(TARGET cna_audio_no_hardware_harness)
         # Same reasoning as cna_net_two_process_harness above, for AudioMixerTests.cpp.
         add_dependencies(${CNA_TEST_OBJECT_TARGET_audio} cna_audio_no_hardware_harness)

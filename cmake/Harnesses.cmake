@@ -592,3 +592,13 @@ if(CNA_BUILD_TESTS)
         tools/content/fake_effect_compiler.cpp
     )
 endif()
+
+# plans/plan_windows_portability_closeout.md WINCLOSE-0003: reports its own argument vector, so
+# RunHostProcess's Windows command-line quoting can be measured against what the child actually
+# received rather than assumed. See its own top-of-file comment for why neither cmd.exe nor
+# /bin/echo can do this job. Links nothing, for the same reason as the compiler above.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_argv_echo
+        tools/content/argv_echo.cpp
+    )
+endif()

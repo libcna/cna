@@ -9,16 +9,34 @@
 // diagnostics are CNA's own code and are verifiable without any compiler at all. What is *not*
 // verified here is that real `fxc` output loads in a real XNA runtime -- see XNAP-A4.
 
+// Before everything else, and narrowed: RepeatedLaunchesDoNotLeakHandlesOrDescriptors asks the
+// operating system how many handles this process holds, and there is no portable way to do that.
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <process.h>
+#else
+#  include <unistd.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <future>
 #include <iostream>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -440,26 +458,95 @@ TEST(EffectSourceRouteTest, AnFxSourceHasNoCnbRouteAndSaysWhy)
     EXPECT_THROW((void)pipeline.Build(request), std::exception);
 }
 
-// -- The process runner (XNAP-A1) --------------------------------------------------------------
+// -- The process runner (XNAP-A1, WINCLOSE-0003) ------------------------------------------------
+//
+// These used to ask for /bin/echo and /bin/sh, so on Windows every one of them reported "could not
+// start" and the CreateProcessW half of RunHostProcess -- command line construction, quoting,
+// Unicode, the pipe drain, exit status -- had no test behind it at all (WINNATIVE-F31). They go
+// through cna_argv_echo now, which reports the argument vector it actually received; see that
+// program's own comment for why neither cmd.exe nor a shell could stand in for it.
+
+namespace
+{
+    /** @brief The argv-reporting helper the build puts next to the test binary. */
+    std::filesystem::path ArgvEcho() { return std::filesystem::path(CNA_ARGV_ECHO_PATH); }
+
+    /** @brief This process's id, spelled the way MSVC and POSIX each require. */
+    [[nodiscard]] int CurrentProcessId()
+    {
+#if defined(_WIN32)
+        return ::_getpid();
+#else
+        return ::getpid();
+#endif
+    }
+
+    /**
+     * @brief Decodes cna_argv_echo's length-prefixed report back into a vector.
+     *
+     * Length-prefixed rather than line-separated precisely so an argument containing a newline --
+     * which is legal on both platforms -- cannot be mistaken for two arguments here.
+     */
+    std::vector<std::string> DecodeArgvReport(const std::string& text)
+    {
+        std::vector<std::string> arguments;
+        std::size_t cursor = text.find('\n');
+        if (cursor == std::string::npos) { return arguments; }
+        ++cursor;
+        while (cursor < text.size())
+        {
+            const std::size_t colon = text.find(':', cursor);
+            if (text.compare(cursor, 4u, "arg=") != 0 || colon == std::string::npos) { break; }
+            const std::size_t length =
+                static_cast<std::size_t>(std::strtoul(text.c_str() + cursor + 4u, nullptr, 10));
+            if (colon + 1u + length > text.size()) { break; }
+            arguments.push_back(text.substr(colon + 1u, length));
+            cursor = colon + 1u + length + 1u;
+        }
+        return arguments;
+    }
+
+    /** @brief The arguments the child received, excluding argv[0]. */
+    std::vector<std::string> EchoedArguments(const std::vector<std::string>& arguments,
+                                             CNA::Internal::HostProcessResult& result)
+    {
+        result = CNA::Internal::RunHostProcess(ArgvEcho(), arguments);
+        std::vector<std::string> received = DecodeArgvReport(result.standardOutput);
+        if (!received.empty()) { received.erase(received.begin()); }
+        return received;
+    }
+}
 
 TEST(HostProcessTest, StandardOutputAndAZeroExitAreCapturedFromARealProcess)
 {
-    const CNA::Internal::HostProcessResult result =
-        CNA::Internal::RunHostProcess("/bin/echo", {"hello", "world"});
+    CNA::Internal::HostProcessResult result;
+    const std::vector<std::string> received = EchoedArguments({"hello", "world"}, result);
     ASSERT_TRUE(result.started) << result.failure;
     EXPECT_EQ(result.exitCode, 0);
-    EXPECT_EQ(result.standardOutput, "hello world\n");
+    EXPECT_EQ(received, (std::vector<std::string>{"hello", "world"}));
     EXPECT_TRUE(result.standardError.empty());
+}
+
+TEST(HostProcessTest, AProcessWithNoArgumentsAtAllStartsAndReportsOnlyItsOwnName)
+{
+    // The command line is then just the quoted executable, with nothing after it -- a shape the
+    // Windows builder reaches only when the argument vector is empty.
+    CNA::Internal::HostProcessResult result;
+    const std::vector<std::string> received = EchoedArguments({}, result);
+    ASSERT_TRUE(result.started) << result.failure;
+    EXPECT_EQ(result.exitCode, 0);
+    EXPECT_TRUE(received.empty());
 }
 
 TEST(HostProcessTest, ANonZeroExitIsAResultRatherThanAFailureToStart)
 {
-    const CNA::Internal::HostProcessResult result =
-        CNA::Internal::RunHostProcess("/bin/sh", {"-c", "echo out; echo err 1>&2; exit 3"});
+    CNA::Internal::HostProcessResult result;
+    const std::vector<std::string> received =
+        EchoedArguments({"--cna-exit=3", "--cna-stderr=err"}, result);
     ASSERT_TRUE(result.started) << result.failure;
     EXPECT_EQ(result.exitCode, 3);
-    EXPECT_EQ(result.standardOutput, "out\n");
-    EXPECT_EQ(result.standardError, "err\n");
+    EXPECT_EQ(received, (std::vector<std::string>{"--cna-exit=3", "--cna-stderr=err"}));
+    EXPECT_EQ(result.standardError, "err");
 }
 
 TEST(HostProcessTest, AMissingExecutableReportsWhyRatherThanLookingLikeAFailedCompile)
@@ -473,11 +560,104 @@ TEST(HostProcessTest, AMissingExecutableReportsWhyRatherThanLookingLikeAFailedCo
 TEST(HostProcessTest, AnArgumentContainingSpacesIsNotResplit)
 {
     // The reason arguments are a vector and not a command string: a Windows SDK path has spaces
-    // in it, and a shell would turn one argument into three.
-    const CNA::Internal::HostProcessResult result =
-        CNA::Internal::RunHostProcess("/bin/echo", {"C:\\Program Files\\fxc.exe"});
+    // in it, and a shell would turn one argument into three. Now checked where it matters -- on
+    // Windows, where RunHostProcess really does have to rebuild a command string and quote it.
+    CNA::Internal::HostProcessResult result;
+    const std::vector<std::string> received =
+        EchoedArguments({"C:\\Program Files\\fxc.exe"}, result);
     ASSERT_TRUE(result.started) << result.failure;
-    EXPECT_EQ(result.standardOutput, "C:\\Program Files\\fxc.exe\n");
+    EXPECT_EQ(received, (std::vector<std::string>{"C:\\Program Files\\fxc.exe"}));
+}
+
+TEST(HostProcessTest, EveryPathologicalArgumentSurvivesTheRoundTripUnchanged)
+{
+    // CreateProcessW takes one string, not a vector, so on Windows RunHostProcess has to quote by
+    // the rules CommandLineToArgvW documents and the child has to get the vector back. These are
+    // the shapes those rules exist for: a backslash is literal EXCEPT before a quote, where it
+    // must be doubled, and a run of them before the closing quote must be doubled too or the
+    // quote is escaped instead of closing.
+    const std::vector<std::string> sent = {
+        "plain",
+        "hello world",
+        "\"quoted\"",
+        "back\\slash",
+        "trailing\\",
+        "two\\\\trailing\\\\",
+        "backslash\\\"quote",
+        "\"",
+        "\\\"",
+        "",                       // an empty argument must survive as an empty argument
+        "tab\there",
+        "new\nline",              // legal in an argument; the length prefix is why it decodes
+        "semi;colon&amp|pipe^caret",
+        "%NOT_EXPANDED%",         // no shell is involved, so this is literal
+        "C:\\Program Files (x86)\\Microsoft DirectX SDK\\fxc.exe",
+    };
+
+    CNA::Internal::HostProcessResult result;
+    const std::vector<std::string> received = EchoedArguments(sent, result);
+    ASSERT_TRUE(result.started) << result.failure;
+    ASSERT_EQ(received.size(), sent.size()) << result.standardOutput;
+    for (std::size_t index = 0u; index < sent.size(); ++index)
+    {
+        EXPECT_EQ(received[index], sent[index]) << "argument " << index << " did not round-trip";
+    }
+}
+
+TEST(HostProcessTest, NonAsciiArgumentsSurviveTheRoundTripAsUtf8)
+{
+    // The arguments are UTF-8 std::strings and Windows takes a UTF-16 command line, so there is a
+    // conversion on this path that Linux does not have. Spelled from code points that no single
+    // Windows ANSI code page can represent, so a conversion that quietly went through the ANSI
+    // code page -- the WINNATIVE-F30 defect, in a new place -- fails here rather than passing on
+    // a machine whose code page happens to fit.
+    const std::vector<std::string> sent = {
+        "\xC5\xBElu\xC5\xA5ou\xC4\x8Dk\xC3\xBD",  // zluťoučký
+        "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E",   // 日本語
+        "\xD0\x9A\xD0\xB8\xD1\x80\xD0\xB8\xD0\xBB\xD0\xBB\xD0\xB8\xD1\x86\xD0\xB0",
+        "\xF0\x9F\x98\x80",                       // an emoji: a surrogate pair in UTF-16
+        "mixed \xE6\x97\xA5 and spaces",
+    };
+
+    CNA::Internal::HostProcessResult result;
+    const std::vector<std::string> received = EchoedArguments(sent, result);
+    ASSERT_TRUE(result.started) << result.failure;
+    ASSERT_EQ(received.size(), sent.size()) << result.standardOutput;
+    for (std::size_t index = 0u; index < sent.size(); ++index)
+    {
+        EXPECT_EQ(received[index], sent[index]) << "argument " << index << " was not UTF-8 clean";
+    }
+}
+
+TEST(HostProcessTest, AnExecutableUnderANonAsciiPathIsFoundAndRun)
+{
+    // The executable is a std::filesystem::path and is widened with wstring() on Windows, so it
+    // has to survive a directory the ANSI code page cannot spell. Copied rather than built there,
+    // because what is under test is the launch, not the toolchain.
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() /
+        ("cna-argv-\xC5\xBElu\xC5\xA5ou\xC4\x8Dk\xC3\xBD-\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E-" +
+         std::to_string(CurrentProcessId()));
+    std::error_code error;
+    std::filesystem::remove_all(root, error);
+    std::filesystem::create_directories(root, error);
+    ASSERT_FALSE(error) << "could not create a non-ASCII directory here";
+
+    const std::filesystem::path copied = root / ArgvEcho().filename();
+    std::filesystem::copy_file(ArgvEcho(), copied,
+                               std::filesystem::copy_options::overwrite_existing, error);
+    ASSERT_FALSE(error) << "could not copy the helper into a non-ASCII directory";
+
+    const CNA::Internal::HostProcessResult result =
+        CNA::Internal::RunHostProcess(copied, {"ran"});
+    ASSERT_TRUE(result.started) << result.failure;
+    EXPECT_EQ(result.exitCode, 0);
+    std::vector<std::string> received = DecodeArgvReport(result.standardOutput);
+    ASSERT_FALSE(received.empty()) << result.standardOutput;
+    received.erase(received.begin());
+    EXPECT_EQ(received, (std::vector<std::string>{"ran"}));
+
+    std::filesystem::remove_all(root, error);
 }
 
 TEST(HostProcessTest, OutputLargerThanAPipeBufferIsNotTruncatedOrDeadlocked)
@@ -486,12 +666,15 @@ TEST(HostProcessTest, OutputLargerThanAPipeBufferIsNotTruncatedOrDeadlocked)
     // what catches a runner that reads one to completion before starting on the other. Under a
     // deadline, because the failure mode is a hang: without one this reports "timeout" minutes
     // later and takes the whole run with it.
+    //
+    // Now runs on Windows too, where the drain is a thread rather than poll() and had never been
+    // exercised.
+    constexpr std::size_t kBlock = 200000u;
     CNA::Internal::HostProcessResult result;
     std::future<void> pending = std::async(std::launch::async, [&]
     {
         result = CNA::Internal::RunHostProcess(
-            "/bin/sh",
-            {"-c", "yes abcdefghij | head -c 200000; yes klmnopqrst | head -c 200000 1>&2"});
+            ArgvEcho(), {"--cna-bulk=" + std::to_string(kBlock)});
     });
     if (pending.wait_for(std::chrono::seconds(60)) == std::future_status::timeout)
     {
@@ -503,6 +686,56 @@ TEST(HostProcessTest, OutputLargerThanAPipeBufferIsNotTruncatedOrDeadlocked)
     pending.get();
     ASSERT_TRUE(result.started) << result.failure;
     EXPECT_EQ(result.exitCode, 0);
-    EXPECT_EQ(result.standardOutput.size(), 200000u);
-    EXPECT_EQ(result.standardError.size(), 200000u);
+    // The bulk block is written after the argv report, so it is the tail of standard output --
+    // checked as the tail rather than by counting 'o', which the helper's own path can contain.
+    ASSERT_GE(result.standardOutput.size(), kBlock);
+    EXPECT_EQ(result.standardOutput.substr(result.standardOutput.size() - kBlock),
+              std::string(kBlock, 'o'));
+    EXPECT_EQ(result.standardError, std::string(kBlock, 'e'));
+}
+
+TEST(HostProcessTest, RepeatedLaunchesDoNotLeakHandlesOrDescriptors)
+{
+    // Every launch opens two pipes, and on Windows a process and a thread handle as well. A
+    // runner that forgets one of them fails only after a content build has shelled out a few
+    // thousand times, which is exactly the scale a real pipeline reaches and no single-launch
+    // test can see.
+    const auto openResources = []() -> long
+    {
+#if defined(_WIN32)
+        DWORD handles = 0u;
+        return GetProcessHandleCount(GetCurrentProcess(), &handles) ? static_cast<long>(handles)
+                                                                    : -1;
+#else
+        std::error_code error;
+        const std::filesystem::directory_iterator descriptors("/proc/self/fd", error);
+        if (error) { return -1; }
+        return static_cast<long>(std::distance(std::filesystem::begin(descriptors),
+                                               std::filesystem::end(descriptors)));
+#endif
+    };
+
+    CNA::Internal::HostProcessResult warmup = CNA::Internal::RunHostProcess(ArgvEcho(), {"warm"});
+    ASSERT_TRUE(warmup.started) << warmup.failure;
+
+    const long before = openResources();
+    if (before < 0) { GTEST_SKIP() << "this host does not report an open-resource count"; }
+
+    constexpr int kLaunches = 40;
+    for (int launch = 0; launch < kLaunches; ++launch)
+    {
+        const CNA::Internal::HostProcessResult result =
+            CNA::Internal::RunHostProcess(ArgvEcho(), {"launch", std::to_string(launch)});
+        ASSERT_TRUE(result.started) << result.failure;
+        ASSERT_EQ(result.exitCode, 0);
+    }
+
+    const long after = openResources();
+    ASSERT_GE(after, 0);
+    // A small allowance rather than equality: a C runtime may cache a handle of its own on the
+    // first launch. What this must catch is growth proportional to the launch count, and leaking
+    // even one handle per launch would put this at least kLaunches above the baseline.
+    EXPECT_LE(after - before, 4)
+        << "open resources grew from " << before << " to " << after << " across " << kLaunches
+        << " launches; a per-launch handle is being leaked";
 }

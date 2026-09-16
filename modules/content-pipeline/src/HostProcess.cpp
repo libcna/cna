@@ -83,18 +83,6 @@ namespace CNA::Internal
             return wide;
         }
 
-        [[nodiscard]] std::string Narrow(const std::wstring& text)
-        {
-            if (text.empty()) { return {}; }
-            const int needed = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
-                                                   static_cast<int>(text.size()), nullptr, 0,
-                                                   nullptr, nullptr);
-            std::string narrow(static_cast<std::size_t>(needed), '\0');
-            WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
-                                narrow.data(), needed, nullptr, nullptr);
-            return narrow;
-        }
-
         /** @brief Reads a pipe to end-of-file. */
         [[nodiscard]] std::string DrainPipe(HANDLE pipe)
         {
@@ -189,10 +177,19 @@ namespace CNA::Internal
         HANDLE outWrite = nullptr;
         HANDLE errRead = nullptr;
         HANDLE errWrite = nullptr;
-        if (!CreatePipe(&outRead, &outWrite, &inheritable, 0) ||
-            !CreatePipe(&errRead, &errWrite, &inheritable, 0))
+        if (!CreatePipe(&outRead, &outWrite, &inheritable, 0))
         {
             result.failure = "could not create a pipe for the child's output";
+            return result;
+        }
+        // Checked separately from the first: folding the two into one condition leaked the output
+        // pipe's two handles whenever it was the second call that failed, which is the path a
+        // process near the handle limit actually takes.
+        if (!CreatePipe(&errRead, &errWrite, &inheritable, 0))
+        {
+            CloseHandle(outRead);
+            CloseHandle(outWrite);
+            result.failure = "could not create a pipe for the child's error output";
             return result;
         }
         SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
@@ -240,7 +237,6 @@ namespace CNA::Internal
         CloseHandle(process.hThread);
         result.started = true;
         result.exitCode = static_cast<int>(exitCode);
-        static_cast<void>(Narrow);
         return result;
 #else
         int outPipe[2] = {-1, -1};
