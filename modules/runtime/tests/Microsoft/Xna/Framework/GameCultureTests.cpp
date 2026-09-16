@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "System/Globalization/CultureInfo.hpp"
 
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
@@ -118,16 +119,35 @@ namespace
     ObservedCultures ConstructGameWithLocale(const CNA::Platform::PlatformLocale& locale)
     {
         ObservedCultures observed;
+        // An exception that escapes a std::thread's entry function calls std::terminate
+        // unconditionally -- there is no frame above it to catch anything, and GoogleTest is on a
+        // different thread entirely. Constructing a Game here can genuinely throw (on native
+        // Windows, once the D3D11 device budget is spent, it does), and when it did, this test
+        // aborted the whole process: exit 3, no results file, every later test discarded.
+        // Carrying the exception back and rethrowing it on the caller's thread makes it an
+        // ordinary reported failure.
+        std::exception_ptr failure;
         std::thread worker([&]
         {
-            auto platform = std::make_unique<PreferredLocalePlatform>(
-                CNA::Platform::PlatformFactory::Create(),
-                std::vector<CNA::Platform::PlatformLocale>{locale});
-            QuietGame game(std::move(platform));
-            observed.culture = CultureInfo::getCurrentCultureProperty().getNameProperty();
-            observed.uiCulture = CultureInfo::getCurrentUICultureProperty().getNameProperty();
+            try
+            {
+                auto platform = std::make_unique<PreferredLocalePlatform>(
+                    CNA::Platform::PlatformFactory::Create(),
+                    std::vector<CNA::Platform::PlatformLocale>{locale});
+                QuietGame game(std::move(platform));
+                observed.culture = CultureInfo::getCurrentCultureProperty().getNameProperty();
+                observed.uiCulture = CultureInfo::getCurrentUICultureProperty().getNameProperty();
+            }
+            catch (...)
+            {
+                failure = std::current_exception();
+            }
         });
         worker.join();
+        if (failure)
+        {
+            std::rethrow_exception(failure);
+        }
         return observed;
     }
 }
