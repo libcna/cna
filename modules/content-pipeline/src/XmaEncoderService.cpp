@@ -10,6 +10,7 @@
 // cannot be vendored, discovered by option then environment then CMake, run through a launcher,
 // and folded into the build fingerprint by its own reported identity.
 #include "CNA/Content/Pipeline/XmaEncoderService.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -278,12 +279,12 @@ namespace CNA::Content::Pipeline
                 if (!WriteWave(input, request))
                 {
                     result.diagnostics.push_back("could not write the encoder's input file in " +
-                                                 scratch.Path().string());
+                                                 CNA::Internal::PathToUtf8(scratch.Path()));
                     return result;
                 }
 
                 std::vector<std::string> arguments;
-                if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
+                if (!launcher_.empty()) { arguments.push_back(CNA::Internal::PathToUtf8(executable_)); }
                 for (const std::string& argument : arguments_)
                 {
                     arguments.push_back(Substitute(argument, input, output, request));
@@ -331,8 +332,8 @@ namespace CNA::Content::Pipeline
                                                         const XmaEncodeRequest& request)
             {
                 const std::pair<const char*, std::string> replacements[] = {
-                    {"{input}", input.string()},
-                    {"{output}", output.string()},
+                    {"{input}", CNA::Internal::PathToUtf8(input)},
+                    {"{output}", CNA::Internal::PathToUtf8(output)},
                     {"{quality}", XmaEncodeQualityName(request.quality)},
                     {"{loopStart}", std::to_string(request.loopStart)},
                     {"{loopLength}", std::to_string(request.loopLength)},
@@ -399,7 +400,7 @@ namespace CNA::Content::Pipeline
         if (!std::filesystem::exists(executable, error) || error)
         {
             return std::make_shared<const UnavailableXmaEncoder>(
-                "the XMA encoder '" + executable.string() + "' does not exist. Name one that does "
+                "the XMA encoder '" + CNA::Internal::PathToUtf8(executable) + "' does not exist. Name one that does "
                 "with --xma-encoder <path> or CNA_XMA_ENCODER; see docs/xma-encoder-backend.md.");
         }
 
@@ -415,7 +416,7 @@ namespace CNA::Content::Pipeline
         if (arguments.empty()) { arguments = {"{input}", "{output}"}; }
 
         XmaEncoderIdentity identity;
-        identity.backend = executable.filename().string();
+        identity.backend = CNA::Internal::PathToUtf8(executable.filename());
         // No version probe: unlike `fxc -help`, there is no command every encoder for this codec
         // answers, and inventing one would make a build depend on a convention nothing follows.
         // The file's own last-write time is what distinguishes two builds of one encoder.

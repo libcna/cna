@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentWriter.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <span>
 #include <system_error>
@@ -150,6 +151,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
             if (!error && !relative.empty()) { reference = relative; }
         }
         if (reference.extension() == ".xnb") { reference.replace_extension(); }
-        output_->WriteExternalReference(reference.generic_string());
+        output_->WriteExternalReference(CNA::Internal::PathToGenericUtf8(reference));
     }
 }

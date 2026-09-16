@@ -589,9 +589,7 @@ namespace Microsoft::Xna::Framework::Media
         CNA::Internal::Graphics::ImageData img;
         try
         {
-            // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- this filename
-            // ends at stb_image's fopen, which is ANSI on Windows. ImageLoader is fixed separately;
-            // re-encoding the string here would make those inputs worse, not better.
+            // ImageLoader::Load takes UTF-8, which is what savedPath already is.
             img = CNA::Internal::Graphics::ImageLoader::Load(savedPath);
         }
         catch (const std::exception&)

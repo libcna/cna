@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
 #include <stdexcept>
@@ -45,6 +46,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         const std::filesystem::path relative =
             std::filesystem::relative(filename, loggerRootDirectory_, error);
         if (error || relative.empty()) { return filename; }
-        return relative.generic_string();
+        return CNA::Internal::PathToGenericUtf8(relative);
     }
 }

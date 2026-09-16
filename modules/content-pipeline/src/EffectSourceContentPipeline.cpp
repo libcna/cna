@@ -17,6 +17,7 @@
 // build failure rather than an `.xnb` that claims to be an XNA Effect and is not.
 
 #include "CNA/Content/Pipeline/EffectSourceContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -49,7 +50,7 @@ namespace CNA::Content::Pipeline
             std::ifstream stream(path, std::ios::binary);
             if (!stream)
             {
-                throw ContentLoadException("cannot open effect source '" + path.string() + "'.");
+                throw ContentLoadException("cannot open effect source '" + CNA::Internal::PathToUtf8(path) + "'.");
             }
             // Braces, not parentheses: the parenthesized form declares a function.
             std::string text{std::istreambuf_iterator<char>(stream),
@@ -57,7 +58,7 @@ namespace CNA::Content::Pipeline
             if (text.size() > kMaxSourceBytes)
             {
                 throw ContentLoadException(
-                    "effect source '" + path.string() + "' is " + std::to_string(text.size()) +
+                    "effect source '" + CNA::Internal::PathToUtf8(path) + "' is " + std::to_string(text.size()) +
                     " bytes, above the " + std::to_string(kMaxSourceBytes) + "-byte ceiling.");
             }
             return text;
@@ -372,15 +373,15 @@ namespace CNA::Content::Pipeline
                 catch (const std::exception& error)
                 {
                     throw ContentLoadException(
-                        current.file.filename().string() + "(" + std::to_string(line) +
+                        CNA::Internal::PathToUtf8(current.file.filename()) + "(" + std::to_string(line) +
                         "): cannot include '" + authored + "': " + error.what());
                 }
                 if (!std::filesystem::exists(resolved))
                 {
                     throw ContentLoadException(
-                        current.file.filename().string() + "(" + std::to_string(line) +
+                        CNA::Internal::PathToUtf8(current.file.filename()) + "(" + std::to_string(line) +
                         "): included file '" + authored + "' does not exist (looked for '" +
-                        resolved.string() + "').");
+                        CNA::Internal::PathToUtf8(resolved) + "').");
                 }
 
                 EffectSourceInclude record;
@@ -399,7 +400,7 @@ namespace CNA::Content::Pipeline
                     if (seen.size() - 1u > kMaxIncludeFiles)
                     {
                         throw ContentLoadException(
-                            "effect source '" + context.SourcePath().filename().string() +
+                            "effect source '" + CNA::Internal::PathToUtf8(context.SourcePath().filename()) +
                             "' includes more than " + std::to_string(kMaxIncludeFiles) +
                             " files.");
                     }
@@ -477,7 +478,7 @@ namespace CNA::Content::Pipeline
 
         if (!compiler_->Available())
         {
-            throw ContentLoadException("'" + source.source.filename().string() + "': " +
+            throw ContentLoadException("'" + CNA::Internal::PathToUtf8(source.source.filename()) + "': " +
                                        compiler_->UnavailableReason());
         }
 
@@ -508,7 +509,7 @@ namespace CNA::Content::Pipeline
         if (!result.succeeded)
         {
             std::ostringstream message;
-            message << "'" << source.source.filename().string()
+            message << "'" << CNA::Internal::PathToUtf8(source.source.filename())
                     << "': the effect compiler ("
                     << compiler_->Identity().ToString() << ") rejected it";
             if (result.diagnostics.empty())
@@ -536,7 +537,7 @@ namespace CNA::Content::Pipeline
             // different effect container, or the source text itself -- must not reach the writer:
             // the result would be an `.xnb` that claims to be an XNA Effect and is not one.
             throw ContentLoadException(
-                "'" + source.source.filename().string() + "': the effect compiler (" +
+                "'" + CNA::Internal::PathToUtf8(source.source.filename()) + "': the effect compiler (" +
                 compiler_->Identity().ToString() + ") produced " +
                 std::to_string(compiled.bytecode.size()) +
                 " bytes that do not begin with an Effect Framework 9.1 signature, so they are "

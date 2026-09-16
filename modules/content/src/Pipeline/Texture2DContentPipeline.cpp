@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
@@ -513,7 +514,7 @@ namespace CNA::Content::Pipeline
             std::vector<std::vector<std::uint8_t>>* compressed = nullptr,
             std::optional<Cnb::CnbTextureFormat>* compressedFormat = nullptr)
         {
-            const std::string origin = source.filename().string();
+            const std::string origin = CNA::Internal::PathToUtf8(source.filename());
             if (CNA::Internal::Graphics::IsDds(bytes))
             {
                 CNA::Internal::Graphics::ImageData level = DecodeDdsLevelZero(bytes, origin);
@@ -601,7 +602,7 @@ namespace CNA::Content::Pipeline
         if (!stream) { throw ContentLoadException("cannot open image source."); }
         const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
                                               std::istreambuf_iterator<char>()};
-        const std::string origin = context.SourcePath().filename().string();
+        const std::string origin = CNA::Internal::PathToUtf8(context.SourcePath().filename());
         if (CNA::Internal::Graphics::IsDds(bytes))
         {
             const CNA::Internal::Graphics::DdsSurfaces surfaces =

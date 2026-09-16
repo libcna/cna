@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/CleanContent.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <exception>
 #include <filesystem>
@@ -191,7 +192,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             catch (const std::exception& failure)
             {
-                LogError(std::string("GetLastOutputs could not read \"") + file.string() +
+                LogError(std::string("GetLastOutputs could not read \"") + CNA::Internal::PathToUtf8(file) +
                          "\": " + failure.what());
                 return false;
             }
@@ -199,14 +200,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             {
                 for (const Canon::ContentBuildManifestOutput& produced : entry.outputs)
                 {
-                    TaskItem item((root / produced.path).string());
+                    TaskItem item(CNA::Internal::PathToUtf8((root / produced.path)));
                     item.SetMetadata("Name", nodeId);
                     item.SetMetadata("SourceAsset", entry.source);
                     outputContentFiles_.push_back(item);
                 }
                 for (const Canon::ContentBuildManifestDeploymentFile& deployed : entry.deploymentFiles)
                 {
-                    TaskItem item((root / deployed.path).string());
+                    TaskItem item(CNA::Internal::PathToUtf8((root / deployed.path)));
                     item.SetMetadata("Name", nodeId);
                     item.SetMetadata("SourceAsset", entry.source);
                     outputContentFiles_.push_back(item);

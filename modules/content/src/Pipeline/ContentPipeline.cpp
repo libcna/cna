@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -186,7 +187,7 @@ namespace CNA::Content::Pipeline
 
         std::string LowerExtension(const std::filesystem::path& source)
         {
-            std::string extension = source.extension().string();
+            std::string extension = CNA::Internal::PathToUtf8(source.extension());
             std::transform(extension.begin(), extension.end(), extension.begin(),
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return extension;

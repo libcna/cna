@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include "CNA/Content/Pipeline/EffectContentPipeline.hpp"
 
@@ -69,7 +70,7 @@ namespace CNA::Content::Pipeline
                 std::filesystem::path(rootRelative).lexically_relative(directory);
             // An empty answer means the two share no prefix at all, which a content root and one
             // of its own assets always do; keeping the original is the safe reading either way.
-            return relative.empty() ? rootRelative : relative.generic_string();
+            return relative.empty() ? rootRelative : CNA::Internal::PathToGenericUtf8(relative);
         }
 
         /** @brief Bumped whenever the serializer's byte output changes for unchanged inputs. */

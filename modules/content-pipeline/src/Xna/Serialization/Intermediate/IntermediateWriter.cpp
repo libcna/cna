@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateWriter.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -340,6 +341,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         {
             return WithBackslashes(filename);
         }
-        return WithBackslashes(relative.generic_string());
+        return WithBackslashes(CNA::Internal::PathToGenericUtf8(relative));
     }
 }

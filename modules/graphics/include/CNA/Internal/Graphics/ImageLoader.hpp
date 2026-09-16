@@ -11,6 +11,8 @@ namespace CNA::Internal::Graphics
     {
     public:
         /// Load an image from a file path and decode it into RGBA8.
+        /// The path is UTF-8 (docs/filesystem-path-model.md); the file is read through a native
+        /// std::filesystem::path, never handed to stb as a filename.
         static ImageData Load(const std::string& assetName);
 
         /// Load an image from an in-memory buffer and decode it into RGBA8.

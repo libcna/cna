@@ -119,11 +119,9 @@ namespace CNA::Internal::Media
                 // aborting the whole scan.
                 try
                 {
-                    // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- this
-                    // narrow filename ends at stb_image's fopen, which is ANSI on Windows, so
-                    // handing it UTF-8 would make it worse rather than better. ImageLoader itself
-                    // is fixed separately.
-                    Graphics::ImageData img = Graphics::ImageLoader::Load(entry.path().string());
+                    // ImageLoader::Load takes UTF-8 and reads through a native path; it no longer
+                    // hands stb a filename at all.
+                    Graphics::ImageData img = Graphics::ImageLoader::Load(PathToUtf8(entry.path()));
 
                     IndexedPicture pic;
                     pic.path = PathToUtf8(entry.path());

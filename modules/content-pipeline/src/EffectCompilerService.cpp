@@ -36,6 +36,7 @@
 // command), and no compiler binary is committed or redistributed.
 
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -731,7 +732,7 @@ namespace CNA::Content::Pipeline
                 if (!available_)
                 {
                     EffectCompilerDiagnostic diagnostic;
-                    diagnostic.file = request.source.string();
+                    diagnostic.file = CNA::Internal::PathToUtf8(request.source);
                     diagnostic.message = reason_;
                     result.diagnostics.push_back(diagnostic);
                     return result;
@@ -748,7 +749,7 @@ namespace CNA::Content::Pipeline
                 const std::vector<std::string> spelled = SpellForLauncher(paths);
 
                 std::vector<std::string> arguments;
-                if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
+                if (!launcher_.empty()) { arguments.push_back(CNA::Internal::PathToUtf8(executable_)); }
                 arguments.push_back("/nologo");
                 arguments.push_back("/T");
                 arguments.push_back(kTargetProfile);
@@ -790,7 +791,7 @@ namespace CNA::Content::Pipeline
                 if (!process.started)
                 {
                     EffectCompilerDiagnostic diagnostic;
-                    diagnostic.file = request.source.string();
+                    diagnostic.file = CNA::Internal::PathToUtf8(request.source);
                     diagnostic.message = "the effect compiler could not be run: " +
                                          process.failure;
                     result.diagnostics.push_back(diagnostic);
@@ -809,7 +810,7 @@ namespace CNA::Content::Pipeline
                     if (result.diagnostics.empty())
                     {
                         EffectCompilerDiagnostic diagnostic;
-                        diagnostic.file = request.source.string();
+                        diagnostic.file = CNA::Internal::PathToUtf8(request.source);
                         diagnostic.message = "the effect compiler exited with status " +
                                              std::to_string(process.exitCode) +
                                              " and said nothing";
@@ -822,7 +823,7 @@ namespace CNA::Content::Pipeline
                 if (!stream)
                 {
                     EffectCompilerDiagnostic diagnostic;
-                    diagnostic.file = request.source.string();
+                    diagnostic.file = CNA::Internal::PathToUtf8(request.source);
                     diagnostic.message =
                         "the effect compiler reported success and wrote no output file";
                     result.diagnostics.push_back(diagnostic);
@@ -835,7 +836,7 @@ namespace CNA::Content::Pipeline
                 if (!result.succeeded)
                 {
                     EffectCompilerDiagnostic diagnostic;
-                    diagnostic.file = request.source.string();
+                    diagnostic.file = CNA::Internal::PathToUtf8(request.source);
                     diagnostic.message =
                         "the effect compiler reported success and wrote an empty output file";
                     result.diagnostics.push_back(diagnostic);
@@ -866,7 +867,7 @@ namespace CNA::Content::Pipeline
             {
                 std::vector<std::string> spelled;
                 spelled.reserve(paths.size());
-                for (const std::filesystem::path& path : paths) { spelled.push_back(path.string()); }
+                for (const std::filesystem::path& path : paths) { spelled.push_back(CNA::Internal::PathToUtf8(path)); }
                 if (!launcherTranslatesPaths_ || paths.empty()) { return spelled; }
 
                 std::vector<std::string> arguments{"winepath", "-w"};
@@ -905,7 +906,7 @@ namespace CNA::Content::Pipeline
 
                 // Wine is the launcher this project documents, and the only one whose path
                 // translation has been measured here.
-                const std::string launcherName = launcher_.filename().string();
+                const std::string launcherName = CNA::Internal::PathToUtf8(launcher_.filename());
                 launcherTranslatesPaths_ = launcherName.rfind("wine", 0) == 0;
 
                 executable_ = options.executable;
@@ -926,7 +927,7 @@ namespace CNA::Content::Pipeline
                 // A version probe doubles as an availability probe: it proves the executable can
                 // be started, and it is what the fingerprint records.
                 std::vector<std::string> arguments;
-                if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
+                if (!launcher_.empty()) { arguments.push_back(CNA::Internal::PathToUtf8(executable_)); }
                 arguments.push_back("/?");
                 const CNA::Internal::HostProcessResult process = CNA::Internal::RunHostProcess(
                     launcher_.empty() ? executable_ : launcher_, arguments);
@@ -958,8 +959,8 @@ namespace CNA::Content::Pipeline
             {
                 std::ostringstream text;
                 text << "no usable effect compiler: "
-                     << (launcher_.empty() ? executable_.string()
-                                           : launcher_.string() + " " + executable_.string())
+                     << (launcher_.empty() ? CNA::Internal::PathToUtf8(executable_)
+                                           : CNA::Internal::PathToUtf8(launcher_) + " " + CNA::Internal::PathToUtf8(executable_))
                      << " -- " << what << ".\n"
                      << "Compiling .fx source to an XNA 4.0 Effect needs Microsoft's legacy "
                         "'fxc' at profile "

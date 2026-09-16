@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
 
@@ -108,9 +109,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         {
             std::filesystem::create_directories(song.parent_path(), error);
         }
-        input->ConvertFormat(Audio::ConversionFormat::WindowsMedia, quality_, song.string());
-        context.AddOutputFile(song.string());
-        return std::make_shared<SongContent>(song.filename().string(), input->getDurationProperty());
+        input->ConvertFormat(Audio::ConversionFormat::WindowsMedia, quality_, CNA::Internal::PathToUtf8(song));
+        context.AddOutputFile(CNA::Internal::PathToUtf8(song));
+        return std::make_shared<SongContent>(CNA::Internal::PathToUtf8(song.filename()), input->getDurationProperty());
     }
 
     const std::string& SongProcessor::GetTypeName() const

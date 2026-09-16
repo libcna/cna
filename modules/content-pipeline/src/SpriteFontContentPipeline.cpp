@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -939,7 +940,7 @@ namespace CNA::Content::Pipeline
             if (!std::filesystem::is_directory(directory, error)) { return files; }
             const auto consider = [&files](const std::filesystem::path& path)
             {
-                const std::string extension = path.extension().string();
+                const std::string extension = CNA::Internal::PathToUtf8(path.extension());
                 const std::vector<std::string>& allowed = FontExtensions();
                 if (std::find(allowed.begin(), allowed.end(), extension) != allowed.end())
                 {
@@ -1197,7 +1198,7 @@ namespace CNA::Content::Pipeline
             std::vector<std::filesystem::path> candidates;
             for (const std::filesystem::path& file : files)
             {
-                if (NormalizeFontName(file.stem().string()) == wanted)
+                if (NormalizeFontName(CNA::Internal::PathToUtf8(file.stem())) == wanted)
                 {
                     candidates.push_back(file);
                 }

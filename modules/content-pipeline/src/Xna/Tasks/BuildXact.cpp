@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildXact.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -231,7 +232,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             {
                 arguments.push_back(compiler);
             }
-            arguments.push_back(project.string());
+            arguments.push_back(CNA::Internal::PathToUtf8(project));
             arguments.push_back(outputDirectory_);
             if (!targetPlatform_.empty())
             {
@@ -251,7 +252,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             if (result.exitCode != 0)
             {
-                LogError("BuildXact: the XACT compiler refused \"" + project.string() +
+                LogError("BuildXact: the XACT compiler refused \"" + CNA::Internal::PathToUtf8(project) +
                          "\" with status " + std::to_string(result.exitCode) + ": " +
                          (result.standardError.empty() ? result.standardOutput : result.standardError));
                 succeeded = false;
@@ -264,13 +265,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 {
                     continue;
                 }
-                const std::string extension = produced.path().extension().string();
+                const std::string extension = CNA::Internal::PathToUtf8(produced.path().extension());
                 if (extension != ".xgs" && extension != ".xwb" && extension != ".xsb")
                 {
                     continue;
                 }
-                TaskItem item(produced.path().string());
-                item.SetMetadata("SourceAsset", project.string());
+                TaskItem item(CNA::Internal::PathToUtf8(produced.path()));
+                item.SetMetadata("SourceAsset", CNA::Internal::PathToUtf8(project));
                 outputXactFiles_.push_back(item);
                 rebuiltXactFiles_.push_back(item);
             }

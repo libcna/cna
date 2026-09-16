@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/VideoContent.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <exception>
 #include <filesystem>
@@ -17,7 +18,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::string name;
             try
             {
-                name = std::filesystem::path(filename).filename().string();
+                name = CNA::Internal::PathToUtf8(std::filesystem::path(filename).filename());
             }
             catch (const std::exception&)
             {

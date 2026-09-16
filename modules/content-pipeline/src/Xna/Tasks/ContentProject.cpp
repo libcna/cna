@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentProject.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -179,7 +180,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         std::ifstream file(filename, std::ios::binary);
         const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         ContentProject project = Parse(text, filename);
-        project.directory_ = std::filesystem::path(filename).parent_path().string();
+        project.directory_ = CNA::Internal::PathToUtf8(std::filesystem::path(filename).parent_path());
         return project;
     }
 

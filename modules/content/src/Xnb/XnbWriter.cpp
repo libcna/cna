@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbWriter.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
 
@@ -255,7 +256,7 @@ namespace CNA::Internal::Xnb
         const std::filesystem::path directory = std::filesystem::path(assetName_).parent_path();
         if (directory.empty())
         {
-            WriteExternalReference(referenced.generic_string());
+            WriteExternalReference(CNA::Internal::PathToGenericUtf8(referenced));
             return;
         }
         const std::filesystem::path relative = referenced.lexically_relative(directory);
@@ -264,7 +265,7 @@ namespace CNA::Internal::Xnb
         // backslash; not one uses a forward slash (plans/plan_xna_sample_xnb_sweep.md
         // `XNASWEEP-116`). CNA's own reader normalizes either, so this changes only the bytes.
         std::string spelled =
-            (relative.empty() ? referenced.generic_string() : relative.generic_string());
+            (relative.empty() ? CNA::Internal::PathToGenericUtf8(referenced) : CNA::Internal::PathToGenericUtf8(relative));
         std::replace(spelled.begin(), spelled.end(), '/', '\\');
         WriteExternalReference(spelled);
     }

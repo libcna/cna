@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -54,7 +55,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             {
                 return "effect.fx";
             }
-            return std::filesystem::path(filename).filename().string();
+            return CNA::Internal::PathToUtf8(std::filesystem::path(filename).filename());
         }
     }
 

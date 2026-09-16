@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateReader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -720,7 +721,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                     throw System::ArgumentException("Invalid filesystem location \"" + filename + "\".");
                 }
                 const std::filesystem::path base = std::filesystem::path(WithForwardSlashes(relocation)).parent_path();
-                filename = (base / WithForwardSlashes(filename)).lexically_normal().generic_string();
+                filename = CNA::Internal::PathToGenericUtf8((base / WithForwardSlashes(filename)).lexically_normal());
             }
             fixup.apply(std::move(filename));
         }

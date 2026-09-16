@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -179,7 +180,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             {
                 relative = path.filename();
             }
-            std::string text = relative.generic_string();
+            std::string text = CNA::Internal::PathToGenericUtf8(relative);
             return text;
         }
 
@@ -242,14 +243,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                     resolved = candidate;
                     continue;
                 }
-                const std::string wanted = part.string();
+                const std::string wanted = CNA::Internal::PathToUtf8(part);
                 std::filesystem::path match;
                 std::size_t matches = 0u;
                 std::filesystem::directory_iterator entries(resolved, error);
                 if (error) { return {}; }
                 for (const std::filesystem::directory_entry& entry : entries)
                 {
-                    const std::string found = entry.path().filename().string();
+                    const std::string found = CNA::Internal::PathToUtf8(entry.path().filename());
                     if (found.size() != wanted.size()) { continue; }
                     bool equal = true;
                     for (std::size_t index = 0; index < found.size(); ++index)
@@ -274,9 +275,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         [[nodiscard]] std::string ContentName(const std::string& key, const std::string& name)
         {
             const std::filesystem::path path(key);
-            const std::string stem = name.empty() ? path.stem().string() : name;
+            const std::string stem = name.empty() ? CNA::Internal::PathToUtf8(path.stem()) : name;
             const std::filesystem::path directory = path.parent_path();
-            return directory.empty() ? stem : (directory / stem).generic_string();
+            return directory.empty() ? stem : CNA::Internal::PathToGenericUtf8((directory / stem));
         }
 
         /**
@@ -535,7 +536,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         if (error)
         {
             LogError("BuildContent could not create the intermediate directory \"" +
-                     intermediate.string() + "\": " + error.message() + ".");
+                     CNA::Internal::PathToUtf8(intermediate) + "\": " + error.message() + ".");
             return false;
         }
 
@@ -813,12 +814,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             if (!file)
             {
                 LogError("BuildContent could not write its build configuration to \"" +
-                         configurationFile.string() + "\".");
+                         CNA::Internal::PathToUtf8(configurationFile) + "\".");
                 return false;
             }
             file << configuration.str();
         }
-        intermediateFiles_.emplace_back(configurationFile.string());
+        intermediateFiles_.emplace_back(CNA::Internal::PathToUtf8(configurationFile));
 
         if (rebuildAll_)
         {
@@ -967,7 +968,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                      "reported.");
             return false;
         }
-        intermediateFiles_.emplace_back((output / Canon::ContentBuildManifestFileName).string());
+        intermediateFiles_.emplace_back(CNA::Internal::PathToUtf8((output / Canon::ContentBuildManifestFileName)));
 
         Canon::ContentBuildManifest manifest;
         Canon::ContentBuildManifest previous;
@@ -990,7 +991,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             const bool rebuilt = was == nullptr || was->fingerprint != entry.fingerprint;
             for (const Canon::ContentBuildManifestOutput& produced : entry.outputs)
             {
-                TaskItem item((output / produced.path).string());
+                TaskItem item(CNA::Internal::PathToUtf8((output / produced.path)));
                 item.SetMetadata("Name", nodeId);
                 item.SetMetadata("SourceAsset", entry.source);
                 outputContentFiles_.push_back(item);
@@ -1001,7 +1002,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             for (const Canon::ContentBuildManifestDeploymentFile& deployed : entry.deploymentFiles)
             {
-                TaskItem item((output / deployed.path).string());
+                TaskItem item(CNA::Internal::PathToUtf8((output / deployed.path)));
                 item.SetMetadata("Name", nodeId);
                 item.SetMetadata("SourceAsset", entry.source);
                 outputContentFiles_.push_back(item);
