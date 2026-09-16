@@ -279,8 +279,19 @@ endif()
 # MSVC decode the repository's UTF-8 C++ sources deterministically; GCC and Clang already do so.
 add_library(cna_project_options INTERFACE)
 add_library(CNA::ProjectOptions ALIAS cna_project_options)
+# /bigobj: the COFF object format caps a translation unit at 65 279 sections, and MSVC emits one
+# per COMDAT -- which template-heavy code exhausts. IntermediateSerializer.cpp, which instantiates
+# a serializer per XNA type, is the first to reach it:
+#
+#   fatal error C1128: number of sections exceeded object file format limit: compile with /bigobj
+#
+# ELF has no such limit, so GCC and Clang never see it. The flag only widens a field in the object
+# file; there is no code-generation or performance consequence, and every Microsoft tool that reads
+# these objects has understood the wider form for two decades. Repo-wide, because which file
+# crosses the line is an accident of instantiation counts rather than a property worth tracking.
+# plans/plan_win32_native_validation.md WINNATIVE-0009.
 target_compile_options(cna_project_options INTERFACE
-    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8;/bigobj>")
 
 # plans/plan_win32_native_validation.md WINNATIVE-0009. <windows.h> -- reached here through
 # <d3d11.h>, <d3d12.h>, <dxgi.h> and every other Windows SDK header -- defines min and max as
