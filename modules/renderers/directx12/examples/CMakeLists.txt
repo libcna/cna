@@ -71,7 +71,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     cna_directx12_test(cna_diag_d3d12_swapchain directx12_swapchain_diag.cpp)
 
     include(${CMAKE_SOURCE_DIR}/cmake/DirectXParityTests.cmake)
-    cna_register_d3d_parity_tests()
+    # plans/plan_win32_native_validation.md WINNATIVE-0015: the parity corpus is built on
+    # modules/graphics/examples/common/PixelTestGame.hpp, which uses SDL for one thing -- probing
+    # whether a display exists, so a fixture can print [SKIP] instead of failing on a machine with
+    # no GPU. That single use makes every fixture that includes it unbuildable with
+    # CNA_ENABLE_SDL=OFF. The fixtures are skipped there rather than the harness being rewritten as
+    # a side effect of a Win32 validation pass: CnaTests, the framework and the demos are what the
+    # SDL-free configuration has to prove, and they do not go through PixelTestGame.
+    if(TARGET SDL3::SDL3)
+        cna_register_d3d_parity_tests()
+    else()
+        message(STATUS
+            "CNA: Direct3D parity fixtures need SDL3 (PixelTestGame.hpp probes for a display with "
+            "it) -- not registered in this SDL-free configuration")
+    endif()
 endif()
 
 cna_apply_skip_convention()
