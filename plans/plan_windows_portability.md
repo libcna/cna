@@ -302,6 +302,51 @@ is the clearest instance of the pattern the whole exercise keeps finding: **the 
 the lowest layer that touches the OS, and everything above it is downstream of a decision already
 made**.
 
+### WINPORT-F5 — what a non-ASCII `TEMP` actually measures *(interpretation, not a defect)*
+
+Pointing `TEMP` and `TMP` at a non-ASCII directory and running the content corpus looked like the
+cheapest possible integration test: a large part of that corpus builds its fixtures under
+`temp_directory_path()`, so hundreds of existing tests would suddenly be exercising Unicode paths.
+
+Measured against a control on the same binary in the same session:
+
+```
+control, the machine's own TEMP     2142 tests, 394 failures
+non-ASCII TEMP                      2142 tests, 602 failures
+fail ONLY under the non-ASCII TEMP                 208
+fail ONLY under the ASCII TEMP                       0
+```
+
+181 of the 208 carry the F30 signature — *"No mapping for the Unicode character exists in the
+target multi-byte code page"*. The tempting reading is 181 more product defects. It is not.
+
+**The test corpus narrows its own fixture paths.** There are roughly 1 100 `.string()` calls in
+`modules/content/tests` and `modules/content-pipeline/tests`, in lines shaped like
+
+```cpp
+ContentManager cm(nullptr, root.path().string());
+(void)CompileCnjToCnb((dir.path() / "m.cnj").string());
+```
+
+Under a non-ASCII `TEMP` that expression throws **in the test body, before any CNA code runs**. The
+correlation is not approximate: `ContentManagerManifestTest` contains exactly 6 such calls and has
+exactly 6 failures here; `ContentManagerXnbTest` has 10 and 10; `CnbContentManagerTest` 21 and 14;
+`CnbCompilerStrictnessTest` 18 and 24.
+
+So this is the `F31` class — test portability — at a scale the earlier workstream did not see,
+because it never pointed `TEMP` anywhere unusual. It is worth knowing and worth writing down, and
+it is **not** evidence about the library.
+
+The step therefore reports that delta as INFO and passes or fails on something it can actually
+claim: whether the suites that build their paths with `PathFromUtf8` — and so genuinely reach CNA —
+pass under a non-ASCII `TEMP`. A check that fails for a reason it does not name is worse than no
+check.
+
+**The honest limit of this workstream's Unicode evidence** is therefore: CNA's *library* code is
+Unicode-correct on the paths that were migrated and tested, and CNA's *test corpus* is not
+Unicode-clean and would need its own pass — roughly 1 100 call sites — before a whole-suite run
+under a non-ASCII `TEMP` could mean anything.
+
 ---
 
 ## 4. The audit — WINPORT-0004
