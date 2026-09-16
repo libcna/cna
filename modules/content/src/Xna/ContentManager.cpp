@@ -1874,7 +1874,7 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Internal::ParseJson(json), path,
                     [&](const std::string& authored)
                     {
-                        return std::filesystem::path(ResolveRootRelativeSidecarPath(
+                        return CNA::Internal::PathFromUtf8(ResolveRootRelativeSidecarPath(
                             cm, path, "clipFile", authored));
                     });
             }
@@ -6146,7 +6146,7 @@ namespace Microsoft::Xna::Framework::Content
                                               const std::string& assetName)
         {
             const std::string resolved = cm.ResolveExistingAssetPath(cm.BuildAssetPath(reference));
-            if (!std::filesystem::exists(resolved))
+            if (!std::filesystem::exists(CNA::Internal::PathFromUtf8(resolved)))
             {
                 throw ContentLoadException("'" + assetName + "' streams '" + reference +
                                            "', which was not found beside it.");
@@ -6323,7 +6323,7 @@ namespace Microsoft::Xna::Framework::Content
         // Through shared_ptr because SoundEffect is move-only and std::any cannot hold it.
         const std::string cnbCandidate =
             ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
-        if (std::filesystem::exists(cnbCandidate))
+        if (std::filesystem::exists(CNA::Internal::PathFromUtf8(cnbCandidate)))
         {
             return std::move(
                 *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(cnbCandidate, assetName));
@@ -6331,7 +6331,7 @@ namespace Microsoft::Xna::Framework::Content
         if (assetName.size() > 4 && assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
         {
             const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
-            if (std::filesystem::exists(literalCnb))
+            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(literalCnb)))
             {
                 return std::move(
                     *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(literalCnb, assetName));

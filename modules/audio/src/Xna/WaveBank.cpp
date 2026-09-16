@@ -239,7 +239,10 @@ namespace Microsoft::Xna::Framework::Audio
         {
             // Lazy per-entry disk read: xactImpl_->data.fileData only holds the header/metadata
             // segments (see ParseXwbStreamingHeader), not wave audio.
-            std::ifstream sf(CNA::Internal::PathFromUtf8(xactImpl_->data.sourcePath), std::ios::binary);
+            const std::optional<std::filesystem::path> nativeSource =
+                CNA::Internal::TryPathFromUtf8(xactImpl_->data.sourcePath);
+            std::ifstream sf;
+            if (nativeSource) { sf.open(*nativeSource, std::ios::binary); }
             if (!sf.is_open())
             {
                 std::cerr << "[WaveBank] Cannot reopen streaming source for wave " << waveIndex

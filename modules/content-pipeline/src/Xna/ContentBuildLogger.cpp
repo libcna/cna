@@ -43,8 +43,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         if (loggerRootDirectory_.empty()) { return filename; }
         std::error_code error;
-        const std::filesystem::path relative =
-            std::filesystem::relative(filename, loggerRootDirectory_, error);
+        const std::filesystem::path relative = std::filesystem::relative(
+            CNA::Internal::PathFromUtf8(filename),
+            CNA::Internal::PathFromUtf8(loggerRootDirectory_), error);
         if (error || relative.empty()) { return filename; }
         return CNA::Internal::PathToGenericUtf8(relative);
     }

@@ -67,7 +67,7 @@ namespace CNA::Content::Pipeline
             if (slash == std::string::npos) { return rootRelative; }
             const std::filesystem::path directory(logicalName.substr(0, slash));
             const std::filesystem::path relative =
-                std::filesystem::path(rootRelative).lexically_relative(directory);
+                CNA::Internal::PathFromUtf8(rootRelative).lexically_relative(directory);
             // An empty answer means the two share no prefix at all, which a content root and one
             // of its own assets always do; keeping the original is the safe reading either way.
             return relative.empty() ? rootRelative : CNA::Internal::PathToGenericUtf8(relative);

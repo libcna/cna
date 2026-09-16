@@ -274,7 +274,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
         [[nodiscard]] std::string ContentName(const std::string& key, const std::string& name)
         {
-            const std::filesystem::path path(key);
+            // key is UTF-8 from RootRelative(); the narrow constructor would decode it as ANSI
+            // and the conversions below re-encode as UTF-8, double-encoding the JSON logicalName
+            // so that it no longer matched the JSON key beside it.
+            const std::filesystem::path path = CNA::Internal::PathFromUtf8(key);
             const std::string stem = name.empty() ? CNA::Internal::PathToUtf8(path.stem()) : name;
             const std::filesystem::path directory = path.parent_path();
             return directory.empty() ? stem : CNA::Internal::PathToGenericUtf8((directory / stem));

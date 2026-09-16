@@ -395,7 +395,7 @@ namespace CNA::Internal::Graphics
         // callback form already used by EncodePng, then write through a native path.
         EncodeBuffer output;
         if (stbi_write_png_to_func(AppendEncodedBytes, &output, width, height, 4, pixels,
-                                   width * 4) == 0 || output.bytes.empty())
+                                   width * 4) == 0 || output.bytes.empty() || output.allocationFailed)
             throw std::runtime_error("ImageLoader: failed to save PNG: " + filename);
         WriteWholeFileNative(filename, output.bytes,
                              "ImageLoader: failed to save PNG: " + filename);
@@ -420,7 +420,7 @@ namespace CNA::Internal::Graphics
         ValidateRgba(pixels, width, height);
         EncodeBuffer output;
         if (stbi_write_jpg_to_func(AppendEncodedBytes, &output, width, height, 4, pixels,
-                                   quality) == 0 || output.bytes.empty())
+                                   quality) == 0 || output.bytes.empty() || output.allocationFailed)
             throw std::runtime_error("ImageLoader: failed to save JPEG: " + filename);
         WriteWholeFileNative(filename, output.bytes,
                              "ImageLoader: failed to save JPEG: " + filename);

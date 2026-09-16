@@ -428,7 +428,7 @@ namespace Microsoft::Xna::Framework::Content
             // at all.
             const std::string cnbCandidate =
                 ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
-            if (std::filesystem::exists(cnbCandidate))
+            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(cnbCandidate)))
             {
                 T result = LoadCnbAsset<T>(cnbCandidate, assetName);
                 loadedAssets_[cacheKey] = result;
@@ -442,7 +442,7 @@ namespace Microsoft::Xna::Framework::Content
                 assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
             {
                 const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
-                if (std::filesystem::exists(literalCnb))
+                if (std::filesystem::exists(CNA::Internal::PathFromUtf8(literalCnb)))
                 {
                     T result = LoadCnbAsset<T>(literalCnb, assetName);
                     loadedAssets_[cacheKey] = result;
@@ -717,7 +717,7 @@ namespace Microsoft::Xna::Framework::Content
             // misinterpret as already-resolved and never try appending
             // a reader extension.
             const std::string literalPath = ResolveExistingAssetPath(base);
-            if (std::filesystem::exists(literalPath))
+            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(literalPath)))
             {
                 return literalPath;
             }
@@ -728,7 +728,7 @@ namespace Microsoft::Xna::Framework::Content
             // .cnj usable as an optional metadata sidecar (plans/plan_cnj.md CNB-4), not just a
             // mutually-exclusive alternative to a native file.
             const std::string cnjCandidate = ResolveExistingAssetPath(base + ".cnj");
-            if (std::filesystem::exists(cnjCandidate))
+            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(cnjCandidate)))
             {
                 return cnjCandidate;
             }
@@ -738,7 +738,7 @@ namespace Microsoft::Xna::Framework::Content
             for (const auto& ext : extensions)
             {
                 const std::string candidate = ResolveExistingAssetPath(base + ext);
-                if (std::filesystem::exists(candidate))
+                if (std::filesystem::exists(CNA::Internal::PathFromUtf8(candidate)))
                 {
                     return candidate;
                 }

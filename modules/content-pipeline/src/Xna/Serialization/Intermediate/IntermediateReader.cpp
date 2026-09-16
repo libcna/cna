@@ -720,7 +720,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                 {
                     throw System::ArgumentException("Invalid filesystem location \"" + filename + "\".");
                 }
-                const std::filesystem::path base = std::filesystem::path(WithForwardSlashes(relocation)).parent_path();
+                const std::filesystem::path base = CNA::Internal::PathFromUtf8(WithForwardSlashes(relocation)).parent_path();
                 filename = CNA::Internal::PathToGenericUtf8((base / WithForwardSlashes(filename)).lexically_normal());
             }
             fixup.apply(std::move(filename));

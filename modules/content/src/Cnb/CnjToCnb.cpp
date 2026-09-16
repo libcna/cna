@@ -306,7 +306,7 @@ namespace CNA::Content::Cnb
                 rootValue, cnjPath,
                 [&](const std::string& authored)
                 {
-                    return std::filesystem::path(
+                    return CNA::Internal::ContentPathFromUtf8(
                         ResolveSidecar(cnjPath, root, authored, "clipFile"));
                 });
             result.bytes = EncodeAnimationClipToCnb(clip, name);

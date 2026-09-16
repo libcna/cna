@@ -265,7 +265,9 @@ namespace Microsoft::Xna::Framework::Storage
                 "titleName must be a simple name within the storage root, not an absolute path "
                 "or one that escapes it.");
         }
-        fs::remove_all(contained.resolvedPath);
+        // resolvedPath is UTF-8; the narrow overload would remove nothing at all -- remove_all on
+        // a path that does not exist returns 0 without an error, so this failed silently.
+        fs::remove_all(CNA::Internal::PathFromUtf8(contained.resolvedPath));
     }
 
     // -------------------------------------------------------------------------
@@ -325,7 +327,7 @@ namespace Microsoft::Xna::Framework::Storage
         storageRoot_.clear();
 
         SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride(
-            fs::path(EnsureStorageRoot()) / ".cna_isolated_storage");
+            CNA::Internal::PathFromUtf8(EnsureStorageRoot()) / ".cna_isolated_storage");
     }
 
     std::string StorageDevice::GetStorageRootEXT()

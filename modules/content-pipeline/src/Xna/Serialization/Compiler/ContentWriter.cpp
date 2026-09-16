@@ -134,9 +134,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         }
         // XNA writes the referenced asset's path relative to the directory of the asset being
         // written, without the compiled extension.
-        std::filesystem::path reference(filename);
+        // Widened as UTF-8. The narrow constructor decodes through the ANSI code page, and the
+        // PathToGenericUtf8 at the end of this function then encodes as UTF-8 -- so the pair was a
+        // double encode, turning "cafe-acute" into "cafA-tilde-copyright" rather than leaving it
+        // alone as the old string()/string() pair did. It also laundered invalid UTF-8 into valid
+        // UTF-8 before XnbWriter's refusal could see it, which is the same hole this workstream
+        // already closed on the sibling route.
+        std::filesystem::path reference = CNA::Internal::PathFromUtf8(filename);
         const std::filesystem::path assetFile =
-            outputDirectory_.empty() ? std::filesystem::path(assetName_) : outputDirectory_ / assetName_;
+            outputDirectory_.empty() ? CNA::Internal::PathFromUtf8(assetName_)
+                                     : outputDirectory_ / CNA::Internal::PathFromUtf8(assetName_);
         const std::filesystem::path baseDirectory = assetFile.parent_path();
         if (reference.is_absolute() && !baseDirectory.empty() && baseDirectory.is_absolute())
         {

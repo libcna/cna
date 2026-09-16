@@ -180,7 +180,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         std::ifstream file(filename, std::ios::binary);
         const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         ContentProject project = Parse(text, filename);
-        project.directory_ = CNA::Internal::PathToUtf8(std::filesystem::path(filename).parent_path());
+        project.directory_ = CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(filename).parent_path());
         return project;
     }
 

@@ -45,7 +45,7 @@ namespace CNA::Internal::Xnb
         // (matching FNA's null -- the caller falls back to the un-stripped original path).
         std::string Normalize(const std::string& fileName)
         {
-            if (std::filesystem::exists(fileName))
+            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(fileName)))
             {
                 return fileName;
             }

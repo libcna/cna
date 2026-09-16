@@ -13,6 +13,8 @@
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
+#include <optional>
+
 #include "Backend/CnaMixer/CnaMixer.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
 
@@ -280,7 +282,9 @@ namespace CNA::Internal::Audio
         EnsureMixer();
         // The mixer interface takes UTF-8, as SDL3_mixer does on the other backend; the narrow
         // ifstream overload would read it as ANSI code page bytes here.
-        std::ifstream file(CNA::Internal::PathFromUtf8(path), std::ios::binary);
+        const std::optional<std::filesystem::path> native = CNA::Internal::TryPathFromUtf8(path);
+        if (!native) { return {}; }
+        std::ifstream file(*native, std::ios::binary);
         if (!file)
         {
             SetError(GetEngine(), "'" + path + "' could not be opened");

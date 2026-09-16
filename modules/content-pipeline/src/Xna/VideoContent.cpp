@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::string name;
             try
             {
-                name = CNA::Internal::PathToUtf8(std::filesystem::path(filename).filename());
+                name = CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(filename).filename());
             }
             catch (const std::exception&)
             {

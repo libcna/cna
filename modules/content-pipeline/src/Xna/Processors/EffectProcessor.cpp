@@ -55,7 +55,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             {
                 return "effect.fx";
             }
-            return CNA::Internal::PathToUtf8(std::filesystem::path(filename).filename());
+            return CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(filename).filename());
         }
     }
 

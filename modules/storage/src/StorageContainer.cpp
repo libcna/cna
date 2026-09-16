@@ -66,8 +66,13 @@ namespace Microsoft::Xna::Framework::Storage
         }
         storagePath_ = contained.resolvedPath;
 
-        if (!fs::exists(storagePath_))
-            fs::create_directories(storagePath_);
+        // Widened like every other member does. Left narrow, the constructor created a
+        // mojibake-named directory while ResolveNativePath, GetFileNames and FileExists all
+        // operated on the correct one -- so the container was permanently empty and a junk
+        // directory accumulated beside it.
+        const std::filesystem::path nativeRoot = CNA::Internal::PathFromUtf8(storagePath_);
+        if (!fs::exists(nativeRoot))
+            fs::create_directories(nativeRoot);
     }
 
     StorageContainer::~StorageContainer()
