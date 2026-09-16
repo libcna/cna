@@ -93,7 +93,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | 🔄 | a real WGL 3.3 core context is created, made current, swapped and destroyed by `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` in the native suite run (it is not among the skips); the `wgl` check in the desktop harness records the driver and the context-cycle GDI count |
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
-| WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | 🔄 | HEADLESS **161 tests, 0 failures**; SDL3 **336 tests, 0 failures, 7 skipped**; SDL2 in progress (§3) |
+| WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ✅ | HEADLESS **161 · 0 failures**; SDL3 **336 · 0 failures · 7 skipped**; SDL2 **195 · 0 failures · 0 skipped** (§3) |
 | WINNATIVE-0024 | Linux regression after every generic fix, and a whole-suite Linux baseline | ✅ | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; whole suite **8939 tests, 25 failures, 479 skipped** (§3), two suites excluded and named |
 | WINNATIVE-0025 | Media fixture: a missing picture root must fail, not crash | ✅ | 8 access violations were unguarded null dereferences; guarded, 92/94 pass on Linux with only the 2 pre-existing duration failures |
 | WINNATIVE-0026 | The abort that discarded 4 400 Windows tests | ✅ | an escaped exception left GoogleTest's global stdout capture installed; the next capture called `abort()` (F23) |
@@ -579,7 +579,17 @@ nothing else. All three run on the interactive desktop, through `win32_standalon
 ```
 HEADLESS : 161 tests, 0 failures, 0 errors, 0 skipped   (exit 0)
 SDL3     : 336 tests, 0 failures, 0 errors, 7 skipped   (exit 0)
+SDL2     : 195 tests, 0 failures, 0 errors, 0 skipped   (exit 0)
 ```
+
+All three pass, so hardening Win32 cost the other backends nothing on this operating system.
+
+SDL2 needed its dependency built first, and that is worth recording because it is not a submodule:
+`cmake/ThirdPartySDL2.cmake` fetches a pinned **SDL 2.30.11** (`fa24d868`) from git at configure
+time, and the standalone harness resolves SDL2 through `find_package`, not through that sub-build.
+The guest was therefore given that same pinned revision from `~/deps/sdl2` on the host and it was
+installed into the **same prefix as SDL3** — the two occupy disjoint subtrees (`include/SDL2` and
+`lib/cmake/SDL2` against `include/SDL3` and `cmake/SDL3Config.cmake`), so one glob serves both.
 
 SDL3's seven skips are all capabilities this environment does not have, not behaviours that failed:
 two sensor tests, two Vulkan tests (no `vulkan-1.dll`), two for a **primary selection**, which is an
