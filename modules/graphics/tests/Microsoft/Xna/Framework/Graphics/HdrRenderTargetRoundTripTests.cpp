@@ -425,6 +425,13 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
         Microsoft::Xna::Framework::Graphics::DepthStencilState::None);
     gd.setRasterizerStateProperty(
         Microsoft::Xna::Framework::Graphics::RasterizerState::CullNone);
+    // WINCLOSE-0035: XNA refuses to draw with a float-format texture on a filtering sampler, and
+    // the shared draw validation enforces that. The environment map is sampler 1, which defaults to
+    // LinearWrap -- so this draw is refused wherever the cube reports its real HdrBlendable format
+    // (DirectX11, Vulkan), and passed only where a cube renderer reports Color. The faces are
+    // uniform, so point sampling reads the same value; AFloatCubeTargetSamplesWithoutAnRgba8
+    // Intermediate below already samples this way.
+    gd.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
 
     const Microsoft::Xna::Framework::Vector3 normal(0.0f, 0.0f, 1.0f);
     const Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture quad[6] = {
