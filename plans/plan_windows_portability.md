@@ -700,3 +700,39 @@ breach: on Windows `\` is a separator, so the path is contained rather than esca
 backslash normalisation is unchanged from before this branch. What differs across platforms is
 whether that spelling is one filename or two components — a semantics question worth deciding
 deliberately rather than as a side effect.
+
+## 15. Unicode integration on native Windows — WINPORT-0012, 0013, 0014
+
+`tools/platform/win32_unicode_paths.ps1`, run in the guest. The path classes are spelled from code
+points rather than as literals, so the script's own encoding cannot be what is being measured. On
+this machine, with `ACP = 1252`, **none** of Czech, Japanese, Cyrillic or emoji is representable —
+which is what makes it a hard test rather than an easy one.
+
+| Check | Result |
+|---|---|
+| `host.filesystem` | **PASS** — NTFS stores and returns every path class, proved by reading a known payload back |
+| `unicode.source.worktree` | **PASS** — git creates a worktree at `…/cna-uni-src-žluťoučký-日本語/CNA-日本語` |
+| `unicode.source.configure` | **PASS** — CMake configures from that non-ASCII source path |
+| `unicode.source.build` | **PASS** — **MSVC builds CNA from a non-ASCII source path** |
+| `unicode.app` | **PASS** — the built binary, copied to `…/CNA test žluťoučký 日本語 😀/` and run with its working directory deliberately elsewhere: **389 tests ran, 379 passed, 10 skipped, 0 failed** |
+| `unicode.nosdl` | **PASS** — the PE import table names no SDL DLL |
+| `unicode.temp.delta` | INFO — see WINPORT-F5; it measures the test corpus, not the library |
+
+`unicode.source.build` is the one that could not have been obtained any other way: it exercises
+CMake's own assumptions, MSVC response files, generated-file paths and custom commands, none of
+which runtime code can reach. The binary it produced was then *both built from and run from*
+non-ASCII directories.
+
+`unicode.nosdl` answers Phase 36: the Unicode migration did not reintroduce SDL. The SDL-free
+Win32 + Direct3D11 configuration still imports no SDL DLL at all.
+
+### Two harness defects this step found in itself
+
+Recorded because both would have produced a confident, wrong answer:
+
+- The app step's first version took the first `.exe` under the build tree, which is CMake's own
+  `CMakeCXXCompilerId.exe`, and duly reported having "run it from a non-ASCII path".
+- A timed `WaitForExit` returns before `ExitCode` is populated, so the step reported an **empty**
+  exit code — and therefore a failure — for a run that had passed 379 tests. The result line now
+  carries gtest's own summary, so the check says what happened rather than only whether a number
+  was zero.
