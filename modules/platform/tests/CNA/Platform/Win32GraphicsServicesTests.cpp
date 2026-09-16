@@ -138,6 +138,159 @@ TEST_F(Win32GraphicsServices, AContextEitherIsCreatedAndUsableOrFailsExplicitly)
     EXPECT_EQ(gl->GetCurrentBinding().context, nullptr);
 }
 
+// plans/plan_windows_portability_closeout.md WINCLOSE-0002: the WGL lifetime audit, as a test.
+//
+// AContextEitherIsCreatedAndUsableOrFailsExplicitly passes alone and access-violates in a long
+// run, and the question that had never been answered was which side of the boundary the fault is
+// on. This is CNA's side of it: every ownership path the service has -- repeated create/destroy,
+// unbind before destroy, destroy while current, two contexts on one window, a context per window,
+// and a window destroyed before the context that was made current on it -- exercised in one
+// process so that a leaked HGLRC, a stale current context or a released DC shows up here rather
+// than as a fault in somebody else's test much later.
+//
+// Skips rather than fails without a usable driver, like its neighbour above: a host with no
+// OpenGL is an environment limitation, and this test is about lifetime, not availability.
+TEST_F(Win32GraphicsServices, ContextLifetimeSurvivesEveryOwnershipPathWithoutLeavingStaleState)
+{
+    IPlatformGlContext* const gl = platform_->GetGlContext();
+    ASSERT_NE(gl, nullptr);
+
+    GlContextDescription wanted;
+    wanted.majorVersion = 3;
+    wanted.minorVersion = 3;
+    wanted.profile = GlProfile::Core;
+
+    const auto tryCreate = [&](IPlatformWindow& window) -> GlContextHandle
+    {
+        try
+        {
+            return gl->CreateContext(window.GetId(), wanted);
+        }
+        catch (const PlatformException&)
+        {
+            return nullptr;
+        }
+    };
+
+    {
+        const std::unique_ptr<IPlatformWindow> probeWindow = CreateWindow(WindowRenderIntent::OpenGl);
+        ASSERT_NE(probeWindow, nullptr);
+        if (tryCreate(*probeWindow) == nullptr)
+            GTEST_SKIP() << "no usable OpenGL driver here";
+    }
+
+    // 1. Repeated create/destroy on a fresh window each time. A context or a DC kept back by any
+    //    one round shows up as a refusal in a later one.
+    for (int round = 0; round < 8; ++round)
+    {
+        const std::unique_ptr<IPlatformWindow> window = CreateWindow(WindowRenderIntent::OpenGl);
+        ASSERT_NE(window, nullptr) << "round " << round;
+        const GlContextHandle context = tryCreate(*window);
+        ASSERT_NE(context, nullptr) << "a context could not be created on round " << round
+                                    << "; something earlier did not give one back";
+        gl->MakeCurrent(window->GetId(), context);
+        EXPECT_EQ(gl->GetCurrentBinding().context, context);
+        gl->MakeCurrent(window->GetId(), nullptr);
+        gl->DestroyContext(context);
+        EXPECT_EQ(gl->GetCurrentBinding().context, nullptr) << "round " << round;
+    }
+
+    // 2. Destroyed while still current. The service has to clear the binding itself, because
+    //    wglDeleteContext refuses a context that is current in the calling thread -- and a caller
+    //    tearing down after an error does exactly this.
+    {
+        const std::unique_ptr<IPlatformWindow> window = CreateWindow(WindowRenderIntent::OpenGl);
+        ASSERT_NE(window, nullptr);
+        const GlContextHandle context = tryCreate(*window);
+        ASSERT_NE(context, nullptr);
+        gl->MakeCurrent(window->GetId(), context);
+        ASSERT_EQ(gl->GetCurrentBinding().context, context);
+        EXPECT_NO_THROW(gl->DestroyContext(context));
+        EXPECT_EQ(gl->GetCurrentBinding().context, nullptr)
+            << "a destroyed context is still reported as current";
+        // Unbinding again must stay a no-op rather than acting on the handle just deleted.
+        EXPECT_NO_THROW(gl->MakeCurrent(0, nullptr));
+    }
+
+    // 3. Two contexts on ONE window. The second SetPixelFormat on the same DC is the case the
+    //    service documents as already-set-and-matching rather than an error.
+    {
+        const std::unique_ptr<IPlatformWindow> window = CreateWindow(WindowRenderIntent::OpenGl);
+        ASSERT_NE(window, nullptr);
+        const GlContextHandle first = tryCreate(*window);
+        ASSERT_NE(first, nullptr);
+        const GlContextHandle second = tryCreate(*window);
+        ASSERT_NE(second, nullptr) << "a second context on the same window was refused";
+        EXPECT_NE(first, second);
+        gl->MakeCurrent(window->GetId(), first);
+        gl->MakeCurrent(window->GetId(), second);
+        EXPECT_EQ(gl->GetCurrentBinding().context, second);
+        gl->MakeCurrent(window->GetId(), nullptr);
+        gl->DestroyContext(second);
+        gl->DestroyContext(first);
+        EXPECT_EQ(gl->GetCurrentBinding().context, nullptr);
+    }
+
+    // 4. Two windows, a context each, both alive at once, and made current in turn.
+    {
+        const std::unique_ptr<IPlatformWindow> windowA = CreateWindow(WindowRenderIntent::OpenGl);
+        const std::unique_ptr<IPlatformWindow> windowB = CreateWindow(WindowRenderIntent::OpenGl);
+        ASSERT_NE(windowA, nullptr);
+        ASSERT_NE(windowB, nullptr);
+        const GlContextHandle contextA = tryCreate(*windowA);
+        const GlContextHandle contextB = tryCreate(*windowB);
+        ASSERT_NE(contextA, nullptr);
+        ASSERT_NE(contextB, nullptr);
+        gl->MakeCurrent(windowA->GetId(), contextA);
+        EXPECT_EQ(gl->GetCurrentBinding().window, windowA->GetId());
+        gl->MakeCurrent(windowB->GetId(), contextB);
+        EXPECT_EQ(gl->GetCurrentBinding().window, windowB->GetId());
+        gl->MakeCurrent(windowB->GetId(), nullptr);
+        gl->DestroyContext(contextA);
+        gl->DestroyContext(contextB);
+        EXPECT_EQ(gl->GetCurrentBinding().context, nullptr);
+    }
+
+    // 5. The window destroyed FIRST, while its context is still current and still owned. This is
+    //    the ordering a crashing teardown takes, and the one that leaves a current context whose
+    //    device context belongs to a window that no longer exists. Nothing here may fault, and
+    //    nothing may be left current for whatever runs next.
+    {
+        GlContextHandle context = nullptr;
+        {
+            const std::unique_ptr<IPlatformWindow> window =
+                CreateWindow(WindowRenderIntent::OpenGl);
+            ASSERT_NE(window, nullptr);
+            context = tryCreate(*window);
+            ASSERT_NE(context, nullptr);
+            gl->MakeCurrent(window->GetId(), context);
+            ASSERT_EQ(gl->GetCurrentBinding().context, context);
+        }   // the window is destroyed here, with the context still current on it
+
+        EXPECT_NO_THROW(gl->DestroyContext(context));
+        EXPECT_EQ(gl->GetCurrentBinding().context, nullptr)
+            << "a context outlived its window and stayed current; the next GL call in this "
+               "process would be made against a device context that no longer exists";
+    }
+
+    // 6. After all of that, an ordinary context still works. If any round above kept a handle,
+    //    this is where the driver says so.
+    {
+        const std::unique_ptr<IPlatformWindow> window = CreateWindow(WindowRenderIntent::OpenGl);
+        ASSERT_NE(window, nullptr);
+        const GlContextHandle context = tryCreate(*window);
+        ASSERT_NE(context, nullptr) << "the service could not create a context after exercising "
+                                       "every ownership path; something was not given back";
+        gl->MakeCurrent(window->GetId(), context);
+        EXPECT_NO_THROW(gl->SwapBuffers(window->GetId()));
+        gl->MakeCurrent(window->GetId(), nullptr);
+        gl->DestroyContext(context);
+    }
+
+    EXPECT_EQ(gl->GetCurrentBinding().context, nullptr);
+    EXPECT_EQ(gl->GetCurrentBinding().window, 0u);
+}
+
 // --- Vulkan ----------------------------------------------------------------------------------
 
 TEST_F(Win32GraphicsServices, VulkanServiceAndCapabilityAgree)
