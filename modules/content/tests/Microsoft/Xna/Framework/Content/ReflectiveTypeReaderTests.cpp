@@ -355,8 +355,11 @@ namespace
 
         void TearDown() override
         {
+            // The free function, not ReflectiveTypeReader<AbstractAnimal>::CanonicalReaderName:
+            // naming that class instantiates a reader whose `AbstractAnimal Read(...)` returns an
+            // abstract class by value, which is ill-formed. It is the same name either way.
             ContentTypeReaderManager::RemoveTypeCreatorEXT(
-                ReflectiveTypeReader<AbstractAnimal>::CanonicalReaderName(
+                Microsoft::Xna::Framework::Content::CanonicalReflectiveReaderNameEXT(
                     "Bestiary.AbstractAnimal"));
             ContentTypeReaderManager::RemoveTypeCreatorEXT(
                 ReflectiveTypeReader<NamedAnimal>::CanonicalReaderName("Bestiary.NamedAnimal"));

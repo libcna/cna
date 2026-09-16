@@ -27,6 +27,26 @@
 namespace Microsoft::Xna::Framework::Content
 {
     /**
+     * @brief The canonical `.xnb` reader name for a reflectively-serialized target type.
+     *
+     * A free function rather than only a static member of `ReflectiveTypeReader<T>`, because the
+     * name is needed for **abstract** target types too -- to register the reader that serves them
+     * and to unregister it -- and `ReflectiveTypeReader<Abstract>` cannot be instantiated at all:
+     * its `virtual T Read(ContentReader&, std::optional<T>)` returns `T` by value, and
+     * [class.abstract] forbids an abstract class as a return type, so even declaring it is
+     * ill-formed. MSVC diagnoses that; GCC and Clang accepted the instantiation, which is why
+     * naming it worked until plans/plan_win32_native_validation.md WINNATIVE-0014.
+     *
+     * @param targetTypeName The .NET name of the serialized type.
+     * @return The canonical reflective reader name.
+     */
+    [[nodiscard]] inline std::string CanonicalReflectiveReaderNameEXT(
+        const std::string& targetTypeName)
+    {
+        return "Microsoft.Xna.Framework.Content.ReflectiveReader`1[[" + targetTypeName + "]]";
+    }
+
+    /**
      * @brief Reads a type the XNA content pipeline serialized *reflectively*, from a field list
      *        the game declares once.
      *
@@ -89,7 +109,7 @@ namespace Microsoft::Xna::Framework::Content
          */
         [[nodiscard]] static std::string CanonicalReaderName(const std::string& targetTypeName)
         {
-            return "Microsoft.Xna.Framework.Content.ReflectiveReader`1[[" + targetTypeName + "]]";
+            return CanonicalReflectiveReaderNameEXT(targetTypeName);
         }
 
     protected:
@@ -101,32 +121,10 @@ namespace Microsoft::Xna::Framework::Content
          */
         T Read(ContentReader& input, std::optional<T> existingInstance) override
         {
-            if constexpr (std::is_abstract_v<T>)
-            {
-                // An abstract T is read through AbstractReflectiveTypeReader, which returns a
-                // shared_ptr to a concrete subclass; this value-shaped reader cannot serve one,
-                // and `T value = ... : T{}` below is not even a valid expression for it.
-                //
-                // The branch exists because a class template's virtual members are instantiated
-                // with the class -- the vtable needs them -- so merely NAMING
-                // ReflectiveTypeReader<Abstract> instantiates this function. The suite does name
-                // it, for the static CanonicalReaderName(), which is a string builder that has
-                // nothing to do with reading. MSVC instantiates eagerly enough to fail on it;
-                // GCC and Clang did not, which is why the shape stood until
-                // plans/plan_win32_native_validation.md WINNATIVE-0014.
-                (void) input;
-                (void) existingInstance;
-                throw ContentLoadException(
-                    "Cannot deserialize abstract reflective type '" +
-                    this->getTargetTypeNameProperty() + "'.");
-            }
-            else
-            {
-                T value = existingInstance.has_value() ? std::move(*existingInstance) : T{};
-                for (const FieldReader& field : fields_)
-                    field(value, input);
-                return value;
-            }
+            T value = existingInstance.has_value() ? std::move(*existingInstance) : T{};
+            for (const FieldReader& field : fields_)
+                field(value, input);
+            return value;
         }
 
     private:
@@ -179,7 +177,9 @@ namespace Microsoft::Xna::Framework::Content
          */
         [[nodiscard]] static std::string CanonicalReaderName(const std::string& targetTypeName)
         {
-            return ReflectiveTypeReader<T>::CanonicalReaderName(targetTypeName);
+            // Deliberately NOT ReflectiveTypeReader<T>::CanonicalReaderName: T is abstract here,
+            // and naming that class is the thing that cannot be instantiated.
+            return CanonicalReflectiveReaderNameEXT(targetTypeName);
         }
 
     protected:
@@ -516,7 +516,10 @@ namespace Microsoft::Xna::Framework::Content
                 ContentTypeReaderManager::AddTypeCreator(registration.first, registration.second);
 
             ContentTypeReaderManager::AddTypeCreator(
-                ReflectiveTypeReader<T>::CanonicalReaderName(targetTypeName_),
+                // The free function, not ReflectiveTypeReader<T>::CanonicalReaderName: the
+                // static_assert above says T is abstract, and that class cannot be instantiated
+                // for an abstract type.
+                CanonicalReflectiveReaderNameEXT(targetTypeName_),
                 [name = targetTypeName_] {
                     return std::unique_ptr<ContentTypeReaderBase>(
                         std::make_unique<AbstractReflectiveTypeReader<T, TStored>>(name));

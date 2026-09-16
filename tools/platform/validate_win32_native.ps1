@@ -291,12 +291,32 @@ function Invoke-Configuration([object] $config, [switch] $ConfigureOnly) {
 
 # ================================================================= step: GoogleTest suites
 
+# A GoogleTest suite runs on the INTERACTIVE desktop, not in this session. CNA's suites create
+# windows, ask about monitors and DPI, and use the clipboard -- all of which answer differently on
+# the invisible service window station an SSH session lives on. See win32_run_interactive.ps1.
+function Invoke-Interactive([string] $Name, [string] $Exe, [string[]] $Arguments, [string] $WorkingDirectory, [int] $Timeout) {
+    $launcher = Join-Path $SourceDir 'tools/platform/win32_run_interactive.ps1'
+    if (-not (Test-Path $launcher)) { return $null }
+    $log = Join-Path $OutDir "$Name.log"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $launcher `
+        -Exe $Exe -Arguments $Arguments -WorkingDirectory $WorkingDirectory `
+        -Name $Name -OutDir $OutDir -TimeoutSeconds $Timeout 2>&1 |
+        Tee-Object -FilePath $log | Out-Null
+    return $LASTEXITCODE
+}
+
 function Invoke-GTest([string] $Check, [string] $Exe, [string[]] $ExtraArgs = @(), [int] $Timeout = 0) {
     if (-not (Test-Path $Exe)) { Add-Result $Check 'NOT-RUN' "$Exe was not built"; return }
-    $name = Split-Path $Exe -LeafBase
+    if ($Timeout -le 0) { $Timeout = $TimeoutSeconds }
     $xml  = Join-Path $OutDir "$Check.xml"
-    $code = Invoke-Logged "gtest-$Check" $Exe (@("--gtest_output=xml:$xml") + $ExtraArgs) `
-                          (Split-Path $Exe -Parent) $Timeout
+    $code = Invoke-Interactive "gtest-$Check" $Exe (@("--gtest_output=xml:$xml") + $ExtraArgs) `
+                               (Split-Path $Exe -Parent) $Timeout
+    if ($null -eq $code) {
+        # No launcher: fall back to this session, and say so, because the result means less.
+        Add-Result "$Check.session" 'INFO' 'run in session 0 -- no interactive launcher found'
+        $code = Invoke-Logged "gtest-$Check" $Exe (@("--gtest_output=xml:$xml") + $ExtraArgs) `
+                              (Split-Path $Exe -Parent) $Timeout
+    }
     $summary = ''
     if (Test-Path $xml) {
         [xml] $report = Get-Content -LiteralPath $xml
@@ -310,7 +330,7 @@ function Invoke-GTest([string] $Check, [string] $Exe, [string[]] $ExtraArgs = @(
             if ($failures.Count -gt 12) { $summary += ", +$($failures.Count - 12) more" }
         }
     }
-    if ($null -eq $code)   { Add-Result $Check 'FAIL' "killed after $(if ($Timeout) { $Timeout } else { $TimeoutSeconds }) s; $summary" }
+    if ($null -eq $code -or $code -eq 124) { Add-Result $Check 'FAIL' "killed on a deadline; $summary" }
     elseif ($code -eq 0)   { Add-Result $Check 'PASS' $summary }
     else                   { Add-Result $Check 'FAIL' "exit $code; $summary" }
 }
