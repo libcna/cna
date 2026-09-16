@@ -32,6 +32,7 @@ namespace CNA::Platform::Wayland {
     class WaylandOutput;
     class WaylandSeat;
     class WaylandTextInput;
+    class WaylandTablet;
     class WaylandTouch;
     class WaylandVulkanSurface;
 
@@ -237,6 +238,7 @@ namespace CNA::Platform::Wayland {
         std::unique_ptr<WaylandKeyboard> keyboard_;
         std::unique_ptr<WaylandMouse> mouse_;
         std::unique_ptr<WaylandTouch> touch_;
+        std::unique_ptr<WaylandTablet> tablet_;
         std::unique_ptr<WaylandTextInput> textInput_;
         std::unique_ptr<WaylandDataDevices> dataDevices_;
         std::unique_ptr<WaylandDisplays> displays_;

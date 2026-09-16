@@ -231,10 +231,13 @@ namespace CNA::Platform::Wayland {
          * @brief Creates the service.
          * @param seats The seats, now.
          * @param controllers The evdev devices of a kind (gamepads, joysticks, haptics).
+         * @param tabletTools The names of the tablet tools attached, now; they are touch devices
+         *        because that is what their strokes arrive as (WAYLAND-0059).
          */
         WaylandInputDevices(std::function<std::vector<const WaylandSeat*>()> seats,
-                            std::function<std::vector<InputDeviceInfo>(InputDeviceKind)> controllers)
-            : seats_(std::move(seats)), controllers_(std::move(controllers))
+                            std::function<std::vector<InputDeviceInfo>(InputDeviceKind)> controllers,
+                            std::function<std::vector<std::string>()> tabletTools)
+            : seats_(std::move(seats)), controllers_(std::move(controllers)), tabletTools_(std::move(tabletTools))
         {
         }
 
@@ -246,6 +249,7 @@ namespace CNA::Platform::Wayland {
     private:
         std::function<std::vector<const WaylandSeat*>()> seats_;
         std::function<std::vector<InputDeviceInfo>(InputDeviceKind)> controllers_;
+        std::function<std::vector<std::string>()> tabletTools_;
     };
 
 } // namespace CNA::Platform::Wayland

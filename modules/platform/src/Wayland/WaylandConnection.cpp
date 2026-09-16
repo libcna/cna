@@ -311,6 +311,13 @@ namespace CNA::Platform::Wayland {
                           [](void* proxy) { zxdg_exporter_v2_destroy(static_cast<zxdg_exporter_v2*>(proxy)); });
         }
 #endif
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+        else if (which == zwp_tablet_manager_v2_interface.name)
+        {
+            bindSingleton(zwp_tablet_manager_v2_interface, 1, reinterpret_cast<void**>(&globals_.tabletManager),
+                          [](void* proxy) { zwp_tablet_manager_v2_destroy(static_cast<zwp_tablet_manager_v2*>(proxy)); });
+        }
+#endif
 #if defined(CNA_WAYLAND_HAVE_CURSOR_SHAPE)
         else if (which == wp_cursor_shape_manager_v1_interface.name)
         {

@@ -1117,6 +1117,208 @@ TEST_F(WaylandProtocol, TouchesAreNormalisedAndCancelled)
     EXPECT_EQ(touches.back().kind, TouchEventKind::Cancelled);
 }
 
+// --- graphics tablets (WAYLAND-0059) --------------------------------------------------------------
+
+TEST_F(WaylandProtocol, AHoveringPenIsNothingAndAStrokeIsATouchWithItsPressure)
+{
+    CompositorOptions options;
+    options.tablet = true;
+    Start(options);
+    IPlatformWindow& window = MakeWindow();
+    Settle();
+    ASSERT_EQ(compositor_->GetTabletToolCount(), 1) << "the backend bound no tablet tool";
+
+    // The pen hovers over the window: a position, no tip. A game sees nothing at all.
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(400, 240);
+    compositor_->TabletFrame();
+    Settle();
+    EXPECT_TRUE(SeenOf<TouchEvent>().empty()) << "a hovering pen produced a contact";
+
+    // The tip goes down at three quarters of its pressure range.
+    compositor_->TabletDown();
+    compositor_->TabletPressure(0.75);
+    compositor_->TabletFrame();
+    compositor_->TabletMotion(600, 240);
+    compositor_->TabletPressure(0.5);
+    compositor_->TabletFrame();
+    // Pressure alone, with the tip where it was: a stroke that presses harder without moving.
+    compositor_->TabletPressure(0.25);
+    compositor_->TabletFrame();
+    compositor_->TabletUp();
+    compositor_->TabletFrame();
+    Settle();
+
+    const std::vector<TouchEvent> touches = SeenOf<TouchEvent>();
+    ASSERT_EQ(touches.size(), 4u);
+    EXPECT_EQ(touches[0].kind, TouchEventKind::Down);
+    EXPECT_EQ(touches[0].window, window.GetId());
+    EXPECT_FLOAT_EQ(touches[0].x, 0.5f);
+    EXPECT_FLOAT_EQ(touches[0].y, 0.5f);
+    EXPECT_NEAR(touches[0].pressure, 0.75f, 0.001f);
+    EXPECT_EQ(touches[1].kind, TouchEventKind::Motion);
+    EXPECT_FLOAT_EQ(touches[1].x, 0.75f);
+    EXPECT_NEAR(touches[1].deltaX, 0.25f, 0.001f);
+    EXPECT_NEAR(touches[1].pressure, 0.5f, 0.001f);
+    EXPECT_EQ(touches[2].kind, TouchEventKind::Motion);
+    EXPECT_NEAR(touches[2].pressure, 0.25f, 0.001f);
+    EXPECT_FLOAT_EQ(touches[2].deltaX, 0.0f) << "a pressure change moved the contact";
+    EXPECT_EQ(touches[3].kind, TouchEventKind::Up);
+    // Every event of one stroke is one contact, and it is not a touchscreen's id.
+    EXPECT_EQ(touches[0].fingerId, touches[3].fingerId);
+    EXPECT_NE(touches[0].fingerId, 0u);
+}
+
+TEST_F(WaylandProtocol, APenTakenOffTheTabletMidStrokeCancelsItsContact)
+{
+    CompositorOptions options;
+    options.tablet = true;
+    Start(options);
+    MakeWindow();
+    Settle();
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(100, 100);
+    compositor_->TabletDown();
+    compositor_->TabletFrame();
+    Settle();
+    ASSERT_EQ(SeenOf<TouchEvent>().size(), 1u);
+
+    compositor_->TabletProximityOut();
+    Settle();
+    const std::vector<TouchEvent> touches = SeenOf<TouchEvent>();
+    ASSERT_EQ(touches.size(), 2u);
+    EXPECT_EQ(touches.back().kind, TouchEventKind::Cancelled) << "a lifted pen left a contact down";
+}
+
+TEST_F(WaylandProtocol, ATabletUnpluggedMidStrokeCancelsItAndItsToolGoesAway)
+{
+    CompositorOptions options;
+    options.tablet = true;
+    Start(options);
+    MakeWindow();
+    Settle();
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(200, 120);
+    compositor_->TabletDown();
+    compositor_->TabletFrame();
+    Settle();
+    ASSERT_EQ(SeenOf<TouchEvent>().size(), 1u);
+
+    compositor_->RemoveTablet();
+    compositor_->RemoveTabletTool();
+    Settle();
+    EXPECT_EQ(SeenOf<TouchEvent>().back().kind, TouchEventKind::Cancelled);
+    EXPECT_EQ(compositor_->GetTabletToolCount(), 0) << "the tool's proxy outlived its removal";
+    EXPECT_TRUE(platform_->GetInputDevices()->GetDevices(InputDeviceKind::Touch).empty());
+}
+
+TEST_F(WaylandProtocol, WhatTheContractDoesNotCarryIsNotInvented)
+{
+    CompositorOptions options;
+    options.tablet = true;
+    Start(options);
+    MakeWindow();
+    Settle();
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(400, 240);
+    compositor_->TabletDown();
+    compositor_->TabletFrame();
+    Settle();
+    const std::size_t afterDown = SeenOf<TouchEvent>().size();
+    ASSERT_EQ(afterDown, 1u);
+
+    // Tilt and a barrel button: frames that change nothing a CNA game can read.
+    compositor_->TabletTilt(12.5, -30.0);
+    compositor_->TabletFrame();
+    compositor_->TabletButton(BTN_STYLUS, true);
+    compositor_->TabletFrame();
+    compositor_->TabletButton(BTN_STYLUS, false);
+    compositor_->TabletFrame();
+    Settle();
+    EXPECT_EQ(SeenOf<TouchEvent>().size(), afterDown) << "tilt or a barrel button became an event";
+    EXPECT_TRUE(SeenOf<MouseButtonEvent>().empty()) << "a barrel button became a mouse button";
+}
+
+TEST_F(WaylandProtocol, APenIsATouchDeviceAndOneAttachedLaterIsFound)
+{
+    CompositorOptions options;
+    options.tabletManager = true;  // the manager, with nothing plugged in: GNOME's usual state
+    Start(options);
+    MakeWindow();
+    Settle();
+    EXPECT_EQ(compositor_->GetTabletSeatCount(), 1) << "the backend asked no seat for its tablets";
+    EXPECT_FALSE(platform_->GetInputDevices()->HasDevice(InputDeviceKind::Touch));
+
+    compositor_->AddTabletTool(true);  // an eraser, plugged in while the game runs
+    Settle();
+    const std::vector<InputDeviceInfo> devices = platform_->GetInputDevices()->GetDevices(InputDeviceKind::Touch);
+    ASSERT_EQ(devices.size(), 1u);
+    EXPECT_EQ(devices[0].kind, InputDeviceKind::Touch);
+    EXPECT_EQ(devices[0].name, "eraser");
+
+    // And it draws, exactly as the pen does: an eraser touching is a touch.
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(400, 240);
+    compositor_->TabletDown();
+    compositor_->TabletPressure(1.0);
+    compositor_->TabletFrame();
+    Settle();
+    const std::vector<TouchEvent> touches = SeenOf<TouchEvent>();
+    ASSERT_EQ(touches.size(), 1u);
+    EXPECT_EQ(touches[0].kind, TouchEventKind::Down);
+    EXPECT_FLOAT_EQ(touches[0].pressure, 1.0f);
+}
+
+TEST_F(WaylandProtocol, APenWithoutPressureReportsAFullContact)
+{
+    CompositorOptions options;
+    options.tablet = true;
+    options.tabletPressure = false;
+    Start(options);
+    MakeWindow();
+    Settle();
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(400, 240);
+    compositor_->TabletDown();
+    compositor_->TabletFrame();
+    Settle();
+    const std::vector<TouchEvent> touches = SeenOf<TouchEvent>();
+    ASSERT_EQ(touches.size(), 1u);
+    // As a finger does under both backends: a contact with no pressure to report is a full one.
+    EXPECT_FLOAT_EQ(touches[0].pressure, 1.0f);
+}
+
+TEST_F(WaylandProtocol, AStrokeOnAWindowThatGoesAwayIsForgotten)
+{
+    CompositorOptions options;
+    options.tablet = true;
+    Start(options);
+    IPlatformWindow& window = MakeWindow();
+    Settle();
+    compositor_->TabletProximityIn(0);
+    compositor_->TabletMotion(400, 240);
+    compositor_->TabletDown();
+    compositor_->TabletFrame();
+    Settle();
+    const WindowId id = window.GetId();
+    ASSERT_EQ(SeenOf<TouchEvent>().size(), 1u);
+
+    windows_.clear();  // the game closes the window with the pen still down
+    Settle();
+    const std::vector<TouchEvent> touches = SeenOf<TouchEvent>();
+    ASSERT_EQ(touches.size(), 2u);
+    EXPECT_EQ(touches.back().kind, TouchEventKind::Cancelled);
+    EXPECT_EQ(touches.back().window, id);
+
+    // Nothing the pen does afterwards names the window that is gone.
+    compositor_->TabletMotion(500, 240);
+    compositor_->TabletFrame();
+    compositor_->TabletUp();
+    compositor_->TabletFrame();
+    Settle();
+    EXPECT_EQ(SeenOf<TouchEvent>().size(), 2u);
+}
+
 // --- clipboard, primary selection, drag and drop (WAYLAND-0070..0073) ------------------------------
 
 std::vector<std::uint8_t> Bytes(const std::string& text)
@@ -1208,9 +1410,22 @@ TEST_F(WaylandProtocol, APasteTargetThatGivesUpDoesNotHurtUs)
     Settle();
     const int fd = compositor_->RequestClientSelection("text/plain;charset=utf-8");
     ASSERT_GE(fd, 0);
+    // The game's own loop is what writes the transfer, so the first slice is waited for by
+    // pumping rather than by a bare read: a read that arrives before the client has written
+    // would block this thread, and then nothing would ever pump again.
     char chunk[4096];
-    Pump();
-    (void) ::read(fd, chunk, sizeof(chunk));
+    bool read = false;
+    const auto deadline = std::chrono::steady_clock::now() + 10s;
+    while (!read && std::chrono::steady_clock::now() < deadline)
+    {
+        Pump();
+        pollfd descriptor{fd, POLLIN, 0};
+        if (::poll(&descriptor, 1, 5) > 0)
+        {
+            read = ::read(fd, chunk, sizeof(chunk)) > 0;
+        }
+    }
+    ASSERT_TRUE(read) << "the platform wrote nothing to the paste pipe";
     ::close(fd);  // the reader hangs up mid-transfer: EPIPE for us, never SIGPIPE
     for (int round = 0; round < 20; ++round)
     {

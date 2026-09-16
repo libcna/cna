@@ -16,6 +16,7 @@
 #include "WaylandOutputs.hpp"
 #include "WaylandSeat.hpp"
 #include "WaylandTextInput.hpp"
+#include "WaylandTablet.hpp"
 #include "WaylandTouch.hpp"
 
 #ifdef CNA_PLATFORM_HAVE_EVDEV
@@ -193,7 +194,8 @@ namespace CNA::Platform::Wayland {
                 for (const auto& seat : seats_) { seats.push_back(seat.get()); }
                 return seats;
             },
-            [this](const InputDeviceKind kind) { return ControllerDevices(kind); });
+            [this](const InputDeviceKind kind) { return ControllerDevices(kind); },
+            [this] { return tablet_ != nullptr ? tablet_->GetToolNames() : std::vector<std::string>(); });
         capabilities_ = ComputeCapabilities();
     }
 
@@ -219,6 +221,7 @@ namespace CNA::Platform::Wayland {
         dialogs_.reset();
         inputDevices_.reset();
         textInput_.reset();
+        tablet_.reset();
         touch_.reset();
         mouse_.reset();
         keyboard_.reset();
@@ -286,6 +289,21 @@ namespace CNA::Platform::Wayland {
             },
             [this](wl_seat* seat, const std::uint32_t serial) { RecordSerial(seat, serial); },
         });
+        // A pen is a touch (WAYLAND-0059): the tablets report through the same host the
+        // touchscreens do, and a game that reads `TouchPanel` cannot tell them apart.
+        tablet_ = std::make_unique<WaylandTablet>(WaylandTablet::Host{
+            [this](PlatformEvent event) { PostEvent(std::move(event)); },
+            [this](wl_surface* surface) { return ResolveSurface(surface); },
+            [this](const WindowId window, int& width, int& height) {
+                if (const WaylandWindow* target = FindWindow(window))
+                {
+                    const WindowBounds bounds = target->GetClientBounds();
+                    width = bounds.width;
+                    height = bounds.height;
+                }
+            },
+            [this](wl_seat* seat, const std::uint32_t serial) { RecordSerial(seat, serial); },
+        });
         textInput_ = std::make_unique<WaylandTextInput>(WaylandTextInput::Host{
             [this](PlatformEvent event) { PostEvent(std::move(event)); },
             [this](wl_surface* surface) { return ResolveSurface(surface); },
@@ -325,6 +343,9 @@ namespace CNA::Platform::Wayland {
         const WaylandGlobals& globals = connection_->GetGlobals();
 #if defined(CNA_WAYLAND_HAVE_TEXT_INPUT_V3)
         textInput_->AttachSeat(globals.textInputManager, seat.GetProxy());
+#endif
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+        tablet_->AttachSeat(globals.tabletManager, seat.GetProxy(), seat.GetGlobalName());
 #endif
         if (dataDevices_ == nullptr && globals.dataDeviceManager != nullptr)
         {
@@ -394,6 +415,10 @@ namespace CNA::Platform::Wayland {
             }
             wl_seat* seat = (*it)->GetProxy();
             textInput_->DetachSeat(seat);
+            if (tablet_ != nullptr)
+            {
+                tablet_->DetachSeat(seat);
+            }
             if (dataDevices_ != nullptr)
             {
                 dataDevices_->DetachSeat(seat);
@@ -422,6 +447,13 @@ namespace CNA::Platform::Wayland {
             for (const auto& seat : seats_)
             {
                 textInput_->DetachSeat(seat->GetProxy());
+            }
+        }
+        if (tablet_ != nullptr)
+        {
+            for (const auto& seat : seats_)
+            {
+                tablet_->DetachSeat(seat->GetProxy());
             }
         }
         // A seat's destructor hands its keyboard, pointer and touch back to the services, which
@@ -708,6 +740,7 @@ namespace CNA::Platform::Wayland {
         if (mouse_ != nullptr) { mouse_->ForgetWindow(id); }
         if (keyboard_ != nullptr) { keyboard_->ForgetWindow(id); }
         if (touch_ != nullptr) { touch_->ForgetWindow(id); }
+        if (tablet_ != nullptr) { tablet_->ForgetWindow(id); }
         if (textInput_ != nullptr) { textInput_->ForgetWindow(id); }
         if (dataDevices_ != nullptr) { dataDevices_->ForgetWindow(id); }
         if (idleInhibitor_ != nullptr) { idleInhibitor_->RemoveWindow(id); }

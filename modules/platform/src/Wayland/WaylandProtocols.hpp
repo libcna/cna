@@ -46,7 +46,11 @@
 #if defined(CNA_WAYLAND_HAVE_XDG_FOREIGN)
 #include "xdg-foreign-unstable-v2-client-protocol.h"
 #endif
-#if defined(CNA_WAYLAND_HAVE_CURSOR_SHAPE)
+#if defined(CNA_WAYLAND_HAVE_TABLET)
 #include "tablet-v2-client-protocol.h"
+#endif
+#if defined(CNA_WAYLAND_HAVE_CURSOR_SHAPE)
+// cursor-shape-v1 names zwp_tablet_tool_v2, so its header needs tablet-v2's; the two are found
+// and generated together in cmake/PlatformWayland.cmake.
 #include "cursor-shape-v1-client-protocol.h"
 #endif

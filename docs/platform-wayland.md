@@ -57,7 +57,7 @@ Found through `pkg-config`; no distribution path is written anywhere
 | `xkbcommon` ≥ 0.5 | **mandatory**, linked | the backend is not offered |
 | `wayland-scanner` | **mandatory**, build time | the backend is not offered |
 | `wayland-protocols` with `stable/xdg-shell` | **mandatory**, build time | the backend is not offered |
-| each optional protocol XML (`xdg-output`, `viewporter`, `fractional-scale-v1`, `relative-pointer`, `pointer-constraints`, `text-input-v3`, `primary-selection`, `xdg-decoration`, `xdg-activation`, `idle-inhibit`, `xdg-foreign-v2`, `cursor-shape-v1` with `tablet-v2`) | optional, build time | exactly that protocol's capability (`CNA_WAYLAND_HAVE_<PROTOCOL>`) |
+| each optional protocol XML (`xdg-output`, `viewporter`, `fractional-scale-v1`, `relative-pointer`, `pointer-constraints`, `text-input-v3`, `primary-selection`, `xdg-decoration`, `xdg-activation`, `idle-inhibit`, `xdg-foreign-v2`, `tablet-v2`, `cursor-shape-v1`) | optional, build time | exactly that protocol's capability (`CNA_WAYLAND_HAVE_<PROTOCOL>`) |
 | EGL + `wayland-egl` **headers** | optional; `libEGL.so.1` and `libwayland-egl.so.1` are loaded at run time | `openGlContext` |
 | `wayland-cursor` **headers** | optional; `libwayland-cursor.so.0` loaded at run time | the cursor-theme fallback (cursor-shape still works) |
 | Vulkan **headers** | optional; the loader is the caller's | `vulkanSurface` |
@@ -106,7 +106,7 @@ when its capability is true.
 | `openGlContext` | conditional | libEGL and libwayland-egl load and an EGL display for the connection initialises |
 | `vulkanSurface` | conditional | the build had the Vulkan headers |
 | `nativeFileDialog` | conditional | the session bus has the desktop portal |
-| `inputDeviceEnumeration` | ✅ | the seats' keyboards, pointers and touchscreens, and the evdev controllers |
+| `inputDeviceEnumeration` | ✅ | the seats' keyboards, pointers, touchscreens and tablet tools, and the evdev controllers |
 | `gamepad`, `joystick`, `gamepadRumble`, `gamepadSensors`, `haptics`, `powerInfo` | Linux | the shared evdev and sysfs services, exactly as under X11 |
 | `globalPointer` | ❌ by design | Wayland gives an ordinary client neither the pointer's position outside its surfaces nor the power to move it (D-19): `SetCapture`, `TryGetGlobalPosition` and `SetGlobalPosition` throw `PlatformNotSupportedException(GlobalPointer)` |
 | `messageBox` | ❌ | see [Message boxes](#message-boxes) |
@@ -228,6 +228,30 @@ protocol is absent; custom images on a `wl_shm` cursor surface.
 
 `wl_touch` down, motion, up and cancel, one finger id per seat and contact, coordinates normalised
 to the window.
+
+## Graphics tablets
+
+`zwp_tablet_manager_v2` (WAYLAND-0059), and the rule is the X11 backend's: **a pen whose tip is
+down is a touch with the pressure it reports, and a hovering pen is nothing.** A game that reads
+`TouchPanel` sees a pen under both backends and cannot tell which device drew the stroke.
+
+- One contact per tool, with the seat's global name in its id, so two seats' tablets never collide
+  with each other or with a touchscreen's fingers. An eraser touching is a touch like the tip.
+- Frames are respected: position, pressure and tip state are applied together when
+  `zwp_tablet_tool_v2.frame` arrives, never one event at a time. A frame that only changes the
+  pressure is a `Motion` with a zero delta, because a drawing program reads the pressure of a
+  stroke from the contact it already has.
+- A tool that leaves proximity, a tool that is unplugged, a tablet that is unplugged and a window
+  that is destroyed each end a stroke in progress as `Cancelled` -- no contact is ever left down.
+- A tool that reports no pressure capability draws at pressure 1, as a finger does.
+- Each tool is listed by `GetDevices(InputDeviceKind::Touch)` under its protocol type name (`pen`,
+  `eraser`, `airbrush`, ...), because a touch is what its strokes arrive as.
+
+**Not delivered, deliberately:** tilt, rotation, the slider, the wheel, the barrel buttons and the
+pad with its rings and strips. The contract carries none of them, and a private event for them
+would be an API no other backend has; the pad object is destroyed as soon as it is announced so the
+compositor stops sending its events. A tablet's own cursor (`zwp_tablet_tool_v2.set_cursor`) is
+left to the compositor.
 
 ---
 

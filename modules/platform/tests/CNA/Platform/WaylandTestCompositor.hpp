@@ -83,6 +83,12 @@ namespace CNA::Platform::Wayland::Testing {
         bool pointer = true;
         /** @brief The seat has a touchscreen. */
         bool touch = false;
+        /** @brief Offer zwp_tablet_manager_v2 (GNOME does, with no tablets attached). */
+        bool tabletManager = false;
+        /** @brief Announce a tablet and a pen on it; implies `tabletManager`. */
+        bool tablet = false;
+        /** @brief The pen announced reports pressure. */
+        bool tabletPressure = true;
 
         // --- the seat -------------------------------------------------------------------------
         /** @brief XKB layout(s) of the keymap sent, e.g. "us" or "cz,us". */
@@ -511,6 +517,41 @@ namespace CNA::Platform::Wayland::Testing {
         void TouchFrame();
         /** @brief Cancels every touch. */
         void TouchCancel();
+
+        // --- tablets ---------------------------------------------------------------------------
+
+        /**
+         * @brief Attaches a tablet with one tool to every tablet seat the client holds.
+         * @param eraser The tool is an eraser rather than a pen.
+         * @param withPressure The tool reports the pressure capability.
+         */
+        void AddTabletTool(bool eraser = false, bool withPressure = true);
+        /** @brief Tells the client the tool is gone (`zwp_tablet_tool_v2.removed`). */
+        void RemoveTabletTool();
+        /** @brief Tells the client the tablet is unplugged (`zwp_tablet_v2.removed`). */
+        void RemoveTablet();
+        /** @brief The tool comes into proximity over a toplevel's content surface. */
+        void TabletProximityIn(int toplevel);
+        /** @brief The tool leaves proximity. */
+        void TabletProximityOut();
+        /** @brief The tip goes down. */
+        void TabletDown();
+        /** @brief The tip lifts. */
+        void TabletUp();
+        /** @brief The tool moves, surface-local. */
+        void TabletMotion(double x, double y);
+        /** @brief Reports pressure, 0 to 1. */
+        void TabletPressure(double pressure);
+        /** @brief Reports tilt in degrees; the backend delivers none of it. */
+        void TabletTilt(double x, double y);
+        /** @brief Presses or releases a barrel button; the backend delivers none of them. */
+        void TabletButton(std::uint32_t button, bool pressed);
+        /** @brief Ends the tool's frame: everything since the last one takes effect together. */
+        void TabletFrame();
+        /** @brief `zwp_tablet_tool_v2` resources the client holds. */
+        [[nodiscard]] int GetTabletToolCount();
+        /** @brief `zwp_tablet_seat_v2` resources the client holds. */
+        [[nodiscard]] int GetTabletSeatCount();
 
         // --- selections and drag and drop -----------------------------------------------------
 

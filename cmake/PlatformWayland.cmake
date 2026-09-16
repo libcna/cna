@@ -158,17 +158,24 @@ wayland-devel)" PARENT_SCOPE)
         endif()
     endforeach()
 
-    # cursor-shape-v1 names zwp_tablet_tool_v2 in one request, so its generated code refers to
-    # that interface: tablet-v2 is generated with it. Stable since wayland-protocols 1.43,
-    # unstable before.
+    # tablet-v2 carries the graphics tablets (WAYLAND-0059) and is also what cursor-shape-v1
+    # needs: cursor-shape names zwp_tablet_tool_v2 in one of its requests, so its generated code
+    # refers to that interface and the two are generated together. tablet-v2 became stable in
+    # wayland-protocols 1.43 and was unstable before, so both paths are looked for.
     set(_tablet "")
     foreach(_candidate stable/tablet/tablet-v2.xml unstable/tablet/tablet-unstable-v2.xml)
         if(NOT _tablet AND EXISTS "${_protocols_dir}/${_candidate}")
             set(_tablet "${_protocols_dir}/${_candidate}")
         endif()
     endforeach()
-    if(_tablet AND EXISTS "${_protocols_dir}/staging/cursor-shape/cursor-shape-v1.xml")
+    if(_tablet)
         list(APPEND _protocols "tablet-v2;${_tablet}")
+        list(APPEND _definitions "CNA_WAYLAND_HAVE_TABLET=1")
+        list(APPEND _found_optional "tablet-v2")
+    else()
+        list(APPEND _missing_optional "tablet-v2")
+    endif()
+    if(_tablet AND EXISTS "${_protocols_dir}/staging/cursor-shape/cursor-shape-v1.xml")
         list(APPEND _protocols "cursor-shape-v1;${_protocols_dir}/staging/cursor-shape/cursor-shape-v1.xml")
         list(APPEND _definitions "CNA_WAYLAND_HAVE_CURSOR_SHAPE=1")
         list(APPEND _found_optional "cursor-shape-v1")

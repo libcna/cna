@@ -339,6 +339,16 @@ namespace CNA::Platform::Wayland {
                                     static_cast<DeviceId>(static_cast<unsigned>(kind));
                 devices.push_back({id, kind, seat->GetName().empty() ? std::string("seat") : seat->GetName()});
             }
+            if (kind == InputDeviceKind::Touch && tabletTools_)
+            {
+                // A pen reports as a touch, so it is listed as one: a game that asks whether a
+                // touch device is attached before reading `TouchPanel` gets a truthful yes.
+                DeviceId index = 0;
+                for (const std::string& tool : tabletTools_())
+                {
+                    devices.push_back({(static_cast<DeviceId>(0x7Fu) << 40) | (++index), kind, tool});
+                }
+            }
             return devices;
         }
         return controllers_ ? controllers_(kind) : devices;

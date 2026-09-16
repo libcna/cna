@@ -83,6 +83,10 @@ namespace CNA::Platform::Wayland {
         /** @brief `zxdg_exporter_v2`: a window handle another process can name. */
         zxdg_exporter_v2* exporter = nullptr;
 #endif
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+        /** @brief `zwp_tablet_manager_v2`: the graphics tablets of a seat. */
+        zwp_tablet_manager_v2* tabletManager = nullptr;
+#endif
 #if defined(CNA_WAYLAND_HAVE_CURSOR_SHAPE)
         /** @brief `wp_cursor_shape_manager_v1`. */
         wp_cursor_shape_manager_v1* cursorShapeManager = nullptr;

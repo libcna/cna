@@ -27,7 +27,12 @@
 #if defined(CNA_WAYLAND_HAVE_POINTER_CONSTRAINTS)
 #  include "pointer-constraints-unstable-v1-server-protocol.h"
 #endif
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+#  include "tablet-v2-server-protocol.h"
+#endif
 #if defined(CNA_WAYLAND_HAVE_CURSOR_SHAPE)
+// cursor-shape-v1 names zwp_tablet_tool_v2: tablet-v2's header comes first, as in the backend's
+// own WaylandProtocols.hpp.
 #  include "cursor-shape-v1-server-protocol.h"
 #endif
 #if defined(CNA_WAYLAND_HAVE_TEXT_INPUT_V3)
@@ -438,6 +443,9 @@ namespace CNA::Platform::Wayland::Testing {
         std::vector<wl_resource*> relativePointers;
         std::vector<Constraint*> constraints;
         std::vector<wl_resource*> shapeDevices;
+        std::vector<wl_resource*> tabletSeats;
+        std::vector<wl_resource*> tablets;
+        std::vector<wl_resource*> tabletTools;
         std::vector<TextInput*> textInputs;
         std::vector<wl_resource*> dataDevices;
         std::vector<wl_resource*> primaryDevices;
@@ -453,6 +461,7 @@ namespace CNA::Platform::Wayland::Testing {
         Surface* keyboardFocus = nullptr;
         Surface* pointerFocus = nullptr;
         Surface* touchFocus = nullptr;
+        Surface* tabletFocus = nullptr;
         std::set<std::uint32_t> inputSerials;
         std::uint32_t lastInputSerial = 0;
         /// Serials of button presses (and touch downs) still held: the implicit grabs a move,
@@ -982,6 +991,7 @@ namespace CNA::Platform::Wayland::Testing {
             if (server->keyboardFocus == surface) { server->keyboardFocus = nullptr; }
             if (server->pointerFocus == surface) { server->pointerFocus = nullptr; }
             if (server->touchFocus == surface) { server->touchFocus = nullptr; }
+            if (server->tabletFocus == surface) { server->tabletFocus = nullptr; }
             if (server->dragSurface == surface) { server->dragSurface = nullptr; }
             if (server->textInputFocus == surface) { server->textInputFocus = nullptr; }
             std::erase(server->surfaces, surface);
@@ -2294,8 +2304,78 @@ namespace CNA::Platform::Wayland::Testing {
                 server->shapeDevices.push_back(device);
             },
             .get_tablet_tool_v2 = [](wl_client* client, wl_resource*, std::uint32_t, wl_resource*) {
-                wl_client_post_implementation_error(client, "the test compositor has no tablets");
+                wl_client_post_implementation_error(client, "the cursor of a tablet tool is not a "
+                                                            "shape the test compositor sets");
             },
+        };
+#endif
+
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+        const struct zwp_tablet_v2_interface kTabletImplementation = {
+            .destroy = DestroyRequest,
+        };
+
+        const struct zwp_tablet_tool_v2_interface kTabletToolImplementation = {
+            .set_cursor = [](wl_client*, wl_resource*, std::uint32_t, wl_resource*, std::int32_t, std::int32_t) {},
+            .destroy = DestroyRequest,
+        };
+
+        const struct zwp_tablet_seat_v2_interface kTabletSeatImplementation = {
+            .destroy = DestroyRequest,
+        };
+
+        /// Announces one tablet with one tool on a tablet seat, as a compositor does when the
+        /// client binds a seat that has one plugged in, or when one is plugged in later.
+        void AnnounceTablet(S* server, wl_client* client, wl_resource* tabletSeat, const bool eraser,
+                            const bool withPressure)
+        {
+            const int version = wl_resource_get_version(tabletSeat);
+            wl_resource* tablet = wl_resource_create(client, &zwp_tablet_v2_interface, version, 0);
+            wl_resource_set_implementation(tablet, &kTabletImplementation, server,
+                                           [](wl_resource* r) { DestroyInList(r, &S::tablets); });
+            server->tablets.push_back(tablet);
+            zwp_tablet_seat_v2_send_tablet_added(tabletSeat, tablet);
+            zwp_tablet_v2_send_name(tablet, "CNA test tablet");
+            zwp_tablet_v2_send_id(tablet, 0x056a, 0x0357);
+            zwp_tablet_v2_send_path(tablet, "/dev/input/event-cna-test");
+            zwp_tablet_v2_send_done(tablet);
+
+            wl_resource* tool = wl_resource_create(client, &zwp_tablet_tool_v2_interface, version, 0);
+            wl_resource_set_implementation(tool, &kTabletToolImplementation, server,
+                                           [](wl_resource* r) { DestroyInList(r, &S::tabletTools); });
+            server->tabletTools.push_back(tool);
+            zwp_tablet_seat_v2_send_tool_added(tabletSeat, tool);
+            zwp_tablet_tool_v2_send_type(tool, eraser ? ZWP_TABLET_TOOL_V2_TYPE_ERASER
+                                                      : ZWP_TABLET_TOOL_V2_TYPE_PEN);
+            zwp_tablet_tool_v2_send_hardware_serial(tool, 0, 0x0C0A0001u);
+            if (withPressure)
+            {
+                zwp_tablet_tool_v2_send_capability(tool, ZWP_TABLET_TOOL_V2_CAPABILITY_PRESSURE);
+            }
+            zwp_tablet_tool_v2_send_capability(tool, ZWP_TABLET_TOOL_V2_CAPABILITY_TILT);
+            zwp_tablet_tool_v2_send_done(tool);
+        }
+
+        const struct zwp_tablet_manager_v2_interface kTabletManagerImplementation = {
+            .get_tablet_seat = [](wl_client* client, wl_resource* resource, const std::uint32_t id,
+                                  wl_resource* seat) {
+                S* server = static_cast<S*>(wl_resource_get_user_data(resource));
+                if (seat == nullptr)
+                {
+                    wl_client_post_implementation_error(client, "get_tablet_seat with no seat");
+                    return;
+                }
+                wl_resource* tabletSeat =
+                    wl_resource_create(client, &zwp_tablet_seat_v2_interface, wl_resource_get_version(resource), id);
+                wl_resource_set_implementation(tabletSeat, &kTabletSeatImplementation, server,
+                                               [](wl_resource* r) { DestroyInList(r, &S::tabletSeats); });
+                server->tabletSeats.push_back(tabletSeat);
+                if (server->options.tablet)
+                {
+                    AnnounceTablet(server, client, tabletSeat, false, server->options.tabletPressure);
+                }
+            },
+            .destroy = DestroyRequest,
         };
 #endif
 
@@ -2646,6 +2726,13 @@ namespace CNA::Platform::Wayland::Testing {
         {
             global("wp_cursor_shape_manager_v1", &wp_cursor_shape_manager_v1_interface, 2,
                    &BindSimple<&wp_cursor_shape_manager_v1_interface, &kShapeManagerImplementation>);
+        }
+#endif
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+        if (s.options.tabletManager || s.options.tablet)
+        {
+            global("zwp_tablet_manager_v2", &zwp_tablet_manager_v2_interface, 1,
+                   &BindSimple<&zwp_tablet_manager_v2_interface, &kTabletManagerImplementation>);
         }
 #endif
 #if defined(CNA_WAYLAND_HAVE_TEXT_INPUT_V3)
@@ -3749,6 +3836,173 @@ namespace CNA::Platform::Wayland::Testing {
             }
         });
     }
+
+    // --- tablets ---------------------------------------------------------------------------------
+
+#if defined(CNA_WAYLAND_HAVE_TABLET)
+
+    namespace {
+
+        /// Every tool the client holds. A test drives one tool; more than one would need the
+        /// caller to name it, which no test has asked for.
+        void ForEachTool(TestCompositor::State& s, const std::function<void(wl_resource*)>& send)
+        {
+            for (wl_resource* tool : s.tabletTools)
+            {
+                send(tool);
+            }
+        }
+
+    } // namespace
+
+    void TestCompositor::AddTabletTool(const bool eraser, const bool withPressure)
+    {
+        Run([&] {
+            State& s = *state_;
+            if (s.tabletSeats.empty())
+            {
+                throw std::runtime_error("the client has bound no zwp_tablet_seat_v2");
+            }
+            for (wl_resource* tabletSeat : s.tabletSeats)
+            {
+                AnnounceTablet(&s, wl_resource_get_client(tabletSeat), tabletSeat, eraser, withPressure);
+            }
+        });
+    }
+
+    void TestCompositor::RemoveTabletTool()
+    {
+        Run([&] { ForEachTool(*state_, [](wl_resource* tool) { zwp_tablet_tool_v2_send_removed(tool); }); });
+    }
+
+    void TestCompositor::RemoveTablet()
+    {
+        Run([&] {
+            for (wl_resource* tablet : state_->tablets)
+            {
+                zwp_tablet_v2_send_removed(tablet);
+            }
+        });
+    }
+
+    void TestCompositor::TabletProximityIn(const int toplevel)
+    {
+        Run([&] {
+            State& s = *state_;
+            State::Toplevel* top = s.ToplevelAt(toplevel);
+            if (top->xdg == nullptr || top->xdg->surface == nullptr || s.tablets.empty())
+            {
+                return;
+            }
+            s.tabletFocus = top->xdg->surface;
+            const std::uint32_t serial = s.InputSerial();
+            wl_resource* tablet = s.tablets.front();
+            ForEachTool(s, [&](wl_resource* tool) {
+                zwp_tablet_tool_v2_send_proximity_in(tool, serial, tablet, s.tabletFocus->resource);
+            });
+        });
+    }
+
+    void TestCompositor::TabletProximityOut()
+    {
+        Run([&] {
+            state_->tabletFocus = nullptr;
+            ForEachTool(*state_, [](wl_resource* tool) { zwp_tablet_tool_v2_send_proximity_out(tool); });
+        });
+    }
+
+    void TestCompositor::TabletDown()
+    {
+        Run([&] {
+            const std::uint32_t serial = state_->InputSerial();
+            ForEachTool(*state_, [serial](wl_resource* tool) { zwp_tablet_tool_v2_send_down(tool, serial); });
+        });
+    }
+
+    void TestCompositor::TabletUp()
+    {
+        Run([&] { ForEachTool(*state_, [](wl_resource* tool) { zwp_tablet_tool_v2_send_up(tool); }); });
+    }
+
+    void TestCompositor::TabletMotion(const double x, const double y)
+    {
+        Run([&] {
+            ForEachTool(*state_, [x, y](wl_resource* tool) {
+                zwp_tablet_tool_v2_send_motion(tool, wl_fixed_from_double(x), wl_fixed_from_double(y));
+            });
+        });
+    }
+
+    void TestCompositor::TabletPressure(const double pressure)
+    {
+        Run([&] {
+            const double clamped = pressure < 0.0 ? 0.0 : (pressure > 1.0 ? 1.0 : pressure);
+            const auto raw = static_cast<std::uint32_t>(clamped * 65535.0 + 0.5);
+            ForEachTool(*state_, [raw](wl_resource* tool) { zwp_tablet_tool_v2_send_pressure(tool, raw); });
+        });
+    }
+
+    void TestCompositor::TabletTilt(const double x, const double y)
+    {
+        Run([&] {
+            ForEachTool(*state_, [x, y](wl_resource* tool) {
+                zwp_tablet_tool_v2_send_tilt(tool, wl_fixed_from_double(x), wl_fixed_from_double(y));
+            });
+        });
+    }
+
+    void TestCompositor::TabletButton(const std::uint32_t button, const bool pressed)
+    {
+        Run([&] {
+            const std::uint32_t serial = state_->InputSerial();
+            ForEachTool(*state_, [&](wl_resource* tool) {
+                zwp_tablet_tool_v2_send_button(tool, serial, button,
+                                               pressed ? ZWP_TABLET_TOOL_V2_BUTTON_STATE_PRESSED
+                                                       : ZWP_TABLET_TOOL_V2_BUTTON_STATE_RELEASED);
+            });
+        });
+    }
+
+    void TestCompositor::TabletFrame()
+    {
+        Run([&] {
+            const std::uint32_t time = NowMs();
+            ForEachTool(*state_, [time](wl_resource* tool) { zwp_tablet_tool_v2_send_frame(tool, time); });
+        });
+    }
+
+    int TestCompositor::GetTabletToolCount()
+    {
+        int count = 0;
+        Run([&] { count = static_cast<int>(state_->tabletTools.size()); });
+        return count;
+    }
+
+    int TestCompositor::GetTabletSeatCount()
+    {
+        int count = 0;
+        Run([&] { count = static_cast<int>(state_->tabletSeats.size()); });
+        return count;
+    }
+
+#else
+
+    void TestCompositor::AddTabletTool(bool, bool) {}
+    void TestCompositor::RemoveTabletTool() {}
+    void TestCompositor::RemoveTablet() {}
+    void TestCompositor::TabletProximityIn(int) {}
+    void TestCompositor::TabletProximityOut() {}
+    void TestCompositor::TabletDown() {}
+    void TestCompositor::TabletUp() {}
+    void TestCompositor::TabletMotion(double, double) {}
+    void TestCompositor::TabletPressure(double) {}
+    void TestCompositor::TabletTilt(double, double) {}
+    void TestCompositor::TabletButton(std::uint32_t, bool) {}
+    void TestCompositor::TabletFrame() {}
+    int TestCompositor::GetTabletToolCount() { return 0; }
+    int TestCompositor::GetTabletSeatCount() { return 0; }
+
+#endif
 
     // --- selections ------------------------------------------------------------------------------
 
