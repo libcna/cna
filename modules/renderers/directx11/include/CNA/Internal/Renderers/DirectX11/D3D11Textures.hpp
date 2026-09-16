@@ -110,6 +110,58 @@ namespace CNA::Internal::Renderers::DirectX11
         /// creation/Map, so the shared layer rejects the read instead of fabricating a face.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Reads an exact DXT block payload back from a cube face region.
+         *
+         * Served from the CPU block copy SetCompressedDataEXT keeps, so the blocks returned are the
+         * blocks stored rather than a re-encoding of a decoded image.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels (a block multiple).
+         * @param y Top edge in texels (a block multiple).
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination block buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete block region was copied.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const override;
+        /**
+         * @brief Stores declared-format bytes in a cube face region.
+         *
+         * The declared-format byte route the shared layer uses for every uncompressed format.
+         * SetData already stores in the declared DXGI format with its own texel size; this is that
+         * path, refused for a block-compressed cube, whose bytes go through SetCompressedDataEXT.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source bytes in the declared format.
+         * @param dataLength Source size in bytes.
+         * @return true when the complete region was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads declared-format bytes from a cube face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete region was copied; false for a block-compressed cube.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
@@ -147,6 +199,41 @@ namespace CNA::Internal::Renderers::DirectX11
         /// applied to the staging texture's RowPitch and DepthPitch.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Stores declared-format bytes in a volume box.
+         *
+         * The shared layer's declared-format byte route; SetData already stores in the declared
+         * DXGI format, so this forwards to it and refuses a block-compressed volume.
+         *
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param z Front edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depth Depth in texels.
+         * @param data Source bytes in the declared format.
+         * @param dataLength Source size in bytes.
+         * @return true when the complete box was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads declared-format bytes from a volume box.
+         *
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param z Front edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depth Depth in texels.
+         * @param data Destination buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete box was copied; false for a block-compressed volume.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                           void* data, int dataLength) const override;
 
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }

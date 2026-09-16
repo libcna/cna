@@ -360,6 +360,60 @@ namespace CNA::Internal::Renderers::DirectX11
         return true;
     }
 
+    // WINCLOSE-0013: the shared layer sends every uncompressed cube transfer through these byte
+    // hooks, and DirectX11 never connected them -- its SetData/GetData already worked in the
+    // declared DXGI format with that format's own texel size (DX-214/225), but the defaults these
+    // replace refused, so each declared-format cube load failed with "the active renderer did not
+    // store the complete declared-format cube region".
+    bool D3D11TextureCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h, const void* data, int dataLength)
+    {
+        return !compressed_ && SetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool D3D11TextureCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        return !compressed_ && GetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool D3D11TextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        // The exact blocks SetCompressedDataEXT stored, from its CPU copy -- the same layout and
+        // alignment rules, read the other way.
+        if (!compressed_ || level < 0 || level >= mipLevels_ || face < 0 || face >= 6 ||
+            data == nullptr || w <= 0 || h <= 0)
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const int blockCols = (w + 3) / 4;
+        const int blockRows = (h + 3) / 4;
+        const std::size_t rowBytes = static_cast<std::size_t>(blockCols) * bytesPerBlock_;
+        const std::size_t required = rowBytes * static_cast<std::size_t>(blockRows);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+
+        const int levelBlockCols = (levelSize + 3) / 4;
+        const std::size_t levelRowBytes =
+            static_cast<std::size_t>(levelBlockCols) * bytesPerBlock_;
+        const auto& levelBlocks =
+            compressedLevels_[static_cast<std::size_t>(face * mipLevels_ + level)];
+        for (int row = 0; row < blockRows; ++row)
+        {
+            std::memcpy(static_cast<std::uint8_t*>(data) + static_cast<std::size_t>(row) * rowBytes,
+                        levelBlocks.data() +
+                            static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                            static_cast<std::size_t>(x / 4) * bytesPerBlock_,
+                        rowBytes);
+        }
+        return true;
+    }
+
     bool D3D11TextureCubeRenderer::SetCompressedDataEXT(
         int face, int level, int x, int y, int w, int h, const void* data, int dataLength)
     {
@@ -643,5 +697,19 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         context_->Unmap(staging.Get(), static_cast<UINT>(level));
         return true;
+    }
+
+    // WINCLOSE-0013: the volume counterpart of the cube hooks above -- SetData/GetData already store
+    // and read in the declared format; the byte hooks the shared layer calls were never connected.
+    bool D3D11Texture3DRenderer::SetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth, const void* data, int dataLength)
+    {
+        return !compressed_ && SetData(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool D3D11Texture3DRenderer::GetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth, void* data, int dataLength) const
+    {
+        return !compressed_ && GetData(level, x, y, z, w, h, depth, data, dataLength);
     }
 }
