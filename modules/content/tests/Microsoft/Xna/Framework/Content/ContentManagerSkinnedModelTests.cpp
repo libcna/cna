@@ -222,6 +222,15 @@ TEST_F(ContentManagerSkinnedModelTest, OutOfRangeIndexThrows)
 // (including the literal, unescaped brace) round-trips correctly, and that the second, ordinary
 // part immediately after it is still located correctly - proving the embedded brace didn't throw
 // off the parts array's own boundary tracking for what follows.
+namespace
+{
+    // One degenerate 16-bit triangle over vertex 0. These parts used to ship an empty index file,
+    // which SOFTWARE-204 (XNA's positive IndexBuffer capacity) now refuses before the manifest
+    // parsing these tests exercise is reached -- a stale fixture, not a loader change
+    // (WINCLOSE-0029).
+    const std::vector<std::uint8_t> kOneTriangleIndices(6, 0);
+}
+
 TEST_F(ContentManagerSkinnedModelTest, PartNameWithUnbalancedEmbeddedBraceParsesCorrectly)
 {
     // SkinnedModelEXT loading builds a real VertexBuffer -- a renderer with no 3D pipeline
@@ -239,9 +248,9 @@ TEST_F(ContentManagerSkinnedModelTest, PartNameWithUnbalancedEmbeddedBraceParses
               R"({"name": "Second", "vertices": "b.verts.bin", "indices": "b.idx.bin", "vertexStride": 52}]})");
     WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 0);
     WriteBytes(root.path() / "a.verts.bin", std::vector<std::uint8_t>(52, 0));
-    WriteBytes(root.path() / "a.idx.bin", {});
+    WriteBytes(root.path() / "a.idx.bin", kOneTriangleIndices);
     WriteBytes(root.path() / "b.verts.bin", std::vector<std::uint8_t>(52, 0));
-    WriteBytes(root.path() / "b.idx.bin", {});
+    WriteBytes(root.path() / "b.idx.bin", kOneTriangleIndices);
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
@@ -287,7 +296,7 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromNestedButUnderRootManifes
               R"("vertexStride": 52, "texture": "tex.png"}]})");
     WriteSkeletonWithBoneCount(manifestDir / "skeleton.bin", 0);
     WriteBytes(manifestDir / "a.verts.bin", std::vector<std::uint8_t>(52, 0));
-    WriteBytes(manifestDir / "a.idx.bin", {});
+    WriteBytes(manifestDir / "a.idx.bin", kOneTriangleIndices);
     WriteTinyPng(gd, manifestDir / "tex.png");
 
     ContentManager cm(nullptr, root.path().string());
@@ -329,7 +338,7 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromManifestOutsideContentRoo
               R"("vertexStride": 52, "texture": "tex.png"}]})");
     WriteSkeletonWithBoneCount(outside / "skeleton.bin", 0);
     WriteBytes(outside / "a.verts.bin", std::vector<std::uint8_t>(52, 0));
-    WriteBytes(outside / "a.idx.bin", {});
+    WriteBytes(outside / "a.idx.bin", kOneTriangleIndices);
     WriteTinyPng(gd, outside / "tex.png");
 
     ContentManager cm(nullptr, root.string());

@@ -19,6 +19,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
+#include <string>
 
 #include "CNA/GraphicsCapability.hpp"
 
@@ -33,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -155,8 +157,20 @@ namespace
                 // rather than reading past the end of the caller's data. The stride guard
                 // (VertexBuffer.cpp:153) raises the derived ArgumentOutOfRangeException on the same
                 // path, which this base catch also covers. Only the ArgumentException family is
-                // accepted here -- System::NotSupportedException (a renderer capability boundary),
-                // std::runtime_error, and every other class still fail this test.
+                // accepted here -- std::runtime_error, and every other class, still fail this
+                // test; System::NotSupportedException only as the profile refusal below.
+                ++cleanlyRejected;
+            }
+            catch (const System::NotSupportedException& refusal)
+            {
+                // WINCLOSE-0029: VertexDeclaration::ValidateForProfile rejects a declaration the
+                // active GraphicsProfile cannot express -- a mutated element format out of range,
+                // a stride over 255, more than 16 elements -- with NotSupportedException, as XNA's
+                // own profile validation does. That is content being refused, so it counts; every
+                // other NotSupportedException (a renderer capability boundary) still fails.
+                const std::string message = refusal.getMessageProperty();
+                if (message.find("active graphics profile") == std::string::npos)
+                    throw;
                 ++cleanlyRejected;
             }
             catch (const std::bad_any_cast&)
