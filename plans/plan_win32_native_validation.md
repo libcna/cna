@@ -369,6 +369,52 @@ deleted the prefix. The clean now excludes it. The SDL build tree lives outside 
 `C:\cna\build\sdl3`, so `git clean` never reached it and restoring the prefix cost one install step
 rather than a full SDL compile.
 
+### WINNATIVE-F21 — MSVC does not lex a raw string literal inside a macro argument *(worked around)*
+
+Adding `tests/OracleCorpusTests.cpp` produced `error C2017: illegal escape sequence` from MSVC and
+nothing at all from GCC. MSVC's default preprocessor does not recognise a raw string literal in a
+macro argument; it re-lexes the text as an ordinary string. The line this test needs —
+
+```cpp
+EXPECT_FALSE(ReadOracleCase(R"({"case": "a", "result": "b\")", name, result));
+```
+
+— deliberately ends in a backslash, so the re-lexing turns `\)` into an escape sequence that does
+not exist, and the translation unit does not compile.
+
+Worth stating precisely, because the obvious reading is wrong: **the repository already has 77 raw
+string literals inside assertion macros and they all build under MSVC.** They are not safe by
+construction, they are safe by content — every one of them happens to spell only legal escapes. A
+trailing backslash is the case that does not, and it is exactly the case a parser test needs.
+
+`/Zc:preprocessor` makes MSVC's preprocessor conformant and would remove the class outright. It is
+deliberately **not** adopted here: it changes how every macro in the repository expands, which is a
+decision for its own task with its own full-suite evidence, not a side effect of adding a test. The
+literals are named instead, which costs one line each.
+
+### WINNATIVE-F22 — a Linux test ends the `CnaTests` process *(pre-existing, NOT fixed — out of scope)*
+
+Found while collecting the Linux baseline this workstream needs, and recorded rather than fixed
+because it is not Windows, not Win32, and not this branch's.
+
+`Sdl3XErrorHandlerTest.ADeliberateBadRequestDoesNotEndTheProcessAndLeavesTheConnectionUsable`
+**ends the process**. In a full `CnaTests` run it is reached, prints its `[ RUN ]` line, and the
+binary exits 1 with no further output and no `--gtest_output` XML written at all — which is Xlib's
+default error handler calling `exit()`, the precise thing the test asserts cannot happen. Every test
+after it in the run is lost, which is why no Linux baseline had been collected.
+
+Run on its own it **skips**, with "libX11 is loaded but XChangeProperty/XSync were not resolvable":
+`dlsym(RTLD_DEFAULT, ...)` finds nothing because nothing has pulled libX11 into the process yet. So
+the test only executes as part of a larger run, and when it executes, it fails in the one way that
+takes the rest of the suite with it.
+
+Not caused by this branch: its only changes under `modules/platform/` are three Win32 test files
+(`git diff --stat next..HEAD -- modules/platform/`), and nothing here touches the SDL3 backend, the
+X11 backend or the error handler.
+
+The Linux baseline in §3 is therefore collected with `--gtest_filter=-Sdl3XErrorHandlerTest.*`, and
+says so.
+
 ---
 
 ## 3. Measurements
