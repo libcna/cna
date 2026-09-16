@@ -44,6 +44,20 @@ Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Win8DpiScaling -Value 1 -Ty
 PS
 }
 
+# windows_vm_sync.sh ships SOURCE, not binaries. Running the matrix against a harness built before
+# the last sync is how two runs of this script silently measured the previous binary -- the
+# --dpi-aware switch was simply ignored, and the result looked like a finding rather than a stale
+# executable. Rebuild first, every time; it is a no-op when nothing changed.
+say "rebuilding the harness in the guest"
+"$EXEC" --stdin >/dev/null 2>&1 <<'PS'
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+cmd /c "`"$(Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat')`" >nul 2>&1 && set" | ForEach-Object {
+    if ($_ -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($matches[1])" -Value $matches[2] }
+}
+cmake --build C:/cna/build/win32-standalone --parallel 6 | Out-Null
+PS
+
 ORIGINAL="$(read_scale)"
 say "original LogPixels: ${ORIGINAL:-96}"
 
