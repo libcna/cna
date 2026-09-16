@@ -1,4 +1,5 @@
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 // Keep every stb symbol local to this translation unit. The content module also instantiates the
 // vendored headers for glTF import, so external linkage here would create duplicate definitions in
@@ -22,6 +23,9 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <vector>
 
 #include "CNA/Internal/Graphics/DibBitmap.hpp"
@@ -151,6 +155,40 @@ namespace CNA::Internal::Graphics
             return result;
         }
 
+        // Both of these exist so no filename ever reaches stb: the vendored decoder and encoder
+        // open with fopen, which is the ANSI code page on Windows.
+        std::vector<std::uint8_t> ReadWholeFileNative(const std::string& utf8Path)
+        {
+            const std::optional<std::filesystem::path> native =
+                CNA::Internal::TryPathFromUtf8(utf8Path);
+            if (!native) { return {}; }
+
+            std::ifstream stream(*native, std::ios::binary | std::ios::ate);
+            if (!stream.good()) { return {}; }
+            const std::streamsize length = stream.tellg();
+            if (length <= 0) { return {}; }
+            stream.seekg(0, std::ios::beg);
+
+            std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+            if (!stream.read(reinterpret_cast<char*>(bytes.data()), length)) { return {}; }
+            return bytes;
+        }
+
+        void WriteWholeFileNative(const std::string& utf8Path,
+                                  const std::vector<std::uint8_t>& bytes,
+                                  const std::string& failureMessage)
+        {
+            const std::optional<std::filesystem::path> native =
+                CNA::Internal::TryPathFromUtf8(utf8Path);
+            if (!native) { throw std::runtime_error(failureMessage); }
+
+            std::ofstream stream(*native, std::ios::binary | std::ios::trunc);
+            if (!stream.good()) { throw std::runtime_error(failureMessage); }
+            stream.write(reinterpret_cast<const char*>(bytes.data()),
+                         static_cast<std::streamsize>(bytes.size()));
+            if (!stream.good()) { throw std::runtime_error(failureMessage); }
+        }
+
         struct EncodeBuffer
         {
             std::vector<uint8_t> bytes;
@@ -205,11 +243,22 @@ namespace CNA::Internal::Graphics
 
     ImageData ImageLoader::Load(const std::string& assetName)
     {
+        // stb_image is compiled here without STBI_WINDOWS_UTF8, so stbi__fopen is a plain
+        // fopen/fopen_s -- the process ANSI code page on Windows, with no wide branch at all. The
+        // bytes are therefore read through a native std::filesystem::path and handed to the memory
+        // decoder, which is the same decoder stbi_load would have reached. Defining
+        // STBI_WINDOWS_UTF8 would fix this one call and leave every other stb consumer to remember
+        // it; not passing a filename at all removes the question.
+        const std::vector<std::uint8_t> bytes = ReadWholeFileNative(assetName);
+        if (bytes.empty())
+            throw std::runtime_error("Failed to load image: " + assetName);
+
         int width = 0;
         int height = 0;
         int sourceChannels = 0;
-        stbi_uc* decoded = stbi_load(
-            assetName.c_str(), &width, &height, &sourceChannels, STBI_rgb_alpha);
+        stbi_uc* decoded = stbi_load_from_memory(
+            bytes.data(), static_cast<int>(bytes.size()), &width, &height, &sourceChannels,
+            STBI_rgb_alpha);
         return CopyDecoded(decoded, width, height, "Failed to load image: " + assetName);
     }
 
@@ -342,8 +391,14 @@ namespace CNA::Internal::Graphics
                               const std::string& filename)
     {
         ValidateRgba(pixels, width, height);
-        if (stbi_write_png(filename.c_str(), width, height, 4, pixels, width * 4) == 0)
+        // stb_image_write has the same ANSI-only fopen as stb_image; encode to memory with the
+        // callback form already used by EncodePng, then write through a native path.
+        EncodeBuffer output;
+        if (stbi_write_png_to_func(AppendEncodedBytes, &output, width, height, 4, pixels,
+                                   width * 4) == 0 || output.bytes.empty())
             throw std::runtime_error("ImageLoader: failed to save PNG: " + filename);
+        WriteWholeFileNative(filename, output.bytes,
+                             "ImageLoader: failed to save PNG: " + filename);
     }
 
     std::vector<uint8_t> ImageLoader::EncodeJpeg(
@@ -363,7 +418,11 @@ namespace CNA::Internal::Graphics
                                const std::string& filename, const int quality)
     {
         ValidateRgba(pixels, width, height);
-        if (stbi_write_jpg(filename.c_str(), width, height, 4, pixels, quality) == 0)
+        EncodeBuffer output;
+        if (stbi_write_jpg_to_func(AppendEncodedBytes, &output, width, height, 4, pixels,
+                                   quality) == 0 || output.bytes.empty())
             throw std::runtime_error("ImageLoader: failed to save JPEG: " + filename);
+        WriteWholeFileNative(filename, output.bytes,
+                             "ImageLoader: failed to save JPEG: " + filename);
     }
 }

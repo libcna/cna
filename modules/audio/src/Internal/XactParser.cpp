@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -812,7 +813,7 @@ namespace CNA::Internal::Audio
 
     XwbData ParseXwbStreamingHeader(const std::string& path)
     {
-        std::ifstream f(path, std::ios::binary);
+        std::ifstream f(CNA::Internal::PathFromUtf8(path), std::ios::binary);
         if (!f.is_open())
             throw std::runtime_error("XWB: cannot open file for streaming");
 

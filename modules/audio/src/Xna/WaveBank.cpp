@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -238,7 +239,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             // Lazy per-entry disk read: xactImpl_->data.fileData only holds the header/metadata
             // segments (see ParseXwbStreamingHeader), not wave audio.
-            std::ifstream sf(xactImpl_->data.sourcePath, std::ios::binary);
+            std::ifstream sf(CNA::Internal::PathFromUtf8(xactImpl_->data.sourcePath), std::ios::binary);
             if (!sf.is_open())
             {
                 std::cerr << "[WaveBank] Cannot reopen streaming source for wave " << waveIndex
