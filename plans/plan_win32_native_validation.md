@@ -79,7 +79,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0006 | Install the minimum native toolchain | ✅ | §0; §2 records the component-id trap |
 | WINNATIVE-0007 | Exact-commit source sync Linux → VM | ✅ | `windows_vm_sync.sh`; full 113 MB once, then 12 KB per commit |
 | WINNATIVE-0008 | First MSVC configure and build of the platform module | ✅ | `C:\cna\build\win32-standalone`, MSVC 19.44, clean |
-| WINNATIVE-0009 | Full integrated CNA + sharp-runtime MSVC build | 🔄 | configure reaches generate; two defects found and fixed (§2) |
+| WINNATIVE-0009 | Full integrated CNA + sharp-runtime MSVC build | 🔄 | configure succeeds; **eight** Windows-build defects found and fixed (F9..F16) |
 | WINNATIVE-0010 | Win32 platform suite on native Windows | ✅ | **389 tests: 386 passed, 3 skipped, 0 failed** on the interactive desktop |
 | WINNATIVE-0011 | `PlatformConformanceTests` on native Win32 | ✅ | 38 + 20 parameterized cases in the run above, 1 skip by design |
 | WINNATIVE-0012 | Direct3D 11/12 probe on a CNA platform HWND | ✅ | D3D11 complete; D3D12 `DXGI_ERROR_UNSUPPORTED` (environment) |
@@ -87,9 +87,9 @@ time and therefore needs no stored password.
 | WINNATIVE-0014 | Full `CnaTests` on native Windows | ⬜ | |
 | WINNATIVE-0015 | SDL-free proof by PE dependency inspection | ⬜ | |
 | WINNATIVE-0016 | DPI at 100/125/150/200 % | ⬜ | |
-| WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ⬜ | |
-| WINNATIVE-0018 | Clipboard against a real Windows application | ⬜ | |
-| WINNATIVE-0019 | COM lifetime, file dialogs, message box | ⬜ | |
+| WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
+| WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
+| WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
 | WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | ⬜ | |
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ⬜ | |
@@ -209,12 +209,11 @@ size out of the `SDL_Window` behind the CNA window), so the inventory gained a `
 and skips it with a configure-time message naming it. The SDL-free build is a real configuration,
 it is one parity fixture short, and it says which one.
 
-### WINNATIVE-F9..F12 — CNA has never been fully built for Windows *(fixed)*
+### WINNATIVE-F9..F16 — CNA has never been fully built for Windows *(fixed)*
 
-Once the configure succeeded, the build found four defects in a row that **no** Windows toolchain
-could have got past. Three of them are not MSVC-specific at all — the mingw-w64 cross-build fails
-on them identically — which means these translation units had never been compiled for Windows by
-anything.
+Once the configure succeeded, the build found **eight** defects in a row that no Windows toolchain
+could have got past. Several are not MSVC-specific at all — the mingw-w64 cross-build fails on them
+identically — which means these translation units had never been compiled for Windows by anything.
 
 | | Where | What |
 |---|---|---|
@@ -222,11 +221,15 @@ anything.
 | F10 | `XnbBuiltInWriters.cpp` | The `OrderedDictionary` *include* was guarded by `SHARP_RUNTIME_HAS_NATIVE_INT128` while the type was used unconditionally. The two are unrelated — it was inside the guard by proximity to `System::Decimal`, which genuinely needs one. Every compiler with native `__int128` compiled the file; MSVC, which has none, did not. |
 | F11 | `HttpNotificationChannel.cpp` | `<winsock2.h>` drags in `<windows.h>`, whose `ERROR` macro collides with `CNA::LogLevel::ERROR` in the `CNA/Logger.hpp` below it. The repository records this pitfall twice already (`ENetHostHandle.hpp` undefines it, `DirectX12Renderer.cpp` orders around it); this file followed neither. `modules/phone` is recent enough that it appears never to have been compiled for Windows. |
 | F12 | sharp-runtime `Core.Base` | `System/Guid.cpp` calls `BCryptGenRandom` and nothing linked `bcrypt`, so every Windows consumer compiled the entire tree and then failed at **link** time. `Security.Cryptography.Random` already links it for the same reason. Fixed in the sibling repository (`33da53f5`). |
+| F13 | `cmake/RendererDescriptorGate.cmake` | The gate compiled Vulkan's descriptor in any configuration that did not *select* Vulkan — including every one with no Vulkan SDK. `fatal error: vulkan/vulkan.h: No such file or directory`. The list beside it already names bgfx and the DirectX families for exactly this; Vulkan joins them, but conditionally (`find_package(Vulkan QUIET)`), because the descriptor *should* be compiled where the headers exist. |
+| F14 | `IntermediateSerializer.cpp` | The last unguarded `System::Decimal`. sharp-runtime's header hard-errors without native `__int128`, which MSVC has not; every other Decimal site in CNA was already behind `SHARP_RUNTIME_HAS_NATIVE_INT128`. Its test suite is excluded rather than guarded — Decimal is woven through the fixtures, and a serializer without Decimal would fail those cases for the right reason anyway. |
+| F15 | repo-wide, MSVC | `fatal error C1128: number of sections exceeded object file format limit: compile with /bigobj`. COFF caps a translation unit at 65 279 sections and MSVC emits one per COMDAT; ELF has no such limit, so GCC and Clang never see it. `/bigobj` set beside `/utf-8`. |
+| F16 | `PushNotificationSender.cpp` | `ssize_t` is POSIX and MSVC does not define it — one of the few defects here that genuinely *only* cl.exe can show, since mingw-w64 supplies it anyway. `::send` also differs in both directions between the platforms; the length is narrowed once and the result compared as a signed 64-bit count. |
 
-The pattern across F5 and F9–F12 is worth stating plainly: almost none of these are "the code is
+The pattern across F5 and F9–F16 is worth stating plainly: almost none of these are "the code is
 wrong". They are places where one toolchain was quietly covering for the code — mingw-w64's
-libstdc++ defines `NOMINMAX` for you, GCC has `__int128`, Linux's `path::native()` is narrow — and
-the cover was mistaken for portability.
+libstdc++ defines `NOMINMAX` and `ssize_t` for you, GCC has `__int128`, ELF has no section limit,
+Linux's `path::native()` is narrow — and the cover was mistaken for portability.
 
 ### WINNATIVE-F7 — the clipboard interop harness was measuring PowerShell *(fixed)*
 
@@ -290,6 +293,55 @@ Five hundred create/destroy cycles leave the USER object count exactly where it 
 the measurement Wine could not make: under Wine every `GetGuiResources` counter reads **0**.
 `adopt-release` additionally asserts, a thousand times, that a host-owned `HWND` is still alive
 after CNA's wrapper is destroyed.
+
+---
+
+### The host-ownership promises, measured
+
+`docs/platform-win32.md` says the backend never touches process-global policy. Captured before the
+platform exists and again after a window has been created and pumped, on the interactive desktop:
+
+```
+dpi awareness    unaware  -> unaware          (the backend never calls SetProcessDpiAwareness*)
+current directory C:\cna\build\win32-standalone -> unchanged
+error mode       32769    -> 32769
+timer resolution 15625 us -> 15625 us         (no timeBeginPeriod anywhere)
+com apartment    uninitialised -> main-STA    (CNA adds a reference; it took nothing from a host)
+```
+
+The timer figure is the one Wine could not produce: 15.625 ms is Windows' real default tick, and a
+stray `timeBeginPeriod(1)` would show here as 1000 us. Under Wine the same probe reads 1000 us
+before *and* after, so the promise was untestable there.
+
+### Synthetic input on the real desktop
+
+`SendInput` enters the same raw input stream a physical keyboard does, and only reaches the
+foreground window — so this is the check that could not exist in session 0. 24 assertions, all
+passing:
+
+```
+key.A / F1 / CapsLock / ArrowLeft            scancode and keycode both correct
+key.LeftShift vs RightShift                  distinct in BOTH scancode and keycode
+key.LeftCtrl vs RightCtrl                    distinguished by the extended flag alone
+key.Keypad5                                  scancode=Keypad5 keycode=NumPad5
+text.ascii / czech / euro                    1 / 2 / 3 UTF-8 bytes, exact
+text.surrogate-pair (U+1F300)                4 bytes -- the two UTF-16 units recombined
+mouse.left / middle / right / x1 / x2        buttons 1..5, X1 and X2 distinguished by mouseData
+wheel.vertical / horizontal                  y=+1 and x=-1
+relativeMode.togglesCleanly                  8 enable/disable cycles
+relativeMode, window destroyed while enabled clip released to the full 1920x1080 virtual screen
+```
+
+The last one is the case that matters: a clip rectangle or hidden cursor surviving the window it
+belonged to leaves the whole desktop unusable, so it is checked against `GetClipCursor` and
+`CURSOR_SHOWING` rather than against CNA's opinion of its own state.
+
+### Clipboard against Notepad
+
+Driven through Notepad's edit control with `WM_PASTE`/`WM_COPY` — what a keystroke turns into —
+rather than SendKeys, which cannot type outside the current layout. Ten checks, both directions,
+all passing: ASCII, Czech, Greek with an em dash, an emoji pair (two surrogate pairs), and 5000
+characters.
 
 ---
 
