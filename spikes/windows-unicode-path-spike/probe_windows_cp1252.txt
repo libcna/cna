@@ -1,0 +1,251 @@
+=== CNA Windows Unicode path probe ===
+platform    : Windows
+ANSI CP     : 1252
+OEM CP      : 437
+sizeof(path::value_type) = 2
+
+root (utf8) : C:\Users\vboxuser\AppData\Local\Temp\cna-unicode-probe
+
+--- ascii  (utf8: plain)
+    representable in CP1252: yes
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  PASS  path::string() did not throw
+  PASS  path::generic_string() did not throw
+  PASS  path::u8string() did not throw
+  PASS  round trip via string() still exists
+  PASS  ifstream(const char* from string())
+  PASS  fopen(const char* from string())
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  PASS  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  PASS  GetFileAttributesA(from string())
+  PASS  _wfopen(wide)
+
+--- spaces  (utf8: CNA test dir)
+    representable in CP1252: yes
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  PASS  path::string() did not throw
+  PASS  path::generic_string() did not throw
+  PASS  path::u8string() did not throw
+  PASS  round trip via string() still exists
+  PASS  ifstream(const char* from string())
+  PASS  fopen(const char* from string())
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  PASS  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  PASS  GetFileAttributesA(from string())
+  PASS  _wfopen(wide)
+
+--- latin1  (utf8: café)
+    representable in CP1252: yes
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  PASS  path::string() did not throw
+  PASS  path::generic_string() did not throw
+  PASS  path::u8string() did not throw
+  PASS  round trip via string() still exists
+  PASS  ifstream(const char* from string())
+  PASS  fopen(const char* from string())
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  PASS  GetFileAttributesA(from string())
+  PASS  _wfopen(wide)
+
+--- czech  (utf8: žluťoučký)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+--- combining  (utf8: étude)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+--- precomposed  (utf8: étude)
+    representable in CP1252: yes
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  PASS  path::string() did not throw
+  PASS  path::generic_string() did not throw
+  PASS  path::u8string() did not throw
+  PASS  round trip via string() still exists
+  PASS  ifstream(const char* from string())
+  PASS  fopen(const char* from string())
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  PASS  GetFileAttributesA(from string())
+  PASS  _wfopen(wide)
+
+--- cyrillic  (utf8: кириллица)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+--- cjk-jp  (utf8: 日本語)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+--- cjk-zh  (utf8: 中文)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+--- emoji  (utf8: emoji-😀)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+--- mixed  (utf8: mích-česky-日本語-😀)
+    representable in CP1252: NO
+  PASS  create_directories(path)
+  PASS  ofstream(path) write
+  PASS  fs::exists(path)
+  PASS  fs::file_size(path) > 0
+  PASS  ifstream(path) read
+  FAIL  path::string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  FAIL  path::generic_string() did not throw   [No mapping for the Unicode character exists in the target multi-byte code page.]
+  PASS  path::u8string() did not throw
+  FAIL  round trip via string() still exists   [string() threw]
+  FAIL  ifstream(const char* from string())   [string() threw]
+  FAIL  fopen(const char* from string())   [string() threw]
+  PASS  round trip via u8string() still exists
+  PASS  ifstream(path from u8string())
+  FAIL  fopen(const char* holding UTF-8)
+  PASS  directory_iterator finds it
+  PASS  GetFileAttributesW
+  PASS  CreateFileW
+  FAIL  GetFileAttributesA(from string())   [string() threw]
+  PASS  _wfopen(wide)
+
+=== probe totals: 158 pass, 51 fail ===
