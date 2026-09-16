@@ -103,11 +103,20 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
         /**
-         * @brief Reports the fixed XNA depth format of the default D3D11 depth resource.
+         * @brief Reports the depth format the back buffer actually allocates for a request.
          * @param requestedFormat The caller's requested DepthFormat ordinal.
-         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         * @return The request itself, or DepthFormat::None for an ordinal with no DXGI depth format.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Applies a Reset's presentation formats; recreates the back buffer's depth resource
+         *        when the depth format changed.
+         * @param backBufferFormat Requested SurfaceFormat ordinal (fixed on this renderer).
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Requested full-screen state (applied through its own path).
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         /** @brief Enables registration of subsequently-created resources for device recovery. */
@@ -564,6 +573,8 @@ namespace CNA::Internal::Renderers::DirectX11
         bool dsDepthWriteEnable_ = true;
         int dsDepthFunc_ = 3;            // CompareFunction::LessEqual
         bool dsStencilEnable_ = false;
+        /// True once GraphicsDevice has applied a depth-stencil state; target changes rebind it only then.
+        bool depthStencilStateApplied_ = false;
         int dsStencilFunc_ = 0;          // CompareFunction::Always
         int dsStencilPass_ = 0;          // StencilOperation::Keep
         int dsStencilFail_ = 0;
@@ -579,6 +590,9 @@ namespace CNA::Internal::Renderers::DirectX11
         /// Rebuilds + binds the depth-stencil state from the tracked ds*_ fields above. Shared by
         /// ApplyDepthStencilState(), SetDepthTestEnabled() and SetDepthWriteEnabled().
         void RebindDepthStencilState();
+        /// Rebinds the depth-stencil state after a render target change, once one has been applied:
+        /// stencil availability depends on which depth view is bound (see RebindDepthStencilState).
+        void RebindDepthStencilStateIfApplied();
 
         // XNA DepthBias is normalized, while D3D11 stores depth-format-dependent integer units.
         // Keep the XNA state so a D16/D24 target switch can rebuild the native rasterizer state.
@@ -600,6 +614,10 @@ namespace CNA::Internal::Renderers::DirectX11
         int virtualHeight_ = 0;
         int requestedMultiSampleCount_ = 0;
         int appliedMultiSampleCount_ = 0;
+        /// Requested DepthFormat ordinal for the back buffer's depth resource.
+        int backBufferDepthFormat_ = 3;
+        /// DepthFormat the current default surfaces were built with; -1 before the first build.
+        int appliedBackBufferDepthFormat_ = -1;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
 
         // Phase DIRECTX5 (DX-32): per-(shader,stride) ID3D11InputLayout cache.

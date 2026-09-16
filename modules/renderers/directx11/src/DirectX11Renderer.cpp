@@ -221,6 +221,7 @@ namespace CNA::Internal::Renderers::DirectX11
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , requestedMultiSampleCount_(args.multiSampleCount)
+        , backBufferDepthFormat_(args.depthStencilFormat)
         , contextRecoveryEnabled_(args.contextRecoveryEnabled)
         , deviceEventCallback_(args.deviceEventCallback)
     {
@@ -461,27 +462,40 @@ namespace CNA::Internal::Renderers::DirectX11
                     "DirectX11Renderer: back-buffer MSAA RTV creation failed, hr=" + FormatHr(hr));
         }
 
-        D3D11_TEXTURE2D_DESC depthDesc{};
-        depthDesc.Width = static_cast<UINT>(width_);
-        depthDesc.Height = static_cast<UINT>(height_);
-        depthDesc.MipLevels = 1;
-        depthDesc.ArraySize = 1;
-        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depthDesc.SampleDesc.Count = newSampleCount > 0
-            ? static_cast<UINT>(newSampleCount)
-            : 1u;
-        depthDesc.Usage = D3D11_USAGE_DEFAULT;
-        depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-
+        // The back buffer's depth resource follows PresentationParameters.DepthStencilFormat, the
+        // same way this renderer's render targets already did. It used to be D24S8 whatever was
+        // asked for, so DepthFormat::None still depth-tested, Depth24 still carried a usable
+        // stencil, and GraphicsDevice -- told the applied format was always Depth24Stencil8 --
+        // never refused a depth or stencil clear on a surface that should have had neither.
+        // DepthFormat::None allocates nothing; DXGI has no 24-bit depth-only format, so Depth24
+        // shares D24S8 storage and RebindDepthStencilState() keeps its stencil out of reach.
+        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(backBufferDepthFormat_);
         ComPtr<ID3D11Texture2D> newDepthTexture;
-        HRESULT hr = device_->CreateTexture2D(&depthDesc, nullptr, newDepthTexture.GetAddressOf());
-        if (FAILED(hr))
-            throw std::runtime_error("CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
-
         ComPtr<ID3D11DepthStencilView> newDepthView;
-        hr = device_->CreateDepthStencilView(newDepthTexture.Get(), nullptr, newDepthView.GetAddressOf());
-        if (FAILED(hr))
-            throw std::runtime_error("CreateDepthStencilView failed, hr=" + FormatHr(hr));
+        if (depthDxgiFormat != DXGI_FORMAT_UNKNOWN)
+        {
+            D3D11_TEXTURE2D_DESC depthDesc{};
+            depthDesc.Width = static_cast<UINT>(width_);
+            depthDesc.Height = static_cast<UINT>(height_);
+            depthDesc.MipLevels = 1;
+            depthDesc.ArraySize = 1;
+            depthDesc.Format = depthDxgiFormat;
+            depthDesc.SampleDesc.Count = newSampleCount > 0
+                ? static_cast<UINT>(newSampleCount)
+                : 1u;
+            depthDesc.Usage = D3D11_USAGE_DEFAULT;
+            depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+            HRESULT hr =
+                device_->CreateTexture2D(&depthDesc, nullptr, newDepthTexture.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
+
+            hr = device_->CreateDepthStencilView(
+                newDepthTexture.Get(), nullptr, newDepthView.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("CreateDepthStencilView failed, hr=" + FormatHr(hr));
+        }
 
         context_->OMSetRenderTargets(0, nullptr, nullptr);
         backBufferMsaaTexture_ = std::move(newMsaaTexture);
@@ -489,6 +503,7 @@ namespace CNA::Internal::Renderers::DirectX11
         depthStencilTexture_ = std::move(newDepthTexture);
         depthStencilView_ = std::move(newDepthView);
         appliedMultiSampleCount_ = newSampleCount;
+        appliedBackBufferDepthFormat_ = backBufferDepthFormat_;
 
         ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
@@ -508,6 +523,7 @@ namespace CNA::Internal::Renderers::DirectX11
         currentRTVCount_ = 1;
         currentDSV_ = depthStencilView_.Get();
         RebindRasterizerState();
+        RebindDepthStencilStateIfApplied();
     }
 
     void DirectX11Renderer::ResolveBackBufferMsaa()
@@ -750,7 +766,10 @@ namespace CNA::Internal::Renderers::DirectX11
         EnsureSwapChainSize();
         const int clamped = ClampBackBufferMultiSampleCount(
             device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
-        if (clamped != appliedMultiSampleCount_ || !depthStencilTexture_)
+        // appliedBackBufferDepthFormat_ stands in for the old `!depthStencilTexture_` test, which
+        // meant "no default surfaces yet" and is no longer that once DepthFormat::None legitimately
+        // leaves the depth texture null.
+        if (clamped != appliedMultiSampleCount_ || appliedBackBufferDepthFormat_ != backBufferDepthFormat_)
             RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
         return appliedMultiSampleCount_;
     }
@@ -763,8 +782,28 @@ namespace CNA::Internal::Renderers::DirectX11
 
     int DirectX11Renderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
     {
-        (void) requestedFormat;
-        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        // The back buffer now allocates what was requested (RecreateDefaultRenderSurfaces), so the
+        // applied format is the request -- except an ordinal DXGI has no depth format for, which
+        // allocates nothing and is reported as exactly that.
+        return D3DCommon::DepthFormatToDxgi(requestedFormat) == DXGI_FORMAT_UNKNOWN
+            ? static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::None)
+            : requestedFormat;
+    }
+
+    void DirectX11Renderer::UpdatePresentationFormatEXT(
+        int backBufferFormat, int depthStencilFormat, bool isFullScreen)
+    {
+        // The colour format is fixed (GetAppliedBackBufferFormatEXT) and full-screen state has its
+        // own path; only the depth format changes a resource here. Recreated at once when the
+        // surfaces already exist, so the depth buffer a Reset asked for is the one the next draw
+        // gets even if the multisample count did not change with it.
+        (void) backBufferFormat;
+        (void) isFullScreen;
+        if (depthStencilFormat == backBufferDepthFormat_)
+            return;
+        backBufferDepthFormat_ = depthStencilFormat;
+        if (swapChain_ && appliedBackBufferDepthFormat_ >= 0)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
     }
 
     void DirectX11Renderer::SetPresentationMode(int mode)
@@ -857,6 +896,56 @@ namespace CNA::Internal::Renderers::DirectX11
         // DX-28: must honor RowPitch per row -- the mapped rows are not guaranteed tightly packed.
         const int srcW = static_cast<int>(desc.Width);
         const int srcH = static_cast<int>(desc.Height);
+
+        // The request is in the game's logical back buffer space, but this renderer draws straight
+        // into the physical swap chain: GraphicsDevice maps every viewport and scissor through
+        // GetDefaultViewportRect(), so when the logical buffer is letterboxed or scaled inside the
+        // window, logical (x, y) is not physical (x, y). Reading physical (x, y) returned the
+        // letterbox bars -- a 16x16 back buffer, which Windows can only show in a window at least
+        // ~120 px wide, read back as black wherever the game had drawn. Sample the same geometry
+        // the draws used, at logical pixel centres. When logical and physical agree the mapping is
+        // the identity and the direct copy below runs exactly as before.
+        int logicalW = 0;
+        int logicalH = 0;
+        GetViewportSize(logicalW, logicalH);
+        int presentX = 0;
+        int presentY = 0;
+        int presentW = 0;
+        int presentH = 0;
+        GetDefaultViewportRect(presentX, presentY, presentW, presentH);
+        const bool presentationIsIdentity =
+            logicalW <= 0 || logicalH <= 0 || presentW <= 0 || presentH <= 0 ||
+            (presentX == 0 && presentY == 0 && presentW == logicalW && presentH == logicalH);
+        if (!presentationIsIdentity)
+        {
+            const double scaleX = static_cast<double>(presentW) / static_cast<double>(logicalW);
+            const double scaleY = static_cast<double>(presentH) / static_cast<double>(logicalH);
+            for (int row = 0; row < h; ++row)
+            {
+                uint8_t* dst =
+                    pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+                const int srcY = presentY + static_cast<int>(
+                    std::floor((static_cast<double>(y + row) + 0.5) * scaleY));
+                for (int column = 0; column < w; ++column)
+                {
+                    const int srcX = presentX + static_cast<int>(
+                        std::floor((static_cast<double>(x + column) + 0.5) * scaleX));
+                    uint8_t* texel = dst + static_cast<std::size_t>(column) * 4;
+                    if (srcX < 0 || srcX >= srcW || srcY < 0 || srcY >= srcH)
+                    {
+                        std::memset(texel, 0, 4);
+                        continue;
+                    }
+                    const uint8_t* src = static_cast<const uint8_t*>(mapped.pData)
+                                        + static_cast<std::size_t>(srcY) * mapped.RowPitch
+                                        + static_cast<std::size_t>(srcX) * 4;
+                    std::memcpy(texel, src, 4);
+                }
+            }
+            context_->Unmap(staging.Get(), 0);
+            return;
+        }
+
         for (int row = 0; row < h; ++row)
         {
             uint8_t* dst = pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
@@ -1352,11 +1441,28 @@ namespace CNA::Internal::Renderers::DirectX11
         RebindDepthStencilState();
     }
 
+    void DirectX11Renderer::RebindDepthStencilStateIfApplied()
+    {
+        if (depthStencilStateApplied_)
+            RebindDepthStencilState();
+    }
+
     void DirectX11Renderer::RebindDepthStencilState()
     {
+        depthStencilStateApplied_ = true;
+        // A back buffer declared Depth24 is backed by D24S8 (DXGI has no 24-bit depth-only
+        // format), and XNA's Depth24 has no stencil at all. So while that depth view is bound the
+        // stencil test is switched off rather than left to operate on storage the game never asked
+        // for. Keyed on the bound view because the same state must still enable stencil for a
+        // render target that declared Depth24Stencil8; this is re-evaluated on every target change.
+        const bool backBufferStencilHidden =
+            currentDSV_ != nullptr && currentDSV_ == depthStencilView_.Get() &&
+            backBufferDepthFormat_ != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        const bool effectiveStencilEnable = dsStencilEnable_ && !backBufferStencilHidden;
         currentDepthStencilState_ = depthStencilStateCache_.GetOrCreate(
             device_.Get(), dsDepthEnable_, dsDepthWriteEnable_, dsDepthFunc_,
-            dsStencilEnable_, dsStencilFunc_, dsStencilPass_, dsStencilFail_, dsStencilDepthFail_,
+            effectiveStencilEnable, dsStencilFunc_, dsStencilPass_, dsStencilFail_, dsStencilDepthFail_,
             dsStencilMask_, dsStencilWriteMask_,
             dsTwoSidedStencilMode_, dsCcwStencilFunc_, dsCcwStencilPass_, dsCcwStencilFail_,
             dsCcwStencilDepthFail_);
@@ -1482,6 +1588,7 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int i = currentRTVCount_; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = dsv;
         RebindRasterizerState();
+        RebindDepthStencilStateIfApplied();
     }
 
     bool DirectX11Renderer::IsRenderTargetActiveEXT(
@@ -1513,6 +1620,7 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int i = 1; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = depthStencilView_.Get();
         RebindRasterizerState();
+        RebindDepthStencilStateIfApplied();
     }
 
     void DirectX11Renderer::NotifyRenderTargetDestroyedEXT(
