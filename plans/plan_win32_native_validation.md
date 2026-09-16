@@ -92,7 +92,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
 | WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | 🔄 | a real WGL 3.3 core context is created, made current, swapped and destroyed by `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` in the native suite run (it is not among the skips); the `wgl` check in the desktop harness records the driver and the context-cycle GDI count |
-| WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
+| WINNATIVE-0021 | A real CNA application, and a soak run | 🔄 | `cna_demo_2d.exe` **links and runs on native Windows** — D3D11 at feature level 11.0, 120 frames, exit 0 — after F28; soak in progress |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ✅ | HEADLESS **161 · 0 failures**; SDL3 **336 · 0 failures · 7 skipped**; SDL2 **195 · 0 failures · 0 skipped** (§3) |
 | WINNATIVE-0024 | Linux regression after every generic fix, and a whole-suite Linux baseline | ✅ | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; whole suite **8939 tests, 25 failures, 479 skipped** (§3), two suites excluded and named |
@@ -273,6 +273,40 @@ default, so a test that fits on one platform fits on the other.
 **Separately:** that test fails on Linux too — this build has no audio decoder, so the importer
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
+
+### WINNATIVE-F28 — every CNA example application was unlinkable with MSVC *(fixed)*
+
+The most user-facing defect in this workstream, and the one that had gone unnoticed longest: **27
+targets across eight modules**, every example application CNA ships, failed to link with the
+Microsoft toolchain. Anyone building a CNA game on Windows with MSVC would have hit it on their
+first build.
+
+```
+MSVCRT.lib(exe_winmain.obj) : error LNK2019: unresolved external symbol WinMain
+    referenced in function "int __cdecl __scrt_common_main_seh(void)"
+cna_demo_2d.exe : fatal error LNK1120: 1 unresolved externals
+```
+
+`WIN32_EXECUTABLE TRUE` links with the GUI subsystem, which is what stops a game opening a console
+behind its window. The subsystem also decides which entry point the C runtime looks for, and the
+toolchains disagree about what happens next: **MinGW's CRT supplies a `WinMain` that calls the
+program's `main()`**, so a GUI-subsystem executable with a `main()` links and runs; **MSVC's CRT
+looks for `WinMain` and nothing else.**
+
+It survived because every Windows executable this project had ever produced was cross-compiled with
+MinGW, where the CRT covers for it. This is the same lesson as F9..F16, in a different place: one
+toolchain was standing in for a platform.
+
+The sources are not wrong, and that is what decides the fix.
+`modules/platform/include/CNA/Platform/Entrypoint.hpp` states the policy outright — the Win32
+backend takes nothing over from the entry point because that "would be a cost with no benefit, and
+would break a console or test host that has its own". CNA applications define `main()` **on
+purpose**. So `/ENTRY:mainCRTStartup` is the answer: it keeps `main()` *and* keeps the GUI
+subsystem, which is the combination the property was asked for in the first place.
+
+`cna_windows_gui_executable()` (`cmake/WindowsGuiExecutable.cmake`) replaces the bare property at
+all 27 sites, not just the one target this workstream needed — the other 26 are the same defect, and
+leaving them would have meant recording them instead of fixing them.
 
 ### WINNATIVE-F27 — a record written in text mode, and fxc running for real *(fixed)*
 
