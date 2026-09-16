@@ -278,9 +278,12 @@ if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
                 $from = Join-Path $SourceDir $payload
                 $to   = Join-Path $worktree  $payload
                 if ((Test-Path $from) -and -not (Test-Path (Join-Path $to 'CMakeLists.txt'))) {
-                    $toParent = Split-Path $to
-                    if ($toParent) { New-Item -ItemType Directory -Force -Path $toParent | Out-Null }
-                    Copy-Item -Recurse -Force $from $to
+                    # The gitlink leaves an EMPTY directory in the worktree, and
+                    # `Copy-Item -Recurse $from $to` onto an existing directory nests the source
+                    # inside it (vendor/googletest/googletest) rather than filling it -- which is
+                    # what made add_subdirectory fail here with no vendor tree to find.
+                    New-Item -ItemType Directory -Force -Path $to | Out-Null
+                    Copy-Item -Recurse -Force (Join-Path $from '*') $to
                 }
             }
 
@@ -330,7 +333,11 @@ if (Want 'app') {
     if (-not $harness) {
         # Anything built and runnable will do; take the first .exe the Unicode build produced.
         if (-not [string]::IsNullOrWhiteSpace($uniBuild) -and (Test-Path $uniBuild)) {
+            # Not CMake's own scratch: CMakeFiles holds CMakeCXXCompilerId.exe, a compiler probe
+            # that proves nothing about CNA and which an earlier run duly "ran from a non-ASCII
+            # path" and reported as if it meant something.
             $first = Get-ChildItem -Path $uniBuild -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue |
+                     Where-Object { $_.FullName -notmatch '[\\/]CMakeFiles[\\/]' } |
                      Select-Object -First 1
             if ($first) { $harness = $first.FullName }
         }
