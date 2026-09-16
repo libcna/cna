@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -91,6 +92,49 @@ class CnjStockEffectTest : public ::testing::Test
 protected:
     GraphicsDevice gd;
 };
+
+namespace
+{
+    enum class GlslEffectValidity { Valid, Invalid, RendererChoice };
+
+    /// WINCLOSE-0030: what a GLSL CNJ effect's validity must be on the active renderer.
+    ///
+    /// CustomEffects says a renderer ACCEPTS an effect; ExecutesShaderEffectSourceEXT says the
+    /// source decides the pixels; GetShaderDialectEXT says which source. A renderer that executes
+    /// declared HLSL (DirectX11, DirectX12) refuses GLSL at compile time, and one that accepts any
+    /// source and keeps its own fixed path (Software, Headless: no dialect, not executed) may call
+    /// the effect valid -- this test used to demand invalid there, and Software failed it.
+    [[nodiscard]] GlslEffectValidity ExpectedGlslEffectValidity(const GraphicsDevice& gd)
+    {
+        using CNA::Internal::Renderers::ShaderDialectEXT;
+        const ShaderDialectEXT dialect = gd.GetShaderDialectEXT();
+        if (dialect == ShaderDialectEXT::Hlsl)
+            return GlslEffectValidity::Invalid;
+        // Software reports CustomEffects false yet accepts the source for resource compatibility;
+        // with no declared dialect and nothing executed, validity is that renderer's own choice.
+        if (!gd.ExecutesShaderEffectSourceEXT() && dialect == ShaderDialectEXT::Unknown)
+            return GlslEffectValidity::RendererChoice;
+        if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects) ||
+            !gd.ExecutesShaderEffectSourceEXT())
+            return GlslEffectValidity::Invalid;
+        return GlslEffectValidity::Valid;
+    }
+
+    void ExpectGlslEffectValidity(const GraphicsDevice& gd, const ShaderEffect& effect)
+    {
+        switch (ExpectedGlslEffectValidity(gd))
+        {
+            case GlslEffectValidity::Valid:
+                EXPECT_TRUE(effect.IsEffectValid());
+                break;
+            case GlslEffectValidity::Invalid:
+                EXPECT_FALSE(effect.IsEffectValid());
+                break;
+            case GlslEffectValidity::RendererChoice:
+                break;
+        }
+    }
+}
 
 TEST_F(CnjStockEffectTest, LoadsBasicEffectWithAllFields)
 {
@@ -316,11 +360,5 @@ TEST_F(CnjStockEffectTest, CustomGlslEffectStillWorks)
     // ExecutesShaderEffectSourceEXT() is the query that exists for exactly this distinction, and
     // it is false there, so the fixture's expectation is the same as for a renderer with no
     // compiler at all.
-    if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects) ||
-        !gd.ExecutesShaderEffectSourceEXT())
-    {
-        EXPECT_FALSE(shaderEffect->IsEffectValid());
-        return;
-    }
-    EXPECT_TRUE(shaderEffect->IsEffectValid());
+    ExpectGlslEffectValidity(gd, *shaderEffect);
 }

@@ -100,6 +100,21 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
 
         /**
+         * @brief The source dialect a custom `ShaderEffect` must be written in: HLSL.
+         *
+         * WINCLOSE-0030. CompileProgram() hands the source to D3DCompile(), so GLSL -- a CNJ effect's
+         * usual payload -- is refused as a compile error. The renderer used to leave this at
+         * `Unknown`, so a caller had no way to tell that apart from a renderer that accepts any
+         * source; WebGPU (WGSL) and Vulkan (SPIR-V) already declare theirs.
+         *
+         * @return ShaderDialectEXT::Hlsl.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override
+        {
+            return ShaderDialectEXT::Hlsl;
+        }
+
+        /**
          * @brief Reports the complete runtime-backed D3D12 capability surface.
          *
          * @param capability Capability to query.
