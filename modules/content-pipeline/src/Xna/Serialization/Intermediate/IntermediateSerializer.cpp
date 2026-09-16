@@ -45,7 +45,15 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/DateTime.hpp"
+// System::Decimal exists only where the compiler provides a native 128-bit integer -- the header
+// hard-errors otherwise -- so it lives behind sharp-runtime's own capability macro here exactly as
+// it already does in ContentCompiler.cpp, XnbBuiltInWriters and DecimalDateTimeContentTypeReaders.
+// This file was the one place that omitted the guard, which is why MSVC (no __int128) could not
+// compile cna_content_pipeline at all.
+// plans/plan_win32_native_validation.md WINNATIVE-0009.
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
 #include "System/Decimal.hpp"
+#endif
 #include "System/FormatException.hpp"
 #include "System/OverflowException.hpp"
 #include "System/TimeSpan.hpp"
@@ -566,6 +574,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             static char16_t ParseTokens(std::span<const std::string> tokens) { return Parse(tokens.empty() ? std::string() : tokens[0]); }
         };
 
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
         struct DecimalTraits : UnpackedTraits
         {
             static std::string XmlName() { return std::string(); }
@@ -573,6 +582,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             static System::Decimal Parse(const std::string& text) { return System::Xml::XmlConvert::ToDecimal(std::string(Trim(text))); }
             static System::Decimal ParseTokens(std::span<const std::string> tokens) { return Parse(tokens.empty() ? std::string() : tokens[0]); }
         };
+#endif
 
         struct TimeSpanTraits : UnpackedTraits
         {
@@ -1475,7 +1485,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         RegisterTypeSerializer(std::make_unique<TextSerializer<double, DoubleTraits>>());
         RegisterTypeSerializer(std::make_unique<TextSerializer<std::string, StringTraits>>());
         RegisterTypeSerializer(std::make_unique<TextSerializer<char16_t, CharTraits>>());
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
         RegisterTypeSerializer(std::make_unique<TextSerializer<System::Decimal, DecimalTraits>>());
+#endif
         RegisterTypeSerializer(std::make_unique<TextSerializer<System::TimeSpan, TimeSpanTraits>>());
         RegisterTypeSerializer(std::make_unique<TextSerializer<System::DateTime, DateTimeTraits>>());
         RegisterTypeSerializer(std::make_unique<TextSerializer<Vector2, Vector2Traits>>());

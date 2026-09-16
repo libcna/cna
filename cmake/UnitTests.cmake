@@ -188,6 +188,17 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Win32.*\\.cpp$")
     endif()
 
+    # plans/plan_win32_native_validation.md WINNATIVE-0009: System::Decimal exists only where the
+    # compiler provides a native 128-bit integer -- sharp-runtime's header hard-errors otherwise,
+    # and sharp-runtime itself drops Decimal.cpp from Core.Base on such a target. CNA's production
+    # code already guards every Decimal use behind SHARP_RUNTIME_HAS_NATIVE_INT128; this suite
+    # cannot be, because Decimal is woven through its fixtures rather than confined to a few cases,
+    # and a serializer with no Decimal support would fail those cases for the right reason anyway.
+    # MSVC has no __int128, so this is what stands between it and a CnaTests binary.
+    if(NOT SHARP_RUNTIME_COMPILER_HAS_NATIVE_INT128)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*XnaIntermediateSerializerTests\\.cpp$")
+    endif()
+
     # plans/plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
     # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
     # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
