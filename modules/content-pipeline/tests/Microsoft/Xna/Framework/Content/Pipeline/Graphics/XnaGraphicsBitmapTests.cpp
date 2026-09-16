@@ -597,7 +597,11 @@ TEST(XnaGraphicsBitmap, MipmapChainsMatchXna)
     EXPECT_EQ(MipmapChain().getCountProperty(), 0);
     EXPECT_THROW(MipmapChain().Add(nullptr), System::ArgumentNullException);
     EXPECT_THROW(MipmapChain(Gradient(2, 2)).setItem(0, nullptr), System::ArgumentNullException);
-    EXPECT_THROW(MipmapChain(std::shared_ptr<BitmapContent>()), System::ArgumentNullException);
+    // Braced inner value-initialisation, not MipmapChain(std::shared_ptr<BitmapContent>()):
+    // the parenthesised form is the most vexing parse, and MSVC resolves it as a declaration --
+    // "error C2063: 'std::shared_ptr<...>': not a function". GCC and Clang read it as the
+    // expression that was meant.
+    EXPECT_THROW(MipmapChain(std::shared_ptr<BitmapContent>{}), System::ArgumentNullException);
 
     Texture2DContent texture;
     EXPECT_EQ("faces=" + std::to_string(texture.getFacesProperty().getCountProperty()) + " mipmaps=" +
