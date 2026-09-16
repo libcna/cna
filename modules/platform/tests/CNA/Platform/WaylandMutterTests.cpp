@@ -428,6 +428,11 @@ protected:
 
 TEST_F(WaylandMutter, GnomeFocusesANewWindowAndItsKeysArrive)
 {
+    if (std::getenv("CNA_WAYLAND_TEST_IBUS") != nullptr)
+    {
+        GTEST_SKIP() << "an input method is running: what is typed becomes a composition, which is "
+                        "what the WaylandIme suite is for";
+    }
     IPlatformWindow& window = MakeFocusedWindow();
     platform_->GetTextInput()->Start(window.GetId(), TextInputType::Text);
     for (const std::uint32_t key : {KEY_H, KEY_E, KEY_L, KEY_L, KEY_O})
@@ -646,6 +651,94 @@ TEST_F(WaylandMutter, CzechLayoutTypesCzech)
     ASSERT_FALSE(keys.empty());
     EXPECT_EQ(keys.front().scancode, Scancode::D2);
     EXPECT_EQ(keys.front().keycode, KeyCode::D2);
+}
+
+// --- the input method (WAYLAND-0054) ------------------------------------------------------------
+//
+// Under Wayland an input method belongs to the compositor: the client speaks `text-input-v3` to
+// gnome-shell, which speaks to an ibus daemon on its own session bus. These tests run against a
+// real one -- `wayland_test_server.sh --compositor mutter --with-ibus hangul` starts gnome-shell
+// with the Korean engine as its input source -- so what is checked is the whole path, not a
+// protocol double: keys typed on the session's virtual keyboard, an engine that turns them into
+// something else, and what a CNA game reads back. Hangul was chosen because its composition is
+// deterministic (jamo combine into one syllable by rule, with no dictionary and no candidate
+// list to choose from) and its engine is a native binary rather than a Python one.
+
+/// The same session, with an input method in it. Its own suite so that a filter can ask for these
+/// tests without also running the ones that type plain text -- which an input method would compose
+/// into something else.
+class WaylandIme : public WaylandMutter
+{
+};
+
+/// Skips unless the launcher started an input method.
+#define CNA_REQUIRE_IBUS(engine)                                                                              do                                                                                                        {                                                                                                             const char* configured = std::getenv("CNA_WAYLAND_TEST_IBUS");                                            if (configured == nullptr || std::string(configured) != (engine))                                         {                                                                                                             GTEST_SKIP() << "no " << (engine) << " input method (run with --with-ibus " << (engine) << ")";        }                                                                                                     } while (false)
+
+TEST_F(WaylandIme, AnInputMethodComposesKoreanAndCommitsIt)
+{
+    CNA_REQUIRE_IBUS("hangul");
+    IPlatformWindow& window = MakeFocusedWindow();
+    platform_->GetTextInput()->Start(window.GetId(), TextInputType::Text);
+    // d, k, s on a US keyboard are the jamo ㅇ, ㅏ, ㄴ, which the engine combines into 안 as they
+    // are typed -- the preedit changing under the cursor with every key.
+    for (const std::uint32_t key : {KEY_D, KEY_K, KEY_S})
+    {
+        input_->Tap(key);
+        (void) PumpUntil([] { return false; }, 120ms);
+    }
+    const bool composed = PumpUntil([&] { return !SeenOf<TextEditingEvent>().empty(); }, 5000ms);
+    const std::vector<TextEditingEvent> editing = SeenOf<TextEditingEvent>();
+    ASSERT_TRUE(composed) << "the engine sent no preedit; typed text so far: " << TypedText();
+    // Preedit is composition, not input: nothing is committed while it is being composed.
+    EXPECT_EQ(editing.back().text, "\xec\x95\x88") << "the preedit is not the syllable the jamo compose into";
+    EXPECT_EQ(editing.back().window, window.GetId());
+    EXPECT_TRUE(TypedText().empty()) << "text was committed while the composition was still open: " << TypedText();
+
+    // Enter commits what is being composed, and the commit is what a game reads as input.
+    input_->Tap(KEY_ENTER);
+    ASSERT_TRUE(PumpUntil([&] { return !TypedText().empty(); }, 5000ms)) << "the composition was never committed";
+    EXPECT_EQ(TypedText(), "\xec\x95\x88") << "the committed text is not what was composed";
+    // The composition is over: the last editing event clears the preedit.
+    EXPECT_TRUE(SeenOf<TextEditingEvent>().back().text.empty())
+        << "the preedit was left on screen after the commit: " << SeenOf<TextEditingEvent>().back().text;
+}
+
+TEST_F(WaylandIme, AGameThatAsksForNoTextStillGetsItsKeysWhileAnInputMethodRuns)
+{
+    CNA_REQUIRE_IBUS("hangul");
+    IPlatformWindow& window = MakeFocusedWindow();
+    // No Start(): a game reading WASD is not composing text, and the keys must reach it as keys
+    // whatever input method the desktop has configured.
+    input_->Tap(KEY_W);
+    input_->Tap(KEY_A);
+    ASSERT_TRUE(PumpUntil([&] { return SeenOf<KeyEvent>().size() >= 4; }, 5000ms));
+    const std::vector<KeyEvent> keys = SeenOf<KeyEvent>();
+    EXPECT_EQ(keys[0].scancode, Scancode::W);
+    EXPECT_EQ(keys[0].keycode, KeyCode::W);
+    EXPECT_TRUE(SeenOf<TextEditingEvent>().empty()) << "a game that asked for no text got a composition";
+    EXPECT_EQ(window.GetId(), keys[0].window);
+}
+
+TEST_F(WaylandIme, StoppingTextInputEndsTheCompositionRatherThanLeavingItOpen)
+{
+    CNA_REQUIRE_IBUS("hangul");
+    IPlatformWindow& window = MakeFocusedWindow();
+    platform_->GetTextInput()->Start(window.GetId(), TextInputType::Text);
+    for (const std::uint32_t key : {KEY_D, KEY_K})
+    {
+        input_->Tap(key);
+        (void) PumpUntil([] { return false; }, 120ms);
+    }
+    ASSERT_TRUE(PumpUntil([&] { return !SeenOf<TextEditingEvent>().empty(); }, 5000ms))
+        << "the engine sent no preedit";
+    platform_->GetTextInput()->Stop(window.GetId());
+    (void) PumpUntil([] { return false; }, 500ms);
+    // Whatever the compositor does with the half-composed text, the game is not left showing a
+    // preedit for an input it no longer asked for.
+    const std::vector<TextEditingEvent> editing = SeenOf<TextEditingEvent>();
+    EXPECT_TRUE(editing.back().text.empty())
+        << "a preedit outlived the text input that asked for it: " << editing.back().text;
+    EXPECT_FALSE(platform_->GetTextInput()->IsActive(window.GetId()));
 }
 
 } // namespace

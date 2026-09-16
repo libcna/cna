@@ -1665,6 +1665,14 @@ if(CNA_BUILD_TESTS)
             COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandProtocol.*
             LABELS "platform" TIMEOUT 300)
 
+        # plans/plan_wayland.md WAYLAND-0091: the desktop portal, with the parent window
+        # xdg-foreign names. Its own entry because it needs a private dbus-daemon as well as the
+        # in-process compositor, and skips itself where libdbus or dbus-daemon is missing. Like
+        # every other test here it reaches no bus but the one it started.
+        cna_register_renderer_test(NAME CnaWaylandPortalTests
+            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandPortal.*
+            LABELS "platform" TIMEOUT 300)
+
         # A real compositor, private to the run: headless Weston through the launcher, which exits
         # 77 (skip) where Weston is not installed. Once with the software renderer -- shm only,
         # EGL skips -- once with Weston's GL renderer, where EGL and Vulkan hand the compositor
@@ -1691,6 +1699,15 @@ if(CNA_BUILD_TESTS)
         cna_register_renderer_test(NAME CnaWaylandMutterCzechTests
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
                     --layout cz $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandMutter.*
+            LABELS "platform" TIMEOUT 600)
+        # plans/plan_wayland.md WAYLAND-0054: a real input method. Under Wayland the IME belongs to
+        # the compositor, so this runs gnome-shell with ibus and the Korean engine as its input
+        # source and types into a CNA window: a composition that is not the keys typed, a commit
+        # that is, and keys still reaching a game that asked for no text. Skips (77) where
+        # gnome-shell, ibus or that engine is not installed.
+        cna_register_renderer_test(NAME CnaWaylandIbusTests
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
+                    --with-ibus hangul $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandIme.*
             LABELS "platform" TIMEOUT 600)
         # plans/plan_wayland.md WAYLAND-0123: the binaries, not only the sources, are SDL- and
         # X11-free (cmake/Tests/WaylandLinkClosure.cmake).

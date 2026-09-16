@@ -104,7 +104,7 @@ when its capability is true.
 | `clipboard`, `clipboardData`, `dragAndDrop` | conditional | a seat and `wl_data_device_manager` |
 | `primarySelection` | conditional | `zwp_primary_selection_device_manager_v1` |
 | `openGlContext` | conditional | libEGL and libwayland-egl load, one of them offers a Wayland platform extension, and an EGL display on this connection initialises -- all three asked when the platform is created, so the capability is a promise and not a guess |
-| `vulkanSurface` | conditional | the build had the Vulkan headers |
+| `vulkanSurface` | conditional | the build had the Vulkan headers. Deliberately not a run-time probe, unlike `openGlContext`: the Vulkan loader usually arrives *with* the renderer (its own `vkGetInstanceProcAddr`, or a `libvulkan` it pulls in), so a probe at start-up would report false for a game that goes on to work. A machine with no loader at all is told so when the surface is asked for, naming both routes that were tried |
 | `nativeFileDialog` | conditional | the session bus has the desktop portal |
 | `inputDeviceEnumeration` | ✅ | the seats' keyboards, pointers, touchscreens and tablet tools, and the evdev controllers |
 | `gamepad`, `joystick`, `gamepadRumble`, `gamepadSensors`, `haptics`, `powerInfo` | Linux | the shared evdev and sysfs services, exactly as under X11 |
@@ -203,6 +203,15 @@ method composes: preedit as `TextEditingEvent` (cursor in characters), commit as
 `SetInputArea` so the candidate window appears beside the text. Candidate lists are the input
 method's own window and are not delivered (as under XIM); `delete_surrounding_text` has nothing
 to act on, since the platform does not hold the application's text.
+
+This is tested against a real input method, not only a protocol double: `CnaWaylandIbusTests`
+starts headless gnome-shell with ibus and the Korean engine and types into a CNA window, where
+three keys compose into one syllable as a preedit and Enter commits it. Two things that surprise
+everyone who tries this: an `ibus-anthy`-style Python engine needs `python3-gi` to start at all,
+and `ibus-hangul` **starts in Latin mode**, passing every key through uncomposed until a person
+presses Hangul or Shift+Space -- the launcher sets `initial-input-mode='hangul'` in the private
+session's settings, because a test has nobody to press it. A game that never calls
+`StartTextInput` keeps getting its keys as keys whatever input method the desktop runs.
 
 ## Mouse
 
@@ -362,9 +371,11 @@ lies for the rest of the process -- and it is the only way an advertised capabil
 | ctest | Needs | What it covers |
 |---|---|---|
 | `CnaWaylandMappingTests` | nothing | pure decisions (versions, scaling, configure sizes, title-bar hit testing, buttons, wheel, XKB modifiers, text-input offsets, MIME aliases, SIGPIPE-free writes, sealed shm), the shared Xkb/Freedesktop/Linux suites, the SDL/X11 source scan |
-| `CnaWaylandProtocolTests` | nothing | 70+ cases against an in-process libwayland-server compositor that checks every protocol rule (see below) |
+| `CnaWaylandProtocolTests` | nothing | 78 cases against an in-process libwayland-server compositor that checks every protocol rule (see below) |
+| `CnaWaylandPortalTests` | dbus-daemon | the desktop portal on a private bus, played by the test: the `wayland:<handle>` parent from xdg-foreign, an honest empty parent without it, and a game loop that keeps turning while a dialog is open |
 | `CnaWaylandWestonTests`, `…GpuTests`, `…ScaledTests` | Weston | the live suite and the conformance suite on headless Weston: software, GL renderer (EGL and Vulkan on the real GPU), output scale 2 |
 | `CnaWaylandMutterTests`, `…CzechTests` | gnome-shell | GNOME's own compositor, headless on a private bus, with real input from its RemoteDesktop API: focus, keys, Czech layout with AltGr, pointer, relative mode, CNA's title bar, fullscreen, the clipboard with wl-clipboard as an independent client |
+| `CnaWaylandIbusTests` | gnome-shell, ibus, ibus-hangul | a real input method: the Korean engine composing 안 out of three keys through `text-input-v3`, the commit, and a game that asked for no text still getting its keys |
 | `CnaWaylandLinkClosure` | readelf | no executable NEEDs SDL, X11, xcb or GLX; the platform-only binary reaches none even transitively |
 
 Every live suite runs through `tools/platform/wayland_test_server.sh`, which starts a compositor in

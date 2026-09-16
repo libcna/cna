@@ -10,7 +10,8 @@
 # own, runs the command against it, and takes everything down again.
 #
 #   tools/platform/wayland_test_server.sh [--compositor weston|mutter] [--renderer pixman|gl]
-#                                         [--scale N] [--layout XKB] <command> [args...]
+#                                         [--scale N] [--layout XKB] [--with-ibus ENGINE]
+#                                         <command> [args...]
 #
 #   weston  Weston's headless backend (default). No seat: windows, outputs, presentation, EGL with
 #           --renderer gl, Vulkan. Found as `weston` on PATH, or the unpacked copy in ~/deps/weston.
@@ -25,6 +26,7 @@
 #   CNA_WAYLAND_TEST_SCALE                      the output scale asked for (weston)
 #   CNA_WAYLAND_TEST_LAYOUT                     the keyboard layout asked for, if any
 #   CNA_WAYLAND_TEST_BUS                        (mutter) the private session bus's address
+#   CNA_WAYLAND_TEST_IBUS                       (--with-ibus) the engine the input method was set to
 #   DBUS_SESSION_BUS_ADDRESS                    a path that does not exist: no session bus
 #
 # A compositor that is not installed, or that does not come up, EXITS 77 -- ctest's skip code: a
@@ -36,17 +38,20 @@ COMPOSITOR=weston
 RENDERER=pixman
 SCALE=1
 LAYOUT=""
+IBUS_ENGINE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --compositor) COMPOSITOR="$2"; shift 2 ;;
         --renderer) RENDERER="$2"; shift 2 ;;
         --scale) SCALE="$2"; shift 2 ;;
         --layout) LAYOUT="$2"; shift 2 ;;
+        --with-ibus) IBUS_ENGINE="$2"; shift 2 ;;
         *) break ;;
     esac
 done
 if [ $# -eq 0 ]; then
-    echo "usage: $0 [--compositor weston|mutter] [--renderer pixman|gl] [--scale N] [--layout XKB] <command> [args...]" >&2
+    echo "usage: $0 [--compositor weston|mutter] [--renderer pixman|gl] [--scale N] [--layout XKB]" \
+         "[--with-ibus ENGINE] <command> [args...]" >&2
     exit 2
 fi
 
@@ -138,6 +143,20 @@ case "$COMPOSITOR" in
             echo "SKIP: gnome-shell or dbus-daemon is not installed" >&2
             exit 77
         fi
+        if [ -n "$IBUS_ENGINE" ]; then
+            # An input method under Wayland is the compositor's, not the client's: the client
+            # speaks text-input-v3 to gnome-shell, and gnome-shell speaks to an ibus-daemon on its
+            # own session bus. So the daemon has to be this session's, on the private bus, with
+            # the engine's own component installed.
+            if ! command -v ibus-daemon >/dev/null 2>&1; then
+                echo "SKIP: ibus-daemon is not installed" >&2
+                exit 77
+            fi
+            if [ ! -f "/usr/share/ibus/component/$IBUS_ENGINE.xml" ]; then
+                echo "SKIP: the ibus engine '$IBUS_ENGINE' is not installed" >&2
+                exit 77
+            fi
+        fi
         # A bus of its own with nothing to activate: nothing the compositor asks for can start a
         # portal, a keyring or a session manager -- or reach the desktop's.
         BUS_CONFIG="$PRIVATE/bus.conf"
@@ -183,7 +202,7 @@ EOF
             # gets the keyboard, or a click, until it is dismissed.
             echo "[org/gnome/shell]"
             echo "welcome-dialog-last-shown-version='9999'"
-            if [ -n "$LAYOUT" ]; then
+            if [ -n "$LAYOUT" ] || [ -n "$IBUS_ENGINE" ]; then
                 SOURCES=""
                 OLDIFS="$IFS"
                 IFS=","
@@ -191,8 +210,21 @@ EOF
                     SOURCES="$SOURCES${SOURCES:+, }('xkb', '$layout')"
                 done
                 IFS="$OLDIFS"
+                if [ -n "$IBUS_ENGINE" ]; then
+                    # First in the list, so it is the input source the session starts with: a
+                    # second source would need a switch nobody is there to press.
+                    SOURCES="('ibus', '$IBUS_ENGINE')${SOURCES:+, }$SOURCES"
+                fi
                 echo "[org/gnome/desktop/input-sources]"
                 echo "sources=[$SOURCES]"
+                echo "current=uint32 0"
+            fi
+            if [ "$IBUS_ENGINE" = "hangul" ]; then
+                # ibus-hangul starts in Latin mode, where every key passes straight through and
+                # nothing is ever composed; a person presses Hangul or Shift+Space to switch. A
+                # test has nobody to press it, so the engine is told to start composing.
+                echo "[org/freedesktop/ibus/engine/hangul]"
+                echo "initial-input-mode='hangul'"
             fi
         } > "$SETTINGS/keyfile"
         env -u WAYLAND_DISPLAY -u DISPLAY -u XDG_SESSION_TYPE -u XDG_CURRENT_DESKTOP -u GNOME_SETUP_DISPLAY \
@@ -260,6 +292,31 @@ if [ "$COMPOSITOR" = mutter ]; then
         sleep 0.1
         WAITED=$((WAITED + 1))
     done
+
+    if [ -n "$IBUS_ENGINE" ]; then
+        # gnome-shell starts its own ibus-daemon on this session's bus when an ibus input source is
+        # configured, and it is that daemon -- not the desktop's, whose address is keyed by this
+        # bus and never reached -- that the engine runs in. Wait for it to own its name, then ask
+        # the shell which input source it ended up on.
+        WAITED=0
+        while [ "$WAITED" -lt 100 ]; do
+            if DBUS_SESSION_BUS_ADDRESS="$BUS" gdbus call --session --dest org.freedesktop.DBus \
+                --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner \
+                org.freedesktop.IBus 2>/dev/null | grep -q true; then
+                break
+            fi
+            sleep 0.1
+            WAITED=$((WAITED + 1))
+        done
+        if ! DBUS_SESSION_BUS_ADDRESS="$BUS" gdbus call --session --dest org.freedesktop.DBus \
+            --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner \
+            org.freedesktop.IBus 2>/dev/null | grep -q true; then
+            echo "SKIP: no ibus daemon appeared on the private bus for engine '$IBUS_ENGINE'" >&2
+            exit 77
+        fi
+        CNA_WAYLAND_TEST_IBUS="$IBUS_ENGINE"
+        export CNA_WAYLAND_TEST_IBUS
+    fi
 fi
 
 XDG_RUNTIME_DIR="$PRIVATE/run"
