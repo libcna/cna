@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/DirectX11/D3D11CompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -242,25 +243,13 @@ namespace CNA::Internal::Renderers::DirectX11
 
     ID3D11Buffer* D3D11SpriteBatchRenderer::GetChannelExpansionBuffer(int surfaceFormat)
     {
-        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        // Direct3D 9's expansion, by the stored format's channel count (EasyGL's table). Every
-        // other format stores four channels, or is Alpha8, which both APIs expand as (0, 0, 0, A).
-        int channels = 4;
-        switch (static_cast<SurfaceFormat>(surfaceFormat))
-        {
-            case SurfaceFormat::Single:
-            case SurfaceFormat::HalfSingle:
-                channels = 1;
-                break;
-            case SurfaceFormat::Vector2:
-            case SurfaceFormat::HalfVector2:
-            case SurfaceFormat::NormalizedByte2:
-            case SurfaceFormat::Rg32:
-                channels = 2;
-                break;
-            default:
-                break;
-        }
+        float values[8];
+        D3DCommon::D3D9ChannelExpansion(surfaceFormat, values, values + 4);
+        // The expansion is fully determined by the channel count, so the buffer is rewritten only
+        // when that changes -- not on every texture switch.
+        int channels = 0;
+        while (channels < 4 && values[channels] == 1.0f)
+            ++channels;
 
         if (!channelExpansionBuffer_)
         {
@@ -276,12 +265,6 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         if (channels != channelExpansionChannels_)
         {
-            float values[8] = {1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-            for (int channel = channels; channel < 4; ++channel)
-            {
-                values[channel] = 0.0f;
-                values[4 + channel] = 1.0f;
-            }
             D3D11_MAPPED_SUBRESOURCE mapped{};
             if (FAILED(context_->Map(channelExpansionBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0,
                                      &mapped)))

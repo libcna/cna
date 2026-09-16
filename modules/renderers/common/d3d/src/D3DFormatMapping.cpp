@@ -105,6 +105,32 @@ namespace CNA::Internal::Renderers::D3DCommon
         }
     }
 
+    void D3D9ChannelExpansion(int surfaceFormat, float mask[4], float fill[4]) noexcept
+    {
+        int channels = 4;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Single:
+            case SurfaceFormat::HalfSingle:
+                channels = 1;
+                break;
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::Rg32:
+                channels = 2;
+                break;
+            default:
+                break;
+        }
+        for (int channel = 0; channel < 4; ++channel)
+        {
+            const bool stored = channel < channels;
+            mask[channel] = stored ? 1.0f : 0.0f;
+            fill[channel] = stored ? 0.0f : 1.0f;
+        }
+    }
+
     int SurfaceFormatBytesPerTexel(int surfaceFormat) noexcept
     {
         switch (static_cast<SurfaceFormat>(surfaceFormat))

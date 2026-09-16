@@ -46,7 +46,8 @@ VSOutput main(VSInput input)
     output.UV = input.UV;
 
     // Mix vertex color and diffuse based on VertexColorEnabled flag.
-    output.Tint = (VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor;
+    // WINCLOSE-0022: XNA writes this to D3D9 COLOR0, which saturates before interpolation.
+    output.Tint = saturate((VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor);
 
     // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the

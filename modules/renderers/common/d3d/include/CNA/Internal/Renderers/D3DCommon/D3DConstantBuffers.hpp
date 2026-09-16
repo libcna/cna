@@ -202,8 +202,14 @@ namespace CNA::Internal::Renderers::D3DCommon
         float Light1Diffuse[4];      ///< offset 144
         float Light2Dir[4];          ///< offset 160: xyz + pad
         float Light2Diffuse[4];      ///< offset 176
+        /// offset 192: WINCLOSE-0022 Direct3D 9 channel expansion of the environment map sample,
+        /// sample * mask + fill. Identity by default, so a renderer that never sets it (DirectX12)
+        /// samples exactly as before.
+        float EnvMapChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float EnvMapChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 208
     };
-    static_assert(sizeof(D3DEnvMapConstants) == 192, "D3DEnvMapConstants must match EnvMapParams's real 192-byte HLSL cbuffer size");
+    static_assert(sizeof(D3DEnvMapConstants) == 224, "D3DEnvMapConstants must match EnvMapParams's real 224-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DEnvMapConstants, EnvMapChannelMask) == 192, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, EmissiveAmount) == 32, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, FogColor) == 96, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, FogVector) == 112, "D3DEnvMapConstants field offset mismatch vs HLSL");

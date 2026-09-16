@@ -2670,6 +2670,9 @@ namespace CNA::Internal::Renderers::DirectX11
             c.Light2Diffuse[0] = params.light2Diffuse[0];
             c.Light2Diffuse[1] = params.light2Diffuse[1];
             c.Light2Diffuse[2] = params.light2Diffuse[2];
+            if (params.envMap != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.envMap->GetSurfaceFormatEXT(),
+                                                c.EnvMapChannelMask, c.EnvMapChannelFill);
 
             ID3D11Buffer* perDrawCB = GetOrCreateEnvMapPerDrawConstantBufferEXT();
             ID3D11Buffer* envCB = GetOrCreateEnvMapConstantBufferEXT();

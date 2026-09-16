@@ -48,7 +48,8 @@ VSOutput main(VSInput input)
 
     // Mix vertex color and diffuse based on VertexColorEnabled flag (matches
     // colored_textured3d.vert.hlsl's own established pattern).
-    output.Tint = (VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor;
+    // WINCLOSE-0022: XNA writes this to D3D9 COLOR0, which saturates before interpolation.
+    output.Tint = saturate((VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor);
 
     // REMED-GFX-005/010: FNA view-space fog. keep = 1 - saturate(dot(objectPos, fogVector)); the
     // vector bakes World*View's 3rd column (eye-space Z), the corrected non-mirrored FNA factor.

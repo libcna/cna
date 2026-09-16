@@ -60,10 +60,11 @@ VSOutput main(VSInput input)
 #else
     output.UV1 = input.UV0;
 #endif
+    // WINCLOSE-0022: XNA writes this to D3D9 COLOR0, which saturates before interpolation.
 #ifdef CNA_DUAL_TEXTURE_COLOR_INPUT
-    output.Tint = DiffuseColor * lerp(1.0.xxxx, input.Color, VertexColorEnabled);
+    output.Tint = saturate(DiffuseColor * lerp(1.0.xxxx, input.Color, VertexColorEnabled));
 #else
-    output.Tint = DiffuseColor;
+    output.Tint = saturate(DiffuseColor);
 #endif
 
     // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector

@@ -57,11 +57,12 @@ VSOutput main(VSInput input)
     output.Position = pos;
 
     // Mix vertex color and diffuse based on VertexColorEnabled flag (matches
-    // colored_textured3d.vert.hlsl's convention for the same flag).
+    // colored_textured3d.vert.hlsl's convention for the same flag). WINCLOSE-0022: XNA writes this
+    // to D3D9 COLOR0, which saturates before interpolation.
 #ifdef CNA_COLORED3D_POSITION_ONLY_INPUT
-    output.Color = DiffuseColor;
+    output.Color = saturate(DiffuseColor);
 #else
-    output.Color = (VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor;
+    output.Color = saturate((VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor);
 #endif
 
     // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector

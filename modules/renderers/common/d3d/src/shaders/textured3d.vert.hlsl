@@ -44,7 +44,8 @@ VSOutput main(VSInput input)
     float4 pos = mul(float4(input.Position, 1.0), Mvp);
     output.Position = pos;
     output.UV = input.UV;
-    output.Tint = DiffuseColor;
+    // WINCLOSE-0022: XNA writes this to D3D9 COLOR0, which saturates before interpolation.
+    output.Tint = saturate(DiffuseColor);
 
     // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the

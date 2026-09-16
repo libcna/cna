@@ -23,6 +23,11 @@ cbuffer EnvMapParams : register(b2)
     float4 Light1DiffPad;
     float4 Light2DirPad;
     float4 Light2DiffPad;
+    // WINCLOSE-0022: Direct3D 9's expansion of the environment map's missing channels -- a
+    // one-channel cube samples (R, 1, 1, 1) and a two-channel one (R, G, 1, 1) in XNA, while
+    // Direct3D 10+ gives (R, 0, 0, 1) and (R, G, 0, 1). Identity for a four-channel format.
+    float4 EnvMapChannelMask;
+    float4 EnvMapChannelFill;
 };
 
 struct VSInput
