@@ -110,8 +110,10 @@ namespace
     /** @brief The four pixels every probe carries: red, green, blue, half-transparent white. */
     const std::vector<std::array<std::uint8_t, 4>>& ProbePixels()
     {
+        // Double-braced for the same reason as BlockCompressionTests: MSVC does not elide braces
+        // for std::array inside an initializer_list.
         static const std::vector<std::array<std::uint8_t, 4>> pixels = {
-            {255, 0, 0, 255}, {0, 255, 0, 255}, {0, 0, 255, 255}, {255, 255, 255, 128}};
+            {{255, 0, 0, 255}}, {{0, 255, 0, 255}}, {{0, 0, 255, 255}}, {{255, 255, 255, 128}}};
         return pixels;
     }
 

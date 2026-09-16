@@ -217,8 +217,12 @@ $script:Configurations = @(
                     '-DCNA_AUDIO_PLATFORM=NULL',
                     '-DCNA_GRAPHICS_RENDERER=DIRECTX11',
                     '-DCNA_BUILD_TESTS=ON',
-                    '-DCNA_BUILD_EXAMPLES=ON',
-                    '-DCNA_ENABLE_NET=OFF')
+                    '-DCNA_BUILD_EXAMPLES=OFF',
+                    '-DCNA_ENABLE_NET=OFF',
+                    # Draco is 84 MB of third-party source that decodes a glTF extension; the
+                    # documented decoder-free build is the honest way to keep it out of a Win32
+                    # validation run rather than a silent omission.
+                    '-DCNA_ENABLE_DRACO=OFF')
         Targets = @()
         Why     = 'the real framework, SDL-free, on the Win32 backend'
     }

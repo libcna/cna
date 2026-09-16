@@ -155,8 +155,14 @@ TEST(BlockCompressionTest, ASolidColourSurvivesEveryFormatExactly)
 {
     // Black is 565 code zero, which is the case the single-colour endpoint rule has to rescue:
     // there is no smaller code to put in the second endpoint, so the colour has to move.
-    for (const auto& colour : std::vector<std::array<std::uint8_t, 3>>{
-             {0u, 0u, 0u}, {255u, 255u, 255u}, {255u, 0u, 0u}, {0u, 255u, 0u}, {0u, 0u, 255u}})
+    // A plain 2-D array rather than a std::vector<std::array<...>> temporary spelled as a
+    // function-style cast in the range-for. MSVC rejects that form -- "cannot convert from
+    // 'initializer list'", and then several cascading errors on `colour` -- with or without the
+    // inner braces; GCC and Clang accept it, which is why it stood until the first native MSVC
+    // build. Nothing about the test needs a vector here.
+    static constexpr std::uint8_t colours[][3] = {
+        {0u, 0u, 0u}, {255u, 255u, 255u}, {255u, 0u, 0u}, {0u, 255u, 0u}, {0u, 0u, 255u}};
+    for (const auto& colour : colours)
     {
         const std::vector<std::uint8_t> image =
             MakeSolid(8u, 8u, colour[0], colour[1], colour[2], 255u);
