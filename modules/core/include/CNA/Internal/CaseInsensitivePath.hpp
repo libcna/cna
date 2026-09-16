@@ -6,6 +6,9 @@
 #include <cctype>
 #include <filesystem>
 #include <string>
+#include <string_view>
+
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal
 {
@@ -21,25 +24,54 @@ namespace CNA::Internal
         return path;
     }
 
+    namespace Detail
+    {
+        /**
+         * @brief Lowercases the ASCII letters of a UTF-8 string and leaves everything else alone.
+         *
+         * Deliberately not `std::tolower`, which consults the C locale and can therefore rewrite
+         * bytes above 0x7F — every continuation byte of a UTF-8 sequence is above 0x7F, so a
+         * locale-aware fold can corrupt a non-ASCII filename into matching the wrong entry. The
+         * promise this walker makes is ASCII case-insensitivity, and this is exactly that.
+         *
+         * @param value UTF-8 text.
+         * @return The same text with `A`–`Z` lowered.
+         */
+        [[nodiscard]] inline std::string FoldAsciiCase(std::string value)
+        {
+            std::transform(value.begin(), value.end(), value.begin(),
+                [](char c) {
+                    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+                });
+            return value;
+        }
+    }
+
     /**
-     * @brief Resolves an existing path one component at a time without ASCII case sensitivity.
+     * @brief Resolves an existing native path one component at a time without ASCII case
+     *        sensitivity.
      *
      * An exact match always wins. If a component has exactly one case-insensitive match in its
      * parent directory, that spelling is used. Missing or ambiguous components leave the original
-     * normalized path unchanged so the caller's normal not-found behavior remains authoritative.
+     * path unchanged so the caller's normal not-found behavior remains authoritative.
      *
-     * @param path The relative or absolute XNA content path to resolve.
-     * @return The existing host spelling, or the normalized input when it cannot be resolved.
+     * Every comparison is made on UTF-8 text obtained with PathToUtf8(), never on
+     * `path::string()`: the walker converts *every entry it enumerates*, not only the one it is
+     * looking for, so on Windows a single non-ASCII sibling used to abort the search for an
+     * ordinary ASCII file.
+     *
+     * @param requested The native path to resolve.
+     * @return The existing host spelling, or @p requested when it cannot be resolved.
      */
-    [[nodiscard]] inline std::string ResolveExistingXnaPath(const std::string& path)
+    [[nodiscard]] inline std::filesystem::path ResolveExistingNativePath(
+        const std::filesystem::path& requested)
     {
         namespace fs = std::filesystem;
 
-        const fs::path requested(NormalizeXnaPathSeparators(path));
         std::error_code ec;
         if (fs::exists(requested, ec) && !ec)
         {
-            return requested.string();
+            return requested;
         }
 
         fs::path resolved = requested.is_absolute() ? requested.root_path() : fs::path{};
@@ -58,12 +90,10 @@ namespace CNA::Internal
             fs::directory_iterator entry(parent, ec);
             if (ec)
             {
-                return requested.string();
+                return requested;
             }
 
-            std::string wanted = component.string();
-            std::transform(wanted.begin(), wanted.end(), wanted.begin(),
-                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            const std::string wanted = Detail::FoldAsciiCase(PathToUtf8(component));
 
             fs::path match;
             const fs::directory_iterator end;
@@ -71,17 +101,16 @@ namespace CNA::Internal
             {
                 if (ec)
                 {
-                    return requested.string();
+                    return requested;
                 }
 
-                std::string candidate = entry->path().filename().string();
-                std::transform(candidate.begin(), candidate.end(), candidate.begin(),
-                    [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+                const std::string candidate =
+                    Detail::FoldAsciiCase(PathToUtf8(entry->path().filename()));
                 if (candidate == wanted)
                 {
                     if (!match.empty())
                     {
-                        return requested.string();
+                        return requested;
                     }
                     match = entry->path().filename();
                 }
@@ -89,11 +118,34 @@ namespace CNA::Internal
 
             if (match.empty())
             {
-                return requested.string();
+                return requested;
             }
             resolved /= match;
         }
 
-        return resolved.string();
+        return resolved;
+    }
+
+    /**
+     * @brief Resolves an existing path one component at a time without ASCII case sensitivity.
+     *
+     * The UTF-8 spelling of ResolveExistingNativePath(); see that function for the resolution
+     * rules. Input and result are UTF-8 (docs/filesystem-path-model.md rule 2).
+     *
+     * @param path The relative or absolute XNA content path to resolve, as UTF-8.
+     * @return The existing host spelling as generic UTF-8, or the normalized input when it cannot
+     *         be resolved.
+     */
+    [[nodiscard]] inline std::string ResolveExistingXnaPath(const std::string& path)
+    {
+        const std::string normalized = NormalizeXnaPathSeparators(path);
+        const std::optional<std::filesystem::path> requested = TryPathFromUtf8(normalized);
+        if (!requested)
+        {
+            // Text that cannot name a path here resolves to itself, which is what the caller's
+            // own not-found handling already copes with.
+            return normalized;
+        }
+        return PathToGenericUtf8(ResolveExistingNativePath(*requested));
     }
 }

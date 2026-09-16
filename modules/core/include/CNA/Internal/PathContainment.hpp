@@ -4,11 +4,13 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
 
 #include "CNA/Internal/ContentPath.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal
 {
@@ -24,12 +26,8 @@ namespace CNA::Internal
      *
      * @param normalized A path string that has already had `\` replaced with `/`.
      */
-    inline bool IsDisallowedAbsolutePath(const std::string& normalized)
+    inline bool IsDisallowedAbsolutePath(std::string_view normalized)
     {
-        if (std::filesystem::path(normalized).is_absolute())
-        {
-            return true;
-        }
         // is_absolute() is not enough, and on Windows it is not even close. There, a path that
         // begins with a separator has a root-directory but no root-name, which the standard calls
         // relative -- so `"/etc/passwd"`, the canonical shape of this attack, answers false. Worse,
@@ -37,6 +35,13 @@ namespace CNA::Internal
         // drive, so the join lands wherever the string says. This check is therefore made on the
         // string, which has already had its backslashes normalized to '/' by every caller: anything
         // starting with a separator is rooted on every platform, whatever is_absolute() thinks.
+        //
+        // The string checks subsume is_absolute() on both platforms, so no path is constructed
+        // here at all: on POSIX is_absolute() means exactly "starts with '/'", and on Windows every
+        // absolute spelling either starts with a separator (UNC) or with a drive letter. Not
+        // building one matters because this function takes untrusted text, and constructing a path
+        // from text that is not valid UTF-8 throws on Windows -- a lookup that answers a question
+        // must not become an exception.
         const bool looksRooted = !normalized.empty() && normalized[0] == '/';
         const bool looksLikeDriveLetter =
             normalized.size() >= 2 &&
@@ -99,6 +104,40 @@ namespace CNA::Internal
     }
 
     /**
+     * @brief Joins untrusted generic UTF-8 path text onto a native base and confines it to a
+     *        native root.
+     *
+     * The native core every helper below is built from: it performs exactly one conversion, of the
+     * untrusted relative text, and never narrows a path it already holds.
+     *
+     * @param rootDir      The native directory the resolved path must stay within.
+     * @param baseDir      The native directory @p relativeUtf8 is relative to.
+     * @param relativeUtf8 Untrusted relative path encoded as generic UTF-8.
+     * @param canonicalize When true, resolve existing symlink components for the check.
+     * @return The contained native path, or an empty failure result.
+     */
+    inline ContainedNativePathResult ResolveContainedNativePathFromBase(
+        const std::filesystem::path& rootDir, const std::filesystem::path& baseDir,
+        std::string_view relativeUtf8, bool canonicalize = true)
+    {
+        namespace fs = std::filesystem;
+
+        std::string normalized(relativeUtf8);
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        if (normalized.empty() || IsDisallowedAbsolutePath(normalized)) { return {}; }
+
+        // Untrusted text: where it cannot name a path on this platform, it is not contained --
+        // rather than an exception escaping a containment check.
+        const std::optional<fs::path> relative = TryPathFromUtf8(normalized);
+        if (!relative) { return {}; }
+
+        const fs::path base = baseDir.empty() ? fs::path(".") : baseDir;
+        const fs::path root = rootDir.empty() ? fs::path(".") : rootDir;
+        return ValidateContainedNativePath(root, (base / *relative).lexically_normal(),
+                                           canonicalize);
+    }
+
+    /**
      * @brief Resolves authored generic UTF-8 path text below a native filesystem root.
      *
      * Cross-platform absolute spellings, lexical traversal, and symlink escapes are rejected
@@ -113,14 +152,9 @@ namespace CNA::Internal
         const std::filesystem::path& rootDir, std::string_view relativeUtf8,
         bool canonicalize = true)
     {
-        std::string normalized(relativeUtf8);
-        std::replace(normalized.begin(), normalized.end(), '\\', '/');
-        if (normalized.empty() || IsDisallowedAbsolutePath(normalized)) { return {}; }
-
         const std::filesystem::path root =
             rootDir.empty() ? std::filesystem::path(".") : rootDir;
-        return ValidateContainedNativePath(
-            root, (root / ContentPathFromUtf8(normalized)).lexically_normal(), canonicalize);
+        return ResolveContainedNativePathFromBase(root, root, relativeUtf8, canonicalize);
     }
 
     /**
@@ -144,16 +178,25 @@ namespace CNA::Internal
                                                        bool canonicalize = true)
     {
         namespace fs = std::filesystem;
-        const ContainedNativePathResult result = ValidateContainedNativePath(
-            rootDir.empty() ? fs::path(".") : fs::path(rootDir), fs::path(candidate),
-            canonicalize);
-        // generic_string(), not string(): lexically_normal() rewrites separators to the platform's
+
+        // Both strings are UTF-8 (docs/filesystem-path-model.md rule 2), so they are widened with
+        // PathFromUtf8 rather than the narrow path constructor, which on Windows would read them
+        // as ANSI code page bytes. Untrusted text that cannot name a path here is not contained.
+        const std::optional<fs::path> candidatePath = TryPathFromUtf8(candidate);
+        if (!candidatePath) { return {}; }
+        const std::optional<fs::path> rootPath =
+            rootDir.empty() ? std::optional<fs::path>(fs::path(".")) : TryPathFromUtf8(rootDir);
+        if (!rootPath) { return {}; }
+
+        const ContainedNativePathResult result =
+            ValidateContainedNativePath(*rootPath, *candidatePath, canonicalize);
+        // PathToGenericUtf8, not string(): lexically_normal() rewrites separators to the platform's
         // preferred one, so on Windows this returned "\base\dir\a.png" where every other producer
         // of the same key spells it with '/'. The documented contract just below -- that callers
         // key data structures by this exact string and need it to match forms produced elsewhere --
         // silently held only where preferred_separator is already '/'. MediaLibrary's song lookup,
         // fed by PlaylistParser, is the case that missed every time on Windows.
-        return result.ok ? ContainedPathResult{true, result.resolvedPath.generic_string()}
+        return result.ok ? ContainedPathResult{true, PathToGenericUtf8(result.resolvedPath)}
                          : ContainedPathResult{};
     }
 
@@ -179,22 +222,20 @@ namespace CNA::Internal
     {
         namespace fs = std::filesystem;
 
-        if (relativeOrAbsolute.empty())
-        {
-            return {};
-        }
+        // One conversion per string, straight into the native core. This used to narrow the joined
+        // path back to text only to have ValidateContainedPath re-parse it -- four ANSI code page
+        // round trips per call on Windows, each of them able to throw.
+        const std::optional<fs::path> base =
+            baseDir.empty() ? std::optional<fs::path>(fs::path(".")) : TryPathFromUtf8(baseDir);
+        if (!base) { return {}; }
+        const std::optional<fs::path> root =
+            rootDir.empty() ? std::optional<fs::path>(fs::path(".")) : TryPathFromUtf8(rootDir);
+        if (!root) { return {}; }
 
-        std::string normalized = relativeOrAbsolute;
-        std::replace(normalized.begin(), normalized.end(), '\\', '/');
-
-        if (IsDisallowedAbsolutePath(normalized))
-        {
-            return {};
-        }
-
-        const fs::path base = baseDir.empty() ? fs::path(".") : fs::path(baseDir);
-        const fs::path lexicalJoined = (base / fs::path(normalized)).lexically_normal();
-        return ValidateContainedPath(rootDir, lexicalJoined.string(), canonicalize);
+        const ContainedNativePathResult result =
+            ResolveContainedNativePathFromBase(*root, *base, relativeOrAbsolute, canonicalize);
+        return result.ok ? ContainedPathResult{true, PathToGenericUtf8(result.resolvedPath)}
+                         : ContainedPathResult{};
     }
 
     /**
@@ -271,18 +312,27 @@ namespace CNA::Internal
             return {};
         }
 
-        const fs::path referringPath = fs::path(referringFile).lexically_normal();
+        const std::optional<fs::path> referring = TryPathFromUtf8(referringFile);
+        if (!referring) { return {}; }
+        const fs::path referringPath = referring->lexically_normal();
         const fs::path baseDir = referringPath.parent_path().empty()
                                      ? fs::path(".")
                                      : referringPath.parent_path();
-        const bool referringFileIsLexicallyInRoot =
-            ValidateContainedPath(contentRoot, referringPath.string(), false).ok;
-        const fs::path authorizedRoot = referringFileIsLexicallyInRoot
-                                            ? (contentRoot.empty() ? fs::path(".")
-                                                                   : fs::path(contentRoot))
-                                            : baseDir;
 
-        return ResolveContainedPathFromBase(
-            authorizedRoot.string(), baseDir.string(), relativeOrAbsolute, canonicalize);
+        const std::optional<fs::path> contentRootPath =
+            contentRoot.empty() ? std::optional<fs::path>(fs::path(".")) : TryPathFromUtf8(contentRoot);
+        if (!contentRootPath) { return {}; }
+
+        // Both of these were narrowed back to text and re-parsed before; the paths are already in
+        // hand, so the native core takes them directly.
+        const bool referringFileIsLexicallyInRoot =
+            ValidateContainedNativePath(*contentRootPath, referringPath, false).ok;
+        const fs::path authorizedRoot =
+            referringFileIsLexicallyInRoot ? *contentRootPath : baseDir;
+
+        const ContainedNativePathResult result = ResolveContainedNativePathFromBase(
+            authorizedRoot, baseDir, relativeOrAbsolute, canonicalize);
+        return result.ok ? ContainedPathResult{true, PathToGenericUtf8(result.resolvedPath)}
+                         : ContainedPathResult{};
     }
 }

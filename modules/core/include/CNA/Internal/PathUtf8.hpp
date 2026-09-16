@@ -3,7 +3,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -109,6 +111,30 @@ namespace CNA::Internal
     {
         return std::filesystem::path(
             std::u8string(reinterpret_cast<const char8_t*>(value.data()), value.size()));
+    }
+
+    /**
+     * @brief Reconstructs a native filesystem path from UTF-8 path text, without throwing.
+     *
+     * The total counterpart of PathFromUtf8(), for text that arrived from somewhere untrusted — a
+     * playlist entry, an external reference inside an XNB, a name a game passed in. Where
+     * PathFromUtf8() would throw because the text cannot name a path on this platform, this
+     * returns an empty optional, so a caller can refuse the input as invalid rather than
+     * propagating an exception out of what reads like a lookup.
+     *
+     * @param value Path text encoded as UTF-8.
+     * @return The native path, or an empty optional when the text cannot name one here.
+     */
+    [[nodiscard]] inline std::optional<std::filesystem::path> TryPathFromUtf8(std::string_view value)
+    {
+        try
+        {
+            return PathFromUtf8(value);
+        }
+        catch (const std::exception&)
+        {
+            return std::nullopt;
+        }
     }
 
     /**
