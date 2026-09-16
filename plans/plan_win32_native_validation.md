@@ -274,6 +274,34 @@ default, so a test that fits on one platform fits on the other.
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
 
+### WINNATIVE-F31 — POSIX hardcoded in tests, hiding untested Windows production code *(open)*
+
+Eighteen of the 44 Windows-only failures are tests that could never have passed on Windows, and one
+of them matters more than the count suggests.
+
+`HostProcessTest` (4 failures) exercises `CNA::Internal::RunHostProcess` — production code with a
+real **Windows `CreateProcess` implementation** alongside its POSIX `fork`/`exec` one — by asking it
+to run `/bin/echo` and `/bin/sh`. On Windows those do not exist, so `result.started` is false in
+every case and **the Windows half of the process runner has never been exercised by any test**. The
+irony is on the page: `AnArgumentContainingSpacesIsNotResplit` explains itself with "a Windows SDK
+path has spaces in it, and a shell would turn one argument into three" — and is the test that
+cannot run on Windows.
+
+`CnbGltfDirectToolTest` (7) and `LargeModelScalingTest` (3) invoke their tools through
+`std::system(command + " >/dev/null 2>&1")`. `/dev/null` is POSIX; the Windows spelling is `NUL`.
+`XmaEncoderService` (4) fails differently but from the same root — its stub encoder is not a PE
+executable, so `CreateProcess` refuses it with error 193, `ERROR_BAD_EXE_FORMAT`.
+
+Recorded rather than fixed. The redirect is a one-line change, but the process-runner tests need
+more than a search-and-replace to be worth having: a shell script that means the same thing under
+`cmd.exe`, and — for the argument-quoting test specifically — a program that echoes its `argv`
+verbatim without a shell re-parsing it, since routing through `cmd.exe` would test cmd's quoting
+rather than `RunHostProcess`'s. Doing that badly would produce tests that pass on Windows without
+checking what they claim to check, which is worse than the honest red they show now.
+
+**The finding to carry forward is not the 18 failures. It is that `RunHostProcess` has a Windows
+code path with no test behind it**, on a project that ships a content pipeline which shells out.
+
 ### WINNATIVE-F30 — non-ASCII paths are broken on Windows *(open, NOT fixed — systemic)*
 
 The largest genuine CNA defect this workstream found, and the one it deliberately did not fix,
