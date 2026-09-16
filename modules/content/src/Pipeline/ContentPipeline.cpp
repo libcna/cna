@@ -124,6 +124,20 @@ namespace CNA::Content::Pipeline
                 return character == static_cast<Character>('/') ||
                        character == static_cast<Character>('\\');
             };
+            // Asked of the authored text as written, not of the generic UTF-8 spelling below.
+            // ContentPathToUtf8() is PathToGenericUtf8(), which rewrites '\' to '/' -- on Windows
+            // that happened before the external-dependency check could see it, so the check was
+            // dead there and `@shared/folder\escape.bin` resolved as two contained components
+            // while POSIX rejected the same manifest. A content dependency is a logical asset
+            // identifier rather than a native path, so its one separator is '/' on every platform
+            // and the same authored string must mean the same thing on both.
+            const bool authoredUsesBackslash =
+                std::find_if(nativeAuthored.begin(), nativeAuthored.end(),
+                             [](const auto character)
+                             {
+                                 using Character = std::decay_t<decltype(character)>;
+                                 return character == static_cast<Character>('\\');
+                             }) != nativeAuthored.end();
             if (std::adjacent_find(nativeAuthored.begin(), nativeAuthored.end(),
                                    [&](const auto left, const auto right)
                 { return isSeparator(left) && isSeparator(right); }) != nativeAuthored.end())
@@ -158,7 +172,7 @@ namespace CNA::Content::Pipeline
                 const std::string relativeText = authoredText.substr(slash + 1u);
                 const std::filesystem::path relative =
                     CNA::Internal::ContentPathFromUtf8(relativeText);
-                if (relativeText.find('\\') != std::string::npos || relative.empty() ||
+                if (authoredUsesBackslash || relative.empty() ||
                     relative.is_absolute() || relative.has_root_name() ||
                     relative.has_root_directory() ||
                     CNA::Internal::ContentPathToUtf8(relative.lexically_normal()) != relativeText)

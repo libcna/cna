@@ -769,6 +769,45 @@ TEST(ContentPipelineCoreTest, ExplicitExternalDependencyCanBeHashedAndDeployedBy
               fingerprintA);
 }
 
+// An external content dependency is a LOGICAL asset identifier, not a native path, so its one
+// separator is '/' and a '\' in it is invalid on every platform -- the same authored manifest has
+// to resolve the same way on Linux and on Windows.
+//
+// It did not. The check read the dependency's generic UTF-8 spelling, and ContentPathToUtf8() is
+// PathToGenericUtf8(), which on Windows had already rewritten '\' to '/' before the check ran. So
+// `@shared/folder\escape.bin` was one rejected filename on POSIX and two accepted path components
+// on Windows. The check now reads the authored text as written.
+//
+// Honest about its reach: on POSIX '\' is an ordinary filename character and the two spellings are
+// identical, so this test cannot fail here whichever way the check is written. It bites on
+// Windows, and it is named so that what it protects is not re-derived from a failing run.
+TEST(ContentPipelineCoreTest, AnExternalDependencyBackslashIsRejectedOnEveryPlatform)
+{
+    ScratchDirectory scratch("external_dependency_backslash");
+    const std::filesystem::path sourceRoot = scratch.Path() / "Source";
+    const std::filesystem::path shared = scratch.Path() / "Shared";
+    WriteText(sourceRoot / "asset.num", "7");
+    WriteText(shared / "folder" / "escape.bin", "reachable only if '\\' became a separator");
+
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>(
+        "test.ExternalImporter", ".num", kImportedType, "@shared/folder\\escape.bin"));
+    registry->RegisterProcessor(std::make_shared<NumberProcessor>());
+    registry->RegisterWriter(std::make_shared<NumberWriter>());
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = sourceRoot;
+    request.source = "asset.num";
+    request.logicalName = "asset";
+    request.externalSourceRoots.Add("shared", shared);
+
+    // The target deliberately EXISTS, so a Windows build that reinterprets '\' as a separator
+    // would succeed rather than fail as not-found -- the two outcomes are opposite, which is what
+    // makes this a test rather than a coincidence.
+    EXPECT_THROW((void)Pipeline::ContentPipeline(registry).Build(request),
+                 Pipeline::ContentPipelineError)
+        << "'\\' was treated as a path separator, so one authored manifest means two things";
+}
+
 TEST(ContentPipelineCoreTest, ExternalReferencesRejectUnknownTraversalAbsoluteAndSymlinkEscape)
 {
     ScratchDirectory scratch("external_dependency_rejection");
