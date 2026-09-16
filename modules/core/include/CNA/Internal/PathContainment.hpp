@@ -30,12 +30,19 @@ namespace CNA::Internal
         {
             return true;
         }
+        // is_absolute() is not enough, and on Windows it is not even close. There, a path that
+        // begins with a separator has a root-directory but no root-name, which the standard calls
+        // relative -- so `"/etc/passwd"`, the canonical shape of this attack, answers false. Worse,
+        // `operator/` still treats such a path as rooted and discards everything but the base's
+        // drive, so the join lands wherever the string says. This check is therefore made on the
+        // string, which has already had its backslashes normalized to '/' by every caller: anything
+        // starting with a separator is rooted on every platform, whatever is_absolute() thinks.
+        const bool looksRooted = !normalized.empty() && normalized[0] == '/';
         const bool looksLikeDriveLetter =
             normalized.size() >= 2 &&
             std::isalpha(static_cast<unsigned char>(normalized[0])) != 0 &&
             normalized[1] == ':';
-        const bool looksLikeUnc = normalized.rfind("//", 0) == 0;
-        return looksLikeDriveLetter || looksLikeUnc;
+        return looksRooted || looksLikeDriveLetter;
     }
 
     /** @brief Result of the shared path-containment helpers. */
@@ -140,7 +147,13 @@ namespace CNA::Internal
         const ContainedNativePathResult result = ValidateContainedNativePath(
             rootDir.empty() ? fs::path(".") : fs::path(rootDir), fs::path(candidate),
             canonicalize);
-        return result.ok ? ContainedPathResult{true, result.resolvedPath.string()}
+        // generic_string(), not string(): lexically_normal() rewrites separators to the platform's
+        // preferred one, so on Windows this returned "\base\dir\a.png" where every other producer
+        // of the same key spells it with '/'. The documented contract just below -- that callers
+        // key data structures by this exact string and need it to match forms produced elsewhere --
+        // silently held only where preferred_separator is already '/'. MediaLibrary's song lookup,
+        // fed by PlaylistParser, is the case that missed every time on Windows.
+        return result.ok ? ContainedPathResult{true, result.resolvedPath.generic_string()}
                          : ContainedPathResult{};
     }
 
