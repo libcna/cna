@@ -119,6 +119,19 @@ function Remove-Tree([string] $path) {
     }
 }
 
+# git writes ordinary progress to stderr -- "Preparing worktree (detached HEAD ...)" is git
+# SUCCEEDING -- and with $ErrorActionPreference = 'Stop' PowerShell turns any stderr from a native
+# command into a terminating error. Every git call goes through here so that a normal message
+# cannot abort the run, and the exit code is what decides.
+function Invoke-Git([string[]] $GitArgs) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & git @GitArgs 2>&1
+        return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
+    } finally { $ErrorActionPreference = $previous }
+}
+
 function Enter-MsvcEnvironment {
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (-not (Test-Path $vswhere)) { return $false }
@@ -244,12 +257,15 @@ if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
     $srcRoot  = New-UnicodeRoot 'src'
     $worktree = Join-Path $srcRoot "CNA-$Japanese"
     try {
-        $head = (& git -C $SourceDir rev-parse HEAD).Trim()
-        & git -C $SourceDir worktree add --detach $worktree $head 2>&1 | Out-Null
+        $head = (Invoke-Git @('-C', $SourceDir, 'rev-parse', 'HEAD')).Output.Trim()
+        $added = Invoke-Git @('-C', $SourceDir, 'worktree', 'add', '--detach', $worktree, $head)
+        if ($added.ExitCode -ne 0) {
+            Add-Result 'unicode.source.worktree' 'FAIL' ($added.Output.Trim() -replace '\s+', ' ')
+        }
         if (-not (Test-Path (Join-Path $worktree 'CMakeLists.txt'))) {
             Add-Result 'unicode.source.worktree' 'FAIL' 'git could not create a worktree at a non-ASCII path'
         } else {
-            $seen = (& git -C $worktree rev-parse HEAD).Trim()
+            $seen = (Invoke-Git @('-C', $worktree, 'rev-parse', 'HEAD')).Output.Trim()
             Add-Result 'unicode.source.worktree' $(if ($seen -eq $head) { 'PASS' } else { 'FAIL' }) `
                 "git worktree at a non-ASCII path is at $seen"
 
@@ -305,7 +321,7 @@ if (Want 'app') {
     }
     if (-not $harness) {
         # Anything built and runnable will do; take the first .exe the Unicode build produced.
-        if ($uniBuild -and (Test-Path $uniBuild)) {
+        if (-not [string]::IsNullOrWhiteSpace($uniBuild) -and (Test-Path $uniBuild)) {
             $first = Get-ChildItem -Path $uniBuild -Filter '*.exe' -Recurse -ErrorAction SilentlyContinue |
                      Select-Object -First 1
             if ($first) { $harness = $first.FullName }
@@ -368,11 +384,11 @@ if (Want 'nosdl') {
 # --- cleanup and report ---------------------------------------------------------------------------
 if ($worktree -and -not $KeepWorktree) {
     try {
-        & git -C $SourceDir worktree remove --force $worktree 2>&1 | Out-Null
+        [void](Invoke-Git @('-C', $SourceDir, 'worktree', 'remove', '--force', $worktree))
     } catch { }
     $parent = Split-Path $worktree -Parent
     if ($parent) { Remove-Tree $parent }
-    & git -C $SourceDir worktree prune 2>&1 | Out-Null
+    [void](Invoke-Git @('-C', $SourceDir, 'worktree', 'prune'))
 }
 
 $script:Results | Export-Csv -NoTypeInformation -Path (Join-Path $OutDir 'unicode-results.csv')
