@@ -96,13 +96,13 @@ it.
 | `WINPORT-0001` | Branch from the validated baseline; record every version in §0 | **done** |
 | `WINPORT-0002` | Establish this plan as the living evidence ledger | **done** |
 | `WINPORT-0003` | Reproduce F30 deterministically *before* changing anything | **done** — see F30-A |
-| `WINPORT-0004` | Repository-wide path-use audit, classified A–I | in progress |
-| `WINPORT-0005` | Document CNA's path encoding contract (Phase 3, ten questions) | |
-| `WINPORT-0006` | Central conversion layer, with its own unit tests | |
-| `WINPORT-0007` | Migrate category-A (OS/filesystem) uses to stay native | |
-| `WINPORT-0008` | Migrate category-C (log/display) uses to explicit UTF-8 | |
-| `WINPORT-0009` | Serialization audit — do not change on-disk formats to fix runtime paths | |
-| `WINPORT-0010` | Third-party boundary contracts, recorded per library | |
+| `WINPORT-0004` | Repository-wide path-use audit, classified A–I | **done** — §4 |
+| `WINPORT-0005` | Document CNA's path encoding contract (Phase 3, ten questions) | **done** — `docs/filesystem-path-model.md` |
+| `WINPORT-0006` | Central conversion layer, with its own unit tests | **done** — `CNA/Internal/PathUtf8.hpp`, 22 tests |
+| `WINPORT-0007` | Migrate category-A (OS/filesystem) uses to stay native | **done** — 9 modules |
+| `WINPORT-0008` | Migrate category-C (log/display) uses to explicit UTF-8 | **done**, with 0007 |
+| `WINPORT-0009` | Serialization audit — do not change on-disk formats to fix runtime paths | **done** — no format changed |
+| `WINPORT-0010` | Third-party boundary contracts, recorded per library | **done** — §5 |
 | `WINPORT-0011` | Unicode content-load regression suite | |
 | `WINPORT-0012` | Build CNA from a Unicode source path with MSVC | |
 | `WINPORT-0013` | Run a real CNA application from a Unicode path | |
@@ -162,6 +162,33 @@ The model this workstream builds is therefore:
 > the way to the call. A narrow `std::string` path is display, log, manifest or identity text, and
 > it is converted back into a `path` before it touches the filesystem again.
 
+### WINPORT-M1 — the Linux regression authority for this branch
+
+Measured on this branch with the conversion layer in place but **before** any module migration,
+from the repository root under `Xvfb :99`, with the two suites the preceding workstream excluded
+for cause (`Sdl3XErrorHandlerTest`, which ends the process — F22; `XnaDifferentialBuildTest`, whose
+Wine prefix wedges):
+
+```
+8961 tests · 26 failures · 0 errors
+```
+
+The 22 extra tests relative to the inherited `8939` are this branch's own `PathUtf8Tests`. The
+failure **set** is what the final run is compared against, not the count — two runs can agree on 26
+and still have swapped one failure for another. The set is recorded in
+`reports/windows-portability/linux_baseline_failures.txt` (gitignored) and is, in full:
+
+`CnbTextureContentManagerTest` ×2, `CnbTextureCubeProducerTest`, `CnjCapabilityMatrixTest`,
+`CnjEffectTest`, `CnjStockEffectTest`, `CnjTexture3DTest`, `ContentManagerSkinnedModelTest` ×3,
+`GltfRendererIndexWidthPolicy`, `GraphicsDeviceCapabilityTest`, `MediaLibraryTestFixture` ×2,
+`TerminalRestoration.SighupGivesTheTerminalBack`, `XnaAudioContent`, `XnaAudioProcessors`,
+`XnaBuildDeterminism` ×3, `XnaContentProjectCommandLine`, `XnaSourceToOutput` ×3,
+`XnbContainerFuzzTest`, `XnbContentPipelineTest`.
+
+One of these — `TerminalRestoration.SighupGivesTheTerminalBack` — is not in the preceding
+workstream's list of 25 and is a SIGHUP/terminal test with an obvious environmental dependence. It
+is carried as baseline here and re-checked at the end rather than attributed to anything.
+
 ### Scale, measured on this branch
 
 `.string()` on a `path`-shaped expression, production code only (`modules/**`, excluding
@@ -173,3 +200,104 @@ inside the one helper that already does this correctly
 
 The inherited note said 165; the difference is that it did not count `modules/renderers/`. The
 audit does not stop at this number — the classification in §4 is what decides each site.
+
+---
+
+## 4. The audit — WINPORT-0004
+
+Three passes over the production tree (`modules/**`, excluding `tests/`), classified A–I as Phase 2
+requires rather than counted. The point of classifying is that the correct fix differs per category
+and two of them must **not** be converted at all.
+
+| Category | What it is | Sites | What was done |
+|---|---|---|---|
+| A | OS/filesystem operation | ~230 | carry `std::filesystem::path` to the call |
+| B | UTF-8 public API boundary | ~140 | declare the encoding; convert at the edge |
+| C | log/error/display text | ~40 | `PathToUtf8()` |
+| D | serialization / on-disk format | ~25 | `PathToGenericUtf8()` — **no format changed** |
+| E | comparison / map key / identity | ~50 | `PathToGenericUtf8()`, both sides together |
+| F | subprocess argv | ~12 | `PathToUtf8()` — `RunHostProcess` already widens `CP_UTF8` |
+| G | third-party boundary | ~20 | per-library contract, §5 |
+| H | test-only | 1 214 | out of scope for this migration |
+| I | provably ASCII / internally generated | ~50 | **left unchanged** |
+
+### What the numbers do not say
+
+The inherited note put the scope at "165 `.string()` sites". The real shape is different in three
+ways, and each changed the work:
+
+1. **It was an undercount of the search and an overcount of the problem.** 210 production
+   `.string()` sites exist, not 165 — the difference is `modules/renderers/`, which the earlier
+   count did not include. But ~100 of the content pipeline's conversions were *already correct*
+   (`ContentPathToUtf8`/`ContentPathFromUtf8`), and ~50 more are category I and must not be touched
+   at all: `/dev/input/eventN`, `/proc/self/comm`, `"."`, a hex hash, an extension literal.
+2. **`.string()` was not the whole search.** The narrow `std::filesystem::path(std::string)`
+   constructor and the narrow `std::ifstream`/`exists`/`create_directories` overloads are the same
+   defect facing the other way, are invisible at a grep for `.string()`, and are **more** numerous.
+   `StandardFileSystem::TryLoadFile` — the platform's primary asset read — contained no `.string()`
+   at all.
+3. **`generic_string()` had to be migrated too.** It narrows through the ANSI code page exactly as
+   `string()` does (measured: it fails on an identical input set), so treating it as the safe
+   spelling would have left the defect in every serialization path.
+
+### The eight root causes, and where they went
+
+| | Root cause | Resolution |
+|---|---|---|
+| RC-1 | `PathContainment`'s narrow family did up to four ANSI round trips per call | native core `ResolveContainedNativePathFromBase`; the narrow helpers became thin UTF-8 wrappers |
+| RC-2 | `StandardFileSystem` is what Win32 delegates to, and was entirely ANSI | the interface now declares UTF-8; `GetBasePath()` was where a game lost its whole content root |
+| RC-3 | the case-insensitive walker existed **three** times, each narrowing every entry it enumerated | one implementation; the other two delegate |
+| RC-4 | `getenv("LOCALAPPDATA")` reads the ANSI environment | `GetEnvironmentVariableW` |
+| RC-5 | a path narrowed and re-parsed to make a trivial edit | concat on the path (`+= ".tmp"`) |
+| RC-6 | `media` carried narrow strings end to end | converted; uncovered the `songByPath_` key mismatch |
+| RC-7 | `Win32SystemServices` undid its own correct conversions | native throughout; the triple conversion at `SetFileName` is gone |
+| RC-8 | third-party sinks reached with an undifferentiated narrow string | §5 |
+
+### Two defects found by the audit rather than inherited
+
+**The `songByPath_` key mismatch.** `MediaLibraryIndex` produced the key with native separators
+while `PlaylistParser`'s members arrive through `ResolveContainedPath`, which always answers
+generic form. On Windows every playlist member lookup missed and playlists came out **empty**.
+That is exactly the case `PathContainment.hpp`'s own comment claims to have fixed, and the claim
+only held once the producer agreed. Byte-identical on POSIX, which is why no test saw it.
+
+**`XnaModelSourceContentPipeline.cpp`** passed `ContentPathToUtf8(path.lexically_normal().generic_string())`
+— narrowing to ANSI and then letting the helper's implicit conversion widen it back.
+
+---
+
+## 5. Third-party boundary contracts — WINPORT-0010
+
+Each verified against the library's own source rather than assumed. The full table is in
+`docs/filesystem-path-model.md`; what this workstream changed:
+
+| Library | Contract on Windows | Evidence | Action |
+|---|---|---|---|
+| stb_image / stb_image_write | **ANSI** — the `_wfopen` branch needs `STBI_WINDOWS_UTF8`, which CNA does not define | `third_party/stb/stb_image.h:1356-1382` | stopped passing a filename: read/write through a native path, decode/encode in memory |
+| cgltf | **ANSI** — `cgltf_default_file_read` is a bare `fopen`, no wide branch | `third_party/cgltf/cgltf.h:1045` | CNA-owned `cgltf_options::file` callbacks |
+| FreeType | **build-dependent** — the header documents `fopen` semantics, the CMake build ships wide ones | `freetype/freetype.h:2563-2568` | `FT_New_Memory_Face`, which is what FreeType's own docs recommend for this |
+| SDL3 / SDL3_mixer | UTF-8 | `third_party/SDL/src/io/SDL_iostream.c:129` | pass `PathToUtf8()` |
+| FFmpeg | UTF-8 (`ff_win32_open` widens with `utf8towchar`) | upstream; not vendored | pass `PathToUtf8()` at the call |
+| zlib, Draco, dr_flac, dr_mp3, stb_vorbis, shaderc | no path crosses | memory APIs / diagnostic labels only | **nothing — deliberately** |
+
+The last row matters as much as the others: five libraries were checked and found already correct,
+and "fixing" shaderc's `filename` argument — a diagnostic label it never opens — would have been a
+change with no defect behind it.
+
+---
+
+## 6. sharp-runtime — WINPORT-0011
+
+One focused commit, `ef75cd18a47351e89e6c76d610c049ccb2e89c6e`, because CNA cannot deliver this
+without it: `System::IO::FileStream` is the sink `TitleContainer::OpenStream` (XNA asset loading)
+and `StorageContainer::CreateFile`/`OpenFile` (save games) both reach, and it opened through the
+narrow `std::fstream` overload.
+
+`FileStream` and `File` now convert once, at the edge, through an implementation-private
+`Utf8Path.hpp` (under `src/`, not `include/` — it is not part of the `System.IO` surface).
+`File::Exists` uses the non-throwing form, because a predicate must answer rather than propagate a
+`filesystem_error`.
+
+Six new tests. **IO suite: 1022/1022 pass.** The five `Xml.Linq::XLinqNamespaceTests` failures in
+the full sharp-runtime run are **pre-existing and unrelated** — verified by stashing the change and
+reproducing them.
