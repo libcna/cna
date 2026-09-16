@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -37,6 +38,49 @@ namespace CNA::Internal::Renderers::DirectX11
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        /// Writes two known texels into a @p format texture and reads them back through a staging
+        /// copy. CheckFormatSupport is only the driver's claim: VirtualBox's SVGA driver claims
+        /// B4G4R4A4_UNORM for 2D, cube and volume textures, accepts every upload, and reads back
+        /// zeros -- while B5G6R5 and B5G5R5A1 round-trip exactly on the same device. Every bit
+        /// pattern is a valid texel in these UNORM formats, so a faithful device returns the bytes.
+        bool FormatKeepsWrittenBytes(
+            ID3D11Device* device, ID3D11DeviceContext* context, DXGI_FORMAT format)
+        {
+            UINT support = 0;
+            if (FAILED(device->CheckFormatSupport(format, &support)) ||
+                (support & D3D11_FORMAT_SUPPORT_TEXTURE2D) == 0)
+                return false;
+
+            D3D11_TEXTURE2D_DESC desc{};
+            desc.Width = 2;
+            desc.Height = 1;
+            desc.MipLevels = 1;
+            desc.ArraySize = 1;
+            desc.Format = format;
+            desc.SampleDesc.Count = 1;
+            desc.Usage = D3D11_USAGE_DEFAULT;
+            desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            ComPtr<ID3D11Texture2D> texture;
+            if (FAILED(device->CreateTexture2D(&desc, nullptr, texture.GetAddressOf())))
+                return false;
+            desc.Usage = D3D11_USAGE_STAGING;
+            desc.BindFlags = 0;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            ComPtr<ID3D11Texture2D> staging;
+            if (FAILED(device->CreateTexture2D(&desc, nullptr, staging.GetAddressOf())))
+                return false;
+
+            static constexpr std::uint8_t kTexels[4] = {0x24, 0x2F, 0x35, 0x46};
+            context->UpdateSubresource(texture.Get(), 0, nullptr, kTexels, sizeof(kTexels), 0);
+            context->CopyResource(staging.Get(), texture.Get());
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+                return false;
+            const bool kept = std::memcmp(mapped.pData, kTexels, sizeof(kTexels)) == 0;
+            context->Unmap(staging.Get(), 0);
+            return kept;
         }
 
         int ClampBackBufferMultiSampleCount(
@@ -364,6 +408,14 @@ namespace CNA::Internal::Renderers::DirectX11
                 "CNA's D3D11 renderer requires feature level 11_0+; GPU only reports 0x"
                 + FormatHr(featureLevel_));
         }
+
+        b5g6r5KeepsBytes_ = FormatKeepsWrittenBytes(device_.Get(), context_.Get(), DXGI_FORMAT_B5G6R5_UNORM);
+        b5g5r5a1KeepsBytes_ = FormatKeepsWrittenBytes(device_.Get(), context_.Get(), DXGI_FORMAT_B5G5R5A1_UNORM);
+        b4g4r4a4KeepsBytes_ = FormatKeepsWrittenBytes(device_.Get(), context_.Get(), DXGI_FORMAT_B4G4R4A4_UNORM);
+        if (!b4g4r4a4KeepsBytes_)
+            CNA::Logger::Warn("D3D11 device does not store B4G4R4A4_UNORM texels it reports as "
+                              "supported; SurfaceFormat::Bgra4444 is refused on this device.",
+                              CNA::LogCategory::RENDER);
 
         // DX-22: factory chain + tearing-capability query (device lifetime -- done once).
         ComPtr<IDXGIDevice> dxgiDevice;
@@ -1057,13 +1109,24 @@ namespace CNA::Internal::Renderers::DirectX11
             constexpr UINT required = D3D11_FORMAT_SUPPORT_TEXTURE2D;
             const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
             if (FAILED(device_->CheckFormatSupport(format, &support)) ||
-                (support & required) != required)
+                (support & required) != required || !DeviceKeepsFormatBytesEXT(format))
                 return RendererFormatVerdict::Unsupported;
             return RendererFormatVerdict::Supported;
         }
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    bool DirectX11Renderer::DeviceKeepsFormatBytesEXT(DXGI_FORMAT format) const
+    {
+        switch (format)
+        {
+            case DXGI_FORMAT_B5G6R5_UNORM:   return b5g6r5KeepsBytes_;
+            case DXGI_FORMAT_B5G5R5A1_UNORM: return b5g5r5a1KeepsBytes_;
+            case DXGI_FORMAT_B4G4R4A4_UNORM: return b4g4r4a4KeepsBytes_;
+            default:                         return true;
+        }
     }
 
     RendererFormatVerdict DirectX11Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
@@ -1098,7 +1161,8 @@ namespace CNA::Internal::Renderers::DirectX11
                 UINT support = 0;
                 const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
                 if (FAILED(device_->CheckFormatSupport(format, &support)) ||
-                    (support & D3D11_FORMAT_SUPPORT_TEXTURE3D) == 0)
+                    (support & D3D11_FORMAT_SUPPORT_TEXTURE3D) == 0 ||
+                    !DeviceKeepsFormatBytesEXT(format))
                     return RendererFormatVerdict::Unsupported;
                 return RendererFormatVerdict::Supported;
             }

@@ -450,6 +450,9 @@ namespace CNA::Internal::Renderers::DirectX11
         void EnsureSwapChainSize();
         /// Routes a native device-removed result into the shared lost-device state.
         void CheckDeviceRemoved(HRESULT hr);
+        /// WINCLOSE-0016: false only for an optional packed 16-bit format this device claimed in
+        /// CheckFormatSupport and then failed to store, as measured when the device was created.
+        [[nodiscard]] bool DeviceKeepsFormatBytesEXT(DXGI_FORMAT format) const;
 
         /// DX-62/DX-63/DX-64: shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib is nullptr for the non-indexed path (context_->Draw), non-null for the indexed path
@@ -475,6 +478,10 @@ namespace CNA::Internal::Renderers::DirectX11
         bool allowTearingSupported_ = false;
         bool debugLayerEnabled_ = false;
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;
+        /// WINCLOSE-0016: measured per device in CreateDeviceResources().
+        bool b5g6r5KeepsBytes_ = true;
+        bool b5g5r5a1KeepsBytes_ = true;
+        bool b4g4r4a4KeepsBytes_ = true;
         bool contextRecoveryEnabled_ = true;
         bool deviceLost_ = false;
         std::function<void(RendererDeviceEvent)> deviceEventCallback_;

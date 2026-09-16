@@ -166,6 +166,18 @@ namespace
         return std::any_cast<TextureCube>(typeReader->ReadUntyped(reader, std::any{}));
     }
 
+    /// WINCLOSE-0016: whether @p verdict is the one refusal in these format sweeps that is a DEVICE
+    /// fact. DirectX11 checks at device creation that B4G4R4A4_UNORM texels actually survive an
+    /// upload, because a driver may advertise the optional format and store zeros (VirtualBox's
+    /// SVGA driver does). On such a device the load must fail loudly; everywhere else, and for
+    /// every other format, the sweep still demands the exact bytes.
+    [[nodiscard]] bool DeviceRefusesOptionalPackedFormat(
+        SurfaceFormat format, CNA::Internal::Renderers::RendererFormatVerdict verdict)
+    {
+        return CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
+               verdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
+    }
+
     class Texture3DTextureCubeContentTypeReaderTest : public ::testing::Test
     {
     protected:
@@ -344,6 +356,13 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
             }
         }
 
+        if (DeviceRefusesOptionalPackedFormat(format,
+                gd.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format))))
+        {
+            EXPECT_THROW((void)ReadHandConstructedCube(gd, format, expected),
+                         System::NotSupportedException);
+            continue;
+        }
         TextureCube cube = ReadHandConstructedCube(gd, format, expected);
         EXPECT_EQ(cube.getFormatProperty(), format);
         EXPECT_EQ(cube.getLevelCountProperty(), 1);
@@ -566,6 +585,13 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
                 0x21u + index * 17u + static_cast<std::size_t>(formatCase.format));
         }
 
+        if (DeviceRefusesOptionalPackedFormat(formatCase.format,
+                gd.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(formatCase.format))))
+        {
+            EXPECT_THROW((void)ReadHandConstructedVolume(gd, formatCase.format, 2, 1, 1, {expected}),
+                         System::NotSupportedException);
+            continue;
+        }
         const auto texture = ReadHandConstructedVolume(
             gd, formatCase.format, 2, 1, 1, {expected});
         ASSERT_NE(texture, nullptr);
