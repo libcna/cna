@@ -94,7 +94,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ⬜ | |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ⬜ | |
-| WINNATIVE-0024 | Linux regression after every generic fix | ⬜ | |
+| WINNATIVE-0024 | Linux regression after every generic fix | 🔄 | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; `CnaContentTests` at its pre-existing 13 |
 
 ---
 
@@ -295,6 +295,24 @@ the measurement Wine could not make: under Wine every `GetGuiResources` counter 
 after CNA's wrapper is destroyed.
 
 ---
+
+### The Linux side did not move
+
+Every fix here is generic C++ or CMake, so the question "did fixing Windows break Linux" is a real
+one. Measured on this branch, native Linux (`CNA_PLATFORM=SDL3`, HEADLESS renderer, Debug):
+
+```
+full rebuild of cmake-build-debug        exit 0, no failed targets
+CnaPlatformModuleTests   511 tests   501 passed, 10 skipped, 0 failed
+CnaMathTests             857 tests   857 passed
+CnaContentPipelineTests              builds and runs; the 44 tests touching
+                                     the changed files all pass
+CnaContentTests                      13 failures -- the same 13 as the baseline
+```
+
+The MinGW-w64 cross-build of `CNA_PLATFORM=WIN32 + CNA_ENABLE_SDL=OFF` with the
+DIRECTX11/DIRECTX12/SOFTWARE/HEADLESS multi-renderer set also builds end to end again, which it had
+not done since the Windows-only defects landed.
 
 ### The Linux baseline, so a Windows number can be read against something
 
