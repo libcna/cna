@@ -273,6 +273,35 @@ default, so a test that fits on one platform fits on the other.
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
 
+### WINNATIVE-F25 — the path-containment guard did not hold on Windows *(fixed)*
+
+Two defects in the shared containment helper, both invisible on Linux, both found by running the
+suite on real Windows. Nine `PathContainmentTest` failures; that suite now passes there.
+
+**The serious one: a rooted path was not rejected.** `IsDisallowedAbsolutePath` asks
+`std::filesystem::path::is_absolute()`, and on Windows a path beginning with a separator has a
+root-directory but **no root-name, which the standard calls relative** — so `"/etc/passwd"`, the
+canonical shape of this attack, answers `false`. `operator/` nevertheless treats such a path as
+rooted and keeps only the base's drive letter, so the join lands wherever the untrusted string
+says. `AbsolutePathInsideBaseIsStillRejectedAsUntrustedInput` is the test that caught it: on
+Windows `result.ok` came back `true`.
+
+The check is now made on the string — whose backslashes every caller has already normalized to
+`/` — so anything starting with a separator is rejected on every platform regardless of what
+`is_absolute()` thinks.
+
+This is the one finding in this workstream with a security character, and it is exactly the kind
+the exercise was for: the guard was written and tested on a platform where the standard library
+happened to agree with it.
+
+**The quiet one: `resolvedPath` came back separator-flipped.** `lexically_normal()` rewrites to the
+platform's preferred separator, so the function returned `\base\dir\a.png` on Windows while every
+other producer of the same key spells it with `/`. The contract documented directly below it — that
+callers key data structures by this exact string and need it to match the form produced elsewhere —
+held only where `preferred_separator` was already `/`. `MediaLibrary`'s song lookup, fed by
+`PlaylistParser`, is the case that missed every time. `generic_string()` fixes it and is a no-op on
+Linux, where 50 related tests pass unchanged.
+
 ### WINNATIVE-F24 — the D3D11 refusal is reproduced by neither control *(open, environment-side)*
 
 > Recorded as **not explained**, because the two obvious explanations were tested and both are
@@ -494,6 +523,52 @@ recording as its own lesson: the run that gets further is the run that finds the
 
 The three tests that fail under Wine on the Linux host pass here. Windows is authoritative, and it
 says the backend is right and the Wine environment was the problem.
+
+### The whole suite on native Windows, and what the number is made of
+
+```
+8136 tests · 1557 failures · 0 errors · 195 skipped      (Linux, same commit: 8939 · 25 · 0 · 479)
+```
+
+The raw failure count is not the measurement — **1 480 of the 1 557 are the single unexplained
+D3D11 refusal of F24** (1 470 `D3D11CreateDevice failed`, plus 5 "no graphics renderer could be
+created" and 5 `DirectX11Renderer::Surface` that are the same cascade one layer up). Taking those
+out is what makes the run readable:
+
+| | Windows | Linux |
+|---|---|---|
+| failures excluding the D3D11 cascade | **77** | 25 |
+
+The 77, by suite, largest first: `PathContainmentTest` 9, `EffectSourceCommandLineTest` 7,
+`CnbGltfDirectToolTest` 7, `CaseInsensitivePathTest` 4, `HostProcessTest` 4, `XmaEncoderService` 4,
+`MediaLibraryTestFixture` 4, then a long tail of ones and twos.
+
+Getting to a completed run at all took the two abort fixes (F23 and the `std::thread` one): before
+them this suite ended at exit 3 with **no results file**, first at 3 712 tests and then at 7 714.
+
+**What the 77 contained, so far.** `PathContainmentTest`'s 9 were a real defect and are fixed
+(F25) — verified on Windows, where that suite now passes. `CaseInsensitivePathTest`'s 4 are a
+divergence rather than a defect, recorded below. The tool-invocation suites
+(`EffectSourceCommandLineTest`, `CnbGltfDirectToolTest`, `HostProcessTest`, `XmaEncoderService`)
+are not yet analysed.
+
+### WINNATIVE-F26 — case resolution on a case-insensitive filesystem *(divergence, NOT fixed)*
+
+`CaseInsensitivePathTest` fails 4 tests on Windows, and the cause is that Windows does not need the
+function. `ResolveExistingXnaPath` exists so XNA content with the wrong case still loads; it walks
+the tree comparing case-insensitively and returns **the spelling that is on disk**. On Windows the
+early `std::filesystem::exists()` succeeds for the wrongly-cased path — the filesystem is already
+case-insensitive — so it returns immediately with **the spelling it was asked for**. The file opens
+either way, so nothing is broken functionally; what differs is the string handed back.
+
+Left alone deliberately. Making it always walk would add a directory scan per path on the one
+platform that does not need it, and the promise being broken ("the returned spelling is the
+on-disk one") is a contract question worth deciding on purpose rather than as a side effect of a
+Windows run. Recorded so the next reader does not take 4 red tests for a path bug.
+
+The related `PlaylistParserTest.ParsesInternationalM3U8WithNonAsciiEntry` failure is **not** this:
+it is the narrow `std::string` path handed to an ANSI `fopen`/`ifstream` on a non-UTF-8 code page,
+which is a genuine defect and is not yet fixed.
 
 ### The other platform backends, on the same machine
 
