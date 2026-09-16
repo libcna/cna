@@ -71,6 +71,8 @@ spikes/dx6-spike/*.exe
 spikes/dx6-spike/*.o
 spikes/dx7-spike/*.exe
 spikes/dx7-spike/*.o
+spikes/d3d11-vsync-spike/*.exe
+spikes/d3d11-vsync-spike/*.obj
 spikes/dx8-spike/*.exe
 spikes/dx8-spike/*.o
 spikes/mingw-cnaext-spike/*.exe

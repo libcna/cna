@@ -487,3 +487,25 @@ guest were not trusted as evidence here.
   presentation layer letterboxes it, and a sprite at logical (8..56) did not appear at logical
   (32, 32) on readback. Whether `GetBackBufferData` or the sprite placement fails to apply the
   letterbox offset was not determined.
+
+### Choppy animation on the VM is the VM's, measured without CNA
+
+With WINCLOSE-0011 fixed, `cna_demo_2d` draws its sprites but animates visibly choppily. Measured
+in the demo: 10–15 draws per second with vsync on, ~270 with it off, and `Draw` itself costing
+**0.07 ms** — the rest is waiting for vblank. Because a CNA pacing defect would look identical from
+inside the demo, the question was settled with `spikes/d3d11-vsync-spike/vsync_probe.cpp`, a D3D11
+program containing no CNA at all:
+
+| No CNA, same guest | fps | p50 frame |
+|---|---|---|
+| flip model, `Present(1)` | **8.3** | 101 ms |
+| flip model, `Present(0)` | 149 | 0.17 ms |
+| BLT model, `Present(1)` | **6.9** | 153 ms |
+
+Any D3D11 application with vsync runs at 7–8 fps in this headless VBoxSVGA session, under either
+swap model, although the guest reports 60 Hz. **Not a CNA defect.** Frame pacing on a physical
+Windows GPU is unmeasured and belongs to the real-hardware Windows test phase, where this probe
+should run first as the CNA-free baseline.
+
+Re-measured the same day: `cna_win32_directx_probe` — all seven D3D11 stages pass; **D3D12 device
+`hr=0x887A0004` (`DXGI_ERROR_UNSUPPORTED`)**, unchanged.
