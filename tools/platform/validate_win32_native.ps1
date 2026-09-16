@@ -70,9 +70,15 @@ $script:failed  = 0
 function Add-Result([string] $Check, [string] $Outcome, [string] $Detail) {
     $script:results.Add([pscustomobject]@{ check = $Check; outcome = $Outcome; detail = $Detail })
     if ($Outcome -eq 'FAIL') { $script:failed++ }
-    # Write-Output, never Write-Host: this script's stdout is a pipe back to Linux, and
-    # PowerShell serialises host writes as CLIXML into it.
-    Write-Output ('{0,-12} {1,-34} {2}' -f $Outcome, $Check, $Detail)
+    # [Console]::Out, not Write-Output and not Write-Host. Write-Host is serialised as CLIXML when
+    # stdout is a pipe, which it always is over SSH. Write-Output goes to the PowerShell success
+    # stream, which means `$ok = Step-Toolchain` CAPTURES every row the step printed instead of
+    # showing it -- a function returns all of its uncaptured output, not just what `return` names.
+    # That is how a run that did real work printed only its first section. Writing to the console
+    # object directly bypasses both problems.
+    # The whole -f expression is parenthesised: without the outer pair PowerShell reads this as
+    # WriteLine with THREE arguments, the first being '...' -f \$Outcome alone.
+    [Console]::Out.WriteLine(('{0,-12} {1,-34} {2}' -f $Outcome, $Check, $Detail))
 }
 
 function Want([string] $step) {
