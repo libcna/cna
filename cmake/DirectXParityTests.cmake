@@ -38,10 +38,18 @@ function(cna_register_d3d_parity_tests)
         # "No SOURCES given to target: cna_test_directx11_<something>" and no mention of the file
         # or of this file -- which is exactly how a DIRECTX11 configure broke between 2026-09-08
         # and this workstream noticed. Say which fixture, which path, and where to fix it.
-        if(NOT EXISTS "${F_SOURCE}")
+        # A SOURCE is either absolute (the cross-module ones, which are the ones that drift) or
+        # relative to the renderer's own examples directory, which is where this function is
+        # called from.
+        if(IS_ABSOLUTE "${F_SOURCE}")
+            set(_cna_d3d_source_path "${F_SOURCE}")
+        else()
+            set(_cna_d3d_source_path "${CMAKE_CURRENT_SOURCE_DIR}/${F_SOURCE}")
+        endif()
+        if(NOT EXISTS "${_cna_d3d_source_path}")
             message(FATAL_ERROR
                 "DirectX parity fixture ${F_NAME} names a source that does not exist:\n"
-                "    ${F_SOURCE}\n"
+                "    ${_cna_d3d_source_path}\n"
                 "Either the file moved and this inventory (cmake/DirectXParityTests.cmake) was not "
                 "updated with it, or the fixture should be removed.")
         endif()
