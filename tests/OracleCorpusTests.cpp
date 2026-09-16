@@ -64,12 +64,13 @@ TEST(OracleCorpus, AnEscapedBackslashBeforeTheClosingQuoteEndsTheResult)
 
 TEST(OracleCorpus, EmptyValuesAreRecords)
 {
-    const auto [name, result] = Read(R"({"case": "", "result": ""})");
+    const std::string line = R"({"case": "", "result": ""})";
+    const auto [name, result] = Read(line);
     EXPECT_EQ(name, "");
     EXPECT_EQ(result, "");
     std::string n;
     std::string r;
-    EXPECT_TRUE(ReadOracleCase(R"({"case": "", "result": ""})", n, r));
+    EXPECT_TRUE(ReadOracleCase(line, n, r));
 }
 
 TEST(OracleCorpus, TextAroundTheRecordIsIgnored)
@@ -90,15 +91,28 @@ TEST(OracleCorpus, TheLeftmostRecordWins)
 
 TEST(OracleCorpus, MalformedLinesAreDeclined)
 {
+    // The lines are named rather than written inside the assertions on purpose. MSVC's default
+    // preprocessor does not recognise a raw string literal in a macro argument: it re-lexes the
+    // text as an ordinary string, so `"b\")` becomes the escape sequence `\)` and the translation
+    // unit fails with C2017, illegal escape sequence. The repository's other raw strings inside
+    // assertion macros survive only because their contents happen to spell legal escapes; a
+    // trailing backslash is the case that does not. `/Zc:preprocessor` would make the preprocessor
+    // conformant, but that is a repository-wide change to every macro expansion, and naming the
+    // literal costs one line.
+    const std::string missingResult = R"({"case": "a"})";
+    const std::string wrongOrder = R"({"result": "a", "case": "b"})";
+    const std::string noClosingBrace = R"({"case": "a", "result": "b")";
+    const std::string neverClosed = R"({"case": "a", "result": "b\")";
+    const std::string noSpace = R"({"case": "a","result": "b"})";
     std::string name;
     std::string result;
     EXPECT_FALSE(ReadOracleCase("", name, result));
     EXPECT_FALSE(ReadOracleCase("[]", name, result));
-    EXPECT_FALSE(ReadOracleCase(R"({"case": "a"})", name, result));
-    EXPECT_FALSE(ReadOracleCase(R"({"result": "a", "case": "b"})", name, result));  // wrong order
-    EXPECT_FALSE(ReadOracleCase(R"({"case": "a", "result": "b")", name, result));   // no brace
-    EXPECT_FALSE(ReadOracleCase(R"({"case": "a", "result": "b\")", name, result));  // never closed
-    EXPECT_FALSE(ReadOracleCase(R"({"case": "a","result": "b"})", name, result));   // no space
+    EXPECT_FALSE(ReadOracleCase(missingResult, name, result));
+    EXPECT_FALSE(ReadOracleCase(wrongOrder, name, result));
+    EXPECT_FALSE(ReadOracleCase(noClosingBrace, name, result));
+    EXPECT_FALSE(ReadOracleCase(neverClosed, name, result));
+    EXPECT_FALSE(ReadOracleCase(noSpace, name, result));
 }
 
 TEST(OracleCorpus, ADeclinedLineLeavesTheOutputsAlone)
@@ -112,10 +126,11 @@ TEST(OracleCorpus, ADeclinedLineLeavesTheOutputsAlone)
 
 TEST(OracleCorpus, ReadsTheFourFieldManifestRecord)
 {
+    const std::string line =
+        R"({"case": "c", "rootType": "System.Int32", "status": "ok", "note": "a\nb"})";
     std::vector<std::string> fields;
     ASSERT_TRUE(ReadOracleFields(
-        R"({"case": "c", "rootType": "System.Int32", "status": "ok", "note": "a\nb"})",
-        {{"case", false}, {"rootType", true}, {"status", false}, {"note", true}}, fields));
+        line, {{"case", false}, {"rootType", true}, {"status", false}, {"note", true}}, fields));
     ASSERT_EQ(fields.size(), 4u);
     EXPECT_EQ(fields[0], "c");
     EXPECT_EQ(fields[1], "System.Int32");
@@ -127,15 +142,17 @@ TEST(OracleCorpus, AnUnescapedFieldStopsAtTheFirstQuotationMark)
 {
     // `case` was written [^"]*, which cannot contain a quotation mark at all -- so a name that
     // carries one is not a record, rather than a name with an escape in it.
+    const std::string line = R"({"case": "a\"b", "result": "c"})";
     std::string name;
     std::string result;
-    EXPECT_FALSE(ReadOracleCase(R"({"case": "a\"b", "result": "c"})", name, result));
+    EXPECT_FALSE(ReadOracleCase(line, name, result));
 }
 
 TEST(OracleCorpus, NoFieldsIsNotARecord)
 {
+    const std::string line = R"({"case": "a"})";
     std::vector<std::string> fields;
-    EXPECT_FALSE(ReadOracleFields(R"({"case": "a"})", {}, fields));
+    EXPECT_FALSE(ReadOracleFields(line, {}, fields));
 }
 
 TEST(OracleCorpus, ALongResultIsReadRatherThanRefused)
