@@ -27,6 +27,10 @@ cbuffer EnvMapParams : register(b2)
     // Direct3D 10+ gives (R, 0, 0, 1) and (R, G, 0, 1). Identity for a four-channel format.
     float4 EnvMapChannelMask;
     float4 EnvMapChannelFill;
+    // WINCLOSE-0026: Direct3D 9's expansion of the texture's missing channels (see
+    // D3DCommon::D3D9ChannelExpansion); identity for a four-channel format.
+    float4 Texture0ChannelMask;
+    float4 Texture0ChannelFill;
 };
 
 struct PSInput
@@ -54,7 +58,7 @@ float4 main(PSInput input) : SV_Target
     // (Emissive + lightSum) * DiffuseColor re-scaled the emissive by DiffuseColor -- invisible only
     // when DiffuseColor is white. Matches the corrected Vulkan/SdlGpu/Bgfx/WebGPU env_map3d shaders.
     float3 litRGB = lightSum * DiffuseColor.rgb + EmissiveEm.xyz;
-    float4 texColor = uTexture.Sample(uTextureSampler, input.UV);
+    float4 texColor = uTexture.Sample(uTextureSampler, input.UV) * Texture0ChannelMask + Texture0ChannelFill;
     float3 reflDir = reflect(-E, N);
     float4 envSample = uEnvMap.Sample(uEnvMapSampler, reflDir) * EnvMapChannelMask + EnvMapChannelFill;
     float3 baseColor = litRGB * texColor.rgb;

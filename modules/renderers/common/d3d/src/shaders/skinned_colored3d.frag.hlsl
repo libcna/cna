@@ -38,6 +38,10 @@ cbuffer FogParams : register(b2)
     float4 Light1SpecPad;
     float4 Light2SpecPad;
     float4 EmissiveColor;   // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha
+    // WINCLOSE-0026: Direct3D 9's expansion of the texture's missing channels (see
+    // D3DCommon::D3D9ChannelExpansion); identity for a four-channel format.
+    float4 Texture0ChannelMask;
+    float4 Texture0ChannelFill;
 };
 
 struct PSInput
@@ -68,7 +72,7 @@ float4 main(PSInput input) : SV_Target
     float3 specularRGB = (spec0 * Light0SpecPad.xyz + spec1 * Light1SpecPad.xyz
                           + spec2 * Light2SpecPad.xyz) * SpecularColorPower.xyz;
 
-    float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) : float4(1.0, 1.0, 1.0, 1.0);
+    float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) * Texture0ChannelMask + Texture0ChannelFill : float4(1.0, 1.0, 1.0, 1.0);
     float4 vc = (VertexColorEnabled > 0.5) ? input.Color : float4(1.0, 1.0, 1.0, 1.0);
 
     float4 outColor = float4(litRGB * tex.rgb, DiffuseColor.a * tex.a * vc.a);

@@ -36,6 +36,10 @@ cbuffer LitLightParams : register(b1)
     // needed here.
     float4 FogColor;     // xyz = FogColor, w = reserved padding
     float4 FogVector;         // CPU-prepared FNA view-space fog vector
+    // WINCLOSE-0026: Direct3D 9's expansion of the texture's missing channels (see
+    // D3DCommon::D3D9ChannelExpansion); identity for a four-channel format.
+    float4 Texture0ChannelMask;
+    float4 Texture0ChannelFill;
 };
 
 struct PSInput
@@ -53,7 +57,7 @@ struct PSInput
 
 float4 main(PSInput input) : SV_Target
 {
-    float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) : float4(1.0, 1.0, 1.0, 1.0);
+    float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) * Texture0ChannelMask + Texture0ChannelFill : float4(1.0, 1.0, 1.0, 1.0);
 #ifdef CNA_LIT_VERTEX_COLOR_INPUT
     float4 vertexColor = (VertexColorEnabled > 0.5) ? input.Color : float4(1.0, 1.0, 1.0, 1.0);
 #else

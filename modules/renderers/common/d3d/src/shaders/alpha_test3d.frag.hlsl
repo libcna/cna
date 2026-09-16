@@ -17,6 +17,10 @@ cbuffer PerDraw : register(b0)
     float4 FogVector;          // offset 96
     float3 FogColor;           // offset 112
     float  VertexColorEnabled; // offset 124 -- unused here (read only in the colored VS)
+    // WINCLOSE-0026: Direct3D 9's expansion of the texture's missing channels (see
+    // D3DCommon::D3D9ChannelExpansion); identity for a four-channel format.
+    float4 Texture0ChannelMask;
+    float4 Texture0ChannelFill;
 };
 
 struct PSInput
@@ -35,7 +39,7 @@ struct PSInput
 // Default {0,0,1,1} = always pass (never discard).
 float4 main(PSInput input) : SV_Target
 {
-    float4 outColor = uTexture.Sample(uTextureSampler, input.UV) * input.Tint;
+    float4 outColor = (uTexture.Sample(uTextureSampler, input.UV) * Texture0ChannelMask + Texture0ChannelFill) * input.Tint;
 
     float alpha = outColor.a;
     bool passTest;

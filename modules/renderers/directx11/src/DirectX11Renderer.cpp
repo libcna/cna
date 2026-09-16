@@ -2616,6 +2616,10 @@ namespace CNA::Internal::Renderers::DirectX11
             c.FogColor[2] = params.fogColor[2];
 
             ID3D11Buffer* cb = GetOrCreateAlphaTestConstantBufferEXT();
+            // WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                c.Texture0ChannelMask, c.Texture0ChannelFill);
             UpdateDynamicConstantBufferEXT(cb, &c, sizeof(c));
             cbs[0] = cb;
         }
@@ -2646,6 +2650,13 @@ namespace CNA::Internal::Renderers::DirectX11
 
             ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
             ID3D11Buffer* fogCB = GetOrCreateDualTexFogConstantBufferEXT();
+            // WINCLOSE-0026: Direct3D 9 channel expansion of both sampled textures.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                fog.Texture0ChannelMask, fog.Texture0ChannelFill);
+            if (params.texture1 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture1->GetSurfaceFormatEXT(),
+                                                fog.Texture1ChannelMask, fog.Texture1ChannelFill);
             UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
             UpdateDynamicConstantBufferEXT(fogCB, &fog, sizeof(fog));
             cbs[0] = perDrawCB;
@@ -2708,6 +2719,10 @@ namespace CNA::Internal::Renderers::DirectX11
             if (params.envMap != nullptr)
                 D3DCommon::D3D9ChannelExpansion(params.envMap->GetSurfaceFormatEXT(),
                                                 c.EnvMapChannelMask, c.EnvMapChannelFill);
+
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                c.Texture0ChannelMask, c.Texture0ChannelFill);
 
             ID3D11Buffer* perDrawCB = GetOrCreateEnvMapPerDrawConstantBufferEXT();
             ID3D11Buffer* envCB = GetOrCreateEnvMapConstantBufferEXT();
@@ -2915,6 +2930,10 @@ namespace CNA::Internal::Renderers::DirectX11
             ID3D11Buffer* extraCB = GetOrCreateSkinnedExtraConstantBufferEXT();
             UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
             UpdateDynamicConstantBufferEXT(boneCB, &bones, sizeof(bones));
+            // WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                extra.Texture0ChannelMask, extra.Texture0ChannelFill);
             UpdateDynamicConstantBufferEXT(extraCB, &extra, sizeof(extra));
             cbs[0] = perDrawCB;
             cbs[1] = boneCB;
@@ -2990,6 +3009,10 @@ namespace CNA::Internal::Renderers::DirectX11
             ID3D11Buffer* perDrawCB  = GetOrCreatePerDrawConstantBufferEXT();
             ID3D11Buffer* lightingCB = GetOrCreateLightingConstantBufferEXT();
             UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+            // WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                lighting.Texture0ChannelMask, lighting.Texture0ChannelFill);
             UpdateDynamicConstantBufferEXT(lightingCB, &lighting, sizeof(lighting));
             cbs[0] = perDrawCB;
             cbs[1] = lightingCB;
@@ -3017,6 +3040,11 @@ namespace CNA::Internal::Renderers::DirectX11
             fog.FogVector[1] = params.fogVector[1];
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
+
+            // WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                fog.Texture0ChannelMask, fog.Texture0ChannelFill);
 
             ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
             ID3D11Buffer* fogCB     = GetOrCreateFogConstantBufferEXT();

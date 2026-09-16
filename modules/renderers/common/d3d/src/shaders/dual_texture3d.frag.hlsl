@@ -23,6 +23,12 @@ cbuffer FogParams : register(b2)
 {
     float4 FogColor;  // xyz = FogColor, w = reserved padding
     float4 FogVector;      // CPU-prepared FNA view-space fog vector
+    // WINCLOSE-0026: Direct3D 9's expansion of the texture's missing channels (see
+    // D3DCommon::D3D9ChannelExpansion); identity for a four-channel format.
+    float4 Texture0ChannelMask;
+    float4 Texture0ChannelFill;
+    float4 Texture1ChannelMask;
+    float4 Texture1ChannelFill;
 };
 
 struct PSInput
@@ -36,8 +42,8 @@ struct PSInput
 
 float4 main(PSInput input) : SV_Target
 {
-    float4 tex1 = uTexture.Sample(uTextureSampler, input.UV0);
-    float4 tex2 = uTexture2.Sample(uTexture2Sampler, input.UV1);
+    float4 tex1 = uTexture.Sample(uTextureSampler, input.UV0) * Texture0ChannelMask + Texture0ChannelFill;
+    float4 tex2 = uTexture2.Sample(uTexture2Sampler, input.UV1) * Texture1ChannelMask + Texture1ChannelFill;
     tex1.rgb *= 2.0;
     float4 outColor = tex1 * tex2 * input.Tint;
     // Task 899: mix toward FogColor as FogFactor -> 0 (matches the established Task 888 formula).

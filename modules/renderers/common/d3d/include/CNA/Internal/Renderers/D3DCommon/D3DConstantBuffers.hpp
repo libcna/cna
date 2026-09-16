@@ -56,8 +56,17 @@ namespace CNA::Internal::Renderers::D3DCommon
     {
         float FogColor[4];   ///< offset 0: xyz = FogColor, w = reserved padding
         float FogVector[4];  ///< offset 16: CPU-prepared FNA view-space fog vector
+        /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
+        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        /// The Texture1 pair is read only by dual_texture3d's second sampler.
+        float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 32
+        float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 48
+        float Texture1ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 64
+        float Texture1ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 80
     };
-    static_assert(sizeof(D3DFogConstants) == 32, "D3DFogConstants must match FogParams's real 32-byte HLSL cbuffer size");
+    static_assert(sizeof(D3DFogConstants) == 96, "D3DFogConstants must match FogParams's real 96-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DFogConstants, Texture0ChannelMask) == 32, "D3DFogConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DFogConstants, Texture1ChannelMask) == 64, "D3DFogConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DFogConstants, FogColor) == 0, "D3DFogConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DFogConstants, FogVector) == 16, "D3DFogConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DFogConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
@@ -85,8 +94,13 @@ namespace CNA::Internal::Renderers::D3DCommon
         float SpecularColorPower[4];   ///< offset 208: xyz = SpecularColor, w = SpecularPower
         float FogColor[4];            ///< offset 224: xyz = FogColor, w = reserved padding
         float FogVector[4];           ///< offset 240: CPU-prepared FNA view-space fog vector
+        /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
+        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 256
+        float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 272
     };
-    static_assert(sizeof(D3DLightingConstants) == 256, "D3DLightingConstants must match LitLightParams's real 256-byte HLSL cbuffer size");
+    static_assert(sizeof(D3DLightingConstants) == 288, "D3DLightingConstants must match LitLightParams's real 288-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DLightingConstants, Texture0ChannelMask) == 256, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DLightingConstants, World) == 80, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DLightingConstants, EyePosition) == 144, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DLightingConstants, SpecularColorPower) == 208, "D3DLightingConstants field offset mismatch vs HLSL");
@@ -114,8 +128,13 @@ namespace CNA::Internal::Renderers::D3DCommon
                                      ///< VertexColorEnabled/FogEnabled/FogStart/FogEnd quartet. All-zero = no fog.
         float FogColor[3];          ///< offset 112
         float VertexColorEnabled;   ///< offset 124: moved here from 96 (only alpha_test_colored3d's VS reads it)
+        /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
+        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 128
+        float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 144
     };
-    static_assert(sizeof(D3DAlphaTestConstants) == 128, "D3DAlphaTestConstants must match alpha_test3d's real 128-byte HLSL cbuffer size");
+    static_assert(sizeof(D3DAlphaTestConstants) == 160, "D3DAlphaTestConstants must match alpha_test3d's real 160-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DAlphaTestConstants, Texture0ChannelMask) == 128, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DAlphaTestConstants, DiffuseColor) == 64, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DAlphaTestConstants, AlphaRef) == 80, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DAlphaTestConstants, AlphaTol) == 84, "D3DAlphaTestConstants field offset mismatch vs HLSL");
@@ -159,8 +178,13 @@ namespace CNA::Internal::Renderers::D3DCommon
         float Light1Specular[4];       ///< offset 208
         float Light2Specular[4];       ///< offset 224
         float EmissiveColor[4];        ///< offset 240: REMED-GFX-008 pre-folded (emissive + ambient*diffuse)*alpha
+        /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
+        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 256
+        float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 272
     };
-    static_assert(sizeof(D3DSkinnedExtraConstants) == 256, "D3DSkinnedExtraConstants must match skinned3d's real 256-byte FogParams cbuffer size");
+    static_assert(sizeof(D3DSkinnedExtraConstants) == 288, "D3DSkinnedExtraConstants must match skinned3d's real 288-byte FogParams cbuffer size");
+    static_assert(offsetof(D3DSkinnedExtraConstants, Texture0ChannelMask) == 256, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, FogColor) == 0, "D3DSkinnedExtraConstants FogColor offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, FogVector) == 16, "D3DSkinnedExtraConstants FogVector offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, EmissiveColor) == 240, "D3DSkinnedExtraConstants EmissiveColor offset mismatch vs HLSL");
@@ -207,8 +231,13 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// samples exactly as before.
         float EnvMapChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         float EnvMapChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 208
+        /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
+        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 224
+        float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 240
     };
-    static_assert(sizeof(D3DEnvMapConstants) == 224, "D3DEnvMapConstants must match EnvMapParams's real 224-byte HLSL cbuffer size");
+    static_assert(sizeof(D3DEnvMapConstants) == 256, "D3DEnvMapConstants must match EnvMapParams's real 256-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DEnvMapConstants, Texture0ChannelMask) == 224, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, EnvMapChannelMask) == 192, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, EmissiveAmount) == 32, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, FogColor) == 96, "D3DEnvMapConstants field offset mismatch vs HLSL");
