@@ -274,6 +274,52 @@ default, so a test that fits on one platform fits on the other.
 refuses and the assertion on `exitCode == 0` does not hold. An environment-dependent failure that
 predates this branch, not something introduced or fixed here.
 
+### WINNATIVE-F30 — non-ASCII paths are broken on Windows *(open, NOT fixed — systemic)*
+
+The largest genuine CNA defect this workstream found, and the one it deliberately did not fix,
+because fixing it properly is a workstream of its own.
+
+Windows says it in as many words:
+
+```
+Import (CNA.ImageImporter): No mapping for the Unicode character exists in
+                            the target multi-byte code page.
+  ...Temp/cna_pipeline_texture_unicode_.../Textury/žluťoučký_壁.png
+```
+
+`std::filesystem::path::string()` on Windows converts the path's native UTF-16 to the process's
+**ANSI code page**, and throws when a character has no mapping there. On Linux the same call is a
+byte copy and cannot fail, which is why 165 uses of it have never been questioned. CNA carries paths
+around as `std::string` and re-opens them later, so every one of those conversions is a place where
+a perfectly valid asset path stops existing.
+
+**What it costs a user:** any CNA application whose assets, playlists, or content directories
+contain a character outside the machine's ANSI code page fails to load them on Windows. On a Czech,
+Japanese or Polish machine that is ordinary content, not an edge case — the fixture that exposes it
+is literally `žluťoučký_壁.png`.
+
+The Windows-only failures it accounts for:
+
+```
+AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly
+CnjContentPipelineTest.ResolvesUtf8AuthoredSidecarsThroughNativePaths
+MediaLibraryTestFixture.InternationalResolvesTheNonAsciiEntry
+PlaylistParserTest.ParsesInternationalM3U8WithNonAsciiEntry
+Texture2DContentPipelineTest.ReadsANativeNonAsciiFilesystemPathWithoutNarrowing
+```
+
+**The prescription**, so the next session does not have to re-derive it: a `std::filesystem::path`
+must be narrowed with `u8string()` and widened back with `path(std::u8string)`, never with
+`string()` and `path(std::string)`. Narrow C APIs (`stbi_load`, `fopen`, and any `std::ifstream`
+built from a `const char*`) must be handed a `std::filesystem::path` instead, so the stream uses
+`native()`. `generic_string()` does **not** fix this — it normalises separators and still narrows to
+the ANSI code page, so the F25 fix is correct for separators and irrelevant here.
+
+**Scope: 165 `.string()` sites across the content, content-pipeline, media, platform, storage and
+runtime modules**, against exactly 2 existing uses of `u8string`. That is a migration with its own
+review, its own test matrix and its own risk of changing behaviour on Linux, and doing it as a side
+effect of a Win32 validation run would be the wrong way to land it. Recorded, measured, and left.
+
 ### WINNATIVE-F29 — the WGL context test crashes in a full run *(open, NOT claimed as validated)*
 
 `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` **passes** in the
