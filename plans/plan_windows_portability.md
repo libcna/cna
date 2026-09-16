@@ -103,14 +103,14 @@ it.
 | `WINPORT-0008` | Migrate category-C (log/display) uses to explicit UTF-8 | **done**, with 0007 |
 | `WINPORT-0009` | Serialization audit — do not change on-disk formats to fix runtime paths | **done** — no format changed |
 | `WINPORT-0010` | Third-party boundary contracts, recorded per library | **done** — §5 |
-| `WINPORT-0011` | Unicode content-load regression suite | |
-| `WINPORT-0012` | Build CNA from a Unicode source path with MSVC | |
-| `WINPORT-0013` | Run a real CNA application from a Unicode path | |
-| `WINPORT-0014` | SDL-free Win32 build from a Unicode path, re-proved by PE imports | |
-| `WINPORT-0015` | Whole Windows suite rerun; before/after partition | |
-| `WINPORT-0016` | Triage every remaining Windows-only failure by root cause | |
-| `WINPORT-0017` | Linux regression after every batch | |
-| `WINPORT-0018` | Automate the Unicode phase in the native Windows harness | |
+| `WINPORT-0011` | Unicode content-load regression suite | **done** — 10 tests, all green on Windows |
+| `WINPORT-0012` | Build CNA from a Unicode source path with MSVC | **done** — §15 |
+| `WINPORT-0013` | Run a real CNA application from a Unicode path | **done** — §15, 379 passed |
+| `WINPORT-0014` | SDL-free Win32 build from a Unicode path, re-proved by PE imports | **done** — §15 |
+| `WINPORT-0015` | Whole Windows suite rerun; before/after partition | **done** — §12 |
+| `WINPORT-0016` | Triage every remaining Windows-only failure by root cause | **done** — §12 |
+| `WINPORT-0017` | Linux regression after every batch | **done** — §13, identical failure set |
+| `WINPORT-0018` | Automate the Unicode phase in the native Windows harness | **done** — `win32_unicode_paths.ps1` |
 
 ---
 
@@ -432,10 +432,10 @@ change with no defect behind it.
 
 ---
 
-## 6. sharp-runtime — WINPORT-0011
+## 6. sharp-runtime — WINPORT-0019
 
-One focused commit, `ef75cd18a47351e89e6c76d610c049ccb2e89c6e`, because CNA cannot deliver this
-without it: `System::IO::FileStream` is the sink `TitleContainer::OpenStream` (XNA asset loading)
+Three focused commits, because CNA cannot deliver this without them. The first,
+`ef75cd18a47351e89e6c76d610c049ccb2e89c6e`: `System::IO::FileStream` is the sink `TitleContainer::OpenStream` (XNA asset loading)
 and `StorageContainer::CreateFile`/`OpenFile` (save games) both reach, and it opened through the
 narrow `std::fstream` overload.
 
@@ -450,7 +450,16 @@ reproducing them.
 
 ---
 
-## 7. Linux regression — WINPORT-0017
+The second, `491b937c`, fixes `System::Environment` — see WINPORT-F4. The third, `a655630f`, fixes
+`XmlReader::Create`, which opened through tinyxml2's `fopen` and so could not read an `.xml` under a
+non-ASCII path: the `FILE*` overload of `LoadFile` takes the file already open, so the open happens
+through a wide path while tinyxml2's own error codes and BOM handling stay exactly as they were.
+That one was found by reading the sample errors inside WINPORT-F5's otherwise uninformative 602.
+
+Every sharp-runtime change is inside `#if defined(_WIN32)` or Windows-only code, and its suites are
+green on Linux: **1022/1022** `IO`, **127/127** `Environment`, **562/562** `Xml`.
+
+## 7. Linux regression, after the first migration batch — WINPORT-0017
 
 The rule the preceding workstream set, and this one keeps: compare the failure **set**, not the
 count. Two runs can agree on a number and still have swapped one failure for a different one.
@@ -482,7 +491,7 @@ memory buffer and touches no path at all; the only audio changes on this branch 
 Everything else is identical: all 26 baseline failures still fail, for the same reasons, and
 nothing that passed before now fails.
 
-## 8. Windows — WINPORT-0012
+## 8. The framework builds on Windows again, after the migration
 
 **The whole framework builds on native Windows with MSVC after the migration**, at commit
 `187ea8b6` against sharp-runtime `ef75cd18`, in the SDL-free `WIN32` + `DIRECTX11` configuration —
@@ -490,7 +499,7 @@ two distinct warning codes (`C4005`, `C4834`), no errors. That is the first thin
 to not break, since the preceding workstream's F9–F16 showed how much of CNA had never been
 compiled by this toolchain at all.
 
-## 9. The Windows measurement — WINPORT-0015
+## 9. The Windows measurement, first comparable run — WINPORT-0015
 
 Whole suite, native Windows, MSVC `RelWithDebInfo`, `WIN32` + `DIRECTX11`, SDL off, **run from the
 repository root** (see WINPORT-F1 for why that sentence is load-bearing):
@@ -527,7 +536,7 @@ of the 44 were always something else, and §10 says what.
 The new coverage passes on Windows too: `PathUtf8Test` 10/10, `IsWellFormedUtf8Test` 10/10,
 `ContentPathCompatibilityTest` 2/2, `PathContainmentTest` 30/30.
 
-## 10. Triage of the 37 — WINPORT-0016
+## 10. Triage of that run's 37 — WINPORT-0016
 
 One row per **root cause**, not per manifestation.
 
@@ -607,7 +616,7 @@ Also measured: malformed UTF-8 at the conversion boundary (11 classes), Windows 
 `MAX_PATH` behaviour with `LongPathsEnabled=0`. Long paths are recorded as a **separate** concern,
 not claimed as solved by the Unicode work.
 
-## 12. Windows, after every fix — WINPORT-0015 final
+## 12. The Windows measurement, final — WINPORT-0015
 
 ```
                               baseline      first run      final
@@ -648,7 +657,7 @@ forward is unchanged and more important than the count: **`RunHostProcess` has a
 `CreateProcess` path with no test behind it**, on a project that ships a content pipeline which
 shells out.
 
-## 13. Final Linux regression — WINPORT-0017
+## 13. Linux regression, final — WINPORT-0017
 
 Same command, same exclusions, same host, after every change on this branch and both sharp-runtime
 commits:
