@@ -327,6 +327,11 @@ if (Want 'app') {
         $candidates += (Join-Path $uniBuild 'cna_platform_tests.exe')
     }
     $candidates += (Join-Path $BuildRoot 'standalone-win32/cna_win32_platform_tests.exe')
+    # The name the standalone harness actually produces. Without it, running this step on its own
+    # -- against an existing standalone build rather than a fresh Unicode worktree -- found no
+    # binary and reported NOT-RUN, which reads like "there was nothing to test" rather than "the
+    # candidate list is spelled wrong".
+    $candidates += (Join-Path $BuildRoot 'standalone-win32/cna_platform_tests.exe')
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) { $harness = $candidate; break }
     }
