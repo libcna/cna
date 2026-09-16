@@ -90,7 +90,7 @@ time and therefore needs no stored password.
 | WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
 | WINNATIVE-0019 | COM lifetime and host-ownership policy | ✅ | §3; dialogs/message box still to run |
-| WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | ⬜ | |
+| WINNATIVE-0020 | WGL/OpenGL through the guest's Mesa SVGA3D stack | 🔄 | a real WGL 3.3 core context is created, made current, swapped and destroyed by `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` in the native suite run (it is not among the skips); the `wgl` check in the desktop harness records the driver and the context-cycle GDI count |
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ⬜ | |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | ⬜ | |
