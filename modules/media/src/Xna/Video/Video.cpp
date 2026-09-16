@@ -4,8 +4,10 @@
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <utility>
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
@@ -24,7 +26,12 @@ namespace Microsoft::Xna::Framework::Media
         // previously just probed via VideoDecoder::Open and silently left width_/height_/
         // duration_ at 0 on failure, with no exception at all -- a real fidelity gap
         // (plans/plan_media.md MEDIA-44).
-        if (!std::filesystem::exists(fileName_))
+        // fileName_ is UTF-8 path text and is widened before it is stat-ed. Text that cannot name a
+        // path on this platform names no existing file either, so it takes the same exit as a
+        // genuinely missing one rather than surfacing a filesystem_error here.
+        const std::optional<std::filesystem::path> nativeFileName =
+            CNA::Internal::TryPathFromUtf8(fileName_);
+        if (!nativeFileName || !std::filesystem::exists(*nativeFileName))
         {
             throw System::IO::FileNotFoundException(
                 "Could not find file '" + fileName_ + "'.", fileName_);
@@ -35,6 +42,8 @@ namespace Microsoft::Xna::Framework::Media
         // of making every Game executable carry FFmpeg (plans/plan_media.md MEDIA-233).
         CNA::Internal::Media::RequireVideoDecoderAvailable();
         CNA::Internal::Media::VideoDecoder probe;
+        // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- libavformat widens
+        // this filename from UTF-8 itself, so it is handed the UTF-8 text unchanged.
         if (probe.Open(fileName_))
         {
             width_          = probe.GetWidth();

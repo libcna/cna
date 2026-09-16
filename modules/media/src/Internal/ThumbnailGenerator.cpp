@@ -82,6 +82,8 @@ namespace CNA::Internal::Media
         ImageData source;
         try
         {
+            // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- this filename
+            // ends at stb_image's fopen, which is ANSI on Windows. ImageLoader is fixed separately.
             source = Graphics::ImageLoader::Load(path);
         }
         catch (const std::exception&)

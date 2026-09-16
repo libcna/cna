@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal::Media
 {
@@ -40,44 +43,73 @@ namespace CNA::Internal::Media
             std::string normalized = name;
             std::replace(normalized.begin(), normalized.end(), '\\', '/');
 
-            std::filesystem::path segment = std::filesystem::path(normalized).filename();
-            std::string result = segment.string();
+            const std::optional<std::filesystem::path> native = TryPathFromUtf8(normalized);
+            if (!native)
+            {
+                return "picture";
+            }
+            std::string result = PathToUtf8(native->filename());
             if (result.empty() || result == "." || result == "..")
             {
                 return "picture";
             }
             return result;
         }
+
+        // The native form of GetSavedPicturesDirectory(), so SavePicture() can join onto the
+        // directory it just created without narrowing and re-parsing it. Returns an empty path on
+        // failure, which is what the public string form reports as an empty string.
+        std::filesystem::path ResolveSavedPicturesDirectory(const std::string& picturesRoot)
+        {
+            if (picturesRoot.empty())
+            {
+                return {};
+            }
+            const std::optional<std::filesystem::path> root = TryPathFromUtf8(picturesRoot);
+            if (!root)
+            {
+                return {};
+            }
+            std::filesystem::path dir = *root / "Saved Pictures";
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            if (ec && !std::filesystem::exists(dir))
+            {
+                return {};
+            }
+            return dir;
+        }
     }
 
     std::string SavedPictureStore::GetSavedPicturesDirectory(const std::string& picturesRoot)
     {
-        if (picturesRoot.empty())
+        const std::filesystem::path dir = ResolveSavedPicturesDirectory(picturesRoot);
+        if (dir.empty())
         {
             return {};
         }
-        std::filesystem::path dir = std::filesystem::path(picturesRoot) / "Saved Pictures";
-        std::error_code ec;
-        std::filesystem::create_directories(dir, ec);
-        if (ec && !std::filesystem::exists(dir))
-        {
-            return {};
-        }
-        return dir.string();
+        return PathToUtf8(dir);
     }
 
     std::string SavedPictureStore::SavePicture(const std::string& picturesRoot,
                                                 const std::string& name,
                                                 const std::vector<uint8_t>& data)
     {
-        std::string dir = GetSavedPicturesDirectory(picturesRoot);
+        const std::filesystem::path dir = ResolveSavedPicturesDirectory(picturesRoot);
         if (dir.empty())
         {
             return {};
         }
 
-        std::filesystem::path outPath =
-            std::filesystem::path(dir) / (SanitizePictureName(name) + SniffImageExtension(data));
+        // One conversion, of the sanitized leaf name only: the directory is already native.
+        const std::optional<std::filesystem::path> leaf =
+            TryPathFromUtf8(SanitizePictureName(name) + SniffImageExtension(data));
+        if (!leaf)
+        {
+            return {};
+        }
+
+        std::filesystem::path outPath = dir / *leaf;
         std::ofstream out(outPath, std::ios::binary);
         if (!out.is_open())
         {
@@ -88,6 +120,6 @@ namespace CNA::Internal::Media
         {
             return {};
         }
-        return outPath.string();
+        return PathToUtf8(outPath);
     }
 }

@@ -4,8 +4,10 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <optional>
 #include <utility>
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
@@ -21,7 +23,12 @@ namespace Microsoft::Xna::Framework::Media
         // FNA's ctor throws FileNotFoundException(fileName) directly (Song.cs); match the
         // established CNA-wide convention (SoundBank/WaveBank) of a descriptive message plus the
         // path via getFileNameProperty(), rather than a bare std::runtime_error(handle_).
-        if (!std::filesystem::exists(handle_))
+        // handle_ is UTF-8 path text and is widened before it is stat-ed. Text that cannot name a
+        // path on this platform names no existing file either, so it takes the same exit as a
+        // genuinely missing one rather than surfacing a filesystem_error here.
+        const std::optional<std::filesystem::path> nativeHandle =
+            CNA::Internal::TryPathFromUtf8(handle_);
+        if (!nativeHandle || !std::filesystem::exists(*nativeHandle))
         {
             throw System::IO::FileNotFoundException(
                 "Could not find file '" + handle_ + "'.", handle_);

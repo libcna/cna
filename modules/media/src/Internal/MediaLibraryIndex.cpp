@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 
 #include "CNA/Internal/Media/AudioTagParser.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal::Media
 {
@@ -24,7 +26,7 @@ namespace CNA::Internal::Media
 
         bool HasSupportedAudioExtension(const std::filesystem::path& p)
         {
-            std::string ext = p.extension().string();
+            std::string ext = PathToUtf8(p.extension());
             std::transform(ext.begin(), ext.end(), ext.begin(),
                             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             // Only formats this project's selected mixer decoder can genuinely PLAY are indexed --
@@ -43,13 +45,15 @@ namespace CNA::Internal::Media
 
     MediaLibraryIndex::MediaLibraryIndex(const std::string& musicRoot)
     {
+        // The root arrives as UTF-8 text and has to be widened before it names a directory.
+        const std::optional<std::filesystem::path> root = TryPathFromUtf8(musicRoot);
         std::error_code ec;
-        if (musicRoot.empty() || !std::filesystem::exists(musicRoot, ec) || ec)
+        if (musicRoot.empty() || !root || !std::filesystem::exists(*root, ec) || ec)
         {
             return;
         }
         std::set<std::filesystem::path> visited;
-        ScanDirectory(musicRoot, visited);
+        ScanDirectory(*root, visited);
     }
 
     void MediaLibraryIndex::ScanDirectory(const std::filesystem::path& dir,
@@ -100,7 +104,16 @@ namespace CNA::Internal::Media
             {
                 if (HasSupportedAudioExtension(entry.path()))
                 {
-                    AddSong(entry.path().string());
+                    // Not inside a try/catch: string() would throw here for a name the ANSI code
+                    // page cannot spell, aborting the whole library scan over one file.
+                    //
+                    // Generic form, not native: this string becomes the songByPath_ key, and the
+                    // playlist side looks it up with a value that came out of
+                    // ResolveContainedPath, which always answers generic form. Keyed natively,
+                    // every playlist member lookup missed on Windows and playlists came out
+                    // empty -- which is exactly the case PathContainment.hpp's own comment claims
+                    // to have fixed, and that claim only holds once this producer agrees.
+                    AddSong(PathToGenericUtf8(entry.path()));
                 }
             }
         }

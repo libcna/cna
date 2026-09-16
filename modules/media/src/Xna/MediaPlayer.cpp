@@ -525,6 +525,9 @@ namespace Microsoft::Xna::Framework::Media
         g_songEnded.store(false, std::memory_order_relaxed);
 
         // Load the song file (streaming, no full predecode for long music tracks).
+        // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- the filename ends at
+        // the mixer's own file open, so it is handed this UTF-8 text unchanged rather than being
+        // re-encoded here; the mixer edge is fixed separately.
         g_musicAudio = CNA::Internal::Audio::LoadMixerAudioFile(
             song->getHandle(), /*predecode=*/false);
         if (!g_musicAudio)

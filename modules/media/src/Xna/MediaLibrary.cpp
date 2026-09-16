@@ -4,9 +4,11 @@
 #include <algorithm>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <utility>
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/Media/AudioDurationProbe.hpp"
 #include "CNA/Internal/Media/AudioTagParser.hpp"
 #include "CNA/Internal/Media/MediaLibraryIndex.hpp"
@@ -26,7 +28,13 @@ namespace Microsoft::Xna::Framework::Media
         // "cover.jpg"/"folder.jpg" file-naming convention (plans/plan_media.md MEDIA-65/R2).
         std::string FindAlbumArtPath(const std::string& songPath)
         {
-            std::filesystem::path dir = std::filesystem::path(songPath).parent_path();
+            const std::optional<std::filesystem::path> nativeSong =
+                CNA::Internal::TryPathFromUtf8(songPath);
+            if (!nativeSong)
+            {
+                return {};
+            }
+            std::filesystem::path dir = nativeSong->parent_path();
 
             // Precedence order, most-specific first. Real-world libraries are wildly inconsistent
             // about this, so several conventions are accepted rather than just cover.jpg/folder.jpg
@@ -42,27 +50,29 @@ namespace Microsoft::Xna::Framework::Media
             // Linux filesystems are case-sensitive but taggers are not consistent about case, so
             // match case-insensitively by scanning the directory once rather than stat-ing every
             // candidate in every casing.
+            // Filenames are kept native so the winning one can be joined back onto `dir` without a
+            // narrowing round trip; only the ASCII case-fold comparison needs text.
             std::error_code ec;
-            std::vector<std::string> namesInDir;
+            std::vector<std::filesystem::path> namesInDir;
             for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
             {
                 if (ec) break;
                 if (entry.is_regular_file(ec) && !ec)
                 {
-                    namesInDir.push_back(entry.path().filename().string());
+                    namesInDir.push_back(entry.path().filename());
                 }
             }
 
             for (const char* candidate : kCandidates)
             {
-                for (const std::string& name : namesInDir)
+                for (const std::filesystem::path& name : namesInDir)
                 {
-                    std::string lower = name;
+                    std::string lower = CNA::Internal::PathToUtf8(name);
                     std::transform(lower.begin(), lower.end(), lower.begin(),
                                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                     if (lower == candidate)
                     {
-                        return (dir / name).string();
+                        return CNA::Internal::PathToUtf8(dir / name);
                     }
                 }
             }
@@ -327,13 +337,17 @@ namespace Microsoft::Xna::Framework::Media
         // creating a new directory on disk; that only happens lazily, the first time SavePicture()
         // is actually called. If a Saved Pictures folder already exists from a previous session,
         // the scan below picks it up like any other real subdirectory.
-        std::string savedDirIfExists;
+        // Kept native across the existence check and the canonicalization below, rather than
+        // narrowed here and re-parsed there.
+        std::filesystem::path savedDirIfExists;
+        if (const std::optional<std::filesystem::path> root =
+                CNA::Internal::TryPathFromUtf8(pictureRoot))
         {
-            std::filesystem::path candidate = std::filesystem::path(pictureRoot) / "Saved Pictures";
+            std::filesystem::path candidate = *root / "Saved Pictures";
             std::error_code ec;
             if (std::filesystem::exists(candidate, ec) && !ec)
             {
-                savedDirIfExists = candidate.string();
+                savedDirIfExists = std::move(candidate);
             }
         }
 
@@ -354,7 +368,11 @@ namespace Microsoft::Xna::Framework::Media
         if (!savedDirIfExists.empty())
         {
             std::error_code ec;
-            std::string canonicalSavedDir = std::filesystem::weakly_canonical(savedDirIfExists, ec).string();
+            // Generic form, matching PictureLibraryIndex's own album keys -- lexically_normal() and
+            // weakly_canonical() spell separators the platform's way, so a key built with string()
+            // would not match the one the index produced.
+            std::string canonicalSavedDir =
+                CNA::Internal::PathToGenericUtf8(std::filesystem::weakly_canonical(savedDirIfExists, ec));
             if (!ec)
             {
                 auto it = pictureAlbumByPath_.find(canonicalSavedDir);
@@ -482,6 +500,15 @@ namespace Microsoft::Xna::Framework::Media
         {
             return savedPicturesAlbum_;
         }
+        // pictureRoot_ is UTF-8 text; widened once here for both the bootstrap root below and the
+        // "Saved Pictures" join further down. Text that cannot name a path here is nowhere to
+        // attach to, the same answer an empty root already gives.
+        const std::optional<std::filesystem::path> pictureRootPath =
+            CNA::Internal::TryPathFromUtf8(pictureRoot_);
+        if (!pictureRootPath)
+        {
+            return nullptr;
+        }
         if (rootPictureAlbum_ == nullptr)
         {
             // The Pictures root itself didn't exist (or was inaccessible) at MediaLibrary
@@ -496,15 +523,19 @@ namespace Microsoft::Xna::Framework::Media
                 return nullptr; // no pictures root configured at all -- genuinely nowhere to attach
             }
             std::error_code rootEc;
-            std::filesystem::path rootPath = std::filesystem::path(pictureRoot_);
-            std::string canonicalRootPath = std::filesystem::weakly_canonical(rootPath, rootEc).string();
+            const std::filesystem::path& rootPath = *pictureRootPath;
+            // Generic form on both branches: this becomes a pictureAlbumByPath_ key, which has to
+            // match the keys PictureLibraryIndex produces.
+            std::string canonicalRootPath = CNA::Internal::PathToGenericUtf8(
+                std::filesystem::weakly_canonical(rootPath, rootEc));
             if (rootEc || canonicalRootPath.empty())
             {
-                canonicalRootPath = rootPath.string(); // best-effort fallback if canonicalization fails
+                // best-effort fallback if canonicalization fails
+                canonicalRootPath = CNA::Internal::PathToGenericUtf8(rootPath);
             }
 
             std::unique_ptr<PictureAlbum> rootAlbum(
-                new PictureAlbum(rootPath.filename().string(), nullptr, canonicalRootPath));
+                new PictureAlbum(CNA::Internal::PathToUtf8(rootPath.filename()), nullptr, canonicalRootPath));
             PictureAlbum* rawRoot = rootAlbum.get();
             ownedPictureAlbums_.push_back(std::move(rootAlbum));
 
@@ -519,7 +550,10 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         std::error_code ec;
-        std::string path = (std::filesystem::path(pictureRoot_) / "Saved Pictures").string();
+        // Generic form, matching the album paths PictureLibraryIndex produces for the same
+        // directory once it has been scanned.
+        std::string path =
+            CNA::Internal::PathToGenericUtf8(*pictureRootPath / "Saved Pictures");
         std::unique_ptr<PictureAlbum> album(new PictureAlbum("Saved Pictures", rootPictureAlbum_, path));
         PictureAlbum* raw = album.get();
         ownedPictureAlbums_.push_back(std::move(album));
@@ -555,6 +589,9 @@ namespace Microsoft::Xna::Framework::Media
         CNA::Internal::Graphics::ImageData img;
         try
         {
+            // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- this filename
+            // ends at stb_image's fopen, which is ANSI on Windows. ImageLoader is fixed separately;
+            // re-encoding the string here would make those inputs worse, not better.
             img = CNA::Internal::Graphics::ImageLoader::Load(savedPath);
         }
         catch (const std::exception&)

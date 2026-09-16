@@ -6,6 +6,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal::Media
 {
@@ -15,7 +18,7 @@ namespace CNA::Internal::Media
         // Shared helpers
         // ---------------------------------------------------------------------------------
 
-        std::vector<uint8_t> ReadFileBytes(const std::string& path)
+        std::vector<uint8_t> ReadFileBytes(const std::filesystem::path& path)
         {
             std::ifstream f(path, std::ios::binary | std::ios::ate);
             if (!f.is_open())
@@ -31,6 +34,18 @@ namespace CNA::Internal::Media
             std::vector<uint8_t> data(static_cast<std::size_t>(size));
             f.read(reinterpret_cast<char*>(data.data()), size);
             return data;
+        }
+
+        // Path text is UTF-8 (docs/filesystem-path-model.md): widen it here rather than letting the
+        // narrow stream constructor read it as the process ANSI code page.
+        std::vector<uint8_t> ReadFileBytes(const std::string& path)
+        {
+            const std::optional<std::filesystem::path> native = TryPathFromUtf8(path);
+            if (!native)
+            {
+                return {};
+            }
+            return ReadFileBytes(*native);
         }
 
         std::string ToLowerAscii(std::string s)
@@ -527,29 +542,37 @@ namespace CNA::Internal::Media
 
     void AudioTagParser::ApplyFilenameFallback(const std::string& path, AudioTags& out)
     {
-        std::filesystem::path p(path);
+        // Text that cannot name a path here yields no fallback at all, rather than an exception out
+        // of a best-effort tag fill-in.
+        const std::optional<std::filesystem::path> native = TryPathFromUtf8(path);
+        if (!native)
+        {
+            return;
+        }
+        const std::filesystem::path& p = *native;
         if (out.title.empty())
         {
-            out.title = p.stem().string();
+            out.title = PathToUtf8(p.stem());
         }
         std::filesystem::path parent = p.parent_path();
         if (out.album.empty() && !parent.empty())
         {
-            out.album = parent.filename().string();
+            out.album = PathToUtf8(parent.filename());
         }
         std::filesystem::path grandparent = parent.parent_path();
         if (out.artist.empty() && !grandparent.empty())
         {
-            out.artist = grandparent.filename().string();
+            out.artist = PathToUtf8(grandparent.filename());
         }
     }
 
     AudioTags AudioTagParser::ReadTags(const std::string& path)
     {
         AudioTags out;
-        std::string ext = ToLowerAscii(std::filesystem::path(path).extension().string());
+        const std::optional<std::filesystem::path> native = TryPathFromUtf8(path);
+        std::string ext = native ? ToLowerAscii(PathToUtf8(native->extension())) : std::string();
 
-        std::vector<uint8_t> bytes = ReadFileBytes(path);
+        std::vector<uint8_t> bytes = native ? ReadFileBytes(*native) : std::vector<uint8_t>();
         if (!bytes.empty())
         {
             if (ext == ".ogg" || ext == ".oga")

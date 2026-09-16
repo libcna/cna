@@ -4,9 +4,11 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal::Media
 {
@@ -22,7 +24,7 @@ namespace CNA::Internal::Media
 
         bool HasPlaylistExtension(const std::filesystem::path& p)
         {
-            std::string ext = p.extension().string();
+            std::string ext = PathToUtf8(p.extension());
             std::transform(ext.begin(), ext.end(), ext.begin(),
                             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return ext == ".m3u" || ext == ".m3u8";
@@ -33,15 +35,23 @@ namespace CNA::Internal::Media
     {
         ParsedPlaylist result;
         result.sourcePath = playlistPath;
-        result.name = std::filesystem::path(playlistPath).stem().string();
 
-        std::ifstream file(playlistPath, std::ios::binary);
+        // The playlist path is UTF-8 text; it is widened once here and then carried native to the
+        // stream and to the containment base, rather than narrowed again per use.
+        const std::optional<std::filesystem::path> nativePath = TryPathFromUtf8(playlistPath);
+        if (!nativePath)
+        {
+            return result;
+        }
+        result.name = PathToUtf8(nativePath->stem());
+
+        std::ifstream file(*nativePath, std::ios::binary);
         if (!file.is_open())
         {
             return result;
         }
 
-        std::filesystem::path baseDir = std::filesystem::path(playlistPath).parent_path();
+        std::filesystem::path baseDir = nativePath->parent_path();
         std::string line;
         while (std::getline(file, line))
         {
@@ -58,14 +68,23 @@ namespace CNA::Internal::Media
             // make the engine open and decode an arbitrary readable file. Every entry is contained
             // to the playlist's own directory, matching the pattern already used for
             // ContentReader::ReadExternalReference and StorageDevice::DeleteContainer.
-            const auto contained = CNA::Internal::ResolveContainedPath(baseDir.string(), trimmed);
+            const auto contained =
+                CNA::Internal::ResolveContainedPath(PathToUtf8(baseDir), trimmed);
             if (!contained.ok)
             {
                 continue; // absolute or escaping entry -- skipped, same as a missing entry below
             }
 
+            // resolvedPath is generic UTF-8 text, so it is widened again before it is stat-ed.
+            const std::optional<std::filesystem::path> resolved =
+                TryPathFromUtf8(contained.resolvedPath);
+            if (!resolved)
+            {
+                continue;
+            }
+
             std::error_code ec;
-            if (std::filesystem::exists(contained.resolvedPath, ec) && !ec)
+            if (std::filesystem::exists(*resolved, ec) && !ec)
             {
                 result.songPaths.push_back(contained.resolvedPath);
             }
@@ -78,14 +97,15 @@ namespace CNA::Internal::Media
     std::vector<ParsedPlaylist> PlaylistParser::ScanDirectory(const std::string& musicRoot)
     {
         std::vector<ParsedPlaylist> playlists;
+        const std::optional<std::filesystem::path> root = TryPathFromUtf8(musicRoot);
         std::error_code ec;
-        if (musicRoot.empty() || !std::filesystem::exists(musicRoot, ec) || ec)
+        if (musicRoot.empty() || !root || !std::filesystem::exists(*root, ec) || ec)
         {
             return playlists;
         }
 
         std::filesystem::directory_iterator it(
-            musicRoot, std::filesystem::directory_options::skip_permission_denied, ec);
+            *root, std::filesystem::directory_options::skip_permission_denied, ec);
         if (ec)
         {
             return playlists;
@@ -107,7 +127,7 @@ namespace CNA::Internal::Media
             std::error_code entryEc;
             if (entry.is_regular_file(entryEc) && !entryEc && HasPlaylistExtension(entry.path()))
             {
-                playlists.push_back(Parse(entry.path().string()));
+                playlists.push_back(Parse(PathToUtf8(entry.path())));
             }
         }
         return playlists;

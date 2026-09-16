@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <exception>
+#include <optional>
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 namespace CNA::Internal::Media
 {
@@ -12,7 +14,7 @@ namespace CNA::Internal::Media
     {
         bool HasSupportedImageExtension(const std::filesystem::path& p)
         {
-            std::string ext = p.extension().string();
+            std::string ext = PathToUtf8(p.extension());
             std::transform(ext.begin(), ext.end(), ext.begin(),
                             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp";
@@ -36,20 +38,24 @@ namespace CNA::Internal::Media
 
     PictureLibraryIndex::PictureLibraryIndex(const std::string& picturesRoot)
     {
+        // The root arrives as UTF-8 text and has to be widened before it names a directory.
+        const std::optional<std::filesystem::path> root = TryPathFromUtf8(picturesRoot);
         std::error_code ec;
-        if (picturesRoot.empty() || !std::filesystem::exists(picturesRoot, ec) || ec)
+        if (picturesRoot.empty() || !root || !std::filesystem::exists(*root, ec) || ec)
         {
             return;
         }
-        std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(picturesRoot, ec);
+        std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(*root, ec);
         if (ec)
         {
             return;
         }
-        rootPath_ = canonicalRoot.string();
+        // Generic form: this is an album identity that MediaLibrary looks up in albums_ and in its
+        // own pictureAlbumByPath_ map, so both sides have to spell separators the same way.
+        rootPath_ = PathToGenericUtf8(canonicalRoot);
 
         std::set<std::filesystem::path> visited;
-        ScanDirectory(picturesRoot, /*parentPath=*/"", visited);
+        ScanDirectory(*root, /*parentPath=*/"", visited);
     }
 
     void PictureLibraryIndex::ScanDirectory(const std::filesystem::path& dir,
@@ -67,10 +73,10 @@ namespace CNA::Internal::Media
             return; // cycle guard, matching MediaLibraryIndex's approach
         }
 
-        std::string thisPath = canonicalDir.string();
+        std::string thisPath = PathToGenericUtf8(canonicalDir); // album identity -- see the ctor
         PictureAlbumNode node;
         node.path = thisPath;
-        node.name = canonicalDir.filename().string();
+        node.name = PathToUtf8(canonicalDir.filename());
         node.parentPath = parentPath;
         albums_.emplace(thisPath, node);
         if (!parentPath.empty())
@@ -113,11 +119,15 @@ namespace CNA::Internal::Media
                 // aborting the whole scan.
                 try
                 {
+                    // WINPORT: third-party boundary, see docs/filesystem-path-model.md -- this
+                    // narrow filename ends at stb_image's fopen, which is ANSI on Windows, so
+                    // handing it UTF-8 would make it worse rather than better. ImageLoader itself
+                    // is fixed separately.
                     Graphics::ImageData img = Graphics::ImageLoader::Load(entry.path().string());
 
                     IndexedPicture pic;
-                    pic.path = entry.path().string();
-                    pic.name = entry.path().stem().string();
+                    pic.path = PathToUtf8(entry.path());
+                    pic.name = PathToUtf8(entry.path().stem());
                     pic.width = img.width;
                     pic.height = img.height;
                     pic.albumPath = thisPath;
