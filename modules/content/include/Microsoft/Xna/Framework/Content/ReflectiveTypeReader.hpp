@@ -47,6 +47,19 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     /**
+     * @brief One field's reader: pulls the next value out and stores it in the object.
+     *
+     * At namespace scope rather than only nested in `ReflectiveTypeReader<T>`, because
+     * `ReflectiveTypeReaderBuilder<T>` holds a vector of these and is used for **abstract** T --
+     * and naming a type nested in `ReflectiveTypeReader<T>` instantiates that class, which for an
+     * abstract T instantiates a `ContentTypeReader<T>::ReadUntyped` full of `std::optional<T>` and
+     * `T` by value. `ReflectiveTypeReader<T>::FieldReader` remains as an alias to this, so no
+     * caller spelling changes.
+     */
+    template <typename T>
+    using ReflectiveFieldReaderEXT = std::function<void(T&, ContentReader&)>;
+
+    /**
      * @brief Reads a type the XNA content pipeline serialized *reflectively*, from a field list
      *        the game declares once.
      *
@@ -86,7 +99,7 @@ namespace Microsoft::Xna::Framework::Content
     {
     public:
         /** @brief One field's reader: pulls the next value out and stores it in the object. */
-        using FieldReader = std::function<void(T&, ContentReader&)>;
+        using FieldReader = ReflectiveFieldReaderEXT<T>;
 
         /**
          * @brief Constructs the reader.
@@ -156,7 +169,7 @@ namespace Microsoft::Xna::Framework::Content
 
     public:
         /** @brief One field's reader, the same shape @ref ReflectiveTypeReader uses. */
-        using FieldReader = typename ReflectiveTypeReader<T>::FieldReader;
+        using FieldReader = ReflectiveFieldReaderEXT<T>;
 
         /**
          * @brief Constructs the reader.
@@ -607,7 +620,9 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         std::string targetTypeName_;
-        std::vector<typename ReflectiveTypeReader<T>::FieldReader> fields_;
+        // The free alias, not ReflectiveTypeReader<T>::FieldReader: see
+        // ReflectiveFieldReaderEXT. This builder is used for abstract T.
+        std::vector<ReflectiveFieldReaderEXT<T>> fields_;
         std::vector<std::pair<std::string, ContentTypeReaderManager::ReaderFactory>>
             enumRegistrations_;
         bool hasSharedResourceFields_ = false;

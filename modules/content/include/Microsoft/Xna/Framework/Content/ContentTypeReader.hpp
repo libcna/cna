@@ -4,6 +4,7 @@
 #include <any>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -142,7 +143,25 @@ namespace Microsoft::Xna::Framework::Content
          */
         std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
         {
-            if constexpr (std::is_copy_constructible_v<T>)
+            if constexpr (std::is_abstract_v<T>)
+            {
+                // An abstract T has no value representation to box or unbox, and this body is full
+                // of std::optional<T> and T-by-value. MSVC instantiates a class template's virtual
+                // members whenever the class is instantiated -- it needs the vtable -- and tolerates
+                // the pure-virtual `T Read(..., std::optional<T>)` declaration above, so it reaches
+                // HERE for an abstract T and fails. GCC and Clang do not.
+                //
+                // A reader for an abstract type is served by AbstractReflectiveTypeReader, which
+                // hands back a shared_ptr to a concrete subclass; reaching this throw would mean a
+                // value-shaped reader was registered for a type that has no values.
+                // plans/plan_win32_native_validation.md WINNATIVE-0014.
+                (void) input;
+                (void) existingInstance;
+                throw std::runtime_error(
+                    "ContentTypeReader: the asset names an abstract type, which has no value "
+                    "representation to read into");
+            }
+            else if constexpr (std::is_copy_constructible_v<T>)
             {
                 std::optional<T> existing = existingInstance.has_value()
                     ? std::optional<T>(std::any_cast<T>(std::move(existingInstance)))
