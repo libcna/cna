@@ -926,6 +926,49 @@ characters.
 
 ---
 
+## 3b. Capability audit — what the backend claims, and what was measured
+
+`Win32Platform::GetCapabilities()` makes twenty promises and declines nine. A capability is a
+promise a caller *branches on*, so each one is listed here against the evidence that exists for it
+on this machine — and where the evidence is weaker than the promise, that is said rather than
+rounded up.
+
+Across the full run there are **199 Win32-specific tests in 15 suites: 1 failure, 2 skips.**
+
+| Capability | Evidence | Verdict |
+|---|---|---|
+| `multipleWindows` | `Win32WindowTest` (24); lifecycle stress, 9 250 operations, counters flat | measured |
+| `highDpi` | `Win32Dpi` (6), `Win32DpiWindow` (4); the 100/125/150/200 % matrix against a DPI-aware host | measured |
+| `multipleDisplays` | `Win32SystemServices` (18); the `displays` desktop check | measured, **one monitor only** |
+| `borderlessFullscreen` | `Win32FullscreenState` (9) | measured |
+| `nativeWindowHandle` | `Win32RendererBridge` (8); `TryGetWin32` feeding a real D3D11 swap chain | measured |
+| `surfacePresentation` | D3D11 device + swap chain + present on a CNA HWND; `cna_demo_2d` rendering frames | measured (**virtual GPU**) |
+| `openGlContext` | `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` | **NOT validated — F29** |
+| `vulkanSurface` | host-decided; reports false here, no `vulkan-1.dll` | correctly false |
+| `clipboard` | 10/10 against **Notepad**, both directions, including non-ASCII | measured |
+| `textInput` | `Win32InputServices` (20); `SendInput` text on the real desktop | measured |
+| `exactKeyboardState` | `Win32KeyCode` (12), `Win32Scancode` (14), `Win32EventMapping` (35) | measured |
+| `pixelAccurateMouse` | `Win32InputServices`; synthetic mouse through `SendInput` | measured |
+| `relativeMouse` | `Win32InputServices`; Raw Input path | measured |
+| `cursorShapes` | the `cursors` desktop check, baseline-relative | measured |
+| `globalPointer` | the desktop harness's pointer check | measured |
+| `inputDeviceEnumeration` | `Win32InputServices` | measured |
+| `powerInfo` | `Win32SystemServices` | measured (**VM battery state**) |
+| `messageBox` | `Win32PlatformTest` | partial — not driven against a real dialog |
+| `nativeFileDialog` | `Win32PlatformTest` | partial — not driven against a real dialog |
+
+The nine declined — `ime`, `gamepad`, `joystick`, `gamepadRumble`, `gamepadSensors`, `haptics`,
+`sensors`, `tray`, `camera` — are **left declined**. Their remaining work is recorded in
+`plans/plan_win32.md` §15, and this workstream's non-goals say so explicitly: a capability reported
+true and backed by a stub is worse than an honest false, because a caller branches on it.
+
+Two entries above are deliberately not marked "measured". `openGlContext` passes alone and crashes
+in company (F29). `messageBox` and `nativeFileDialog` are exercised as contracts but were never put
+in front of a real modal dialog, so what is proved is that they refuse and return correctly, not
+that a user can dismiss one.
+
+---
+
 ## 4. How to repeat this
 
 From a Linux checkout, with the VM present in VirtualBox:
