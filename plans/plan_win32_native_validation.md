@@ -194,6 +194,40 @@ code is standard either way, and the stream closes itself on every path out of t
 including the throw the old code left a `FILE*` open on. The other `std::fopen`/`std::getenv` call
 sites there are inside POSIX-only blocks and are untouched.
 
+### WINNATIVE-F8 — the SDL-free Direct3D configuration could not configure *(fixed)*
+
+`CNA_PLATFORM=WIN32 + CNA_ENABLE_SDL=OFF + CNA_GRAPHICS_RENDERER=DIRECTX11 + CNA_BUILD_TESTS=ON`
+— the configuration this workstream exists to prove — did not reach a build at all:
+`cna_directx11_test`/`cna_directx12_test` linked `SDL3::SDL3` unconditionally, and with SDL off that
+target does not exist.
+
+The link was vestigial for nearly the whole corpus: of the 123 shared graphics example programs
+those fixtures are built from, **two** include an SDL header and **none** call `SDL_Init` or
+`SDL_CreateWindow`. It is now guarded the way `modules/renderers/headless/examples` already guards
+it. One fixture is genuinely SDL-coupled (`viewport_reset_after_resize_test.cpp` reads the physical
+size out of the `SDL_Window` behind the CNA window), so the inventory gained a `REQUIRES_SDL` flag
+and skips it with a configure-time message naming it. The SDL-free build is a real configuration,
+it is one parity fixture short, and it says which one.
+
+### WINNATIVE-F9..F12 — CNA has never been fully built for Windows *(fixed)*
+
+Once the configure succeeded, the build found four defects in a row that **no** Windows toolchain
+could have got past. Three of them are not MSVC-specific at all — the mingw-w64 cross-build fails
+on them identically — which means these translation units had never been compiled for Windows by
+anything.
+
+| | Where | What |
+|---|---|---|
+| F9 | `XnaPipelineBridge.cpp` | `relative.native().starts_with("..")`. `path::native()` is `std::wstring` on Windows, so this compiled on Linux and nowhere else. Asked as a path question now, which also stops a directory named `..config` being mistaken for an escape from the content root. |
+| F10 | `XnbBuiltInWriters.cpp` | The `OrderedDictionary` *include* was guarded by `SHARP_RUNTIME_HAS_NATIVE_INT128` while the type was used unconditionally. The two are unrelated — it was inside the guard by proximity to `System::Decimal`, which genuinely needs one. Every compiler with native `__int128` compiled the file; MSVC, which has none, did not. |
+| F11 | `HttpNotificationChannel.cpp` | `<winsock2.h>` drags in `<windows.h>`, whose `ERROR` macro collides with `CNA::LogLevel::ERROR` in the `CNA/Logger.hpp` below it. The repository records this pitfall twice already (`ENetHostHandle.hpp` undefines it, `DirectX12Renderer.cpp` orders around it); this file followed neither. `modules/phone` is recent enough that it appears never to have been compiled for Windows. |
+| F12 | sharp-runtime `Core.Base` | `System/Guid.cpp` calls `BCryptGenRandom` and nothing linked `bcrypt`, so every Windows consumer compiled the entire tree and then failed at **link** time. `Security.Cryptography.Random` already links it for the same reason. Fixed in the sibling repository (`33da53f5`). |
+
+The pattern across F5 and F9–F12 is worth stating plainly: almost none of these are "the code is
+wrong". They are places where one toolchain was quietly covering for the code — mingw-w64's
+libstdc++ defines `NOMINMAX` for you, GCC has `__int128`, Linux's `path::native()` is narrow — and
+the cover was mistaken for portability.
+
 ### WINNATIVE-F7 — the clipboard interop harness was measuring PowerShell *(fixed)*
 
 The first Notepad interop run reported six failures on non-ASCII samples, and **none of them were
