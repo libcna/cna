@@ -19,7 +19,13 @@
 // sampled along the way. If the counts are flat and creation still fails, the driver is the limit.
 // If the counts climb, we are the limit.
 //
-// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--quiet]
+// --warp runs the same loop on the WARP software rasteriser instead of the adapter. That is the
+// discriminator that turns an inference into a measurement: WARP is Microsoft's own code and is
+// the same on every machine, so if the hardware path leaks and WARP does not, the leak belongs to
+// the graphics driver rather than to the D3D11 runtime -- and on this VM the "graphics driver" is
+// VirtualBox's.
+//
+// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--warp] [--quiet]
 // Exit:  0 every cycle succeeded; 1 creation began failing while our own counts stayed flat
 //        (environment limit -- reported, not a defect); 2 our counts grew (a leak); 3 no D3D11 at
 //        all on this machine.
@@ -85,11 +91,21 @@ int main(int argc, char** argv)
 {
     int cycles = 400;
     bool quiet = false;
+    bool warp = false;
+    bool noD3d = false;
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--cycles") == 0 && i + 1 < argc) cycles = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--warp") == 0) warp = true;
+        else if (std::strcmp(argv[i], "--no-d3d") == 0) noD3d = true;
         else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
     }
+    const D3D_DRIVER_TYPE driverType = warp ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_HARDWARE;
+    // --no-d3d is the control: the identical loop, windows and all, with no device created. If the
+    // counts climb here too, the device was never the subject.
+    std::printf("driver: %s\n", noD3d ? "NONE (control: windows only, no D3D)"
+                                       : (warp ? "WARP (software rasteriser)"
+                                               : "HARDWARE (this adapter)"));
 
     std::unique_ptr<IPlatform> platform;
     try { platform = PlatformFactory::Create("Win32"); }
@@ -120,6 +136,25 @@ int main(int argc, char** argv)
         Win32NativeWindow native;
         if (!TryGetWin32(window->GetNativeHandle(), native)) { std::printf("no HWND\n"); return 3; }
 
+        if (noD3d)
+        {
+            window.reset();
+            events.clear();
+            platform->PollEvents(events);
+            if (cycle == 0) baseline = Sample();
+            if (!quiet && (cycle % 50 == 0 || cycle == cycles - 1))
+            {
+                const Counts now = Sample();
+                std::printf("  cycle %5d  USER %4lu  GDI %4lu  handles %5lu  private %6llu KB\n",
+                            cycle, static_cast<unsigned long>(now.user),
+                            static_cast<unsigned long>(now.gdi),
+                            static_cast<unsigned long>(now.handles),
+                            static_cast<unsigned long long>(now.privateBytes / 1024));
+                std::fflush(stdout);
+            }
+            continue;
+        }
+
         DXGI_SWAP_CHAIN_DESC swapDescription{};
         swapDescription.BufferCount = 1;
         swapDescription.BufferDesc.Width = kWidth;
@@ -136,7 +171,7 @@ int main(int argc, char** argv)
         ID3D11DeviceContext* context = nullptr;
         D3D_FEATURE_LEVEL level{};
         const HRESULT hr = D3D11CreateDeviceAndSwapChain(
-            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+            nullptr, driverType, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
             &swapDescription, &swapChain, &device, &level, &context);
 
         if (FAILED(hr) || device == nullptr)
@@ -197,7 +232,16 @@ int main(int argc, char** argv)
         }
     }
 
+    // Settle before judging. Windows reclaims some kernel objects lazily, and a count sampled the
+    // instant the last Release returned can look like a leak that a second later is not one. Pump
+    // and wait, then sample again, and report both numbers so the difference is visible rather
+    // than hidden inside a verdict.
+    const Counts beforeSettle = firstFailure >= 0 ? atFailure : Sample();
+    for (int i = 0; i < 40; ++i) { events.clear(); platform->PollEvents(events); ::Sleep(50); }
     const Counts end = firstFailure >= 0 ? atFailure : Sample();
+    std::printf("\nbefore settling        : handles %lu  private %llu KB\n",
+                static_cast<unsigned long>(beforeSettle.handles),
+                static_cast<unsigned long long>(beforeSettle.privateBytes / 1024));
     const bool userGrew = end.user > baseline.user + 8;
     const bool gdiGrew = end.gdi > baseline.gdi + 12;
     const bool handlesGrew = end.handles > baseline.handles + 32;
