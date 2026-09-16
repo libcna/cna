@@ -63,12 +63,20 @@ Remove-Item $stdout, $stderr, $rcFile -Force -ErrorAction SilentlyContinue
 # code and the two streams on the far side, where nothing of this session survives.
 $quoted = ($Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
 $cmd = Join-Path $OutDir "$Name.run.cmd"
-@(
+# UTF-8 without a BOM, switched to code page 65001 on its second line. It used to be written as
+# ASCII, which turned every character of a non-ASCII executable, argument or working directory
+# into '?', so the task ran a path that did not exist and the run could only time out -- the one
+# case this runner exists for on a Unicode-path check. cmd.exe decodes each batch line with the
+# console code page current when it reads it, so the chcp line has to come before any path; a
+# BOM would be read as part of the first line, which is why there is none.
+$wrapper = @(
     '@echo off'
+    'chcp 65001 >nul'
     "cd /d `"$WorkingDirectory`""
     "`"$Exe`" $quoted 1> `"$stdout`" 2> `"$stderr`""
     "echo %ERRORLEVEL% > `"$rcFile`""
-) | Set-Content -LiteralPath $cmd -Encoding ASCII
+) -join "`r`n"
+[System.IO.File]::WriteAllText($cmd, $wrapper + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
 
 $taskName = "CNA_Interactive_$Name"
 $service = New-Object -ComObject 'Schedule.Service'

@@ -32,7 +32,16 @@
 // failing. The two numbers together say whether a limit is on devices alive at once or on devices
 // ever created.
 //
-// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--warp] [--hold] [--quiet]
+// --flip and --renderer-teardown make the loop model what DirectX11Renderer actually does, which the
+// defaults do not. By default this builds a DXGI_SWAP_EFFECT_DISCARD, BufferCount 1 swap chain --
+// the BLT model -- and releases through ClearState()/Flush(); the renderer uses FLIP_DISCARD with
+// two buffers and lets its ComPtr members unwind with neither call. A control that cannot exercise
+// the path under suspicion cannot fail, which is how "400 clean cycles" once stood as evidence
+// about a renderer this loop never resembled. The defaults are kept so earlier numbers stay
+// comparable; the two flags together are the renderer-shaped run.
+//
+// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--warp] [--hold] [--flip] [--renderer-teardown]
+//                                  [--quiet]
 // Exit:  0 every cycle succeeded; 1 creation began failing while our own counts stayed flat
 //        (environment limit -- reported, not a defect); 2 our counts grew (a leak); 3 no D3D11 at
 //        all on this machine.
@@ -101,12 +110,16 @@ int main(int argc, char** argv)
     bool warp = false;
     bool noD3d = false;
     bool hold = false;
+    bool flip = false;
+    bool rendererTeardown = false;
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--cycles") == 0 && i + 1 < argc) cycles = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--warp") == 0) warp = true;
         else if (std::strcmp(argv[i], "--no-d3d") == 0) noD3d = true;
         else if (std::strcmp(argv[i], "--hold") == 0) hold = true;
+        else if (std::strcmp(argv[i], "--flip") == 0) flip = true;
+        else if (std::strcmp(argv[i], "--renderer-teardown") == 0) rendererTeardown = true;
         else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
     }
     const D3D_DRIVER_TYPE driverType = warp ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_HARDWARE;
@@ -115,6 +128,9 @@ int main(int argc, char** argv)
     std::printf("driver: %s\n", noD3d ? "NONE (control: windows only, no D3D)"
                                        : (warp ? "WARP (software rasteriser)"
                                                : "HARDWARE (this adapter)"));
+    std::printf("swap chain: %s, teardown: %s\n",
+                flip ? "FLIP_DISCARD x2 (renderer model)" : "DISCARD x1 (BLT model)",
+                rendererTeardown ? "renderer-shaped (no ClearState/Flush)" : "ClearState + Flush");
 
     std::unique_ptr<IPlatform> platform;
     try { platform = PlatformFactory::Create("Win32"); }
@@ -171,7 +187,7 @@ int main(int argc, char** argv)
         }
 
         DXGI_SWAP_CHAIN_DESC swapDescription{};
-        swapDescription.BufferCount = 1;
+        swapDescription.BufferCount = flip ? 2 : 1;
         swapDescription.BufferDesc.Width = kWidth;
         swapDescription.BufferDesc.Height = kHeight;
         swapDescription.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -179,7 +195,7 @@ int main(int argc, char** argv)
         swapDescription.OutputWindow = static_cast<HWND>(native.hwnd);
         swapDescription.SampleDesc.Count = 1;
         swapDescription.Windowed = TRUE;
-        swapDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        swapDescription.SwapEffect = flip ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_DISCARD;
 
         IDXGISwapChain* swapChain = nullptr;
         ID3D11Device* device = nullptr;
@@ -237,8 +253,19 @@ int main(int argc, char** argv)
             // program exists to notice.
             if (view != nullptr) view->Release();
             if (backBuffer != nullptr) backBuffer->Release();
-            if (context != nullptr) { context->ClearState(); context->Flush(); context->Release(); }
-            if (swapChain != nullptr) swapChain->Release();
+            if (rendererTeardown)
+            {
+                // ~DirectX11Renderer(): no ClearState(), no Flush(); members unwind in reverse
+                // declaration order -- views, then the swap chain, then the context, then the
+                // device -- with the context still holding its bindings when the chain goes.
+                if (swapChain != nullptr) swapChain->Release();
+                if (context != nullptr) context->Release();
+            }
+            else
+            {
+                if (context != nullptr) { context->ClearState(); context->Flush(); context->Release(); }
+                if (swapChain != nullptr) swapChain->Release();
+            }
             if (device != nullptr) device->Release();
 
             window.reset();
