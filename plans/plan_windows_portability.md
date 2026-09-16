@@ -189,6 +189,33 @@ One of these — `TerminalRestoration.SighupGivesTheTerminalBack` — is not in 
 workstream's list of 25 and is a SIGHUP/terminal test with an obvious environmental dependence. It
 is carried as baseline here and re-checked at the end rather than attributed to anything.
 
+### WINPORT-F1 — the Windows suite was being run from the wrong directory *(harness, fixed)*
+
+The first whole-suite rerun after the migration reported **613 failures, 588 of them apparently
+Windows-only** — against an inherited baseline of 44. That number was wrong, and it was wrong for a
+reason that has now caught three workstreams in a row.
+
+`Invoke-GTest` ran `CnaTests.exe` with its working directory set to the **build tree**. A large part
+of the suite names its fixtures relative to the repository root (`tests/assets/media/music/Artist
+One/Album Alpha/01 - Sunrise.ogg`), and the build tree holds only the *generated* assets, not the
+checked-in ones. So hundreds of tests failed for want of a file, and the resulting number was not
+comparable with the Linux baseline, which has always been measured from the repository root.
+
+Measured rather than argued, on the same binary in the same minute:
+
+| Working directory | `SongTest` + `AudioTagParserTest` |
+|---|---|
+| `C:\cna\build\full-win32-d3d11-nosdl` | wholesale failures |
+| `C:\src\cna` | **49 passed, 1 failed** |
+
+This is the third finding in two workstreams where the **harness** produced the red rather than the
+library — after the PowerShell argv/stdout mangling (`WINNATIVE-F7`) and the session-global cursor
+state. The rule Phase 38 states for Unicode applies just as well to a working directory: be
+suspicious of a large new failure count before being suspicious of the code.
+
+`Invoke-GTest` now takes the working directory explicitly, and the `cnatests` step passes the
+source root.
+
 ### Scale, measured on this branch
 
 `.string()` on a `path`-shaped expression, production code only (`modules/**`, excluding
