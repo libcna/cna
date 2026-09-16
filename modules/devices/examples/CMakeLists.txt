@@ -71,7 +71,7 @@ if(CNA_BUILD_EXAMPLES AND NOT ANDROID AND (TARGET SDL3::SDL3 OR TARGET SDL3::SDL
             target_link_libraries(cna_demo_devices PRIVATE SDL3::SDL3main)
         endif()
         if(WIN32)
-            set_target_properties(cna_demo_devices PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_windows_gui_executable(cna_demo_devices)
             cna_copy_sdl_runtime(cna_demo_devices)
         endif()
     endif()

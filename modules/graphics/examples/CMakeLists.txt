@@ -98,7 +98,7 @@ if(CNA_BUILD_EXAMPLES)
             endif()
         endif()
         if(WIN32)
-            set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_windows_gui_executable(cna_demo_2d)
             # The cross-compiled demo is a distributable Windows GUI executable, just like the
             # Windows renderer smoke tests.  Keep libgcc/libstdc++ self-contained and copy the
             # remaining MinGW thread runtime so a clean Proton/Windows prefix can load it.
@@ -176,7 +176,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             target_link_libraries(cna_house3d_demo PRIVATE SDL3::SDL3main)
         endif()
         if(WIN32)
-            set_target_properties(cna_house3d_demo PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_windows_gui_executable(cna_house3d_demo)
             cna_copy_sdl_runtime(cna_house3d_demo)
         endif()
     endif()

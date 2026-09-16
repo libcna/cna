@@ -177,6 +177,7 @@ if(CNA_ENABLE_SDL)
 endif()
 
 include(cmake/TestHelpers.cmake)
+include(cmake/WindowsGuiExecutable.cmake)
 
 if(CNA_ENABLE_NET)
     include(cmake/ThirdPartyENet.cmake)

@@ -45,7 +45,7 @@ if(CNA_BUILD_EXAMPLES)
             COMMENT "Copying Content next to cna_demo_sound executable"
             VERBATIM)
         if(WIN32)
-            set_target_properties(cna_demo_sound PROPERTIES WIN32_EXECUTABLE TRUE)
+            cna_windows_gui_executable(cna_demo_sound)
             cna_copy_sdl_runtime(cna_demo_sound)
         endif()
     endif()
@@ -74,7 +74,7 @@ if(CNA_BUILD_EXAMPLES)
     # own XGS/XWB/XSB files at runtime via XactFileGen::GenerateXactFiles() into "Content/Audio"
     # relative to the process's working directory, so there is nothing to copy from source.
     if(WIN32)
-        set_target_properties(cna_demo_xact PROPERTIES WIN32_EXECUTABLE TRUE)
+        cna_windows_gui_executable(cna_demo_xact)
         cna_copy_sdl_runtime(cna_demo_xact)
     endif()
     endif() # NOT EMSCRIPTEN AND NOT ANDROID
