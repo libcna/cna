@@ -415,7 +415,15 @@ namespace CNA::Content::Pipeline
         {
             std::error_code error;
             const std::filesystem::path relative = std::filesystem::relative(source, root, error);
-            if (error || relative.empty() || relative.native().starts_with(".."))
+            // "does the relative path start by leaving the root" asked as a path question rather
+            // than a string one. path::native() is std::wstring on Windows, so comparing it with a
+            // narrow ".." does not compile there at all -- plans/plan_win32_native_validation.md
+            // WINNATIVE-0009. Comparing the first COMPONENT is also more correct than a prefix
+            // test on the whole string, which would mistake a directory named "..config" for an
+            // escape.
+            const bool escapesRoot =
+                !relative.empty() && *relative.begin() == std::filesystem::path("..");
+            if (error || relative.empty() || escapesRoot)
             {
                 throw Xna::PipelineException(
                     "BuildAsset: '{0}' is outside the content root '{1}', so no asset name can be derived; pass assetName.",
