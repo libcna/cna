@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 #include "System/IO/FileStream.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -30,7 +31,10 @@ namespace Microsoft::Xna::Framework
         CNA::Logger::Info("[TitleContainer] OpenStream requested: " + name);
         CNA::Logger::Info("[TitleContainer] Resolved path: " + realName);
 
-        if (std::filesystem::exists(realName))
+        // realName is UTF-8 (docs/filesystem-path-model.md); widening it with the narrow path
+        // constructor read it as ANSI code page bytes, so an asset under a non-ASCII title path
+        // reported itself as missing.
+        if (std::filesystem::exists(CNA::Internal::PathFromUtf8(realName)))
         {
             return std::make_unique<System::IO::FileStream>(
                 realName, System::IO::FileMode::Open, System::IO::FileAccess::Read);
@@ -71,7 +75,7 @@ namespace Microsoft::Xna::Framework
 
         size = 0;
 
-        std::ifstream file(realName, std::ios::binary | std::ios::ate);
+        std::ifstream file(CNA::Internal::PathFromUtf8(realName), std::ios::binary | std::ios::ate);
         if (file)
         {
             const std::streamsize length = file.tellg();
@@ -180,16 +184,18 @@ namespace Microsoft::Xna::Framework
 
     std::string TitleContainer::CombineTitlePath(const std::string& name)
     {
-        const std::filesystem::path base(TitleLocation::getPathProperty());
-        return (base / std::filesystem::path(name)).lexically_normal().string();
+        const std::filesystem::path base =
+            CNA::Internal::PathFromUtf8(TitleLocation::getPathProperty());
+        return CNA::Internal::PathToGenericUtf8(
+            (base / CNA::Internal::PathFromUtf8(name)).lexically_normal());
     }
 
     std::string TitleContainer::ResolveRealPath(const std::string& name)
     {
         if (IsPathRooted(name))
         {
-            return CNA::Internal::ResolveExistingXnaPath(
-                std::filesystem::path(name).lexically_normal().string());
+            return CNA::Internal::ResolveExistingXnaPath(CNA::Internal::PathToGenericUtf8(
+                CNA::Internal::PathFromUtf8(name).lexically_normal()));
         }
 
 #if defined(__ANDROID__)

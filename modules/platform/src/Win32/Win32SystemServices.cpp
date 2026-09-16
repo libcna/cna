@@ -7,6 +7,7 @@
 #include "Win32Utf.hpp"
 #include "Win32Window.hpp"
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
 #include <knownfolders.h>
@@ -570,13 +571,18 @@ namespace CNA::Platform::Win32 {
 
         // A save dialog's default location may name a file rather than a directory, which
         // SetFolder cannot take.
-        const std::filesystem::path suggested(defaultLocation);
+        // defaultLocation is UTF-8 by the IPlatformSystemServices contract. It used to be widened
+        // by the narrow path constructor -- ANSI -- and the filename then went back out through
+        // .string() and into ToWide() as if it were UTF-8 again. Three conversions, and because
+        // ToWide() uses MB_ERR_INVALID_CHARS it returned an empty string rather than mangling one,
+        // so SetFileName silently received nothing. The path is native here, so nothing narrows.
+        const std::filesystem::path suggested = CNA::Internal::PathFromUtf8(defaultLocation);
         if (!defaultLocation.empty() && suggested.has_filename() &&
             !std::filesystem::is_directory(suggested))
         {
-            const std::wstring name = ToWide(suggested.filename().string());
+            const std::wstring name = suggested.filename().wstring();
             dialog->SetFileName(name.c_str());
-            SetDialogFolder(*dialog, suggested.parent_path().string());
+            SetDialogFolder(*dialog, CNA::Internal::PathToUtf8(suggested.parent_path()));
         }
         else
         {
@@ -788,20 +794,24 @@ namespace CNA::Platform::Win32 {
         if (root.empty())
             return standard_.GetPreferencesPath(organization, application);
 
-        std::filesystem::path path(root);
+        // KnownFolder() already did the correct wide-to-UTF-8 conversion; re-reading its result
+        // through the narrow path constructor undid it. organization and application are UTF-8 on
+        // the same contract and may legitimately be non-ASCII.
+        std::filesystem::path path = CNA::Internal::PathFromUtf8(root);
         if (!organization.empty())
-            path /= organization;
-        path /= application.empty() ? std::string("CNA") : application;
+            path /= CNA::Internal::PathFromUtf8(organization);
+        path /= application.empty() ? std::filesystem::path("CNA")
+                                    : CNA::Internal::PathFromUtf8(application);
 
         std::error_code error;
         std::filesystem::create_directories(path, error);
         if (error)
         {
             throw PlatformException("Win32FileSystem::GetPreferencesPath",
-                                    path.string() + ": " + error.message());
+                                    CNA::Internal::PathToUtf8(path) + ": " + error.message());
         }
 
-        std::string result = path.string();
+        std::string result = CNA::Internal::PathToUtf8(path);
         if (!result.empty() && result.back() != '\\' && result.back() != '/')
             result.push_back('\\');
         return result;

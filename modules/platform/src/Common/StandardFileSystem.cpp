@@ -2,6 +2,8 @@
 
 #include "StandardFileSystem.hpp"
 
+#include "CNA/Internal/CaseInsensitivePath.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
 #include <algorithm>
@@ -48,67 +50,15 @@ namespace CNA::Platform::Common {
             return {};
         }
 
-        std::optional<std::filesystem::path> ResolvePathIgnoringCase(
-            const std::filesystem::path& requested)
+        // The case-insensitive component walk used to be duplicated here, byte for byte, from
+        // CNA/Internal/CaseInsensitivePath.hpp -- including its defect of narrowing every entry it
+        // enumerated through the ANSI code page. It now delegates. The failure shapes still agree:
+        // where this returned nullopt for a missing or ambiguous component, the shared walker
+        // returns the requested path unchanged and the open below then fails, which is the same
+        // "false" to the caller.
+        std::filesystem::path ResolvePathIgnoringCase(const std::filesystem::path& requested)
         {
-            namespace fs = std::filesystem;
-
-            std::error_code code;
-            if (fs::exists(requested, code) && !code)
-            {
-                return requested;
-            }
-
-            fs::path resolved = requested.is_absolute() ? requested.root_path() : fs::path{};
-            for (const fs::path& component : requested.relative_path())
-            {
-                const fs::path exact = resolved / component;
-                code.clear();
-                if (fs::exists(exact, code) && !code)
-                {
-                    resolved = exact;
-                    continue;
-                }
-
-                const fs::path parent = resolved.empty() ? fs::path(".") : resolved;
-                code.clear();
-                fs::directory_iterator entry(parent, code);
-                if (code)
-                {
-                    return std::nullopt;
-                }
-
-                std::string wanted = component.string();
-                std::transform(wanted.begin(), wanted.end(), wanted.begin(),
-                    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-                fs::path match;
-                const fs::directory_iterator end;
-                for (; entry != end; entry.increment(code))
-                {
-                    if (code)
-                    {
-                        return std::nullopt;
-                    }
-                    std::string candidate = entry->path().filename().string();
-                    std::transform(candidate.begin(), candidate.end(), candidate.begin(),
-                        [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                    if (candidate == wanted)
-                    {
-                        if (!match.empty())
-                        {
-                            return std::nullopt;
-                        }
-                        match = entry->path().filename();
-                    }
-                }
-                if (match.empty())
-                {
-                    return std::nullopt;
-                }
-                resolved /= match;
-            }
-            return resolved;
+            return CNA::Internal::ResolveExistingNativePath(requested);
         }
 
     }
@@ -120,21 +70,29 @@ namespace CNA::Platform::Common {
 
     std::string StandardFileSystem::GetBasePath() const
     {
-        return std::filesystem::current_path().string() + "/";
+        // The single most consequential conversion in the platform layer: this is where
+        // TitleLocation::Path() comes from, so a game installed under a directory the ANSI code
+        // page cannot spell used to lose its entire content root before loading anything.
+        return CNA::Internal::PathToGenericUtf8(std::filesystem::current_path()) + "/";
     }
 
     std::string StandardFileSystem::GetPreferencesPath(const std::string& organization,
                                                        const std::string& application) const
     {
-        const std::filesystem::path path =
-            std::filesystem::temp_directory_path() / preferencesRootName_ / organization / application;
+        // organization and application are UTF-8 and may legitimately be non-ASCII, so they are
+        // widened rather than appended as narrow strings; temp_directory_path() itself contains
+        // the user's name, which is the other half of the same problem.
+        const std::filesystem::path path = std::filesystem::temp_directory_path()
+            / preferencesRootName_
+            / CNA::Internal::PathFromUtf8(organization)
+            / CNA::Internal::PathFromUtf8(application);
         std::error_code code;
         std::filesystem::create_directories(path, code);
         if (code)
         {
             throw PlatformException("FileSystem::GetPreferencesPath", code.message());
         }
-        return path.string() + "/";
+        return CNA::Internal::PathToGenericUtf8(path) + "/";
     }
 
     std::string StandardFileSystem::GetUserFolder(const UserFolder folder) const
@@ -149,7 +107,16 @@ namespace CNA::Platform::Common {
 
     bool StandardFileSystem::TryLoadFile(const std::string& path, std::vector<std::uint8_t>& data) const
     {
-        std::ifstream input(path, std::ios::binary | std::ios::ate);
+        // The platform's primary asset-read sink. The narrow ifstream overload took the UTF-8 path
+        // the interface promises and read it as ANSI code page bytes, so an asset under a
+        // non-ASCII directory reported itself as "not found".
+        const std::optional<std::filesystem::path> native = CNA::Internal::TryPathFromUtf8(path);
+        if (!native)
+        {
+            return false;
+        }
+
+        std::ifstream input(*native, std::ios::binary | std::ios::ate);
         if (!input.good())
         {
             return false;
@@ -175,14 +142,14 @@ namespace CNA::Platform::Common {
     bool TryLoadStandardFileIgnoringCase(
         const std::string& path, std::vector<std::uint8_t>& data)
     {
-        const std::optional<std::filesystem::path> resolved =
-            ResolvePathIgnoringCase(std::filesystem::path(path));
-        if (!resolved.has_value())
+        const std::optional<std::filesystem::path> requested = CNA::Internal::TryPathFromUtf8(path);
+        if (!requested)
         {
             return false;
         }
+        const std::filesystem::path resolved = ResolvePathIgnoringCase(*requested);
 
-        std::ifstream input(*resolved, std::ios::binary | std::ios::ate);
+        std::ifstream input(resolved, std::ios::binary | std::ios::ate);
         if (!input.good())
         {
             return false;
@@ -201,8 +168,15 @@ namespace CNA::Platform::Common {
 
     void StandardFileSystem::CreateDirectory(const std::string& path)
     {
+        const std::optional<std::filesystem::path> native = CNA::Internal::TryPathFromUtf8(path);
+        if (!native)
+        {
+            throw PlatformException("FileSystem::CreateDirectory(" + path + ")",
+                                    "the path is not valid UTF-8");
+        }
+
         std::error_code code;
-        std::filesystem::create_directories(path, code);
+        std::filesystem::create_directories(*native, code);
         if (code)
         {
             throw PlatformException("FileSystem::CreateDirectory(" + path + ")", code.message());

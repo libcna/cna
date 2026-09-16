@@ -2,8 +2,10 @@
 #include "CNA/Internal/DefaultWindowTitle.hpp"
 
 #include "CNA/AssemblyInfo.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #if defined(_WIN32)
+#include <filesystem>
 #include <windows.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
@@ -25,10 +27,14 @@ namespace CNA::Internal
 #if defined(__EMSCRIPTEN__)
             return {};
 #elif defined(_WIN32)
-            char buffer[MAX_PATH];
-            const DWORD length = ::GetModuleFileNameA(nullptr, buffer, MAX_PATH);
+            // GetModuleFileNameW, not ...A: the ANSI twin substitutes '?' for anything the code
+            // page cannot spell, so a game installed under a non-ASCII directory used to show a
+            // mangled window title. This was the only ANSI Win32 call left in the platform and
+            // core modules.
+            wchar_t buffer[MAX_PATH];
+            const DWORD length = ::GetModuleFileNameW(nullptr, buffer, MAX_PATH);
             if (length == 0 || length >= MAX_PATH) return {};
-            return std::string(buffer, length);
+            return PathToUtf8(std::filesystem::path(std::wstring(buffer, length)));
 #elif defined(__APPLE__)
             uint32_t size = 0;
             _NSGetExecutablePath(nullptr, &size);

@@ -4,6 +4,8 @@
 
 #include <filesystem>
 
+#include "CNA/Internal/PathUtf8.hpp"
+
 #include "CNA/Platform/CurrentPlatform.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -46,6 +48,8 @@ namespace Microsoft::Xna::Framework
             return basePath;
         }
 
-        return std::filesystem::current_path().string();
+        // The fallback when no platform filesystem answered. UTF-8 like everything else on this
+        // boundary; .string() would narrow through the ANSI code page on Windows.
+        return CNA::Internal::PathToGenericUtf8(std::filesystem::current_path());
     }
 }
