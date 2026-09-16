@@ -79,13 +79,13 @@ time and therefore needs no stored password.
 | WINNATIVE-0006 | Install the minimum native toolchain | ✅ | §0; §2 records the component-id trap |
 | WINNATIVE-0007 | Exact-commit source sync Linux → VM | ✅ | `windows_vm_sync.sh`; full 113 MB once, then 12 KB per commit |
 | WINNATIVE-0008 | First MSVC configure and build of the platform module | ✅ | `C:\cna\build\win32-standalone`, MSVC 19.44, clean |
-| WINNATIVE-0009 | Full integrated CNA + sharp-runtime MSVC build | 🔄 | configure succeeds; **eight** Windows-build defects found and fixed (F9..F16) |
+| WINNATIVE-0009 | Full integrated CNA + sharp-runtime MSVC build | ✅ | **0 failures, 38 executables, `CnaTests.exe` linked**; sixteen Windows-build defects found and fixed on the way (§2) |
 | WINNATIVE-0010 | Win32 platform suite on native Windows | ✅ | **389 tests: 386 passed, 3 skipped, 0 failed** on the interactive desktop |
 | WINNATIVE-0011 | `PlatformConformanceTests` on native Win32 | ✅ | 38 + 20 parameterized cases in the run above, 1 skip by design |
 | WINNATIVE-0012 | Direct3D 11/12 probe on a CNA platform HWND | ✅ | D3D11 complete; D3D12 `DXGI_ERROR_UNSUPPORTED` (environment) |
 | WINNATIVE-0013 | Window-lifecycle stress and leak harness | ✅ | 9 250 operations, every counter flat (§3) |
 | WINNATIVE-0014 | Full `CnaTests` on native Windows | ⬜ | |
-| WINNATIVE-0015 | SDL-free proof by PE dependency inspection | ⬜ | |
+| WINNATIVE-0015 | SDL-free proof by PE dependency inspection | ✅ | 38 executables, `dumpbin /dependents`: no SDL artifact built, no SDL import (§3) |
 | WINNATIVE-0016 | DPI at 100/125/150/200 % | ⬜ | |
 | WINNATIVE-0017 | Keyboard, text input, mouse, Raw Input on the real desktop | ✅ | 24 checks through `SendInput`; §3 |
 | WINNATIVE-0018 | Clipboard against a real Windows application | ✅ | 10/10 against Notepad, both directions; §3 |
@@ -295,6 +295,30 @@ the measurement Wine could not make: under Wine every `GetGuiResources` counter 
 after CNA's wrapper is destroyed.
 
 ---
+
+### SDL-free, proved by the PE import tables
+
+`CNA_PLATFORM=WIN32 + CNA_ENABLE_SDL=OFF + CNA_AUDIO_PLATFORM=NULL + CNA_GRAPHICS_RENDERER=DIRECTX11`,
+built with MSVC. Two questions, both answered by inspection rather than by the configure log:
+
+1. **was anything named SDL built?** No `*.dll`, `*.lib` or `*.exe` matching `sdl` exists anywhere
+   in the build tree.
+2. **does any executable import one?** `dumpbin /nologo /dependents` over all **38** executables:
+   none imports an SDL DLL.
+
+The union of everything those 38 executables import is small enough to read in full, which is the
+real evidence:
+
+```
+KERNEL32 USER32 GDI32 ADVAPI32 SHELL32 ole32        the Win32 backend's own edges
+d3d11 D3DCOMPILER_47 OPENGL32                        the renderer and WGL
+bcrypt                                               sharp-runtime's Guid.NewGuid (F12)
+MSVCP140 MSVCP140_ATOMIC_WAIT VCRUNTIME140[_1]       the MSVC C++ runtime
+api-ms-win-crt-*                                     the UCRT
+```
+
+Nothing else. `bcrypt` appearing here is also the visible proof that the `Core.Base` link fix (F12)
+is in effect rather than merely committed.
 
 ### The Linux side did not move
 
