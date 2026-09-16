@@ -46,13 +46,19 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
+#include "CNA/Platform/Input/IPlatformTextInput.hpp"
+#include "CNA/Platform/Input/KeyCode.hpp"
+#include "CNA/Platform/Input/Scancode.hpp"
 #include "CNA/Platform/NativeWindowHandle.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformException.hpp"
@@ -622,6 +628,300 @@ namespace
         ++checksRun;
     }
 
+
+    // ---------------------------------------------------------------- synthetic input
+
+    // SendInput is how Windows itself delivers a keystroke: it enters the same raw input stream a
+    // physical keyboard does, below the message queue, so what arrives at the window is
+    // indistinguishable from a real key. That makes it the only way to exercise the backend's
+    // keyboard, text and mouse paths end to end without a person -- and it only works against the
+    // FOREGROUND window, which is why none of this can run from an SSH session.
+
+    bool ForegroundIsOurs(HWND hwnd) { return GetForegroundWindow() == hwnd; }
+
+    bool BringToForeground(IPlatform& platform, IPlatformWindow& window,
+                           std::vector<PlatformEvent>& events)
+    {
+        const HWND hwnd = HandleOf(window);
+        if (hwnd == nullptr) return false;
+        for (int attempt = 0; attempt < 40; ++attempt)
+        {
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+            SetActiveWindow(hwnd);
+            SetFocus(hwnd);
+            Pump(platform, events, 4);
+            if (ForegroundIsOurs(hwnd)) return true;
+        }
+        return false;
+    }
+
+    void SendKeyScan(WORD scan, bool extended, bool up)
+    {
+        INPUT input{};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wScan = scan;
+        input.ki.dwFlags = KEYEVENTF_SCANCODE | (extended ? KEYEVENTF_EXTENDEDKEY : 0u) |
+                           (up ? KEYEVENTF_KEYUP : 0u);
+        SendInput(1, &input, sizeof(INPUT));
+    }
+
+    void SendUnitUtf16(wchar_t unit, bool up)
+    {
+        INPUT input{};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wScan = unit;
+        input.ki.dwFlags = KEYEVENTF_UNICODE | (up ? KEYEVENTF_KEYUP : 0u);
+        SendInput(1, &input, sizeof(INPUT));
+    }
+
+    void SendMouseFlags(DWORD flags, DWORD data = 0)
+    {
+        INPUT input{};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = flags;
+        input.mi.mouseData = data;
+        SendInput(1, &input, sizeof(INPUT));
+    }
+
+    struct SeenKey
+    {
+        bool got = false;
+        Scancode scancode = Scancode::Unknown;
+        KeyCode keycode = KeyCode::None;
+        bool pressed = false;
+    };
+
+    SeenKey PressAndCollect(IPlatform& platform, std::vector<PlatformEvent>& events,
+                            WORD scan, bool extended)
+    {
+        SeenKey seen;
+        SendKeyScan(scan, extended, false);
+        for (int round = 0; round < 40 && !seen.got; ++round)
+        {
+            events.clear();
+            platform.PollEvents(events);
+            for (const PlatformEvent& event : events)
+            {
+                if (const auto* key = std::get_if<KeyEvent>(&event))
+                {
+                    if (!key->pressed) continue;
+                    seen.got = true;
+                    seen.scancode = key->scancode;
+                    seen.keycode = key->keycode;
+                    seen.pressed = key->pressed;
+                    break;
+                }
+            }
+            ::Sleep(5);
+        }
+        SendKeyScan(scan, extended, true);
+        Pump(platform, events, 6);
+        return seen;
+    }
+
+    std::string CollectText(IPlatform& platform, std::vector<PlatformEvent>& events, int rounds)
+    {
+        std::string text;
+        for (int round = 0; round < rounds; ++round)
+        {
+            events.clear();
+            platform.PollEvents(events);
+            for (const PlatformEvent& event : events)
+                if (const auto* input = std::get_if<TextInputEvent>(&event)) text += input->text;
+            ::Sleep(5);
+        }
+        return text;
+    }
+
+    void CheckInput(IPlatform& platform)
+    {
+        std::vector<PlatformEvent> events;
+        WindowDescription description = Described("synthetic input", 640, 480);
+        auto window = platform.CreateWindow(description);
+        Pump(platform, events, 12);
+        if (!BringToForeground(platform, *window, events))
+        {
+            // Another window refusing to give up the foreground is an environment condition, not a
+            // CNA defect, and is reported as one rather than as a failure.
+            Info("input.environment", "this window could not take the foreground; input not exercised");
+            ++checksRun;
+            return;
+        }
+        Report("input.windowHasTheForeground", true, "");
+
+        // --- keyboard: physical location and logical key are different things -------------------
+        // set-1 scancodes, with the extended flag where the physical key needs one. The assertion
+        // is on BOTH: Scancode must name the physical key and KeyCode the logical one, and a
+        // backend that conflated them would pass one and fail the other.
+        struct KeyCase { const char* name; WORD scan; bool extended; Scancode scancode; KeyCode keycode; };
+        const KeyCase cases[] = {
+            {"A",          0x1E, false, Scancode::A,            KeyCode::A},
+            {"F1",         0x3B, false, Scancode::F1,           KeyCode::F1},
+            {"CapsLock",   0x3A, false, Scancode::CapsLock,     KeyCode::CapsLock},
+            {"LeftShift",  0x2A, false, Scancode::LeftShift,    KeyCode::LeftShift},
+            {"RightShift", 0x36, false, Scancode::RightShift,   KeyCode::RightShift},
+            {"LeftCtrl",   0x1D, false, Scancode::LeftControl,  KeyCode::LeftControl},
+            {"RightCtrl",  0x1D, true,  Scancode::RightControl, KeyCode::RightControl},
+            {"ArrowLeft",  0x4B, true,  Scancode::Left,         KeyCode::Left},
+            {"Keypad5",    0x4C, false, Scancode::Keypad5,      KeyCode::None},
+        };
+        for (const KeyCase& c : cases)
+        {
+            const SeenKey seen = PressAndCollect(platform, events, c.scan, c.extended);
+            if (!seen.got) { Report(std::string("input.key.") + c.name, false, "no key event arrived"); continue; }
+            const bool scanOk = seen.scancode == c.scancode;
+            // Keypad5's logical key depends on Num Lock, so only its physical identity is asserted.
+            const bool codeOk = c.keycode == KeyCode::None || seen.keycode == c.keycode;
+            Report(std::string("input.key.") + c.name, scanOk && codeOk,
+                   std::string("scancode=") + ToString(seen.scancode) + " keycode=" +
+                       ToString(seen.keycode));
+        }
+
+        // Left and right modifiers must be distinguishable, which is the whole point of sided
+        // scancodes and the thing a naive VK_SHIFT mapping loses.
+        const SeenKey left = PressAndCollect(platform, events, 0x2A, false);
+        const SeenKey right = PressAndCollect(platform, events, 0x36, false);
+        Report("input.key.shiftSidesAreDistinct",
+               left.got && right.got && left.scancode != right.scancode &&
+                   left.keycode != right.keycode,
+               std::string(ToString(left.scancode)) + " vs " + ToString(right.scancode));
+
+        // --- committed text, including a character no keyboard layout here can type -------------
+        IPlatformTextInput* textInput = platform.GetTextInput();
+        if (textInput != nullptr) textInput->Start(window->GetId(), TextInputType::Text);
+        Pump(platform, events, 6);
+        events.clear();
+        platform.PollEvents(events);
+
+        struct TextCase { const char* name; const wchar_t* utf16; const char* utf8; };
+        const TextCase textCases[] = {
+            {"ascii", L"A", "A"},
+            {"czech", L"č", "\xC4\x8D"},
+            {"euro",  L"€", "\xE2\x82\xAC"},
+            // U+1F300: a surrogate PAIR. Sent as two UTF-16 units, exactly as Windows delivers it,
+            // so the backend has to recombine them rather than emit two broken characters.
+            {"surrogate-pair", L"\U0001F300", "\xF0\x9F\x8C\x80"},
+        };
+        for (const TextCase& c : textCases)
+        {
+            events.clear();
+            platform.PollEvents(events);
+            for (const wchar_t* unit = c.utf16; *unit != L'\0'; ++unit)
+            {
+                SendUnitUtf16(*unit, false);
+                SendUnitUtf16(*unit, true);
+            }
+            const std::string got = CollectText(platform, events, 40);
+            Report(std::string("input.text.") + c.name, got == c.utf8,
+                   "got " + std::to_string(got.size()) + " bytes, expected " +
+                       std::to_string(std::strlen(c.utf8)));
+        }
+        if (textInput != nullptr) textInput->Stop(window->GetId());
+
+        // --- mouse buttons, including the two extra ones ---------------------------------------
+        IPlatformMouse* mouse = platform.GetMouse();
+        struct ButtonCase { const char* name; DWORD down; DWORD up; DWORD data; std::uint8_t button; };
+        const ButtonCase buttons[] = {
+            {"left",   MOUSEEVENTF_LEFTDOWN,   MOUSEEVENTF_LEFTUP,   0,        1},
+            {"middle", MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, 0,        2},
+            {"right",  MOUSEEVENTF_RIGHTDOWN,  MOUSEEVENTF_RIGHTUP,  0,        3},
+            {"x1",     MOUSEEVENTF_XDOWN,      MOUSEEVENTF_XUP,      XBUTTON1, 4},
+            {"x2",     MOUSEEVENTF_XDOWN,      MOUSEEVENTF_XUP,      XBUTTON2, 5},
+        };
+        // The pointer has to be inside our client area for the click to reach us.
+        RECT client{};
+        GetClientRect(HandleOf(*window), &client);
+        POINT centre{(client.right - client.left) / 2, (client.bottom - client.top) / 2};
+        ClientToScreen(HandleOf(*window), &centre);
+        SetCursorPos(centre.x, centre.y);
+        Pump(platform, events, 8);
+
+        for (const ButtonCase& b : buttons)
+        {
+            events.clear();
+            platform.PollEvents(events);
+            SendMouseFlags(b.down, b.data);
+            SendMouseFlags(b.up, b.data);
+            bool sawPress = false;
+            std::uint8_t sawButton = 0;
+            for (int round = 0; round < 40 && !sawPress; ++round)
+            {
+                events.clear();
+                platform.PollEvents(events);
+                for (const PlatformEvent& event : events)
+                    if (const auto* click = std::get_if<MouseButtonEvent>(&event))
+                        if (click->pressed) { sawPress = true; sawButton = click->button; break; }
+                ::Sleep(5);
+            }
+            Report(std::string("input.mouse.") + b.name, sawPress && sawButton == b.button,
+                   sawPress ? ("button " + std::to_string(sawButton)) : "no button event");
+        }
+
+        // --- wheel, both axes -------------------------------------------------------------------
+        for (const auto& wheel : {std::pair<const char*, DWORD>{"vertical", MOUSEEVENTF_WHEEL},
+                                  std::pair<const char*, DWORD>{"horizontal", MOUSEEVENTF_HWHEEL}})
+        {
+            events.clear();
+            platform.PollEvents(events);
+            SendMouseFlags(wheel.second, static_cast<DWORD>(WHEEL_DELTA));
+            bool saw = false;
+            float dx = 0.0f, dy = 0.0f;
+            for (int round = 0; round < 40 && !saw; ++round)
+            {
+                events.clear();
+                platform.PollEvents(events);
+                for (const PlatformEvent& event : events)
+                    if (const auto* w = std::get_if<MouseWheelEvent>(&event))
+                    { saw = true; dx = w->x; dy = w->y; break; }
+                ::Sleep(5);
+            }
+            Report(std::string("input.wheel.") + wheel.first, saw,
+                   saw ? ("x=" + std::to_string(dx) + " y=" + std::to_string(dy)) : "no wheel event");
+        }
+
+        // --- relative mode: Raw Input, enabled and disabled repeatedly --------------------------
+        if (mouse != nullptr && platform.GetCapabilities().relativeMouse)
+        {
+            bool recovered = true;
+            for (int cycle = 0; cycle < 8; ++cycle)
+            {
+                mouse->SetRelativeMode(window->GetId(), true);
+                Pump(platform, events, 4);
+                if (!mouse->IsRelativeMode()) { recovered = false; break; }
+                SendMouseFlags(MOUSEEVENTF_MOVE);
+                Pump(platform, events, 4);
+                mouse->SetRelativeMode(window->GetId(), false);
+                Pump(platform, events, 4);
+                if (mouse->IsRelativeMode()) { recovered = false; break; }
+            }
+            Report("input.relativeMode.togglesCleanly", recovered, "8 enable/disable cycles");
+
+            // Left enabled, then the window is destroyed under it: the cursor must come back and
+            // the clip must be released, or the desktop is left unusable.
+            mouse->SetRelativeMode(window->GetId(), true);
+            Pump(platform, events, 6);
+            window.reset();
+            Pump(platform, events, 12);
+            RECT clip{};
+            GetClipCursor(&clip);
+            RECT virtualScreen{GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+                               GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                               GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+            const bool released = clip.left <= virtualScreen.left && clip.top <= virtualScreen.top &&
+                                  clip.right >= virtualScreen.right && clip.bottom >= virtualScreen.bottom;
+            Report("input.relativeMode.cursorRecoveredAfterWindowDestroyed", released,
+                   "clip " + std::to_string(clip.right - clip.left) + "x" +
+                       std::to_string(clip.bottom - clip.top));
+            CURSORINFO cursor{};
+            cursor.cbSize = sizeof(cursor);
+            GetCursorInfo(&cursor);
+            Report("input.relativeMode.cursorVisibleAgain", (cursor.flags & CURSOR_SHOWING) != 0, "");
+        }
+        else { Info("input.relativeMode", "the platform does not claim relativeMouse"); }
+        ++checksRun;
+    }
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -640,7 +940,7 @@ int main(int argc, char** argv)
         else if (arg == "--clipboard-get-file" && i + 1 < argc) clipboardGetFile = argv[++i];
         else if (arg == "--list")
         {
-            std::cout << "host-ownership dpi displays clipboard cursors handles close wgl\n";
+            std::cout << "host-ownership dpi displays clipboard cursors handles close wgl input\n";
             return 0;
         }
     }
@@ -680,8 +980,8 @@ int main(int argc, char** argv)
     }
 
     if (checks.empty())
-        checks = {"host-ownership", "dpi", "displays", "clipboard",
-                  "cursors",        "handles", "close",     "wgl"};
+        checks = {"host-ownership", "dpi",     "displays", "clipboard", "cursors",
+                  "handles",        "close",   "wgl",      "input"};
 
     // Captured BEFORE the platform exists: that is the whole point of the host-ownership check.
     const HostState before = CaptureHostState();
@@ -715,6 +1015,7 @@ int main(int argc, char** argv)
             else if (check == "handles") CheckNativeHandles(*platform);
             else if (check == "close") CheckCloseIsARequest(*platform);
             else if (check == "wgl") CheckWgl(*platform, iterations);
+            else if (check == "input") CheckInput(*platform);
             else Report(check, false, "no such check (try --list)");
         }
         catch (const std::exception& error)
