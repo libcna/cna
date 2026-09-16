@@ -261,28 +261,6 @@ namespace CNA::Internal::Renderers::DirectX11
             mojoShaderContext_ = nullptr;
         }
 #endif
-
-        // The swap chain is FLIP_DISCARD (DX-45), and a flip-model swap chain is not destroyed
-        // when the last reference to it goes: the runtime defers destruction while the immediate
-        // context still holds references to its buffers, and the device -- and this window's
-        // association with it -- stays alive with it. Letting the ComPtr members simply unwind
-        // therefore leaks one device per renderer, which is invisible until something creates
-        // devices in a loop and then fails to get the eighth.
-        //
-        // Dropping the bindings is not enough on its own: backBufferRTV_/backBufferTexture_ hold
-        // references to the swap chain's own buffers, so they have to go before it does.
-        // ReleaseWindowSizeDependentViews() is exactly that set, and is what EnsureSwapChainSize()
-        // calls before ResizeBuffers() for the same reason; ClearState() then drops everything
-        // else still bound, and Flush() retires the work that referenced it. Ordered explicitly
-        // rather than left to reverse declaration order, so the swap chain is released after the
-        // context that referenced it and before the device.
-        if (context_)
-        {
-            ReleaseWindowSizeDependentViews();
-            context_->ClearState();
-            context_->Flush();
-        }
-        swapChain_.Reset();
     }
 
     void DirectX11Renderer::SetContextRecoveryEnabled(bool enabled)
