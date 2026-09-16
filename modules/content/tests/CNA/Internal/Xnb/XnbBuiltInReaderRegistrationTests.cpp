@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guard it replaced.
 using namespace CNA::Testing::Renderers;
@@ -136,8 +137,15 @@ TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryMathReader)
 
 TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryOtherBuiltInReader)
 {
+    // WINCLOSE-0031: DecimalReader exists only where System::Decimal does -- it needs native 128-bit
+    // integers, which MSVC does not have -- and RegisterDecimalDateTimeXnbReaders registers it under
+    // exactly that condition. Asking for it unconditionally failed every native Windows build.
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.DecimalReader"));
+#else
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.DecimalReader"));
+#endif
     static constexpr const char* kNames[] = {
-        "Microsoft.Xna.Framework.Content.DecimalReader",
         "Microsoft.Xna.Framework.Content.DateTimeReader",
         "Microsoft.Xna.Framework.Content.TimeSpanReader",
         "Microsoft.Xna.Framework.Content.CurveReader",

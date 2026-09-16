@@ -5,8 +5,10 @@
 // full end-to-end milestone test through ContentManager.
 
 #include <array>
+#include <stdexcept>
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -173,6 +175,16 @@ TEST_F(Texture2DContentTypeReaderTest,
                 0x31u + index * 19u + static_cast<std::size_t>(format));
         }
 
+        // WINCLOSE-0031: DirectX11 verifies the optional B4G4R4A4_UNORM per device (WINCLOSE-0016);
+        // a device that does not keep those texels refuses Bgra4444 at construction, loudly.
+        if (CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
+            device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                CNA::Internal::Renderers::RendererFormatVerdict::Unsupported)
+        {
+            EXPECT_THROW((void)ReadHandConstructedTexture2D(device, format, 2, 1, {expected}),
+                         std::runtime_error);
+            continue;
+        }
         Texture2D texture = ReadHandConstructedTexture2D(
             device, format, 2, 1, {expected});
         EXPECT_EQ(texture.getFormatProperty(), format);
