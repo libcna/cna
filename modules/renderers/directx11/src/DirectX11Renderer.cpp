@@ -1255,6 +1255,15 @@ namespace CNA::Internal::Renderers::DirectX11
         return false;
     }
 
+    bool DirectX11Renderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        if (!device_)
+            return false;
+        UINT support = 0;
+        return SUCCEEDED(device_->CheckFormatSupport(DXGI_FORMAT_R16G16B16A16_FLOAT, &support)) &&
+               (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
+    }
+
     bool DirectX11Renderer::LoadsCompressedContentNativelyEXT() const
     {
         return true;

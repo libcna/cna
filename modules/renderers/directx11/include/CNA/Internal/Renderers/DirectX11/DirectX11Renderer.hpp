@@ -172,6 +172,16 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return true only when this renderer and its current device implement the capability.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /**
+         * @brief Whether this device linearly filters a half-float colour texture.
+         *
+         * WINCLOSE-0023. Asked of the device: R16G16B16A16_FLOAT with SHADER_SAMPLE, the D3D11
+         * flag that covers filtered sampling. It used to inherit the interface's `false`, although
+         * every feature-level 11 device must filter that format.
+         *
+         * @return True when the device reports filtered sampling of R16G16B16A16_FLOAT.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
