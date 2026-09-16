@@ -94,7 +94,9 @@ time and therefore needs no stored password.
 | WINNATIVE-0021 | A real CNA application, and a soak run | ⬜ | |
 | WINNATIVE-0022 | MSVC AddressSanitizer on the lifecycle-heavy tests | ✅ | 389 tests, 0 failures, **0 AddressSanitizer reports** across the suite, the stress and the desktop checks |
 | WINNATIVE-0023 | SDL3 / SDL2 / HEADLESS regression on native Windows | 🔄 | HEADLESS **161 tests, 0 failures**; SDL3 **336 tests, 0 failures, 7 skipped**; SDL2 in progress (§3) |
-| WINNATIVE-0024 | Linux regression after every generic fix | 🔄 | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; `CnaContentTests` at its pre-existing 13 |
+| WINNATIVE-0024 | Linux regression after every generic fix, and a whole-suite Linux baseline | ✅ | full Linux rebuild exit 0; `CnaPlatformModuleTests` **511 tests, 501 passed, 10 skipped, 0 failed**; `CnaMathTests` 857 passed; whole suite **8939 tests, 25 failures, 479 skipped** (§3), two suites excluded and named |
+| WINNATIVE-0025 | Media fixture: a missing picture root must fail, not crash | ✅ | 8 access violations were unguarded null dereferences; guarded, 92/94 pass on Linux with only the 2 pre-existing duration failures |
+| WINNATIVE-0026 | The abort that discarded 4 400 Windows tests | ✅ | an escaped exception left GoogleTest's global stdout capture installed; the next capture called `abort()` (F23) |
 
 ---
 
