@@ -49,6 +49,18 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/WindowDescription.hpp"
 
+// NOMINMAX before <windows.h>, or windef.h defines min and max as function-like macros and every
+// std::max(...) below is parsed as one. MinGW-w64 happens not to define them for C++, so this is a
+// defect only cl.exe can show -- the same class of thing modules/platform/src/Win32/Win32Common.hpp
+// exists to centralise, and the reason docs/platform-win32.md tells hosts what <windows.h> does.
+// (guarded: mingw-w64's libstdc++ already defines NOMINMAX in os_defines.h, which is exactly why
+// the MinGW cross-build never saw this.)
+#ifndef NOMINMAX
+#  define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <psapi.h>
 #include <tlhelp32.h>
