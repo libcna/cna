@@ -274,6 +274,34 @@ It contained no `.string()` at all, which is precisely why a search for `.string
 have found it, and why WINPORT-0011's content tests were written to go through the public API.
 Nine of those ten tests failed on Windows and passed on Linux; that is what they were for.
 
+### WINPORT-F4 — sharp-runtime's `Environment` wrote a store it did not read *(fixed)*
+
+Found by triaging one Windows-only CNA failure — `StandardFileSystemTests` could not see a
+variable it had just set — and the root cause turned out to be two separate Windows defects in
+`System::Environment`.
+
+**Two stores.** `SetEnvironmentVariable` writes the Win32 process environment block.
+`getenv`/`_dupenv_s` — which is what that file's *own* `tryGetEnvironmentVariable` reads, and what
+CNA's `getenv` callers read — reads the CRT's copy, which the Win32 call does not touch. A variable
+set through `Environment::SetEnvironmentVariable` was therefore invisible to
+`Environment::GetEnvironmentVariable`, **in the same process**. `_wputenv_s` updates both and is now
+the normal route; the present-but-empty case still needs the Win32 call alone, because `_wputenv_s`
+deletes on an empty value and cannot express it — a CRT limitation, commented rather than hidden.
+
+**Nine ANSI entry points**, every one of them returning a path or a name: `GetCurrentDirectoryA`,
+`SetCurrentDirectoryA`, `GetModuleFileNameA`, `SHGetFolderPathA`, `GetComputerNameA`,
+`GetUserNameA`, `SetEnvironmentVariableA`. The `...A` twins substitute `?` for anything the code
+page cannot spell, so a user whose Windows account name is not representable there had that name
+destroyed before any caller could do anything about it — **and every special folder underneath it
+with it**. That is the same class of damage as `getenv("LOCALAPPDATA")` in `StorageDevice`, one
+layer further down, and no amount of correct conversion above it could have recovered.
+`GetLogicalDriveStringsA` is deliberately left alone: drive letters are ASCII by construction.
+
+Recorded here because it is the second sharp-runtime commit this workstream needed, and because it
+is the clearest instance of the pattern the whole exercise keeps finding: **the damage happens at
+the lowest layer that touches the OS, and everything above it is downstream of a decision already
+made**.
+
 ---
 
 ## 4. The audit — WINPORT-0004
@@ -482,7 +510,7 @@ without a shell re-parsing it — routing through `cmd.exe` would test cmd's quo
 |---|---|
 | Baseline branch / SHA | `win32-native-validation` / `db7852c6eff5d49e37be0f2e90c167801e9bec16` |
 | This branch | `windows-portability` |
-| sharp-runtime | `33da53f5` → `ef75cd18a47351e89e6c76d610c049ccb2e89c6e` (one focused commit) |
+| sharp-runtime | `33da53f5` → `491b937c` (two focused commits: `io` paths, `Environment`) |
 | Authorship | every commit `Robert Vokac <robertvokac@robertvokac.com>`, author **and** committer, both repositories |
 | Attribution scan | zero matches for claude / anthropic / co-authored-by / generated-by / assisted-by |
 | Push status | **not pushed**; `next` untouched; no history rewritten; no force-push |
