@@ -228,6 +228,52 @@ inside the one helper that already does this correctly
 The inherited note said 165; the difference is that it did not count `modules/renderers/`. The
 audit does not stop at this number — the classification in §4 is what decides each site.
 
+### WINPORT-F2 — a half-migrated conversion is worse than an unmigrated one *(fixed)*
+
+The most important thing the branch's own adversarial review found, and the reason "replace
+`.string()` with a UTF-8 call" is not a recipe.
+
+On MSVC the old pair was a **lossless round trip** for any name the code page can spell:
+
+```
+path(std::string)   decodes through CP_ACP
+path::string()      encodes through CP_ACP
+```
+
+Replacing only the *output* half makes it a **double encode**. UTF-8 `café` decodes as ANSI into
+the wide string `cafÃ©`, which then encodes as UTF-8 into those same mojibake characters — so the
+site now corrupts a name that used to survive. Both halves have to move together, or neither.
+
+Eight sites were left half-migrated, including three that write to disk: `ContentWriter`'s XNB
+external reference, `BuildContent`'s `cna-buildcontent.json` `logicalName` (which then disagreed
+with the JSON key beside it), and `IntermediateReader`'s relocated reference.
+`ContentWriter`'s also laundered invalid UTF-8 into valid UTF-8 *before* `XnbWriter`'s refusal could
+see it — the same hole closed two commits earlier on the sibling route, still open on this one.
+
+The mirror-image class was just as costly: a producer changed to return UTF-8 while its consumer
+kept the narrow constructor. `StorageDevice::SetAppNameEXT` pointed isolated storage at a mojibake
+directory; `DeleteContainer` removed nothing and reported no error, because `remove_all` on a
+missing path returns 0 quietly; `StorageContainer`'s constructor created one directory while every
+other member used another, leaving the container permanently empty; and `ContentManager` checked
+`exists()` narrow at eight asset-tier sites, so under a Unicode content root `.xnb` loaded while
+`.cnb`, literal, `.cnj` and loose files all silently missed — an asymmetry that is worse than a
+clean failure, because it looks like the feature works.
+
+**None of this is visible on Linux**, where every one of these conversions is byte identity. It was
+found by reading the diff for producer/consumer pairs, and confirmed by the native Windows run.
+
+### WINPORT-F3 — the content manifest was empty for a non-ASCII root *(fixed)*
+
+`RefreshContentManifest` passed `rootDirectory_` to `fs::exists` and to
+`recursive_directory_iterator` as a narrow string. A content root outside the code page therefore
+did not exist as far as the scan was concerned: the manifest came back **empty**, every asset's
+real extension went undiscovered, and `Load<T>()` failed with `cannot open file` naming an
+*extension-less* path — a symptom several steps from its cause.
+
+It contained no `.string()` at all, which is precisely why a search for `.string()` would never
+have found it, and why WINPORT-0011's content tests were written to go through the public API.
+Nine of those ten tests failed on Windows and passed on Linux; that is what they were for.
+
 ---
 
 ## 4. The audit — WINPORT-0004
