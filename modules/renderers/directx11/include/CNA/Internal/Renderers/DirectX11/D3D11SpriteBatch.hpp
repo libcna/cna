@@ -10,16 +10,14 @@
 // VulkanSpriteBatchRenderer's deferred-to-frame-end snapshot design -- D3D11's context is already
 // immediate-mode like GL, so there's no command-buffer-recording reason to defer.
 //
-// One real, deliberate improvement over both existing precedents: SetTransformMatrix() is
-// genuinely implemented here (VulkanSpriteBatchRenderer leaves it a silent no-op -- a known,
-// undocumented-in-code gap). sprite2d.vert.hlsl's real contract (DX-13-hlsl) is a raw pixel-space
-// Position input mapped straight to NDC via ViewportSize, with no projection-matrix uniform at
-// all -- so this renderer applies the SpriteBatch transform matrix on the CPU, per vertex, via
-// Vector2::Transform(), before upload. This is mathematically equivalent to XNA/EasyGL's
-// combined = transformMatrix * orthographicProjection (both are affine maps composed in the same
-// pixel-space domain XNA's SpriteBatch.Begin(transformMatrix) parameter operates in), just
-// evaluated CPU-side instead of GPU-side, and it applies uniformly to both the stock sprite2d path
-// and the custom-Effect path below (both draw from the same already-transformed vertex buffer).
+// SetTransformMatrix() is genuinely implemented (VulkanSpriteBatchRenderer leaves it a no-op). The
+// stock path follows FNA's SpriteEffect: vertices stay untransformed (x, y, layerDepth) and the GPU
+// applies transformMatrix * CreateOrthographicOffCenter(0, w, h, 0, 0, -1) through sprite3d.vert.hlsl
+// (WINCLOSE-0014). It used to apply the transform on the CPU through Vector2::Transform, which keeps
+// only the affine x/y part: layerDepth never reached the depth test, and a transform's depth and W --
+// near-plane clipping, perspective -- were silently discarded. The custom-effect paths still receive
+// the CPU-transformed 2D vertices they were written against (D3D11EffectRenderer binds a float2
+// position with a viewport-size constant), so they behave exactly as before.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "D3D11Buffers.hpp"
@@ -49,6 +47,9 @@ namespace CNA::Internal::Renderers::DirectX11
         /// (x,y | u,v | r,g,b,a -- 32 bytes): POSITION0 R32G32 @0, TEXCOORD0 R32G32 @8,
         /// COLOR0 R32G32B32A32 @16.
         struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
+        /// The stock path's vertex (36 bytes): untransformed pixel-space position with layerDepth
+        /// as z -- POSITION0 R32G32B32 @0, TEXCOORD0 R32G32 @12, COLOR0 R32G32B32A32 @20.
+        struct SpriteVertex { float x, y, z, u, v, r, g, b, a; };
 
         explicit D3D11SpriteBatchRenderer(DirectX11Renderer* owner);
         ~D3D11SpriteBatchRenderer() override;
@@ -79,7 +80,11 @@ namespace CNA::Internal::Renderers::DirectX11
     private:
         void FlushBatch();
         ID3D11InputLayout* GetOrCreateSprite2DInputLayout();
+        ID3D11InputLayout* GetOrCreateSprite3DInputLayout();
         ID3D11Buffer* GetOrCreatePerDrawBuffer();
+        ID3D11Buffer* GetOrCreateMatrixBuffer();
+        /// The pending batch as CPU-transformed 2D vertices, for the custom-effect paths.
+        const std::vector<Sprite2DVertex>& TransformedSprite2DVertices();
         void GetCurrentViewportSize(float& width, float& height) const;
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
         void ApplyCompiledSpriteVertexShader(float viewportWidth, float viewportHeight);
@@ -92,10 +97,14 @@ namespace CNA::Internal::Renderers::DirectX11
 
         D3D11VertexBufferRenderer vb_;
         D3D11IndexBufferRenderer ib_;
+        D3D11VertexBufferRenderer vb3d_;
         ComPtr<ID3D11InputLayout> sprite2DInputLayout_;
+        ComPtr<ID3D11InputLayout> sprite3DInputLayout_;
         ComPtr<ID3D11Buffer> perDrawBuffer_;
+        ComPtr<ID3D11Buffer> matrixBuffer_;
 
-        std::vector<Sprite2DVertex> pendingVertices_;
+        std::vector<SpriteVertex> pendingVertices_;
+        std::vector<Sprite2DVertex> transformedVertices_;
         std::vector<uint16_t> pendingIndices_;
         const ITextureRenderer* currentTexture_ = nullptr;
 

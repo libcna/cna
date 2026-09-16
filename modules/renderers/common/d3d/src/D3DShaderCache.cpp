@@ -52,6 +52,7 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Skinned3dColoredFloatIndices: return {kSkinned3dColoredFloatIndicesVertDxbc, kSkinned3dColoredFloatIndicesVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColored: return {kSkinned3dVertexLitColoredVertDxbc, kSkinned3dVertexLitColoredVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices: return {kSkinned3dVertexLitColoredFloatIndicesVertDxbc, kSkinned3dVertexLitColoredFloatIndicesVertDxbc_size};
+                case D3DShaderVariant::Sprite3d:          return {kSprite3dVertDxbc, kSprite3dVertDxbc_size};
             }
             return {nullptr, 0};
         }
@@ -96,6 +97,7 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Skinned3dColoredFloatIndices: return {kSkinned3dColoredFragDxbc, kSkinned3dColoredFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColored: return {kSkinned3dVertexLitColoredFragDxbc, kSkinned3dVertexLitColoredFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices: return {kSkinned3dVertexLitColoredFragDxbc, kSkinned3dVertexLitColoredFragDxbc_size};
+                case D3DShaderVariant::Sprite3d:          return {kSprite2dFragDxbc, kSprite2dFragDxbc_size};
             }
             return {nullptr, 0};
         }

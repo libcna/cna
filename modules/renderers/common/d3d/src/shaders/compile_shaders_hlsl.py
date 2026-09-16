@@ -96,6 +96,9 @@ SHADERS = [
     ("skinned_colored3d_vertexlit.vert.hlsl",  "main", "vs_5_0", "kSkinned3dVertexLitColoredVertDxbc"),
     ("skinned_colored3d_vertexlit.vert.hlsl",  "main", "vs_5_0", "kSkinned3dVertexLitColoredFloatIndicesVertDxbc", "CNA_SKINNED_FLOAT_INDICES"),
     ("skinned_colored3d_vertexlit.frag.hlsl",  "main", "ps_5_0", "kSkinned3dVertexLitColoredFragDxbc"),
+    # WINCLOSE-0014: SpriteBatch with XNA's full vertex semantics -- layerDepth and the Begin
+    # transform's depth and W. Appended, so every existing array keeps its bytes and its place.
+    ("sprite3d.vert.hlsl",                     "main", "vs_5_0", "kSprite3dVertDxbc"),
 ]
 
 

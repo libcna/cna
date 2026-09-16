@@ -57,6 +57,7 @@ namespace CNA::Internal::Renderers::DirectX11
         , context_(owner_->GetContextEXT())
         , vb_(owner_, 256)
         , ib_(owner_, 384, false)
+        , vb3d_(owner_, 256)
     {
         using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
         using Microsoft::Xna::Framework::Graphics::VertexElement;
@@ -74,6 +75,18 @@ namespace CNA::Internal::Renderers::DirectX11
                               VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
             });
         vb_.SetVertexDeclaration(kSpriteDeclaration);
+        static const VertexDeclaration kSprite3DDeclaration(
+            static_cast<int>(sizeof(SpriteVertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, x)),
+                              VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+        vb3d_.SetVertexDeclaration(kSprite3DDeclaration);
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
         const auto& bytes =
             CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
@@ -192,6 +205,57 @@ namespace CNA::Internal::Renderers::DirectX11
         return perDrawBuffer_.Get();
     }
 
+    ID3D11InputLayout* D3D11SpriteBatchRenderer::GetOrCreateSprite3DInputLayout()
+    {
+        if (!sprite3DInputLayout_)
+        {
+            static const D3D11_INPUT_ELEMENT_DESC kElements[] = {
+                { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+                { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+                { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            };
+            const uint8_t* vsBytes = nullptr;
+            std::size_t vsSize = 0;
+            D3DCommon::GetVertexShaderBytecode(D3DCommon::D3DShaderVariant::Sprite3d, vsBytes, vsSize);
+            if (vsBytes == nullptr || vsSize == 0)
+                return nullptr;
+            device_->CreateInputLayout(kElements, ARRAYSIZE(kElements), vsBytes, vsSize,
+                                       sprite3DInputLayout_.ReleaseAndGetAddressOf());
+        }
+        return sprite3DInputLayout_.Get();
+    }
+
+    ID3D11Buffer* D3D11SpriteBatchRenderer::GetOrCreateMatrixBuffer()
+    {
+        if (!matrixBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = 64; // one row_major float4x4
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            device_->CreateBuffer(&desc, nullptr, matrixBuffer_.ReleaseAndGetAddressOf());
+        }
+        return matrixBuffer_.Get();
+    }
+
+    const std::vector<D3D11SpriteBatchRenderer::Sprite2DVertex>&
+    D3D11SpriteBatchRenderer::TransformedSprite2DVertices()
+    {
+        // Exactly what Draw() used to push for these paths: the affine part of the transform,
+        // applied in pixel space. They bind a float2 position and a viewport-size constant, so this
+        // is the vertex they were written against; layerDepth and W were never theirs to see.
+        transformedVertices_.clear();
+        transformedVertices_.reserve(pendingVertices_.size());
+        for (const SpriteVertex& vertex : pendingVertices_)
+        {
+            const Vector2 position = Vector2::Transform(Vector2(vertex.x, vertex.y), transform_);
+            transformedVertices_.push_back(
+                {position.X, position.Y, vertex.u, vertex.v, vertex.r, vertex.g, vertex.b, vertex.a});
+        }
+        return transformedVertices_;
+    }
+
     void D3D11SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
@@ -226,26 +290,37 @@ namespace CNA::Internal::Renderers::DirectX11
             // author never calls SetViewportSizeEXT() itself.
             customRenderer->SetViewportSizeEXT(vpW, vpH);
             customEffect_->Apply();
+
+            const auto& vertices = TransformedSprite2DVertices();
+            vb_.SetData(vertices.data(), static_cast<int>(vertices.size()), sizeof(Sprite2DVertex));
+            ID3D11Buffer* vbRaw = vb_.GetBufferEXT();
+            const UINT stride = static_cast<UINT>(sizeof(Sprite2DVertex));
+            const UINT offset = 0;
+            context_->IASetVertexBuffers(0, 1, &vbRaw, &stride, &offset);
         }
         else
         {
-            auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite2d);
-            auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite2d);
+            auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite3d);
+            auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite3d);
             if (!vs || !ps)
-                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite2d shader objects");
+                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite3d shader objects");
 
-            ID3D11InputLayout* layout = GetOrCreateSprite2DInputLayout();
+            ID3D11InputLayout* layout = GetOrCreateSprite3DInputLayout();
             if (!layout)
-                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite2d input layout");
+                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite3d input layout");
 
-            D3DCommon::D3DSprite2DConstants c{};
-            c.ViewportSize[0] = vpW;
-            c.ViewportSize[1] = vpH;
-            ID3D11Buffer* cb = GetOrCreatePerDrawBuffer();
+            // FNA's SpriteBatch.cs: MatrixTransform = transformMatrix * ortho(0, w, h, 0, 0, -1),
+            // over the logical viewport size. ToColumnMajor gives the row-major flat layout the
+            // row_major cbuffer field reads (the convention every D3D11 3D path here uses).
+            const Matrix matrixTransform =
+                transform_ * Matrix::CreateOrthographicOffCenter(0.0f, vpW, vpH, 0.0f, 0.0f, -1.0f);
+            float matrixValues[16];
+            matrixTransform.ToColumnMajor(matrixValues);
+            ID3D11Buffer* cb = GetOrCreateMatrixBuffer();
             D3D11_MAPPED_SUBRESOURCE mapped{};
             if (SUCCEEDED(context_->Map(cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
             {
-                std::memcpy(mapped.pData, &c, sizeof(c));
+                std::memcpy(mapped.pData, matrixValues, sizeof(matrixValues));
                 context_->Unmap(cb, 0);
             }
 
@@ -253,15 +328,16 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->VSSetShader(vs.Get(), nullptr, 0);
             context_->PSSetShader(ps.Get(), nullptr, 0);
             context_->VSSetConstantBuffers(0, 1, &cb);
+
+            vb3d_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+                          sizeof(SpriteVertex));
+            ID3D11Buffer* vbRaw = vb3d_.GetBufferEXT();
+            const UINT stride = static_cast<UINT>(sizeof(SpriteVertex));
+            const UINT offset = 0;
+            context_->IASetVertexBuffers(0, 1, &vbRaw, &stride, &offset);
         }
 
-        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(Sprite2DVertex));
         ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
-
-        ID3D11Buffer* vbRaw = vb_.GetBufferEXT();
-        const UINT stride = static_cast<UINT>(sizeof(Sprite2DVertex));
-        const UINT offset = 0;
-        context_->IASetVertexBuffers(0, 1, &vbRaw, &stride, &offset);
         context_->IASetIndexBuffer(ib_.GetBufferEXT(), ib_.GetFormatEXT(), 0);
         context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         context_->DrawIndexed(static_cast<UINT>(pendingIndices_.size()), 0, 0);
@@ -311,7 +387,8 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error(
                 "DirectX11 SpriteBatch: compiled-effect batch state is incomplete.");
 
-        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+        const auto& transformedVertices = TransformedSprite2DVertices();
+        vb_.SetData(transformedVertices.data(), static_cast<int>(transformedVertices.size()),
                     sizeof(Sprite2DVertex));
         ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
 
@@ -381,11 +458,17 @@ namespace CNA::Internal::Renderers::DirectX11
                                        float rotation,
                                        const Vector2& origin,
                                        SpriteEffects effects,
-                                       float /*layerDepth*/)
+                                       float layerDepth)
     {
         if (!begun_) throw std::runtime_error("D3D11SpriteBatchRenderer::Draw called before Begin()");
 
-        if (currentTexture_ != nullptr && currentTexture_ != &texture)
+        // A batch is flushed on a texture change, and also before a quad whose vertices a 16-bit
+        // index could no longer address. The index base used to be narrowed to uint16_t
+        // unconditionally, so past 65 536 vertices -- 16 384 sprites of one texture -- the indices
+        // wrapped and later quads were drawn from the first quads' vertices.
+        constexpr std::size_t kMaxBatchVertices = 65536u;
+        if (currentTexture_ != nullptr &&
+            (currentTexture_ != &texture || pendingVertices_.size() + 4u > kMaxBatchVertices))
             FlushBatch();
         currentTexture_ = &texture;
 
@@ -396,10 +479,14 @@ namespace CNA::Internal::Renderers::DirectX11
         // sourceRectangle extending past the texture bounds intentionally produces UVs outside
         // [0,1], letting the bound SamplerState's TextureAddressMode (DX-72: Wrap/Mirror/Clamp,
         // all real on this renderer via D3D11SamplerCache) govern edge sampling.
+        //
+        // In the float domain, as FNA does (SpriteBatch.cs: X/texW + W/texW): the end was
+        // X + Width in int, which overflows -- undefined behaviour -- for a source rectangle near
+        // INT_MAX, and wrapped to a coordinate on the far side of the texture.
         float u1 = static_cast<float>(sourceRectangle.X) / texW;
         float v1 = static_cast<float>(sourceRectangle.Y) / texH;
-        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width)  / texW;
-        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
+        float u2 = u1 + static_cast<float>(sourceRectangle.Width)  / texW;
+        float v2 = v1 + static_cast<float>(sourceRectangle.Height) / texH;
 
         if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u1, u2);
         if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v1, v2);
@@ -443,20 +530,15 @@ namespace CNA::Internal::Renderers::DirectX11
         rotateAndTranslate(p2x, p2y, v2x, v2y);
         rotateAndTranslate(p3x, p3y, v3x, v3y);
 
-        // DX-70: apply SpriteBatch's own transform matrix here, in pixel space, before upload --
-        // see this file's header comment for why this is the correct place (sprite2d.vert.hlsl's
-        // real contract has no projection-matrix uniform to fold it into GPU-side).
-        const Vector2 tv0 = Vector2::Transform(Vector2(v0x, v0y), transform_);
-        const Vector2 tv1 = Vector2::Transform(Vector2(v1x, v1y), transform_);
-        const Vector2 tv2 = Vector2::Transform(Vector2(v2x, v2y), transform_);
-        const Vector2 tv3 = Vector2::Transform(Vector2(v3x, v3y), transform_);
-
+        // Untransformed, with layerDepth as z: the transform is applied at flush time, on the GPU
+        // for the stock path (sprite3d.vert.hlsl) and on the CPU for the custom-effect paths
+        // (TransformedSprite2DVertices), so each keeps the vertex contract it was written for.
         const auto base = static_cast<uint16_t>(pendingVertices_.size());
 
-        pendingVertices_.push_back({tv0.X, tv0.Y, u1, v1, r, g, b, a});
-        pendingVertices_.push_back({tv1.X, tv1.Y, u2, v1, r, g, b, a});
-        pendingVertices_.push_back({tv2.X, tv2.Y, u2, v2, r, g, b, a});
-        pendingVertices_.push_back({tv3.X, tv3.Y, u1, v2, r, g, b, a});
+        pendingVertices_.push_back({v0x, v0y, layerDepth, u1, v1, r, g, b, a});
+        pendingVertices_.push_back({v1x, v1y, layerDepth, u2, v1, r, g, b, a});
+        pendingVertices_.push_back({v2x, v2y, layerDepth, u2, v2, r, g, b, a});
+        pendingVertices_.push_back({v3x, v3y, layerDepth, u1, v2, r, g, b, a});
 
         pendingIndices_.push_back(base + 0);
         pendingIndices_.push_back(base + 1);

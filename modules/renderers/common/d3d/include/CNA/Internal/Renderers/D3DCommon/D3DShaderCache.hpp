@@ -91,6 +91,11 @@ namespace CNA::Internal::Renderers::D3DCommon
         Skinned3dVertexLitColored,
         /// Skinned3dVertexLitColored with a floating-point BLENDINDICES input.
         Skinned3dVertexLitColoredFloatIndices,
+        /// WINCLOSE-0014: SpriteBatch's stock stage with XNA's vertex semantics -- (x, y,
+        /// layerDepth) through MatrixTransform = transform * orthographic, so depth and W survive.
+        /// Reuses Sprite2d's pixel shader. Appended last so no existing value, and no D3D12
+        /// pipeline key built from one, moves.
+        Sprite3d,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.
