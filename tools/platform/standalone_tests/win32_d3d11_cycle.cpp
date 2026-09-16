@@ -1,0 +1,238 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plans/plan_win32_native_validation.md WINNATIVE-0025: does repeatedly creating and destroying a
+// Direct3D 11 device on a CNA window cost anything?
+//
+// The question is not academic. The native CnaTests run reached a point where
+// `D3D11CreateDevice` began returning DXGI_ERROR_UNSUPPORTED (0x887A0004) after thousands of tests
+// had each made a device -- while a freshly launched probe on the same machine, at the same
+// moment, made one without trouble. Something accumulates across a long-lived process. Two very
+// different explanations fit that, and they call for opposite responses:
+//
+//   * CNA (or this harness) leaks a device, context or swap chain per cycle -- a defect to fix;
+//   * the VirtualBox virtual adapter simply will not hand out more than N devices to one process,
+//     however diligently they are released -- an environment limitation to record and not to
+//     "fix" in CNA.
+//
+// Telling them apart needs exactly this: a tight loop that releases everything it creates, run
+// until either it stops working or the budget runs out, with the process's own object counts
+// sampled along the way. If the counts are flat and creation still fails, the driver is the limit.
+// If the counts climb, we are the limit.
+//
+// Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--quiet]
+// Exit:  0 every cycle succeeded; 1 creation began failing while our own counts stayed flat
+//        (environment limit -- reported, not a defect); 2 our counts grew (a leak); 3 no D3D11 at
+//        all on this machine.
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/NativeWindowHandle.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/WindowDescription.hpp"
+
+#ifndef NOMINMAX
+#  define NOMINMAX
+#endif
+#include <windows.h>
+#include <psapi.h>
+#include <d3d11.h>
+#include <dxgi.h>
+
+#undef CreateWindow
+#undef CreateDirectory
+#undef MessageBox
+#undef GetClassName
+
+namespace
+{
+    using namespace CNA::Platform;
+
+    constexpr UINT kWidth = 320;
+    constexpr UINT kHeight = 240;
+
+    struct Counts
+    {
+        DWORD user = 0;
+        DWORD gdi = 0;
+        DWORD handles = 0;
+        SIZE_T privateBytes = 0;
+    };
+
+    Counts Sample()
+    {
+        Counts c{};
+        const HANDLE self = GetCurrentProcess();
+        c.user = GetGuiResources(self, GR_USEROBJECTS);
+        c.gdi = GetGuiResources(self, GR_GDIOBJECTS);
+        DWORD h = 0;
+        if (GetProcessHandleCount(self, &h)) c.handles = h;
+        PROCESS_MEMORY_COUNTERS m{};
+        m.cb = sizeof(m);
+        if (GetProcessMemoryInfo(self, &m, sizeof(m))) c.privateBytes = m.PagefileUsage;
+        return c;
+    }
+}
+
+int main(int argc, char** argv)
+{
+    int cycles = 400;
+    bool quiet = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--cycles") == 0 && i + 1 < argc) cycles = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
+    }
+
+    std::unique_ptr<IPlatform> platform;
+    try { platform = PlatformFactory::Create("Win32"); }
+    catch (const std::exception& error)
+    {
+        std::printf("the Win32 platform could not be created: %s\n", error.what());
+        return 3;
+    }
+    platform->AcquireSubsystem(PlatformSubsystem::Video);
+    std::vector<PlatformEvent> events;
+
+    Counts baseline{};
+    int firstFailure = -1;
+    HRESULT firstFailureHr = S_OK;
+    Counts atFailure{};
+
+    for (int cycle = 0; cycle < cycles; ++cycle)
+    {
+        WindowDescription description;
+        description.title = "d3d11 cycle";
+        description.width = static_cast<int>(kWidth);
+        description.height = static_cast<int>(kHeight);
+        description.visible = false;
+        std::unique_ptr<IPlatformWindow> window = platform->CreateWindow(description);
+        events.clear();
+        platform->PollEvents(events);
+
+        Win32NativeWindow native;
+        if (!TryGetWin32(window->GetNativeHandle(), native)) { std::printf("no HWND\n"); return 3; }
+
+        DXGI_SWAP_CHAIN_DESC swapDescription{};
+        swapDescription.BufferCount = 1;
+        swapDescription.BufferDesc.Width = kWidth;
+        swapDescription.BufferDesc.Height = kHeight;
+        swapDescription.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        swapDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapDescription.OutputWindow = static_cast<HWND>(native.hwnd);
+        swapDescription.SampleDesc.Count = 1;
+        swapDescription.Windowed = TRUE;
+        swapDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+        IDXGISwapChain* swapChain = nullptr;
+        ID3D11Device* device = nullptr;
+        ID3D11DeviceContext* context = nullptr;
+        D3D_FEATURE_LEVEL level{};
+        const HRESULT hr = D3D11CreateDeviceAndSwapChain(
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+            &swapDescription, &swapChain, &device, &level, &context);
+
+        if (FAILED(hr) || device == nullptr)
+        {
+            if (cycle == 0) { std::printf("no Direct3D 11 device at all (hr=0x%08lX)\n",
+                                          static_cast<unsigned long>(hr)); return 3; }
+            firstFailure = cycle;
+            firstFailureHr = hr;
+            atFailure = Sample();
+            if (swapChain != nullptr) swapChain->Release();
+            if (context != nullptr) context->Release();
+            if (device != nullptr) device->Release();
+            break;
+        }
+
+        // Use it, so the cycle is a real one rather than a creation benchmark.
+        ID3D11Texture2D* backBuffer = nullptr;
+        ID3D11RenderTargetView* view = nullptr;
+        if (SUCCEEDED(swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+                                           reinterpret_cast<void**>(&backBuffer))) &&
+            backBuffer != nullptr)
+        {
+            if (SUCCEEDED(device->CreateRenderTargetView(backBuffer, nullptr, &view)) &&
+                view != nullptr)
+            {
+                const FLOAT colour[4] = {0.1f, 0.2f, 0.4f, 1.0f};
+                context->ClearRenderTargetView(view, colour);
+                context->OMSetRenderTargets(1, &view, nullptr);
+            }
+        }
+        swapChain->Present(0, 0);
+
+        // Everything released, in the order a renderer would: views and buffers first, then the
+        // swap chain, then the context, then the device. A leak of any one of them is what this
+        // program exists to notice.
+        if (view != nullptr) view->Release();
+        if (backBuffer != nullptr) backBuffer->Release();
+        if (context != nullptr) { context->ClearState(); context->Flush(); context->Release(); }
+        if (swapChain != nullptr) swapChain->Release();
+        if (device != nullptr) device->Release();
+
+        window.reset();
+        events.clear();
+        platform->PollEvents(events);
+
+        // The baseline is taken after the first cycle, not before: the first device loads the
+        // driver and its caches, and that cost never comes back.
+        if (cycle == 0) baseline = Sample();
+        if (!quiet && (cycle % 50 == 0 || cycle == cycles - 1))
+        {
+            const Counts now = Sample();
+            std::printf("  cycle %5d  USER %4lu  GDI %4lu  handles %5lu  private %6llu KB\n",
+                        cycle, static_cast<unsigned long>(now.user),
+                        static_cast<unsigned long>(now.gdi),
+                        static_cast<unsigned long>(now.handles),
+                        static_cast<unsigned long long>(now.privateBytes / 1024));
+            std::fflush(stdout);
+        }
+    }
+
+    const Counts end = firstFailure >= 0 ? atFailure : Sample();
+    const bool userGrew = end.user > baseline.user + 8;
+    const bool gdiGrew = end.gdi > baseline.gdi + 12;
+    const bool handlesGrew = end.handles > baseline.handles + 32;
+
+    std::printf("\nbaseline after cycle 0 : USER %lu  GDI %lu  handles %lu  private %llu KB\n",
+                static_cast<unsigned long>(baseline.user), static_cast<unsigned long>(baseline.gdi),
+                static_cast<unsigned long>(baseline.handles),
+                static_cast<unsigned long long>(baseline.privateBytes / 1024));
+    std::printf("end                    : USER %lu  GDI %lu  handles %lu  private %llu KB\n",
+                static_cast<unsigned long>(end.user), static_cast<unsigned long>(end.gdi),
+                static_cast<unsigned long>(end.handles),
+                static_cast<unsigned long long>(end.privateBytes / 1024));
+
+    if (firstFailure >= 0)
+    {
+        std::printf("\nD3D11CreateDeviceAndSwapChain began failing at cycle %d with hr=0x%08lX.\n",
+                    firstFailure, static_cast<unsigned long>(firstFailureHr));
+        if (userGrew || handlesGrew || gdiGrew)
+        {
+            std::printf("RESULT: our own object counts grew as well -- this looks like a LEAK on "
+                        "our side, not a driver limit.\n");
+            return 2;
+        }
+        std::printf("RESULT: every cycle released what it created and our object counts stayed "
+                    "flat, so the adapter itself stops handing out devices. On this VM that is a "
+                    "VIRTUAL GPU LIMITATION, not a CNA defect.\n");
+        return 1;
+    }
+
+    if (userGrew || handlesGrew || gdiGrew)
+    {
+        std::printf("\nRESULT: %d cycles all succeeded, but our object counts grew -- a LEAK.\n",
+                    cycles);
+        return 2;
+    }
+    std::printf("\nRESULT: %d create/use/destroy cycles, counts flat, no failure.\n", cycles);
+    return 0;
+}

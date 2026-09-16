@@ -272,6 +272,14 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     # repeated cursor changes leak USER objects. None of these can be answered from inside a single
     # process on an invisible window station, which is where an SSH session lives -- see
     # tools/platform/win32_run_interactive.ps1.
+    # --- the Direct3D 11 device-cycle stress -----------------------------------------------------
+    # plans/plan_win32_native_validation.md WINNATIVE-0025. Separates "CNA leaks a device" from
+    # "this adapter will not hand out more than N to one process", which the native CnaTests run
+    # made a live question rather than a theoretical one.
+    add_executable(cna_win32_d3d11_cycle win32_d3d11_cycle.cpp)
+    target_link_libraries(cna_win32_d3d11_cycle PRIVATE cna_platform user32 gdi32 psapi d3d11 dxgi)
+    target_compile_options(cna_win32_d3d11_cycle PRIVATE ${CNA_HARNESS_WARNINGS})
+
     add_executable(cna_win32_native_desktop win32_native_desktop.cpp)
     target_link_libraries(cna_win32_native_desktop PRIVATE cna_platform user32 gdi32 ole32 opengl32)
     target_compile_options(cna_win32_native_desktop PRIVATE ${CNA_HARNESS_WARNINGS})
@@ -286,7 +294,7 @@ endif()
 # libstdc++.a also defines in tinfo.o; a static link reports it as multiply defined.
 if(MINGW)
     foreach(_cna_target IN ITEMS cna_platform_tests cna_win32_directx_probe cna_win32_native_stress
-                              cna_win32_native_desktop)
+                              cna_win32_native_desktop cna_win32_d3d11_cycle)
         if(NOT TARGET ${_cna_target})
             continue()
         endif()
