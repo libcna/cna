@@ -690,6 +690,8 @@ namespace CNA::Internal::Renderers::DirectX11
         defaultWhiteTexture_.Reset();
         defaultFlatNormalSrv_.Reset();
         defaultFlatNormalTexture_.Reset();
+        defaultOpaqueBlackSrv_.Reset();
+        defaultOpaqueBlackTexture_.Reset();
         currentCustomRT_ = nullptr;
         currentCubeRT_ = nullptr;
         currentMRTCount_ = 0;
@@ -2208,6 +2210,35 @@ namespace CNA::Internal::Renderers::DirectX11
         return defaultFlatNormalSrv_.Get();
     }
 
+    ID3D11ShaderResourceView* DirectX11Renderer::GetOrCreateDefaultOpaqueBlackSrvEXT()
+    {
+        if (!defaultOpaqueBlackSrv_)
+        {
+            const uint8_t opaqueBlack[4] = {0, 0, 0, 255};
+            D3D11_TEXTURE2D_DESC desc{};
+            desc.Width = 1;
+            desc.Height = 1;
+            desc.MipLevels = 1;
+            desc.ArraySize = 1;
+            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.SampleDesc.Count = 1;
+            desc.Usage = D3D11_USAGE_IMMUTABLE;
+            desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+            D3D11_SUBRESOURCE_DATA initData{};
+            initData.pSysMem = opaqueBlack;
+            initData.SysMemPitch = 4;
+
+            HRESULT hr = device_->CreateTexture2D(&desc, &initData, defaultOpaqueBlackTexture_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("DirectX11Renderer: default opaque-black texture creation failed, hr=" + FormatHr(hr));
+            hr = device_->CreateShaderResourceView(defaultOpaqueBlackTexture_.Get(), nullptr, defaultOpaqueBlackSrv_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("DirectX11Renderer: default opaque-black SRV creation failed, hr=" + FormatHr(hr));
+        }
+        return defaultOpaqueBlackSrv_.Get();
+    }
+
     void DirectX11Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -2474,10 +2505,11 @@ namespace CNA::Internal::Renderers::DirectX11
             nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         if (needsDualTex)
         {
+            // WINCLOSE-0018: XNA samples an unbound slot as opaque black, not white.
             srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
-                                      : GetOrCreateDefaultWhiteSrvEXT();
+                                      : GetOrCreateDefaultOpaqueBlackSrvEXT();
             srvs[1] = params.texture1 ? GetSrvForTextureEXT(params.texture1)
-                                      : GetOrCreateDefaultWhiteSrvEXT();
+                                      : GetOrCreateDefaultOpaqueBlackSrvEXT();
         }
         else if (needsEnvMap)
         {

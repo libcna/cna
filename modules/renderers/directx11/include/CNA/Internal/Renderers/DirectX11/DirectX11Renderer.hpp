@@ -695,6 +695,11 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11ShaderResourceView> defaultFlatNormalSrv_;
         ID3D11ShaderResourceView* GetOrCreateDefaultWhiteSrvEXT();
         ID3D11ShaderResourceView* GetOrCreateDefaultFlatNormalSrvEXT();
+        // WINCLOSE-0018: XNA samples an unbound DualTextureEffect slot as opaque black (SOFTWARE-302);
+        // an unbound D3D11 SRV samples transparent black, and the white fallback lit the other slot.
+        ComPtr<ID3D11Texture2D> defaultOpaqueBlackTexture_;
+        ComPtr<ID3D11ShaderResourceView> defaultOpaqueBlackSrv_;
+        ID3D11ShaderResourceView* GetOrCreateDefaultOpaqueBlackSrvEXT();
 
     };
 }

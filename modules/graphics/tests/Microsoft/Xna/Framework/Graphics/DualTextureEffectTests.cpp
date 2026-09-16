@@ -403,9 +403,10 @@ namespace
         void SetUp() override
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+            // WINCLOSE-0018: DirectX11 binds an opaque-black texel for an unbound slot.
             if (!CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                 OpenGL4, Software))
-                GTEST_SKIP() << "requires the Software or EasyGL stock-effect raster path";
+                                 OpenGL4, Software, DirectX11))
+                GTEST_SKIP() << "requires a stock-effect raster path that samples a missing slot";
         }
 
         [[nodiscard]] Color DrawMissingSampler(MissingDualTextureSlot missing,
