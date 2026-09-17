@@ -39,7 +39,8 @@
 // opaque black (SOFTWARE-303, measured). This fixture predates that measurement and relied on the
 // retired white-null convention, so on a renderer with XNA's rule it read black and half-fogged
 // black instead of the material (plans/plan_directx12_parity.md DX12-0021). Its subject is fog, so
-// the texture is now stated rather than implied.
+// the texture is now stated rather than implied, with the TEXCOORD0 every AlphaTestEffect vertex shader
+// reads (XNA refuses a declaration without it, and so do both D3D renderers once a texture is bound).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -47,6 +48,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -54,7 +56,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -136,9 +138,10 @@ class AlphaTestFogTest : public Game
 
         const Vector3 tl(-1.0f,  1.0f, z), bl(-1.0f, -1.0f, z);
         const Vector3 br( 1.0f, -1.0f, z), tr( 1.0f,  1.0f, z);
-        const VertexPositionColor quad[6] = {
-            { tl, kMaterialColor }, { bl, kMaterialColor }, { br, kMaterialColor },
-            { tl, kMaterialColor }, { br, kMaterialColor }, { tr, kMaterialColor },
+        const Vector2 uv(0.0f, 0.0f); // the texture is 1x1, so every coordinate reads its one texel
+        const VertexPositionColorTexture quad[6] = {
+            { tl, kMaterialColor, uv }, { bl, kMaterialColor, uv }, { br, kMaterialColor, uv },
+            { tl, kMaterialColor, uv }, { br, kMaterialColor, uv }, { tr, kMaterialColor, uv },
         };
 
         Color got(0, 0, 0, 0);
