@@ -13,6 +13,7 @@
 #endif
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DDebugLayerLog.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
@@ -67,24 +68,6 @@ namespace CNA::Internal::Renderers::DirectX12
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
-        }
-
-        std::mutex& ProcessDebugMessageMutex()
-        {
-            static std::mutex mutex;
-            return mutex;
-        }
-
-        D3D12DebugMessageTotalsEXT& ProcessDebugMessageTotals()
-        {
-            static D3D12DebugMessageTotalsEXT totals;
-            return totals;
-        }
-
-        std::deque<D3D12DebugMessageEXT>& ProcessRecentDebugMessages()
-        {
-            static std::deque<D3D12DebugMessageEXT> messages;
-            return messages;
         }
 
         // Every live renderer's info queue, so a diagnostic handler can read the message that made
@@ -427,6 +410,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // DX12-0004: whatever teardown itself made the layer say is part of this device's record.
         DrainDebugMessagesEXT();
         UnregisterLiveDebugQueue(infoQueue_);
+        D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
     }
 
     void DirectX12Renderer::SetContextRecoveryEnabled(bool enabled)
@@ -569,6 +553,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 infoQueue->PushStorageFilter(&filter);
                 infoQueue_ = infoQueue;
                 RegisterLiveDebugQueue(infoQueue_);
+                D3DCommon::D3DDebugLayerLog::RegisterLiveQueue(this, [this] { DrainDebugMessagesEXT(); });
             }
         }
 
@@ -793,50 +778,26 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         infoQueue->ClearStoredMessages();
 
-        if (drained.empty())
-            return drained;
-
-        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
-        auto& totals = ProcessDebugMessageTotals();
-        auto& recent = ProcessRecentDebugMessages();
-        constexpr std::size_t kRetainedMessages = 256;
+        // plans/plan_graphics_shared_cleanup.md GSC-0006: one process-wide log for both Direct3D debug
+        // layers, which logs and counts each message and hands it to a test harness's observer.
         for (const auto& entry : drained)
-        {
-            const std::string text = "D3D12 debug layer [severity " + std::to_string(entry.severity) +
-                                     ", id " + std::to_string(entry.id) + "]: " + entry.description;
-            switch (entry.severity)
-            {
-            case D3D12_MESSAGE_SEVERITY_CORRUPTION:
-                ++totals.corruption;
-                CNA::Logger::Error(text, CNA::LogCategory::RENDER);
-                break;
-            case D3D12_MESSAGE_SEVERITY_ERROR:
-                ++totals.error;
-                CNA::Logger::Error(text, CNA::LogCategory::RENDER);
-                break;
-            default:
-                ++totals.warning;
-                CNA::Logger::Warn(text, CNA::LogCategory::RENDER);
-                break;
-            }
-            recent.push_back(entry);
-            if (recent.size() > kRetainedMessages)
-                recent.pop_front();
-        }
+            D3DCommon::D3DDebugLayerLog::Record(
+                {D3DCommon::D3DDebugLayerApi::Direct3D12, entry.severity, entry.id, entry.description});
         return drained;
     }
 
     D3D12DebugMessageTotalsEXT DirectX12Renderer::GetProcessDebugMessageTotalsEXT() noexcept
     {
-        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
-        return ProcessDebugMessageTotals();
+        const D3DCommon::D3DDebugLayerTotals totals = D3DCommon::D3DDebugLayerLog::Totals();
+        return {totals.corruption, totals.error, totals.warning};
     }
 
     std::vector<D3D12DebugMessageEXT> DirectX12Renderer::GetRecentProcessDebugMessagesEXT()
     {
-        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
-        const auto& recent = ProcessRecentDebugMessages();
-        return {recent.begin(), recent.end()};
+        std::vector<D3D12DebugMessageEXT> recent;
+        for (const auto& message : D3DCommon::D3DDebugLayerLog::Recent())
+            recent.push_back({message.severity, message.id, message.description});
+        return recent;
     }
 
     void DirectX12Renderer::ReportDeviceRemovedExtendedDataEXT()
@@ -1807,6 +1768,7 @@ namespace CNA::Internal::Renderers::DirectX12
         commandQueue_.Reset();
         DrainDebugMessagesEXT();
         UnregisterLiveDebugQueue(infoQueue_);
+        D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
         infoQueue_.Reset();
         device_.Reset();
         factory_.Reset();

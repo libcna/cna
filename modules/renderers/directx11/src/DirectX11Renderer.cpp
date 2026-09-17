@@ -12,6 +12,7 @@
 #endif
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DDebugLayerLog.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
@@ -24,7 +25,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -307,6 +310,8 @@ namespace CNA::Internal::Renderers::DirectX11
 
     DirectX11Renderer::~DirectX11Renderer()
     {
+        DrainDebugMessagesEXT();
+        D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
         lifetimeToken_.reset();
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
         if (mojoShaderContext_ != nullptr)
@@ -382,6 +387,20 @@ namespace CNA::Internal::Renderers::DirectX11
 #ifndef NDEBUG
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
+        // plans/plan_graphics_shared_cleanup.md GSC-0006: CNA_D3D11_DEBUG_LAYER=1 enables the layer in any
+        // build type and =0 disables it in a Debug build -- the explicit switch validation runs use, as
+        // CNA_D3D12_DEBUG_LAYER is for DirectX12. Unset keeps the build type's default.
+        if (const char* debugLayer = std::getenv("CNA_D3D11_DEBUG_LAYER"); debugLayer != nullptr)
+        {
+            if (std::strcmp(debugLayer, "1") == 0)
+                flags |= D3D11_CREATE_DEVICE_DEBUG;
+            else if (std::strcmp(debugLayer, "0") == 0)
+                flags &= ~static_cast<UINT>(D3D11_CREATE_DEVICE_DEBUG);
+            else
+                CNA::Logger::Warn(std::string("CNA_D3D11_DEBUG_LAYER='") + debugLayer +
+                                      "' is neither 0 nor 1; the build type's default is kept.",
+                                  CNA::LogCategory::RENDER);
+        }
 
         HRESULT hr = tryCreate(flags, kFeatureLevels, ARRAYSIZE(kFeatureLevels));
 
@@ -408,6 +427,18 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         debugLayerEnabled_ = (flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
+        if (debugLayerEnabled_ && SUCCEEDED(device_.As(&infoQueue_)))
+        {
+            // Informational messages carry no verdict and arrive by the thousand (state object
+            // creation, every shader); they are dropped at the queue, as DirectX12 does.
+            D3D11_MESSAGE_SEVERITY deniedSeverities[] = {
+                D3D11_MESSAGE_SEVERITY_INFO, D3D11_MESSAGE_SEVERITY_MESSAGE};
+            D3D11_INFO_QUEUE_FILTER filter{};
+            filter.DenyList.NumSeverities = static_cast<UINT>(std::size(deniedSeverities));
+            filter.DenyList.pSeverityList = deniedSeverities;
+            infoQueue_->PushStorageFilter(&filter);
+            D3DCommon::D3DDebugLayerLog::RegisterLiveQueue(this, [this] { DrainDebugMessagesEXT(); });
+        }
 
         // design decision 12: negotiation is broad, but acceptance is a hard floor -- Phase DIRECTX8's
         // Shader Model 5 stock shaders need feature level 11.0+.
@@ -638,6 +669,32 @@ namespace CNA::Internal::Renderers::DirectX11
         CreateWindowSizeDependentViews();
     }
 
+    void DirectX11Renderer::DrainDebugMessagesEXT()
+    {
+        if (!infoQueue_)
+            return;
+        const UINT64 count = infoQueue_->GetNumStoredMessagesAllowedByRetrievalFilter();
+        for (UINT64 i = 0; i < count; ++i)
+        {
+            SIZE_T length = 0;
+            if (FAILED(infoQueue_->GetMessage(i, nullptr, &length)) || length == 0)
+                continue;
+            std::vector<char> storage(length);
+            auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+            if (FAILED(infoQueue_->GetMessage(i, message, &length)))
+                continue;
+            // Stored before the filter was pushed (device creation), like DirectX12's startup notices.
+            if (message->Severity == D3D11_MESSAGE_SEVERITY_INFO ||
+                message->Severity == D3D11_MESSAGE_SEVERITY_MESSAGE)
+                continue;
+            D3DCommon::D3DDebugLayerLog::Record(
+                {D3DCommon::D3DDebugLayerApi::Direct3D11, static_cast<int>(message->Severity),
+                 static_cast<int>(message->ID),
+                 message->pDescription != nullptr ? std::string(message->pDescription) : std::string()});
+        }
+        infoQueue_->ClearStoredMessages();
+    }
+
     void DirectX11Renderer::CheckDeviceRemoved(HRESULT hr)
     {
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -645,6 +702,7 @@ namespace CNA::Internal::Renderers::DirectX11
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D11 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            DrainDebugMessagesEXT();
             if (!deviceLost_)
             {
                 deviceLost_ = true;
@@ -713,6 +771,9 @@ namespace CNA::Internal::Renderers::DirectX11
             rtv = nullptr;
         currentDSV_ = nullptr;
 
+        DrainDebugMessagesEXT();
+        D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
+        infoQueue_.Reset();
         context_.Reset();
         device_.Reset();
         factory_.Reset();
@@ -771,6 +832,7 @@ namespace CNA::Internal::Renderers::DirectX11
         const UINT flags = mayTear ? DXGI_PRESENT_ALLOW_TEARING : 0;
 
         const HRESULT hr = swapChain_->Present(syncInterval, flags);
+        DrainDebugMessagesEXT();
         if (FAILED(hr))
         {
             CheckDeviceRemoved(hr);

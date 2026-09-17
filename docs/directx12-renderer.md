@@ -147,6 +147,17 @@ this shape:
 `D3D12_Smoke` keeps its local check naming, but new public conformance proof must not be added there
 instead of the shared renderer-neutral fixture.
 
+## Validation runs: the debug layer fails tests
+
+`CNA_D3D12_DEBUG_LAYER=1` (or `CNA_D3D12_GPU_VALIDATION=1`) makes `CnaTests` install
+`D3DDebugLayerListener` (`modules/renderers/common/d3d/tests/`), shared with DirectX11. It drains every
+live device's `ID3D12InfoQueue` at the end of each test and **fails the test** for any CORRUPTION or
+ERROR, and for any WARNING not named -- by API, message id and test -- in `D3DDebugLayerPolicy.hpp`'s
+allowlist. INFO and MESSAGE never fail; the renderer already drops the optimized-clear-value
+performance hints (IDs 820/821) at its queue. Report lines go to stdout and to `CNA_D3D_DEBUG_REPORT`
+(the older `CNA_D3D12_DEBUG_REPORT` is still read), which `tools/platform/win32_gtest_shards.ps1` sets
+per shard (`plans/plan_graphics_shared_cleanup.md` GSC-0006).
+
 ## Known limitations (2026-09-09)
 
 - **CPU-visible operations remain synchronization boundaries.** `DX-237` records clears, draws and

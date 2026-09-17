@@ -56,8 +56,10 @@ function Start-Shard([int] $index) {
     $arguments = @("--gtest_output=xml:$xml")
     if ($Filter) { $arguments += "--gtest_filter=$Filter" }
     $shardEnv = @("GTEST_TOTAL_SHARDS=$Shards", "GTEST_SHARD_INDEX=$index") + $Environment
-    if (($Environment | Where-Object { $_ -match '^CNA_D3D12_(DEBUG_LAYER|GPU_VALIDATION)=1$' })) {
-        $shardEnv += "CNA_D3D12_DEBUG_REPORT=$(Join-Path $OutDir "$tag.debuglayer.txt")"
+    # plans/plan_graphics_shared_cleanup.md GSC-0006: either Direct3D debug layer; the listener fails a test
+    # on a fatal message and writes its report lines here.
+    if (($Environment | Where-Object { $_ -match '^CNA_D3D(11_DEBUG_LAYER|12_DEBUG_LAYER|12_GPU_VALIDATION)=1$' })) {
+        $shardEnv += "CNA_D3D_DEBUG_REPORT=$(Join-Path $OutDir "$tag.debuglayer.txt")"
     }
     Start-Job -ScriptBlock {
         param($runner, $exe, $arguments, $wd, $outDir, $tag, $timeout, $shardEnv)
