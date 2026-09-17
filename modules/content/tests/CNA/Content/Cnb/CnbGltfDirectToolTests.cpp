@@ -72,6 +72,18 @@ namespace
 #endif
     }
 
+    // One argument for the shell RunTool hands the command to. cmd.exe does not treat a single
+    // quote as quoting, so on Windows '.' reached the tool as a three-character name it rightly
+    // accepted, and '' as two quote characters rather than an empty argument.
+    std::string ShellArgument(const std::string& value)
+    {
+#if defined(_WIN32)
+        return "\"" + value + "\"";
+#else
+        return "'" + value + "'";
+#endif
+    }
+
     std::vector<std::uint8_t> ReadFile(const std::filesystem::path& path)
     {
         std::ifstream in(path, std::ios::binary);
@@ -167,7 +179,7 @@ TEST(CnbGltfDirectToolTest, ABaseNameThatIsNotOneFileNameComponentIsRefused)
     {
         ScratchDir out(std::string("basename"));
         EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                              out.path().string() + " '" + bad + "' --quiet"),
+                              out.path().string() + " " + ShellArgument(bad) + " --quiet"),
                   0)
             << "baseName '" << bad << "' was accepted";
         EXPECT_TRUE(std::filesystem::is_empty(out.path()))
@@ -177,7 +189,7 @@ TEST(CnbGltfDirectToolTest, ABaseNameThatIsNotOneFileNameComponentIsRefused)
     // An empty baseName is a positional argument that is present but says nothing.
     ScratchDir empty("basename-empty");
     EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                          empty.path().string() + " '' --quiet"),
+                          empty.path().string() + " " + ShellArgument("") + " --quiet"),
               0);
 
     // An ordinary name still works, so this is a boundary rather than a blanket refusal.
@@ -202,7 +214,8 @@ TEST(CnbGltfDirectToolTest, UnitScaleMustBeAFiniteFullyConsumedPositiveNumber)
     {
         ScratchDir out("unitscale");
         EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                              out.path().string() + " asset --unit-scale '" + bad + "' --quiet"),
+                              out.path().string() + " asset --unit-scale " + ShellArgument(bad) +
+                              " --quiet"),
                   0)
             << "--unit-scale '" << bad << "' was accepted";
         EXPECT_FALSE(std::filesystem::exists(out.path() / "asset.cnb"));
