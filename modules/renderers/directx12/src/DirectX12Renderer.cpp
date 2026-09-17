@@ -2516,6 +2516,52 @@ namespace CNA::Internal::Renderers::DirectX12
         if (full.size() < static_cast<std::size_t>(srcW) * static_cast<std::size_t>(srcH) * 4)
             throw std::runtime_error("DirectX12Renderer::ReadBackbuffer: back-buffer readback failed");
 
+        // plans/plan_directx12_parity.md DX12-0015 (DirectX11's WINCLOSE-0012): the request is in the
+        // game's logical back-buffer space, but a windowed device draws into the physical swap chain
+        // through GetDefaultViewportRect(). When the logical buffer is letterboxed or scaled inside
+        // the window -- a 16x16 back buffer in a window Windows will not make narrower than ~120 px --
+        // physical (x, y) is the letterbox bar, not what the game drew. Sample the geometry the draws
+        // used, at logical pixel centres; when logical and physical agree this is the direct copy.
+        {
+            int logicalW = 0;
+            int logicalH = 0;
+            GetViewportSize(logicalW, logicalH);
+            int presentX = 0;
+            int presentY = 0;
+            int presentW = 0;
+            int presentH = 0;
+            GetDefaultViewportRect(presentX, presentY, presentW, presentH);
+            const bool presentationIsIdentity =
+                logicalW <= 0 || logicalH <= 0 || presentW <= 0 || presentH <= 0 ||
+                (presentX == 0 && presentY == 0 && presentW == logicalW && presentH == logicalH);
+            if (!presentationIsIdentity)
+            {
+                const double scaleX = static_cast<double>(presentW) / static_cast<double>(logicalW);
+                const double scaleY = static_cast<double>(presentH) / static_cast<double>(logicalH);
+                for (int row = 0; row < h; ++row)
+                {
+                    std::uint8_t* dst =
+                        pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+                    const int srcY = presentY + static_cast<int>(
+                        std::floor((static_cast<double>(y + row) + 0.5) * scaleY));
+                    for (int column = 0; column < w; ++column)
+                    {
+                        const int srcX = presentX + static_cast<int>(
+                            std::floor((static_cast<double>(x + column) + 0.5) * scaleX));
+                        std::uint8_t* texel = dst + static_cast<std::size_t>(column) * 4;
+                        if (srcX < 0 || srcX >= srcW || srcY < 0 || srcY >= srcH)
+                        {
+                            std::memset(texel, 0, 4);
+                            continue;
+                        }
+                        std::memcpy(texel,
+                                    full.data() + (static_cast<std::size_t>(srcY) * srcW + srcX) * 4, 4);
+                    }
+                }
+                return;
+            }
+        }
+
         // Same out-of-range policy D3D11's own DX-28 override uses: a row or column outside the real
         // resource is zero-filled rather than read from adjacent memory. GraphicsDevice has already
         // rejected a rectangle outside the PresentationParameters bounds, so this only matters when
