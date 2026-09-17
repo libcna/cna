@@ -75,6 +75,57 @@ namespace CNA::Internal::Renderers::DirectX12
         /// rejects the read instead of fabricating a transparent-black face.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Stores declared-format bytes in a cube face region.
+         *
+         * plans/plan_directx12_parity.md DX12-0018 (DirectX11's WINCLOSE-0013). The shared layer sends
+         * every uncompressed cube transfer through this hook; SetData already stores in the declared
+         * DXGI format, so this is that path, refused for a block-compressed cube.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source bytes in the declared format.
+         * @param dataLength Source size in bytes.
+         * @return true when the complete region was recorded for upload.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads declared-format bytes from a cube face region.
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete region was copied; false for a block-compressed cube.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
+        /**
+         * @brief Reads an exact DXT block payload back from a cube face region.
+         *
+         * Served from the CPU block copy SetCompressedDataEXT keeps, so the blocks returned are the
+         * blocks stored, with the alignment rules SetCompressedDataEXT enforces.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels (a block multiple).
+         * @param y Top edge in texels (a block multiple).
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination block buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete block region was copied.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }

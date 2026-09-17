@@ -983,7 +983,7 @@ function(cna_register_d3d_parity_tests)
     cna_d3d_parity_fixture(
         NAME RealWindowResize TARGET real_window_resize DIRECTX12_ORDER 2390
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp"
-        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
+        REQUIRES_SDL DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
     cna_d3d_parity_fixture(
         NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp" REQUIRES_SDL
@@ -1022,7 +1022,11 @@ function(cna_register_d3d_parity_tests)
             endif()
             set(_cna_d3d_target "cna_test_directx12_${_cna_d3d_fixture_${_cna_d3d_fixture}_TARGET}")
             cna_directx12_test(${_cna_d3d_target} "${_cna_d3d_fixture_${_cna_d3d_fixture}_SOURCE}")
-            if(_cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_PROTON)
+            # plans/plan_directx12_parity.md DX12-0005: the Proton launcher and the forced windowless
+            # device below are the Linux/Wine lane's workarounds -- vanilla Wine's dxgi.dll cannot
+            # present a D3D12 swap chain (DX-100). A native Windows build runs each fixture as
+            # itself, windowed, exactly as DirectX11's fixtures run.
+            if(_cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_PROTON AND CMAKE_CROSSCOMPILING)
                 set(_cna_d3d_command
                     ${CMAKE_SOURCE_DIR}/scripts/run-proton-vkd3d.sh
                     $<TARGET_FILE:${_cna_d3d_target}>)
@@ -1038,7 +1042,8 @@ function(cna_register_d3d_parity_tests)
                 COMMAND ${_cna_d3d_command}
                 TIMEOUT ${_cna_d3d_timeout}
                 LABELS "DIRECTX12")
-            if(NOT _cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_NO_HEADLESS
+            if(CMAKE_CROSSCOMPILING
+               AND NOT _cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_NO_HEADLESS
                AND NOT _cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_PROTON)
                 list(APPEND _cna_d3d_registration
                     ENVIRONMENT "CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12")

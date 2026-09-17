@@ -77,7 +77,7 @@ namespace
 
 TEST(VertexDeclarationProfileTest, ReachAcceptsEveryReachVertexFormat)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::Reach);
 
     for (int ordinal = static_cast<int>(VertexElementFormat::Single);
@@ -100,7 +100,7 @@ TEST(VertexDeclarationProfileTest, ReachAcceptsEveryReachVertexFormat)
 
 TEST(VertexDeclarationProfileTest, ReachRejectsHalfFormatsThatHiDefAccepts)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto reach = MakeDevice(GraphicsProfile::Reach);
     auto hiDef = MakeDevice(GraphicsProfile::HiDef);
 
@@ -116,7 +116,7 @@ TEST(VertexDeclarationProfileTest, ReachRejectsHalfFormatsThatHiDefAccepts)
 
 TEST(VertexDeclarationProfileTest, DynamicVertexBufferUsesTheSameProfileValidation)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::Reach);
     const VertexDeclaration declaration = SingleElement(VertexElementFormat::HalfVector2);
 
@@ -126,7 +126,7 @@ TEST(VertexDeclarationProfileTest, DynamicVertexBufferUsesTheSameProfileValidati
 
 TEST(VertexDeclarationProfileTest, BindRejectsStrideAboveTheXnaLimit)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     const VertexDeclaration declaration(256, {
         VertexElement(0, VertexElementFormat::Single, VertexElementUsage::Position, 0),
@@ -138,7 +138,7 @@ TEST(VertexDeclarationProfileTest, BindRejectsStrideAboveTheXnaLimit)
 
 TEST(VertexDeclarationProfileTest, BindRejectsMoreThanSixteenElements)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     std::vector<VertexElement> elements;
     for (int index = 0; index < 16; ++index)
@@ -155,7 +155,7 @@ TEST(VertexDeclarationProfileTest, BindRejectsMoreThanSixteenElements)
 
 TEST(VertexDeclarationProfileTest, BindRejectsUsageIndicesOutsideZeroThroughFifteen)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
 
     for (const int usageIndex : {-1, 16})
@@ -170,7 +170,7 @@ TEST(VertexDeclarationProfileTest, BindRejectsUsageIndicesOutsideZeroThroughFift
 
 TEST(VertexDeclarationProfileTest, BindRejectsUnknownFormatsAfterConstruction)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     const VertexDeclaration declaration(4, {
         VertexElement(0, static_cast<VertexElementFormat>(12),
@@ -183,7 +183,7 @@ TEST(VertexDeclarationProfileTest, BindRejectsUnknownFormatsAfterConstruction)
 
 TEST(VertexDeclarationProfileTest, DisposedDeclarationCannotBindToVertexBuffers)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
     declaration.Dispose();
@@ -196,7 +196,7 @@ TEST(VertexDeclarationProfileTest, DisposedDeclarationCannotBindToVertexBuffers)
 
 TEST(VertexDeclarationProfileTest, VertexBufferRetainsTheDeclarationResourceIdentity)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
     TestTag firstTag;
@@ -240,7 +240,7 @@ TEST(VertexDeclarationProfileTest, VertexBufferRetainsTheDeclarationResourceIden
 
 TEST(VertexDeclarationProfileTest, RetainedDeclarationOutlivesTheSourceCppWrapper)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     std::unique_ptr<VertexBuffer> buffer;
     {
@@ -262,7 +262,7 @@ TEST(VertexDeclarationProfileTest, RetainedDeclarationOutlivesTheSourceCppWrappe
 
 TEST(VertexDeclarationProfileTest, DeclarationOwnershipRebindsAcrossDevices)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto firstDevice = MakeDevice(GraphicsProfile::HiDef);
     auto secondDevice = MakeDevice(GraphicsProfile::HiDef);
     VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
@@ -287,7 +287,7 @@ TEST(VertexDeclarationProfileTest, DeclarationOwnershipRebindsAcrossDevices)
 
 TEST(VertexDeclarationProfileTest, DeviceDisposalDoesNotDisposeDeclarationAliases)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
     VertexBuffer buffer(device, declaration, 1, BufferUsage::None);
@@ -313,7 +313,7 @@ TEST(VertexDeclarationProfileTest, DeviceDisposalDoesNotDisposeDeclarationAliase
 
 TEST(VertexDeclarationProfileTest, StaticDeclarationsSurviveCompletedCppDeviceScopes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     const VertexDeclaration& declaration = VertexPositionColor::getVertexDeclarationStatic();
 
     {
@@ -330,7 +330,7 @@ TEST(VertexDeclarationProfileTest, StaticDeclarationsSurviveCompletedCppDeviceSc
 
 TEST(VertexDeclarationProfileTest, DrawUserValidatesProfileBeforeReadingVertexData)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::Reach);
     BasicEffect effect(device);
     effect.Apply();
@@ -344,7 +344,7 @@ TEST(VertexDeclarationProfileTest, DrawUserValidatesProfileBeforeReadingVertexDa
 
 TEST(VertexDeclarationProfileTest, DrawUserIndexedValidatesDisposedDeclarationBeforeReadingData)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::HiDef);
     BasicEffect effect(device);
     effect.Apply();
@@ -359,7 +359,7 @@ TEST(VertexDeclarationProfileTest, DrawUserIndexedValidatesDisposedDeclarationBe
 
 TEST(VertexDeclarationProfileTest, CnaExtensionEmptyDeclarationStillSupportsLegacyBufferPath)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     auto device = MakeDevice(GraphicsProfile::Reach);
 
     EXPECT_NO_THROW((void)VertexBuffer(device, 1));

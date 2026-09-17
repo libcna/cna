@@ -789,7 +789,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // target before resetting the backbuffer, and does not restore the target set afterward.
         // Leaving CNA's binding alive makes the resized renderer and public device disagree and
         // keeps Present() rejected even though Reset established a new backbuffer.
-        if (!currentRenderTargets_.empty())
+        if (!currentRenderTargets_.empty() || boundRenderTargetDestroyed_)
             SetRenderTargets({});
 
         PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
@@ -1225,6 +1225,39 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         textures_.RemoveDisposedTexture(texture);
         vertexTextures_.RemoveDisposedTexture(texture);
+    }
+
+    void GraphicsDevice::DetachDestroyedRenderTarget(const Texture* texture) noexcept
+    {
+        bool bound = false;
+        for (const RenderTargetBinding& binding : currentRenderTargets_)
+            bound = bound || binding.getRenderTargetProperty() == texture;
+        if (!bound)
+            return;
+
+        // plans/plan_directx12_parity.md DX12-0023: RenderTarget2D/RenderTargetCube::Dispose refuse a
+        // bound target, but their destructors cannot, so this is only reached by an object destroyed
+        // while bound, and before its backend is released. The renderer is moved to the back buffer
+        // now, while the backend still exists: not every renderer detaches a dying backend itself
+        // (DX-233 taught DirectX11/12 and EasyGL to; Software keeps a raw pointer it would unbind on
+        // the next transition).
+        if (!isDisposed_ && renderer_ != nullptr)
+        {
+            try
+            {
+                renderer_->SetRenderTargets(nullptr, 0);
+            }
+            catch (...)
+            {
+            }
+        }
+        // The public binding must not outlive the object: GetRenderTargets() handed the dead pointer
+        // out, draws dereferenced it, and SetRenderTargets' identity comparison (SOFTWARE-222) treated
+        // the next target built at the same address as already bound. The device nevertheless stays
+        // bound -- Present() keeps refusing, as bound_target_lifetime_test P1 requires -- until the
+        // next SetRenderTargets, which boundRenderTargetDestroyed_ keeps from being skipped.
+        currentRenderTargets_.clear();
+        boundRenderTargetDestroyed_ = true;
     }
 
     void GraphicsDevice::TransferMovedVertexBuffer(
@@ -4927,7 +4960,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 && renderTargets[i].getCubeMapFaceProperty()
                     == currentRenderTargets_[i].getCubeMapFaceProperty();
         }
-        if (bindingsUnchanged)
+        // DX12-0023: after a bound target was destroyed the device is still bound although no binding
+        // remains to compare, so even an empty set is a real transition.
+        if (bindingsUnchanged && !boundRenderTargetDestroyed_)
             return;
 
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
@@ -4963,6 +4998,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // backbuffer or its dimensions until that native restoration actually succeeds.
             currentRenderTargets_.clear();
             renderTargetBound_ = false;
+            boundRenderTargetDestroyed_ = false;
             ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
                                                     presentationParameters_.getBackBufferHeightProperty());
             return;
@@ -5080,6 +5116,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = true;
+        boundRenderTargetDestroyed_ = false;
         IRenderTarget* first = publicTargets[0];
         // Matches FNA: Viewport/ScissorRectangle reset to the FIRST bound target's size.
         ResetViewportAndScissorForRenderTarget(

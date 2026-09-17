@@ -225,8 +225,11 @@ namespace
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_DIRECTX12)
+    // `rtCubeSetData` true since plans/plan_directx12_parity.md DX12-0014: D3D12RenderTargetCubeRenderer
+    // uploads SetData into its sampleable cube instead of inheriting the interface's refusal, and an
+    // uploaded face reads back in the same row order (`rtCubeUploadMirrored` false).
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_LLGL)
     // `msaaCubeTargets` true (LLGL-34): unlike Vulkan's own renderer-wide sampleCount_ piggyback,
     // this renderer reads multiSampleCount at each RenderTargetCube's own construction, so a cube

@@ -1999,7 +1999,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // decoy range 4..6, while applying it twice underflows the vertex buffer.
 TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, DirectX12);
     RequireInstancedRendering();
 
     const GridLayout layout = BackbufferLayout();

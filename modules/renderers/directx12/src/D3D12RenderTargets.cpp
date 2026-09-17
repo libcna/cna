@@ -88,9 +88,12 @@ namespace CNA::Internal::Renderers::DirectX12
         void UploadSubresource(
             DirectX12Renderer* owner, ID3D12Resource* resource,
             UINT subresource, const uint8_t* pixels, int w, int h,
-            DXGI_FORMAT dxgiFormat, int bytesPerTexel)
+            DXGI_FORMAT dxgiFormat, int bytesPerTexel, int dstX = 0, int dstY = 0,
+            int sourceRowPitch = 0)
         {
             const UINT tightRowPitch = static_cast<UINT>(w) * static_cast<UINT>(bytesPerTexel);
+            const std::size_t sourcePitch = sourceRowPitch > 0
+                ? static_cast<std::size_t>(sourceRowPitch) : static_cast<std::size_t>(tightRowPitch);
             const UINT rowPitch = (tightRowPitch + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
                                  & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
             const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
@@ -100,7 +103,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
             for (int row = 0; row < h; ++row)
                 std::memcpy(upload.mapped + static_cast<std::size_t>(row) * rowPitch,
-                            pixels + static_cast<std::size_t>(row) * tightRowPitch,
+                            pixels + static_cast<std::size_t>(row) * sourcePitch,
                             tightRowPitch);
 
             D3D12_TEXTURE_COPY_LOCATION dst{};
@@ -124,7 +127,8 @@ namespace CNA::Internal::Renderers::DirectX12
             auto& tracker = owner->GetResourceStateTrackerEXT();
             const D3D12_RESOURCE_STATES prior = tracker.GetTrackedStateEXT(resource);
             tracker.TransitionTo(cmdList, resource, D3D12_RESOURCE_STATE_COPY_DEST);
-            cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+            cmdList->CopyTextureRegion(&dst, static_cast<UINT>(dstX), static_cast<UINT>(dstY), 0,
+                                       &src, nullptr);
             tracker.TransitionTo(cmdList, resource, prior);
 
         }
@@ -618,6 +622,27 @@ namespace CNA::Internal::Renderers::DirectX12
         return true;
     }
 
+    void D3D12RenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        ID3D12Resource* const target = GetSampleableColorResourceEXT();
+        if (!owner_ || data == nullptr || target == nullptr)
+            return;
+        UploadSubresource(owner_.Get(), target, 0, data, width_, height_, dxgiFormat_,
+                          bytesPerTexel_, 0, 0, stride);
+    }
+
+    void D3D12RenderTargetRenderer::UpdatePixelsLevel(int level, const uint8_t* data,
+                                                      int levelW, int levelH)
+    {
+        ID3D12Resource* const target = GetSampleableColorResourceEXT();
+        if (!owner_ || data == nullptr || target == nullptr || level < 0 || level >= levelCount_)
+            return;
+        if (levelW != std::max(1, width_ >> level) || levelH != std::max(1, height_ >> level))
+            return;
+        UploadSubresource(owner_.Get(), target, static_cast<UINT>(level), data, levelW, levelH,
+                          dxgiFormat_, bytesPerTexel_);
+    }
+
     void D3D12RenderTargetRenderer::GenerateMipsEXT() const
     {
         if (!mipMap_ || levelCount_ <= 1 || !owner_) return;
@@ -786,7 +811,17 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetCubeRenderer::~D3D12RenderTargetCubeRenderer()
     {
-        if (owner_) owner_->NotifyRenderTargetCubeDestroyedEXT(this);
+        if (owner_)
+        {
+            owner_->NotifyRenderTargetCubeDestroyedEXT(this);
+            // plans/plan_directx12_parity.md DX12-0014: the 2D target untracks its resources; the cube
+            // never did, so every destroyed cube left three stale pointer keys in the barrier tracker
+            // for a later allocation at the same address to inherit.
+            auto& tracker = owner_->GetResourceStateTrackerEXT();
+            if (colorResource_) tracker.UntrackResource(colorResource_.Get());
+            if (resolveResource_) tracker.UntrackResource(resolveResource_.Get());
+            if (depthResource_) tracker.UntrackResource(depthResource_.Get());
+        }
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
         for (D3D12_CPU_DESCRIPTOR_HANDLE face : rtv_) heaps_->rtv.Free(face);
@@ -937,6 +972,40 @@ namespace CNA::Internal::Renderers::DirectX12
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);
         return true;
+    }
+
+    bool D3D12RenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
+                                               const void* data, int dataLength)
+    {
+        (void) owner_.Get();
+        if (isMsaa_ || data == nullptr) return false;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * bytesPerTexel_;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes) return false;
+
+        ID3D12Resource* const target = GetSampleableColorResourceEXT();
+        if (target == nullptr) return false;
+        const UINT subresource =
+            static_cast<UINT>(level) + static_cast<UINT>(face) * static_cast<UINT>(levelCount_);
+        UploadSubresource(owner_.Get(), target, subresource, static_cast<const uint8_t*>(data), w, h,
+                          dxgiFormat_, bytesPerTexel_, x, y);
+        return true;
+    }
+
+    bool D3D12RenderTargetCubeRenderer::SetDataBytesEXT(int face, int level, int x, int y, int w,
+                                                       int h, const void* data, int dataLength)
+    {
+        return SetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool D3D12RenderTargetCubeRenderer::GetDataBytesEXT(int face, int level, int x, int y, int w,
+                                                       int h, void* data, int dataLength) const
+    {
+        return GetData(face, level, x, y, w, h, data, dataLength);
     }
 
     void D3D12RenderTargetCubeRenderer::UnbindAsRenderTarget()

@@ -25,8 +25,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
@@ -37,6 +39,8 @@
 // windows.h's macros collide with this project's own enumerator names -- put it first and
 // CNA/LogCategory.hpp stops parsing instead. Same hazard mingw-cnaext-spike/ exists to catch.
 #include <d3d12sdklayers.h>
+// DX12-0004: IDXGIFactory6::EnumAdapterByGpuPreference orders the hardware candidates.
+#include <dxgi1_6.h>
 
 // plans/plan_modern.md MOD-1605: two D3D12 spec constants that Ubuntu's MinGW-w64 13.2 <d3d12.h> does not
 // define, though the Windows SDK does. Both are fixed by the D3D12 specification rather than by any
@@ -63,6 +67,62 @@ namespace CNA::Internal::Renderers::DirectX12
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        std::mutex& ProcessDebugMessageMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        D3D12DebugMessageTotalsEXT& ProcessDebugMessageTotals()
+        {
+            static D3D12DebugMessageTotalsEXT totals;
+            return totals;
+        }
+
+        std::deque<D3D12DebugMessageEXT>& ProcessRecentDebugMessages()
+        {
+            static std::deque<D3D12DebugMessageEXT> messages;
+            return messages;
+        }
+
+        // Every live renderer's info queue, so a diagnostic handler can read the message that made
+        // the debug layer terminate the process (DX12-0003: ID 921 raises 0x87D) without a renderer.
+        std::mutex& LiveDebugQueueMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::vector<ComPtr<IUnknown>>& LiveDebugQueues()
+        {
+            static std::vector<ComPtr<IUnknown>> queues;
+            return queues;
+        }
+
+        void RegisterLiveDebugQueue(const ComPtr<IUnknown>& queue)
+        {
+            std::lock_guard<std::mutex> lock(LiveDebugQueueMutex());
+            LiveDebugQueues().push_back(queue);
+        }
+
+        void UnregisterLiveDebugQueue(const ComPtr<IUnknown>& queue)
+        {
+            if (!queue) return;
+            std::lock_guard<std::mutex> lock(LiveDebugQueueMutex());
+            auto& queues = LiveDebugQueues();
+            std::erase_if(queues, [&](const ComPtr<IUnknown>& item) { return item.Get() == queue.Get(); });
+        }
+    
+
+        std::string NarrowAdapterDescription(const wchar_t* text)
+        {
+            const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+            if (bytes <= 1) return {};
+            std::string out(static_cast<std::size_t>(bytes - 1), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text, -1, out.data(), bytes, nullptr, nullptr);
+            return out;
         }
 
         int ClampBackBufferMultiSampleCount(
@@ -147,11 +207,19 @@ namespace CNA::Internal::Renderers::DirectX12
                     throw System::NotSupportedException(
                         "DirectX12 multi-stream input requires every per-vertex buffer to carry "
                         "a VertexDeclaration.");
-                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
                 {
-                    auto combined = source;
+                    auto combined = elements[elementIndex];
                     combined.setOffsetProperty(
-                        source.getOffsetProperty() + stream.combinedByteBase);
+                        combined.getOffsetProperty() + stream.combinedByteBase);
+                    // plans/plan_directx12_parity.md DX12-0012 (DirectX11's WINCLOSE-0033): XNA and
+                    // FNA3D move a (usage, index) pair an earlier bound stream already claimed to
+                    // that usage's first free index, and GraphicsDevice records the result per
+                    // element. The declaration's own index handed CreateGraphicsPipelineState two
+                    // POSITION0 or COLOR0 elements, which it refuses.
+                    if (static_cast<int>(elementIndex) < stream.effectiveUsageIndexCount)
+                        combined.setUsageIndexProperty(stream.effectiveUsageIndices[elementIndex]);
                     combinedElements.push_back(combined);
                 }
             }
@@ -266,6 +334,7 @@ namespace CNA::Internal::Renderers::DirectX12
         : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , requestedMultiSampleCount_(args.multiSampleCount)
+        , backBufferDepthFormat_(args.depthStencilFormat)
         , contextRecoveryEnabled_(args.contextRecoveryEnabled)
         , deviceEventCallback_(args.deviceEventCallback)
     {
@@ -298,6 +367,7 @@ namespace CNA::Internal::Renderers::DirectX12
             currentSamplerLodBias_[i] = 0.0f;
         }
 
+        configuration_ = CaptureD3D12ConfigurationFromEnvironment();
         CreateDeviceResources();
         CreateCommandQueueResources();
         CreateDescriptorHeapResources();
@@ -324,6 +394,8 @@ namespace CNA::Internal::Renderers::DirectX12
         CNA::Logger::Info(
             "D3D12 device resources created; feature level " + FormatHr(featureLevel_) +
                 ", debug layer " + (debugLayerEnabled_ ? "enabled" : "disabled") +
+                ", GPU-based validation " + (gpuBasedValidationEnabled_ ? "enabled" : "disabled") +
+                ", DRED " + (dredEnabled_ ? "enabled" : "disabled") +
                 ", tearing " + (allowTearingSupported_ ? "supported" : "unsupported") +
                 ", swap chain " + (swapChainAvailable_ ? "available" : "unavailable"),
             CNA::LogCategory::RENDER);
@@ -352,6 +424,9 @@ namespace CNA::Internal::Renderers::DirectX12
             CloseHandle(fenceEvent_);
             fenceEvent_ = nullptr;
         }
+        // DX12-0004: whatever teardown itself made the layer say is part of this device's record.
+        DrainDebugMessagesEXT();
+        UnregisterLiveDebugQueue(infoQueue_);
     }
 
     void DirectX12Renderer::SetContextRecoveryEnabled(bool enabled)
@@ -401,10 +476,14 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::CreateDeviceResources()
     {
         UINT factoryFlags = 0;
+        debugLayerEnabled_ = false;
+        gpuBasedValidationEnabled_ = false;
+        dredEnabled_ = false;
 
-        // design decision 12's own "debug layer is best-effort, never a hard requirement" applies
-        // identically here -- D3D12's debug interface is a separate opt-in call
-        // (D3D12GetDebugInterface), unlike D3D11's D3D11_CREATE_DEVICE_DEBUG flag.
+        // plans/plan_directx12_parity.md DX12-0004: the debug layer is opt-in in every build type.
+        // It used to be enabled unconditionally whenever D3D12GetDebugInterface succeeded -- that
+        // is, on every machine with Graphics Tools installed, Release games included.
+        if (configuration_.debugLayer)
         {
             ComPtr<ID3D12Debug> debugController;
             if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(debugController.ReleaseAndGetAddressOf()))))
@@ -412,62 +491,86 @@ namespace CNA::Internal::Renderers::DirectX12
                 debugController->EnableDebugLayer();
                 debugLayerEnabled_ = true;
                 factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+                if (configuration_.gpuBasedValidation)
+                {
+                    ComPtr<ID3D12Debug1> debugController1;
+                    if (SUCCEEDED(debugController.As(&debugController1)))
+                    {
+                        debugController1->SetEnableGPUBasedValidation(TRUE);
+                        gpuBasedValidationEnabled_ = true;
+                    }
+                    else
+                    {
+                        CNA::Logger::Warn(
+                            "D3D12: CNA_D3D12_GPU_VALIDATION=1 was requested but ID3D12Debug1 is "
+                            "unavailable; the debug layer runs without GPU-based validation.",
+                            CNA::LogCategory::RENDER);
+                    }
+                }
             }
             else
             {
-                CNA::Logger::Warn("D3D12 debug layer unavailable; continuing without it.",
+                CNA::Logger::Warn(
+                    "D3D12: CNA_D3D12_DEBUG_LAYER=1 was requested but the debug layer is not "
+                    "installed (Windows optional feature Tools.Graphics.DirectX); continuing without it.",
+                    CNA::LogCategory::RENDER);
+            }
+        }
+
+#if defined(_MSC_VER)
+        // DX12-0004: DRED must be configured before the device exists; it records what the GPU was
+        // doing when a device is removed, which a removed device can no longer be asked.
+        if (configuration_.dred)
+        {
+            ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dredSettings;
+            if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(dredSettings.GetAddressOf()))))
+            {
+                dredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                dredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                dredEnabled_ = true;
+            }
+            else
+            {
+                CNA::Logger::Warn("D3D12: CNA_D3D12_DRED=1 was requested but DRED is unavailable.",
                                   CNA::LogCategory::RENDER);
             }
         }
+#else
+        if (configuration_.dred)
+            CNA::Logger::Warn("D3D12: CNA_D3D12_DRED=1 is not supported by this toolchain's headers.",
+                              CNA::LogCategory::RENDER);
+#endif
 
         HRESULT hr = CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(factory_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("CreateDXGIFactory2 failed, hr=" + FormatHr(hr));
 
-        // DX-102: unlike D3D11CreateDevice's own feature-level fallback ARRAY, D3D12CreateDevice
-        // only accepts a single MinimumFeatureLevel -- so the fallback here is a real retry loop,
-        // not one call with an array.
-        static const D3D_FEATURE_LEVEL kFeatureLevels[] = {
-            D3D_FEATURE_LEVEL_12_1,
-            D3D_FEATURE_LEVEL_12_0,
-            D3D_FEATURE_LEVEL_11_1,
-            D3D_FEATURE_LEVEL_11_0,
-        };
+        CreateDeviceOnConfiguredAdapter();
 
-        // Pick the first hardware (non-software) adapter the factory enumerates -- IDXGIFactory6's
-        // EnumAdapterByGpuPreference would be a nicer "prefer high performance" query, but a plain
-        // EnumAdapters1 walk is sufficient for a first implementation (matches this task's own
-        // "simple strategy is fine, document it" allowance, DX-103's row).
-        ComPtr<IDXGIAdapter1> chosenAdapter;
-        for (UINT i = 0; ; ++i)
+        if (debugLayerEnabled_)
         {
-            ComPtr<IDXGIAdapter1> adapter;
-            if (factory_->EnumAdapters1(i, adapter.ReleaseAndGetAddressOf()) == DXGI_ERROR_NOT_FOUND)
-                break;
-
-            DXGI_ADAPTER_DESC1 desc{};
-            adapter->GetDesc1(&desc);
-            if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-                continue; // skip the WARP/software adapter for the default path
-
-            chosenAdapter = adapter;
-            break;
-        }
-
-        bool created = false;
-        for (D3D_FEATURE_LEVEL level : kFeatureLevels)
-        {
-            hr = D3D12CreateDevice(chosenAdapter.Get(), level, IID_PPV_ARGS(device_.ReleaseAndGetAddressOf()));
-            if (SUCCEEDED(hr))
+            ComPtr<ID3D12InfoQueue> infoQueue;
+            if (SUCCEEDED(device_.As(&infoQueue)))
             {
-                featureLevel_ = level;
-                created = true;
-                break;
+                // A clear whose colour differs from the resource's optimized clear value is a
+                // documented performance hint. Swap-chain buffers have no clear value and XNA clears
+                // to whatever colour the game names, so every frame would report it. Informational
+                // messages are dropped for the same volume reason; they carry no verdict.
+                D3D12_MESSAGE_SEVERITY deniedSeverities[] = {
+                    D3D12_MESSAGE_SEVERITY_INFO, D3D12_MESSAGE_SEVERITY_MESSAGE};
+                D3D12_MESSAGE_ID deniedIds[] = {
+                    D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+                    D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE};
+                D3D12_INFO_QUEUE_FILTER filter{};
+                filter.DenyList.NumSeverities = static_cast<UINT>(std::size(deniedSeverities));
+                filter.DenyList.pSeverityList = deniedSeverities;
+                filter.DenyList.NumIDs = static_cast<UINT>(std::size(deniedIds));
+                filter.DenyList.pIDList = deniedIds;
+                infoQueue->PushStorageFilter(&filter);
+                infoQueue_ = infoQueue;
+                RegisterLiveDebugQueue(infoQueue_);
             }
         }
-
-        if (!created)
-            throw std::runtime_error("D3D12CreateDevice failed for every feature level in the fallback list, last hr=" + FormatHr(hr));
 
         // DX-102: tearing-capability query, same DXGI_FEATURE_PRESENT_ALLOW_TEARING check D3D11's
         // own DX-22 uses, just off the factory directly (D3D12 has no IDXGIDevice indirection).
@@ -481,6 +584,308 @@ namespace CNA::Internal::Renderers::DirectX12
                 allowTearingSupported_ = allowTearing != FALSE;
             }
         }
+    }
+
+    void DirectX12Renderer::CreateDeviceOnConfiguredAdapter()
+    {
+        // DX-102: D3D12CreateDevice takes a single minimum feature level, so the fallback is a retry
+        // loop rather than D3D11's array.
+        static const D3D_FEATURE_LEVEL kFeatureLevels[] = {
+            D3D_FEATURE_LEVEL_12_1,
+            D3D_FEATURE_LEVEL_12_0,
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+        };
+
+        const auto tryCreate = [this](IDXGIAdapter1* adapter, HRESULT& lastHr)
+        {
+            for (D3D_FEATURE_LEVEL level : kFeatureLevels)
+            {
+                lastHr = D3D12CreateDevice(adapter, level,
+                                           IID_PPV_ARGS(device_.ReleaseAndGetAddressOf()));
+                if (SUCCEEDED(lastHr))
+                {
+                    featureLevel_ = level;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const auto describe = [this](IDXGIAdapter1* adapter)
+        {
+            DXGI_ADAPTER_DESC1 desc{};
+            adapter->GetDesc1(&desc);
+            D3D12AdapterInfoEXT info;
+            info.description = NarrowAdapterDescription(desc.Description);
+            info.vendorId = desc.VendorId;
+            info.deviceId = desc.DeviceId;
+            info.subSysId = desc.SubSysId;
+            info.revision = desc.Revision;
+            info.dedicatedVideoMemory = desc.DedicatedVideoMemory;
+            info.dedicatedSystemMemory = desc.DedicatedSystemMemory;
+            info.sharedSystemMemory = desc.SharedSystemMemory;
+            info.software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+            info.selectedBy = configuration_.adapter;
+            return info;
+        };
+
+        if (configuration_.adapter == D3D12AdapterPreference::Warp)
+        {
+            // DX12-0004: WARP by API, never by matching an adapter name.
+            ComPtr<IDXGIAdapter1> warp;
+            HRESULT hr = factory_->EnumWarpAdapter(IID_PPV_ARGS(warp.GetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX12Renderer: CNA_D3D12_ADAPTER=warp was requested but "
+                    "IDXGIFactory4::EnumWarpAdapter failed, hr=" + FormatHr(hr));
+            if (!tryCreate(warp.Get(), hr))
+                throw std::runtime_error(
+                    "DirectX12Renderer: CNA_D3D12_ADAPTER=warp was requested but D3D12CreateDevice "
+                    "on the WARP adapter failed at every feature level, last hr=" + FormatHr(hr));
+            adapterInfo_ = describe(warp.Get());
+        }
+        else
+        {
+            // DX12-0004: every hardware adapter, in the order DXGI prefers for performance when it can
+            // say so, until one creates a device. D3D12CreateDevice is never given a null adapter:
+            // that means "the default adapter", which on a machine whose only adapter is the
+            // Microsoft Basic Render Driver is a software rasteriser -- exactly the silent fallback
+            // the production path must not have.
+            ComPtr<IDXGIFactory6> factory6;
+            const bool byPreference = SUCCEEDED(factory_.As(&factory6));
+            std::string attempts;
+            bool created = false;
+            for (UINT i = 0; !created; ++i)
+            {
+                ComPtr<IDXGIAdapter1> adapter;
+                const HRESULT enumHr = byPreference
+                    ? factory6->EnumAdapterByGpuPreference(
+                          i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(adapter.GetAddressOf()))
+                    : factory_->EnumAdapters1(i, adapter.GetAddressOf());
+                if (enumHr == DXGI_ERROR_NOT_FOUND)
+                    break;
+                if (FAILED(enumHr))
+                    throw std::runtime_error(
+                        "DirectX12Renderer: DXGI adapter enumeration failed, hr=" + FormatHr(enumHr));
+
+                D3D12AdapterInfoEXT candidate = describe(adapter.Get());
+                if (!attempts.empty()) attempts += "; ";
+                attempts += "'" + candidate.description + "'";
+                if (candidate.software)
+                {
+                    attempts += " skipped (software adapter)";
+                    continue;
+                }
+                HRESULT hr = S_OK;
+                if (tryCreate(adapter.Get(), hr))
+                {
+                    adapterInfo_ = std::move(candidate);
+                    created = true;
+                }
+                else
+                {
+                    attempts += " refused D3D12, hr=" + FormatHr(hr);
+                }
+            }
+            if (!created)
+                throw std::runtime_error(
+                    "DirectX12Renderer: no hardware DXGI adapter could create a Direct3D 12 device (" +
+                    (attempts.empty() ? std::string("no adapters enumerated") : attempts) +
+                    "). The WARP software rasteriser is never used as a fallback; set "
+                    "CNA_D3D12_ADAPTER=warp to select it explicitly for validation.");
+        }
+        adapterInfo_.featureLevel = featureLevel_;
+
+        char ids[96];
+        std::snprintf(ids, sizeof(ids), "vendor 0x%04X, device 0x%04X, subsys 0x%08X, revision %u",
+                      adapterInfo_.vendorId, adapterInfo_.deviceId, adapterInfo_.subSysId,
+                      adapterInfo_.revision);
+        CNA::Logger::Info(
+            "D3D12 adapter: '" + adapterInfo_.description + "' (" + ids + ", " +
+                std::to_string(adapterInfo_.dedicatedVideoMemory / (1024u * 1024u)) +
+                " MB dedicated video, " +
+                std::to_string(adapterInfo_.sharedSystemMemory / (1024u * 1024u)) +
+                " MB shared), " + (adapterInfo_.software ? "software" : "hardware") +
+                ", selected by CNA_D3D12_ADAPTER=" +
+                D3D12AdapterPreferenceName(configuration_.adapter) +
+                (configuration_.adapter == D3D12AdapterPreference::Warp
+                     ? " -- the WARP software rasteriser, validation evidence only, not GPU evidence"
+                     : ""),
+            CNA::LogCategory::RENDER);
+    }
+
+    std::vector<D3D12DebugMessageEXT> DirectX12Renderer::PeekLiveDebugQueuesEXT() noexcept
+    {
+        std::vector<D3D12DebugMessageEXT> messages;
+        try
+        {
+            // try_lock: this runs from an exception handler, possibly on a thread already inside a
+            // registration. A missed read is better than a deadlock in a dying process.
+            std::unique_lock<std::mutex> lock(LiveDebugQueueMutex(), std::try_to_lock);
+            if (!lock.owns_lock())
+                return messages;
+            for (const auto& unknown : LiveDebugQueues())
+            {
+                ComPtr<ID3D12InfoQueue> queue;
+                if (FAILED(unknown.As(&queue)))
+                    continue;
+                const UINT64 count = queue->GetNumStoredMessagesAllowedByRetrievalFilter();
+                for (UINT64 i = 0; i < count; ++i)
+                {
+                    SIZE_T length = 0;
+                    if (FAILED(queue->GetMessage(i, nullptr, &length)) || length == 0)
+                        continue;
+                    std::vector<char> storage(length);
+                    auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+                    if (FAILED(queue->GetMessage(i, message, &length)))
+                        continue;
+                    D3D12DebugMessageEXT entry;
+                    entry.severity = static_cast<int>(message->Severity);
+                    entry.id = static_cast<int>(message->ID);
+                    if (message->pDescription != nullptr)
+                        entry.description.assign(message->pDescription,
+                                                 std::strlen(message->pDescription));
+                    messages.push_back(std::move(entry));
+                }
+            }
+        }
+        catch (...)
+        {
+        }
+        return messages;
+    }
+
+    std::vector<D3D12DebugMessageEXT> DirectX12Renderer::DrainDebugMessagesEXT()
+    {
+        std::vector<D3D12DebugMessageEXT> drained;
+        if (!infoQueue_)
+            return drained;
+        ComPtr<ID3D12InfoQueue> infoQueue;
+        if (FAILED(infoQueue_.As(&infoQueue)))
+            return drained;
+
+        const UINT64 count = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+        for (UINT64 i = 0; i < count; ++i)
+        {
+            SIZE_T length = 0;
+            if (FAILED(infoQueue->GetMessage(i, nullptr, &length)) || length == 0)
+                continue;
+            std::vector<char> storage(length);
+            auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+            if (FAILED(infoQueue->GetMessage(i, message, &length)))
+                continue;
+            // The storage filter denies INFO and MESSAGE, but only from the moment it is pushed: the
+            // debug layer stores its startup notices during device creation, before that, and with
+            // GPU-based validation on it always stores one (ID 1016, severity MESSAGE). They carry no
+            // verdict; counting them as warnings failed every GBV run (plans/plan_directx12_parity.md
+            // DX12-0025).
+            if (message->Severity == D3D12_MESSAGE_SEVERITY_INFO ||
+                message->Severity == D3D12_MESSAGE_SEVERITY_MESSAGE)
+                continue;
+            D3D12DebugMessageEXT entry;
+            entry.severity = static_cast<int>(message->Severity);
+            entry.id = static_cast<int>(message->ID);
+            if (message->pDescription != nullptr && message->DescriptionByteLength > 0)
+                entry.description.assign(message->pDescription,
+                                         std::strlen(message->pDescription));
+            drained.push_back(std::move(entry));
+        }
+        infoQueue->ClearStoredMessages();
+
+        if (drained.empty())
+            return drained;
+
+        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
+        auto& totals = ProcessDebugMessageTotals();
+        auto& recent = ProcessRecentDebugMessages();
+        constexpr std::size_t kRetainedMessages = 256;
+        for (const auto& entry : drained)
+        {
+            const std::string text = "D3D12 debug layer [severity " + std::to_string(entry.severity) +
+                                     ", id " + std::to_string(entry.id) + "]: " + entry.description;
+            switch (entry.severity)
+            {
+            case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+                ++totals.corruption;
+                CNA::Logger::Error(text, CNA::LogCategory::RENDER);
+                break;
+            case D3D12_MESSAGE_SEVERITY_ERROR:
+                ++totals.error;
+                CNA::Logger::Error(text, CNA::LogCategory::RENDER);
+                break;
+            default:
+                ++totals.warning;
+                CNA::Logger::Warn(text, CNA::LogCategory::RENDER);
+                break;
+            }
+            recent.push_back(entry);
+            if (recent.size() > kRetainedMessages)
+                recent.pop_front();
+        }
+        return drained;
+    }
+
+    D3D12DebugMessageTotalsEXT DirectX12Renderer::GetProcessDebugMessageTotalsEXT() noexcept
+    {
+        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
+        return ProcessDebugMessageTotals();
+    }
+
+    std::vector<D3D12DebugMessageEXT> DirectX12Renderer::GetRecentProcessDebugMessagesEXT()
+    {
+        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
+        const auto& recent = ProcessRecentDebugMessages();
+        return {recent.begin(), recent.end()};
+    }
+
+    void DirectX12Renderer::ReportDeviceRemovedExtendedDataEXT()
+    {
+#if defined(_MSC_VER)
+        if (!dredEnabled_ || !device_)
+            return;
+        ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+        if (FAILED(device_.As(&dred)))
+            return;
+
+        D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
+        if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs)))
+        {
+            int nodeIndex = 0;
+            for (const D3D12_AUTO_BREADCRUMB_NODE* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+                 node != nullptr && nodeIndex < 64; node = node->pNext, ++nodeIndex)
+            {
+                const UINT completed = node->pLastBreadcrumbValue ? *node->pLastBreadcrumbValue : 0;
+                std::string line = "D3D12 DRED breadcrumb node " + std::to_string(nodeIndex) +
+                                   ": " + std::to_string(completed) + " of " +
+                                   std::to_string(node->BreadcrumbCount) + " operations completed";
+                // The first operation that did not complete is the one the removal interrupted.
+                if (node->pCommandHistory != nullptr && completed < node->BreadcrumbCount)
+                    line += ", first incomplete op " +
+                            std::to_string(static_cast<int>(node->pCommandHistory[completed]));
+                CNA::Logger::Error(line, CNA::LogCategory::RENDER);
+            }
+        }
+
+        D3D12_DRED_PAGE_FAULT_OUTPUT pageFault{};
+        if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&pageFault)) && pageFault.PageFaultVA != 0)
+        {
+            char va[32];
+            std::snprintf(va, sizeof(va), "0x%016llX",
+                          static_cast<unsigned long long>(pageFault.PageFaultVA));
+            std::string line = std::string("D3D12 DRED page fault at ") + va;
+            int allocations = 0;
+            for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadExistingAllocationNode;
+                 node != nullptr && allocations < 16; node = node->pNext, ++allocations)
+                line += "; existing allocation type " +
+                        std::to_string(static_cast<int>(node->AllocationType));
+            for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadRecentFreedAllocationNode;
+                 node != nullptr && allocations < 32; node = node->pNext, ++allocations)
+                line += "; recently freed allocation type " +
+                        std::to_string(static_cast<int>(node->AllocationType));
+            CNA::Logger::Error(line, CNA::LogCategory::RENDER);
+        }
+#endif
     }
 
     void DirectX12Renderer::CreateCommandQueueResources()
@@ -696,30 +1101,39 @@ namespace CNA::Internal::Renderers::DirectX12
                     FormatHr(colorHr));
         }
 
-        D3D12_RESOURCE_DESC depthDesc{};
-        depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        depthDesc.Width = static_cast<UINT64>(width_);
-        depthDesc.Height = static_cast<UINT>(height_);
-        depthDesc.DepthOrArraySize = 1;
-        depthDesc.MipLevels = 1;
-        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // matches D3D11's own DX-24 default (DX-11-fmt)
-        depthDesc.SampleDesc.Count = newSampleCount > 0
-            ? static_cast<UINT>(newSampleCount)
-            : 1u;
-        depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-        D3D12_CLEAR_VALUE depthClear{};
-        depthClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depthClear.DepthStencil.Depth = 1.0f;
-        depthClear.DepthStencil.Stencil = 0;
-
+        // plans/plan_directx12_parity.md DX12-0019 (DirectX11's WINCLOSE-0012): the depth resource follows
+        // PresentationParameters.DepthStencilFormat, as render targets already did. It used to be D24S8
+        // whatever was asked for, so DepthFormat::None still depth-tested and Depth24 carried a usable
+        // stencil. None allocates nothing; DXGI has no 24-bit depth-only format, so Depth24 shares
+        // D24S8 storage and FillPsoStateFromCurrentEXT keeps its stencil out of reach.
+        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(backBufferDepthFormat_);
         ComPtr<ID3D12Resource> newDepthResource;
-        HRESULT hr = device_->CreateCommittedResource(
-            &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
-            D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
-            IID_PPV_ARGS(newDepthResource.GetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
+        if (depthDxgiFormat != DXGI_FORMAT_UNKNOWN)
+        {
+            D3D12_RESOURCE_DESC depthDesc{};
+            depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            depthDesc.Width = static_cast<UINT64>(width_);
+            depthDesc.Height = static_cast<UINT>(height_);
+            depthDesc.DepthOrArraySize = 1;
+            depthDesc.MipLevels = 1;
+            depthDesc.Format = depthDxgiFormat;
+            depthDesc.SampleDesc.Count = newSampleCount > 0
+                ? static_cast<UINT>(newSampleCount)
+                : 1u;
+            depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+            D3D12_CLEAR_VALUE depthClear{};
+            depthClear.Format = depthDxgiFormat;
+            depthClear.DepthStencil.Depth = 1.0f;
+            depthClear.DepthStencil.Stencil = 0;
+
+            const HRESULT hr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
+                IID_PPV_ARGS(newDepthResource.GetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("DirectX12Renderer: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
+        }
 
         D3D12_CPU_DESCRIPTOR_HANDLE newMsaaRtv{};
         if (newMsaaResource)
@@ -727,28 +1141,36 @@ namespace CNA::Internal::Renderers::DirectX12
             newMsaaRtv = AllocateRtvDescriptorEXT();
             device_->CreateRenderTargetView(newMsaaResource.Get(), nullptr, newMsaaRtv);
         }
-        const D3D12_CPU_DESCRIPTOR_HANDLE newDepthView = AllocateDsvDescriptorEXT();
-        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        dsvDesc.ViewDimension = newSampleCount > 0
-            ? D3D12_DSV_DIMENSION_TEXTURE2DMS
-            : D3D12_DSV_DIMENSION_TEXTURE2D;
-        device_->CreateDepthStencilView(newDepthResource.Get(), &dsvDesc, newDepthView);
+        D3D12_CPU_DESCRIPTOR_HANDLE newDepthView{};
+        if (newDepthResource)
+        {
+            newDepthView = AllocateDsvDescriptorEXT();
+            D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+            dsvDesc.Format = depthDxgiFormat;
+            dsvDesc.ViewDimension = newSampleCount > 0
+                ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+                : D3D12_DSV_DIMENSION_TEXTURE2D;
+            device_->CreateDepthStencilView(newDepthResource.Get(), &dsvDesc, newDepthView);
+        }
 
         UnbindOffscreenColorTargetEXT();
         FreeRtvDescriptorEXT(backBufferMsaaRtv_);
         FreeDsvDescriptorEXT(depthStencilViewEXT_);
         backBufferMsaaResource_ = std::move(newMsaaResource);
         backBufferMsaaRtv_ = newMsaaRtv;
+        resourceStates_.UntrackResource(depthStencilResource_.Get());
         depthStencilResource_ = std::move(newDepthResource);
         depthStencilViewEXT_ = newDepthView;
+        depthStencilDxgiFormat_ = depthDxgiFormat;
+        appliedBackBufferDepthFormat_ = backBufferDepthFormat_;
         requestedMultiSampleCount_ = requestedMultiSampleCount;
         appliedMultiSampleCount_ = newSampleCount;
 
         if (backBufferMsaaResource_)
             resourceStates_.TrackResource(
                 backBufferMsaaResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
-        resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        if (depthStencilResource_)
+            resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
         RestoreBackBufferRenderTargetEXT();
     }
 
@@ -823,7 +1245,8 @@ namespace CNA::Internal::Renderers::DirectX12
         CNA::Logger::Info(
             "D3D12: no swap chain, so this device uses an implicit off-screen back buffer (" +
                 std::to_string(width_) + "x" + std::to_string(height_) +
-                ", R8G8B8A8_UNORM + D24_UNORM_S8_UINT); Present() is a no-op on it "
+                ", R8G8B8A8_UNORM, DepthFormat ordinal " + std::to_string(appliedBackBufferDepthFormat_) +
+                "); Present() is a no-op on it "
                 "(plans/plan_dx.md DX-241)",
             CNA::LogCategory::RENDER);
     }
@@ -1310,6 +1733,10 @@ namespace CNA::Internal::Renderers::DirectX12
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D12 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            // DX12-0004: the layer's own account and DRED's breadcrumbs are the only record of what
+            // the GPU was doing; both are gone once the device is recreated.
+            DrainDebugMessagesEXT();
+            ReportDeviceRemovedExtendedDataEXT();
             if (!deviceLost_)
             {
                 deviceLost_ = true;
@@ -1321,6 +1748,16 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void DirectX12Renderer::RecreateDeviceEXT()
     {
+        // plans/plan_directx12_parity.md DX12-0017: the renderer's own lazily created fallback textures
+        // are ordinary recoverable resources -- CreateTexture registers them. They used to be destroyed
+        // further down, after the registry below had been copied, so their destructors unregistered
+        // them from the live registry but not from the copy, and the recreate loop then called into
+        // freed memory: every recovery after a PBR draw (which creates them) crashed. They are
+        // recreated on first use, so they are dropped before anything is copied.
+        defaultWhiteTexture_.reset();
+        defaultFlatNormalTexture_.reset();
+        defaultOpaqueBlackTexture_.reset();
+        defaultOpaqueBlackCube_.reset();
         const auto resources = recoverableResources_;
         // Best-effort drain of anything in flight before tearing down -- mirrors the destructor's
         // own drain (it's not safe to release a fence/allocator/command list the GPU may still be
@@ -1368,6 +1805,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // soon as the last such resource is gone.
         heaps_.reset();
         commandQueue_.Reset();
+        DrainDebugMessagesEXT();
+        UnregisterLiveDebugQueue(infoQueue_);
+        infoQueue_.Reset();
         device_.Reset();
         factory_.Reset();
 
@@ -1382,8 +1822,6 @@ namespace CNA::Internal::Renderers::DirectX12
         // survive recreation unchanged -- a device-removed event doesn't change what SamplerState
         // the game itself last set.
         samplerCache_ = D3D12SamplerCache();
-        defaultWhiteTexture_.reset();
-        defaultFlatNormalTexture_.reset();
         // Any bound off-screen target has already released its old native handles through the
         // recovery registry. Drop the binding now; the same public target object is reconstructed
         // below and can be rebound by the caller after DeviceReset.
@@ -1396,7 +1834,6 @@ namespace CNA::Internal::Renderers::DirectX12
         activeFrameIndex_ = -1;
         activeFrameFenceValue_ = 0;
         headlessFrameIndex_ = 0;
-        debugLayerEnabled_ = false;
         allowTearingSupported_ = false;
 
         // Every old native object was released above. Clear stale pointer identities before the
@@ -1421,7 +1858,11 @@ namespace CNA::Internal::Renderers::DirectX12
         std::vector<std::string> failures;
         for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
         {
-            if (resource == nullptr)
+            // A resource can be destroyed while its siblings are being recreated (an owner releasing a
+            // dependant, say); a pointer that has left the live registry is not called.
+            if (resource == nullptr ||
+                std::find(recoverableResources_.begin(), recoverableResources_.end(), resource) ==
+                    recoverableResources_.end())
                 continue;
             try
             {
@@ -1612,7 +2053,7 @@ namespace CNA::Internal::Renderers::DirectX12
         if (drawResource)
             BindOffscreenColorTargetEXT(drawResource, GetBackBufferDrawRtvEXT(),
                                         DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                        depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
+                                        depthStencilViewEXT_, depthStencilDxgiFormat_,
                                         depthStencilResource_.Get());
     }
 
@@ -1699,6 +2140,32 @@ namespace CNA::Internal::Renderers::DirectX12
             defaultWhiteTexture_ = CreateTexture(img);
         }
         return defaultWhiteTexture_.get();
+    }
+
+    ITextureRenderer* DirectX12Renderer::GetOrCreateDefaultOpaqueBlackTextureEXT()
+    {
+        if (!defaultOpaqueBlackTexture_)
+        {
+            ImageData img;
+            img.width = 1;
+            img.height = 1;
+            img.mipLevels = 1;
+            img.pixels = {0, 0, 0, 255};
+            defaultOpaqueBlackTexture_ = CreateTexture(img);
+        }
+        return defaultOpaqueBlackTexture_.get();
+    }
+
+    ITextureCubeRenderer* DirectX12Renderer::GetOrCreateDefaultOpaqueBlackCubeEXT()
+    {
+        if (!defaultOpaqueBlackCube_)
+        {
+            defaultOpaqueBlackCube_ = CreateTextureCube(1, false, 0);
+            const std::uint8_t opaqueBlack[4] = {0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+                (void)defaultOpaqueBlackCube_->SetData(face, 0, 0, 0, 1, 1, opaqueBlack, 4);
+        }
+        return defaultOpaqueBlackCube_.get();
     }
 
     ITextureRenderer* DirectX12Renderer::GetOrCreateDefaultFlatNormalTextureEXT()
@@ -1941,6 +2408,7 @@ namespace CNA::Internal::Renderers::DirectX12
                     ResolveBackBufferMsaaEXT();
                 SubmitFrameCommandsEXT();
                 headlessFrameIndex_ = (headlessFrameIndex_ + 1) % kFramesInFlight;
+                if (infoQueue_) DrainDebugMessagesEXT();
                 return;
             }
             NotYetImplemented("Present (no swap chain and no implicit off-screen back buffer -- "
@@ -1981,10 +2449,22 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // Re-bind the default draw surface for the next frame. With MSAA this remains the shared
         // multisampled color resource; otherwise it is the newly-current flip-model back buffer.
+        // plans/plan_directx12_parity.md DX12-0020: the game did not change its render target, so its
+        // viewport stays. BindOffscreenColorTargetEXT resets the viewport to the full target -- right
+        // for a public SetRenderTarget, which GraphicsDevice follows with its own SetViewport, and wrong
+        // here: GraphicsDevice re-pushes a viewport after Present only when the window size changed.
+        // With a letterboxed back buffer the reset put every later frame's draws in the full physical
+        // target instead of the presentation rectangle.
+        const bool viewportWasSet = viewportSet_;
+        const int keptX = viewportX_, keptY = viewportY_, keptW = viewportW_, keptH = viewportH_;
+        const float keptMinDepth = viewportMinDepth_, keptMaxDepth = viewportMaxDepth_;
         BindOffscreenColorTargetEXT(GetBackBufferDrawResourceEXT(), GetBackBufferDrawRtvEXT(),
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
+                                    depthStencilViewEXT_, depthStencilDxgiFormat_,
                                     depthStencilResource_.Get());
+        if (viewportWasSet)
+            SetViewport(keptX, keptY, keptW, keptH, keptMinDepth, keptMaxDepth);
+        if (infoQueue_) DrainDebugMessagesEXT();
     }
 
     ID3D12Resource* DirectX12Renderer::GetCurrentBackBufferResourceEXT() const
@@ -2097,6 +2577,52 @@ namespace CNA::Internal::Renderers::DirectX12
         if (full.size() < static_cast<std::size_t>(srcW) * static_cast<std::size_t>(srcH) * 4)
             throw std::runtime_error("DirectX12Renderer::ReadBackbuffer: back-buffer readback failed");
 
+        // plans/plan_directx12_parity.md DX12-0015 (DirectX11's WINCLOSE-0012): the request is in the
+        // game's logical back-buffer space, but a windowed device draws into the physical swap chain
+        // through GetDefaultViewportRect(). When the logical buffer is letterboxed or scaled inside
+        // the window -- a 16x16 back buffer in a window Windows will not make narrower than ~120 px --
+        // physical (x, y) is the letterbox bar, not what the game drew. Sample the geometry the draws
+        // used, at logical pixel centres; when logical and physical agree this is the direct copy.
+        {
+            int logicalW = 0;
+            int logicalH = 0;
+            GetViewportSize(logicalW, logicalH);
+            int presentX = 0;
+            int presentY = 0;
+            int presentW = 0;
+            int presentH = 0;
+            GetDefaultViewportRect(presentX, presentY, presentW, presentH);
+            const bool presentationIsIdentity =
+                logicalW <= 0 || logicalH <= 0 || presentW <= 0 || presentH <= 0 ||
+                (presentX == 0 && presentY == 0 && presentW == logicalW && presentH == logicalH);
+            if (!presentationIsIdentity)
+            {
+                const double scaleX = static_cast<double>(presentW) / static_cast<double>(logicalW);
+                const double scaleY = static_cast<double>(presentH) / static_cast<double>(logicalH);
+                for (int row = 0; row < h; ++row)
+                {
+                    std::uint8_t* dst =
+                        pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+                    const int srcY = presentY + static_cast<int>(
+                        std::floor((static_cast<double>(y + row) + 0.5) * scaleY));
+                    for (int column = 0; column < w; ++column)
+                    {
+                        const int srcX = presentX + static_cast<int>(
+                            std::floor((static_cast<double>(x + column) + 0.5) * scaleX));
+                        std::uint8_t* texel = dst + static_cast<std::size_t>(column) * 4;
+                        if (srcX < 0 || srcX >= srcW || srcY < 0 || srcY >= srcH)
+                        {
+                            std::memset(texel, 0, 4);
+                            continue;
+                        }
+                        std::memcpy(texel,
+                                    full.data() + (static_cast<std::size_t>(srcY) * srcW + srcX) * 4, 4);
+                    }
+                }
+                return;
+            }
+        }
+
         // Same out-of-range policy D3D11's own DX-28 override uses: a row or column outside the real
         // resource is zero-filled rather than read from adjacent memory. GraphicsDevice has already
         // rejected a rectangle outside the PresentationParameters bounds, so this only matters when
@@ -2193,7 +2719,10 @@ namespace CNA::Internal::Renderers::DirectX12
         requestedMultiSampleCount_ = requestedMultiSampleCount;
         const int clamped = ClampBackBufferMultiSampleCount(
             device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
-        if (clamped != appliedMultiSampleCount_ || !depthStencilResource_)
+        // DX12-0019: the applied depth format stands in for the old `!depthStencilResource_` test, which
+        // meant "no default surfaces yet" and is no longer that once DepthFormat::None legitimately
+        // leaves the depth resource null.
+        if (clamped != appliedMultiSampleCount_ || appliedBackBufferDepthFormat_ != backBufferDepthFormat_)
             RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
         return appliedMultiSampleCount_;
     }
@@ -2206,8 +2735,24 @@ namespace CNA::Internal::Renderers::DirectX12
 
     int DirectX12Renderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
     {
-        (void) requestedFormat;
-        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        return D3DCommon::DepthFormatToDxgi(requestedFormat) == DXGI_FORMAT_UNKNOWN
+            ? static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::None)
+            : requestedFormat;
+    }
+
+    void DirectX12Renderer::UpdatePresentationFormatEXT(
+        int backBufferFormat, int depthStencilFormat, bool isFullScreen)
+    {
+        // DX12-0019: only the depth format changes a resource here (the colour format is fixed, full
+        // screen has its own path). Recreated at once when the surfaces exist, so the depth buffer a
+        // Reset asked for is the one the next draw gets even if the sample count did not change.
+        (void) backBufferFormat;
+        (void) isFullScreen;
+        if (depthStencilFormat == backBufferDepthFormat_)
+            return;
+        backBufferDepthFormat_ = depthStencilFormat;
+        if (appliedBackBufferDepthFormat_ >= 0 && GetCurrentBackBufferResourceEXT() != nullptr)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
     }
 
     void DirectX12Renderer::SetPresentationMode(int mode)
@@ -2245,14 +2790,91 @@ namespace CNA::Internal::Renderers::DirectX12
         return true;
     }
 
+    bool DirectX12Renderer::DeviceSupportsFormatEXT(DXGI_FORMAT format, int support1Flags) const
+    {
+        if (!device_ || format == DXGI_FORMAT_UNKNOWN)
+            return false;
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = format;
+        const auto required = static_cast<D3D12_FORMAT_SUPPORT1>(support1Flags);
+        return SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support,
+                                                      sizeof(support))) &&
+               (support.Support1 & required) == required;
+    }
+
     RendererFormatVerdict DirectX12Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
     {
-        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
-            D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
+        if (D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
             return RendererFormatVerdict::Supported;
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat))
+        {
+            // plans/plan_directx12_parity.md DX12-0016 (DirectX11's WINCLOSE-0013): asked of the
+            // device, not assumed. Every mapping is faithful, but not every DXGI format is required of
+            // every adapter -- B4G4R4A4_UNORM is optional -- and answering Supported regardless told
+            // GraphicsDevice a texture could be made that CreateCommittedResource would refuse. The
+            // question is creation, not SHADER_SAMPLE: XNA point-samples the 32-bit float formats.
+            if (!device_)
+                return RendererFormatVerdict::Supported;
+            return DeviceSupportsFormatEXT(D3DCommon::SurfaceFormatToDxgi(surfaceFormat),
+                                           D3D12_FORMAT_SUPPORT1_TEXTURE2D)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        // DX12-0016 (WINCLOSE-0013): the interface default defers to the framework's Color-only volume
+        // rule, although D3D12Texture3DRenderer stores every classic uncompressed format in its
+        // declared DXGI format. The set is Software's and DirectX11's; each is asked of the device,
+        // since not every DXGI format is required as a 3D texture.
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                if (!device_)
+                    return RendererFormatVerdict::Supported;
+                return DeviceSupportsFormatEXT(D3DCommon::SurfaceFormatToDxgi(surfaceFormat),
+                                               D3D12_FORMAT_SUPPORT1_TEXTURE3D)
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
+            // Refused explicitly, as DirectX11 does: block-compressed and signed-normalized volumes are
+            // not part of the contract. Deferring left the answer to the framework rule instead.
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    bool DirectX12Renderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        // DX12-0016 (WINCLOSE-0023): a CNAEXT fact about the device, separate from XNA's own refusal
+        // to linearly filter HalfVector4, which the shared layer keeps enforcing. The interface
+        // default answers false without asking.
+        return DeviceSupportsFormatEXT(DXGI_FORMAT_R16G16B16A16_FLOAT,
+                                       D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
     }
 
     RendererFormatVerdict DirectX12Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
@@ -2566,7 +3188,15 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.depthFunc = currentDepthFunc_;
         // DX-202: the stencil half, which used to be dropped between ApplyDepthStencilState() and
         // the PSO.
-        psoDesc.stencilEnable = currentStencilEnable_;
+        // DX12-0019: a back buffer declared Depth24 is backed by D24S8, and XNA's Depth24 has no stencil,
+        // so while that view is bound the stencil test is off rather than operating on storage the game
+        // never asked for. Keyed on the bound resource, so a render target that declared Depth24Stencil8
+        // keeps its stencil.
+        const bool backBufferStencilHidden =
+            boundDepthResource_ != nullptr && boundDepthResource_ == depthStencilResource_.Get() &&
+            backBufferDepthFormat_ != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        psoDesc.stencilEnable = currentStencilEnable_ && !backBufferStencilHidden;
         psoDesc.stencilFunc = currentStencilFunc_;
         psoDesc.stencilPass = currentStencilPass_;
         psoDesc.stencilFail = currentStencilFail_;
@@ -3305,9 +3935,15 @@ namespace CNA::Internal::Renderers::DirectX12
             c.FogColor[1] = params.fogColor[1];
             c.FogColor[2] = params.fogColor[2];
 
+            // plans/plan_directx12_parity.md DX12-0021: XNA samples an unbound AlphaTestEffect texture as
+            // opaque black (easygl_alphatest_null_texture_test); the white texel drew DiffuseColor.
             srvTextures[0] = params.texture0 != nullptr
                 ? params.texture0
-                : GetOrCreateDefaultWhiteTextureEXT();
+                : GetOrCreateDefaultOpaqueBlackTextureEXT();
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                c.Texture0ChannelMask, c.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&c, sizeof(c));
         }
@@ -3335,6 +3971,22 @@ namespace CNA::Internal::Renderers::DirectX12
             fog.FogVector[1] = params.fogVector[1];
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of both sampled textures.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                fog.Texture0ChannelMask, fog.Texture0ChannelFill);
+            if (params.texture1 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture1->GetSurfaceFormatEXT(),
+                                                fog.Texture1ChannelMask, fog.Texture1ChannelFill);
+
+            // Resolved before any frame constant is allocated: creating a fallback texture uploads
+            // synchronously, which can submit the current frame segment.
+            srvTextures[0] = params.texture0 != nullptr
+                ? params.texture0
+                : GetOrCreateDefaultOpaqueBlackTextureEXT();
+            srvTextures[1] = params.texture1 != nullptr
+                ? params.texture1
+                : GetOrCreateDefaultOpaqueBlackTextureEXT();
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             const D3D12_GPU_VIRTUAL_ADDRESS fogAddress =
@@ -3344,13 +3996,6 @@ namespace CNA::Internal::Renderers::DirectX12
             // unread) address rather than leaving a root descriptor unset.
             cbAddresses[1] = cbAddresses[0];
             cbAddresses[2] = fogAddress;
-
-            srvTextures[0] = params.texture0 != nullptr
-                ? params.texture0
-                : GetOrCreateDefaultWhiteTextureEXT();
-            srvTextures[1] = params.texture1 != nullptr
-                ? params.texture1
-                : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsEnvMap)
         {
@@ -3407,6 +4052,14 @@ namespace CNA::Internal::Renderers::DirectX12
             c.Light2Diffuse[0] = params.light2Diffuse[0];
             c.Light2Diffuse[1] = params.light2Diffuse[1];
             c.Light2Diffuse[2] = params.light2Diffuse[2];
+            // DX12-0012 (WINCLOSE-0022/0026): Direct3D 9 channel expansion of the environment cube
+            // and of the base texture.
+            if (params.envMap != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.envMap->GetSurfaceFormatEXT(),
+                                                c.EnvMapChannelMask, c.EnvMapChannelFill);
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                c.Texture0ChannelMask, c.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             const D3D12_GPU_VIRTUAL_ADDRESS envAddress =
@@ -3430,6 +4083,9 @@ namespace CNA::Internal::Renderers::DirectX12
             // Resolve lazy fallback resources before allocating frame constants. Creating either
             // fallback performs a synchronous texture upload, which submits the current frame
             // segment; allocating first would let the resumed segment reset and reuse those ranges.
+            // GLTF-386 (as DirectX11): glTF baseColorTexture is optional, and an absent base-colour map
+            // is opaque white. The fill loop below supplies it (this branch is reached only when
+            // needsEnvMap is false), so this line keeps the spelling GltfRendererPbrFallbackPolicy audits.
             srvTextures[0] = params.texture0;
             srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
             srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
@@ -3631,6 +4287,10 @@ namespace CNA::Internal::Renderers::DirectX12
             extra.EmissiveColor[0] = params.emissiveColor[0];
             extra.EmissiveColor[1] = params.emissiveColor[1];
             extra.EmissiveColor[2] = params.emissiveColor[2];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                extra.Texture0ChannelMask, extra.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             cbAddresses[1] = AllocateFrameConstantDataEXT(&bones, sizeof(bones));
@@ -3699,6 +4359,10 @@ namespace CNA::Internal::Renderers::DirectX12
             lighting.FogVector[1] = params.fogVector[1];
             lighting.FogVector[2] = params.fogVector[2];
             lighting.FogVector[3] = params.fogVector[3];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                lighting.Texture0ChannelMask, lighting.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             cbAddresses[1] = AllocateFrameConstantDataEXT(&lighting, sizeof(lighting));
@@ -3726,6 +4390,10 @@ namespace CNA::Internal::Renderers::DirectX12
             fog.FogVector[1] = params.fogVector[1];
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                fog.Texture0ChannelMask, fog.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             cbAddresses[1] = AllocateFrameConstantDataEXT(&fog, sizeof(fog));
@@ -3739,13 +4407,36 @@ namespace CNA::Internal::Renderers::DirectX12
         // verified correct). Every texture's own SRV -- created once, at texture-construction time --
         // is bound directly, exactly like the original single-SRV path; no per-draw descriptor copy
         // is needed for any variant, dual_texture3d included. Sized 7 for the complete PBR range.
+        // plans/plan_directx12_parity.md DX12-0021: every texture slot a stock stage declares is bound to a
+        // real descriptor. An unbound slot used to pass a null GPU handle to SetGraphicsRootDescriptorTable,
+        // which is undefined. The values are DirectX11's established ones: DualTextureEffect and
+        // AlphaTestEffect were given XNA's opaque black above; SkinnedEffect and BasicEffect sample opaque
+        // white (GLTF-386) -- SOFTWARE-303 has since measured XNA's opaque black there too, a conflict
+        // DirectX11 shares and the plan records rather than one renderer deciding it alone;
+        // EnvironmentMapEffect, for which DirectX11 binds a null view, takes XNA's opaque black for both
+        // its texture and its cube. Resolved before the command list is touched, because creating a
+        // fallback records an upload.
+        for (int i = 0; i < numSrvs; ++i)
+        {
+            if (i == 1 && needsEnvMap)
+            {
+                if (srvCubeTexture == nullptr)
+                    srvCubeTexture = GetOrCreateDefaultOpaqueBlackCubeEXT();
+            }
+            else if (srvTextures[i] == nullptr)
+            {
+                srvTextures[i] = needsEnvMap ? GetOrCreateDefaultOpaqueBlackTextureEXT()
+                                             : GetOrCreateDefaultWhiteTextureEXT();
+            }
+        }
+
         D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[7]{};
         for (int i = 0; i < numSrvs; ++i)
         {
             // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only
             // ever set by the needsEnvMap branch above, every other variant's 2nd slot (if any) is a
             // plain Texture2D via srvTextures[1] (dual_texture3d).
-            srvHandles[i] = (i == 1 && srvCubeTexture != nullptr)
+            srvHandles[i] = (i == 1 && needsEnvMap)
                 ? GetSrvGpuHandleForTextureCubeEXT(srvCubeTexture)
                 : GetSrvGpuHandleForTextureEXT(srvTextures[i]);
         }
@@ -3889,6 +4580,27 @@ namespace CNA::Internal::Renderers::DirectX12
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);
+        // plans/plan_directx12_parity.md DX12-0028: the stock instanced effect reads each instance's World
+        // matrix from TextureCoordinate1..4 of the per-instance stream (INSTANCEWORLD0..3, DX-222). A
+        // declaration without all four was only refused when input-layout creation failed -- a generic
+        // runtime_error, and a debug-layer error (ID 65) for a draw the game can be told about plainly.
+        {
+            bool instanceColumns[4] = {false, false, false, false};
+            for (const auto& input : inputElements)
+            {
+                const int usageIndex = input.element.getUsageIndexProperty();
+                if (input.instanceWorldSemantic &&
+                    input.element.getVertexElementUsageProperty() ==
+                        Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate &&
+                    usageIndex >= 1 && usageIndex <= 4)
+                    instanceColumns[usageIndex - 1] = true;
+            }
+            if (!(instanceColumns[0] && instanceColumns[1] && instanceColumns[2] && instanceColumns[3]))
+                throw System::NotSupportedException(
+                    "DirectX12Renderer::DrawInstancedPrimitivesEx: the stock instanced effect reads each "
+                    "instance's World matrix from TextureCoordinate1..4 of the per-instance stream, "
+                    "and the bound declaration does not provide all four");
+        }
         const bool hasColor = DeclarationHasElement(
             combinedElements,
             Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
@@ -3916,7 +4628,11 @@ namespace CNA::Internal::Renderers::DirectX12
         // field is named "Vp" (view*projection only, world comes from the per-instance buffer
         // instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DPerDrawConstants perDraw{};
-        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
+        // plans/plan_directx12_parity.md DX12-0012 (DirectX11's WINCLOSE-0034): the effect's World
+        // composes AFTER each instance's own matrix -- instanceWorld * World * View * Projection, as
+        // EasyGL, Software, Vulkan and DirectX11 apply it. View * Projection alone ignored an
+        // Effect.World set on an instanced draw.
+        const Matrix vp = ApplyXnaPixelCenterEXT(world * view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];

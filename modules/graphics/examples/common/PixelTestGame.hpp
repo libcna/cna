@@ -48,7 +48,14 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/IO/FileStream.hpp"
 
+// plans/plan_directx12_parity.md DX12-0005: SDL is used here for one thing -- probing whether a
+// display exists before a Game is constructed. A target built without SDL (a CNA_ENABLE_SDL=OFF
+// configuration's Direct3D fixtures) defines CNA_EXAMPLES_NO_SDL, and the probe is then left to the
+// platform the build selected: its own window creation is the probe, and a failure there surfaces
+// as the failure it is rather than as a skip.
+#if !defined(CNA_EXAMPLES_NO_SDL)
 #include <SDL3/SDL.h>
+#endif
 
 #include <cstdint>
 #include <cstdio>
@@ -303,6 +310,9 @@ namespace CNA::Examples
     // RunPixelTest<TGame>() itself uses.
     inline bool ProbeGpuDisplayAvailable()
     {
+#if defined(CNA_EXAMPLES_NO_SDL)
+        return true;
+#else
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
             std::printf("[SKIP] no GPU/display available (SDL_InitSubSystem(SDL_INIT_VIDEO) "
@@ -311,6 +321,7 @@ namespace CNA::Examples
         }
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return true;
+#endif
     }
 
     // Constructs, runs, and returns the process exit code for a PixelTestGame-derived test in
@@ -326,16 +337,8 @@ namespace CNA::Examples
         static_assert(std::is_base_of_v<PixelTestGame, TGame>,
                       "RunPixelTest<TGame>: TGame must derive from CNA::Examples::PixelTestGame");
 
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-        {
-            std::printf("[SKIP] no GPU/display available (SDL_InitSubSystem(SDL_INIT_VIDEO) "
-                        "failed: %s)\n", SDL_GetError());
+        if (!ProbeGpuDisplayAvailable())
             return kSkipExitCode;
-        }
-        // Release the probe -- the real Game/GraphicsDevice construction below re-acquires the
-        // subsystem itself (SDL reference-counts SDL_InitSubSystem/SDL_QuitSubSystem pairs, so
-        // this leaves it exactly as this function found it).
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
         // LLGL-55: a real display is present (the probe above succeeded), but the LLGL Vulkan
         // module still cannot actually PRESENT on it when the X server has no DRI3 support --

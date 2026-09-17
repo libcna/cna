@@ -2560,6 +2560,13 @@ namespace CNA::Internal::Renderers::DirectX11
             srvs[0] = GetSrvForTextureEXT(params.texture0);
             srvs[1] = GetSrvForTextureCubeEXT(params.envMap);
         }
+        else if (needsAlphaTest)
+        {
+            // plans/plan_directx12_parity.md DX12-0021: XNA samples an unbound AlphaTestEffect texture
+            // as opaque black; a null SRV here sampled as the diffuse colour's untextured result.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultOpaqueBlackSrvEXT();
+        }
         else if (needsPbr)
         {
             // plans/plan_cnj.md CNB-58 follow-up: when a given PBR map is unbound, fall back to a 1x1
@@ -3153,6 +3160,27 @@ namespace CNA::Internal::Renderers::DirectX11
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DCommon::D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);
+        // plans/plan_directx12_parity.md DX12-0028 (shared with DirectX12): the stock instanced effect reads each instance's World
+        // matrix from TextureCoordinate1..4 of the per-instance stream (INSTANCEWORLD0..3, DX-222). A
+        // declaration without all four was only refused when input-layout creation failed -- a generic
+        // runtime_error, and a debug-layer error (ID 65) for a draw the game can be told about plainly.
+        {
+            bool instanceColumns[4] = {false, false, false, false};
+            for (const auto& input : inputElements)
+            {
+                const int usageIndex = input.element.getUsageIndexProperty();
+                if (input.instanceWorldSemantic &&
+                    input.element.getVertexElementUsageProperty() ==
+                        Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate &&
+                    usageIndex >= 1 && usageIndex <= 4)
+                    instanceColumns[usageIndex - 1] = true;
+            }
+            if (!(instanceColumns[0] && instanceColumns[1] && instanceColumns[2] && instanceColumns[3]))
+                throw System::NotSupportedException(
+                    "DirectX11Renderer::DrawInstancedPrimitivesEx: the stock instanced effect reads each "
+                    "instance's World matrix from TextureCoordinate1..4 of the per-instance stream, "
+                    "and the bound declaration does not provide all four");
+        }
         const bool hasColor = D3DCommon::DeclarationHasElement(
             combinedElements,
             Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);

@@ -811,8 +811,10 @@ namespace CNA::Internal::Renderers::DirectX12
                 range.RangeType = rangeType;
                 range.NumDescriptors = 1;
                 range.BaseShaderRegister = static_cast<UINT>(sampler.index);
+                // DX12-0026: DATA_VOLATILE -- a sampled texture may become a render target later in the
+                // same frame's command list (see D3D12RootSignatureCache).
                 range.Flags = rangeType == D3D12_DESCRIPTOR_RANGE_TYPE_SRV
-                    ? D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC
+                    ? D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE
                     : D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
                 ranges.push_back(range);
                 D3D12_ROOT_PARAMETER1 parameter{};

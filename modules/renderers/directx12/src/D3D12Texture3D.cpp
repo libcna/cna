@@ -409,4 +409,18 @@ namespace CNA::Internal::Renderers::DirectX12
         readback->Unmap(0, &writtenRange);
         return true;
     }
+
+    // plans/plan_directx12_parity.md DX12-0018 (DirectX11's WINCLOSE-0013): the declared-format byte route
+    // the shared layer uses for every uncompressed volume transfer, which the defaults refused.
+    bool D3D12Texture3DRenderer::SetDataBytesEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                                 const void* data, int dataLength)
+    {
+        return !compressed_ && SetData(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool D3D12Texture3DRenderer::GetDataBytesEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                                 void* data, int dataLength) const
+    {
+        return !compressed_ && GetData(level, x, y, z, w, h, depth, data, dataLength);
+    }
 }

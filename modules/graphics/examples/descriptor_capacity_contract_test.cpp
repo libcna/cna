@@ -548,15 +548,27 @@ class DescriptorCapacityContractTest : public Game
                 const TextureAddressMode v = kAddressModes[static_cast<std::size_t>(
                     (static_cast<int>(combos) + 1) % static_cast<int>(kAddressModes.size()))];
                 ++combos;
+                const std::vector<Color> pixels = DrawAndRead(dev, *rt, *tex, MakeSampler(f, u, v));
+                bool stateWrong = false;
                 if (MagnifiesLinearly(f))
                 {
                     ++blending;
-                    if (!BlendedAndCovered(DrawAndRead(dev, *rt, *tex, MakeSampler(f, u, v))))
-                        ++wrong;   // 1365 has four distinct texels, so a blend must be visible
+                    stateWrong = !BlendedAndCovered(pixels); // 1365 has four distinct texels, so a blend must be visible
                 }
-                else if (DrawAndDecode(dev, *rt, *tex, MakeSampler(f, u, v)) != 1365)
+                else
+                {
+                    stateWrong = DecodeIdentity(pixels) != 1365;
+                }
+                if (stateWrong)
                 {
                     ++wrong;
+                    std::string read;
+                    for (const Color& c : pixels)
+                        read += " (" + std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) +
+                                "," + std::to_string(c.getBProperty()) + ")";
+                    note("B1 wrong: filter " + std::to_string(static_cast<int>(f)) + " address u " +
+                         std::to_string(static_cast<int>(u)) + " v " + std::to_string(static_cast<int>(v)) +
+                         " state #" + std::to_string(combos) + " read" + read);
                 }
             }
         }

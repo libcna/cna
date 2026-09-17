@@ -262,10 +262,12 @@ namespace
      * Nonzero in every channel and opaque, so it is distinguishable from BOTH a never-written
      * target (0,0,0,0) and the target's own DiscardContents clear (0,0,0,255).
      */
-    constexpr Color MidTone() { return Color(bytecs(70), bytecs(130), bytecs(190), bytecs(255)); }
+    // Not constexpr: Color's constructor is not, and MSVC rejects a constexpr function that can never
+    // be a constant expression (C3615) where GCC and Clang accept it silently.
+    inline Color MidTone() { return Color(bytecs(70), bytecs(130), bytecs(190), bytecs(255)); }
 
     /** @brief The colour a DiscardContents bind writes, per GraphicsDevice::SetRenderTarget. */
-    constexpr Color DiscardTone() { return Color(bytecs(0), bytecs(0), bytecs(0), bytecs(255)); }
+    inline Color DiscardTone() { return Color(bytecs(0), bytecs(0), bytecs(0), bytecs(255)); }
 
     /** @brief Formats a colour as R,G,B,A for diagnostics. */
     std::string ColorText(const Color& c)

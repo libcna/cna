@@ -31,6 +31,11 @@
 # Usage:
 #   win32_run_interactive.ps1 -Exe C:\path\to\thing.exe [-Arguments a,b] [-WorkingDirectory dir]
 #                             [-OutDir C:\cna\report] [-Name tag] [-TimeoutSeconds 900]
+#                             [-Environment 'NAME=value','OTHER=value']
+#
+# -Environment exists because the task runs with the logged-on user's environment, not this
+# session's: a variable set here never reaches the program. Each entry becomes a `set` line in the
+# wrapper, ahead of the program (plans/plan_directx12_parity.md DX12-0006: CNA_D3D12_ADAPTER=warp).
 #
 # stdout and stderr land in <OutDir>\<Name>.out.txt / .err.txt and are echoed here; the exit code of
 # the program becomes the exit code of this script. 124 means it outlived its deadline.
@@ -43,6 +48,7 @@ param(
     [string] $OutDir = 'C:\cna\report\interactive',
     [string] $Name = '',
     [int] $TimeoutSeconds = 900,
+    [string[]] $Environment = @(),
     [switch] $Quiet
 )
 
@@ -61,7 +67,14 @@ Remove-Item $stdout, $stderr, $rcFile -Force -ErrorAction SilentlyContinue
 
 # A .cmd wrapper rather than passing the program straight to the task: it is what captures the exit
 # code and the two streams on the far side, where nothing of this session survives.
-$quoted = ($Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+# The line is read by cmd.exe, not by a shell that leaves arguments alone: `& | < > ^ ( )` are operators
+# or escapes outside double quotes (a ctest -R alternation became a pipe and the run ended in 20 s with
+# no report, plans/plan_directx12_parity.md DX12-0030), and a batch file expands `%` even inside quotes,
+# so it is doubled.
+$quoted = ($Arguments | ForEach-Object {
+    $argument = $_ -replace '%', '%%'
+    if ($argument -match '[\s"&|<>^()]') { '"' + ($argument -replace '"', '\"') + '"' } else { $argument }
+}) -join ' '
 $cmd = Join-Path $OutDir "$Name.run.cmd"
 # UTF-8 without a BOM, switched to code page 65001 on its second line. It used to be written as
 # ASCII, which turned every character of a non-ASCII executable, argument or working directory
@@ -69,9 +82,15 @@ $cmd = Join-Path $OutDir "$Name.run.cmd"
 # case this runner exists for on a Unicode-path check. cmd.exe decodes each batch line with the
 # console code page current when it reads it, so the chcp line has to come before any path; a
 # BOM would be read as part of the first line, which is why there is none.
+$setLines = @($Environment | Where-Object { $_ } | ForEach-Object {
+    if ($_ -notmatch '^[A-Za-z_][A-Za-z0-9_]*=') { throw "win32_run_interactive: -Environment entry '$_' is not NAME=value" }
+    # `set "NAME=value"` keeps trailing spaces and characters cmd would otherwise interpret.
+    "set `"$_`""
+})
 $wrapper = @(
     '@echo off'
     'chcp 65001 >nul'
+) + $setLines + @(
     "cd /d `"$WorkingDirectory`""
     "`"$Exe`" $quoted 1> `"$stdout`" 2> `"$stderr`""
     "echo %ERRORLEVEL% > `"$rcFile`""

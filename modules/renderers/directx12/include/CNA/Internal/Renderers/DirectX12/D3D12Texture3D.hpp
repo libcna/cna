@@ -44,6 +44,41 @@ namespace CNA::Internal::Renderers::DirectX12
         /// applied to the placed footprint's RowPitch and slice pitch.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Stores declared-format bytes in a volume box.
+         *
+         * plans/plan_directx12_parity.md DX12-0018 (DirectX11's WINCLOSE-0013): the shared layer's
+         * declared-format byte route; SetData already stores in the declared DXGI format, so this
+         * forwards to it and refuses a block-compressed volume.
+         *
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param z Front edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depth Depth in texels.
+         * @param data Source bytes in the declared format.
+         * @param dataLength Source size in bytes.
+         * @return true when the complete box was recorded for upload.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads declared-format bytes from a volume box.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param z Front edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depth Depth in texels.
+         * @param data Destination buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete box was copied; false for a block-compressed volume.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                           void* data, int dataLength) const override;
 
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }

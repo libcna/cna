@@ -11,6 +11,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
+#include "D3D12Configuration.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
@@ -26,6 +27,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 #include <memory>
 
@@ -39,6 +41,55 @@ namespace CNA::Internal::Renderers::DirectX12
     struct D3D12MojoShaderContextEXT;
     class D3D12CompiledEffect;
     using Microsoft::WRL::ComPtr;
+
+    /** @brief The DXGI adapter a DirectX12Renderer created its device on (DX12-0004). */
+    struct D3D12AdapterInfoEXT
+    {
+        /** @brief DXGI_ADAPTER_DESC1::Description, UTF-8. */
+        std::string description;
+        /** @brief PCI vendor identifier (0x1414 for Microsoft's software adapters). */
+        std::uint32_t vendorId = 0;
+        /** @brief PCI device identifier. */
+        std::uint32_t deviceId = 0;
+        /** @brief PCI subsystem identifier. */
+        std::uint32_t subSysId = 0;
+        /** @brief PCI revision. */
+        std::uint32_t revision = 0;
+        /** @brief Dedicated video memory in bytes. */
+        std::uint64_t dedicatedVideoMemory = 0;
+        /** @brief Dedicated system memory in bytes. */
+        std::uint64_t dedicatedSystemMemory = 0;
+        /** @brief Shared system memory in bytes. */
+        std::uint64_t sharedSystemMemory = 0;
+        /** @brief DXGI_ADAPTER_FLAG_SOFTWARE was set. */
+        bool software = false;
+        /** @brief The preference the adapter was selected under. */
+        D3D12AdapterPreference selectedBy = D3D12AdapterPreference::Hardware;
+        /** @brief The feature level the device was created at. */
+        D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
+    };
+
+    /** @brief One message the D3D12 debug layer stored (DX12-0004). */
+    struct D3D12DebugMessageEXT
+    {
+        /** @brief D3D12_MESSAGE_SEVERITY: 0 corruption, 1 error, 2 warning, 3 info, 4 message. */
+        int severity = 0;
+        /** @brief D3D12_MESSAGE_ID. */
+        int id = 0;
+        /** @brief The layer's description text. */
+        std::string description;
+    };
+
+    /** @brief Process-wide debug-layer message counts, accumulated across every renderer instance. */
+    struct D3D12DebugMessageTotalsEXT
+    {
+        /** @brief Corruption-severity messages. */
+        std::uint64_t corruption = 0;
+        /** @brief Error-severity messages. */
+        std::uint64_t error = 0;
+        /** @brief Warning-severity messages that are not classified performance hints. */
+        std::uint64_t warning = 0;
+    };
 
     /**
      * @brief D3D12 graphics renderer with two frame slots and explicit resource synchronization.
@@ -157,11 +208,24 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
         /**
-         * @brief Reports the fixed XNA depth format of the default D3D12 depth resource.
+         * @brief Reports the XNA depth format the default D3D12 depth resource is allocated in.
+         *
+         * plans/plan_directx12_parity.md DX12-0019 (DirectX11's WINCLOSE-0012): the back buffer allocates
+         * what PresentationParameters.DepthStencilFormat asks for, so this is the request -- except an
+         * ordinal DXGI has no depth format for, which allocates nothing.
+         *
          * @param requestedFormat The caller's requested DepthFormat ordinal.
-         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         * @return @p requestedFormat, or DepthFormat::None when it has no DXGI depth format.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Applies a Reset's back-buffer depth format to the default surfaces.
+         * @param backBufferFormat Requested SurfaceFormat ordinal (the colour format is fixed).
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Requested full-screen state (handled by presentation, not here).
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
@@ -202,8 +266,20 @@ namespace CNA::Internal::Renderers::DirectX12
                                       float& windowX, float& windowY) const override;
 
 
-        /** @brief Classifies core XNA surface formats backed by native D3D12 storage. */
+        /** @brief Classifies core XNA surface formats backed by native D3D12 storage, asking the device. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies the classic uncompressed volume formats D3D12Texture3DRenderer stores.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported when the device can create the format as a 3D texture, Unsupported when it
+         *         cannot, Defer for formats outside the classic uncompressed set.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether the device can sample R16G16B16A16_FLOAT, which linear filtering requires.
+         * @return true when the device reports SHADER_SAMPLE for the format.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
         /**
          * @brief Classifies XNA render-target formats using actual D3D12 device support.
          * @param surfaceFormat SurfaceFormat ordinal.
@@ -455,8 +531,50 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] ID3D12CommandQueue* GetCommandQueueEXT() const { return commandQueue_.Get(); }
         /** @brief Negotiated feature level (DX-102). */
         [[nodiscard]] D3D_FEATURE_LEVEL GetFeatureLevelEXT() const { return featureLevel_; }
-        /** @brief Whether the D3D12 debug layer actually ended up enabled (best-effort, DX-102). */
+        /** @brief Whether the D3D12 debug layer actually ended up enabled (DX-102, opt-in since DX12-0004). */
         [[nodiscard]] bool IsDebugLayerEnabledEXT() const { return debugLayerEnabled_; }
+        /** @brief Whether GPU-based validation actually ended up enabled (DX12-0004). */
+        [[nodiscard]] bool IsGpuBasedValidationEnabledEXT() const { return gpuBasedValidationEnabled_; }
+        /** @brief Whether DRED breadcrumbs and page-fault reporting were enabled before device creation. */
+        [[nodiscard]] bool IsDredEnabledEXT() const { return dredEnabled_; }
+        /** @brief The adapter and diagnostics policy this renderer was constructed under (DX12-0004). */
+        [[nodiscard]] const D3D12Configuration& GetConfigurationEXT() const { return configuration_; }
+        /** @brief The adapter the current device was created on (DX12-0004). */
+        [[nodiscard]] const D3D12AdapterInfoEXT& GetAdapterInfoEXT() const { return adapterInfo_; }
+        /**
+         * @brief Moves every message the debug layer stored since the last drain out of its queue.
+         *
+         * Each message is logged and counted into the process totals. Messages classified as
+         * performance hints -- a clear whose colour differs from the resource's optimized clear
+         * value -- are filtered out at the queue, because XNA clears to whatever colour the game
+         * names. Empty when the debug layer is not enabled.
+         *
+         * @return The drained messages, oldest first.
+         */
+        std::vector<D3D12DebugMessageEXT> DrainDebugMessagesEXT();
+        /**
+         * @brief Debug-layer message counts accumulated by every renderer instance in this process.
+         * @return The totals so far.
+         */
+        [[nodiscard]] static D3D12DebugMessageTotalsEXT GetProcessDebugMessageTotalsEXT() noexcept;
+        /**
+         * @brief The most recent debug-layer messages drained in this process, oldest first.
+         *
+         * Bounded, so a runaway layer cannot exhaust memory; the totals keep counting past it.
+         *
+         * @return The retained messages.
+         */
+        [[nodiscard]] static std::vector<D3D12DebugMessageEXT> GetRecentProcessDebugMessagesEXT();
+        /**
+         * @brief Reads, without draining or logging, every message stored by every live renderer.
+         *
+         * For a diagnostic exception handler: the debug layer terminates the process with exception
+         * 0x87D on some corruption messages (an object released while queued work still uses it),
+         * before any drain can run.
+         *
+         * @return The stored messages; empty when no debug layer is live or the registry is busy.
+         */
+        [[nodiscard]] static std::vector<D3D12DebugMessageEXT> PeekLiveDebugQueuesEXT() noexcept;
         /** @brief Whether the adapter/factory reported tearing support (DX-102). */
         [[nodiscard]] bool IsTearingSupportedEXT() const { return allowTearingSupported_; }
         /** @brief Whether CreateSwapChainResources() actually produced a usable swap chain --
@@ -885,6 +1003,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /// GpuDrawParams::pbrNormalMap is null. Mirrors D3D11's own
         /// GetOrCreateDefaultFlatNormalSrvEXT / EnsureDefaultFlatNormalTexture().
         ITextureRenderer* GetOrCreateDefaultFlatNormalTextureEXT();
+        /// plans/plan_directx12_parity.md DX12-0012 (DirectX11's WINCLOSE-0018): a lazily created 1x1
+        /// opaque black (0,0,0,255) texture. XNA samples an unbound DualTextureEffect slot as opaque
+        /// black; the white fallback lit the other layer at double brightness where XNA draws black.
+        ITextureRenderer* GetOrCreateDefaultOpaqueBlackTextureEXT();
+        /// plans/plan_directx12_parity.md DX12-0021: a lazily created 1x1 opaque black cube, bound for an
+        /// EnvironmentMapEffect whose EnvironmentMap is unset instead of a null descriptor handle.
+        ITextureCubeRenderer* GetOrCreateDefaultOpaqueBlackCubeEXT();
 
         /// DX-111 (continued): shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib may be null for the non-indexed path (mirrors DirectX11Renderer's own
@@ -919,6 +1044,21 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;
         bool debugLayerEnabled_ = false;
         bool allowTearingSupported_ = false;
+        // DX12-0004: captured once at construction and kept across RecreateDeviceEXT(), so a
+        // recovered device is created under the same policy as the one it replaces.
+        D3D12Configuration configuration_;
+        D3D12AdapterInfoEXT adapterInfo_;
+        bool gpuBasedValidationEnabled_ = false;
+        bool dredEnabled_ = false;
+        // ID3D12InfoQueue, held as IUnknown: MinGW-w64's <d3d12.h> does not declare it (MOD-1605).
+        ComPtr<IUnknown> infoQueue_;
+        /// Whether the device reports every D3D12_FORMAT_SUPPORT1 bit in @p support1Flags for @p format.
+        [[nodiscard]] bool DeviceSupportsFormatEXT(DXGI_FORMAT format, int support1Flags) const;
+        /// Selects the adapter under configuration_ and creates device_ on it; throws with every
+        /// adapter tried and its HRESULT when none succeeds.
+        void CreateDeviceOnConfiguredAdapter();
+        /// Logs DRED breadcrumbs and page-fault data after a device removal, when DRED is enabled.
+        void ReportDeviceRemovedExtendedDataEXT();
 
         // DX-103 gave each of the four heaps a fixed capacity and a monotonic bump cursor with no
         // free list, so a descriptor was consumed for the lifetime of the PROCESS rather than of the
@@ -1041,6 +1181,11 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
         int requestedMultiSampleCount_ = 0;
         int appliedMultiSampleCount_ = 0;
+        // DX12-0019: PresentationParameters.DepthStencilFormat as requested, and the format the
+        // default depth resource was last allocated in (-1 before the first allocation).
+        int backBufferDepthFormat_ = 3; // DepthFormat::Depth24Stencil8
+        int appliedBackBufferDepthFormat_ = -1;
+        DXGI_FORMAT depthStencilDxgiFormat_ = DXGI_FORMAT_UNKNOWN;
 
         // DX-144: tracks the currently-bound custom (non-back-buffer) render target, mirroring
         // DirectX11Renderer's own currentCustomRT_ exactly -- SetRenderTarget2D(nullptr) needs
@@ -1077,6 +1222,8 @@ namespace CNA::Internal::Renderers::DirectX12
         // across every draw that needs a fallback.
         std::unique_ptr<ITextureRenderer> defaultWhiteTexture_;
         std::unique_ptr<ITextureRenderer> defaultFlatNormalTexture_;
+        std::unique_ptr<ITextureRenderer> defaultOpaqueBlackTexture_;
+        std::unique_ptr<ITextureCubeRenderer> defaultOpaqueBlackCube_;
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
         ID3D12Resource* boundColorResource_ = nullptr;

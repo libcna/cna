@@ -73,6 +73,10 @@ spikes/dx7-spike/*.exe
 spikes/dx7-spike/*.o
 spikes/d3d11-vsync-spike/*.exe
 spikes/d3d11-vsync-spike/*.obj
+spikes/d3d12-warp-spike/*.exe
+spikes/d3d12-warp-spike/*.obj
+spikes/d3d12-warp-spike/*.pdb
+spikes/d3d12-warp-spike/*.ilk
 spikes/dx8-spike/*.exe
 spikes/dx8-spike/*.o
 spikes/mingw-cnaext-spike/*.exe

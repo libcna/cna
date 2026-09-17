@@ -30,7 +30,10 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
         // XNA's MaxMipLevel is the MOST DETAILED level index -- larger means coarser -- so it is
         // D3D's MinLOD, not MaxLOD, despite the name.
-        desc.MinLOD = static_cast<float>(std::max(0, maxMipLevel));
+        // plans/plan_directx12_parity.md DX12-0022: XNA writes MaxMipLevel into Direct3D 9's unsigned
+        // D3DSAMP_MAXMIPLEVEL, so a negative value is a huge level index that clamps to the last stored
+        // level (texture_filter_mip_contract_test L3/L9). Clamping it to 0 selected the most detailed.
+        desc.MinLOD = maxMipLevel < 0 ? D3D12_FLOAT32_MAX : static_cast<float>(maxMipLevel);
         desc.MaxLOD = D3D12_FLOAT32_MAX;
 
         const std::uint32_t index = createSlot(desc);
