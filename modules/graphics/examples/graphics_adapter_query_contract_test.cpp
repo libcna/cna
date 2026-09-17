@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // DX-245: GraphicsAdapter must answer from the selected D3D device before GraphicsDevice exists.
+//
+// plans/plan_graphics_shared_cleanup.md GSC-0005: the back-buffer depth half used to assert DX-213's
+// fixed Depth24Stencil8. Both Direct3D back buffers allocate the requested depth format since
+// WINCLOSE-0012/DX12-0019, and QueryBackBufferFormat must agree with what device creation applies (XNA's
+// adapter keeps a supported depth request; FNA returns it unchanged), so the query now reports the
+// request, with an ordinal DXGI has no depth format for reported as None.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -90,14 +96,20 @@ class GraphicsAdapterQueryContract final : public Game
         Check(exact, "fixed Color/Depth24Stencil8 single-sample back buffer is exact");
 
         exact = adapter.QueryBackBufferFormat(
+            GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::Depth16, 0,
+            selectedFormat, selectedDepth, selectedSamples);
+        Check(exact && selectedDepth == DepthFormat::Depth16,
+              "single-sample Color/Depth16 back buffer is exact: the depth request is kept");
+
+        exact = adapter.QueryBackBufferFormat(
             GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::Depth16,
             kImpossibleSampleRequest, selectedFormat, selectedDepth, selectedSamples);
         backBufferSampleCount_ = selectedSamples;
-        Check(!exact, "fixed back-buffer depth and impossible sample requests are substituted");
+        Check(!exact, "an impossible back-buffer sample request is substituted");
         Check(selectedFormat == SurfaceFormat::Color,
               "supported back-buffer format remains Color");
-        Check(selectedDepth == DepthFormat::Depth24Stencil8,
-              "back-buffer query reports the fixed applied D24S8 depth resource");
+        Check(selectedDepth == DepthFormat::Depth16,
+              "back-buffer query keeps the requested Depth16 the back buffer will allocate");
         Check(backBufferSampleCount_ == renderTargetSampleCount_,
               "back-buffer and render-target Color queries use the same native MSAA clamp");
 
@@ -106,8 +118,8 @@ class GraphicsAdapterQueryContract final : public Game
             kImpossibleSampleRequest, selectedFormat, selectedDepth, selectedSamples);
         Check(!exact, "non-Color back-buffer request is rejected");
         Check(selectedFormat == SurfaceFormat::Color &&
-                  selectedDepth == DepthFormat::Depth24Stencil8,
-              "back-buffer format and depth fall back to the resources the renderer creates");
+                  selectedDepth == DepthFormat::None,
+              "back-buffer format falls back to Color and the None depth request is kept");
         Check(selectedSamples == backBufferSampleCount_,
               "back-buffer MSAA clamp follows the selected Color fallback");
 
@@ -125,6 +137,9 @@ protected:
         done_ = true;
 
         GraphicsDevice& device = getGraphicsDeviceProperty();
+        Check(device.getPresentationParametersProperty().getDepthStencilFormatProperty() ==
+                  DepthFormat::Depth24,
+              "GraphicsDeviceManager's default depth request, XNA's Depth24, is applied");
         PresentationParameters requested =
             device.getPresentationParametersProperty().Clone();
         requested.setBackBufferFormatProperty(SurfaceFormat::Rgba1010102);
@@ -136,8 +151,8 @@ protected:
             device.getPresentationParametersProperty();
         Check(applied.getBackBufferFormatProperty() == SurfaceFormat::Color,
               "device Reset applies the adapter query's fixed back-buffer format");
-        Check(applied.getDepthStencilFormatProperty() == DepthFormat::Depth24Stencil8,
-              "device Reset applies the adapter query's fixed depth format");
+        Check(applied.getDepthStencilFormatProperty() == DepthFormat::Depth16,
+              "device Reset applies the depth format the adapter query selected");
         Check(applied.getMultiSampleCountProperty() == backBufferSampleCount_,
               "device Reset applies the adapter query's native back-buffer MSAA clamp");
 
@@ -162,7 +177,7 @@ protected:
             GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::Depth16,
             kImpossibleSampleRequest, selectedFormat, selectedDepth, selectedSamples);
         Check(!exact && selectedFormat == SurfaceFormat::Color &&
-                  selectedDepth == DepthFormat::Depth24Stencil8 &&
+                  selectedDepth == DepthFormat::Depth16 &&
                   selectedSamples == backBufferSampleCount_,
               "adapter result is stable after device creation and resource allocation");
 

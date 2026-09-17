@@ -490,27 +490,27 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
 
 TEST_F(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
 {
-    const CNA::GraphicsRendererType renderer =
-        CNA::getCurrentGraphicsRendererType();
-    const bool usesFixedDirectXDepth =
-        renderer == CNA::GraphicsRendererType::DirectX11 ||
-        renderer == CNA::GraphicsRendererType::DirectX12;
-
+    // plans/plan_graphics_shared_cleanup.md GSC-0005: every renderer keeps the depth request, as FNA's
+    // QueryBackBufferFormat does. DirectX11 and DirectX12 used to answer DX-213's fixed Depth24Stencil8
+    // here while their back buffers already allocated the requested format.
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     SurfaceFormat selectedFormat;
     DepthFormat selectedDepthFormat;
     SharpRuntime::intcs selectedMultiSampleCount;
 
-    const bool accepted = def.QueryBackBufferFormat(
-        GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::None, 0,
-        selectedFormat, selectedDepthFormat, selectedMultiSampleCount);
+    for (const DepthFormat requested : {DepthFormat::None, DepthFormat::Depth16,
+                                        DepthFormat::Depth24, DepthFormat::Depth24Stencil8})
+    {
+        SCOPED_TRACE(static_cast<int>(requested));
+        const bool accepted = def.QueryBackBufferFormat(
+            GraphicsProfile::HiDef, SurfaceFormat::Color, requested, 0,
+            selectedFormat, selectedDepthFormat, selectedMultiSampleCount);
 
-    EXPECT_EQ(accepted, !usesFixedDirectXDepth);
-    EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
-    EXPECT_EQ(selectedDepthFormat, usesFixedDirectXDepth
-        ? DepthFormat::Depth24Stencil8
-        : DepthFormat::None);
-    EXPECT_EQ(selectedMultiSampleCount, 0);
+        EXPECT_TRUE(accepted);
+        EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
+        EXPECT_EQ(selectedDepthFormat, requested);
+        EXPECT_EQ(selectedMultiSampleCount, 0);
+    }
 }
 
 TEST_F(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)
