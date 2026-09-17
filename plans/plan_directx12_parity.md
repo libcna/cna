@@ -41,10 +41,18 @@ reported as a CNA defect.
 | DX12-0018 | Cube and volume byte-transfer hooks; DXT cube blocks read back | ✅ `37bf39899` (round D) |
 | DX12-0019 | Back buffer honours `PresentationParameters.DepthStencilFormat` | ✅ `88363e92a` (round D) |
 | DX12-0020 | `Present` keeps the game's viewport when it rebinds the back buffer | ✅ `0aca24c94` (round D) |
-| DX12-0021 | Unbound stock-effect texture slots bind a defined texture (DX12 + DX11 AlphaTest) | ✅ `3f890b831`, `db4de0e91`, `ece3d8960` (round D) |
+| DX12-0021 | Unbound stock-effect texture slots bind a defined texture (DX12 + DX11 AlphaTest) | ✅ `3f890b831`, `db4de0e91`, `ece3d8960`, `b5a53351f` (rounds D–F) |
 | DX12-0022 | Negative `MaxMipLevel` selects the last level (DX11 + DX12) | ✅ `a47afaf99`; DX11 passes, DX12 WARP limitation measured (`minlod_probe`) |
 | DX12-0016b | DXT/NormalizedByte volumes refused explicitly, as DX11 | ✅ `d285bb823` |
-| DX12-0023 | `GraphicsDevice` unbinds a render target destroyed while bound (generic) | ✅ `3db9d4abf` (Linux proven; Windows round E) |
+| DX12-0023 | A render target destroyed while bound leaves no dangling binding (generic) | ✅ `3db9d4abf`, redesigned `756ccf497` (rounds E–G) |
+| DX12-0024 | `DescriptorCapacityContract` B1/C1 on WARP: mixed-filter LOD-0 boundary, not CNA | ✅ measured (`9f5d24f94`, `31123b89d`, `133b64731`) |
+| DX12-0025 | Debug-message drain ignores the layer's startup notices (GBV ID 1016) | ✅ `483676475` (round H) |
+| DX12-0026 | Shader-resource descriptor ranges `DATA_VOLATILE` (debug layer ID 1002, error) | ✅ `55ac04915` (round H) |
+| DX12-0027 | No depth/stencil test in a PSO without a DSV format (ID 680, warning) | ✅ `3c8a09d27` (round H) |
+| DX12-0028 | Instanced draw without TextureCoordinate1..4 refused up front, DX11 + DX12 (ID 65, error) | ✅ `ea1a02d7f` (round H) |
+| DX12-0029 | Block-compressed upload footprints in whole blocks (ID 867, error) | ✅ `ad5c9a76c` (round H) |
+| DX12-0030 | Interactive runner quotes arguments cmd.exe would interpret | ✅ `e6a5b9776` (GBV subset) |
+| DX12-0031 | Pre-device adapter queries use the configured adapter | ✅ `c02386b12` (round I) |
 
 ---
 
@@ -476,3 +484,146 @@ skins). DirectX12 follows DirectX11 there (parity), and XNA's black for AlphaTes
 and EnvironmentMapEffect where no such pin exists. Resolving SkinnedEffect/BasicEffect needs the glTF
 importer to bind its own white texture first — outside this workstream, recorded for the owner.
 
+
+## Rounds E, F and G — after the round-D follow-ups
+
+| Round | Tree | DX12 corpus (WARP) | DX12 CnaTests (WARP) | DX11 corpus | DX11 CnaTests |
+|---|---|---|---|---|---|
+| E | `31123b89d`-era: DX12-0023 first version | 233/262 | 8 032/8 202 (3 failed) | 225/264 | — (harness: empty `-EnvList`) |
+| F | `9f5d24f94`: DX12-0023 redesigned, fog fixture TEXCOORD0 | **235/262** | **8 033/8 202 (2 failed)** | 224/264 † | 8 021/8 206 † |
+| G | same tree, guest power-cycled first | — | — | **227/264** | **8 038/8 206 (4 failed)** |
+
+† Round F's DirectX11 runs came after two builds and the WARP runs on a guest up for over an hour: 20
+CnaTests failures (draw ranges, point lists, binding offsets) and three new corpus failures
+(`TextureAddressMode`, `TextureAddressMode_Mirror`, `RenderTarget_MsaaMipReadback`) whose fixtures use no
+code this branch changed. Round G, the same binaries straight after a power cycle, has none of them —
+VirtualBox driver state, the third sighting in this workstream. **DirectX11 is judged on round G.**
+
+DirectX11 regression, round G against the reference (DX12-0011): corpus fixes `AlphaTestEffect_NullTexture`
+and `TextureFilterMipContract`, **no new failure**; CnaTests 4 failures, all pre-existing
+(`CaseInsensitivePathTest` ×2, the two VirtualBox cube defects), the reference's
+`MediaLibrarySavePictureTest` passing, and one test more (DX12-0023's).
+
+DirectX12, round F: the two CnaTests failures are `CaseInsensitivePathTest` ×2 (WINNATIVE-F26). Round E's
+`XnaRouteScaling.TheCoordinatorIsNotQuadraticInTheNumberOfAssets` did not recur (a timing assertion under
+three parallel shards). Corpus: 27 failures, 25 shared with DirectX11 round G; the two DirectX12-only ones
+are both measured WARP behaviour (below and DX12-0022).
+
+### DX12-0023, second version
+
+The first version unbound the device publicly on destruction. Round E: `Resource_BoundTargetLifetime` M1
+passed, but **P1 failed** — the DX-233 frame-end contract says `Present()` refuses identically whether the
+bound target is alive or destroyed, and the device stays bound until the game's next `SetRenderTarget`.
+The defect was only ever the dead pointer, so the second version drops the binding (nothing left to hand
+out, dereference or compare by address), keeps `renderTargetBound_`, and records
+`boundRenderTargetDestroyed_` so the next `SetRenderTargets` — even an empty one — is a real transition.
+The renderer is still moved to the back buffer at destruction while the backend exists, because Software
+keeps a raw `currentRenderTarget_` it would otherwise unbind after the free. Rounds F/G: P1 and M1 pass on
+both D3D renderers; `NonBlendableTargetsRejectBlendAndAllColorMasks` passes on DirectX12; Linux
+render-target/texture groups 312/312 on OpenGL33 and Software.
+
+The fog fixture fix also needed a second step: `ece3d8960` bound a texture but kept `VertexPositionColor`,
+and both D3D renderers (like XNA) refuse an AlphaTestEffect draw with a real texture and no TEXCOORD0.
+`b5a53351f` gives it VertexPositionColorTexture; it passes on DirectX11 (G) and DirectX12 (F).
+
+### DX12-0024 — `DescriptorCapacityContract` B1/C1 on WARP
+
+Failing since baseline A on DirectX12 only. First hypothesis, WARP precision at CNA's 63/64 pixel-centre
+shift with Wrap/Mirror: refuted by `pixelcenter_probe` (raw D3D11), every Clamp/Wrap/Mirror pair exact on
+WARP and the VirtualBox adapter. B1 was made to name each wrong state (`9f5d24f94`): all twelve were mixed
+filters — `MinLinearMagPoint*` blended, `MinPointMagLinear*` reproduced the texels. The probe's second part
+draws the same 1:1 footprint with the four mixed filters: the VirtualBox driver applies the
+**magnification** half, WARP the **minification** half. At a one-to-one footprint the LOD is zero and that
+boundary decides it; CNA's DirectX12 readings are WARP's own. Not a CNA defect; not adapted; physical-GPU
+checklist. (C1's 112 misses are the same mixed filters rotated across 256 textures.)
+
+## Evidence runs on DirectX12 WARP (after round F, before DX12-0025…0029)
+
+Guest power-cycled; tree at `133b64731`.
+
+| Run | Result |
+|---|---|
+| PE imports (`dumpbin /dependents`) of `CnaTests.exe`, `cna_demo_2d.exe`, `cna_stress_directx12_win32_present.exe` | d3d12, dxgi, D3DCOMPILER_47, user32, gdi32, opengl32, ole32, shell32, (bcrypt, advapi32 for CnaTests), kernel32, MSVC runtime, UCRT. **No SDL**; 0 `SDL*.dll` in the tree. Cache: `CNA_PLATFORM=WIN32`, `CNA_ENABLE_SDL=OFF`, `CNA_AUDIO_PLATFORM=NULL`, `CNA_GRAPHICS_RENDERER=DIRECTX12` |
+| `cna_demo_2d --smoke 3000`, WARP + debug layer | **exit 0, 3 000 frames in 51 s, 0 debug-layer messages**; the log names the adapter and "validation evidence only, not GPU evidence" |
+| `cna_demo_2d --smoke 60`, no `CNA_D3D12_ADAPTER` (hardware default) | exit `0xC0000409` after 3 s — the refusal escapes `Game::Run` in a GUI-subsystem executable whose log is not captured; the console stress program repeats this in round H |
+| `cna_stress_directx12_win32_present --frames 3000`, WARP + debug layer | **PASS**: 3 001 frames, 130 resizes (back buffer = client size each time), 20 minimize/restore cycles, 120 churn cycles, 281 back-buffer and 120 render-target checks exact, handles −4, private bytes +3 MB, debug layer 0/0/0, RTV/SRV peaks 3/2. Baseline A's two failures (letterbox readback, 19×7 mip round trip) are gone |
+| same, 300 frames, + GPU-based validation + DRED | every check exact; **FAIL on one message**: ID 1016, severity MESSAGE, the layer's own "GPU-Based Validation is enabled" notice → DX12-0025 |
+| parity corpus, WARP + debug layer | 235/262 (same as without); no `0x87D` terminations. Messages by fixture: `Backbuffer_PassOrder` ID 1002 ×47 (**error**) → DX12-0026; ID 680 ×4 (warning; Smoke, DualTextureEffect_Golden, RenderTarget2D_Msaa, Backbuffer_PassOrder) → DX12-0027; `Deferred_Scissor` ID 695 ×3 (warning: a legal empty scissor rectangle with a non-empty viewport — XNA draws nothing, so does D3D12; recorded, not changed) |
+| CnaTests, WARP + debug layer | 8 033/8 202, the same 2 failures. Reports: ID 867 ×60 (**error**, DXT texture-cube content tests) → DX12-0029; ID 65 ×3 (**error**, InstanceFrequencyFixesTheExactConsumedRecordCount) → DX12-0028; ID 680 ×69 (warning) → DX12-0027; ID 245 ×3 (warning, `DrawRouteValidation.EveryVertexElementFormatIsBoundOrRefusedByName`: a Byte4 element read by a float TEXCOORD input — the layer states the conversion is well defined; recorded) |
+| corpus subset + GBV + DRED | void: the regex lost its quoting through SSH and matched nothing; repeated in round H through `--stdin` |
+
+## Round H — after DX12-0025…0029 (final measured state)
+
+Tree at `ad5c9a76c`; both trees rebuilt (0 warnings in the incremental logs), guest power-cycled, DirectX11
+first.
+
+| Suite | Result |
+|---|---|
+| DX11 corpus (VirtualBox adapter) | **227/264**, the same 37 as round G — none new against the DX11 reference, two fixed |
+| DX11 CnaTests | **8 038/8 206**, 4 failed, all pre-existing (`CaseInsensitivePathTest` ×2, two VirtualBox cube defects) |
+| DX12 corpus, WARP | **235/262** |
+| DX12 CnaTests, WARP | **8 033/8 202**, 2 failed (`CaseInsensitivePathTest` ×2, WINNATIVE-F26) |
+| DX12 corpus, WARP + debug layer | 235/262; across all 262 fixtures **0 corruption, 0 errors**, 3 warnings (`Deferred_Scissor` ID 695, a legal empty scissor) |
+| DX12 CnaTests, WARP + debug layer | 8 033/8 202; reports **0 corruption, 0 errors**, 3 warnings (ID 245, a well-defined Byte4 → float conversion) |
+| `cna_stress_directx12_win32_present --frames 300`, WARP + GBV + DRED | **PASS** (DX12-0025) |
+| same, no `CNA_D3D12_ADAPTER` | exit 1 with the refusal, verbatim: "no hardware DXGI adapter could create a Direct3D 12 device ('VirtualBox Graphics Adapter (WDDM)' refused D3D12, hr=0x887A0004; 'Microsoft Basic Render Driver' skipped (software adapter)). The WARP software rasteriser is never used as a fallback…" — the default is hardware and WARP is never substituted |
+
+The 27 DirectX12 corpus failures: 25 are shared with DirectX11 (same fixture fails on both D3D renderers;
+see the triage table below), and 2 are DirectX12-only, both measured WARP behaviour outside CNA
+(`TextureFilterMipContract` L3/L9 — DX12-0022; `DescriptorCapacityContract` B1/C1 — DX12-0024).
+
+**GPU-based validation + DRED** (corpus subset of 17 fixtures across every effect family, render targets,
+MRT, MSAA, cube sampling, DXT, device recovery, destroyed-while-bound; `-Parallel 2`): 13 passed, 4 failed
+(`Backbuffer_PassOrder`, `Dxt1_FromStream`, `MsaaChange`, `SkinnedEffect_WorldNormal` — the same shared
+failures as without validation), **0 debug-layer messages**. The first attempt ran nothing: the
+interactive runner wrote the `-R` alternation unquoted into a `.cmd` file, where `|` is a pipe (DX12-0030).
+
+### Round I — DX12-0031
+
+`GraphicsAdapterQueryContract` had three DirectX12-only failures on top of the shared one: every MSAA clamp
+the adapter queries returned was 0, because their probe device ignored `CNA_D3D12_ADAPTER` and took the
+VirtualBox adapter, which refuses Direct3D 12. After the fix all three pass (WARP reports a 16× Color clamp
+for render target, back buffer and a real target alike); the corpus stays 235/262 with the fixture still
+failing only "device Reset applies the adapter query's fixed depth format", as on DirectX11.
+
+### The 25 corpus failures shared by both D3D renderers (round H)
+
+None of these is a DirectX12 parity gap: each fails with the same first failing check on DirectX11. They
+are recorded so that nobody mistakes them for WARP or DirectX12 findings.
+
+| Class | Fixtures | First failing check (identical on both) |
+|---|---|---|
+| Fixture needs HiDef but runs under GraphicsDeviceManager's default Reach profile | `Backbuffer_PassOrder`, `MsaaChange`, `SkinnedEffect_BoneDeformation`, `ViewSpaceFog` (GetBackBufferData refused by Reach); `SamplerLodAddressWContract`, `ShaderEffect_ReflectionContract`, `CubeVolume_GetDataContract` (Texture3D refused by Reach); `RenderTarget_ActiveMsaaReadback` (two targets exceed Reach's one); `GraphicsDevice_OrderedClear` (separate alpha refused by Reach; DirectX11 also its VirtualBox cube-face clear) | The public profile gate, before any renderer work. Fixture corrections (request HiDef) are shared-corpus changes, left to the owner |
+| Fixture predates a later shared contract decision | `PresentationFormatContract`, `GraphicsAdapterQueryContract` (fixed D24S8 of DX-213 vs WINCLOSE-0012's honoured depth format); `PresentationModeContract` (physical vs logical back-buffer readback, WINCLOSE-0012/DX12-0015) | Recorded conflicts; neither renderer changed |
+| Public-layer validation the fixture disagrees with | `Deferred_Scissor` E2/E3 (a scissor outside the target raises instead of clipping); `DrawRangeValidation` (negative/overlong ranges refused by the shared gate, fixture expects forwarding); `CompressedTexture_StorageContract` (non-block-aligned compressed rectangle refused); `Dxt1_FromStream` (non-seekable stream refused); `SpriteFont_Properties` (ctor argument check); `SurfaceFormat_Throws` (TextureCube ColorSrgbEXT refused with NotSupported, fixture wants another type); `RenderTarget_SurfaceFormat` (compressed RT format substituted, fixture wants a refusal); `RendererCapabilityTruth` (public capability flags vs renderer claims) | `GraphicsDevice`/resource layer, shared by every renderer |
+| RenderTargetCube `SetData` contract | `CubeVolume_SetDataContract` R1 (fixture requires a deterministic refusal; both D3D renderers now store the face, DX12-0014/WINCLOSE-0017) | Contract question, shared |
+| Harness expectation of a MinGW exit code | `Resource_PresentLifecycle` C2 (expects MinGW's termination code 3; MSVC's abort is `0xC0000409`) | Harness, shared |
+| Depth-format interaction | `RenderTargetCube_DepthFormat` ("Cannot clear depth or stencil because the device does not have an active depth or stencil buffer") | Shared, not investigated here |
+| **Shared D3D renderer defects** (not fixed in this workstream) | `DepthStencilState_StencilTwoSided` (TwoSidedStencilMode=true column reads the background instead of GREEN: counter-clockwise ops not applied to the counter-clockwise triangle); `SkinnedEffect_WorldNormal` (non-uniform bone scale: N·L 90 where 212 is expected, both lighting modes — the shared skinned HLSL's normal transform) | Candidates for a follow-up on both D3D renderers; EasyGL passes both |
+
+## Physical Direct3D 12 checklist (not yet run — no physical adapter in this lab)
+
+Everything above is WARP evidence (or VirtualBox-adapter evidence for DirectX11). None of it is physical-GPU
+validation. On a machine with a real Direct3D 12 adapter, run the same trees with the **default** adapter
+selection (no `CNA_D3D12_ADAPTER`, or `=hardware`) and record:
+
+1. The startup log names the hardware adapter, "selected by default", and never WARP.
+2. Direct3D parity corpus, `win32_ctest_interactive.ps1 -Label DIRECTX12`: compare against the last WARP
+   round fixture by fixture; any fixture that passes on WARP and fails on hardware is a finding.
+3. `texture_filter_mip_contract_test` L3/L9: expected to pass on hardware (the WARP failure is the
+   `MinLOD = FLOAT32_MAX` limitation measured by `minlod_probe`); run `minlod_probe.exe` on the same machine.
+4. `DescriptorCapacityContract` B1/C1 (mixed min/mag filters at a one-to-one footprint): expected to pass
+   on hardware that applies the magnification half at LOD 0; run `pixelcenter_probe.exe` on the same machine.
+5. CnaTests, 27 shards, then again with `CNA_D3D12_DEBUG_LAYER=1`. The gtest listener does not fail a test:
+   it writes every test's debug-layer messages to `CNA_D3D12_DEBUG_REPORT` (the shard runner sets one per
+   shard), and the run is judged from those reports.
+6. `cna_stress_directx12_win32_present --frames 3000` with the debug layer, then 300 frames with
+   `CNA_D3D12_GPU_VALIDATION=1`: back buffer = client size after every resize, churn exact, handle and
+   private-byte growth bounded, zero debug-layer messages.
+7. Exclusive full screen: `IsFullScreen` toggles, `ToggleFullScreen`, Alt+Enter and a mode change, with
+   `DXGI_PRESENT_ALLOW_TEARING` only in windowed flip mode — WARP in a VM cannot exercise a real output.
+8. MSAA 2/4/8 on the hardware's own quality levels (`RenderTarget_MsaaDepthContract`, `MsaaChange`,
+   `RenderTarget_ActiveMsaaReadback`).
+9. Device removal: `CNA_D3D12_DRED=1`, then `dxcap -forcetdr` (or a driver reset) during the demo; the log
+   must carry DRED breadcrumbs and page-fault data, and the game must see a clean `DeviceLost` path.
+10. Performance sanity: `cna_demo_2d` frame time with vsync off against DirectX11 on the same machine.
