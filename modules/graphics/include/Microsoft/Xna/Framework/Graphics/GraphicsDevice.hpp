@@ -1599,6 +1599,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<RenderTargetBinding> currentRenderTargets_;
         bool renderTargetBound_ = false;
+        // plans/plan_directx12_parity.md DX12-0023: a bound target was destroyed. Its binding is gone
+        // (no dangling pointer to compare or dereference) but the device stays bound until the next
+        // SetRenderTargets, which is therefore never skipped as unchanged.
+        bool boundRenderTargetDestroyed_ = false;
         std::vector<VertexBufferBinding> currentVertexBuffers_;
         std::vector<GraphicsResource*> resources_;
 
@@ -1641,7 +1645,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept;
         void DetachMovedTexture(const Texture* texture) noexcept;
         // plans/plan_directx12_parity.md DX12-0023: called by a render target's destruction while its
-        // backend still exists. A binding that names it is unbound as SetRenderTarget(null) would be.
+        // backend still exists. A binding that names it is dropped and the renderer returns to the back
+        // buffer; the device stays bound (see boundRenderTargetDestroyed_).
         void DetachDestroyedRenderTarget(const Texture* texture) noexcept;
         void TransferMovedVertexBuffer(const VertexBuffer* source,
                                        const VertexBuffer* destination) noexcept;

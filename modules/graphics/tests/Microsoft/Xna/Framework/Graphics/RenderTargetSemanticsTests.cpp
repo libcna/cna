@@ -36,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
@@ -121,12 +122,13 @@ TEST(RenderTargetSemantics, DiscardContentsDoesNotKeepIt)
 }
 
 // plans/plan_directx12_parity.md DX12-0023: a target destroyed while it is still bound. Its explicit
-// Dispose() refuses that, but a C++ object can simply go out of scope. The device must forget the
-// binding then: SetRenderTargets returns early for an unchanged binding set, compared by address
-// (SOFTWARE-222), so a stale binding made binding the NEXT target constructed at the same address a
-// silent no-op -- its Clear reached the back buffer (DirectX11) or no target at all (DirectX12,
-// which threw), and GetRenderTargets() handed out a dangling pointer. std::optional reuses its
-// storage, which makes the address reuse certain rather than likely.
+// Dispose() refuses that, but a C++ object can simply go out of scope. The device must drop the binding
+// -- SetRenderTargets returns early for an unchanged binding set, compared by address (SOFTWARE-222), so
+// a stale binding made binding the NEXT target constructed at the same address a silent no-op, and
+// GetRenderTargets() handed out a dangling pointer -- while staying bound until the game's next
+// SetRenderTarget, which is the frame-end contract bound_target_lifetime_test P1 pins: Present() refuses
+// identically for a live and a destroyed bound target. std::optional reuses its storage, which makes the
+// address reuse certain rather than likely.
 TEST(RenderTargetSemantics, ATargetDestroyedWhileBoundIsForgottenByTheDevice)
 {
     GraphicsDevice device;
@@ -142,9 +144,18 @@ TEST(RenderTargetSemantics, ATargetDestroyedWhileBoundIsForgottenByTheDevice)
 
     EXPECT_TRUE(device.GetRenderTargets().empty())
         << "a destroyed target must not stay in the device's binding set";
-    EXPECT_EQ(device.getViewportProperty().getWidthProperty(), backBufferWidth)
-        << "forgetting the binding is an unbind: the viewport returns to the back buffer";
+    EXPECT_THROW(device.Present(), System::InvalidOperationException)
+        << "the device is still bound until the next SetRenderTarget";
 
+    // An unbind with no binding left to compare is still a real transition.
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    EXPECT_EQ(device.getViewportProperty().getWidthProperty(), backBufferWidth)
+        << "SetRenderTarget(null) after the destruction must not be skipped as unchanged";
+
+    slot.emplace(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                 RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&*slot);
+    slot.reset();
     slot.emplace(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
                  RenderTargetUsage::PreserveContents);
     device.SetRenderTarget(&*slot);
