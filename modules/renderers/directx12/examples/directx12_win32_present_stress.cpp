@@ -224,8 +224,19 @@ namespace
                 texture.SetData(data.data(), 0, static_cast<int>(data.size()));
                 std::vector<Color> back(data.size());
                 texture.GetData(back.data(), 0, static_cast<int>(back.size()));
-                if (std::memcmp(back.data(), data.data(), data.size() * sizeof(Color)) != 0)
-                    Fail("frame " + std::to_string(frame_) + ": Texture2D SetData/GetData round trip differs");
+                for (std::size_t i = 0; i < data.size(); ++i)
+                {
+                    if (back[i] == data[i])
+                        continue;
+                    const auto text = [](const Color& c) {
+                        return std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) + "," +
+                               std::to_string(c.getBProperty()) + "," + std::to_string(c.getAProperty());
+                    };
+                    Fail("frame " + std::to_string(frame_) + ": Texture2D SetData/GetData round trip differs first at texel " +
+                         std::to_string(i) + " (x " + std::to_string(i % 19) + ", y " + std::to_string(i / 19) +
+                         "): wrote " + text(data[i]) + ", read " + text(back[i]));
+                    break;
+                }
             }
             {
                 DynamicVertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(), 64, BufferUsage::WriteOnly);
