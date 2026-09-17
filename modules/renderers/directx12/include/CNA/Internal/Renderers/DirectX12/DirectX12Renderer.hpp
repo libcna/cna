@@ -253,8 +253,20 @@ namespace CNA::Internal::Renderers::DirectX12
                                       float& windowX, float& windowY) const override;
 
 
-        /** @brief Classifies core XNA surface formats backed by native D3D12 storage. */
+        /** @brief Classifies core XNA surface formats backed by native D3D12 storage, asking the device. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies the classic uncompressed volume formats D3D12Texture3DRenderer stores.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported when the device can create the format as a 3D texture, Unsupported when it
+         *         cannot, Defer for formats outside the classic uncompressed set.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether the device can sample R16G16B16A16_FLOAT, which linear filtering requires.
+         * @return true when the device reports SHADER_SAMPLE for the format.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
         /**
          * @brief Classifies XNA render-target formats using actual D3D12 device support.
          * @param surfaceFormat SurfaceFormat ordinal.
@@ -1024,6 +1036,8 @@ namespace CNA::Internal::Renderers::DirectX12
         bool dredEnabled_ = false;
         // ID3D12InfoQueue, held as IUnknown: MinGW-w64's <d3d12.h> does not declare it (MOD-1605).
         ComPtr<IUnknown> infoQueue_;
+        /// Whether the device reports every D3D12_FORMAT_SUPPORT1 bit in @p support1Flags for @p format.
+        [[nodiscard]] bool DeviceSupportsFormatEXT(DXGI_FORMAT format, int support1Flags) const;
         /// Selects the adapter under configuration_ and creates device_ on it; throws with every
         /// adapter tried and its HRESULT when none succeeds.
         void CreateDeviceOnConfiguredAdapter();

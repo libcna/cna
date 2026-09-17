@@ -2710,14 +2710,83 @@ namespace CNA::Internal::Renderers::DirectX12
         return true;
     }
 
+    bool DirectX12Renderer::DeviceSupportsFormatEXT(DXGI_FORMAT format, int support1Flags) const
+    {
+        if (!device_ || format == DXGI_FORMAT_UNKNOWN)
+            return false;
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = format;
+        const auto required = static_cast<D3D12_FORMAT_SUPPORT1>(support1Flags);
+        return SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support,
+                                                      sizeof(support))) &&
+               (support.Support1 & required) == required;
+    }
+
     RendererFormatVerdict DirectX12Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
     {
-        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
-            D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
+        if (D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
             return RendererFormatVerdict::Supported;
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat))
+        {
+            // plans/plan_directx12_parity.md DX12-0016 (DirectX11's WINCLOSE-0013): asked of the
+            // device, not assumed. Every mapping is faithful, but not every DXGI format is required of
+            // every adapter -- B4G4R4A4_UNORM is optional -- and answering Supported regardless told
+            // GraphicsDevice a texture could be made that CreateCommittedResource would refuse. The
+            // question is creation, not SHADER_SAMPLE: XNA point-samples the 32-bit float formats.
+            if (!device_)
+                return RendererFormatVerdict::Supported;
+            return DeviceSupportsFormatEXT(D3DCommon::SurfaceFormatToDxgi(surfaceFormat),
+                                           D3D12_FORMAT_SUPPORT1_TEXTURE2D)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        // DX12-0016 (WINCLOSE-0013): the interface default defers to the framework's Color-only volume
+        // rule, although D3D12Texture3DRenderer stores every classic uncompressed format in its
+        // declared DXGI format. The set is Software's and DirectX11's; each is asked of the device,
+        // since not every DXGI format is required as a 3D texture.
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                if (!device_)
+                    return RendererFormatVerdict::Supported;
+                return DeviceSupportsFormatEXT(D3DCommon::SurfaceFormatToDxgi(surfaceFormat),
+                                               D3D12_FORMAT_SUPPORT1_TEXTURE3D)
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    bool DirectX12Renderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        // DX12-0016 (WINCLOSE-0023): a CNAEXT fact about the device, separate from XNA's own refusal
+        // to linearly filter HalfVector4, which the shared layer keeps enforcing. The interface
+        // default answers false without asking.
+        return DeviceSupportsFormatEXT(DXGI_FORMAT_R16G16B16A16_FLOAT,
+                                       D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
     }
 
     RendererFormatVerdict DirectX12Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
