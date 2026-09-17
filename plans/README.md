@@ -52,6 +52,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics backends and renderers
 
+- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 25 renderer identities and the
+  curated renderer set that remains.
 - [`plan_ascii.md`](plan_ascii.md) — ASCII renderer.
 - [`plan_blend2d.md`](plan_blend2d.md) — Blend2D.
 - [`plan_canvas.md`](plan_canvas.md) — HTML Canvas 2D.
