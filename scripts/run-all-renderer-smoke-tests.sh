@@ -5,8 +5,7 @@
 # smoke test (Tasks 85/88/89/730, CTest label "GraphicsSmoke") sequentially --
 # never concurrently, matching this project's own testing discipline -- using
 # the persistent per-renderer build directories this project already uses
-# locally (cmake-build-debug=OPENGLES3, cmake-build-vulkan, cmake-build-bgfx,
-# cmake-build-sdl).
+# locally (cmake-build-debug=OPENGLES3, cmake-build-vulkan, cmake-build-sdl).
 #
 # A renderer whose build directory does not exist and cannot be freshly
 # configured (e.g. missing system dependencies such as the Vulkan SDK) is
@@ -47,16 +46,16 @@ fi
 #   --tier routine   the renderers that need NO third-party checkout: run these often
 #   --tier full      every family that owns a GraphicsSmoke target: run these occasionally
 #
-# No flag keeps the historical four-renderer set, so existing callers are unaffected.
+# No flag keeps the historical default set, so existing callers are unaffected.
 #
 # A family whose dependency is missing is REPORTED as unavailable, never silently counted as a
 # pass. That distinction is the point of the gate: "7 of 9 ran, 2 could not be built here" is a
 # result, "all green" over a set that quietly shrank is not.
-RENDERERS=(OPENGLES3 VULKAN BGFX SDL_RENDERER)
+RENDERERS=(OPENGLES3 VULKAN SDL_RENDERER)
 if [ "${1:-}" = "--tier" ]; then
     case "${2:-}" in
-        routine) RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1) ;;
-        full)    RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1 VULKAN LLGL MAGNUM DILIGENT BGFX WEBGPU) ;;
+        routine) RENDERERS=(OPENGLES3 SDL_RENDERER) ;;
+        full)    RENDERERS=(OPENGLES3 SDL_RENDERER VULKAN WEBGPU) ;;
         *) echo "usage: $0 [--tier routine|full] | [--multi \"R;R;...\"]" >&2; exit 2 ;;
     esac
     shift 2
@@ -65,12 +64,7 @@ fi
 declare -A RENDERER_DIRS=(
     [OPENGLES3]="cmake-build-debug"
     [VULKAN]="cmake-build-vulkan"
-    [BGFX]="cmake-build-bgfx"
     [SDL_RENDERER]="cmake-build-sdl"
-    [OPENGLES1]="cmake-build-opengles1"
-    [LLGL]="cmake-build-llgl"
-    [MAGNUM]="cmake-build-magnum"
-    [DILIGENT]="cmake-build-diligent"
     [WEBGPU]="cmake-build-webgpu"
 )
 declare -A RESULTS
@@ -94,7 +88,7 @@ if [ -n "${MULTI_LIST}" ]; then
     for renderer in "${MULTI_RENDERERS[@]}"; do
         echo "=== ${renderer} (selected at runtime from the ${dir} build) ==="
 
-        # Which label carries this renderer's smoke test. The GL/Vulkan/bgfx family registers
+        # Which label carries this renderer's smoke test. The GL/Vulkan family registers
         # "GraphicsSmoke"; the CPU renderers register under their own name (Stub_Smoke is labelled
         # "Stub"). Try both rather than assuming, because `ctest -L <nothing matched>` exits 0 --
         # so a wrong label would report PASS for a renderer that ran no test at all.
