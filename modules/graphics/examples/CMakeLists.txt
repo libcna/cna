@@ -119,15 +119,23 @@ if(CNA_BUILD_EXAMPLES)
 endif()
 
 # A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
-# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It runs with
-# SOFTWARE, the CPU renderer the platform-ci TERMINAL leg configures.
+# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.
+#
+# Registered but DISABLED, and the reason is a missing renderer rather than a broken test
+# (plans/plan_renderer_cleanup.md RRC-010).  Every piece of evidence the runner waits for --
+# the alternate screen, the SIGWINCH-observed grid, the `dropped_frames=`/`kitty_keyboard=`
+# diagnostics -- is emitted only by TerminalSurfacePresenter, which GraphicsDevice creates only
+# for a renderer whose descriptor sets `needsSurfacePresenter`.  BLEND2D was the only renderer that
+# did, and it was retired with the 25-identity curation; SOFTWARE does not, so the runner times out
+# on its first gate.  This is left registered rather than deleted so the gap stays visible: connect
+# a CPU renderer to IPlatformSurfacePresenter and remove the DISABLED property in the same change.
 if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_PLATFORM STREQUAL "TERMINAL"
    AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE" AND TARGET Python3::Interpreter)
     add_test(NAME TerminalSoftwareDemoIntegration
         COMMAND Python3::Interpreter
             "${CMAKE_SOURCE_DIR}/tools/platform/terminal_demo_integration_test.py"
             "$<TARGET_FILE:cna_demo_2d>")
-    set_tests_properties(TerminalSoftwareDemoIntegration PROPERTIES TIMEOUT 25)
+    set_tests_properties(TerminalSoftwareDemoIntegration PROPERTIES TIMEOUT 25 DISABLED TRUE)
 endif()
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"

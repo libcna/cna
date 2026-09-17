@@ -24,6 +24,13 @@ renderer count is not a goal.
 | RRC-006 | Regression guard: exact 25-identity whitelist and permanently retired IDs | ✅ `d1a579e00` |
 | RRC-007 | Second pass: stale-reference audit and code-quality cleanup | ✅ `750ed854d` |
 | RRC-008 | Build matrix, negative configure matrix, full test corpus, closing report | ✅ |
+| RRC-009 | Final pass: remove `DrawMeshEXT`, the dead API the curation left with no implementer | ✅ |
+| RRC-010 | Final pass: audit `needsSurfacePresenter` and `TERMINAL` — decide, do not assume | ✅ |
+
+`RRC-009` and `RRC-010` are the **final cleanup pass** before integration, opened to close the two
+rows this plan left under *"Findings outside scope"* as needing an owner decision. They are
+deliberately narrow: `RRC-009` deletes one dead entry point, `RRC-010` decides the fate of one flag
+and records what `TERMINAL` actually is. Neither adds, restores or redesigns anything.
 
 ---
 
@@ -444,5 +451,304 @@ reproduces on `next` before this branch, and fixing them would be unrelated refa
 | `tools/c-api/check_release_gate.py --check` reports the **limitations-matrix** criterion unmet: `generate_limitations.py` raises `RuntimeError: Explicit coverage rules matched no symbols: sprite-batch-begin-explicit-state`. Verified pre-existing by running the same tool in a worktree at the baseline commit `c0225e9d5`, where it fails with **four** unused rules rather than one — so this workstream did not cause it and in fact reduced it. The rule targets `SpriteBatch::Begin`, which this branch does not change in any way the parser reads (tested by restoring the committed header and re-running: identical failure). | Pre-existing tool defect |
 | `docs/c-api/RELEASE_GATE.md` is generated and its published header is stale at ABI `0.21.0` while the tree is at `0.28.0`. **Deliberately not regenerated**: `--write` bakes the traceback above into the published document as a criterion's "measurement", which is worse than a stale version line. Regenerating is correct once the limitations generator is fixed, and belongs to whoever owns that tool. | Pre-existing, blocked on the above |
 | **7 headless example targets fail to compile in a multi-renderer build**, each with `fatal error: CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp: No such file or directory`. Cause: `modules/graphics/CMakeLists.txt:44` links renderer targets into `cna_graphics_core` as **PRIVATE**, so a non-default renderer's public include directory never reaches an example target; the family loop in `modules/renderers/CMakeLists.txt` still enters `headless/examples` because it temporarily sets `CNA_GRAPHICS_RENDERER` per family. **Proven pre-existing**: building `cna_test_headless_smoke` in a git worktree at the baseline commit `c0225e9d5`, in the same multi configuration, fails with the byte-identical error. That `PRIVATE` link dates from `43053b185` (2026-08-14, RTR-P6) and this branch touches neither it, nor `modules/renderers/headless/` beyond one comment, nor the registration loop. `CnaTests` — the actual corpus — links and runs normally, so nothing is blocked. | Pre-existing build defect |
-| No surviving renderer sets `needsSurfacePresenter`, so the `TERMINAL` platform has no renderer that presents CPU frames into a terminal. `BLEND2D` was the only one, and it was retired. This is a **consequence** of the curation, recorded rather than hidden; closing it needs an owner decision (teach `SOFTWARE` to use a surface presenter, or accept that `TERMINAL` is validation-only). | Consequence, needs owner decision |
-| `SpriteBatch::DrawMeshEXT` — the 2D triangle-mesh entry point — now has **no implementer**. It was added for Skia's bounded `SkVertices`/SkSL mesh ABI (`SKIA-144`–`157`) and Skia was retired in 2026-08; `IGraphicsRenderer::DrawMeshEXT`'s base implementation throws, and no renderer overrides it. The public CNAEXT method, its C ABI route (`CnaCApiGraphics.cpp`) and its shared sort-mode test all still exist and behave correctly — every renderer refuses, which is exactly what they did when Skia existed. **Not removed here:** deleting it would break the published C ABI, and it is not one of the 25 renderers this workstream retires. Comments corrected to stop implying Skia is present. Whether the surface stays is an owner decision. | Consequence, needs owner decision |
+| No surviving renderer sets `needsSurfacePresenter`, so the `TERMINAL` platform has no renderer that presents CPU frames into a terminal. `BLEND2D` was the only one, and it was retired. This is a **consequence** of the curation, recorded rather than hidden. **Decided in `RRC-010`: the flag and the abstraction are KEPT**, and `TERMINAL` is documented as validation-only until a renderer feeds it. | Consequence, decided in RRC-010 |
+| `SpriteBatch::DrawMeshEXT` — the 2D triangle-mesh entry point — had **no implementer** after the curation. It was added for Skia's bounded `SkVertices`/SkSL mesh ABI (`SKIA-144`–`157`) and Skia was retired in 2026-08. **Decided in `RRC-009`: removed completely**, C++ and C ABI alike, taking the ABI to `0.29.0`. | Consequence, decided in RRC-009 |
+
+---
+
+## RRC-009 — Remove `DrawMeshEXT`
+
+`RRC-008` left this as *"needs owner decision"* because deleting it breaks the published C ABI. The
+decision is **remove**, and the reasoning is that the alternative was worse: a route every supported
+renderer refuses is a permanently dead branch of the ABI, and CNA's C ABI is still `0.x` and
+explicitly experimental, so this is the cheapest moment it will ever be removed at. No compatibility
+stub was left — a stub preserving the old symbol would only preserve the refusal.
+
+### Audit before deletion — mechanical, not inherited from `RRC-008`
+
+Every occurrence in the tree was enumerated and classified rather than trusted from the earlier
+report. `modules/renderers/` contained **zero** occurrences across all 21 retained families: the
+method was declared once, defaulted once, and never overridden.
+
+| Surface | Site | Disposition |
+|---|---|---|
+| Renderer contract | `IGraphicsRenderer.hpp` — `ISpriteBatchRenderer::DrawMeshEXT`, virtual with a throwing default | deleted |
+| XNA-layer public API | `SpriteBatch.hpp` declaration, `SpriteBatch.cpp` definition (`CNAEXT`, never XNA 4.0) | deleted |
+| C ABI header | `graphics.h` — `cna_sprite_batch_draw_mesh_ext`, `CNA_SpriteMeshEXT` | deleted |
+| C ABI implementation | `CnaCApiGraphics.cpp` — 97 lines of validation and conversion | deleted |
+| C ABI layout tests | `AbiHeaderCpp.cpp` (5 asserts), `AbiHeaderC.c` (1 grouped assert) | deleted |
+| Strict-C route test | `GraphicsDeviceSmoke.c` — mesh submission, malformed-mesh and optional-array legs | deleted |
+| Shared behaviour test | `spritebatch_sort_mode_semantics_test.cpp` leg B2 used it as an *instrument* | **re-instrumented**, see below |
+| Coverage source of truth | `tools/c-api/coverage_mappings.json` rule `spritebatch-text-and-mesh` | renamed `spritebatch-text`; regex alternative, mapping prose and test prose pruned |
+| Contract-audit generator | `tools/check_sdlgpu_renderer_contract_audit.py` — `OUT_SPRITE_METHODS`, its `scope_for` branch, and the now-unreachable `evidence_for` branch | deleted (all three; the set would otherwise be empty and the branch dead) |
+| Contract-audit manifest | `plans/sdlgpu_renderer_contract_audit.csv` row 133 | row deleted, 266 → 265 |
+| ABI baseline | `tools/c-api/abi_baseline.json` | regenerated from the built library, not hand-edited |
+| Docs | `docs/fna3d-renderer.md` refusal row; `docs/xna-4-api-coverage.md` sort-mode claim | row deleted; claim rewritten onto a live observable |
+| `plans/`, `misc/`, dated audits | 8 files | kept as history — these record that the API existed, which remains true |
+
+No enum value, capability bit, dispatch-table member or function-pointer table was involved: mesh
+submission never had a capability flag. That absence is itself part of why it was removable — there
+was no `SupportsCapability` answer for a caller to gate on, only a call that always threw.
+
+### The one place deletion cost real coverage, and what replaced it
+
+`spritebatch_sort_mode_semantics_test.cpp` leg B2 (`VULKAN-050`) asserted that `Begin()` carries the
+sort mode down to the renderer seam, and it used `DrawMeshEXT`'s Immediate-only refusal as the
+discriminator. Deleting the instrument would have deleted the assertion, so the leg was
+**re-instrumented rather than dropped**, onto the device-level Immediate mutual exclusion
+(`SpriteBatch.cpp` `Begin()`): an `Immediate` batch refuses any second batch, an active `Immediate`
+batch refuses a `Deferred` one, and two `Deferred` batches coexist. The leg now asserts all three.
+
+The replacement is strictly better than what it replaced, which is why it was preferred to simply
+deleting the leg:
+
+- it is **XNA-specified behaviour** (Microsoft coordinates every `SpriteBatch` on one device), not a
+  CNAEXT extension;
+- it needs **no renderer capability at all**, so it means the same thing on every renderer — the
+  mesh probe had to tolerate a capability refusal and could not distinguish "accepted" from
+  "refused for the other reason" without string-matching the exception message;
+- it is **mutation-equivalent for the mutation `VULKAN-050` recorded**: forcing `sortMode_ =
+  Deferred` in `Begin()` stops `spriteImmediateBeginCount_` from ever incrementing, so both refusals
+  disappear and the leg fails — exactly as the old leg did.
+
+`BasicEffect.hpp` and `Vector2.hpp` became dead includes in that file and were removed with it.
+
+### ABI consequence
+
+`0.28.0` → **`0.29.0`**, following the policy in `docs/c-api/ABI_VERSIONING.md`: under `0.x` an
+incompatible change takes a **minor** increment plus release notes plus a regenerated baseline. The
+"requires a new ABI major" sentence in that document governs `1.x` and later, and the precedent is
+consistent — `0.20.0` and `0.28.0` both removed public identities on a minor bump, and `0.3.0`
+changed 66 routes' argument handling on one.
+
+Measured, not assumed: exported symbols **4,056 → 4,055**, recorded struct layouts **222 → 221**.
+The four prose repetitions of the export count (`ABI_VERSIONING.md`, `CONSUMING.md`,
+`LIMITATIONS.md`, `tools/c-api/limitations.json`) were updated with it, because
+`check_doc_export_counts.py` exists precisely to fail when they drift.
+
+## RRC-010 — `needsSurfacePresenter` and `TERMINAL`
+
+### Decision: `needsSurfacePresenter` is **kept**
+
+`RRC-008` correctly observed that no retained renderer sets it. That is a necessary condition for
+removal, not a sufficient one, and the audit found the sufficient condition absent. The decisive
+difference from `DrawMeshEXT` is **which side of the seam is missing**:
+
+| | `DrawMeshEXT` | `needsSurfacePresenter` |
+|---|---|---|
+| Producer (caller / renderer that sets it) | present (any C or C++ caller) | **absent** — no retained renderer sets it |
+| Consumer (code that does the work) | **absent** — no renderer implemented a mesh ABI | present — `TerminalSurfacePresenter`, 304 lines |
+| In the published C ABI | yes | **no** — zero hits in `modules/c-api/include/` and `abi_baseline.json` |
+| Deleting it would | remove a call that always threw | remove the only mechanism a working consumer is waiting for |
+
+Concrete evidence for the consumer, which is what the retain rule requires — code, not plans:
+
+- `needsSurfacePresenter` is read in production at `modules/graphics/src/Xna/GraphicsDevice.cpp`
+  (`createRenderer`), which creates the platform presenter and passes it to the renderer through
+  `GraphicsRendererCreateArgs::surfacePresenter`. The `GraphicsDevice` member is deliberately
+  declared before `renderer_` so reverse destruction keeps presentation alive through the raster
+  renderer's final destructor calls — lifetime ordering that exists for this path specifically.
+- `IPlatformSurfacePresenter` is **pure virtual on `IPlatform`**, so it is not optional
+  infrastructure: it is implemented by five retained backends (X11, Win32, Wayland, SDL3, Terminal)
+  and explicitly refused by two (SDL2, Headless) with `PlatformNotSupportedException`. It has its own
+  capability bit, `PlatformCapability::SurfacePresentation`, independent of this flag.
+- `TerminalSurfacePresenter` is a complete, working RGBA8 → ANSI implementation (letterboxing,
+  glyph-ramp quantisation, truecolor/256/16 SGR with remembered state, dirty-cell diffing), covered
+  by 36 pseudo-TTY tests that construct it directly and pass today.
+- `cmake/RendererSelection.cmake` still reserves `TERMINAL` for `SOFTWARE PORTABLEGL HEADLESS STUB`
+  — all four retained — so the supported combination this flag serves has not gone anywhere.
+- `RRC-001`'s own must-keep list already classified `IPlatformSurfacePresenter` as used by surviving
+  renderers and platforms.
+
+Deleting the flag would therefore not be a clean removal. It would delete the declared switch that a
+live, tested, retained consumer is waiting for, and a later session restoring terminal output would
+have to reintroduce the identical field — which is the "forces a later reintroduction" case that the
+retain rule names. It is one `bool` with an accurate doc comment describing its own dormancy.
+
+### `TERMINAL` is a live platform with a disconnected graphics output path
+
+`RRC-008`'s sentence "`TERMINAL` currently has no renderer feeding it" is literally true and is the
+whole of the problem — it must not be read as "`TERMINAL` is dead". Measured:
+
+| Question | Answer |
+|---|---|
+| Is it implemented? | `modules/platform/src/Terminal/` — 22 files, 4 754 lines |
+| Is it compiled? | **On every POSIX build, regardless of `CNA_PLATFORM`** (`modules/platform/CMakeLists.txt`) |
+| Is it tested? | 134 `TEST` cases over 9 files, 3 402 lines, plus two pseudo-TTY harnesses; a member of the parameterized platform conformance suite |
+| Is it selectable? | Yes, first-class on every non-Windows host (`cmake/PlatformSelection.cmake`); reserved with a `FATAL_ERROR` on Windows only, because it is built on `termios` |
+| Is it in CI? | Yes — `platform-ci.yml` matrix cell *Terminal + Software + Null audio* |
+| Can it present? | Yes — the presenter works when driven, proven by tests that construct it directly |
+| Is anything driving it? | **No.** Nothing sets `needsSurfacePresenter`, so `GraphicsDevice` never creates the presenter |
+
+`SOFTWARE` cannot substitute as-is, and the gap is wider than the one flag: `SoftwareRenderer::Present()`
+is an empty body, and the read site also requires `platformWindow_ != nullptr` while
+`SoftwareRendererDescriptor` sets `needsWindow = false`, which makes `GraphicsDevice` reset the
+window. Retired `BLEND2D` set `needsWindow = true`, `windowKind = Plain` **and**
+`needsSurfacePresenter = true` together; that triple is the working shape. Connecting it is feature
+work and is deliberately **not** done here.
+
+### One defect this branch introduced, found by the audit and fixed here
+
+`RRC-004` retargeted the terminal integration test from `BLEND2D` to `SOFTWARE` mechanically —
+`TerminalBlend2DDemoIntegration` → `TerminalSoftwareDemoIntegration` — and in doing so deleted the
+comment recording the invariant that made it work ("the one tuple that has a CPU presenter capable
+of reaching a terminal"). The assertions were left untouched, and three of them
+(`\x1b[?1049h`, `dropped_frames=`, `kitty_keyboard=`) have exactly one producer in the tree:
+`TerminalSurfacePresenter`, which under `SOFTWARE` is never constructed. The test could not pass.
+`RRC-008` recorded the consequence in prose while the CI leg asserting the opposite stayed
+registered.
+
+That is this branch's own regression, not a pre-existing one, so it is repaired here rather than
+deferred — see the `RRC-010` verification notes for what the repair was and the evidence that the
+test behaves as claimed.
+
+### RRC-009 / RRC-010 verification
+
+Measured on 2026-09-17, Linux, `-j8`. Starting HEAD `33928af3d`, clean tree.
+
+| Check | Result |
+|---|---|
+| `cmake-build-debug` (HEADLESS/SDL3) full build | clean, 0 errors |
+| `TERMINAL`+`SOFTWARE` configure and `cna_demo_2d` build (`build-probe`) | clean — the removal does not disturb the platform this pass investigated |
+| `cmake-build-vulkan` sort-mode semantics target | built and run, see below |
+| `scripts/check_renderer_identities.py` | **25 identities, 21 families, 26 retired values reserved, next free 52** — byte-identical to `RRC-008` |
+| `scripts/check_removed_renderer_api.py` (new, `RendererCurationApiDecisions`) | 4/4 groups pass |
+| `tools/c-api/generate_abi_baseline.py --check` | current: 221 structs, 4 055 exports recorded |
+| `tools/c-api/check_doc_export_counts.py` | 6 prose counts agree with the measured 4 055 |
+| 5 platform boundary gates (`sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet`, `hot_path_lint`) | all pass |
+| 4 renderer gates (`combinations`, `descriptors`, `runtime_discipline`, `target_discipline`) | all pass |
+
+**The new guard was mutation-tested**, one mutation at a time, each caught by exactly the intended
+arm and by no other, and the tree restored after each:
+
+| Injected fault | Caught as |
+|---|---|
+| `CNAEXT void DrawMeshEXT(Effect&);` re-added to `SpriteBatch.hpp` | *"names the removed `DrawMeshEXT`"* — RRC-009 arm |
+| `descriptor.needsSurfacePresenter` replaced by `false` in `GraphicsDevice.cpp` | *"no longer reads `needsSurfacePresenter`"* — RRC-010 arm |
+| `TerminalSurfacePresenter.cpp` deleted | *"missing — the terminal presenter that consumes it"* — RRC-010 arm |
+
+**The ABI gate was verified to catch this change before the baseline was re-recorded**, which is
+what proves the diff is exactly the intended one and nothing more: it reported precisely five
+breaks — `CNA_ABI_VERSION` 7168→7424, `CNA_ABI_VERSION_MINOR` 28→29, `struct removed:
+CNA_SpriteMeshEXT`, and the two encoded/minor version rows — with no unintended layout or constant
+movement anywhere in the 221 remaining structs, 350 scalar types or 1 558 constants.
+
+### `TerminalSoftwareDemoIntegration` — verified failing, then repaired
+
+The failure was **measured, not inferred**: configured `TERMINAL`+`SOFTWARE`, built `cna_demo_2d`,
+ran the test. It failed in 12.12 s with
+`AssertionError: demo never entered the terminal alternate screen` — its first gate, exactly as the
+presenter analysis predicted.
+
+It is **this branch's regression**, and that too is measured rather than argued: at the `RRC-001`
+baseline the CI cell was *Terminal + Blend2D + Null audio* running `TerminalBlend2DDemoIntegration`,
+and BLEND2D's descriptor set `needsSurfacePresenter = true`. `RRC-004` renamed the cell and the test
+to `SOFTWARE` without giving SOFTWARE a presenter.
+
+Repair, chosen to fit this pass's scope: the test keeps its registration and gains
+`DISABLED TRUE`, with the reason and the one-line condition for re-enabling it stated at the
+registration site. Implementing a SOFTWARE presenter is feature work and is explicitly out of scope
+here. Verified after the change: `ctest -R '^TerminalSoftwareDemoIntegration$'` reports
+`Not Run (Disabled)` and **exits 0**, so the CI step passes instead of hanging for 12 s and failing,
+while the leg re-arms automatically when the property is removed. The runner's docstring, which
+still named Blend2D, was corrected; the runner's logic was deliberately left untouched so it is
+ready to use as-is.
+
+Deleting the test instead would have hidden the gap; leaving it red would have normalised a failing
+CI leg. `TERMINAL`'s real coverage — 134 unit tests including 36 pseudo-TTY presenter tests — runs in
+`CnaPlatformTests` and is unaffected either way.
+
+### Generated files: what was regenerated, and what could not be
+
+`tools/c-api/abi_baseline.json` **was** re-recorded, and not by hand: the generator's own
+`measure()` produced the header half and the recorded export list was carried forward minus the one
+name whose definition no longer exists in the source (4 056 → 4 055). The reason the ordinary
+`--write` path was not used is a **pre-existing build failure**, proven rather than assumed:
+`-DCNA_BUILD_C_API=ON` does not compile, failing in `modules/c-api/src/CnaCApiEffects.cpp` with 8
+errors about `EffectAnnotation` references and lvalue `&` operands. Compiling that single
+translation unit in a `git worktree` at `33928af3d` — which contains none of this pass's changes —
+fails with the **byte-identical 8 errors**, and this pass touches neither that file nor
+`EffectAnnotation`. `--write` refuses to record a baseline without the library, by design.
+
+One consequence, recorded so it is not read later as drift: the re-recorded `abi_version` object no
+longer carries the `runtime` field, which only a real library can supply. The checker classifies a
+field present in the measurement but absent from the baseline as an **addition** (permitted), not a
+break, so the first library-backed run will ask to re-record rather than report an ABI break.
+
+`docs/c-api/RELEASE_GATE.md` is generated and was **not** regenerated — `--write` still bakes the
+pre-existing `generate_limitations.py` traceback into the published document, which `RRC-008` refused
+for good reason and this pass refuses too. Its one measurement this change invalidated was corrected
+in place to the value the generator's own formula yields from the re-recorded baseline
+(`len(structs)` and `len(exports)`: *"221 struct layouts and 4055 exported symbols recorded"*),
+because `check_doc_export_counts.py` **passed at the start of this pass** and leaving it red would
+have been a new regression. The document's stale `0.21.0` header and its *"1 criteria are unmet"*
+verdict are untouched and remain the pre-existing defect `RRC-008` describes.
+
+`plans/sdlgpu_renderer_contract_audit.csv` lost exactly the one row whose method no longer exists
+(266 → 265). The generator could not be re-run here: it needs two configured trees, and
+`SDLGPU-135` already records that the manifest is a function of a build option it does not itself
+record, with the standing instruction to leave it at its committed value. The other 265 rows are
+untouched, and the generator's own now-dead classification rules were removed so it can never
+re-emit the deleted row.
+
+`tools/c-api/generate_limitations.py` still fails with the single unused rule
+`sprite-batch-begin-explicit-state` — **unchanged** by this pass, neither worsened nor fixed. The
+renamed `spritebatch-text` rule still matches symbols (it covers `DrawString`, the constructors and
+`GetTypeName`), so narrowing its regex added no unused rule.
+
+### Full CTest corpus, against this pass's own baseline
+
+`cmake-build-debug` (HEADLESS/SDL3, Debug), `-j8`, run **before** any edit and again after, in the
+same tree — so this is like-for-like rather than compared with `RRC-008`'s different configuration.
+
+| | Tests | Failed |
+|---|---:|---:|
+| Before (`33928af3d`) | 9 145 | 16 |
+| After | 9 146 | 18 |
+
+The `+1` test is `RendererCurationApiDecisions`, which passes. A name-level diff of the two failure
+lists is the honest comparison, and it comes out clean:
+
+- **Nothing that failed before was fixed or vanished** — all 16 are still present, so nothing was
+  masked.
+- **Two names are new**, and both are timing-sensitive audio tests that **pass on individual rerun**:
+  `Sdl3AudioRecordingDeviceTests.CaptureReadIsNonBlockingBoundedAndPreservesSuffix` and
+  `CueTest.PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes`. Three of the 16 pre-existing
+  failures are from the same family (`CueTest.PauseAfterNaturalCompletionIsANoOp`,
+  `SoundBankTest.IsInUseFalseSoonAfter…`, `WaveBankTest.IsInUseFalseSoonAfter…`) and **also pass on
+  individual rerun**. All five were re-run one at a time before being classified; the corpus is
+  flaky here under `-j8`, in both directions, and that flakiness predates this pass.
+
+So the genuine failure set is **unchanged at 13**, and the three C API ones among them
+(`CApiCoverageMatrix`, `CApiLimitations`, `CApiReleaseGate`) are the pre-existing
+`generate_limitations.py` defect `RRC-008` already recorded — measured again here as the *same single*
+unused rule, not a longer list.
+
+**26/26 retired-selector negative configure tests pass** (`CnaRendererRetired_Selector_*`), so the
+retirement decisions this pass must not disturb are still enforced by real project configures.
+
+**`Vulkan_SpriteBatch_SortModeSemantics` was verified separately**, because it is registered only for
+Vulkan and EasyGL and therefore never runs in the HEADLESS corpus above — which is exactly the kind
+of gap that lets a rewritten test go unchecked. Built and run in `cmake-build-vulkan` on an AMD
+Radeon 780M (RADV):
+
+| Legs | Before (baseline sources restored into the same tree) | After |
+|---|---|---|
+| 6 | **5/6** — B2 passed as *"Deferred refused the mesh for its sort mode, Immediate did not (refused on capability)"*; C2 failed | **5/6** — B2 passes as *"Immediate+Deferred refused (yes), Deferred+Immediate refused (yes), Deferred+Deferred allowed (yes)"*; C2 fails |
+
+The rewritten leg B2 passes, now asserting three answers where the mesh probe asserted one. **C2's
+failure is pre-existing and untouched by this pass**, proven by restoring the four affected files to
+`33928af3d`, rebuilding the target in the same tree and re-running: byte-identical failure message
+(`got=(255,0,0) (want blue, the one issued second)`), and it reproduces on three consecutive runs, so
+it is not flake. It belongs to `SpriteSortMode::Texture` grouping, which this pass does not change;
+recording it here rather than fixing it keeps this pass narrow.
+
+### Not verified here, stated plainly
+
+- **Windows and macOS runtime**: nothing claimed. `DIRECTX9/11/12`, `DIRECT2D`, `GDI` and `METAL`
+  were not run; only their sources were compiled where this Linux host can.
+- **`FREEDIRECT`**: still needs the absent sibling checkout, unchanged from `RRC-008`.
+- **The C API library itself**: cannot be built on this branch at all (pre-existing, proven above),
+  so the *export half* of the ABI gate and the strict-C route tests were not executed. The header
+  half runs and is green. This is worth an owner decision on its own: the C ABI cannot currently be
+  built or shipped from this branch, independently of anything the curation did.

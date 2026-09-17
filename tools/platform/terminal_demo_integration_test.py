@@ -2,8 +2,15 @@
 """Run the real 2D demo under a pseudo-terminal and verify its platform contract.
 
 This is deliberately an integration test rather than another presenter unit test: the executable
-creates Game/GraphicsDevice/Blend2D/TerminalPlatform, presents real frames, handles a real input
+creates Game/GraphicsDevice/renderer/TerminalPlatform, presents real frames, handles a real input
 byte, reacts to SIGWINCH, and must restore the caller's terminal before it exits.
+
+It requires a renderer whose `GraphicsRendererDescriptor` sets `needsSurfacePresenter`, because
+every byte sequence asserted below is emitted by `TerminalSurfacePresenter` and nothing else.
+No renderer in the tree sets it since BLEND2D was retired, so the CTest registration is currently
+DISABLED -- see `modules/graphics/examples/CMakeLists.txt` and
+`plans/plan_renderer_cleanup.md` RRC-010. The runner is kept intact and unmodified so that
+connecting a CPU renderer to `IPlatformSurfacePresenter` re-enables real coverage in one step.
 """
 
 import argparse

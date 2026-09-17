@@ -74,6 +74,17 @@ simply another device that can accept that buffer — it just quantises instead 
 `BLEND2D` (retired 2026-09-17) was the only renderer that presented CPU frames through
 `IPlatformSurfacePresenter`, and no renderer in the tree requests a presenter today.
 
+**What that costs, precisely** (`plans/plan_renderer_cleanup.md` `RRC-010`). The terminal platform
+itself is unaffected: it is compiled into every POSIX build, and its 134 unit tests — including the
+36 pseudo-TTY tests that drive `TerminalSurfacePresenter` directly — run and pass in
+`CnaPlatformTests`. What cannot happen today is a *game* reaching the terminal, because
+`GraphicsDevice` builds a presenter only for a renderer whose descriptor sets
+`needsSurfacePresenter`. The end-to-end demo test `TerminalSoftwareDemoIntegration` is therefore
+registered `DISABLED` rather than left failing, and re-enabling it is one property removal once a CPU
+renderer requests a presenter. `SOFTWARE` needs more than the flag to become that renderer:
+`SoftwareRenderer::Present()` is currently empty and the descriptor sets `needsWindow = false`, which
+makes `GraphicsDevice` drop the window the presenter is created against.
+
 ```text
 Game
   ↓
