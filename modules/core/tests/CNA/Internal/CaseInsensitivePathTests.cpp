@@ -6,10 +6,19 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+
+// plans/plan_graphics_shared_cleanup.md GSC-0007 (formerly WINNATIVE-F26, two deliberately red tests on
+// Windows). ResolveExistingXnaPath promises a spelling that OPENS the file XNA content named with any
+// ASCII casing, not the casing stored on disk: on a case-insensitive filesystem the requested spelling
+// already opens and is returned without a directory scan. So every case asserts what the function
+// promises on the filesystem the scratch directory is actually on -- the resolved path opens the right
+// file -- and pins the spelling each kind of filesystem produces, decided by probing that filesystem
+// rather than by the compile target.
 
 namespace
 {
@@ -23,6 +32,9 @@ namespace
                     ("cna_case_insensitive_path_" + std::to_string(suffix));
             std::filesystem::create_directories(path_ / "Content" / "Audio");
             std::ofstream(path_ / "Content" / "Audio" / "SpaceWar.xgs") << "fixture";
+
+            std::error_code ec;
+            caseSensitive_ = !std::filesystem::exists(path_ / "content", ec);
         }
 
         ~ScratchPath()
@@ -33,9 +45,28 @@ namespace
 
         [[nodiscard]] const std::filesystem::path& getPath() const { return path_; }
 
+        /** @brief Whether the scratch directory's filesystem tells "Content" from "content". */
+        [[nodiscard]] bool isCaseSensitive() const { return caseSensitive_; }
+
     private:
         std::filesystem::path path_;
+        bool caseSensitive_ = true;
     };
+
+    std::string ReadAll(const std::string& utf8Path)
+    {
+        std::ifstream stream(CNA::Internal::PathFromUtf8(utf8Path), std::ios::binary);
+        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    }
+
+    void ExpectOpensTheOnDiskFile(const std::string& resolved, const std::filesystem::path& onDisk)
+    {
+        std::error_code ec;
+        EXPECT_TRUE(std::filesystem::equivalent(CNA::Internal::PathFromUtf8(resolved), onDisk, ec))
+            << resolved << " does not name " << CNA::Internal::PathToGenericUtf8(onDisk)
+            << (ec ? " (" + ec.message() + ")" : std::string());
+        EXPECT_EQ(ReadAll(resolved), "fixture") << resolved;
+    }
 }
 
 TEST(CaseInsensitivePathTest, ExactExistingPathIsPreserved)
@@ -51,36 +82,34 @@ TEST(CaseInsensitivePathTest, ExactExistingPathIsPreserved)
               CNA::Internal::PathToGenericUtf8(exact));
 }
 
-// This one is expected to FAIL on Windows, and is deliberately left failing rather than guarded.
-// It is WINNATIVE-F26: on a case-insensitive filesystem the early exists() check succeeds for the
-// wrongly-cased path, so the walker returns the spelling it was ASKED for rather than the one on
-// disk. The file opens either way; what differs is the returned string. Making it always walk
-// would add a directory scan per path on the one platform that does not need it, and guarding the
-// test would make it pass on Windows without checking what it claims -- which is worse than an
-// honest red. See plans/plan_win32_native_validation.md WINNATIVE-F26.
 TEST(CaseInsensitivePathTest, ResolvesEveryCaseVariantComponent)
 {
     ScratchPath scratch;
     const auto requested = scratch.getPath() / "content" / "audio" / "spacewar.xgs";
-    const auto expected = scratch.getPath() / "Content" / "Audio" / "SpaceWar.xgs";
+    const auto onDisk = scratch.getPath() / "Content" / "Audio" / "SpaceWar.xgs";
 
-    EXPECT_EQ(CNA::Internal::ResolveExistingXnaPath(CNA::Internal::PathToGenericUtf8(requested)),
-              CNA::Internal::PathToGenericUtf8(expected));
+    const std::string resolved =
+        CNA::Internal::ResolveExistingXnaPath(CNA::Internal::PathToGenericUtf8(requested));
+    ExpectOpensTheOnDiskFile(resolved, onDisk);
+
+    // Case-sensitive: only the on-disk spelling opens, so the walk must have found it. Case-insensitive:
+    // the request already opens and comes back unchanged, with no directory scan.
+    EXPECT_EQ(resolved, CNA::Internal::PathToGenericUtf8(scratch.isCaseSensitive() ? onDisk : requested));
 }
 
-// Also expected to FAIL on Windows, and for the same reason as ResolvesEveryCaseVariantComponent
-// above: its input is lower-cased as well as backslash-spelled, so it asks for the on-disk casing
-// too. WINNATIVE-F26 covers both. The separator half of what it checks does hold on Windows.
 TEST(CaseInsensitivePathTest, NormalizesWindowsSeparators)
 {
     ScratchPath scratch;
-    std::string requested =
-        CNA::Internal::PathToGenericUtf8(scratch.getPath() / "content" / "audio" / "spacewar.xgs");
+    const auto requestedPath = scratch.getPath() / "content" / "audio" / "spacewar.xgs";
+    std::string requested = CNA::Internal::PathToGenericUtf8(requestedPath);
     std::replace(requested.begin(), requested.end(), '/', '\\');
-    const auto expected = scratch.getPath() / "Content" / "Audio" / "SpaceWar.xgs";
+    const auto onDisk = scratch.getPath() / "Content" / "Audio" / "SpaceWar.xgs";
 
-    EXPECT_EQ(CNA::Internal::ResolveExistingXnaPath(requested),
-              CNA::Internal::PathToGenericUtf8(expected));
+    const std::string resolved = CNA::Internal::ResolveExistingXnaPath(requested);
+    EXPECT_EQ(resolved.find('\\'), std::string::npos) << resolved;
+    ExpectOpensTheOnDiskFile(resolved, onDisk);
+    EXPECT_EQ(resolved,
+              CNA::Internal::PathToGenericUtf8(scratch.isCaseSensitive() ? onDisk : requestedPath));
 }
 
 TEST(CaseInsensitivePathTest, UnresolvedPathKeepsNormalizedRequestedSpelling)
