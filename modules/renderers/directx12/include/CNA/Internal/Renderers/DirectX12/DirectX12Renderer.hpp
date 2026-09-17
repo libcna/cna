@@ -208,11 +208,24 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
         /**
-         * @brief Reports the fixed XNA depth format of the default D3D12 depth resource.
+         * @brief Reports the XNA depth format the default D3D12 depth resource is allocated in.
+         *
+         * plans/plan_directx12_parity.md DX12-0019 (DirectX11's WINCLOSE-0012): the back buffer allocates
+         * what PresentationParameters.DepthStencilFormat asks for, so this is the request -- except an
+         * ordinal DXGI has no depth format for, which allocates nothing.
+         *
          * @param requestedFormat The caller's requested DepthFormat ordinal.
-         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         * @return @p requestedFormat, or DepthFormat::None when it has no DXGI depth format.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Applies a Reset's back-buffer depth format to the default surfaces.
+         * @param backBufferFormat Requested SurfaceFormat ordinal (the colour format is fixed).
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Requested full-screen state (handled by presentation, not here).
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
@@ -1165,6 +1178,11 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
         int requestedMultiSampleCount_ = 0;
         int appliedMultiSampleCount_ = 0;
+        // DX12-0019: PresentationParameters.DepthStencilFormat as requested, and the format the
+        // default depth resource was last allocated in (-1 before the first allocation).
+        int backBufferDepthFormat_ = 3; // DepthFormat::Depth24Stencil8
+        int appliedBackBufferDepthFormat_ = -1;
+        DXGI_FORMAT depthStencilDxgiFormat_ = DXGI_FORMAT_UNKNOWN;
 
         // DX-144: tracks the currently-bound custom (non-back-buffer) render target, mirroring
         // DirectX11Renderer's own currentCustomRT_ exactly -- SetRenderTarget2D(nullptr) needs

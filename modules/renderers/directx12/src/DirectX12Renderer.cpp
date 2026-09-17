@@ -334,6 +334,7 @@ namespace CNA::Internal::Renderers::DirectX12
         : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , requestedMultiSampleCount_(args.multiSampleCount)
+        , backBufferDepthFormat_(args.depthStencilFormat)
         , contextRecoveryEnabled_(args.contextRecoveryEnabled)
         , deviceEventCallback_(args.deviceEventCallback)
     {
@@ -1092,30 +1093,39 @@ namespace CNA::Internal::Renderers::DirectX12
                     FormatHr(colorHr));
         }
 
-        D3D12_RESOURCE_DESC depthDesc{};
-        depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        depthDesc.Width = static_cast<UINT64>(width_);
-        depthDesc.Height = static_cast<UINT>(height_);
-        depthDesc.DepthOrArraySize = 1;
-        depthDesc.MipLevels = 1;
-        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // matches D3D11's own DX-24 default (DX-11-fmt)
-        depthDesc.SampleDesc.Count = newSampleCount > 0
-            ? static_cast<UINT>(newSampleCount)
-            : 1u;
-        depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-        D3D12_CLEAR_VALUE depthClear{};
-        depthClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depthClear.DepthStencil.Depth = 1.0f;
-        depthClear.DepthStencil.Stencil = 0;
-
+        // plans/plan_directx12_parity.md DX12-0019 (DirectX11's WINCLOSE-0012): the depth resource follows
+        // PresentationParameters.DepthStencilFormat, as render targets already did. It used to be D24S8
+        // whatever was asked for, so DepthFormat::None still depth-tested and Depth24 carried a usable
+        // stencil. None allocates nothing; DXGI has no 24-bit depth-only format, so Depth24 shares
+        // D24S8 storage and FillPsoStateFromCurrentEXT keeps its stencil out of reach.
+        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(backBufferDepthFormat_);
         ComPtr<ID3D12Resource> newDepthResource;
-        HRESULT hr = device_->CreateCommittedResource(
-            &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
-            D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
-            IID_PPV_ARGS(newDepthResource.GetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
+        if (depthDxgiFormat != DXGI_FORMAT_UNKNOWN)
+        {
+            D3D12_RESOURCE_DESC depthDesc{};
+            depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            depthDesc.Width = static_cast<UINT64>(width_);
+            depthDesc.Height = static_cast<UINT>(height_);
+            depthDesc.DepthOrArraySize = 1;
+            depthDesc.MipLevels = 1;
+            depthDesc.Format = depthDxgiFormat;
+            depthDesc.SampleDesc.Count = newSampleCount > 0
+                ? static_cast<UINT>(newSampleCount)
+                : 1u;
+            depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+            D3D12_CLEAR_VALUE depthClear{};
+            depthClear.Format = depthDxgiFormat;
+            depthClear.DepthStencil.Depth = 1.0f;
+            depthClear.DepthStencil.Stencil = 0;
+
+            const HRESULT hr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
+                IID_PPV_ARGS(newDepthResource.GetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("DirectX12Renderer: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
+        }
 
         D3D12_CPU_DESCRIPTOR_HANDLE newMsaaRtv{};
         if (newMsaaResource)
@@ -1123,28 +1133,36 @@ namespace CNA::Internal::Renderers::DirectX12
             newMsaaRtv = AllocateRtvDescriptorEXT();
             device_->CreateRenderTargetView(newMsaaResource.Get(), nullptr, newMsaaRtv);
         }
-        const D3D12_CPU_DESCRIPTOR_HANDLE newDepthView = AllocateDsvDescriptorEXT();
-        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        dsvDesc.ViewDimension = newSampleCount > 0
-            ? D3D12_DSV_DIMENSION_TEXTURE2DMS
-            : D3D12_DSV_DIMENSION_TEXTURE2D;
-        device_->CreateDepthStencilView(newDepthResource.Get(), &dsvDesc, newDepthView);
+        D3D12_CPU_DESCRIPTOR_HANDLE newDepthView{};
+        if (newDepthResource)
+        {
+            newDepthView = AllocateDsvDescriptorEXT();
+            D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+            dsvDesc.Format = depthDxgiFormat;
+            dsvDesc.ViewDimension = newSampleCount > 0
+                ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+                : D3D12_DSV_DIMENSION_TEXTURE2D;
+            device_->CreateDepthStencilView(newDepthResource.Get(), &dsvDesc, newDepthView);
+        }
 
         UnbindOffscreenColorTargetEXT();
         FreeRtvDescriptorEXT(backBufferMsaaRtv_);
         FreeDsvDescriptorEXT(depthStencilViewEXT_);
         backBufferMsaaResource_ = std::move(newMsaaResource);
         backBufferMsaaRtv_ = newMsaaRtv;
+        resourceStates_.UntrackResource(depthStencilResource_.Get());
         depthStencilResource_ = std::move(newDepthResource);
         depthStencilViewEXT_ = newDepthView;
+        depthStencilDxgiFormat_ = depthDxgiFormat;
+        appliedBackBufferDepthFormat_ = backBufferDepthFormat_;
         requestedMultiSampleCount_ = requestedMultiSampleCount;
         appliedMultiSampleCount_ = newSampleCount;
 
         if (backBufferMsaaResource_)
             resourceStates_.TrackResource(
                 backBufferMsaaResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
-        resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        if (depthStencilResource_)
+            resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
         RestoreBackBufferRenderTargetEXT();
     }
 
@@ -1219,7 +1237,8 @@ namespace CNA::Internal::Renderers::DirectX12
         CNA::Logger::Info(
             "D3D12: no swap chain, so this device uses an implicit off-screen back buffer (" +
                 std::to_string(width_) + "x" + std::to_string(height_) +
-                ", R8G8B8A8_UNORM + D24_UNORM_S8_UINT); Present() is a no-op on it "
+                ", R8G8B8A8_UNORM, DepthFormat ordinal " + std::to_string(appliedBackBufferDepthFormat_) +
+                "); Present() is a no-op on it "
                 "(plans/plan_dx.md DX-241)",
             CNA::LogCategory::RENDER);
     }
@@ -2025,7 +2044,7 @@ namespace CNA::Internal::Renderers::DirectX12
         if (drawResource)
             BindOffscreenColorTargetEXT(drawResource, GetBackBufferDrawRtvEXT(),
                                         DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                        depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
+                                        depthStencilViewEXT_, depthStencilDxgiFormat_,
                                         depthStencilResource_.Get());
     }
 
@@ -2411,7 +2430,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // multisampled color resource; otherwise it is the newly-current flip-model back buffer.
         BindOffscreenColorTargetEXT(GetBackBufferDrawResourceEXT(), GetBackBufferDrawRtvEXT(),
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
+                                    depthStencilViewEXT_, depthStencilDxgiFormat_,
                                     depthStencilResource_.Get());
         if (infoQueue_) DrainDebugMessagesEXT();
     }
@@ -2668,7 +2687,10 @@ namespace CNA::Internal::Renderers::DirectX12
         requestedMultiSampleCount_ = requestedMultiSampleCount;
         const int clamped = ClampBackBufferMultiSampleCount(
             device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
-        if (clamped != appliedMultiSampleCount_ || !depthStencilResource_)
+        // DX12-0019: the applied depth format stands in for the old `!depthStencilResource_` test, which
+        // meant "no default surfaces yet" and is no longer that once DepthFormat::None legitimately
+        // leaves the depth resource null.
+        if (clamped != appliedMultiSampleCount_ || appliedBackBufferDepthFormat_ != backBufferDepthFormat_)
             RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
         return appliedMultiSampleCount_;
     }
@@ -2681,8 +2703,24 @@ namespace CNA::Internal::Renderers::DirectX12
 
     int DirectX12Renderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
     {
-        (void) requestedFormat;
-        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        return D3DCommon::DepthFormatToDxgi(requestedFormat) == DXGI_FORMAT_UNKNOWN
+            ? static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::None)
+            : requestedFormat;
+    }
+
+    void DirectX12Renderer::UpdatePresentationFormatEXT(
+        int backBufferFormat, int depthStencilFormat, bool isFullScreen)
+    {
+        // DX12-0019: only the depth format changes a resource here (the colour format is fixed, full
+        // screen has its own path). Recreated at once when the surfaces exist, so the depth buffer a
+        // Reset asked for is the one the next draw gets even if the sample count did not change.
+        (void) backBufferFormat;
+        (void) isFullScreen;
+        if (depthStencilFormat == backBufferDepthFormat_)
+            return;
+        backBufferDepthFormat_ = depthStencilFormat;
+        if (appliedBackBufferDepthFormat_ >= 0 && GetCurrentBackBufferResourceEXT() != nullptr)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
     }
 
     void DirectX12Renderer::SetPresentationMode(int mode)
@@ -3110,7 +3148,15 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.depthFunc = currentDepthFunc_;
         // DX-202: the stencil half, which used to be dropped between ApplyDepthStencilState() and
         // the PSO.
-        psoDesc.stencilEnable = currentStencilEnable_;
+        // DX12-0019: a back buffer declared Depth24 is backed by D24S8, and XNA's Depth24 has no stencil,
+        // so while that view is bound the stencil test is off rather than operating on storage the game
+        // never asked for. Keyed on the bound resource, so a render target that declared Depth24Stencil8
+        // keeps its stencil.
+        const bool backBufferStencilHidden =
+            boundDepthResource_ != nullptr && boundDepthResource_ == depthStencilResource_.Get() &&
+            backBufferDepthFormat_ != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        psoDesc.stencilEnable = currentStencilEnable_ && !backBufferStencilHidden;
         psoDesc.stencilFunc = currentStencilFunc_;
         psoDesc.stencilPass = currentStencilPass_;
         psoDesc.stencilFail = currentStencilFail_;
