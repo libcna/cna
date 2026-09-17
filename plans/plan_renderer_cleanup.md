@@ -752,3 +752,14 @@ recording it here rather than fixing it keeps this pass narrow.
   so the *export half* of the ABI gate and the strict-C route tests were not executed. The header
   half runs and is green. This is worth an owner decision on its own: the C ABI cannot currently be
   built or shipped from this branch, independently of anything the curation did.
+
+### One thing the new gate caught on its author
+
+Worth recording because it is the gate doing its job on the change that introduced it: the
+`RRC-010` justification comment added to `GraphicsRendererDescriptor.hpp` originally contrasted the
+decision with `DrawMeshEXT` **by name**, which is precisely what the `RRC-009` arm forbids in active
+code. The gate failed, and the comment was reworded to name the task rather than the symbol rather
+than adding an exemption for the file — an exemption would have opened the whole descriptor header to
+the name it exists to keep out. The only allowances are the gate's own source, the files whose
+subject *is* the removal (`CHANGELOG.md`, the ABI release notes, the dated `0.9.0` handoff note), the
+separately-checked ABI baseline, and one explanatory comment in the re-instrumented sort-mode test.

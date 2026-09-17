@@ -266,10 +266,10 @@ namespace CNA::Internal::Renderers
          * BLEND2D, were retired in 2026-08 and on 2026-09-17.
          *
          * **Audited and deliberately kept** (`plans/plan_renderer_cleanup.md` `RRC-010`), unlike
-         * `DrawMeshEXT`, which was audited the same way and deleted. The difference is which side
-         * of the seam is missing: `DrawMeshEXT` had no *implementation* anywhere, so the call could
-         * only ever throw, while this flag's consumer is complete and tested and only its producer
-         * is absent. `GraphicsDevice::createRenderer()` reads it to build an
+         * the 2D mesh entry point that `RRC-009` audited the same way and deleted. The difference
+         * is which side of the seam is missing: that one had no *implementation* anywhere, so the
+         * call could only ever throw, while this flag's consumer is complete and tested and only
+         * its producer is absent. `GraphicsDevice::createRenderer()` reads it to build an
          * `IPlatformSurfacePresenter`; that interface is pure-virtual on `IPlatform`, implemented by
          * five retained backends, and `TerminalSurfacePresenter` turns the RGBA8 frame into ANSI
          * under 36 passing pseudo-TTY tests. `cmake/RendererSelection.cmake` still reserves
