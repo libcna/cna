@@ -48,7 +48,14 @@ SSH_OPTS=(
 
 die() { echo "windows_vm_exec: $*" >&2; exit 2; }
 
-vm_state() { VBoxManage showvminfo "$VM" --machinereadable 2>/dev/null | sed -n 's/^VMState="\(.*\)"$/\1/p'; }
+# VBoxManage starts VBoxSVC, and VBoxSVC starts VBoxHeadless; each inherits the caller's working
+# directory, and VBoxHeadless writes a <date>-VBoxHeadless-<pid>.log register dump there when the
+# guest powers off. Run every VBoxManage call from a state directory so that dump never lands in
+# the checkout the script was invoked from.
+VBOX_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/cna-windows-vm"
+vbox() { mkdir -p "$VBOX_STATE_DIR" && (cd "$VBOX_STATE_DIR" && VBoxManage "$@"); }
+
+vm_state() { vbox showvminfo "$VM" --machinereadable 2>/dev/null | sed -n 's/^VMState="\(.*\)"$/\1/p'; }
 
 ssh_ok() {
   timeout 20 ssh -n "${SSH_OPTS[@]}" -p "$PORT" "$USER_NAME@$HOST" "exit 0" >/dev/null 2>&1
@@ -68,7 +75,7 @@ ensure_running() {
   [ -n "$state" ] || die "VM '$VM' not found (VBoxManage list vms)"
   if [ "$state" != "running" ]; then
     echo "windows_vm_exec: starting '$VM' ($state -> running, --type $VM_TYPE)" >&2
-    VBoxManage startvm "$VM" --type "$VM_TYPE" >&2 || die "could not start '$VM'"
+    vbox startvm "$VM" --type "$VM_TYPE" >&2 || die "could not start '$VM'"
   fi
   wait_ssh 420 || die "VM is running but SSH never came up on port $PORT"
 }
@@ -88,7 +95,7 @@ case "${1:-}" in
       ssh "${SSH_OPTS[@]}" -p "$PORT" "$USER_NAME@$HOST" \
           "shutdown /s /t 0 /d p:0:0" >/dev/null 2>&1
     else
-      VBoxManage controlvm "$VM" acpipowerbutton >/dev/null 2>&1
+      vbox controlvm "$VM" acpipowerbutton >/dev/null 2>&1
     fi
     for _ in $(seq 1 60); do [ "$(vm_state)" = "poweroff" ] && { echo "poweroff"; exit 0; }; sleep 5; done
     die "guest did not power off within 300s"
