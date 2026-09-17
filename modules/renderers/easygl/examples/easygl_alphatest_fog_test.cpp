@@ -34,6 +34,13 @@
 // same reason Task 377 didn't commit one — it would encode today's confirmed no-op as a "passing"
 // assertion that would need updating (and could be forgotten) once Task 888 lands.
 //
+// The material is sampled through an explicit 1x1 opaque-white Texture. AlphaTestEffect has no
+// TextureEnabled switch and always samples its texture, and Microsoft XNA samples a null one as
+// opaque black (SOFTWARE-303, measured). This fixture predates that measurement and relied on the
+// retired white-null convention, so on a renderer with XNA's rule it read black and half-fogged
+// black instead of the material (plans/plan_directx12_parity.md DX12-0021). Its subject is fog, so
+// the texture is now stated rather than implied.
+//
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -46,6 +53,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cstdio>
@@ -78,6 +86,7 @@ static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0.45: factor=0.5, h
 class AlphaTestFogTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
+    std::unique_ptr<Texture2D> white_;
     int  pass_ = 0;
     int  fail_ = 0;
 
@@ -117,6 +126,7 @@ class AlphaTestFogTest : public Game
     Color renderAtZ(GraphicsDevice& dev, float z)
     {
         AlphaTestEffect fx(dev);
+        fx.setTextureProperty(white_.get());
         fx.setDiffuseColorProperty(kDiffuse);
         fx.setFogEnabledProperty(true);
         fx.setFogColorProperty(kFogColor);
@@ -152,6 +162,9 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
+        white_ = std::make_unique<Texture2D>(dev, 1, 1);
+        const Color white(255, 255, 255, 255);
+        white_->SetData(&white, 1);
 
         const Color noFogGot = renderAtZ(dev, 0.0f);
         check(matches(noFogGot, kExpectedNoFog),
