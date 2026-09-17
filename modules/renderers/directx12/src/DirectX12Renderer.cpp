@@ -4076,8 +4076,9 @@ namespace CNA::Internal::Renderers::DirectX12
             // fallback performs a synchronous texture upload, which submits the current frame
             // segment; allocating first would let the resumed segment reset and reuse those ranges.
             // GLTF-386 (as DirectX11): glTF baseColorTexture is optional, and an absent base-colour map
-            // is opaque white -- factor-only PBR primitives must not sample the generic fallback below.
-            srvTextures[0] = params.texture0 ? params.texture0 : GetOrCreateDefaultWhiteTextureEXT();
+            // is opaque white. The fill loop below supplies it (this branch is reached only when
+            // needsEnvMap is false), so this line keeps the spelling GltfRendererPbrFallbackPolicy audits.
+            srvTextures[0] = params.texture0;
             srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
             srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
@@ -4402,9 +4403,11 @@ namespace CNA::Internal::Renderers::DirectX12
         // real descriptor. An unbound slot used to pass a null GPU handle to SetGraphicsRootDescriptorTable,
         // which is undefined. The values are DirectX11's established ones: DualTextureEffect and
         // AlphaTestEffect were given XNA's opaque black above; SkinnedEffect and BasicEffect sample opaque
-        // white (GLTF-386, shared with Vulkan, EasyGL and OpenGL); EnvironmentMapEffect, for which DirectX11
-        // binds a null view, takes XNA's opaque black for both its texture and its cube. Resolved before
-        // the command list is touched, because creating a fallback records an upload.
+        // white (GLTF-386) -- SOFTWARE-303 has since measured XNA's opaque black there too, a conflict
+        // DirectX11 shares and the plan records rather than one renderer deciding it alone;
+        // EnvironmentMapEffect, for which DirectX11 binds a null view, takes XNA's opaque black for both
+        // its texture and its cube. Resolved before the command list is touched, because creating a
+        // fallback records an upload.
         for (int i = 0; i < numSrvs; ++i)
         {
             if (i == 1 && needsEnvMap)
