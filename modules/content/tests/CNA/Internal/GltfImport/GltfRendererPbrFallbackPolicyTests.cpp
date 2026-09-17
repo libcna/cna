@@ -3370,11 +3370,14 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     // remaining 2D/no-3D backends deliberately inherit the shared, unconditionally throwing
     // default. Keeping the three sets disjoint makes a new renderer an audit failure, not an
     // accidental 16-bit fallback.
-    constexpr std::array<const char*, 33> providers{{
+    // WINCLOSE-0037: RLGL gained real 16- and 32-bit index buffers in its September parity work
+    // (RlglRenderer::CreateIndexBuffer16/32) without an entry in either list here, so the
+    // inventory audit has failed on every platform since.
+    constexpr std::array<const char*, 34> providers{{
         "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
         "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
         "easygl", "fna3d", "glide", "headless", "igl", "llgl", "magnum", "metal",
-        "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
+        "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "rlgl", "sdl-gpu",
         "software", "sokol", "stub", "tinygl", "vulkan", "webgpu", "wicked",
     }};
     constexpr std::array<const char*, 1> explicitRejecters{{"gdi"}};
@@ -3390,7 +3393,7 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     for (const char* name : providers) { expected.insert(name); }
     for (const char* name : explicitRejecters) { expected.insert(name); }
     for (const char* name : inheritedRejecters) { expected.insert(name); }
-    ASSERT_EQ(45u, expected.size()) << "the policy sets must be disjoint";
+    ASSERT_EQ(46u, expected.size()) << "the policy sets must be disjoint";
 
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
@@ -3410,11 +3413,14 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 
 TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFallBackToSixteenBits)
 {
-    constexpr std::array<const char*, 33> providers{{
+    // WINCLOSE-0037: RLGL gained real 16- and 32-bit index buffers in its September parity work
+    // (RlglRenderer::CreateIndexBuffer16/32) without an entry in either list here, so the
+    // inventory audit has failed on every platform since.
+    constexpr std::array<const char*, 34> providers{{
         "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
         "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
         "easygl", "fna3d", "glide", "headless", "igl", "llgl", "magnum", "metal",
-        "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
+        "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "rlgl", "sdl-gpu",
         "software", "sokol", "stub", "tinygl", "vulkan", "webgpu", "wicked",
     }};
     // PIXIJS overrides CreateIndexBuffer16 locally to name itself in the refusal but does NOT
