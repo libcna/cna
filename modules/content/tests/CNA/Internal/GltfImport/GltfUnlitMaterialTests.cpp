@@ -34,6 +34,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "CNA/RendererTestGate.hpp"
 
 using CNA::Internal::JsonValue;
 using CnaTest::GltfOracle::BoolOr;
@@ -49,6 +51,8 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
+using namespace CNA::Testing::Renderers;
 
 namespace
 {
@@ -219,6 +223,35 @@ TEST(GltfUnlitMaterial, ASkinnedUnlitMaterialIsApproximatedRatherThanMapped)
            "worse answer than leaving it lit";
     EXPECT_NEAR(1.0f, ambient.Y, kTolerance);
     EXPECT_NEAR(1.0f, ambient.Z, kTolerance);
+}
+
+TEST(GltfUnlitMaterial, AnUntexturedSkinSamplesGltfWhiteRatherThanAnUnboundTexture)
+{
+    // plans/plan_graphics_shared_cleanup.md GSC-0004. glTF: a missing baseColorTexture is a white
+    // multiplier of baseColorFactor. XNA's SkinnedEffect always samples its texture and reads an
+    // unbound one as opaque black (tools/xna-oracle/reference/null-texture/skinned_null.png), so the
+    // importer has to bind glTF's white itself -- the Direct3D renderers used to paper over this with
+    // a white renderer fallback (GLTF-386), which is not what XNA's stock effect means.
+    const LoadedFixture fixture("skin-unlit");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-unlit");
+
+    auto* skinned = dynamic_cast<SkinnedEffect*>(FirstEffect(model));
+    ASSERT_NE(nullptr, skinned);
+    Texture2D* texture = skinned->getTextureProperty();
+    ASSERT_NE(nullptr, texture) << "an untextured glTF skin must not leave SkinnedEffect.Texture null";
+    EXPECT_EQ(1, texture->getWidthProperty());
+    EXPECT_EQ(1, texture->getHeightProperty());
+    if (CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan))
+    {
+        Microsoft::Xna::Framework::Color texel = Microsoft::Xna::Framework::Color::Transparent;
+        texture->GetData(&texel, 1);
+        EXPECT_EQ(Microsoft::Xna::Framework::Color::White, texel);
+    }
 }
 
 TEST(GltfUnlitMaterial, EveryUnlitFixtureCarriesTheFlagThroughTheImporterItself)

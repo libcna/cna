@@ -751,6 +751,11 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Texture2D> defaultOpaqueBlackTexture_;
         ComPtr<ID3D11ShaderResourceView> defaultOpaqueBlackSrv_;
         ID3D11ShaderResourceView* GetOrCreateDefaultOpaqueBlackSrvEXT();
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: EnvironmentMapEffect's unbound cube samples
+        // opaque black in XNA too; a null cube view here sampled transparent black.
+        ComPtr<ID3D11Texture2D> defaultOpaqueBlackCubeTexture_;
+        ComPtr<ID3D11ShaderResourceView> defaultOpaqueBlackCubeSrv_;
+        ID3D11ShaderResourceView* GetOrCreateDefaultOpaqueBlackCubeSrvEXT();
 
     };
 }

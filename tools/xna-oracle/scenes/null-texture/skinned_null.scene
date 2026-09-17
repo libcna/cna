@@ -1,0 +1,24 @@
+# plans/plan_graphics_shared_cleanup.md GSC-0004: what a real XNA 4.0 stock effect samples from an
+# unbound texture slot. SkinnedEffect with Texture=null, one identity bone, ambient light white and no
+# directional light: the pixel is the sample times DiffuseColor (white).
+# The clear colour has alpha 255 and the default BlendState.Opaque writes the effect's alpha, so the
+# result separates opaque black (0,0,0,255), transparent black (0,0,0,0) and white.
+# Deliberately in scenes/null-texture/, outside every renderer script's scenes/*.scene glob.
+width=64
+height=64
+profile=HiDef
+clearcolor=100,149,237,255
+effect=SkinnedEffect
+vertexformat=PositionNormalTextureWeights
+lighting=true
+ambientcolor=1,1,1
+light0enabled=false
+texture=false
+weightspervertex=1
+primitive=TriangleList
+vertex=-0.6,0.6,0,0,0,1,0,0,0,1.0
+vertex=0.6,0.6,0,0,0,1,1,0,0,1.0
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,1.0
+vertex=0.6,0.6,0,0,0,1,1,0,0,1.0
+vertex=0.6,-0.6,0,0,0,1,1,1,0,1.0
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,1.0

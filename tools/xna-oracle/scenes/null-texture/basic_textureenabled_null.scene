@@ -1,0 +1,23 @@
+# plans/plan_graphics_shared_cleanup.md GSC-0004: what a real XNA 4.0 stock effect samples from an
+# unbound texture slot. BasicEffect with TextureEnabled=true and Texture=null, unlit, DiffuseColor white:
+# the pixel is the sample itself.
+# The clear colour has alpha 255 and the default BlendState.Opaque writes the effect's alpha, so the
+# result separates opaque black (0,0,0,255), transparent black (0,0,0,0) and white.
+# Deliberately in scenes/null-texture/, outside every renderer script's scenes/*.scene glob.
+width=64
+height=64
+profile=HiDef
+clearcolor=100,149,237,255
+effect=BasicEffect
+vertexformat=PositionTexture
+vertexcolor=false
+lighting=false
+texture=true
+texturenull=true
+primitive=TriangleList
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

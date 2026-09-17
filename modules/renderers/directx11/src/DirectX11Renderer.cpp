@@ -701,6 +701,8 @@ namespace CNA::Internal::Renderers::DirectX11
         defaultFlatNormalTexture_.Reset();
         defaultOpaqueBlackSrv_.Reset();
         defaultOpaqueBlackTexture_.Reset();
+        defaultOpaqueBlackCubeSrv_.Reset();
+        defaultOpaqueBlackCubeTexture_.Reset();
         currentCustomRT_ = nullptr;
         currentCubeRT_ = nullptr;
         currentMRTCount_ = 0;
@@ -2283,6 +2285,39 @@ namespace CNA::Internal::Renderers::DirectX11
         return defaultOpaqueBlackSrv_.Get();
     }
 
+    ID3D11ShaderResourceView* DirectX11Renderer::GetOrCreateDefaultOpaqueBlackCubeSrvEXT()
+    {
+        if (!defaultOpaqueBlackCubeSrv_)
+        {
+            const uint8_t opaqueBlack[4] = {0, 0, 0, 255};
+            D3D11_TEXTURE2D_DESC desc{};
+            desc.Width = 1;
+            desc.Height = 1;
+            desc.MipLevels = 1;
+            desc.ArraySize = 6;
+            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.SampleDesc.Count = 1;
+            desc.Usage = D3D11_USAGE_IMMUTABLE;
+            desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            desc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+            D3D11_SUBRESOURCE_DATA faces[6]{};
+            for (D3D11_SUBRESOURCE_DATA& face : faces)
+            {
+                face.pSysMem = opaqueBlack;
+                face.SysMemPitch = 4;
+            }
+
+            HRESULT hr = device_->CreateTexture2D(&desc, faces, defaultOpaqueBlackCubeTexture_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("DirectX11Renderer: default opaque-black cube creation failed, hr=" + FormatHr(hr));
+            hr = device_->CreateShaderResourceView(defaultOpaqueBlackCubeTexture_.Get(), nullptr, defaultOpaqueBlackCubeSrv_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("DirectX11Renderer: default opaque-black cube SRV creation failed, hr=" + FormatHr(hr));
+        }
+        return defaultOpaqueBlackCubeSrv_.Get();
+    }
+
     void DirectX11Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -2557,8 +2592,13 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else if (needsEnvMap)
         {
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
-            srvs[1] = GetSrvForTextureCubeEXT(params.envMap);
+            // plans/plan_graphics_shared_cleanup.md GSC-0004: XNA samples both unbound slots as opaque
+            // black (tools/xna-oracle/reference/null-texture/envmap_*_null.png); a null view sampled
+            // transparent black, which also zeroed the output alpha.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultOpaqueBlackSrvEXT();
+            srvs[1] = params.envMap ? GetSrvForTextureCubeEXT(params.envMap)
+                                    : GetOrCreateDefaultOpaqueBlackCubeSrvEXT();
         }
         else if (needsAlphaTest)
         {
@@ -2588,19 +2628,17 @@ namespace CNA::Internal::Renderers::DirectX11
             srvs[5] = params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[6] = params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT();
         }
-        else if (needsSkinned)
-        {
-            // GLTF-386: SkinnedEffect always enables and samples its texture, including for an
-            // untextured KHR_materials_unlit skin. D3D11 samples an unbound SRV as transparent
-            // black, so preserve SkinnedEffect's established renderer contract by substituting
-            // opaque white. Vulkan, EasyGL and OpenGL use the same semantic fallback.
-            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
-                                      : GetOrCreateDefaultWhiteSrvEXT();
-        }
         else
         {
+            // plans/plan_graphics_shared_cleanup.md GSC-0004: SkinnedEffect and BasicEffect with
+            // TextureEnabled sample an unbound texture as opaque black in XNA
+            // (tools/xna-oracle/reference/null-texture/, measured through the real XNA 4.0 runtime), as
+            // every other classic stock effect does. GLTF-386 had bound white here for untextured glTF
+            // skins; the glTF importer now supplies glTF's own white base-colour texture instead
+            // (ContentManager), so the stock effect keeps XNA's meaning. BasicEffect without
+            // TextureEnabled runs shaders that gate the sample on TextureEnabled.
             srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
-                                      : GetOrCreateDefaultWhiteSrvEXT();
+                                      : GetOrCreateDefaultOpaqueBlackSrvEXT();
         }
 
         // 3 contiguous slots (b0/b1/b2) always fully rebound below (unused slots explicitly null)

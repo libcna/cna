@@ -140,6 +140,8 @@ public class Scene
     public bool LightingEnabled;
     public bool PreferPerPixelLighting;
     public bool TextureEnabled;
+    // plans/plan_graphics_shared_cleanup.md GSC-0004: texture sampling requested with no texture object.
+    public bool TextureNull;
     public int TextureWidth;
     public int TextureHeight;
     public bool TexturePointFilter = true;
@@ -289,6 +291,7 @@ public class Scene
                 case "lighting": scene.LightingEnabled = ParseBool(value); break;
                 case "preferpixellighting": scene.PreferPerPixelLighting = ParseBool(value); break;
                 case "texture": scene.TextureEnabled = ParseBool(value); break;
+                case "texturenull": scene.TextureNull = ParseBool(value); break;
                 case "texturewidth": scene.TextureWidth = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "textureheight": scene.TextureHeight = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "texturefilter": scene.TexturePointFilter = value == "Point"; break;
@@ -591,7 +594,7 @@ public class Oracle : Game
         }
 
         Texture2D texture = null;
-        if (scene.TextureEnabled)
+        if (scene.TextureEnabled && !scene.TextureNull)
         {
             texture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
             texture.SetData(scene.TexturePixels.ToArray());

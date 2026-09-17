@@ -1931,7 +1931,41 @@ namespace Microsoft::Xna::Framework::Content
             // CNB-64/65 (Phase 13B): owns the morph-target data attached to each morphed mesh
             // part's own Tag property (one entry per part that has morph targets, not per Model).
             std::vector<std::unique_ptr<Graphics::MorphTargetDataEXT>> morphOwners;
+            // plans/plan_graphics_shared_cleanup.md GSC-0004: the 1x1 opaque-white base colour an
+            // untextured glTF SkinnedEffect material samples, created once per model on first use and
+            // owned by textureOwners.
+            Graphics::Texture2D* gltfWhiteBaseColorTexture = nullptr;
         };
+
+        /**
+         * @brief Gives an untextured glTF SkinnedEffect material glTF's white base-colour texture.
+         *
+         * glTF defines a missing baseColorTexture as a white multiplier of baseColorFactor. XNA's
+         * SkinnedEffect has no TextureEnabled switch and samples an unbound texture as opaque black
+         * (tools/xna-oracle/reference/null-texture/skinned_null.png), so the glTF material policy
+         * binds a real white texture here instead of relying on a renderer fallback -- the stock effect
+         * keeps XNA's meaning. BasicEffect needs nothing: it stays at TextureEnabled=false. PBR effects
+         * are CNAEXT and define their own white identity.
+         *
+         * @param device The device the model's resources live on.
+         * @param effect The part's effect; left alone unless it is a SkinnedEffect with no texture.
+         * @param res    Owns the texture.
+         */
+        void ApplyGltfWhiteBaseColorTextureEXT(
+            Graphics::GraphicsDevice& device, Graphics::Effect& effect, ModelResources& res)
+        {
+            auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(&effect);
+            if (skinnedFx == nullptr || skinnedFx->getTextureProperty() != nullptr)
+                return;
+            if (res.gltfWhiteBaseColorTexture == nullptr)
+            {
+                auto white = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(
+                    device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255}));
+                res.gltfWhiteBaseColorTexture = white.get();
+                res.textureOwners.push_back(std::move(white));
+            }
+            skinnedFx->setTextureProperty(res.gltfWhiteBaseColorTexture);
+        }
         // plans/plan_gltf.md GLTF-037. `std::vector<std::uint8_t>::data()` is only guaranteed to be
         // aligned for a byte, so casting it to `const std::uint32_t*` and dereferencing is a
         // misaligned load -- undefined behaviour by the standard, an outright fault on targets
@@ -2415,8 +2449,9 @@ namespace Microsoft::Xna::Framework::Content
          * @param material               The part's material state.
          * @param vertexColorEnabled     Whether the effect should sample per-vertex colour.
          * @param unlit                  Whether the material is KHR_materials_unlit.
-         * @param applyPunctualLights    Whether to apply @p lights (the glTF lighting policy,
-         *                               which belongs only to cnjVersion 2 / real glTF sources).
+         * @param appliesGltfMaterialPolicy Whether the glTF material policy applies -- @p lights
+         *                               and glTF's white base colour for an untextured SkinnedEffect
+         *                               (it belongs only to cnjVersion 2 / real glTF sources).
          * @param lights                 Punctual lights to apply.
          * @param res                    Owns the textures this call loads.
          * @return The configured effect.
@@ -2426,7 +2461,7 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& stockEffectName, const std::string& customEffectAssetName,
             const MaterialAssetResolverEXT& resolveAsset,
             const CNA::Internal::GltfImport::MaterialOut& material,
-            bool vertexColorEnabled, bool unlit, bool applyPunctualLights,
+            bool vertexColorEnabled, bool unlit, bool appliesGltfMaterialPolicy,
             const std::vector<CNA::Internal::GltfImport::LightOut>& lights,
             ModelResources& res)
         {
@@ -2693,9 +2728,13 @@ namespace Microsoft::Xna::Framework::Content
                     unlitOut.material = material;
                     ApplyUnlitMaterialEXT(*fx, unlitOut);
                 }
-                else if (applyPunctualLights)
+                else if (appliesGltfMaterialPolicy)
                 {
                     ApplyPunctualLightsEXT(*fx, lights);
+                }
+                if (appliesGltfMaterialPolicy)
+                {
+                    ApplyGltfWhiteBaseColorTextureEXT(device, *fx, res);
                 }
 
             return fx;
@@ -3377,6 +3416,7 @@ namespace Microsoft::Xna::Framework::Content
 
                 if (!ApplyUnlitMaterialEXT(*fx, meshOut))
                     ApplyPunctualLightsEXT(*fx, punctualLights);
+                ApplyGltfWhiteBaseColorTextureEXT(device, *fx, *res);
 
                 Graphics::Effect* result = fx.get();
                 effectCache.emplace(effectKey, result);
@@ -4892,7 +4932,7 @@ namespace Microsoft::Xna::Framework::Content
                                     ? std::string()
                                     : ResolveRootRelativeAssetName(cm, path, "effect", effectStr),
                                 resolveAsset, material, vertexColorEnabled, unlit,
-                                /*applyPunctualLights=*/envelope.cnjVersion >= 2, punctualLights,
+                                /*appliesGltfMaterialPolicy=*/envelope.cnjVersion >= 2, punctualLights,
                                 *res);
 
                             Graphics::Effect* effectPtr = fx.get();
