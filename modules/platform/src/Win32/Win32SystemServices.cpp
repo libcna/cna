@@ -225,6 +225,21 @@ namespace CNA::Platform::Win32 {
 
     void Win32Clipboard::SetText(const std::string& text)
     {
+        // WINCLOSE-0038: empty text means no text, as on every other backend (SDL3's
+        // SDL_SetClipboardText("") and X11 both leave nothing to paste). Publishing an empty
+        // CF_UNICODETEXT block instead made HasText() true for a clipboard with nothing in it.
+        if (text.empty())
+        {
+            if (OpenClipboard(nullptr) == FALSE)
+                ThrowLastError("Win32Clipboard::SetText");
+            const BOOL emptied = EmptyClipboard();
+            const DWORD error = emptied ? ERROR_SUCCESS : GetLastError();
+            CloseClipboard();
+            if (!emptied)
+                ThrowError("Win32Clipboard::SetText", error);
+            return;
+        }
+
         const std::wstring wide = ToWide(text);
         const std::size_t bytes = (wide.size() + 1) * sizeof(wchar_t);
 

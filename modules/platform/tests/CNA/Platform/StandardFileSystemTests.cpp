@@ -97,8 +97,12 @@ TEST(StandardFileSystemTests, HeadlessAndTerminalReadXdgUserDirectories)
             CNA::Platform::PlatformFactory::Create(implementation);
         ASSERT_NE(platform, nullptr);
         ASSERT_NE(platform->GetFileSystem(), nullptr);
+        // user-dirs.dirs substitutes $HOME textually, so the result is HOME's own spelling followed
+        // by the file's "/My Music". Building the expectation with std::filesystem's operator/
+        // inserted the native separator instead, which is a backslash on Windows only
+        // (WINCLOSE-0038).
         EXPECT_EQ(platform->GetFileSystem()->GetUserFolder(CNA::Platform::UserFolder::Music),
-                  (home / "My Music").string() + "/");
+                  home.string() + "/My Music/");
         EXPECT_EQ(platform->GetFileSystem()->GetUserFolder(CNA::Platform::UserFolder::Pictures),
                   "/srv/shared/pictures/");
     }
