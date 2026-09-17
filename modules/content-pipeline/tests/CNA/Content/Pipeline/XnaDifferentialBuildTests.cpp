@@ -98,6 +98,24 @@ namespace
         return cases;
     }
 
+    /**
+     * @brief The compare.py command line, runnable by the shell std::system hands it to.
+     *
+     * WINCLOSE-0046: cmd.exe cannot open /dev/null, and `python3` on Windows is the Microsoft Store
+     * alias -- so on Windows the comparison never ran and its exit 1 was the shell's. CNA_PYTHON
+     * overrides the interpreter, as it does for LargeModelScalingTest.
+     */
+    std::string CompareCommand(const std::string& arguments)
+    {
+        const char* const configured = std::getenv("CNA_PYTHON");
+#if defined(_WIN32)
+        return std::string(configured == nullptr ? "python" : configured) + " " + arguments +
+               " >NUL 2>&1";
+#else
+        return std::string(configured == nullptr ? "python3" : configured) + " " + arguments +
+               " > /dev/null 2>&1";
+#endif
+    }
 }
 
 // Every corpus case has an answer from XNA, and the corpus is not empty. A case added to the
@@ -249,8 +267,8 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     {
         return;
     }
-    const std::string command = "python3 " + compare.string() + " --xna " + xnaSide.string() +
-                                " --cna " + publishRoot.string() + " > /dev/null 2>&1";
+    const std::string command = CompareCommand(compare.string() + " --xna " + xnaSide.string() +
+                                               " --cna " + publishRoot.string());
     const int status = std::system(command.c_str());
     EXPECT_EQ(status, 0)
         << "the two builds produce files that do not mean the same thing. Run\n  python3 "

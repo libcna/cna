@@ -117,8 +117,11 @@ def main(argv):
         row = {"case": case}
         if not os.path.exists(cna_path):
             # A case CNA has no route for at all is still a difference, and a recorded reason
-            # covers it the same way it covers a difference in the bytes.
-            if case in decisions:
+            # covers it the same way it covers a difference in the bytes. A decision that names
+            # paths explains differences at those paths and nothing else, so it does not cover a
+            # file that was never produced: a build without the optional font rasterizer skips
+            # every font case, and their glyph decisions are no reason for that (WINCLOSE-0046).
+            if case in decisions and not decisions[case].get("paths"):
                 row["outcome"] = "accepted"
                 row["reason"] = decisions[case]["reason"]
                 row["detail"] = "CNA produced no file for this case"
@@ -198,13 +201,16 @@ def main(argv):
         report["cases"].append(row)
 
     # A decision for a case that no longer differs is a decision that has outlived its reason.
-    compared = {row["case"] for row in report["cases"]}
+    compared = {row["case"]: row["outcome"] for row in report["cases"]}
     for case, decision in sorted(decisions.items()):
         if case not in compared:
             report["cases"].append({"case": case, "outcome": "open",
                                     "detail": "accepted in decisions.json but not in the corpus"})
             report["open"] += 1
-        elif next(r for r in report["cases"] if r["case"] == case)["outcome"] == "identical":
+        elif compared[case] == "absent":
+            # Nothing was compared, so nothing can have stopped differing.
+            continue
+        elif compared[case] == "identical":
             report["cases"].append({"case": case, "outcome": "open",
                                     "detail": "accepted in decisions.json but the two now agree; "
                                               "remove the decision"})
