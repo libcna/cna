@@ -2847,6 +2847,14 @@ namespace CNA::Internal::Renderers::DirectX12
                                                D3D12_FORMAT_SUPPORT1_TEXTURE3D)
                     ? RendererFormatVerdict::Supported
                     : RendererFormatVerdict::Unsupported;
+            // Refused explicitly, as DirectX11 does: block-compressed and signed-normalized volumes are
+            // not part of the contract. Deferring left the answer to the framework rule instead.
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
             default:
                 return RendererFormatVerdict::Defer;
         }
