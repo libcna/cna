@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "AudioTestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
@@ -577,7 +578,7 @@ namespace
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
-        auto dir = std::filesystem::temp_directory_path() / dirName;
+        auto dir = CnaAudioTest::FixtureRoot() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         std::ofstream f(file, std::ios::binary);

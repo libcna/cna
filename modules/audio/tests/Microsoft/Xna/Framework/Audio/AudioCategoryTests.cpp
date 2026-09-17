@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "AudioTestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
@@ -159,7 +160,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = std::filesystem::temp_directory_path() / "cna_audio_category_test";
+            auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_category_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
             WriteFileAtomically(file, BuildXgsFixtureBytes());
@@ -245,7 +246,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = std::filesystem::temp_directory_path() / "cna_audio_category_test";
+            auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_category_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xsb";
             WriteFileAtomically(file, BuildXsbFixtureBytes());
@@ -391,7 +392,7 @@ namespace
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
-        auto dir = std::filesystem::temp_directory_path() / dirName;
+        auto dir = CnaAudioTest::FixtureRoot() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         WriteFileAtomically(file, bytes);
