@@ -208,6 +208,57 @@ float4 ps(V i) : SV_Target { return t0.Sample(s0, i.uv); }
         }
         std::printf("%s: CNA-shifted point sampling exact for every address mode: %s\n", label,
                     allExact ? "yes" : "NO");
+
+        // The same 1:1 draw with the mixed filters. The footprint is one texel per pixel, so the LOD is
+        // zero up to derivative precision, and which half of a MIN_x_MAG_y filter applies is decided by
+        // that boundary: "exact" means the point half was used, "blended" the linear half.
+        struct Filter { D3D11_FILTER filter; const char* name; };
+        const Filter filters[] = {
+            {D3D11_FILTER_MIN_MAG_MIP_POINT, "MIN_MAG_MIP_POINT"},
+            {D3D11_FILTER_MIN_MAG_MIP_LINEAR, "MIN_MAG_MIP_LINEAR"},
+            {D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR, "MIN_LINEAR_MAG_POINT_MIP_LINEAR"},
+            {D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT, "MIN_LINEAR_MAG_MIP_POINT"},
+            {D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR, "MIN_POINT_MAG_MIP_LINEAR"},
+            {D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT, "MIN_POINT_MAG_LINEAR_MIP_POINT"},
+        };
+        for (float shift : shifts)
+        {
+            for (const Filter& f : filters)
+            {
+                D3D11_SAMPLER_DESC sd{};
+                sd.Filter = f.filter;
+                sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+                sd.MaxAnisotropy = 1;
+                sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+                sd.MaxLOD = D3D11_FLOAT32_MAX;
+                Com<ID3D11SamplerState> sampler;
+                if (FAILED(device->CreateSamplerState(&sd, &sampler)))
+                    return false;
+                D3D11_MAPPED_SUBRESOURCE mapped{};
+                context->Map(constants, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                const float data[4] = {shift, -shift, 0.0f, 0.0f};
+                std::memcpy(mapped.pData, data, sizeof(data));
+                context->Unmap(constants, 0);
+                const float sentinel[4] = {1.0f, 0.0f, 1.0f, 1.0f};
+                context->ClearRenderTargetView(rtv, sentinel);
+                ID3D11SamplerState* samplers[1] = {sampler.p};
+                context->PSSetSamplers(0, 1, samplers);
+                context->Draw(6, 0);
+                context->CopyResource(staging, target);
+                if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped)))
+                    return false;
+                int got[4];
+                const unsigned char* second = static_cast<const unsigned char*>(mapped.pData) + 4;
+                for (int y = 0; y < 2; ++y)
+                    for (int x = 0; x < 2; ++x)
+                        got[y * 2 + x] = TexelIndex(static_cast<const unsigned char*>(mapped.pData) +
+                                                    mapped.RowPitch * y + 4 * x);
+                std::printf("%s: shift %-9g %-32s -> texels %2d %2d %2d %2d, pixel (1,0) = (%3u,%3u,%3u) %s\n",
+                            label, shift, f.name, got[0], got[1], got[2], got[3], second[0], second[1],
+                            second[2], (got[0] == 0 && got[1] == 1 && got[2] == 2 && got[3] == 3) ? "exact" : "blended");
+                context->Unmap(staging, 0);
+            }
+        }
         return true;
     }
 }

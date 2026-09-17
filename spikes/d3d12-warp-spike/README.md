@@ -95,4 +95,21 @@ pixelcenter_probe.exe
 ```
 
 Result on `win10_local`: **all 18 cases exact on both the VirtualBox adapter and WARP.** The hypothesis is
-refuted — WARP samples exactly — so B1/C1 were investigated inside CNA's DirectX12 renderer instead.
+refuted — WARP samples exactly.
+
+B1 was then made to print each wrong state. Every one was a *mixed* filter: `MinLinearMagPoint*` read
+interpolated values (126/129) and `MinPointMagLinear*` read the exact texels — the opposite halves of what
+the fixture expects for a magnification. The probe's second part repeats the 1:1 draw with the mixed
+filters:
+
+| filter, CNA shift | VirtualBox adapter | WARP |
+|---|---|---|
+| `MIN_MAG_MIP_POINT` | exact | exact |
+| `MIN_MAG_MIP_LINEAR` | blended (126,129) | blended (125,129) |
+| `MIN_LINEAR_MAG_POINT_MIP_LINEAR`, `MIN_LINEAR_MAG_MIP_POINT` | **exact** (magnification half) | **blended** (minification half) |
+| `MIN_POINT_MAG_MIP_LINEAR`, `MIN_POINT_MAG_LINEAR_MIP_POINT` | **blended** (magnification half) | **exact** (minification half) |
+
+A one-to-one footprint puts the LOD at zero, and which half of a mixed filter applies there is decided at
+that boundary: the VirtualBox driver treats it as magnification (as the fixture, measured against XNA 4.0,
+expects), WARP as minification. CNA's DirectX12 readings on WARP are exactly WARP's own. Not a CNA defect;
+CNA is not adapted to it; B1/C1 are on the physical-GPU checklist.
