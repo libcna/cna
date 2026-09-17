@@ -1126,38 +1126,6 @@ typedef struct CNA_SpriteTextCommand {
 } CNA_SpriteTextCommand;
 
 /**
- * @brief Describes one indexed triangle mesh submitted through a SpriteBatch.
- */
-typedef struct CNA_SpriteMeshEXT {
-    /** @brief Size of this caller-provided structure in bytes. */
-    uint32_t struct_size;
-
-    /** @brief Version of this caller-provided structure. */
-    uint32_t struct_version;
-
-    /** @brief Owned effect handle belonging to the same game as the batch. */
-    CNA_Handle effect;
-
-    /** @brief Caller-owned screen-space positions read during this call. */
-    const CNA_Vector2* positions;
-
-    /** @brief Caller-owned per-vertex colors, or null to use opaque white. */
-    const CNA_Color* colors;
-
-    /** @brief Caller-owned texture coordinates, or null when the effect samples nothing. */
-    const CNA_Vector2* texture_coordinates;
-
-    /** @brief Caller-owned 16-bit triangle indices read during this call. */
-    const uint16_t* indices;
-
-    /** @brief Number of vertices in each supplied array. */
-    uint64_t vertex_count;
-
-    /** @brief Number of indices beginning at @ref indices. */
-    uint64_t index_count;
-} CNA_SpriteMeshEXT;
-
-/**
  * @brief Gets the UTF-8 byte count of the SpriteBatch type name.
  *
  * @param sprite_batch Owned SpriteBatch handle.
@@ -1199,22 +1167,6 @@ CNA_C_API CNA_Result cna_sprite_batch_copy_type_name(
 CNA_C_API CNA_Result cna_sprite_batch_draw_string(
     CNA_Handle sprite_batch,
     const CNA_SpriteTextCommand* command);
-
-/**
- * @brief Submits one indexed triangle mesh through an active SpriteBatch interval.
- *
- * @param sprite_batch Owned SpriteBatch handle inside an Immediate begin/end interval.
- * @param mesh Versioned mesh description validated before native submission.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside an interval or outside
- * `CNA_SPRITE_SORT_MODE_IMMEDIATE`, `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the
- * operation, or another documented argument/handle/thread/native failure.
- *
- * A mesh draw deliberately does not join the deferred sprite queue, so the canonical contract
- * requires Immediate mode. All arrays are read during the call and never retained.
- */
-CNA_C_API CNA_Result cna_sprite_batch_draw_mesh_ext(
-    CNA_Handle sprite_batch,
-    const CNA_SpriteMeshEXT* mesh);
 
 #ifdef __cplusplus
 }

@@ -52,6 +52,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   silent fallback to another renderer. No surviving identity is renumbered: their C ABI values are
   unchanged, the retired values are permanently reserved, and the C ABI is `0.28.0` with
   `CNA_GRAPHICS_RENDERER_MAXIMUM` at 46 (`PORTABLEGL`).
+- **The SpriteBatch 2D triangle-mesh entry point**, which the curation above left with no
+  implementer: `SpriteBatch::DrawMeshEXT` (a CNAEXT extension, never part of XNA 4.0),
+  `ISpriteBatchRenderer::DrawMeshEXT`, and the C route `cna_sprite_batch_draw_mesh_ext` with its
+  `CNA_SpriteMeshEXT` structure. It existed for the retired Skia renderer's `SkVertices`/SkSL mesh
+  ABI, and after the curation every renderer refused it — the C route could be called but never
+  succeeded on any supported renderer. Deleted rather than left as a permanently dead ABI branch
+  while the ABI is still experimental; there is no replacement and no compatibility stub. This
+  advances the experimental C ABI to `0.29.0`, with exported symbols 4,056 → 4,055 and recorded
+  struct layouts 222 → 221 (`plans/plan_renderer_cleanup.md` `RRC-009`).
 
 ### Changed
 

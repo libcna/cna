@@ -916,12 +916,6 @@ _Static_assert(sizeof(CNA_SpriteTextCommand) == 72U &&
                    offsetof(CNA_SpriteTextCommand, text) == 16U &&
                    offsetof(CNA_SpriteTextCommand, position) == 32U,
                "CNA_SpriteTextCommand layout must remain stable");
-_Static_assert(sizeof(CNA_SpriteMeshEXT) == 64U &&
-                   _Alignof(CNA_SpriteMeshEXT) == 8U &&
-                   offsetof(CNA_SpriteMeshEXT, effect) == 8U &&
-                   offsetof(CNA_SpriteMeshEXT, positions) == 16U &&
-                   offsetof(CNA_SpriteMeshEXT, vertex_count) == 48U,
-               "CNA_SpriteMeshEXT layout must remain stable");
 _Static_assert(sizeof(CNA_AsciiPostProcessEffectHandle) == 8U &&
                    sizeof(CNA_AsciiQuantizeMode) == sizeof(uint32_t) &&
                    sizeof(CNA_CRTMaskType) == sizeof(uint32_t) &&

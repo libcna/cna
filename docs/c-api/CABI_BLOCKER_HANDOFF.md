@@ -77,7 +77,7 @@ Two halves with different answers.
   so copying XNA's shape would have kept the undefined behaviour.
 - **ABI CLASSIFICATION** — **D**. The C boundary's own finiteness guards on the four XNA-shaped
   sprite routes are gone, so values this ABI refused now succeed.
-  `cna_sprite_batch_draw_mesh_ext` keeps its guard, having no XNA counterpart and so its own
+  `cna_sprite_batch_draw_mesh_ext` kept its guard, having no XNA counterpart and so its own
   contract.
 - **STATUS** — `RESOLVED`. **Downstream must re-review**: values this ABI refused now succeed. The
   Int32 destination range check is unchanged and still refuses a finite value too large to be a

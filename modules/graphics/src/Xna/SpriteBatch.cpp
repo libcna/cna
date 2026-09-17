@@ -915,22 +915,4 @@ namespace Microsoft::Xna::Framework::Graphics
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }
-
-    void SpriteBatch::DrawMeshEXT(Effect& effect,
-                                  const Vector2* positions, const Color* colors, const Vector2* uvs,
-                                  int vertexCount, const std::uint16_t* indices, int indexCount)
-    {
-        throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::DrawMeshEXT called before Begin().");
-        // A mesh draw does not participate in the deferred sort/batch queue -- a declared, tested
-        // scope boundary (docs/skia-vertices-2d-effect-contract.md), not a silent misbatch.
-        if (sortMode_ != SpriteSortMode::Immediate)
-        {
-            throw std::runtime_error(
-                "SpriteBatch::DrawMeshEXT requires SpriteSortMode::Immediate; it does not "
-                "participate in the deferred sprite sort/batch queue.");
-        }
-        if (!renderer_) return;
-        renderer_->DrawMeshEXT(effect, positions, colors, uvs, vertexCount, indices, indexCount);
-    }
 }

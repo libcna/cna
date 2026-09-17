@@ -1,10 +1,9 @@
 {
  "abi_version": {
-  "encoded": 7168,
+  "encoded": 7424,
   "major": 0,
-  "minor": 28,
-  "patch": 0,
-  "runtime": 7168
+  "minor": 29,
+  "patch": 0
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -4387,7 +4386,6 @@
   "cna_sprite_batch_copy_type_name",
   "cna_sprite_batch_create",
   "cna_sprite_batch_destroy",
-  "cna_sprite_batch_draw_mesh_ext",
   "cna_sprite_batch_draw_string",
   "cna_sprite_batch_end",
   "cna_sprite_batch_get_type_name_size",
@@ -4913,9 +4911,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 7168,
+  "CNA_ABI_VERSION": 7424,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 28,
+  "CNA_ABI_VERSION_MINOR": 29,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -14315,48 +14313,6 @@
     ]
    },
    "size": 32
-  },
-  "CNA_SpriteMeshEXT": {
-   "align": 8,
-   "fields": {
-    "colors": [
-     24,
-     8
-    ],
-    "effect": [
-     8,
-     8
-    ],
-    "index_count": [
-     56,
-     8
-    ],
-    "indices": [
-     40,
-     8
-    ],
-    "positions": [
-     16,
-     8
-    ],
-    "struct_size": [
-     0,
-     4
-    ],
-    "struct_version": [
-     4,
-     4
-    ],
-    "texture_coordinates": [
-     32,
-     8
-    ],
-    "vertex_count": [
-     48,
-     8
-    ]
-   },
-   "size": 64
   },
   "CNA_SpriteScaledCommand": {
    "align": 8,

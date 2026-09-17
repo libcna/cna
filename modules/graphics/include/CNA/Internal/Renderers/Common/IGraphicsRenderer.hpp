@@ -1560,34 +1560,6 @@ namespace CNA::Internal::Renderers
                            quantise(destinationWidth), quantise(destinationHeight)),
                  sourceRectangle, color, rotation, origin, effects, layerDepth);
         }
-
-        /**
-         * @brief Draws a triangle-list 2D mesh through @p effect's own bound custom shader.
-         *
-         * An entirely different draw primitive from every `Draw()` overload above, which always
-         * submits exactly one quad through the built-in or `cnaTexture0`-shaped sprite shader.
-         * Composes with the active `SetTransformMatrix()` the same way ordinary sprite draws do;
-         * @p colors / @p uvs may be null if @p effect's compiled program declares no vertex-colour
-         * combine / no texture children respectively.
-         *
-         * **No renderer in the tree implements this today.** It was added for the Skia renderer's
-         * bounded `SkVertices`/SkSL mesh ABI (`SKIA-144`-`157`), and Skia was retired in 2026-08.
-         * The declaration, the public `SpriteBatch::DrawMeshEXT` and its C ABI route are all still
-         * here, so the entry point exists and refuses on every renderer rather than silently
-         * drawing nothing or falling back to sprite mode -- which is the correct behaviour for a
-         * renderer that has no mesh ABI, and is what every renderer did even when Skia existed.
-         * Whether the surface itself should stay is an owner decision, not a cleanup one: removing
-         * it would break the published C ABI. See `plans/plan_renderer_cleanup.md`.
-         */
-        virtual void DrawMeshEXT(
-            Effect& /*effect*/,
-            const Vector2* /*positions*/, const Color* /*colors*/, const Vector2* /*uvs*/,
-            int /*vertexCount*/, const std::uint16_t* /*indices*/, int /*indexCount*/)
-        {
-            throw std::runtime_error(
-                "This renderer does not support DrawMeshEXT; no renderer in the tree implements "
-                "a 2D mesh ABI.");
-        }
     };
 
     /**

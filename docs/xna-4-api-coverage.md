@@ -659,8 +659,9 @@ implemented and exercised by the `demo_*` avatar/net examples and their own test
 *Added 2026-09-07, `plans/plan_vulkan.md` VULKAN-057.*
 
 - **Present and correct:** every sort mode is accepted, every sprite is drawn, in issue order, each
-  into its own destination rectangle. `Immediate` is what gates `SpriteBatch::DrawMeshEXT`, and
-  `Begin()` carries the mode to the renderer seam.
+  into its own destination rectangle, and `Begin()` carries the mode to the renderer seam --
+  observable through the device-level rule that an `Immediate` batch is mutually exclusive
+  with every other `SpriteBatch` on the same `GraphicsDevice`.
 - **Divergent:** `Immediate` does **not** submit each sprite as it is issued. XNA defines it as
   *"each sprite is drawing at individual draw call, instead of `SpriteBatch.End`"*
   (`SpriteSortMode.cs`), so a texture mutated in place between two `Draw` calls leaves the first
