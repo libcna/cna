@@ -43,8 +43,8 @@
 // Usage: cna_win32_d3d11_cycle.exe [--cycles N] [--warp] [--hold] [--flip] [--renderer-teardown]
 //                                  [--quiet]
 // Exit:  0 every cycle succeeded; 1 creation began failing while our own counts stayed flat
-//        (environment limit -- reported, not a defect); 2 our counts grew (a leak); 3 no D3D11 at
-//        all on this machine.
+//        (environment limit -- reported, not a defect); 2 the process's counts grew (a leak --
+//        --warp says whether it is the driver's); 3 no D3D11 at all on this machine.
 
 #include <cstdio>
 #include <cstdlib>
@@ -100,6 +100,23 @@ namespace
         m.cb = sizeof(m);
         if (GetProcessMemoryInfo(self, &m, sizeof(m))) c.privateBytes = m.PagefileUsage;
         return c;
+    }
+
+    // The counts are the whole process's, and the adapter's user-mode driver lives in this process,
+    // so growth alone cannot say whose leak it is. 2026-09-16 on the VirtualBox guest: 1500 cycles
+    // flat on WARP, ~6 handles and ~200 KB per cycle on the adapter.
+    void PrintLeakOwner(bool warp)
+    {
+        if (warp)
+        {
+            std::printf("WARP is Microsoft's own rasteriser, so this loop or the D3D11 runtime "
+                        "leaks -- not a graphics driver.\n");
+        }
+        else
+        {
+            std::printf("The counts include the adapter's user-mode driver. Run the same flags with "
+                        "--warp: if WARP stays flat, the graphics driver leaks, not this loop.\n");
+        }
     }
 }
 
@@ -340,8 +357,9 @@ int main(int argc, char** argv)
                     firstFailure, static_cast<unsigned long>(firstFailureHr));
         if (userGrew || handlesGrew || gdiGrew)
         {
-            std::printf("RESULT: our own object counts grew as well -- this looks like a LEAK on "
-                        "our side, not a driver limit.\n");
+            std::printf("RESULT: the process's object counts grew as well -- a LEAK, not a device "
+                        "limit.\n");
+            PrintLeakOwner(warp);
             return 2;
         }
         std::printf("RESULT: every cycle released what it created and our object counts stayed "
@@ -352,8 +370,9 @@ int main(int argc, char** argv)
 
     if (userGrew || handlesGrew || gdiGrew)
     {
-        std::printf("\nRESULT: %d cycles all succeeded, but our object counts grew -- a LEAK.\n",
-                    cycles);
+        std::printf("\nRESULT: %d cycles all succeeded, but the process's object counts grew -- a "
+                    "LEAK.\n", cycles);
+        PrintLeakOwner(warp);
         return 2;
     }
     std::printf("\nRESULT: %d create/use/destroy cycles, counts flat, no failure.\n", cycles);
