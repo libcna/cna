@@ -214,6 +214,14 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] D3D_FEATURE_LEVEL GetFeatureLevelEXT() const { return featureLevel_; }
         /// Exposes whether the debug layer actually ended up enabled (CNAEXT, DX-21 diagnostics).
         [[nodiscard]] bool IsDebugLayerEnabledEXT() const { return debugLayerEnabled_; }
+        /**
+         * @brief Moves every message the debug layer stored since the last drain into the process log.
+         *
+         * plans/plan_graphics_shared_cleanup.md GSC-0006: the Direct3D 11 counterpart of
+         * DirectX12Renderer::DrainDebugMessagesEXT, feeding D3DCommon::D3DDebugLayerLog. Runs at
+         * Present, device loss and teardown; a no-op when the debug layer is not enabled.
+         */
+        void DrainDebugMessagesEXT();
         /// Exposes whether the swap chain was created tearing-capable (CNAEXT, DX-23 diagnostics).
         [[nodiscard]] bool IsTearingCapableEXT() const { return allowTearingSupported_ && allowTearingRequested_; }
         /// Exposes the raw device pointer for tests/diagnostics and for D3DCommon helpers (e.g.
@@ -528,6 +536,8 @@ namespace CNA::Internal::Renderers::DirectX11
         std::unordered_map<int, ComPtr<ID3D11PixelShader>> stockPixelShaders_;
         bool allowTearingSupported_ = false;
         bool debugLayerEnabled_ = false;
+        /// GSC-0006: the device's ID3D11InfoQueue while the debug layer is enabled.
+        ComPtr<ID3D11InfoQueue> infoQueue_;
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;
         /// WINCLOSE-0016: measured per device in CreateDeviceResources().
         bool b5g6r5KeepsBytes_ = true;
@@ -751,6 +761,11 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Texture2D> defaultOpaqueBlackTexture_;
         ComPtr<ID3D11ShaderResourceView> defaultOpaqueBlackSrv_;
         ID3D11ShaderResourceView* GetOrCreateDefaultOpaqueBlackSrvEXT();
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: EnvironmentMapEffect's unbound cube samples
+        // opaque black in XNA too; a null cube view here sampled transparent black.
+        ComPtr<ID3D11Texture2D> defaultOpaqueBlackCubeTexture_;
+        ComPtr<ID3D11ShaderResourceView> defaultOpaqueBlackCubeSrv_;
+        ID3D11ShaderResourceView* GetOrCreateDefaultOpaqueBlackCubeSrvEXT();
 
     };
 }

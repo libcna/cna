@@ -228,6 +228,8 @@ namespace
         // real XNA's own default (per-vertex/Gouraud lighting).
         bool preferPerPixelLighting = false;
         bool textureEnabled = false;
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: texture sampling requested with no texture object.
+        bool textureNull = false;
         int textureWidth = 0;
         int textureHeight = 0;
         bool texturePointFilter = true;
@@ -524,6 +526,7 @@ namespace
             else if (key == "lighting") scene.lightingEnabled = ParseBool(value);
             else if (key == "preferpixellighting") scene.preferPerPixelLighting = ParseBool(value);
             else if (key == "texture") scene.textureEnabled = ParseBool(value);
+            else if (key == "texturenull") scene.textureNull = ParseBool(value);
             else if (key == "texturewidth") scene.textureWidth = std::stoi(value);
             else if (key == "textureheight") scene.textureHeight = std::stoi(value);
             else if (key == "texturefilter") scene.texturePointFilter = value == "Point";
@@ -653,7 +656,7 @@ protected:
         }
 
         std::unique_ptr<Texture2D> texture;
-        if (scene_.textureEnabled)
+        if (scene_.textureEnabled && !scene_.textureNull)
         {
             texture = std::make_unique<Texture2D>(dev, scene_.textureWidth, scene_.textureHeight);
             texture->SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));

@@ -51,9 +51,13 @@ namespace CNA::Internal
      * @brief Resolves an existing native path one component at a time without ASCII case
      *        sensitivity.
      *
-     * An exact match always wins. If a component has exactly one case-insensitive match in its
+     * The promise is a path that opens the file XNA content named with any ASCII casing -- not the
+     * casing stored on disk. A path the host already opens is returned as requested: an exact
+     * match, and on a case-insensitive filesystem (NTFS, APFS by default) every casing, with no
+     * directory scan. Otherwise, if a component has exactly one case-insensitive match in its
      * parent directory, that spelling is used. Missing or ambiguous components leave the original
      * path unchanged so the caller's normal not-found behavior remains authoritative.
+     * (plans/plan_graphics_shared_cleanup.md GSC-0007, formerly WINNATIVE-F26.)
      *
      * Every comparison is made on UTF-8 text obtained with PathToUtf8(), never on
      * `path::string()`: the walker converts *every entry it enumerates*, not only the one it is
@@ -61,7 +65,7 @@ namespace CNA::Internal
      * ordinary ASCII file.
      *
      * @param requested The native path to resolve.
-     * @return The existing host spelling, or @p requested when it cannot be resolved.
+     * @return A spelling that opens the existing file, or @p requested when it cannot be resolved.
      */
     [[nodiscard]] inline std::filesystem::path ResolveExistingNativePath(
         const std::filesystem::path& requested)
@@ -133,8 +137,8 @@ namespace CNA::Internal
      * rules. Input and result are UTF-8 (docs/filesystem-path-model.md rule 2).
      *
      * @param path The relative or absolute XNA content path to resolve, as UTF-8.
-     * @return The existing host spelling as generic UTF-8, or the normalized input when it cannot
-     *         be resolved.
+     * @return A spelling that opens the existing file, as generic UTF-8, or the normalized input
+     *         when it cannot be resolved.
      */
     [[nodiscard]] inline std::string ResolveExistingXnaPath(const std::string& path)
     {

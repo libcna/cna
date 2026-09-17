@@ -147,6 +147,19 @@ shape:
 mapping-table/logic check rather than a rendering-correctness one (format/state enum mapping,
 vertex-stride inference, cbuffer `static_assert` layout checks already caught at compile time).
 
+## Validation runs: the debug layer fails tests
+
+`CNA_D3D11_DEBUG_LAYER=1` creates the device with `D3D11_CREATE_DEVICE_DEBUG` in any build type (`=0`
+turns it off in a Debug build; unset keeps the build type's default). The renderer drains its
+`ID3D11InfoQueue` into `D3DCommon::D3DDebugLayerLog` at `Present`, device loss and teardown.
+
+With that switch set, `CnaTests` installs `D3DDebugLayerListener`
+(`modules/renderers/common/d3d/tests/`), which drains every live device at the end of each test and
+**fails the test** for any CORRUPTION or ERROR, and for any WARNING not named -- by API, message id
+and test -- in `D3DDebugLayerPolicy.hpp`'s allowlist. INFO and MESSAGE never fail. Report lines go to
+stdout and to `CNA_D3D_DEBUG_REPORT`, which `tools/platform/win32_gtest_shards.ps1` sets per shard
+(`plans/plan_graphics_shared_cleanup.md` GSC-0006).
+
 ## Known limitations (2026-09-09)
 
 - **Native Windows remains a separate gate.** `DX-90` covers MSVC execution, real DXGI

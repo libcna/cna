@@ -38,6 +38,14 @@ extern char** environ;
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Xnb/XnbByteWriter.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
@@ -1022,6 +1030,40 @@ TEST(XnbModelSourceRouteTest, ASkinnedModelStatesThatItsSkeletonIsNotWritten)
         if (warning.find("skinning skeleton") != std::string::npos) { mentionsSkeleton = true; }
     }
     EXPECT_TRUE(mentionsSkeleton) << "an XNA Model has no skeleton; dropping one must be stated";
+}
+
+TEST(XnbModelSourceRouteTest, AnUntexturedGltfSkinBuiltToCnbCarriesGltfWhite)
+{
+    // plans/plan_graphics_shared_cleanup.md GSC-0004: the compiled-model loader applies the same glTF
+    // material policy as the runtime glTF path. An untextured glTF skin reaches SkinnedEffect, whose
+    // unbound texture samples XNA's opaque black, so the glTF white base colour is bound explicitly.
+    ScratchDirectory scratch("gltf_skin_cnb");
+    CopyGltfFixture(scratch, "skin-unlit.glb");
+    const Pipeline::ContentBuildResult built =
+        Build(scratch.Path(), "skin-unlit.glb", "models/asset", Pipeline::ContentOutputFormat::Cnb);
+    ASSERT_FALSE(built.output.bytes.empty());
+    const std::filesystem::path nativeRoot = scratch.Path() / "native";
+    WriteBytes(nativeRoot / "asset.cnb", built.output.bytes);
+
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "renderer has no 3D pipeline to build a runtime Model on";
+    }
+    Microsoft::Xna::Framework::Content::ContentManager content(nullptr, nativeRoot.string());
+    content.setGraphicsDevice(device);
+    const Microsoft::Xna::Framework::Graphics::Model model =
+        content.Load<Microsoft::Xna::Framework::Graphics::Model>("asset");
+    ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);
+    const auto& parts = model.getMeshesProperty()[0]->getMeshPartsProperty();
+    ASSERT_GT(parts.getCountProperty(), 0);
+    const auto* skinned = dynamic_cast<const Microsoft::Xna::Framework::Graphics::SkinnedEffect*>(
+        parts[0]->getEffectProperty());
+    ASSERT_NE(skinned, nullptr);
+    const auto* texture = skinned->getTextureProperty();
+    ASSERT_NE(texture, nullptr);
+    EXPECT_EQ(texture->getWidthProperty(), 1);
+    EXPECT_EQ(texture->getHeightProperty(), 1);
 }
 
 TEST(XnbModelSourceRouteTest, TheSameGltfSourceStillBuildsToCnbUnchanged)

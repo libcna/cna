@@ -76,14 +76,16 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0, c1, c2) / det;
 }
 
-float3 TransformSkinNormal(float3 normal, float3x3 m)
+// plans/plan_graphics_shared_cleanup.md GSC-0003: XNA's stock SkinnedEffect.fx Skin() transforms the
+// normal by the weighted bone 3x3 directly -- mul(vin.Normal, (float3x3)skinning) -- and only the World
+// transform after it uses the inverse transpose, so a bone palette with non-uniform scale tilts the
+// normal toward the stretched axis exactly as XNA does. This classic path used the joint inverse
+// transpose instead (DX-230); the CNAEXT PBR skin (pbr_skinned3d.vert.hlsl) keeps that policy for glTF.
+// A weighted sum that cancels to a zero vector keeps the bind-pose normal rather than normalizing zero.
+float3 SkinNormal(float3 normal, float3x3 skin)
 {
-    float3 c0 = cross(m[1], m[2]);
-    float3 c1 = cross(m[2], m[0]);
-    float3 c2 = cross(m[0], m[1]);
-    float det = dot(m[0], c0);
-    float3 transformed = mul(normal, float3x3(c0, c1, c2));
-    return abs(det) > 1e-6 ? transformed * sign(det) : mul(normal, m);
+    float3 transformed = mul(normal, skin);
+    return length(transformed) > 1e-6 ? transformed : normal;
 }
 
 VSOutput main(VSInput input)
@@ -99,7 +101,7 @@ VSOutput main(VSInput input)
     output.Position = mul(skinnedPos, Mvp);
     // REMED-GFX-006: compose the bone-skin 3x3 with the outer World inverse-transpose normal
     // matrix (was skin-only). Matches the corrected Vulkan skinned3d.vert.glsl exactly.
-    output.Normal = normalize(mul(TransformSkinNormal(input.Normal, (float3x3)skinMat),
+    output.Normal = normalize(mul(SkinNormal(input.Normal, (float3x3)skinMat),
                                   InverseTranspose3x3((float3x3)World)));
     output.UV = input.UV;
     output.WorldPos = mul(skinnedPos, World).xyz;

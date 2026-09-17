@@ -1,0 +1,26 @@
+# plans/plan_graphics_shared_cleanup.md GSC-0004: what a real XNA 4.0 stock effect samples from an
+# unbound texture slot. DualTextureEffect with Texture=null and a white Texture2, DiffuseColor 0.5:
+# texture * texture2 * 2 * diffuse is the sample itself.
+# The clear colour has alpha 255 and the default BlendState.Opaque writes the effect's alpha, so the
+# result separates opaque black (0,0,0,255), transparent black (0,0,0,0) and white.
+# Deliberately in scenes/null-texture/, outside every renderer script's scenes/*.scene glob.
+width=64
+height=64
+profile=HiDef
+clearcolor=100,149,237,255
+effect=DualTextureEffect
+vertexformat=PositionDualTexture
+vertexcolor=false
+texture=false
+texture2=true
+texture2width=1
+texture2height=1
+texture2pixel=255,255,255,255
+diffusecolor=0.5,0.5,0.5
+primitive=TriangleList
+vertex=-0.6,0.6,0,0,0,0,0
+vertex=0.6,0.6,0,1,0,1,0
+vertex=-0.6,-0.6,0,0,1,0,1
+vertex=0.6,0.6,0,1,0,1,0
+vertex=0.6,-0.6,0,1,1,1,1
+vertex=-0.6,-0.6,0,0,1,0,1

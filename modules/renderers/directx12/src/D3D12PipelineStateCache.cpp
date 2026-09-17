@@ -166,27 +166,29 @@ namespace CNA::Internal::Renderers::DirectX12
         ds.StencilReadMask = static_cast<UINT8>(desc.stencilMask);
         ds.StencilWriteMask = static_cast<UINT8>(desc.stencilWriteMask);
 
-        ds.FrontFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.stencilFunc));
-        ds.FrontFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilPass));
-        ds.FrontFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilFail));
-        ds.FrontFace.StencilDepthFailOp =
+        // plans/plan_graphics_shared_cleanup.md GSC-0002: with FrontCounterClockwise = TRUE (above) the
+        // counter-clockwise triangles are FrontFace, and XNA's CounterClockwiseStencil* state belongs to
+        // exactly those -- DepthStencilState::Apply writes it to D3DRS_CCW_STENCIL*, which Direct3D 9
+        // applies to the winding CullCounterClockwiseFace culls. The ordinary operations are BackFace;
+        // D3D11DepthStencilStateCache carries the full account.
+        ds.BackFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.stencilFunc));
+        ds.BackFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilPass));
+        ds.BackFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilFail));
+        ds.BackFace.StencilDepthFailOp =
             static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilDepthFail));
 
-        // XNA's DepthStencilState.TwoSidedStencilMode gates whether the CounterClockwise* fields are
-        // used at all; when false, the front-face ops apply to both faces. Same rule
-        // D3D11DepthStencilStateCache states, and the same one EasyGL follows by only calling the
-        // *_separate(Back, ...) GL entry points when it is true.
+        // TwoSidedStencilMode = false applies the ordinary operations to both windings.
         if (desc.twoSidedStencilMode)
         {
-            ds.BackFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.ccwStencilFunc));
-            ds.BackFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilPass));
-            ds.BackFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilFail));
-            ds.BackFace.StencilDepthFailOp =
+            ds.FrontFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.ccwStencilFunc));
+            ds.FrontFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilPass));
+            ds.FrontFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilFail));
+            ds.FrontFace.StencilDepthFailOp =
                 static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilDepthFail));
         }
         else
         {
-            ds.BackFace = ds.FrontFace;
+            ds.FrontFace = ds.BackFace;
         }
 
         psoDesc.NumRenderTargets = std::min<UINT>(

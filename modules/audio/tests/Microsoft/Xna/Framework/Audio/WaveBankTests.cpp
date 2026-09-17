@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "AudioTestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
@@ -354,7 +355,7 @@ namespace
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
-        auto dir = std::filesystem::temp_directory_path() / dirName;
+        auto dir = CnaAudioTest::FixtureRoot() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         std::ofstream f(file, std::ios::binary);
@@ -449,7 +450,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = std::filesystem::temp_directory_path() / "cna_wavebank_test";
+            auto dir = CnaAudioTest::FixtureRoot() / "cna_wavebank_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture_engine.xgs";
             const auto bytes = BuildMinimalXgsFixtureBytes();
@@ -979,7 +980,7 @@ TEST(WaveBankTest, NonStreamingGetSoundEffectRejectsEntryLengthExceedingRealFile
 TEST(WaveBankTest, ConstructorMissingFileThrowsFileNotFound)
 {
     const auto missing =
-        (std::filesystem::temp_directory_path() / "cna_wavebank_test_missing.xwb").string();
+        (CnaAudioTest::FixtureRoot() / "cna_wavebank_test_missing.xwb").string();
     EXPECT_THROW(WaveBank wb(&SharedEngine(), missing), System::IO::FileNotFoundException);
 }
 

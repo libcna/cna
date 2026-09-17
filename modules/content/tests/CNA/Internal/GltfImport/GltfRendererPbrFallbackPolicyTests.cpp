@@ -2753,26 +2753,23 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
     }
 }
 
-TEST(GltfRendererPbrFallbackPolicy, DirectX11SkinnedEffectUsesOpaqueWhiteForMissingTexture)
+TEST(GltfRendererPbrFallbackPolicy, DirectX11KeepsOpaqueWhiteOnlyForThePbrBaseColour)
 {
-    // GLTF-386: skin-unlit has no base-color texture, while SkinnedEffect deliberately keeps
-    // TextureEnabled=true. An unbound Direct3D 11 SRV samples transparent black and therefore
-    // erases this otherwise valid glTF draw. Keep the SkinnedEffect-specific null branch tied to
-    // the same opaque-white fallback used by the other full renderers.
+    // GLTF-386 bound opaque white for a missing SkinnedEffect texture so the untextured skin-unlit
+    // fixture drew, and DX-230 extended it to BasicEffect. plans/plan_graphics_shared_cleanup.md
+    // GSC-0004 then measured Microsoft XNA 4.0: every classic stock effect samples an unbound texture
+    // as opaque black (tools/xna-oracle/reference/null-texture/). The glTF importer now binds glTF's
+    // own white base colour for such a skin (GltfUnlitMaterial.AnUntexturedSkinSamplesGltfWhite...),
+    // so the renderer keeps white exactly where CNAEXT PBR defines it and nowhere else.
     const std::string directx11 = RendererText(
         RepositoryRoot() / "modules" / "renderers" / "directx11");
     const std::string kOpaqueWhiteTexture0 = Normalize(R"(
         srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
                                   : GetOrCreateDefaultWhiteSrvEXT();
     )");
-    // plans/plan_dx.md DX-230 extended the SAME fallback to the dual-texture and default branches,
-    // because an unbound D3D11 SRV samples transparent black in every branch, not only these two.
-    // An exact count therefore no longer states this test's guarantee -- it would go red whenever
-    // an unrelated branch adopted the correct behaviour. What must hold is that the PBR and the
-    // plain-skinned bindings both have it, and the PBR one is pinned by its adjacent normal-map
-    // slot so this cannot be satisfied by two arbitrary branches.
-    EXPECT_GE(CountOccurrences(directx11, kOpaqueWhiteTexture0), 2u)
-        << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
+    EXPECT_EQ(1u, CountOccurrences(directx11, kOpaqueWhiteTexture0))
+        << "only the PBR base colour may fall back to opaque white; a classic stock effect samples "
+           "XNA's opaque black";
     EXPECT_EQ(1u, CountOccurrences(directx11, kOpaqueWhiteTexture0 + Normalize(R"(
         srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
     )"))) << "the PBR branch specifically must keep the opaque-white texture0 fallback";

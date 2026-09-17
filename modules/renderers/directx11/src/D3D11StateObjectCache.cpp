@@ -100,26 +100,32 @@ namespace CNA::Internal::Renderers::DirectX11
         desc.StencilReadMask = static_cast<UINT8>(stencilMask);
         desc.StencilWriteMask = static_cast<UINT8>(stencilWriteMask);
 
-        desc.FrontFace.StencilFunc = D3DCommon::CompareFunctionToD3D11(stencilFunc);
-        desc.FrontFace.StencilPassOp = D3DCommon::StencilOperationToD3D11(stencilPass);
-        desc.FrontFace.StencilFailOp = D3DCommon::StencilOperationToD3D11(stencilFail);
-        desc.FrontFace.StencilDepthFailOp = D3DCommon::StencilOperationToD3D11(stencilDepthFail);
+        // plans/plan_graphics_shared_cleanup.md GSC-0002: XNA's DepthStencilState::Apply (IL of
+        // Microsoft.Xna.Framework.Graphics.dll) writes StencilFunction/Pass/Fail/DepthBufferFail to
+        // D3DRS_STENCIL* and, when TwoSidedStencilMode is set, the CounterClockwise* fields to
+        // D3DRS_CCW_STENCILFAIL/ZFAIL/PASS/FUNC (0xBA..0xBD). Direct3D 9 applies the CCW states to the
+        // counter-clockwise triangles -- the winding D3DCULL_CCW (CullCounterClockwiseFace) culls.
+        // D3D11RasterizerStateCache sets FrontCounterClockwise = TRUE and maps that cull mode to
+        // D3D11_CULL_FRONT, so the counter-clockwise triangles are FrontFace here and the ordinary,
+        // clockwise ones BackFace. FNA3D's Direct3D 11 driver wires the CCW fields to BackFace under the
+        // same rasterizer convention; this follows XNA instead.
+        desc.BackFace.StencilFunc = D3DCommon::CompareFunctionToD3D11(stencilFunc);
+        desc.BackFace.StencilPassOp = D3DCommon::StencilOperationToD3D11(stencilPass);
+        desc.BackFace.StencilFailOp = D3DCommon::StencilOperationToD3D11(stencilFail);
+        desc.BackFace.StencilDepthFailOp = D3DCommon::StencilOperationToD3D11(stencilDepthFail);
 
-        // XNA's DepthStencilState.TwoSidedStencilMode gates whether the CounterClockwise* fields
-        // are actually used at all -- when false, FNA/D3D9 apply the front-face ops to both faces
-        // (matches this project's own EasyGL precedent, which only calls the *_separate(Back, ...)
-        // GL entry points when twoSidedStencilMode is true). Mirror that here rather than always
-        // wiring BackFace to the (possibly stale/default) ccw* fields.
+        // TwoSidedStencilMode = false applies the ordinary operations to both windings (D3D9 ignores
+        // the CCW states then); the CounterClockwise* fields may hold anything.
         if (twoSidedStencilMode)
         {
-            desc.BackFace.StencilFunc = D3DCommon::CompareFunctionToD3D11(ccwStencilFunc);
-            desc.BackFace.StencilPassOp = D3DCommon::StencilOperationToD3D11(ccwStencilPass);
-            desc.BackFace.StencilFailOp = D3DCommon::StencilOperationToD3D11(ccwStencilFail);
-            desc.BackFace.StencilDepthFailOp = D3DCommon::StencilOperationToD3D11(ccwStencilDepthFail);
+            desc.FrontFace.StencilFunc = D3DCommon::CompareFunctionToD3D11(ccwStencilFunc);
+            desc.FrontFace.StencilPassOp = D3DCommon::StencilOperationToD3D11(ccwStencilPass);
+            desc.FrontFace.StencilFailOp = D3DCommon::StencilOperationToD3D11(ccwStencilFail);
+            desc.FrontFace.StencilDepthFailOp = D3DCommon::StencilOperationToD3D11(ccwStencilDepthFail);
         }
         else
         {
-            desc.BackFace = desc.FrontFace;
+            desc.FrontFace = desc.BackFace;
         }
 
         ComPtr<ID3D11DepthStencilState> state;
@@ -144,7 +150,8 @@ namespace CNA::Internal::Renderers::DirectX11
         D3D11_RASTERIZER_DESC desc{};
         desc.FillMode = D3DCommon::FillModeToD3D11(fillMode);
         desc.CullMode = D3DCommon::CullModeToD3D11(cullMode);
-        // FNA3D uses this convention so XNA's CounterClockwiseStencil* state maps to BackFace.
+        // Counter-clockwise triangles are front-facing, so CullCounterClockwiseFace is D3D11_CULL_FRONT
+        // and XNA's CounterClockwiseStencil* state is FrontFace (D3D11DepthStencilStateCache).
         desc.FrontCounterClockwise = TRUE;
         desc.DepthBias = depthBias;
         desc.DepthBiasClamp = 0.0f;

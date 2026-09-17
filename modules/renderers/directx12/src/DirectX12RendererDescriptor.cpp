@@ -128,10 +128,15 @@ namespace CNA::Internal::Renderers::DirectX12
             return HasFormatSupport(DXGI_FORMAT_R8G8B8A8_UNORM, required);
         }
 
+        // plans/plan_graphics_shared_cleanup.md GSC-0005: the back buffer allocates the requested depth
+        // format (WINCLOSE-0012 / DX12-0019), as XNA's device does and FNA's QueryBackBufferFormat
+        // reports, so the adapter answers what device creation will apply -- the same rule
+        // GetAppliedDepthStencilFormatEXT uses -- instead of DX-213's former fixed Depth24Stencil8.
         int SelectBackBufferDepthStencilFormat(int requestedDepthFormat)
         {
-            (void) requestedDepthFormat;
-            return static_cast<int>(DepthFormat::Depth24Stencil8);
+            return D3DCommon::DepthFormatToDxgi(requestedDepthFormat) == DXGI_FORMAT_UNKNOWN
+                ? static_cast<int>(DepthFormat::None)
+                : requestedDepthFormat;
         }
 
         int ClampMultiSampleCount(int surfaceFormat, int requestedMultiSampleCount)

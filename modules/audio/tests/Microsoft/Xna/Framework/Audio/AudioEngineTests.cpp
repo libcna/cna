@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "AudioTestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
@@ -162,7 +163,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = std::filesystem::temp_directory_path() / "cna_audio_engine_test";
+            auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_engine_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
             const auto bytes = BuildXgsFixtureBytes();
@@ -258,7 +259,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = std::filesystem::temp_directory_path() / "cna_audio_engine_test";
+            auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_engine_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "var_accessibility.xgs";
             const auto bytes = BuildVarAccessibilityXgsFixtureBytes();
@@ -271,7 +272,7 @@ namespace
 
     std::string WriteFixture(const std::string& fileName, const std::vector<uint8_t>& bytes)
     {
-        auto dir = std::filesystem::temp_directory_path() / "cna_audio_engine_test";
+        auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_engine_test";
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         std::ofstream f(file, std::ios::binary);
@@ -780,7 +781,7 @@ TEST(AudioEngineTest, GetCategoryAfterDisposeThrowsObjectDisposed)
 TEST(AudioEngineTest, ConstructorWithMissingFileThrowsFileNotFound)
 {
     const auto missing =
-        (std::filesystem::temp_directory_path() / "cna_audio_engine_test_missing.xgs").string();
+        (CnaAudioTest::FixtureRoot() / "cna_audio_engine_test_missing.xgs").string();
     EXPECT_THROW(AudioEngine engine(missing), System::IO::FileNotFoundException);
 }
 
