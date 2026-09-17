@@ -25,8 +25,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
@@ -37,6 +39,8 @@
 // windows.h's macros collide with this project's own enumerator names -- put it first and
 // CNA/LogCategory.hpp stops parsing instead. Same hazard mingw-cnaext-spike/ exists to catch.
 #include <d3d12sdklayers.h>
+// DX12-0004: IDXGIFactory6::EnumAdapterByGpuPreference orders the hardware candidates.
+#include <dxgi1_6.h>
 
 // plans/plan_modern.md MOD-1605: two D3D12 spec constants that Ubuntu's MinGW-w64 13.2 <d3d12.h> does not
 // define, though the Windows SDK does. Both are fixed by the D3D12 specification rather than by any
@@ -63,6 +67,62 @@ namespace CNA::Internal::Renderers::DirectX12
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        std::mutex& ProcessDebugMessageMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        D3D12DebugMessageTotalsEXT& ProcessDebugMessageTotals()
+        {
+            static D3D12DebugMessageTotalsEXT totals;
+            return totals;
+        }
+
+        std::deque<D3D12DebugMessageEXT>& ProcessRecentDebugMessages()
+        {
+            static std::deque<D3D12DebugMessageEXT> messages;
+            return messages;
+        }
+
+        // Every live renderer's info queue, so a diagnostic handler can read the message that made
+        // the debug layer terminate the process (DX12-0003: ID 921 raises 0x87D) without a renderer.
+        std::mutex& LiveDebugQueueMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::vector<ComPtr<IUnknown>>& LiveDebugQueues()
+        {
+            static std::vector<ComPtr<IUnknown>> queues;
+            return queues;
+        }
+
+        void RegisterLiveDebugQueue(const ComPtr<IUnknown>& queue)
+        {
+            std::lock_guard<std::mutex> lock(LiveDebugQueueMutex());
+            LiveDebugQueues().push_back(queue);
+        }
+
+        void UnregisterLiveDebugQueue(const ComPtr<IUnknown>& queue)
+        {
+            if (!queue) return;
+            std::lock_guard<std::mutex> lock(LiveDebugQueueMutex());
+            auto& queues = LiveDebugQueues();
+            std::erase_if(queues, [&](const ComPtr<IUnknown>& item) { return item.Get() == queue.Get(); });
+        }
+    
+
+        std::string NarrowAdapterDescription(const wchar_t* text)
+        {
+            const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+            if (bytes <= 1) return {};
+            std::string out(static_cast<std::size_t>(bytes - 1), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text, -1, out.data(), bytes, nullptr, nullptr);
+            return out;
         }
 
         int ClampBackBufferMultiSampleCount(
@@ -298,6 +358,7 @@ namespace CNA::Internal::Renderers::DirectX12
             currentSamplerLodBias_[i] = 0.0f;
         }
 
+        configuration_ = CaptureD3D12ConfigurationFromEnvironment();
         CreateDeviceResources();
         CreateCommandQueueResources();
         CreateDescriptorHeapResources();
@@ -324,6 +385,8 @@ namespace CNA::Internal::Renderers::DirectX12
         CNA::Logger::Info(
             "D3D12 device resources created; feature level " + FormatHr(featureLevel_) +
                 ", debug layer " + (debugLayerEnabled_ ? "enabled" : "disabled") +
+                ", GPU-based validation " + (gpuBasedValidationEnabled_ ? "enabled" : "disabled") +
+                ", DRED " + (dredEnabled_ ? "enabled" : "disabled") +
                 ", tearing " + (allowTearingSupported_ ? "supported" : "unsupported") +
                 ", swap chain " + (swapChainAvailable_ ? "available" : "unavailable"),
             CNA::LogCategory::RENDER);
@@ -352,6 +415,9 @@ namespace CNA::Internal::Renderers::DirectX12
             CloseHandle(fenceEvent_);
             fenceEvent_ = nullptr;
         }
+        // DX12-0004: whatever teardown itself made the layer say is part of this device's record.
+        DrainDebugMessagesEXT();
+        UnregisterLiveDebugQueue(infoQueue_);
     }
 
     void DirectX12Renderer::SetContextRecoveryEnabled(bool enabled)
@@ -401,10 +467,14 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::CreateDeviceResources()
     {
         UINT factoryFlags = 0;
+        debugLayerEnabled_ = false;
+        gpuBasedValidationEnabled_ = false;
+        dredEnabled_ = false;
 
-        // design decision 12's own "debug layer is best-effort, never a hard requirement" applies
-        // identically here -- D3D12's debug interface is a separate opt-in call
-        // (D3D12GetDebugInterface), unlike D3D11's D3D11_CREATE_DEVICE_DEBUG flag.
+        // plans/plan_directx12_parity.md DX12-0004: the debug layer is opt-in in every build type.
+        // It used to be enabled unconditionally whenever D3D12GetDebugInterface succeeded -- that
+        // is, on every machine with Graphics Tools installed, Release games included.
+        if (configuration_.debugLayer)
         {
             ComPtr<ID3D12Debug> debugController;
             if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(debugController.ReleaseAndGetAddressOf()))))
@@ -412,62 +482,86 @@ namespace CNA::Internal::Renderers::DirectX12
                 debugController->EnableDebugLayer();
                 debugLayerEnabled_ = true;
                 factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+                if (configuration_.gpuBasedValidation)
+                {
+                    ComPtr<ID3D12Debug1> debugController1;
+                    if (SUCCEEDED(debugController.As(&debugController1)))
+                    {
+                        debugController1->SetEnableGPUBasedValidation(TRUE);
+                        gpuBasedValidationEnabled_ = true;
+                    }
+                    else
+                    {
+                        CNA::Logger::Warn(
+                            "D3D12: CNA_D3D12_GPU_VALIDATION=1 was requested but ID3D12Debug1 is "
+                            "unavailable; the debug layer runs without GPU-based validation.",
+                            CNA::LogCategory::RENDER);
+                    }
+                }
             }
             else
             {
-                CNA::Logger::Warn("D3D12 debug layer unavailable; continuing without it.",
+                CNA::Logger::Warn(
+                    "D3D12: CNA_D3D12_DEBUG_LAYER=1 was requested but the debug layer is not "
+                    "installed (Windows optional feature Tools.Graphics.DirectX); continuing without it.",
+                    CNA::LogCategory::RENDER);
+            }
+        }
+
+#if defined(_MSC_VER)
+        // DX12-0004: DRED must be configured before the device exists; it records what the GPU was
+        // doing when a device is removed, which a removed device can no longer be asked.
+        if (configuration_.dred)
+        {
+            ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dredSettings;
+            if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(dredSettings.GetAddressOf()))))
+            {
+                dredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                dredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                dredEnabled_ = true;
+            }
+            else
+            {
+                CNA::Logger::Warn("D3D12: CNA_D3D12_DRED=1 was requested but DRED is unavailable.",
                                   CNA::LogCategory::RENDER);
             }
         }
+#else
+        if (configuration_.dred)
+            CNA::Logger::Warn("D3D12: CNA_D3D12_DRED=1 is not supported by this toolchain's headers.",
+                              CNA::LogCategory::RENDER);
+#endif
 
         HRESULT hr = CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(factory_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("CreateDXGIFactory2 failed, hr=" + FormatHr(hr));
 
-        // DX-102: unlike D3D11CreateDevice's own feature-level fallback ARRAY, D3D12CreateDevice
-        // only accepts a single MinimumFeatureLevel -- so the fallback here is a real retry loop,
-        // not one call with an array.
-        static const D3D_FEATURE_LEVEL kFeatureLevels[] = {
-            D3D_FEATURE_LEVEL_12_1,
-            D3D_FEATURE_LEVEL_12_0,
-            D3D_FEATURE_LEVEL_11_1,
-            D3D_FEATURE_LEVEL_11_0,
-        };
+        CreateDeviceOnConfiguredAdapter();
 
-        // Pick the first hardware (non-software) adapter the factory enumerates -- IDXGIFactory6's
-        // EnumAdapterByGpuPreference would be a nicer "prefer high performance" query, but a plain
-        // EnumAdapters1 walk is sufficient for a first implementation (matches this task's own
-        // "simple strategy is fine, document it" allowance, DX-103's row).
-        ComPtr<IDXGIAdapter1> chosenAdapter;
-        for (UINT i = 0; ; ++i)
+        if (debugLayerEnabled_)
         {
-            ComPtr<IDXGIAdapter1> adapter;
-            if (factory_->EnumAdapters1(i, adapter.ReleaseAndGetAddressOf()) == DXGI_ERROR_NOT_FOUND)
-                break;
-
-            DXGI_ADAPTER_DESC1 desc{};
-            adapter->GetDesc1(&desc);
-            if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-                continue; // skip the WARP/software adapter for the default path
-
-            chosenAdapter = adapter;
-            break;
-        }
-
-        bool created = false;
-        for (D3D_FEATURE_LEVEL level : kFeatureLevels)
-        {
-            hr = D3D12CreateDevice(chosenAdapter.Get(), level, IID_PPV_ARGS(device_.ReleaseAndGetAddressOf()));
-            if (SUCCEEDED(hr))
+            ComPtr<ID3D12InfoQueue> infoQueue;
+            if (SUCCEEDED(device_.As(&infoQueue)))
             {
-                featureLevel_ = level;
-                created = true;
-                break;
+                // A clear whose colour differs from the resource's optimized clear value is a
+                // documented performance hint. Swap-chain buffers have no clear value and XNA clears
+                // to whatever colour the game names, so every frame would report it. Informational
+                // messages are dropped for the same volume reason; they carry no verdict.
+                D3D12_MESSAGE_SEVERITY deniedSeverities[] = {
+                    D3D12_MESSAGE_SEVERITY_INFO, D3D12_MESSAGE_SEVERITY_MESSAGE};
+                D3D12_MESSAGE_ID deniedIds[] = {
+                    D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+                    D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE};
+                D3D12_INFO_QUEUE_FILTER filter{};
+                filter.DenyList.NumSeverities = static_cast<UINT>(std::size(deniedSeverities));
+                filter.DenyList.pSeverityList = deniedSeverities;
+                filter.DenyList.NumIDs = static_cast<UINT>(std::size(deniedIds));
+                filter.DenyList.pIDList = deniedIds;
+                infoQueue->PushStorageFilter(&filter);
+                infoQueue_ = infoQueue;
+                RegisterLiveDebugQueue(infoQueue_);
             }
         }
-
-        if (!created)
-            throw std::runtime_error("D3D12CreateDevice failed for every feature level in the fallback list, last hr=" + FormatHr(hr));
 
         // DX-102: tearing-capability query, same DXGI_FEATURE_PRESENT_ALLOW_TEARING check D3D11's
         // own DX-22 uses, just off the factory directly (D3D12 has no IDXGIDevice indirection).
@@ -481,6 +575,300 @@ namespace CNA::Internal::Renderers::DirectX12
                 allowTearingSupported_ = allowTearing != FALSE;
             }
         }
+    }
+
+    void DirectX12Renderer::CreateDeviceOnConfiguredAdapter()
+    {
+        // DX-102: D3D12CreateDevice takes a single minimum feature level, so the fallback is a retry
+        // loop rather than D3D11's array.
+        static const D3D_FEATURE_LEVEL kFeatureLevels[] = {
+            D3D_FEATURE_LEVEL_12_1,
+            D3D_FEATURE_LEVEL_12_0,
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+        };
+
+        const auto tryCreate = [this](IDXGIAdapter1* adapter, HRESULT& lastHr)
+        {
+            for (D3D_FEATURE_LEVEL level : kFeatureLevels)
+            {
+                lastHr = D3D12CreateDevice(adapter, level,
+                                           IID_PPV_ARGS(device_.ReleaseAndGetAddressOf()));
+                if (SUCCEEDED(lastHr))
+                {
+                    featureLevel_ = level;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const auto describe = [this](IDXGIAdapter1* adapter)
+        {
+            DXGI_ADAPTER_DESC1 desc{};
+            adapter->GetDesc1(&desc);
+            D3D12AdapterInfoEXT info;
+            info.description = NarrowAdapterDescription(desc.Description);
+            info.vendorId = desc.VendorId;
+            info.deviceId = desc.DeviceId;
+            info.subSysId = desc.SubSysId;
+            info.revision = desc.Revision;
+            info.dedicatedVideoMemory = desc.DedicatedVideoMemory;
+            info.dedicatedSystemMemory = desc.DedicatedSystemMemory;
+            info.sharedSystemMemory = desc.SharedSystemMemory;
+            info.software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+            info.selectedBy = configuration_.adapter;
+            return info;
+        };
+
+        if (configuration_.adapter == D3D12AdapterPreference::Warp)
+        {
+            // DX12-0004: WARP by API, never by matching an adapter name.
+            ComPtr<IDXGIAdapter1> warp;
+            HRESULT hr = factory_->EnumWarpAdapter(IID_PPV_ARGS(warp.GetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX12Renderer: CNA_D3D12_ADAPTER=warp was requested but "
+                    "IDXGIFactory4::EnumWarpAdapter failed, hr=" + FormatHr(hr));
+            if (!tryCreate(warp.Get(), hr))
+                throw std::runtime_error(
+                    "DirectX12Renderer: CNA_D3D12_ADAPTER=warp was requested but D3D12CreateDevice "
+                    "on the WARP adapter failed at every feature level, last hr=" + FormatHr(hr));
+            adapterInfo_ = describe(warp.Get());
+        }
+        else
+        {
+            // DX12-0004: every hardware adapter, in the order DXGI prefers for performance when it can
+            // say so, until one creates a device. D3D12CreateDevice is never given a null adapter:
+            // that means "the default adapter", which on a machine whose only adapter is the
+            // Microsoft Basic Render Driver is a software rasteriser -- exactly the silent fallback
+            // the production path must not have.
+            ComPtr<IDXGIFactory6> factory6;
+            const bool byPreference = SUCCEEDED(factory_.As(&factory6));
+            std::string attempts;
+            bool created = false;
+            for (UINT i = 0; !created; ++i)
+            {
+                ComPtr<IDXGIAdapter1> adapter;
+                const HRESULT enumHr = byPreference
+                    ? factory6->EnumAdapterByGpuPreference(
+                          i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(adapter.GetAddressOf()))
+                    : factory_->EnumAdapters1(i, adapter.GetAddressOf());
+                if (enumHr == DXGI_ERROR_NOT_FOUND)
+                    break;
+                if (FAILED(enumHr))
+                    throw std::runtime_error(
+                        "DirectX12Renderer: DXGI adapter enumeration failed, hr=" + FormatHr(enumHr));
+
+                D3D12AdapterInfoEXT candidate = describe(adapter.Get());
+                if (!attempts.empty()) attempts += "; ";
+                attempts += "'" + candidate.description + "'";
+                if (candidate.software)
+                {
+                    attempts += " skipped (software adapter)";
+                    continue;
+                }
+                HRESULT hr = S_OK;
+                if (tryCreate(adapter.Get(), hr))
+                {
+                    adapterInfo_ = std::move(candidate);
+                    created = true;
+                }
+                else
+                {
+                    attempts += " refused D3D12, hr=" + FormatHr(hr);
+                }
+            }
+            if (!created)
+                throw std::runtime_error(
+                    "DirectX12Renderer: no hardware DXGI adapter could create a Direct3D 12 device (" +
+                    (attempts.empty() ? std::string("no adapters enumerated") : attempts) +
+                    "). The WARP software rasteriser is never used as a fallback; set "
+                    "CNA_D3D12_ADAPTER=warp to select it explicitly for validation.");
+        }
+        adapterInfo_.featureLevel = featureLevel_;
+
+        char ids[96];
+        std::snprintf(ids, sizeof(ids), "vendor 0x%04X, device 0x%04X, subsys 0x%08X, revision %u",
+                      adapterInfo_.vendorId, adapterInfo_.deviceId, adapterInfo_.subSysId,
+                      adapterInfo_.revision);
+        CNA::Logger::Info(
+            "D3D12 adapter: '" + adapterInfo_.description + "' (" + ids + ", " +
+                std::to_string(adapterInfo_.dedicatedVideoMemory / (1024u * 1024u)) +
+                " MB dedicated video, " +
+                std::to_string(adapterInfo_.sharedSystemMemory / (1024u * 1024u)) +
+                " MB shared), " + (adapterInfo_.software ? "software" : "hardware") +
+                ", selected by CNA_D3D12_ADAPTER=" +
+                D3D12AdapterPreferenceName(configuration_.adapter) +
+                (configuration_.adapter == D3D12AdapterPreference::Warp
+                     ? " -- the WARP software rasteriser, validation evidence only, not GPU evidence"
+                     : ""),
+            CNA::LogCategory::RENDER);
+    }
+
+    std::vector<D3D12DebugMessageEXT> DirectX12Renderer::PeekLiveDebugQueuesEXT() noexcept
+    {
+        std::vector<D3D12DebugMessageEXT> messages;
+        try
+        {
+            // try_lock: this runs from an exception handler, possibly on a thread already inside a
+            // registration. A missed read is better than a deadlock in a dying process.
+            std::unique_lock<std::mutex> lock(LiveDebugQueueMutex(), std::try_to_lock);
+            if (!lock.owns_lock())
+                return messages;
+            for (const auto& unknown : LiveDebugQueues())
+            {
+                ComPtr<ID3D12InfoQueue> queue;
+                if (FAILED(unknown.As(&queue)))
+                    continue;
+                const UINT64 count = queue->GetNumStoredMessagesAllowedByRetrievalFilter();
+                for (UINT64 i = 0; i < count; ++i)
+                {
+                    SIZE_T length = 0;
+                    if (FAILED(queue->GetMessage(i, nullptr, &length)) || length == 0)
+                        continue;
+                    std::vector<char> storage(length);
+                    auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+                    if (FAILED(queue->GetMessage(i, message, &length)))
+                        continue;
+                    D3D12DebugMessageEXT entry;
+                    entry.severity = static_cast<int>(message->Severity);
+                    entry.id = static_cast<int>(message->ID);
+                    if (message->pDescription != nullptr)
+                        entry.description.assign(message->pDescription,
+                                                 std::strlen(message->pDescription));
+                    messages.push_back(std::move(entry));
+                }
+            }
+        }
+        catch (...)
+        {
+        }
+        return messages;
+    }
+
+    std::vector<D3D12DebugMessageEXT> DirectX12Renderer::DrainDebugMessagesEXT()
+    {
+        std::vector<D3D12DebugMessageEXT> drained;
+        if (!infoQueue_)
+            return drained;
+        ComPtr<ID3D12InfoQueue> infoQueue;
+        if (FAILED(infoQueue_.As(&infoQueue)))
+            return drained;
+
+        const UINT64 count = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+        for (UINT64 i = 0; i < count; ++i)
+        {
+            SIZE_T length = 0;
+            if (FAILED(infoQueue->GetMessage(i, nullptr, &length)) || length == 0)
+                continue;
+            std::vector<char> storage(length);
+            auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+            if (FAILED(infoQueue->GetMessage(i, message, &length)))
+                continue;
+            D3D12DebugMessageEXT entry;
+            entry.severity = static_cast<int>(message->Severity);
+            entry.id = static_cast<int>(message->ID);
+            if (message->pDescription != nullptr && message->DescriptionByteLength > 0)
+                entry.description.assign(message->pDescription,
+                                         std::strlen(message->pDescription));
+            drained.push_back(std::move(entry));
+        }
+        infoQueue->ClearStoredMessages();
+
+        if (drained.empty())
+            return drained;
+
+        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
+        auto& totals = ProcessDebugMessageTotals();
+        auto& recent = ProcessRecentDebugMessages();
+        constexpr std::size_t kRetainedMessages = 256;
+        for (const auto& entry : drained)
+        {
+            const std::string text = "D3D12 debug layer [severity " + std::to_string(entry.severity) +
+                                     ", id " + std::to_string(entry.id) + "]: " + entry.description;
+            switch (entry.severity)
+            {
+            case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+                ++totals.corruption;
+                CNA::Logger::Error(text, CNA::LogCategory::RENDER);
+                break;
+            case D3D12_MESSAGE_SEVERITY_ERROR:
+                ++totals.error;
+                CNA::Logger::Error(text, CNA::LogCategory::RENDER);
+                break;
+            default:
+                ++totals.warning;
+                CNA::Logger::Warn(text, CNA::LogCategory::RENDER);
+                break;
+            }
+            recent.push_back(entry);
+            if (recent.size() > kRetainedMessages)
+                recent.pop_front();
+        }
+        return drained;
+    }
+
+    D3D12DebugMessageTotalsEXT DirectX12Renderer::GetProcessDebugMessageTotalsEXT() noexcept
+    {
+        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
+        return ProcessDebugMessageTotals();
+    }
+
+    std::vector<D3D12DebugMessageEXT> DirectX12Renderer::GetRecentProcessDebugMessagesEXT()
+    {
+        std::lock_guard<std::mutex> lock(ProcessDebugMessageMutex());
+        const auto& recent = ProcessRecentDebugMessages();
+        return {recent.begin(), recent.end()};
+    }
+
+    void DirectX12Renderer::ReportDeviceRemovedExtendedDataEXT()
+    {
+#if defined(_MSC_VER)
+        if (!dredEnabled_ || !device_)
+            return;
+        ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+        if (FAILED(device_.As(&dred)))
+            return;
+
+        D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
+        if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs)))
+        {
+            int nodeIndex = 0;
+            for (const D3D12_AUTO_BREADCRUMB_NODE* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+                 node != nullptr && nodeIndex < 64; node = node->pNext, ++nodeIndex)
+            {
+                const UINT completed = node->pLastBreadcrumbValue ? *node->pLastBreadcrumbValue : 0;
+                std::string line = "D3D12 DRED breadcrumb node " + std::to_string(nodeIndex) +
+                                   ": " + std::to_string(completed) + " of " +
+                                   std::to_string(node->BreadcrumbCount) + " operations completed";
+                // The first operation that did not complete is the one the removal interrupted.
+                if (node->pCommandHistory != nullptr && completed < node->BreadcrumbCount)
+                    line += ", first incomplete op " +
+                            std::to_string(static_cast<int>(node->pCommandHistory[completed]));
+                CNA::Logger::Error(line, CNA::LogCategory::RENDER);
+            }
+        }
+
+        D3D12_DRED_PAGE_FAULT_OUTPUT pageFault{};
+        if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&pageFault)) && pageFault.PageFaultVA != 0)
+        {
+            char va[32];
+            std::snprintf(va, sizeof(va), "0x%016llX",
+                          static_cast<unsigned long long>(pageFault.PageFaultVA));
+            std::string line = std::string("D3D12 DRED page fault at ") + va;
+            int allocations = 0;
+            for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadExistingAllocationNode;
+                 node != nullptr && allocations < 16; node = node->pNext, ++allocations)
+                line += "; existing allocation type " +
+                        std::to_string(static_cast<int>(node->AllocationType));
+            for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadRecentFreedAllocationNode;
+                 node != nullptr && allocations < 32; node = node->pNext, ++allocations)
+                line += "; recently freed allocation type " +
+                        std::to_string(static_cast<int>(node->AllocationType));
+            CNA::Logger::Error(line, CNA::LogCategory::RENDER);
+        }
+#endif
     }
 
     void DirectX12Renderer::CreateCommandQueueResources()
@@ -1310,6 +1698,10 @@ namespace CNA::Internal::Renderers::DirectX12
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D12 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            // DX12-0004: the layer's own account and DRED's breadcrumbs are the only record of what
+            // the GPU was doing; both are gone once the device is recreated.
+            DrainDebugMessagesEXT();
+            ReportDeviceRemovedExtendedDataEXT();
             if (!deviceLost_)
             {
                 deviceLost_ = true;
@@ -1368,6 +1760,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // soon as the last such resource is gone.
         heaps_.reset();
         commandQueue_.Reset();
+        DrainDebugMessagesEXT();
+        UnregisterLiveDebugQueue(infoQueue_);
+        infoQueue_.Reset();
         device_.Reset();
         factory_.Reset();
 
@@ -1396,7 +1791,6 @@ namespace CNA::Internal::Renderers::DirectX12
         activeFrameIndex_ = -1;
         activeFrameFenceValue_ = 0;
         headlessFrameIndex_ = 0;
-        debugLayerEnabled_ = false;
         allowTearingSupported_ = false;
 
         // Every old native object was released above. Clear stale pointer identities before the
@@ -1941,6 +2335,7 @@ namespace CNA::Internal::Renderers::DirectX12
                     ResolveBackBufferMsaaEXT();
                 SubmitFrameCommandsEXT();
                 headlessFrameIndex_ = (headlessFrameIndex_ + 1) % kFramesInFlight;
+                if (infoQueue_) DrainDebugMessagesEXT();
                 return;
             }
             NotYetImplemented("Present (no swap chain and no implicit off-screen back buffer -- "
@@ -1985,6 +2380,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
                                     depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT,
                                     depthStencilResource_.Get());
+        if (infoQueue_) DrainDebugMessagesEXT();
     }
 
     ID3D12Resource* DirectX12Renderer::GetCurrentBackBufferResourceEXT() const
