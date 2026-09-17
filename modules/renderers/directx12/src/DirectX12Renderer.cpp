@@ -2428,10 +2428,21 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // Re-bind the default draw surface for the next frame. With MSAA this remains the shared
         // multisampled color resource; otherwise it is the newly-current flip-model back buffer.
+        // plans/plan_directx12_parity.md DX12-0020: the game did not change its render target, so its
+        // viewport stays. BindOffscreenColorTargetEXT resets the viewport to the full target -- right
+        // for a public SetRenderTarget, which GraphicsDevice follows with its own SetViewport, and wrong
+        // here: GraphicsDevice re-pushes a viewport after Present only when the window size changed.
+        // With a letterboxed back buffer the reset put every later frame's draws in the full physical
+        // target instead of the presentation rectangle.
+        const bool viewportWasSet = viewportSet_;
+        const int keptX = viewportX_, keptY = viewportY_, keptW = viewportW_, keptH = viewportH_;
+        const float keptMinDepth = viewportMinDepth_, keptMaxDepth = viewportMaxDepth_;
         BindOffscreenColorTargetEXT(GetBackBufferDrawResourceEXT(), GetBackBufferDrawRtvEXT(),
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
                                     depthStencilViewEXT_, depthStencilDxgiFormat_,
                                     depthStencilResource_.Get());
+        if (viewportWasSet)
+            SetViewport(keptX, keptY, keptW, keptH, keptMinDepth, keptMaxDepth);
         if (infoQueue_) DrainDebugMessagesEXT();
     }
 
