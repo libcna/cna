@@ -20,8 +20,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
         # impossible to configure at all. Same idiom as the headless renderer's examples.
         if(TARGET SDL3::SDL3)
             target_link_libraries(${target} PRIVATE SDL3::SDL3)
+        else()
+            # plans/plan_directx12_parity.md DX12-0005: PixelTestGame.hpp's display probe is the
+            # only SDL use the shared fixtures have; this tells it there is no SDL to probe with.
+            target_compile_definitions(${target} PRIVATE CNA_EXAMPLES_NO_SDL)
         endif()
         cna_link_sharp_runtime(${target} PRIVATE)
+        if(MSVC)
+            # plans/plan_directx12_parity.md DX12-0008: this macro builds the whole Direct3D parity
+            # corpus -- ~265 executables. RelWithDebInfo's /INCREMENTAL state and full PDB are about
+            # 150 MB per executable, ~40 GB per build tree, which filled the validation VM's disk.
+            # FASTLINK keeps them debuggable through the object files at a few MB each.
+            target_link_options(${target} PRIVATE /INCREMENTAL:NO /DEBUG:FASTLINK)
+        endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
@@ -67,24 +78,28 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     endif()
 
     # This window-attached diagnostic remains buildable but intentionally is not
-    # a CTest in the routine Wine lane (DX-100/DX-114).
-    cna_directx12_test(cna_diag_d3d12_swapchain directx12_swapchain_diag.cpp)
+    # a CTest in the routine Wine lane (DX-100/DX-114). It creates its window with SDL, so a
+    # CNA_ENABLE_SDL=OFF configuration cannot build it (plans/plan_directx12_parity.md DX12-0005:
+    # it was the one failing target of the first SDL-free DirectX 12 build).
+    if(TARGET SDL3::SDL3)
+        cna_directx12_test(cna_diag_d3d12_swapchain directx12_swapchain_diag.cpp)
+    endif()
+
+    # plans/plan_directx12_parity.md DX12-0007: presentation, resize, minimize and resource churn on a
+    # real CNA Win32 window. Not a CTest: it drives the desktop's window manager and takes minutes on
+    # WARP; tools/platform/win32_run_interactive.ps1 runs it with CNA_D3D12_ADAPTER=warp.
+    if(CNA_PLATFORM STREQUAL "WIN32")
+        cna_directx12_test(cna_stress_directx12_win32_present directx12_win32_present_stress.cpp)
+        target_link_libraries(cna_stress_directx12_win32_present PRIVATE psapi)
+    endif()
 
     include(${CMAKE_SOURCE_DIR}/cmake/DirectXParityTests.cmake)
-    # plans/plan_win32_native_validation.md WINNATIVE-0015: the parity corpus is built on
-    # modules/graphics/examples/common/PixelTestGame.hpp, which uses SDL for one thing -- probing
-    # whether a display exists, so a fixture can print [SKIP] instead of failing on a machine with
-    # no GPU. That single use makes every fixture that includes it unbuildable with
-    # CNA_ENABLE_SDL=OFF. The fixtures are skipped there rather than the harness being rewritten as
-    # a side effect of a Win32 validation pass: CnaTests, the framework and the demos are what the
-    # SDL-free configuration has to prove, and they do not go through PixelTestGame.
-    if(TARGET SDL3::SDL3)
-        cna_register_d3d_parity_tests()
-    else()
-        message(STATUS
-            "CNA: Direct3D parity fixtures need SDL3 (PixelTestGame.hpp probes for a display with "
-            "it) -- not registered in this SDL-free configuration")
-    endif()
+    # plans/plan_directx12_parity.md DX12-0005: registered in every configuration. The corpus used to
+    # be dropped whole when SDL was off (WINNATIVE-0015), because PixelTestGame.hpp probed for a
+    # display with SDL; measured, 4 of its 265 sources call SDL at all, 26 reached it only through
+    # that probe, and 235 never include it. The probe is now SDL-free where SDL is absent, and the
+    # fixtures that genuinely drive an SDL_Window keep REQUIRES_SDL.
+    cna_register_d3d_parity_tests()
 endif()
 
 cna_apply_skip_convention()
