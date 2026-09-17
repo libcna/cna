@@ -54,3 +54,28 @@ signal a fresh fence after `Present` and wait before releasing the buffers.
 
 That is the invariant CNA's own resize has to keep, and the reason CNA's DirectX 12 test listener
 installs the same kind of handler.
+
+## `minlod_probe.cpp` — a very large `MinLOD` on WARP (DX12-0022)
+
+XNA writes `SamplerState.MaxMipLevel` into Direct3D 9's unsigned `D3DSAMP_MAXMIPLEVEL`, so a negative value
+selects the last stored level. CNA maps it to `MinLOD = FLOAT32_MAX`. `texture_filter_mip_contract_test`
+L3/L9 then passed on DirectX11 (VirtualBox adapter) and failed on DirectX12 WARP, with identical sampler
+code. This probe (Direct3D 11, no CNA) draws an 8×8 texture of four flat levels 1:1 with a point sampler
+and reads which level `MinLOD` selected, on both driver types:
+
+```
+cl /nologo /EHsc /O2 /std:c++17 /W4 minlod_probe.cpp /link d3d11.lib d3dcompiler.lib dxgi.lib
+minlod_probe.exe
+```
+
+| `MinLOD` | VirtualBox Graphics Adapter | WARP (Microsoft Basic Render Driver) |
+|---|---|---|
+| 0 / 1 / 3 | level 0 / 1 / 3 | level 0 / 1 / 3 |
+| 14, 15, 99, 1e6 | level 3 (last) | level 3 (last) |
+| 1e30, `FLT_MAX` | level 3 (last) | **level 0** |
+
+WARP's rasterizer (shared by its Direct3D 11 and 12 front ends) loses the value once it no longer fits the
+fixed-point LOD it clamps in; a representable value behaves. The spec states the clamp without such a
+limit, so CNA keeps `FLOAT32_MAX` rather than adapting to WARP, and L3/L9 stay on the physical-GPU
+checklist. The probe's first run read the clear colour at every value — its full-screen triangle was
+culled — which is why it now clears to magenta and names "nothing drawn".
