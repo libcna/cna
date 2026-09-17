@@ -5,9 +5,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <barrier>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -38,6 +42,18 @@ namespace
         const auto found = std::find_if(snapshot.metrics.begin(), snapshot.metrics.end(),
             [name](const MetricSample& metric) { return metric.name == name; });
         return found == snapshot.metrics.end() ? nullptr : &*found;
+    }
+
+    [[nodiscard]] std::uint64_t SaturatingResourceTotal(const Snapshot& snapshot)
+    {
+        std::uint64_t total = 0;
+        for (const ResourceRecord& resource : snapshot.resources)
+        {
+            if (total > std::numeric_limits<std::uint64_t>::max() - resource.estimatedBytes)
+                return std::numeric_limits<std::uint64_t>::max();
+            total += resource.estimatedBytes;
+        }
+        return total;
     }
 #endif
 
@@ -140,6 +156,27 @@ namespace
         EXPECT_EQ(after.malformedFrameCount, before + 2);
     }
 
+    TEST(DiagnosticsFrameTest, FrameHistoryIsBoundedOrderedAndReportsExactFps)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        for (std::size_t frame = 0; frame < FrameHistoryCapacity + 5; ++frame)
+        {
+            FrameScope scope;
+        }
+
+        const Snapshot snapshot = GetProvider().CaptureSnapshot();
+        ASSERT_EQ(snapshot.recentFrames.size(), FrameHistoryCapacity);
+        for (std::size_t index = 1; index < snapshot.recentFrames.size(); ++index)
+        {
+            EXPECT_LT(snapshot.recentFrames[index - 1].frameNumber,
+                      snapshot.recentFrames[index].frameNumber);
+        }
+        const FrameSample& latest = snapshot.recentFrames.back();
+        const double expectedFps = latest.durationNs == 0
+            ? 0.0 : 1'000'000'000.0 / static_cast<double>(latest.durationNs);
+        EXPECT_DOUBLE_EQ(latest.framesPerSecond, expectedFps);
+    }
+
     TEST(DiagnosticsResourceTest, RegistrationUpdateAndUnregistrationUseOneStableId)
     {
         RuntimeModeGuard mode(Mode::Stats);
@@ -180,6 +217,185 @@ namespace
             [id](const ResourceRecord& record) { return record.id == id; }), 0);
     }
 
+    TEST(DiagnosticsResourceTest, RepeatedLifecycleReturnsCountAndBytesToBaseline)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        const Snapshot baseline = GetProvider().CaptureSnapshot();
+        ResourceId previousId = 0;
+        for (int iteration = 0; iteration < 2'000; ++iteration)
+        {
+            ResourceHandle resource(ResourceDescriptor{
+                .kind = ResourceKind::Texture2D,
+                .label = "stress texture",
+                .format = "Color",
+                .width = 32,
+                .height = 16,
+                .depth = 1,
+                .mipCount = 1,
+                .estimatedBytes = 2048,
+                .byteAccuracy = Accuracy::Estimated});
+            ASSERT_GT(resource.GetId(), previousId);
+            previousId = resource.GetId();
+            resource.Update(ResourceDescriptor{
+                .kind = ResourceKind::RenderTarget2D,
+                .label = "updated stress texture",
+                .format = "Color",
+                .width = 32,
+                .height = 16,
+                .depth = 1,
+                .mipCount = 1,
+                .estimatedBytes = 4096,
+                .byteAccuracy = Accuracy::Estimated});
+        }
+
+        const Snapshot after = GetProvider().CaptureSnapshot();
+        EXPECT_EQ(after.resources.size(), baseline.resources.size());
+        EXPECT_EQ(after.registeredResourceBytes, baseline.registeredResourceBytes);
+    }
+
+    TEST(DiagnosticsResourceTest, SaturatedByteTotalRecoversAfterUpdatesAndDestruction)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        const Snapshot baseline = GetProvider().CaptureSnapshot();
+        ASSERT_LT(baseline.registeredResourceBytes,
+                  std::numeric_limits<std::uint64_t>::max());
+        ResourceHandle maximum(ResourceDescriptor{
+            .kind = ResourceKind::Custom,
+            .label = "maximum",
+            .format = {},
+            .width = 0,
+            .height = 0,
+            .depth = 0,
+            .mipCount = 0,
+            .estimatedBytes = std::numeric_limits<std::uint64_t>::max(),
+            .byteAccuracy = Accuracy::Estimated});
+        ResourceHandle extra(ResourceDescriptor{
+            .kind = ResourceKind::Custom,
+            .label = "extra",
+            .format = {},
+            .width = 0,
+            .height = 0,
+            .depth = 0,
+            .mipCount = 0,
+            .estimatedBytes = 1,
+            .byteAccuracy = Accuracy::Exact});
+        EXPECT_EQ(GetProvider().CaptureSnapshot().registeredResourceBytes,
+                  std::numeric_limits<std::uint64_t>::max());
+
+        maximum.Update(ResourceDescriptor{
+            .kind = ResourceKind::Custom,
+            .label = "reduced",
+            .format = {},
+            .width = 0,
+            .height = 0,
+            .depth = 0,
+            .mipCount = 0,
+            .estimatedBytes = 4,
+            .byteAccuracy = Accuracy::Exact});
+        EXPECT_EQ(GetProvider().CaptureSnapshot().registeredResourceBytes,
+                  baseline.registeredResourceBytes + 5);
+        extra.Reset();
+        maximum.Reset();
+        EXPECT_EQ(GetProvider().CaptureSnapshot().registeredResourceBytes,
+                  baseline.registeredResourceBytes);
+    }
+
+    TEST(DiagnosticsResourceTest, MoveOperationsTransferOneLiveRegistration)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        const Snapshot baseline = GetProvider().CaptureSnapshot();
+        ResourceHandle first(ResourceDescriptor{
+            .kind = ResourceKind::Custom,
+            .label = "first",
+            .format = {},
+            .width = 0,
+            .height = 0,
+            .depth = 0,
+            .mipCount = 0,
+            .estimatedBytes = 10,
+            .byteAccuracy = Accuracy::Unavailable});
+        const ResourceId retainedId = first.GetId();
+        ResourceHandle second(std::move(first));
+        EXPECT_EQ(first.GetId(), 0u);
+        EXPECT_EQ(second.GetId(), retainedId);
+
+        ResourceHandle replaced(ResourceDescriptor{
+            .kind = ResourceKind::Custom,
+            .label = "replaced",
+            .format = {},
+            .width = 0,
+            .height = 0,
+            .depth = 0,
+            .mipCount = 0,
+            .estimatedBytes = 20,
+            .byteAccuracy = Accuracy::Unavailable});
+        const ResourceId removedId = replaced.GetId();
+        replaced = std::move(second);
+        EXPECT_EQ(second.GetId(), 0u);
+        EXPECT_EQ(replaced.GetId(), retainedId);
+        const Snapshot moved = GetProvider().CaptureSnapshot();
+        EXPECT_EQ(std::count_if(moved.resources.begin(), moved.resources.end(),
+            [retainedId](const ResourceRecord& record) { return record.id == retainedId; }), 1);
+        EXPECT_EQ(std::count_if(moved.resources.begin(), moved.resources.end(),
+            [removedId](const ResourceRecord& record) { return record.id == removedId; }), 0);
+
+        replaced.Reset();
+        const Snapshot after = GetProvider().CaptureSnapshot();
+        EXPECT_EQ(after.resources.size(), baseline.resources.size());
+        EXPECT_EQ(after.registeredResourceBytes, baseline.registeredResourceBytes);
+    }
+
+    TEST(DiagnosticsResourceTest, ConcurrentSnapshotsMatchLiveResourceMetadata)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        const Snapshot baseline = GetProvider().CaptureSnapshot();
+        std::barrier start(2);
+        std::atomic<bool> finished{false};
+        std::thread worker([&] {
+            start.arrive_and_wait();
+            for (int iteration = 0; iteration < 2'000; ++iteration)
+            {
+                ResourceHandle resource(ResourceDescriptor{
+                    .kind = ResourceKind::Custom,
+                    .label = "concurrent",
+                    .format = {},
+                    .width = 0,
+                    .height = 0,
+                    .depth = 0,
+                    .mipCount = 0,
+                    .estimatedBytes = static_cast<std::uint64_t>(iteration + 1),
+                    .byteAccuracy = Accuracy::Exact});
+                resource.Update(ResourceDescriptor{
+                    .kind = ResourceKind::Custom,
+                    .label = "concurrent updated",
+                    .format = {},
+                    .width = 0,
+                    .height = 0,
+                    .depth = 0,
+                    .mipCount = 0,
+                    .estimatedBytes = static_cast<std::uint64_t>(iteration + 2),
+                    .byteAccuracy = Accuracy::Exact});
+                std::this_thread::yield();
+            }
+            finished.store(true, std::memory_order_release);
+        });
+        start.arrive_and_wait();
+        std::size_t snapshots = 0;
+        do
+        {
+            const Snapshot snapshot = GetProvider().CaptureSnapshot();
+            EXPECT_EQ(snapshot.registeredResourceBytes, SaturatingResourceTotal(snapshot));
+            ++snapshots;
+        }
+        while (!finished.load(std::memory_order_acquire));
+        worker.join();
+
+        EXPECT_GT(snapshots, 0u);
+        const Snapshot after = GetProvider().CaptureSnapshot();
+        EXPECT_EQ(after.resources.size(), baseline.resources.size());
+        EXPECT_EQ(after.registeredResourceBytes, baseline.registeredResourceBytes);
+    }
+
     TEST(DiagnosticsSourceTest, OptionalSourcePublishesOnlyAtFrameBoundaries)
     {
         class Source final : public IDiagnosticsSource
@@ -215,6 +431,74 @@ namespace
         EXPECT_EQ(queryResults->value, 2);
         registration.Reset();
         EXPECT_FALSE(registration.IsRegistered());
+    }
+
+    TEST(DiagnosticsSourceTest, InvalidAndOffFrameEndsDoNotCollectSources)
+    {
+        class Source final : public IDiagnosticsSource
+        {
+        public:
+            void Collect(FrameStatisticsSink&) override { ++calls; }
+            int calls = 0;
+        };
+
+        RuntimeModeGuard mode(Mode::Stats);
+        auto source = std::make_shared<Source>();
+        SourceRegistration registration = RegisterSource(source);
+        const std::uint64_t malformedBefore =
+            GetProvider().CaptureSnapshot().malformedFrameCount;
+        EndFrame();
+        EXPECT_EQ(source->calls, 0);
+        EXPECT_EQ(GetProvider().CaptureSnapshot().malformedFrameCount, malformedBefore + 1);
+
+        ASSERT_TRUE(SetRuntimeMode(Mode::Off));
+        BeginFrame();
+        EndFrame();
+        EXPECT_EQ(source->calls, 0);
+        EXPECT_EQ(GetProvider().CaptureSnapshot().malformedFrameCount, malformedBefore + 1);
+
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        BeginFrame();
+        EndFrame();
+        EXPECT_EQ(source->calls, 1);
+    }
+
+    TEST(DiagnosticsRuntimeModeTest, OffStatsAndFullTransitionsPreserveMetricSemantics)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        CounterHandle counter("Tests/Modes/Cumulative");
+
+        ASSERT_TRUE(SetRuntimeMode(Mode::Off));
+        counter.Add(11);
+        {
+            FrameScope frame;
+        }
+
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        counter.Add(2);
+        {
+            FrameScope frame;
+        }
+#if CNA_DIAGNOSTICS_LEVEL >= 2
+        ASSERT_TRUE(SetRuntimeMode(Mode::Full));
+        counter.Add(3);
+        {
+            FrameScope frame;
+        }
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Full));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Off));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+#endif
+
+        const Snapshot snapshot = GetProvider().CaptureSnapshot();
+        const MetricSample* sample = FindMetric(snapshot, "Tests/Modes/Cumulative");
+        ASSERT_NE(sample, nullptr);
+#if CNA_DIAGNOSTICS_LEVEL >= 2
+        EXPECT_EQ(sample->value, 5);
+#else
+        EXPECT_EQ(sample->value, 2);
+#endif
     }
 #endif
 
@@ -274,6 +558,43 @@ namespace
         EXPECT_TRUE(EndZone(next));
     }
 
+    TEST(DiagnosticsZonesTest, RepeatedModeCyclesResetAWaitingWorkerContext)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        const NameHandle marker("Tests/Modes/WaitingWorker");
+        const NameHandle outerName("Tests/Modes/WorkerOuter");
+        const NameHandle innerName("Tests/Modes/WorkerInner");
+        std::barrier ready(2);
+        std::barrier release(2);
+        RecordingSession recording = StartRecording(8);
+        std::thread worker([&] {
+            MarkEvent(marker);
+            ready.arrive_and_wait();
+            release.arrive_and_wait();
+            ZoneScope outer(outerName);
+            ZoneScope inner(innerName);
+        });
+        ready.arrive_and_wait();
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Full));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Off));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Full));
+        release.arrive_and_wait();
+        worker.join();
+
+        const Trace trace = StopRecording(recording);
+        const auto outer = std::find_if(trace.GetEvents().begin(), trace.GetEvents().end(),
+            [&outerName](const EventRecord& event) { return event.name == outerName.GetId(); });
+        const auto inner = std::find_if(trace.GetEvents().begin(), trace.GetEvents().end(),
+            [&innerName](const EventRecord& event) { return event.name == innerName.GetId(); });
+        ASSERT_NE(outer, trace.GetEvents().end());
+        ASSERT_NE(inner, trace.GetEvents().end());
+        EXPECT_EQ(outer->parentCorrelationId, 0u);
+        EXPECT_EQ(inner->parentCorrelationId, outer->correlationId);
+        EXPECT_EQ(inner->threadId, outer->threadId);
+    }
+
     TEST(DiagnosticsEventsTest, MultipleThreadsPublishIntoOneBoundedRecording)
     {
         RuntimeModeGuard mode(Mode::Full);
@@ -297,6 +618,87 @@ namespace
         EXPECT_EQ(std::count_if(trace.GetEvents().begin(), trace.GetEvents().end(),
             [&marker](const EventRecord& event) { return event.name == marker.GetId(); }),
             ThreadCount * EventsPerThread);
+    }
+
+    TEST(DiagnosticsEventsTest, SequentialThreadContextsRetainProcessUniqueIdentities)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        const NameHandle marker("Tests/Events/SequentialThreadIdentity");
+        constexpr int ThreadCount = 256;
+        RecordingSession recording = StartRecording(ThreadCount);
+        ASSERT_TRUE(recording.IsActive());
+        for (int thread = 0; thread < ThreadCount; ++thread)
+        {
+            std::thread worker([&marker, thread] {
+                MarkEvent(marker, Category::Application, thread);
+            });
+            worker.join();
+        }
+
+        const Trace trace = StopRecording(recording);
+        std::unordered_set<std::uint64_t> threadIds;
+        for (const EventRecord& event : trace.GetEvents())
+        {
+            if (event.name == marker.GetId())
+            {
+                EXPECT_NE(event.threadId, 0u);
+                threadIds.insert(event.threadId);
+            }
+        }
+        EXPECT_EQ(trace.GetEvents().size(), ThreadCount);
+        EXPECT_EQ(threadIds.size(), ThreadCount);
+    }
+
+    TEST(DiagnosticsEventsTest, ConcurrentThreadContextsHaveDistinctIdentities)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        const NameHandle marker("Tests/Events/ConcurrentThreadIdentity");
+        constexpr int ThreadCount = 64;
+        std::barrier ready(ThreadCount);
+        RecordingSession recording = StartRecording(ThreadCount);
+        ASSERT_TRUE(recording.IsActive());
+        std::vector<std::thread> workers;
+        workers.reserve(ThreadCount);
+        for (int thread = 0; thread < ThreadCount; ++thread)
+        {
+            workers.emplace_back([&marker, &ready, thread] {
+                ready.arrive_and_wait();
+                MarkEvent(marker, Category::Application, thread);
+            });
+        }
+        for (std::thread& worker : workers)
+            worker.join();
+
+        const Trace trace = StopRecording(recording);
+        std::unordered_set<std::uint64_t> threadIds;
+        for (const EventRecord& event : trace.GetEvents())
+        {
+            if (event.name == marker.GetId())
+                threadIds.insert(event.threadId);
+        }
+        EXPECT_EQ(trace.GetEvents().size(), ThreadCount);
+        EXPECT_EQ(threadIds.size(), ThreadCount);
+    }
+
+    TEST(DiagnosticsEventsTest, ActiveThreadContextIsSafeToSnapshotAndReleasedAtExit)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        const Snapshot baseline = GetProvider().CaptureSnapshot();
+        const NameHandle marker("Tests/Events/ActiveWorkerSnapshot");
+        std::barrier ready(2);
+        std::barrier release(2);
+        std::thread worker([&] {
+            MarkEvent(marker);
+            ready.arrive_and_wait();
+            release.arrive_and_wait();
+        });
+        ready.arrive_and_wait();
+        const Snapshot active = GetProvider().CaptureSnapshot();
+        EXPECT_GT(active.profilerOwnedBytes, baseline.profilerOwnedBytes);
+        release.arrive_and_wait();
+        worker.join();
+        const Snapshot after = GetProvider().CaptureSnapshot();
+        EXPECT_EQ(after.profilerOwnedBytes, baseline.profilerOwnedBytes);
     }
 
     TEST(DiagnosticsEventsTest, ThreadBufferOverflowDropsNewEventsAndReportsIt)
@@ -340,10 +742,49 @@ namespace
             MarkEvent(marker, Category::Application, value);
         Trace trace = StopRecording(session);
         ASSERT_EQ(trace.GetEvents().size(), 3u);
-        EXPECT_GE(trace.GetDroppedEventCount(), 2u);
+        EXPECT_EQ(trace.GetDroppedEventCount(), 2u);
         EXPECT_EQ(trace.GetEvents().front().value, 2);
         EXPECT_EQ(trace.ResolveName(marker.GetId()), "Tests/Recording/Bounded");
         EXPECT_FALSE(session.IsActive());
+
+        std::stringstream binary(std::ios::in | std::ios::out | std::ios::binary);
+        ASSERT_TRUE(trace.WriteBinary(binary));
+        binary.seekg(0);
+        const Trace decoded = Trace::ReadBinary(binary);
+        ASSERT_EQ(decoded.GetEvents().size(), 3u);
+        EXPECT_EQ(decoded.GetDroppedEventCount(), 2u);
+        EXPECT_EQ(decoded.GetEvents().front().value, 2);
+    }
+
+    TEST(DiagnosticsRecordingTest, MaximumCapacityRetainsEveryNormallyDrainedEvent)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        RecordingSession session = StartRecording(EventHistoryCapacity);
+        ASSERT_TRUE(session.IsActive());
+        const NameHandle marker("Tests/Recording/MaximumCapacity");
+        for (std::size_t first = 0; first < EventHistoryCapacity;
+             first += ThreadEventCapacity)
+        {
+            for (std::size_t offset = 0; offset < ThreadEventCapacity; ++offset)
+            {
+                MarkEvent(marker, Category::Application,
+                          static_cast<std::int64_t>(first + offset));
+            }
+            (void)GetProvider().ReadEvents(0, 1);
+        }
+
+        const Trace trace = StopRecording(session);
+        ASSERT_EQ(trace.GetEvents().size(), EventHistoryCapacity);
+        EXPECT_EQ(trace.GetDroppedEventCount(), 0u);
+        EXPECT_EQ(trace.GetEvents().front().value, 0);
+        EXPECT_EQ(trace.GetEvents().back().value,
+                  static_cast<std::int64_t>(EventHistoryCapacity - 1));
+        for (std::size_t index = 1; index < trace.GetEvents().size(); ++index)
+        {
+            EXPECT_LT(trace.GetEvents()[index - 1].sequence, trace.GetEvents()[index].sequence);
+            EXPECT_LE(trace.GetEvents()[index - 1].timestampNs,
+                      trace.GetEvents()[index].timestampNs);
+        }
     }
 
     TEST(DiagnosticsRecordingTest, MovingSessionTransfersTheOnlyActiveCursor)
@@ -359,6 +800,43 @@ namespace
         EXPECT_EQ(StopRecording(moved).GetEvents().size(), 1u);
     }
 
+    TEST(DiagnosticsRecordingTest, MoveAssignmentTransfersTheOnlyActiveCursor)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        RecordingSession destination = StartRecording(4);
+        RecordingSession source = StartRecording(4);
+        ASSERT_TRUE(destination.IsActive());
+        ASSERT_TRUE(source.IsActive());
+        destination = std::move(source);
+        EXPECT_FALSE(source.IsActive());
+        EXPECT_TRUE(destination.IsActive());
+        const NameHandle marker("Tests/Recording/MoveAssigned");
+        MarkEvent(marker);
+        EXPECT_EQ(StopRecording(destination).GetEvents().size(), 1u);
+    }
+
+    TEST(DiagnosticsRecordingTest, RuntimeModesBeforeAndDuringRecordingFailSafely)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        EXPECT_FALSE(StartRecording(4).IsActive());
+        ASSERT_TRUE(SetRuntimeMode(Mode::Full));
+        RecordingSession session = StartRecording(4);
+        ASSERT_TRUE(session.IsActive());
+        const NameHandle marker("Tests/Recording/ModeTransition");
+        MarkEvent(marker, Category::Application, 1);
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        MarkEvent(marker, Category::Application, 2);
+        ASSERT_TRUE(SetRuntimeMode(Mode::Off));
+        ASSERT_TRUE(SetRuntimeMode(Mode::Full));
+        MarkEvent(marker, Category::Application, 3);
+
+        const Trace trace = StopRecording(session);
+        ASSERT_EQ(trace.GetEvents().size(), 2u);
+        EXPECT_EQ(trace.GetEvents()[0].value, 1);
+        EXPECT_EQ(trace.GetEvents()[1].value, 3);
+    }
+
     TEST(DiagnosticsTraceTest, BinaryAndChromeExportsRoundTripWithoutPerFrameJson)
     {
         RuntimeModeGuard mode(Mode::Full);
@@ -372,13 +850,83 @@ namespace
         binary.seekg(0);
         Trace decoded = Trace::ReadBinary(binary);
         ASSERT_EQ(decoded.GetEvents().size(), 1u);
-        EXPECT_EQ(decoded.GetEvents()[0].value, 42);
+        const EventRecord& expected = original.GetEvents()[0];
+        const EventRecord& actual = decoded.GetEvents()[0];
+        EXPECT_EQ(actual.sequence, expected.sequence);
+        EXPECT_EQ(actual.timestampNs, expected.timestampNs);
+        EXPECT_EQ(actual.durationNs, expected.durationNs);
+        EXPECT_EQ(actual.frameNumber, expected.frameNumber);
+        EXPECT_EQ(actual.threadId, expected.threadId);
+        EXPECT_EQ(actual.correlationId, expected.correlationId);
+        EXPECT_EQ(actual.parentCorrelationId, expected.parentCorrelationId);
+        EXPECT_EQ(actual.value, 42);
+        EXPECT_EQ(actual.name, expected.name);
+        EXPECT_EQ(actual.kind, expected.kind);
+        EXPECT_EQ(actual.category, expected.category);
         EXPECT_EQ(decoded.ResolveName(decoded.GetEvents()[0].name), "Tests/Trace/RoundTrip");
 
         std::ostringstream chrome;
         ASSERT_TRUE(decoded.WriteChromeTrace(chrome));
         EXPECT_NE(chrome.str().find("Tests/Trace/RoundTrip"), std::string::npos);
         EXPECT_NE(chrome.str().find("traceEvents"), std::string::npos);
+    }
+
+    TEST(DiagnosticsTraceTest, EmptyTraceRoundTripsAndProducesValidChromeJson)
+    {
+        Trace empty;
+        std::stringstream binary(std::ios::in | std::ios::out | std::ios::binary);
+        ASSERT_TRUE(empty.WriteBinary(binary));
+        binary.seekg(0);
+        Trace decoded = Trace::ReadBinary(binary);
+        EXPECT_TRUE(decoded.GetEvents().empty());
+        EXPECT_EQ(decoded.GetDroppedEventCount(), 0u);
+
+        std::ostringstream chrome;
+        ASSERT_TRUE(decoded.WriteChromeTrace(chrome));
+        EXPECT_EQ(chrome.str(),
+                  "{\"traceEvents\":[],\"displayTimeUnit\":\"ns\",\"cnaDroppedEvents\":0}");
+    }
+
+    TEST(DiagnosticsTraceTest, MoveConstructionAndAssignmentPreserveOwnedData)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        RecordingSession session = StartRecording(2);
+        const NameHandle marker("Tests/Trace/Moved");
+        MarkEvent(marker, Category::Content, 17);
+        Trace original = StopRecording(session);
+        Trace moved(std::move(original));
+        Trace assigned;
+        assigned = std::move(moved);
+        ASSERT_EQ(assigned.GetEvents().size(), 1u);
+        EXPECT_EQ(assigned.GetEvents()[0].value, 17);
+        EXPECT_EQ(assigned.ResolveName(assigned.GetEvents()[0].name), "Tests/Trace/Moved");
+    }
+
+    TEST(DiagnosticsTraceTest, ChromeJsonEscapesNamesAndRetainsNestedAndThreadedEvents)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        RecordingSession session = StartRecording(8);
+        const NameHandle special(R"(Tests/Trace/"quoted"\path/Ω)");
+        const NameHandle outerName("Tests/Trace/ChromeOuter");
+        const NameHandle innerName("Tests/Trace/ChromeInner");
+        std::thread worker([&special] { MarkEvent(special); });
+        {
+            ZoneScope outer(outerName);
+            ZoneScope inner(innerName);
+        }
+        worker.join();
+        const Trace trace = StopRecording(session);
+        ASSERT_EQ(trace.GetEvents().size(), 3u);
+
+        std::ostringstream chrome;
+        ASSERT_TRUE(trace.WriteChromeTrace(chrome));
+        const std::string json = chrome.str();
+        EXPECT_EQ(json.front(), '{');
+        EXPECT_EQ(json.back(), '}');
+        EXPECT_NE(json.find("\"name\":\"Tests/Trace/\\\"quoted\\\"\\\\path/Ω\""),
+                  std::string::npos);
+        EXPECT_NE(json.find("\"ph\":\"X\""), std::string::npos);
+        EXPECT_NE(json.find("\"ph\":\"i\""), std::string::npos);
     }
 
     TEST(DiagnosticsTraceTest, MalformedBinaryInputIsRejected)

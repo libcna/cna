@@ -6,7 +6,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
-#include <functional>
 #include <iomanip>
 #include <istream>
 #include <limits>
@@ -14,7 +13,6 @@
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
-#include <thread>
 #include <type_traits>
 #include <unordered_map>
 
@@ -189,6 +187,7 @@ namespace CNA::Diagnostics
             std::size_t metricCount = 0;
 
             std::mutex frameMutex;
+            std::mutex frameCompletionMutex;
             std::array<InternalFrame, FrameHistoryCapacity> frames{};
             std::size_t frameWriteIndex = 0;
             std::size_t frameCount = 0;
@@ -199,7 +198,7 @@ namespace CNA::Diagnostics
             std::mutex resourceMutex;
             std::unordered_map<ResourceId, ResourceRecord> resources;
             std::uint64_t nextResourceId = 1;
-            std::atomic<std::uint64_t> resourceBytes{0};
+            std::uint64_t resourceBytes = 0;
 
             std::atomic<std::uint64_t> malformedZones{0};
             std::atomic<std::uint64_t> malformedFrames{0};
@@ -217,6 +216,7 @@ namespace CNA::Diagnostics
 
             std::mutex threadMutex;
             std::vector<ThreadContext*> threads;
+            std::atomic<std::uint64_t> nextThreadId{1};
 
             std::mutex historyMutex;
             std::array<EventRecord, EventHistoryCapacity> history{};
@@ -392,10 +392,22 @@ namespace CNA::Diagnostics
             thread_local ThreadContextHolder holder;
             if (holder.context == nullptr)
             {
-                const std::uint64_t threadId = static_cast<std::uint64_t>(
-                    std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                holder.context = new ThreadContext(threadId);
                 State& state = GetState();
+                std::uint64_t threadId = state.nextThreadId.load(std::memory_order_relaxed);
+                while (threadId != 0)
+                {
+                    const std::uint64_t next = threadId == std::numeric_limits<std::uint64_t>::max()
+                        ? 0 : threadId + 1;
+                    if (state.nextThreadId.compare_exchange_weak(
+                            threadId, next, std::memory_order_relaxed,
+                            std::memory_order_relaxed))
+                    {
+                        break;
+                    }
+                }
+                if (threadId == 0)
+                    throw std::overflow_error("Diagnostics thread ID space exhausted");
+                holder.context = new ThreadContext(threadId);
                 const std::lock_guard lock(state.threadMutex);
                 state.threads.push_back(holder.context);
             }
@@ -438,6 +450,26 @@ namespace CNA::Diagnostics
             return record;
         }
 
+        void AddResourceBytesLocked(State& state, std::uint64_t bytes) noexcept
+        {
+            if (state.resourceBytes > std::numeric_limits<std::uint64_t>::max() - bytes)
+                state.resourceBytes = std::numeric_limits<std::uint64_t>::max();
+            else
+                state.resourceBytes += bytes;
+        }
+
+        void RecalculateResourceBytesLocked(State& state) noexcept
+        {
+            state.resourceBytes = 0;
+            for (const auto& [id, resource] : state.resources)
+            {
+                (void)id;
+                AddResourceBytesLocked(state, resource.estimatedBytes);
+                if (state.resourceBytes == std::numeric_limits<std::uint64_t>::max())
+                    break;
+            }
+        }
+
         [[nodiscard]] ResourceId RegisterResource(const ResourceDescriptor& descriptor) noexcept
         {
             try
@@ -448,10 +480,13 @@ namespace CNA::Diagnostics
                 ResourceId id = 0;
                 {
                     const std::lock_guard lock(state.resourceMutex);
-                    id = state.nextResourceId++;
+                    if (state.nextResourceId == 0)
+                        return 0;
+                    id = state.nextResourceId;
+                    state.nextResourceId = id == std::numeric_limits<ResourceId>::max()
+                        ? 0 : id + 1;
                     state.resources.emplace(id, CopyResource(id, descriptor));
-                    state.resourceBytes.fetch_add(descriptor.estimatedBytes,
-                                                  std::memory_order_relaxed);
+                    AddResourceBytesLocked(state, descriptor.estimatedBytes);
                 }
 #if CNA_DIAGNOSTICS_LEVEL >= 2
                 static const NameHandle eventName("Diagnostics/ResourceCreated");
@@ -482,12 +517,13 @@ namespace CNA::Diagnostics
                     return;
                 const std::uint64_t previousBytes = found->second.estimatedBytes;
                 found->second = CopyResource(id, descriptor);
-                if (descriptor.estimatedBytes >= previousBytes)
-                    state.resourceBytes.fetch_add(descriptor.estimatedBytes - previousBytes,
-                                                  std::memory_order_relaxed);
+                if (state.resourceBytes == std::numeric_limits<std::uint64_t>::max())
+                    RecalculateResourceBytesLocked(state);
                 else
-                    state.resourceBytes.fetch_sub(previousBytes - descriptor.estimatedBytes,
-                                                  std::memory_order_relaxed);
+                {
+                    state.resourceBytes -= previousBytes;
+                    AddResourceBytesLocked(state, descriptor.estimatedBytes);
+                }
             }
             catch (...)
             {
@@ -504,9 +540,14 @@ namespace CNA::Diagnostics
                 const auto found = state.resources.find(id);
                 if (found == state.resources.end())
                     return;
-                state.resourceBytes.fetch_sub(found->second.estimatedBytes,
-                                              std::memory_order_relaxed);
+                const bool wasSaturated =
+                    state.resourceBytes == std::numeric_limits<std::uint64_t>::max();
+                const std::uint64_t removedBytes = found->second.estimatedBytes;
                 state.resources.erase(found);
+                if (wasSaturated)
+                    RecalculateResourceBytesLocked(state);
+                else
+                    state.resourceBytes -= removedBytes;
             }
 #if CNA_DIAGNOSTICS_LEVEL >= 2
             static const NameHandle eventName("Diagnostics/ResourceDestroyed");
@@ -527,7 +568,11 @@ namespace CNA::Diagnostics
             {
                 State& state = GetState();
                 const std::lock_guard lock(state.sourceMutex);
-                const std::uint64_t id = state.nextSourceId++;
+                if (state.nextSourceId == 0)
+                    return 0;
+                const std::uint64_t id = state.nextSourceId;
+                state.nextSourceId = id == std::numeric_limits<std::uint64_t>::max()
+                    ? 0 : id + 1;
                 state.sources.emplace(id, std::move(source));
                 return id;
             }
@@ -598,16 +643,23 @@ namespace CNA::Diagnostics
         void FinishFrame(bool reportMalformed) noexcept
         {
             State& state = GetState();
-            CollectDiagnosticsSources(state);
-            InternalFrame completed;
+            const std::lock_guard completionLock(state.frameCompletionMutex);
             {
                 const std::lock_guard frameLock(state.frameMutex);
                 if (!state.frameActive)
                 {
-                    if (reportMalformed)
+                    if (reportMalformed &&
+                        state.runtimeMode.load(std::memory_order_relaxed) != Mode::Off)
+                    {
                         state.malformedFrames.fetch_add(1, std::memory_order_relaxed);
+                    }
                     return;
                 }
+            }
+            CollectDiagnosticsSources(state);
+            InternalFrame completed;
+            {
+                const std::lock_guard frameLock(state.frameMutex);
                 const std::uint64_t now = TimestampNowNs();
                 completed.frameNumber =
                     state.currentFrameNumber.load(std::memory_order_relaxed);
@@ -669,8 +721,6 @@ namespace CNA::Diagnostics
                     state.malformedZones.load(std::memory_order_relaxed);
                 snapshot.malformedFrameCount =
                     state.malformedFrames.load(std::memory_order_relaxed);
-                snapshot.registeredResourceBytes =
-                    state.resourceBytes.load(std::memory_order_relaxed);
                 snapshot.sourceCollectionFailures =
                     state.sourceCollectionFailures.load(std::memory_order_relaxed);
 
@@ -720,6 +770,7 @@ namespace CNA::Diagnostics
                 }
                 {
                     const std::lock_guard lock(state.resourceMutex);
+                    snapshot.registeredResourceBytes = state.resourceBytes;
                     snapshot.resources.reserve(state.resources.size());
                     for (const auto& [id, resource] : state.resources)
                     {
