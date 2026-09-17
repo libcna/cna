@@ -59,7 +59,13 @@ namespace CNA::Internal::Renderers::DirectX12
     public:
         /// Fixed vertex contract, identical shape to D3D11SpriteBatchRenderer's own (x,y | u,v |
         /// r,g,b,a -- 32 bytes): POSITION0 R32G32 @0, TEXCOORD0 R32G32 @8, COLOR0 R32G32B32A32 @16.
+        /// Only the custom-effect and compiled-effect paths use it, with the Begin transform already
+        /// applied on the CPU -- the vertex those paths are written against.
         struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
+        /// plans/plan_directx12_parity.md DX12-0013: the stock path's untransformed vertex,
+        /// (x, y, layerDepth | u, v | r, g, b, a -- 36 bytes). sprite3d.vert.hlsl applies
+        /// MatrixTransform = transform * ortho exactly as FNA's SpriteEffect does.
+        struct SpriteVertex { float x, y, z, u, v, r, g, b, a; };
 
         explicit D3D12SpriteBatchRenderer(DirectX12Renderer* owner);
         ~D3D12SpriteBatchRenderer() override;
@@ -89,7 +95,14 @@ namespace CNA::Internal::Renderers::DirectX12
 
     private:
         void FlushBatch();
-        ID3D12PipelineState* GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig);
+        /// DX12-0013: sprite3d binds a constant buffer at b0 in BOTH stages -- MatrixTransform for the
+        /// vertex stage, the Direct3D 9 channel expansion for the pixel stage -- so its root signature
+        /// gives each its own visibility; D3D12RootSignatureCache exposes every CBV to all stages.
+        /// Recreated when the renderer's device has been replaced.
+        ID3D12RootSignature* GetOrCreateSprite3DRootSignature();
+        /// The pending vertices with the Begin transform applied in pixel space, for the paths that
+        /// bind a 2D position (a custom ShaderEffect, a compiled Effect).
+        const std::vector<Sprite2DVertex>& TransformedSprite2DVertices();
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
         void ApplyCompiledSpriteVertexShader(float viewportWidth, float viewportHeight);
         void FlushBatchWithCompiledEffect();
@@ -99,15 +112,13 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3D12Device> device_;
 
         D3D12VertexBufferRenderer vb_;
+        D3D12VertexBufferRenderer vb3d_;
         D3D12IndexBufferRenderer ib_;
-        /// plans/plan_dx.md DX-210: the key is the renderer's whole tracked pipeline state
-        /// (`D3D12PipelineStateDesc::AsCacheKeyEXT()`, which includes the complete MRT/DSV format
-        /// shape). Spelling fields out again is how depth and stencil went missing originally.
-        using SpritePsoKey = decltype(
-            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT());
-        std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
+        ComPtr<ID3D12RootSignature> sprite3DRootSignature_;
+        ID3D12Device* sprite3DRootSignatureDevice_ = nullptr;
 
-        std::vector<Sprite2DVertex> pendingVertices_;
+        std::vector<SpriteVertex> pendingVertices_;
+        std::vector<Sprite2DVertex> transformedVertices_;
         std::vector<uint16_t> pendingIndices_;
         const ITextureRenderer* currentTexture_ = nullptr;
 

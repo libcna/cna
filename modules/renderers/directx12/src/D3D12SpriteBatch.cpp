@@ -10,6 +10,7 @@
 #endif
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -61,7 +62,6 @@ namespace CNA::Internal::Renderers::DirectX12
             return handle;
         }
 
-        D3D12_PRIMITIVE_TOPOLOGY_TYPE kSpriteTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     }
 
     D3D12SpriteBatchRenderer::D3D12SpriteBatchRenderer(DirectX12Renderer* owner)
@@ -69,6 +69,7 @@ namespace CNA::Internal::Renderers::DirectX12
                  "D3D12SpriteBatchRenderer")
         , device_(owner_->GetDeviceEXT())
         , vb_(owner_.Get(), 256)
+        , vb3d_(owner_.Get(), 256)
         , ib_(owner_.Get(), 384, /*thirtyTwoBit=*/false)
     {
         using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
@@ -87,6 +88,18 @@ namespace CNA::Internal::Renderers::DirectX12
                               VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
             });
         vb_.SetVertexDeclaration(kSpriteDeclaration);
+        static const VertexDeclaration kSprite3DDeclaration(
+            static_cast<int>(sizeof(SpriteVertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, x)),
+                              VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+        vb3d_.SetVertexDeclaration(kSprite3DDeclaration);
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
         const auto& bytes =
             CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
@@ -157,125 +170,77 @@ namespace CNA::Internal::Renderers::DirectX12
         pendingAddressW_ = addressW;
     }
 
-    ID3D12PipelineState* D3D12SpriteBatchRenderer::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
+    ID3D12RootSignature* D3D12SpriteBatchRenderer::GetOrCreateSprite3DRootSignature()
     {
-        // plans/plan_dx.md DX-210: the whole tracked pipeline state, not a hand-copied subset of it. This
-        // used to list blend and write-mask fields only, which is why the depth and stencil halves
-        // were silently absent from both the key AND the descriptor below.
-        D3D12PipelineStateDesc state;
-        owner_->FillPsoStateFromCurrentEXT(state);
-        state.variant = D3DShaderVariant::Sprite2d;
-        state.strideInBytes = sizeof(Sprite2DVertex);
-        state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-        const SpritePsoKey key = state.AsCacheKeyEXT();
-        if (const auto it = sprite2DPsos_.find(key); it != sprite2DPsos_.end())
-            return it->second.Get();
+        ID3D12Device* const device = owner_->GetDeviceEXT();
+        if (sprite3DRootSignature_ && sprite3DRootSignatureDevice_ == device)
+            return sprite3DRootSignature_.Get();
 
-        const uint8_t* vsBytes = nullptr; std::size_t vsSize = 0;
-        const uint8_t* psBytes = nullptr; std::size_t psSize = 0;
-        GetVertexShaderBytecode(D3DShaderVariant::Sprite2d, vsBytes, vsSize);
-        GetPixelShaderBytecode(D3DShaderVariant::Sprite2d, psBytes, psSize);
-        if (!vsBytes || !psBytes)
-            throw std::runtime_error("D3D12SpriteBatchRenderer: missing sprite2d DXBC bytecode");
+        // [0] MatrixTransform, b0, vertex stage; [1] ChannelExpansion, b0, pixel stage; [2] t0 and
+        // [3] s0 as single-descriptor tables, the shape every other D3D12 draw here binds.
+        D3D12_DESCRIPTOR_RANGE1 textureRange{};
+        textureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        textureRange.NumDescriptors = 1;
+        textureRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
+        D3D12_DESCRIPTOR_RANGE1 samplerRange{};
+        samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        samplerRange.NumDescriptors = 1;
 
-        // Fixed Sprite2DVertex contract -- deliberately NOT resolved via
-        // D3DVertexFormatHelper::InputElementsForStrideD3D12(32, ...), which would incorrectly
-        // return VertexPositionNormalTexture's layout (this file's own header comment explains the
-        // real stride-32 collision this sidesteps, matching D3D11's own DX-70 precedent).
-        static const D3D12_INPUT_ELEMENT_DESC kElements[] = {
-            { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 8,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        };
+        D3D12_ROOT_PARAMETER1 parameters[4]{};
+        parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+        parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+        parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameters[2].DescriptorTable.NumDescriptorRanges = 1;
+        parameters[2].DescriptorTable.pDescriptorRanges = &textureRange;
+        parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        parameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameters[3].DescriptorTable.NumDescriptorRanges = 1;
+        parameters[3].DescriptorTable.pDescriptorRanges = &samplerRange;
+        parameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
-        desc.pRootSignature = rootSig;
-        desc.VS = {vsBytes, vsSize};
-        desc.PS = {psBytes, psSize};
-        desc.InputLayout = {kElements, static_cast<UINT>(std::size(kElements))};
-        desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-        desc.PrimitiveTopologyType = kSpriteTopologyType;
-        desc.SampleMask = state.sampleMask;
-        desc.SampleDesc.Count = state.sampleCount; // plans/plan_dx.md DX-207
-        desc.NodeMask = 0;
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc{};
+        desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+        desc.Desc_1_1.NumParameters = static_cast<UINT>(std::size(parameters));
+        desc.Desc_1_1.pParameters = parameters;
+        desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-        desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-        desc.RasterizerState.FrontCounterClockwise = FALSE;
-        desc.RasterizerState.DepthClipEnable = TRUE;
-
-        const bool colorOpaque = owner_->currentColorSrcBlend_ == 0 && owner_->currentColorDstBlend_ == 1;
-        const bool alphaOpaque = owner_->currentAlphaSrcBlend_ == 0 && owner_->currentAlphaDstBlend_ == 1;
-        desc.BlendState.IndependentBlendEnable =
-            (state.colorWriteMasks[1] != state.colorWriteMasks[0]
-             || state.colorWriteMasks[2] != state.colorWriteMasks[0]
-             || state.colorWriteMasks[3] != state.colorWriteMasks[0]) ? TRUE : FALSE;
-        D3D12_RENDER_TARGET_BLEND_DESC rtTemplate{};
-        rtTemplate.BlendEnable = !(colorOpaque && alphaOpaque);
-        rtTemplate.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorSrcBlend_));
-        rtTemplate.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorDstBlend_));
-        rtTemplate.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentColorBlendFunc_));
-        rtTemplate.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaSrcBlend_));
-        rtTemplate.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaDstBlend_));
-        rtTemplate.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentAlphaBlendFunc_));
-        rtTemplate.LogicOpEnable = FALSE;
-        rtTemplate.LogicOp = D3D12_LOGIC_OP_NOOP;
-        for (std::size_t i = 0; i < std::size(desc.BlendState.RenderTarget); ++i)
-        {
-            desc.BlendState.RenderTarget[i] = rtTemplate;
-            desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
-                static_cast<UINT8>(state.colorWriteMasks[std::min<std::size_t>(i, 3)] & 0xF);
-        }
-        desc.SampleMask = owner_->currentSampleMask_;
-
-        // plans/plan_dx.md DX-210: the device's real DepthStencilState, not a hardcoded "off". XNA's
-        // SpriteBatch::Begin takes a DepthStencilState, and SpriteSortMode::FrontToBack with
-        // DepthStencilState::Default plus stencil-masked sprite UI are ordinary uses of it; both
-        // silently lost depth and stencil here. D3D11's sprite path issues no depth state of its
-        // own, so whatever GraphicsDevice last applied is in force -- this reaches the same place by
-        // building the pipeline state from the same tracked fields. SpriteBatch's own default is
-        // DepthStencilState::None, which GraphicsDevice applies before the first sprite draw, so a
-        // batch that does not ask for depth still gets none.
-        D3D12_DEPTH_STENCIL_DESC& sds = desc.DepthStencilState;
-        sds.DepthEnable = state.depthEnable ? TRUE : FALSE;
-        sds.DepthWriteMask = state.depthWriteEnable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
-        sds.DepthFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.depthFunc));
-        sds.StencilEnable = state.stencilEnable ? TRUE : FALSE;
-        sds.StencilReadMask = static_cast<UINT8>(state.stencilMask);
-        sds.StencilWriteMask = static_cast<UINT8>(state.stencilWriteMask);
-        sds.FrontFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.stencilFunc));
-        sds.FrontFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilPass));
-        sds.FrontFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilFail));
-        sds.FrontFace.StencilDepthFailOp =
-            static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilDepthFail));
-        if (state.twoSidedStencilMode)
-        {
-            sds.BackFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.ccwStencilFunc));
-            sds.BackFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilPass));
-            sds.BackFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilFail));
-            sds.BackFace.StencilDepthFailOp =
-                static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilDepthFail));
-        }
-        else
-        {
-            sds.BackFace = sds.FrontFace;
-        }
-
-        desc.NumRenderTargets = std::min<UINT>(
-            state.renderTargetCount, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
-        for (UINT i = 0; i < desc.NumRenderTargets; ++i)
-            desc.RTVFormats[i] = state.renderTargetFormats[i];
-        // DX-210: a pipeline state that uses depth or stencil must name the format of the view it
-        // will be used with; DXGI_FORMAT_UNKNOWN here is legal only when neither is enabled.
-        desc.DSVFormat = state.depthStencilFormat;
-
-        ComPtr<ID3D12PipelineState> pso;
-        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
+        ComPtr<ID3DBlob> serialized;
+        ComPtr<ID3DBlob> error;
+        HRESULT hr = D3D12SerializeVersionedRootSignature(&desc, serialized.GetAddressOf(),
+                                                          error.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer: CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
-        ID3D12PipelineState* result = pso.Get();
-        sprite2DPsos_.emplace(key, std::move(pso));
-        return result;
+            throw std::runtime_error(
+                "D3D12SpriteBatchRenderer: sprite3d root signature serialization failed, hr=" +
+                FormatHr(hr) + (error ? std::string(": ") +
+                    std::string(static_cast<const char*>(error->GetBufferPointer()),
+                                error->GetBufferSize()) : std::string()));
+        ComPtr<ID3D12RootSignature> rootSignature;
+        hr = device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(),
+                                         IID_PPV_ARGS(rootSignature.GetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "D3D12SpriteBatchRenderer: sprite3d CreateRootSignature failed, hr=" + FormatHr(hr));
+        sprite3DRootSignature_ = std::move(rootSignature);
+        sprite3DRootSignatureDevice_ = device;
+        return sprite3DRootSignature_.Get();
+    }
+
+    const std::vector<D3D12SpriteBatchRenderer::Sprite2DVertex>&
+    D3D12SpriteBatchRenderer::TransformedSprite2DVertices()
+    {
+        // Exactly what Draw() used to push for these paths: the affine part of the Begin transform,
+        // applied in pixel space. They bind a float2 position; layerDepth and W were never theirs.
+        transformedVertices_.clear();
+        transformedVertices_.reserve(pendingVertices_.size());
+        for (const SpriteVertex& vertex : pendingVertices_)
+        {
+            const Vector2 position = Vector2::Transform(Vector2(vertex.x, vertex.y), transform_);
+            transformedVertices_.push_back(
+                {position.X, position.Y, vertex.u, vertex.v, vertex.r, vertex.g, vertex.b, vertex.a});
+        }
+        return transformedVertices_;
     }
 
     void D3D12SpriteBatchRenderer::FlushBatch()
@@ -322,10 +287,10 @@ namespace CNA::Internal::Renderers::DirectX12
         if (customEffect_)
             customRenderer = dynamic_cast<D3D12EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
-        ComPtr<ID3D12RootSignature> stockRootSignature;
         ID3D12RootSignature* rootSignature = nullptr;
         ID3D12PipelineState* pso = nullptr;
-        D3DSprite2DConstants stockConstants{};
+        float matrixValues[16]{};
+        float channelExpansion[8]{};
         bool useStockConstants = false;
         int constantBufferCount = 1;
         int shaderResourceCount = 1;
@@ -368,27 +333,64 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         else
         {
-            stockRootSignature = owner_->GetRootSignatureCacheEXT().GetOrCreate(
-                device_.Get(), 1, 1, 1);
-            rootSignature = stockRootSignature.Get();
-            if (!rootSignature)
+            // plans/plan_directx12_parity.md DX12-0013 (DirectX11's WINCLOSE-0014/0019): the stock
+            // stage is FNA's SpriteEffect. sprite2d wrote z = 0 and w = 1 from CPU-transformed
+            // pixel positions, so layerDepth never reached the depth test and a Begin transform lost
+            // its depth, W and perspective; its pixel stage also sampled a one- or two-channel
+            // texture the Direct3D 10+ way. The pipeline state now comes from the renderer's shared
+            // cache with the device's whole tracked state -- rasterizer included, so a SpriteBatch
+            // culls, fills and biases as the RasterizerState passed to Begin asks, as on DirectX11.
+            constantBufferCount = 2;
+            rootSignature = GetOrCreateSprite3DRootSignature();
+            D3D12PipelineStateDesc state;
+            owner_->FillPsoStateFromCurrentEXT(state);
+            state.variant = D3DShaderVariant::Sprite3d;
+            state.strideInBytes = sizeof(SpriteVertex);
+            using Microsoft::Xna::Framework::Graphics::VertexElement;
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            state.vertexInputElements = {
+                {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0), 0, 0, false},
+                {VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0), 0, 0, false},
+                {VertexElement(20, VertexElementFormat::Vector4, VertexElementUsage::Color, 0), 0, 0, false},
+            };
+            state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+            const auto cached = owner_->psoCache_.GetOrCreate(owner_->GetDeviceEXT(), rootSignature, state);
+            pso = cached.Get();
+            if (!pso)
                 throw std::runtime_error(
-                    "D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
-            pso = GetOrCreateSprite2DPso(rootSignature);
-            stockConstants.ViewportSize[0] = static_cast<float>(vpW);
-            stockConstants.ViewportSize[1] = static_cast<float>(vpH);
+                    "D3D12SpriteBatchRenderer: CreateGraphicsPipelineState failed for sprite3d");
+
+            // SpriteBatch.cs: MatrixTransform = transformMatrix * ortho(0, w, h, 0, 0, -1), over the
+            // logical viewport size. ToColumnMajor gives the flat layout the row_major field reads.
+            const Matrix matrixTransform = transform_ * Matrix::CreateOrthographicOffCenter(
+                0.0f, static_cast<float>(vpW), static_cast<float>(vpH), 0.0f, 0.0f, -1.0f);
+            matrixTransform.ToColumnMajor(matrixValues);
+            D3DCommon::D3D9ChannelExpansion(currentTexture_ != nullptr
+                                                ? currentTexture_->GetSurfaceFormatEXT() : 0,
+                                            channelExpansion, channelExpansion + 4);
             useStockConstants = true;
         }
 
         // SpriteBatch replaces both transient streams on every flush. Discard gives each update a
         // fresh range in DX-238's frame-owned upload ring without a submit or fence wait.
-        vb_.SetDataWithOptions(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
-                               sizeof(Sprite2DVertex), SetDataOptions::Discard);
+        D3D12VertexBufferRenderer& vertexBuffer = useStockConstants ? vb3d_ : vb_;
+        if (useStockConstants)
+        {
+            vb3d_.SetDataWithOptions(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+                                     sizeof(SpriteVertex), SetDataOptions::Discard);
+        }
+        else
+        {
+            const auto& vertices = TransformedSprite2DVertices();
+            vb_.SetDataWithOptions(vertices.data(), static_cast<int>(vertices.size()),
+                                   sizeof(Sprite2DVertex), SetDataOptions::Discard);
+        }
         ib_.SetData16WithOptions(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()),
                                  SetDataOptions::Discard);
 
         ID3D12GraphicsCommandList* cmdList = owner_->GetFrameCommandListEXT();
-        owner_->RetainFrameObjectEXT(vb_.GetResourceEXT());
+        owner_->RetainFrameObjectEXT(vertexBuffer.GetResourceEXT());
         owner_->RetainFrameObjectEXT(ib_.GetResourceEXT());
         owner_->RetainFrameObjectEXT(rootSignature);
         owner_->RetainFrameObjectEXT(pso);
@@ -397,8 +399,10 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (const auto* target = dynamic_cast<const D3D12RenderTargetRenderer*>(currentTexture_))
             owner_->RetainFrameObjectEXT(target->GetSampleableColorResourceEXT());
 
-        const D3D12_GPU_VIRTUAL_ADDRESS stockConstantAddress = useStockConstants
-            ? owner_->AllocateFrameConstantDataEXT(&stockConstants, sizeof(stockConstants)) : 0;
+        const D3D12_GPU_VIRTUAL_ADDRESS matrixAddress = useStockConstants
+            ? owner_->AllocateFrameConstantDataEXT(matrixValues, sizeof(matrixValues)) : 0;
+        const D3D12_GPU_VIRTUAL_ADDRESS channelExpansionAddress = useStockConstants
+            ? owner_->AllocateFrameConstantDataEXT(channelExpansion, sizeof(channelExpansion)) : 0;
 
         owner_->TransitionAndBindRenderTargetsEXT(cmdList);
 
@@ -427,7 +431,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->OMSetStencilRef(static_cast<UINT>(owner_->GetReferenceStencilEXT()));
         cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-        D3D12_VERTEX_BUFFER_VIEW vbView = vb_.GetViewEXT();
+        D3D12_VERTEX_BUFFER_VIEW vbView = vertexBuffer.GetViewEXT();
         cmdList->IASetVertexBuffers(0, 1, &vbView);
         D3D12_INDEX_BUFFER_VIEW ibView = ib_.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
@@ -445,7 +449,8 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         else
         {
-            cmdList->SetGraphicsRootConstantBufferView(0, stockConstantAddress);
+            cmdList->SetGraphicsRootConstantBufferView(0, matrixAddress);
+            cmdList->SetGraphicsRootConstantBufferView(1, channelExpansionAddress);
         }
 
         // DX-133: pendingFilter_/pendingAddressU_/pendingAddressV_ (set via SetSamplerFilter()/
@@ -540,8 +545,9 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error(
                 "DirectX12 SpriteBatch: no render target is bound.");
 
+        const auto& transformedVertices = TransformedSprite2DVertices();
         vb_.SetDataWithOptions(
-            pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+            transformedVertices.data(), static_cast<int>(transformedVertices.size()),
             sizeof(Sprite2DVertex), SetDataOptions::Discard);
         ib_.SetData16WithOptions(
             pendingIndices_.data(), static_cast<int>(pendingIndices_.size()),
@@ -604,11 +610,16 @@ namespace CNA::Internal::Renderers::DirectX12
                                        float rotation,
                                        const Vector2& origin,
                                        SpriteEffects effects,
-                                       float /*layerDepth*/)
+                                       float layerDepth)
     {
         if (!begun_) throw std::runtime_error("D3D12SpriteBatchRenderer::Draw called before Begin()");
 
-        if (currentTexture_ != nullptr && currentTexture_ != &texture)
+        // DX12-0013 (WINCLOSE-0014): a batch is flushed on a texture change and also before a quad a
+        // 16-bit index could no longer address -- the index base was narrowed to uint16_t
+        // unconditionally, so past 65 536 vertices the indices wrapped onto the first quads.
+        constexpr std::size_t kMaxBatchVertices = 65536u;
+        if (currentTexture_ != nullptr &&
+            (currentTexture_ != &texture || pendingVertices_.size() + 4u > kMaxBatchVertices))
             FlushBatch();
         currentTexture_ = &texture;
 
@@ -617,10 +628,12 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // No [0,1] clamp -- matches FNA (SpriteBatch.cs divides straight through), same convention
         // D3D11SpriteBatchRenderer::Draw already established.
+        // In the float domain, as FNA does: X + Width in int overflows (undefined behaviour) for a
+        // source rectangle near INT_MAX.
         float u1 = static_cast<float>(sourceRectangle.X) / texW;
         float v1 = static_cast<float>(sourceRectangle.Y) / texH;
-        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width)  / texW;
-        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
+        float u2 = u1 + static_cast<float>(sourceRectangle.Width)  / texW;
+        float v2 = v1 + static_cast<float>(sourceRectangle.Height) / texH;
 
         if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u1, u2);
         if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v1, v2);
@@ -664,20 +677,14 @@ namespace CNA::Internal::Renderers::DirectX12
         rotateAndTranslate(p2x, p2y, v2x, v2y);
         rotateAndTranslate(p3x, p3y, v3x, v3y);
 
-        // SpriteBatch's own transform matrix is applied here, in pixel space, before upload -- same
-        // reasoning D3D11SpriteBatchRenderer's own header comment already documents (sprite2d.vert
-        // .hlsl's real contract has no projection-matrix uniform to fold it into GPU-side).
-        const Vector2 tv0 = Vector2::Transform(Vector2(v0x, v0y), transform_);
-        const Vector2 tv1 = Vector2::Transform(Vector2(v1x, v1y), transform_);
-        const Vector2 tv2 = Vector2::Transform(Vector2(v2x, v2y), transform_);
-        const Vector2 tv3 = Vector2::Transform(Vector2(v3x, v3y), transform_);
-
+        // DX12-0013: untransformed, with layerDepth as z. The stock stage applies the Begin transform
+        // on the GPU; the 2D paths get it applied on the CPU at flush (TransformedSprite2DVertices).
         const auto base = static_cast<uint16_t>(pendingVertices_.size());
 
-        pendingVertices_.push_back({tv0.X, tv0.Y, u1, v1, r, g, b, a});
-        pendingVertices_.push_back({tv1.X, tv1.Y, u2, v1, r, g, b, a});
-        pendingVertices_.push_back({tv2.X, tv2.Y, u2, v2, r, g, b, a});
-        pendingVertices_.push_back({tv3.X, tv3.Y, u1, v2, r, g, b, a});
+        pendingVertices_.push_back({v0x, v0y, layerDepth, u1, v1, r, g, b, a});
+        pendingVertices_.push_back({v1x, v1y, layerDepth, u2, v1, r, g, b, a});
+        pendingVertices_.push_back({v2x, v2y, layerDepth, u2, v2, r, g, b, a});
+        pendingVertices_.push_back({v3x, v3y, layerDepth, u1, v2, r, g, b, a});
 
         pendingIndices_.push_back(base + 0);
         pendingIndices_.push_back(base + 1);
