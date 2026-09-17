@@ -51,7 +51,6 @@
 // Power-loss durability is out of scope: nothing here fsyncs the file or its directory. The
 // contract is that no PROCESS failure can leave a partial file where a complete one was.
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -449,7 +448,11 @@ namespace CNA::Tools
         }
         Detail::PublishFileAtomically(destination, [&](Detail::ExclusiveNewFile& out)
         {
-            std::array<std::uint8_t, 1024u * 1024u> buffer{};
+            // WINCLOSE-0039: on the heap. A 1 MiB std::array here was the whole of a Windows
+            // thread's default 1 MiB stack, so copying any support file -- every MP3 and WMA song
+            // source -- died with STATUS_STACK_OVERFLOW (0xC00000FD) on Windows, and on Linux
+            // under `ulimit -s 1024`; Linux's usual 8 MiB stack only hid it.
+            std::vector<std::uint8_t> buffer(1024u * 1024u);
             while (input)
             {
                 input.read(reinterpret_cast<char*>(buffer.data()),
