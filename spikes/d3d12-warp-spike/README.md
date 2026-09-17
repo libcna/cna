@@ -79,3 +79,20 @@ fixed-point LOD it clamps in; a representable value behaves. The spec states the
 limit, so CNA keeps `FLOAT32_MAX` rather than adapting to WARP, and L3/L9 stay on the physical-GPU
 checklist. The probe's first run read the clear colour at every value — its full-screen triangle was
 culled — which is why it now clears to magenta and names "nothing drawn".
+
+## `pixelcenter_probe.cpp` — point sampling under CNA's pixel-centre shift (DX12-0024)
+
+`DescriptorCapacityContract` B1/C1 failed on DirectX12 WARP (every point-filter state misread its 2×2
+identity texture) and passed on DirectX11. The first hypothesis was WARP precision: CNA moves clip-space
+geometry 63/64 of a pixel's half width (`D3DCommon::ApplyXnaPixelCenter`), so pixel centres sample a
+hair inside each texel, and Wrap or Mirror could turn a slightly negative coordinate into the far texel.
+This probe (raw Direct3D 11, no CNA) draws a 2×2 texture one-to-one into a 2×2 target with that shift and
+without it, with a point sampler, for every Clamp/Wrap/Mirror pair:
+
+```
+cl /nologo /EHsc /O2 /std:c++17 /W4 pixelcenter_probe.cpp /link d3d11.lib d3dcompiler.lib dxgi.lib
+pixelcenter_probe.exe
+```
+
+Result on `win10_local`: **all 18 cases exact on both the VirtualBox adapter and WARP.** The hypothesis is
+refuted — WARP samples exactly — so B1/C1 were investigated inside CNA's DirectX12 renderer instead.
