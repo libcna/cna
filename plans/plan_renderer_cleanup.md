@@ -20,10 +20,10 @@ renderer count is not a goal.
 | RRC-002 | Retire the 25 identities from the registry, CMake selection and C ABI; reject retired selectors explicitly | ✅ `fc1b6a537` |
 | RRC-003 | Remove the 25 implementation families and everything that existed only for them | ✅ `fc1b6a537` |
 | RRC-004 | Tests, test infrastructure and CI | ✅ `643b587d5` |
-| RRC-005 | Live documentation, historical banners, tombstones, curated-set policy | ⬜ |
-| RRC-006 | Regression guard: exact 25-identity whitelist and permanently retired IDs | ✅ |
-| RRC-007 | Second pass: stale-reference audit and code-quality cleanup | ⬜ |
-| RRC-008 | Build matrix, negative configure matrix, full test corpus, closing report | ⬜ |
+| RRC-005 | Live documentation, historical banners, tombstones, curated-set policy | ✅ `1321ca346` |
+| RRC-006 | Regression guard: exact 25-identity whitelist and permanently retired IDs | ✅ `d1a579e00` |
+| RRC-007 | Second pass: stale-reference audit and code-quality cleanup | ✅ `750ed854d` |
+| RRC-008 | Build matrix, negative configure matrix, full test corpus, closing report | ✅ |
 
 ---
 
@@ -298,8 +298,15 @@ running all five renderer gates rather than only the one being edited.
 
 - [x] Multi-spelling stale-reference audit rerun; every remaining hit classified as active (fixed),
       historical, or retired-ID documentation.
-- [ ] Empty directories, dead includes and forward declarations, unused helpers, orphaned shaders and
+- [x] Empty directories, dead includes and forward declarations, unused helpers, orphaned shaders and
       patches, stale TODOs, CMake variables without readers, dead links.
+
+No empty directories remain under `modules/`, `cmake/`, `scripts/`, `tools/`, `docs/`, `spikes/` or
+`integration/`. No orphaned patch remains: every file under `cmake/patches/` is referenced, and all
+of them now belong to FNA3D/mojoshader and SDL_shadercross — the eight retired-renderer patches went
+with their renderers in `fc1b6a537`. A repository-wide relative-link check found no live document
+still linking a deleted page; the pre-existing broken links it did find are listed under *Findings
+outside scope* and are all unrelated to renderers.
 
 ### The stale-reference audit, and what "explain every remaining reference" means
 
@@ -330,10 +337,95 @@ removed with the renderer in 2026-08, so nothing in it could be checked against 
 
 ## RRC-008 — Verification
 
-- [ ] Identity/descriptor/combination/cnaext gates; platform boundary gates.
-- [ ] Representative builds (see matrix, filled in when run).
-- [ ] Negative configure of all 25 retired selectors.
-- [ ] Full CTest corpus against the RRC-001 baseline.
+- [x] Identity/descriptor/combination/cnaext gates; platform boundary gates.
+- [x] Representative builds (matrix below).
+- [x] Negative configure of all 25 retired selectors — done for all **26**, including `SKIA`.
+- [x] Full CTest corpus against the RRC-001 baseline.
+
+### CTest, measured in the same tree as the baseline
+
+`cmake-build-multi` — the tree RRC-001 measured — rebuilt and re-run, so this is like-for-like
+rather than a comparison across configurations.
+
+| | Registered | Failed |
+|---|---:|---:|
+| Baseline (`c0225e9d5`, pre-work) | 9 510 | 100 |
+| After (`750ed854d`) | 9 456 | **46** |
+
+54 fewer tests registered — the retired renderers' own suites — and **54 fewer failures**.
+Comparing the failing *names*, not just the counts: **58 baseline failures are gone** and four
+names appear that the baseline list does not have. None is renderer-related, and **all four pass when re-run individually** — they are flaky under
+`-j8`, not regressions:
+
+| Newly-listed failure | Verdict |
+|---|---|
+| `NetworkSessionTest.FindReturnsEmptyCollection` | **Flaky under `-j8`** — passes on rerun |
+| `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses` | **Flaky** — passes on rerun (spawns two real processes) |
+| `ContentPipelineCliTest.WorkerCountsProduceIdenticalColdNoOpAndDependencyRebuilds` | **Flaky** — passes on rerun (asserts equality across worker counts under load) |
+| `CnaInputTests` | **Flaky** — passes on rerun. `modules/input/` is also untouched by this branch (`git diff --name-only` against the baseline is empty) |
+
+A second full run in `cmake-build-debug` (single-renderer `HEADLESS`, Debug, SDL3 platform) gives
+**9 130 / 9 145**. Its 15 failures are a different set because the configuration differs, and each
+was classified rather than counted: six are in the baseline list verbatim; the `Cnb*`/`Cnj*` texture
+ones fail with *"this graphics renderer did not store the complete requested cube face region"*,
+which is HEADLESS's documented capability boundary and precisely why they do not fail in a tree
+that defaults to EasyGL; the rest are in modules this branch never touched.
+
+**No test was deleted to make a build green.** The only tests removed are those of the retired
+renderers themselves, and shared tests kept every parameter except the retired renderer.
+
+### Gates
+
+All nine green: `check_renderer_identities`, `check_renderer_combinations`,
+`check_runtime_renderer_discipline`, `check_renderer_descriptors`, `check_cnaext_matrix`, and the
+four platform boundary gates (`sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `sdl_ratchet`)
+plus `hot_path_lint`. `tools/c-api/generate_abi_baseline.py --check` reports the baseline current.
+
+### Negative configure — all 26 retired selectors
+
+Run as a **real project configure** (`cmake -S . -B ...`), not only in `cmake -P` script mode, so the
+refusal is proven on the path a user actually takes. All 26 refused, each naming its permanently
+reserved C ABI value and pointing at `docs/removed-renderers.md`. Spot-checked in the brief's own
+list: `BGFX` (7), `OPENGLES1` (32), `DIRECTX7` (28), `OPENGL2` (35), `IGL` (48), `RLGL` (51),
+`PIXIJS` (49), and `SKIA` (19).
+
+**No silent fallback, proven rather than asserted:** after a refused configure the tree contains
+**no generated build system** (no `build.ninja`, no `Makefile`), and `CMakeCache.txt` holds the
+refused name itself — never a substituted renderer. There is no way to end up with a build that
+quietly uses a different renderer than the one that was asked for.
+
+A retired name is also refused through the other two routes that can name a renderer — a member of
+`CNA_GRAPHICS_RENDERERS` and `CNA_RENDERER_<X>=ON` — and the refusal says *retired*, not merely
+*unknown* (`ctest -R CnaRendererRetired`, 34/34).
+
+### Build matrix, as actually run on this machine
+
+Native Linux (Debian, GCC 14, Ninja, ccache), Emscripten 5.0.7 from `~/Downloads/emsdk`.
+
+| Renderer | Configure | Renderer library built | Note |
+|---|---|---|---|
+| `OPENGLES3`, `OPENGL33` | ✅ | ✅ `cna_renderer_easygl` | |
+| `OPENGL4` | ✅ | ✅ | |
+| `VULKAN` | ✅ | ✅ | |
+| `SDL_GPU` | ✅ | ✅ | |
+| `SOFTWARE`, `HEADLESS`, `STUB`, `PORTABLEGL`, `SDL_RENDERER` | ✅ | ✅ | `HEADLESS` additionally has a **complete** build of the whole configuration (`cmake-build-debug`, every target, 0 errors) |
+| `WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM` | ✅ (Emscripten) | ✅ | Real `emcmake` configure and build of each family's library |
+| `FREEDIRECT` | ⛔ refused at its **documented dependency gate** | — | Needs the sibling checkout `../free-direct`, which is not on this machine. The refusal names the missing repository and the exact `git clone` that fixes it. Not cloned: this workstream does not touch sibling repositories |
+| `DIRECTX9/11/12`, `DIRECT2D`, `GDI` | not attempted here | — | Windows-only. A MinGW cross-compile exists (`cmake-build-d3d11`) but **no Windows runtime validation is claimed from Linux** |
+| `METAL` | not attempted | — | macOS-only; no Darwin toolchain on this machine. No macOS claim is made |
+| `FNA3D` | not attempted | — | `~/deps/FNA3D` is present; deferred as not required for the identity contract |
+
+Two builds are complete configurations rather than a single library: `cmake-build-debug`
+(`HEADLESS`, every target) and `cmake-build-multi` (`OPENGL33` default with `VULKAN`, `SOFTWARE`
+and `HEADLESS` compiled in, X11 platform) — the latter is the tree the RRC-001 baseline was
+measured in, rebuilt so the before/after test comparison is like-for-like.
+
+**Result: 14 of 14 attempted renderer libraries built, 0 errors** — ten native
+(`cna_renderer_easygl` for both GL identities, `opengl4`, `vulkan`, `sdl_gpu`, `software`,
+`headless`, `stub`, `portablegl`, `sdl_renderer`) and four under Emscripten (`easygl` for WEBGL2,
+`canvas`, `html_dom`, `svg_dom`). The Emscripten half became possible because the project owner
+pointed at `~/Downloads/emsdk`; without it these five identities would have been reported as
+unverifiable on this machine rather than built.
 
 ---
 
@@ -351,6 +443,6 @@ reproduces on `next` before this branch, and fixing them would be unrelated refa
 | 25 apparent "dead links" in `docs/input-public-api-frozen.md`, `docs/model-content-pipeline-support.md`, `docs/viewport-displaymode-adapter-support.md`, `docs/xna-content-pipeline-parity-report.md` and `plans/plan_graphics.md` are false positives: C++ generic arguments (`std::vector<int>`, `Keys`, `intcs`) that a markdown link checker reads as `[text](target)`. Nothing to fix. | Not a defect |
 | `tools/c-api/check_release_gate.py --check` reports the **limitations-matrix** criterion unmet: `generate_limitations.py` raises `RuntimeError: Explicit coverage rules matched no symbols: sprite-batch-begin-explicit-state`. Verified pre-existing by running the same tool in a worktree at the baseline commit `c0225e9d5`, where it fails with **four** unused rules rather than one — so this workstream did not cause it and in fact reduced it. The rule targets `SpriteBatch::Begin`, which this branch does not change in any way the parser reads (tested by restoring the committed header and re-running: identical failure). | Pre-existing tool defect |
 | `docs/c-api/RELEASE_GATE.md` is generated and its published header is stale at ABI `0.21.0` while the tree is at `0.28.0`. **Deliberately not regenerated**: `--write` bakes the traceback above into the published document as a criterion's "measurement", which is worse than a stale version line. Regenerating is correct once the limitations generator is fixed, and belongs to whoever owns that tool. | Pre-existing, blocked on the above |
-| 8 headless example targets fail to compile/link in an X11 multi-renderer build (`SDL_GetError` undefined). Present in the pre-work baseline; unrelated to renderer identities. | Pre-existing build defect |
+| **7 headless example targets fail to compile in a multi-renderer build**, each with `fatal error: CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp: No such file or directory`. Cause: `modules/graphics/CMakeLists.txt:44` links renderer targets into `cna_graphics_core` as **PRIVATE**, so a non-default renderer's public include directory never reaches an example target; the family loop in `modules/renderers/CMakeLists.txt` still enters `headless/examples` because it temporarily sets `CNA_GRAPHICS_RENDERER` per family. **Proven pre-existing**: building `cna_test_headless_smoke` in a git worktree at the baseline commit `c0225e9d5`, in the same multi configuration, fails with the byte-identical error. That `PRIVATE` link dates from `43053b185` (2026-08-14, RTR-P6) and this branch touches neither it, nor `modules/renderers/headless/` beyond one comment, nor the registration loop. `CnaTests` — the actual corpus — links and runs normally, so nothing is blocked. | Pre-existing build defect |
 | No surviving renderer sets `needsSurfacePresenter`, so the `TERMINAL` platform has no renderer that presents CPU frames into a terminal. `BLEND2D` was the only one, and it was retired. This is a **consequence** of the curation, recorded rather than hidden; closing it needs an owner decision (teach `SOFTWARE` to use a surface presenter, or accept that `TERMINAL` is validation-only). | Consequence, needs owner decision |
 | `SpriteBatch::DrawMeshEXT` — the 2D triangle-mesh entry point — now has **no implementer**. It was added for Skia's bounded `SkVertices`/SkSL mesh ABI (`SKIA-144`–`157`) and Skia was retired in 2026-08; `IGraphicsRenderer::DrawMeshEXT`'s base implementation throws, and no renderer overrides it. The public CNAEXT method, its C ABI route (`CnaCApiGraphics.cpp`) and its shared sort-mode test all still exist and behave correctly — every renderer refuses, which is exactly what they did when Skia existed. **Not removed here:** deleting it would break the published C ABI, and it is not one of the 25 renderers this workstream retires. Comments corrected to stop implying Skia is present. Whether the surface stays is an owner decision. | Consequence, needs owner decision |
