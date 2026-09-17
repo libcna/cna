@@ -1721,6 +1721,15 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void DirectX12Renderer::RecreateDeviceEXT()
     {
+        // plans/plan_directx12_parity.md DX12-0017: the renderer's own lazily created fallback textures
+        // are ordinary recoverable resources -- CreateTexture registers them. They used to be destroyed
+        // further down, after the registry below had been copied, so their destructors unregistered
+        // them from the live registry but not from the copy, and the recreate loop then called into
+        // freed memory: every recovery after a PBR draw (which creates them) crashed. They are
+        // recreated on first use, so they are dropped before anything is copied.
+        defaultWhiteTexture_.reset();
+        defaultFlatNormalTexture_.reset();
+        defaultOpaqueBlackTexture_.reset();
         const auto resources = recoverableResources_;
         // Best-effort drain of anything in flight before tearing down -- mirrors the destructor's
         // own drain (it's not safe to release a fence/allocator/command list the GPU may still be
@@ -1785,9 +1794,6 @@ namespace CNA::Internal::Renderers::DirectX12
         // survive recreation unchanged -- a device-removed event doesn't change what SamplerState
         // the game itself last set.
         samplerCache_ = D3D12SamplerCache();
-        defaultWhiteTexture_.reset();
-        defaultFlatNormalTexture_.reset();
-        defaultOpaqueBlackTexture_.reset();
         // Any bound off-screen target has already released its old native handles through the
         // recovery registry. Drop the binding now; the same public target object is reconstructed
         // below and can be rebound by the caller after DeviceReset.
@@ -1824,7 +1830,11 @@ namespace CNA::Internal::Renderers::DirectX12
         std::vector<std::string> failures;
         for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
         {
-            if (resource == nullptr)
+            // A resource can be destroyed while its siblings are being recreated (an owner releasing a
+            // dependant, say); a pointer that has left the live registry is not called.
+            if (resource == nullptr ||
+                std::find(recoverableResources_.begin(), recoverableResources_.end(), resource) ==
+                    recoverableResources_.end())
                 continue;
             try
             {
