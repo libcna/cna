@@ -92,34 +92,61 @@ COUNTED_DOCUMENTS = {
 IDENTITY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+public\s+(?:renderer\s+)?identities")
 FAMILY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+implementation\s+families\b")
 
-# Canonical public identities: (cmake selection name, enum name). 25 entries.
+# Canonical public identities: (cmake selection name, enum name, C ABI value). 25 entries.
+#
+# The C ABI value is the ONLY stable numeric identity contract CNA publishes. The C++ enum's
+# ordinals are not one and never were: they are dense and were renumbered when SKIA was retired in
+# 2026-08, while every surviving C value stayed put. So this column is pinned here, per identity,
+# rather than derived from a position in a list -- a table whose numbers come from its own ordering
+# cannot catch a renumbering, which is the single most damaging thing that can happen to this file.
 IDENTITIES = [
-    ("SDL_RENDERER", "SdlRenderer"),
-    ("OPENGLES2", "OpenGLES2"),
-    ("OPENGLES3", "OpenGLES3"),
-    ("OPENGL33", "OpenGL33"),
-    ("WEBGL1", "WebGL1"),
-    ("WEBGL2", "WebGL2"),
-    ("VULKAN", "Vulkan"),
-    ("WEBGPU", "WebGPU"),
-    ("HEADLESS", "Headless"),
-    ("SOFTWARE", "Software"),
-    ("STUB", "Stub"),
-    ("DIRECTX11", "DirectX11"),
-    ("DIRECTX12", "DirectX12"),
-    ("DIRECT2D", "Direct2D"),
-    ("CANVAS", "Canvas"),
-    ("HTML_DOM", "HtmlDom"),
-    ("FREEDIRECT", "FreeDirect"),
-    ("DIRECTX9", "DirectX9"),
-    ("SDL_GPU", "SdlGpu"),
-    ("OPENGL4", "OpenGL4"),
-    ("GDI", "Gdi"),
-    ("METAL", "Metal"),
-    ("FNA3D", "Fna3d"),
-    ("SVG_DOM", "SvgDom"),
-    ("PORTABLEGL", "PortableGL"),
+    ("SDL_RENDERER", "SdlRenderer", 1),
+    ("OPENGLES2", "OpenGLES2", 2),
+    ("OPENGLES3", "OpenGLES3", 3),
+    ("OPENGL33", "OpenGL33", 4),
+    ("WEBGL1", "WebGL1", 5),
+    ("WEBGL2", "WebGL2", 6),
+    ("VULKAN", "Vulkan", 8),
+    ("WEBGPU", "WebGPU", 9),
+    ("HEADLESS", "Headless", 11),
+    ("SOFTWARE", "Software", 12),
+    ("STUB", "Stub", 13),
+    ("DIRECTX11", "DirectX11", 14),
+    ("DIRECTX12", "DirectX12", 15),
+    ("DIRECT2D", "Direct2D", 16),
+    ("CANVAS", "Canvas", 17),
+    ("HTML_DOM", "HtmlDom", 18),
+    ("FREEDIRECT", "FreeDirect", 21),
+    ("DIRECTX9", "DirectX9", 22),
+    ("SDL_GPU", "SdlGpu", 31),
+    ("OPENGL4", "OpenGL4", 33),
+    ("GDI", "Gdi", 40),
+    ("METAL", "Metal", 42),
+    ("FNA3D", "Fna3d", 43),
+    ("SVG_DOM", "SvgDom", 44),
+    ("PORTABLEGL", "PortableGL", 46),
 ]
+
+# Retired identities and their permanently reserved C ABI values. A retired value is never
+# reassigned -- not to a new renderer, and not to the same renderer if it is ever restored with
+# different semantics -- so this table only ever grows. SKIA (19) was retired in 2026-08; the other
+# twenty-five on 2026-09-17 (plans/plan_renderer_cleanup.md, docs/removed-renderers.md).
+#
+# It is pinned here as well as in cmake/RendererIdentities.cmake on purpose. The CMake list exists
+# to REFUSE a retired selector at configure time; this one exists to make the refusal itself
+# checkable, and to make reuse of a value a test failure rather than a code review's job. The
+# precedent is concrete: eleven identities were retired on 2026-08-30 and restored on 2026-09-04,
+# and nothing mechanical would have stopped that restoration from taking different numbers.
+RETIRED_IDENTITIES = {
+    "BGFX": 7, "MAGNUM": 10, "SKIA": 19, "BLEND2D": 20,
+    "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26, "DIRECTX6": 27,
+    "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32, "OPENGL1": 34,
+    "OPENGL2": 35, "WICKED": 36, "SOKOL": 37, "DILIGENT": 38, "GLIDE": 39, "LLGL": 41,
+    "OPENVG": 45, "TINYGL": 47, "IGL": 48, "PIXIJS": 49, "NANOVG": 50, "RLGL": 51,
+}
+
+# The first value never assigned to any identity, live or retired. A new renderer takes this one.
+NEXT_FREE_ABI_VALUE = 52
 
 
 def enum_identities():
@@ -208,7 +235,7 @@ def check_runtime_registry(identities):
     mapping = registry_map()
     sources = renderer_sources()
 
-    for cmake_name, _enum_name in identities:
+    for cmake_name, _enum_name, _value in identities:
         entry = mapping.get(cmake_name)
         if entry is None:
             problems.append(
@@ -243,10 +270,165 @@ def check_runtime_registry(identities):
                 f"CreateGraphicsRenderer. plans/plan_runtimerenderer.md design decision 4 requires the "
                 f"factory to live in the family's own namespace, not the shared one.")
 
-    for cmake_name in sorted(set(mapping) - {c for c, _ in identities}):
+    for cmake_name in sorted(set(mapping) - {c for c, _e, _v in identities}):
         problems.append(
             f"{cmake_name}: cmake/RendererRegistry.cmake maps an identity that is not in the "
             f"canonical table. Remove it, or add it to IDENTITIES here and to both registries.")
+    return problems
+
+
+def c_abi_values():
+    """The CNA_GRAPHICS_RENDERER_<NAME> constants and what CNA_GRAPHICS_RENDERER_MAXIMUM aliases."""
+    path = os.path.join(REPO, "modules", "c-api", "include", "CNA", "C", "graphics.h")
+    text = open(path, encoding="utf-8").read()
+    values = {name: int(value) for name, value in re.findall(
+        r"#define\s+CNA_GRAPHICS_RENDERER_([A-Z0-9_]+)\s+UINT32_C\((\d+)\)", text)}
+    maximum = re.search(
+        r"#define\s+CNA_GRAPHICS_RENDERER_MAXIMUM\s+CNA_GRAPHICS_RENDERER_([A-Z0-9_]+)", text)
+    return values, (maximum.group(1) if maximum else None)
+
+
+def cmake_retired():
+    """cmake/RendererIdentities.cmake's CNA_RENDERER_RETIRED_IDENTITIES, as {name: value}."""
+    path = os.path.join(REPO, "cmake", "RendererIdentities.cmake")
+    text = open(path, encoding="utf-8").read()
+    body = re.search(r"set\(CNA_RENDERER_RETIRED_IDENTITIES\s(.*?)\)", text, re.S)
+    if not body:
+        sys.exit("cannot locate CNA_RENDERER_RETIRED_IDENTITIES in cmake/RendererIdentities.cmake")
+    stripped = re.sub(r"#[^\n]*", "", body.group(1))
+    return {name: int(value) for name, value in re.findall(r"([A-Z][A-Z0-9_]*)=(\d+)", stripped)}
+
+
+def c_api_identity_table():
+    """The identity->enum pairs of RendererIdentities[] in modules/c-api/src/CnaCApiCoreExt.cpp."""
+    path = os.path.join(REPO, "modules", "c-api", "src", "CnaCApiCoreExt.cpp")
+    text = open(path, encoding="utf-8").read()
+    body = re.search(r"RendererIdentities\{\{(.*?)\}\};", text, re.S)
+    if not body:
+        sys.exit("cannot locate the RendererIdentities table in modules/c-api/src/CnaCApiCoreExt.cpp")
+    return re.findall(r"CNA_GRAPHICS_RENDERER_([A-Z0-9_]+)\s*,\s*"
+                      r"CNA::GraphicsRendererType::(\w+)", body.group(1))
+
+
+def check_abi_contract(identities):
+    """The numeric identity contract: live values pinned, retired values reserved forever.
+
+    This is the half of the registry that a rename or a reordering cannot express and a reader
+    cannot check by eye. Four things are held together here:
+
+      1. Every live identity's C ABI value is exactly the one pinned in IDENTITIES. Renumbering a
+         surviving renderer silently breaks every compiled consumer of the C ABI -- the one thing
+         in this file that cannot be fixed forward, because the old binaries are already out.
+      2. graphics.h publishes a constant for each live identity and for NO retired one. A retired
+         constant left behind is a value a consumer can still pass; the routes would refuse it, but
+         the header would be promising otherwise.
+      3. The retired table agrees, name for name and value for value, with the CMake copy that does
+         the refusing. Two tables that disagree mean one of them is refusing the wrong thing.
+      4. No live value collides with a retired value, and no live NAME reuses a retired name. This
+         is the invariant that outlives everyone who remembers why: value 19 is Skia's forever, and
+         a future renderer takes NEXT_FREE_ABI_VALUE rather than the first hole it finds.
+    """
+    problems = []
+    published, maximum_alias = c_abi_values()
+    retired_cmake = cmake_retired()
+    live = {name: value for name, _enum, value in identities}
+
+    for name, value in live.items():
+        actual = published.get(name)
+        if actual is None:
+            problems.append(
+                f"{name}: modules/c-api/include/CNA/C/graphics.h publishes no "
+                f"CNA_GRAPHICS_RENDERER_{name}, so the identity is unreachable from C.")
+        elif actual != value:
+            problems.append(
+                f"{name}: graphics.h says {actual}, the canonical table says {value}. A surviving "
+                f"renderer's C ABI value must never be renumbered -- already-compiled consumers "
+                f"carry the old number.")
+
+    for name in sorted(RETIRED_IDENTITIES):
+        if name in published:
+            problems.append(
+                f"{name}: graphics.h still publishes CNA_GRAPHICS_RENDERER_{name} for a retired "
+                f"identity. The value stays reserved; the constant does not stay published.")
+        if name in live:
+            problems.append(
+                f"{name}: is listed as retired and as a live identity. A retired name is not "
+                f"reused -- see docs/removed-renderers.md.")
+
+    if RETIRED_IDENTITIES != retired_cmake:
+        only_here = {n: v for n, v in RETIRED_IDENTITIES.items() if retired_cmake.get(n) != v}
+        only_cmake = {n: v for n, v in retired_cmake.items() if RETIRED_IDENTITIES.get(n) != v}
+        problems.append(
+            f"the retired table here and cmake/RendererIdentities.cmake's "
+            f"CNA_RENDERER_RETIRED_IDENTITIES disagree. Here but not matching there: "
+            f"{only_here or '{}'}; there but not matching here: {only_cmake or '{}'}. The CMake "
+            f"list is what refuses a retired selector at configure time, so a disagreement means "
+            f"one of the two is refusing the wrong set.")
+
+    collisions = sorted(set(live.values()) & set(RETIRED_IDENTITIES.values()))
+    for value in collisions:
+        live_name = next(n for n, v in live.items() if v == value)
+        retired_name = next(n for n, v in RETIRED_IDENTITIES.items() if v == value)
+        problems.append(
+            f"value {value} is used by the live identity {live_name} and is also the reserved "
+            f"value of the retired {retired_name}. Retired values are never reassigned; a new "
+            f"identity takes {NEXT_FREE_ABI_VALUE}.")
+
+    assigned = set(live.values()) | set(RETIRED_IDENTITIES.values())
+    if NEXT_FREE_ABI_VALUE in assigned:
+        problems.append(
+            f"NEXT_FREE_ABI_VALUE is {NEXT_FREE_ABI_VALUE}, which is already assigned. It must be "
+            f"the first value no identity has ever had.")
+    if assigned and max(assigned) >= NEXT_FREE_ABI_VALUE:
+        problems.append(
+            f"an identity uses value {max(assigned)}, at or above NEXT_FREE_ABI_VALUE "
+            f"({NEXT_FREE_ABI_VALUE}). Raise it past every assigned value.")
+
+    highest = max(live, key=lambda name: live[name]) if live else None
+    if maximum_alias is None:
+        problems.append("graphics.h does not define CNA_GRAPHICS_RENDERER_MAXIMUM as an alias of a "
+                        "published identity constant.")
+    elif maximum_alias != highest:
+        problems.append(
+            f"CNA_GRAPHICS_RENDERER_MAXIMUM aliases {maximum_alias}; the highest-valued live "
+            f"identity is {highest} ({live[highest]}).")
+
+    table = c_api_identity_table()
+    expected = [(name, enum) for name, enum, _value in identities]
+    if sorted(table) != sorted(expected):
+        problems.append(
+            f"modules/c-api/src/CnaCApiCoreExt.cpp's RendererIdentities table does not match the "
+            f"canonical table: it has {len(table)} entries, {len(expected)} expected; "
+            f"missing {sorted(set(expected) - set(table))}, unexpected "
+            f"{sorted(set(table) - set(expected))}.")
+    return problems
+
+
+def check_no_retired_selectors(identities):
+    """No retired identity may reappear as a selectable renderer.
+
+    Checked against the two lists a user can actually reach: the CMake STRINGS set and the C++
+    enum. A retired name in either is a renderer that can be selected again without anyone
+    deciding to restore it -- which is precisely what happened between 2026-08-30 and 2026-09-04,
+    when eleven identities came back.
+    """
+    problems = []
+    live_cmake = set(cmake_identities())
+    live_enum = set(enum_identities())
+    enum_spelling = {name: enum for name, enum, _ in identities}
+
+    for name in sorted(RETIRED_IDENTITIES):
+        if name in live_cmake:
+            problems.append(
+                f"{name}: is retired but appears in CNA_RENDERER_PUBLIC_IDENTITIES, so "
+                f"-DCNA_GRAPHICS_RENDERER={name} would be accepted again.")
+        # The enum spells identities in UpperCamelCase; compare case- and underscore-insensitively
+        # so BGFX matches Bgfx and HTML_DOM matches HtmlDom.
+        flattened = name.replace("_", "").lower()
+        for enumerator in live_enum:
+            if enumerator.lower() == flattened and enumerator not in enum_spelling.values():
+                problems.append(
+                    f"{name}: is retired but GraphicsRendererType still declares {enumerator}.")
     return problems
 
 
@@ -285,8 +467,8 @@ def documented_counts(identities, families):
 
 
 def main():
-    expected_cmake = [c for c, _ in IDENTITIES]
-    expected_enum = [e for _, e in IDENTITIES]
+    expected_cmake = [c for c, _e, _v in IDENTITIES]
+    expected_enum = [e for _c, e, _v in IDENTITIES]
     ok = True
 
     actual_enum = enum_identities()
@@ -312,6 +494,20 @@ def main():
         for problem in runtime:
             print(f"  - {problem}")
 
+    abi = check_abi_contract(IDENTITIES)
+    if abi:
+        ok = False
+        print("The C ABI identity contract is broken:")
+        for problem in abi:
+            print(f"  - {problem}")
+
+    resurrected = check_no_retired_selectors(IDENTITIES)
+    if resurrected:
+        ok = False
+        print("A retired renderer identity is selectable again:")
+        for problem in resurrected:
+            print(f"  - {problem}")
+
     families = family_count()
     stale = documented_counts(len(IDENTITIES), families)
     if stale:
@@ -323,7 +519,9 @@ def main():
     if ok:
         print(f"OK: {len(IDENTITIES)} public renderer identities preserved in the enum, the cmake "
               f"selection list and the runtime registry, over {families} implementation families; "
-              f"every documented count agrees")
+              f"every documented count agrees; {len(RETIRED_IDENTITIES)} retired identities stay "
+              f"retired with their C ABI values reserved (next free value "
+              f"{NEXT_FREE_ABI_VALUE})")
         return 0
     return 1
 

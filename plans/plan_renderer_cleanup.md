@@ -17,11 +17,11 @@ renderer count is not a goal.
 | ID | Task | Status |
 |---|---|---|
 | RRC-001 | Baseline, repository-wide audit, this plan | ✅ |
-| RRC-002 | Retire the 25 identities from the registry, CMake selection and C ABI; reject retired selectors explicitly | ⬜ |
-| RRC-003 | Remove the 25 implementation families and everything that existed only for them | ⬜ |
-| RRC-004 | Tests, test infrastructure and CI | ⬜ |
+| RRC-002 | Retire the 25 identities from the registry, CMake selection and C ABI; reject retired selectors explicitly | ✅ `fc1b6a537` |
+| RRC-003 | Remove the 25 implementation families and everything that existed only for them | ✅ `fc1b6a537` |
+| RRC-004 | Tests, test infrastructure and CI | ✅ `643b587d5` |
 | RRC-005 | Live documentation, historical banners, tombstones, curated-set policy | ⬜ |
-| RRC-006 | Regression guard: exact 25-identity whitelist and permanently retired IDs | ⬜ |
+| RRC-006 | Regression guard: exact 25-identity whitelist and permanently retired IDs | ✅ |
 | RRC-007 | Second pass: stale-reference audit and code-quality cleanup | ⬜ |
 | RRC-008 | Build matrix, negative configure matrix, full test corpus, closing report | ⬜ |
 
@@ -251,12 +251,48 @@ representative build succeed.
 
 ## RRC-006 — Regression guard
 
-- [ ] `scripts/check_renderer_identities.py` checks the exact whitelist (names, enum names and C ABI
+- [x] `scripts/check_renderer_identities.py` checks the exact whitelist (names, enum names and C ABI
       values), the retired table (26 values including `SKIA`), that no live identity uses a retired
       name or value, that `CNA/C/graphics.h` defines exactly the live constants with those values and
       `MAXIMUM` = the highest, and that the CMake retired list matches the script's.
-- [ ] A `cmake -P` negative-configure test per retired identity, registered in CTest.
-- [ ] `GraphicsRendererDescriptorTests`' identity tripwire at 25.
+- [x] A `cmake -P` negative-configure test per retired identity, registered in CTest.
+- [x] `GraphicsRendererDescriptorTests`' identity tripwire at 25.
+
+**Evidence.** `IDENTITIES` now pins each identity's C ABI value per row rather than by position, a
+new `RETIRED_IDENTITIES` table pins all 26 reserved values, and `NEXT_FREE_ABI_VALUE` is 52.
+`check_abi_contract()` and `check_no_retired_selectors()` hold those against
+`modules/c-api/include/CNA/C/graphics.h`, `modules/c-api/src/CnaCApiCoreExt.cpp`'s
+`RendererIdentities[]`, `cmake/RendererIdentities.cmake` and the C++ enum.
+
+The guard was verified by breaking the tree four ways and confirming each is caught, then restoring:
+
+| Injected fault | Caught as |
+|---|---|
+| `VULKAN` renumbered 8 → 7 (reusing bgfx's reserved value) | "a surviving renderer's C ABI value must never be renumbered" |
+| `CNA_GRAPHICS_RENDERER_BGFX` republished in `graphics.h` | "the value stays reserved; the constant does not stay published" |
+| `BGFX` added back to `CNA_RENDERER_PUBLIC_IDENTITIES` | STRINGS divergence **and** "is retired but appears in CNA_RENDERER_PUBLIC_IDENTITIES" |
+| `RLGL=51` dropped from the CMake retired list | the two retired tables "disagree ... one of the two is refusing the wrong set" |
+
+`cmake/Tests/RendererRetiredIdentityCase.cmake` runs `cmake/RendererIdentities.cmake` in `cmake -P`
+script mode and asserts the outcome per selection, on three routes (`CNA_GRAPHICS_RENDERER`, a
+member of `CNA_GRAPHICS_RENDERERS`, and `CNA_RENDERER_<X>=ON`). `cmake/Tests/ModuleProbes.cmake`
+generates one REFUSE case **per entry of `CNA_RENDERER_RETIRED_IDENTITIES`**, so retiring a
+renderer cannot add a name to the refusal list without also adding its test, plus eight route and
+control cases. The expected text is `removed-renderers.md`, the one phrase the retired message has
+and the unknown-name message does not — so the test proves a retired selector is refused *as
+retired*, not merely as unknown.
+
+`ctest -R CnaRendererRetired` → **34/34 passed in 1.03 s** (26 identity sweeps + 8 route/control
+cases). Direct sweeps outside ctest: all **26** retired identities refused with the retired-specific
+message, all **25** live identities accepted. Two deliberate inversions (`VULKAN` expected REFUSE,
+`BGFX` expected ACCEPT) both fail, so the harness discriminates rather than passing everything.
+
+**Regression this caused and fixed.** Widening `IDENTITIES` from 2-tuples to 3-tuples broke two
+sibling gates that scrape the table with a regex: `check_renderer_combinations.py` (reported
+`SVG_DOM` and `METAL` as "not a public renderer identity") and `check_cnaext_matrix.py` (its
+anchored pattern matched nothing, and its own no-match tripwire then reported the parse as broken).
+Both patterns now match the first two fields without anchoring on the closing paren. Found by
+running all five renderer gates rather than only the one being edited.
 
 ## RRC-007 — Second pass
 
@@ -276,7 +312,15 @@ representative build succeed.
 
 ## Findings outside scope
 
-Recorded, not fixed here.
+Recorded, not fixed here. Every one of these is independent of the renderer retirement: each
+reproduces on `next` before this branch, and fixing them would be unrelated refactoring.
 
 | Item | Class |
 |---|---|
+| `plans/plan_gdi.md` links 9 pre-modularization paths (`../src/CNA/Internal/Backends/...`, `../cmake/BackendSelection.cmake`, `../cmake/CnaLibrary.cmake`). Broken by the Phase-3 physical move, not by this work. | Stale link, pre-existing |
+| `plans/plan_graphics.md` links `plan_graphics_20260708.md` and `plan_graphics_20260709.md`, which are not in the tree. | Stale link, pre-existing |
+| `misc/cnj.md` links `xnb.md` and `plans/plan_xnb.md` as if from the repo root, but the file is in `misc/`, so both resolve one level too high. The targets exist. | Stale link, pre-existing |
+| `misc/CNAEXT.md` links `docs/cnaext-nova3d.md`, which does not exist (same root-relative mistake, or a document never written). | Stale link, pre-existing |
+| 25 apparent "dead links" in `docs/input-public-api-frozen.md`, `docs/model-content-pipeline-support.md`, `docs/viewport-displaymode-adapter-support.md`, `docs/xna-content-pipeline-parity-report.md` and `plans/plan_graphics.md` are false positives: C++ generic arguments (`std::vector<int>`, `Keys`, `intcs`) that a markdown link checker reads as `[text](target)`. Nothing to fix. | Not a defect |
+| 8 headless example targets fail to compile/link in an X11 multi-renderer build (`SDL_GetError` undefined). Present in the pre-work baseline; unrelated to renderer identities. | Pre-existing build defect |
+| No surviving renderer sets `needsSurfacePresenter`, so the `TERMINAL` platform has no renderer that presents CPU frames into a terminal. `BLEND2D` was the only one, and it was retired. This is a **consequence** of the curation, recorded rather than hidden; closing it needs an owner decision (teach `SOFTWARE` to use a surface presenter, or accept that `TERMINAL` is validation-only). | Consequence, needs owner decision |
