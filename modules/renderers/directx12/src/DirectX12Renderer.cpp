@@ -207,11 +207,19 @@ namespace CNA::Internal::Renderers::DirectX12
                     throw System::NotSupportedException(
                         "DirectX12 multi-stream input requires every per-vertex buffer to carry "
                         "a VertexDeclaration.");
-                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
                 {
-                    auto combined = source;
+                    auto combined = elements[elementIndex];
                     combined.setOffsetProperty(
-                        source.getOffsetProperty() + stream.combinedByteBase);
+                        combined.getOffsetProperty() + stream.combinedByteBase);
+                    // plans/plan_directx12_parity.md DX12-0012 (DirectX11's WINCLOSE-0033): XNA and
+                    // FNA3D move a (usage, index) pair an earlier bound stream already claimed to
+                    // that usage's first free index, and GraphicsDevice records the result per
+                    // element. The declaration's own index handed CreateGraphicsPipelineState two
+                    // POSITION0 or COLOR0 elements, which it refuses.
+                    if (static_cast<int>(elementIndex) < stream.effectiveUsageIndexCount)
+                        combined.setUsageIndexProperty(stream.effectiveUsageIndices[elementIndex]);
                     combinedElements.push_back(combined);
                 }
             }
@@ -1779,6 +1787,7 @@ namespace CNA::Internal::Renderers::DirectX12
         samplerCache_ = D3D12SamplerCache();
         defaultWhiteTexture_.reset();
         defaultFlatNormalTexture_.reset();
+        defaultOpaqueBlackTexture_.reset();
         // Any bound off-screen target has already released its old native handles through the
         // recovery registry. Drop the binding now; the same public target object is reconstructed
         // below and can be rebound by the caller after DeviceReset.
@@ -2093,6 +2102,20 @@ namespace CNA::Internal::Renderers::DirectX12
             defaultWhiteTexture_ = CreateTexture(img);
         }
         return defaultWhiteTexture_.get();
+    }
+
+    ITextureRenderer* DirectX12Renderer::GetOrCreateDefaultOpaqueBlackTextureEXT()
+    {
+        if (!defaultOpaqueBlackTexture_)
+        {
+            ImageData img;
+            img.width = 1;
+            img.height = 1;
+            img.mipLevels = 1;
+            img.pixels = {0, 0, 0, 255};
+            defaultOpaqueBlackTexture_ = CreateTexture(img);
+        }
+        return defaultOpaqueBlackTexture_.get();
     }
 
     ITextureRenderer* DirectX12Renderer::GetOrCreateDefaultFlatNormalTextureEXT()
@@ -3704,6 +3727,10 @@ namespace CNA::Internal::Renderers::DirectX12
             srvTextures[0] = params.texture0 != nullptr
                 ? params.texture0
                 : GetOrCreateDefaultWhiteTextureEXT();
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                c.Texture0ChannelMask, c.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&c, sizeof(c));
         }
@@ -3731,6 +3758,22 @@ namespace CNA::Internal::Renderers::DirectX12
             fog.FogVector[1] = params.fogVector[1];
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of both sampled textures.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                fog.Texture0ChannelMask, fog.Texture0ChannelFill);
+            if (params.texture1 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture1->GetSurfaceFormatEXT(),
+                                                fog.Texture1ChannelMask, fog.Texture1ChannelFill);
+
+            // Resolved before any frame constant is allocated: creating a fallback texture uploads
+            // synchronously, which can submit the current frame segment.
+            srvTextures[0] = params.texture0 != nullptr
+                ? params.texture0
+                : GetOrCreateDefaultOpaqueBlackTextureEXT();
+            srvTextures[1] = params.texture1 != nullptr
+                ? params.texture1
+                : GetOrCreateDefaultOpaqueBlackTextureEXT();
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             const D3D12_GPU_VIRTUAL_ADDRESS fogAddress =
@@ -3740,13 +3783,6 @@ namespace CNA::Internal::Renderers::DirectX12
             // unread) address rather than leaving a root descriptor unset.
             cbAddresses[1] = cbAddresses[0];
             cbAddresses[2] = fogAddress;
-
-            srvTextures[0] = params.texture0 != nullptr
-                ? params.texture0
-                : GetOrCreateDefaultWhiteTextureEXT();
-            srvTextures[1] = params.texture1 != nullptr
-                ? params.texture1
-                : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsEnvMap)
         {
@@ -3803,6 +3839,14 @@ namespace CNA::Internal::Renderers::DirectX12
             c.Light2Diffuse[0] = params.light2Diffuse[0];
             c.Light2Diffuse[1] = params.light2Diffuse[1];
             c.Light2Diffuse[2] = params.light2Diffuse[2];
+            // DX12-0012 (WINCLOSE-0022/0026): Direct3D 9 channel expansion of the environment cube
+            // and of the base texture.
+            if (params.envMap != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.envMap->GetSurfaceFormatEXT(),
+                                                c.EnvMapChannelMask, c.EnvMapChannelFill);
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                c.Texture0ChannelMask, c.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             const D3D12_GPU_VIRTUAL_ADDRESS envAddress =
@@ -4027,6 +4071,10 @@ namespace CNA::Internal::Renderers::DirectX12
             extra.EmissiveColor[0] = params.emissiveColor[0];
             extra.EmissiveColor[1] = params.emissiveColor[1];
             extra.EmissiveColor[2] = params.emissiveColor[2];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                extra.Texture0ChannelMask, extra.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             cbAddresses[1] = AllocateFrameConstantDataEXT(&bones, sizeof(bones));
@@ -4095,6 +4143,10 @@ namespace CNA::Internal::Renderers::DirectX12
             lighting.FogVector[1] = params.fogVector[1];
             lighting.FogVector[2] = params.fogVector[2];
             lighting.FogVector[3] = params.fogVector[3];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                lighting.Texture0ChannelMask, lighting.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             cbAddresses[1] = AllocateFrameConstantDataEXT(&lighting, sizeof(lighting));
@@ -4122,6 +4174,10 @@ namespace CNA::Internal::Renderers::DirectX12
             fog.FogVector[1] = params.fogVector[1];
             fog.FogVector[2] = params.fogVector[2];
             fog.FogVector[3] = params.fogVector[3];
+            // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
+            if (params.texture0 != nullptr)
+                D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
+                                                fog.Texture0ChannelMask, fog.Texture0ChannelFill);
 
             cbAddresses[0] = AllocateFrameConstantDataEXT(&perDraw, sizeof(perDraw));
             cbAddresses[1] = AllocateFrameConstantDataEXT(&fog, sizeof(fog));
@@ -4312,7 +4368,11 @@ namespace CNA::Internal::Renderers::DirectX12
         // field is named "Vp" (view*projection only, world comes from the per-instance buffer
         // instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DPerDrawConstants perDraw{};
-        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
+        // plans/plan_directx12_parity.md DX12-0012 (DirectX11's WINCLOSE-0034): the effect's World
+        // composes AFTER each instance's own matrix -- instanceWorld * World * View * Projection, as
+        // EasyGL, Software, Vulkan and DirectX11 apply it. View * Projection alone ignored an
+        // Effect.World set on an instanced draw.
+        const Matrix vp = ApplyXnaPixelCenterEXT(world * view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];
