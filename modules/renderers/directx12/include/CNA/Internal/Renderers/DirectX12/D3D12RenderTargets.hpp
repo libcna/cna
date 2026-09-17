@@ -113,6 +113,26 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Stores a whole level-zero image in the sampleable colour resource.
+         *
+         * plans/plan_directx12_parity.md DX12-0014 (DirectX11's WINCLOSE-0025). RenderTarget2D is a
+         * Texture2D, and Texture2D::SetData reaches the renderer only through these hooks, whose
+         * default does nothing -- so SetData on a DirectX 12 render target returned normally and
+         * stored nothing, and the next GetData read the target's old content.
+         *
+         * @param data   Tightly packed or @p stride-pitched rows in the target's SurfaceFormat.
+         * @param stride Source row pitch in bytes, or zero for width times the texel size.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+        /**
+         * @brief Stores one whole mip level in the sampleable colour resource.
+         * @param level  Mip level to write; out-of-range levels are ignored.
+         * @param data   Tightly packed rows in the target's SurfaceFormat.
+         * @param levelW Level width; a mismatch with the level's real width is ignored.
+         * @param levelH Level height; a mismatch with the level's real height is ignored.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
 
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
@@ -283,6 +303,33 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Seeds a region of one face's mip level with format-native texels.
+         *
+         * plans/plan_directx12_parity.md DX12-0014 (DirectX11's WINCLOSE-0017). XNA's RenderTargetCube
+         * is a TextureCube, so SetData is part of its API; this renderer inherited the interface's
+         * refusal although its colour resource is an ordinary sampleable cube. A multisampled cube
+         * still refuses: its sampleable content is the resolve copy UnbindAsRenderTarget() writes.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the region, in texels.
+         * @param y          Top edge of the region, in texels.
+         * @param w          Width of the region, in texels.
+         * @param h          Height of the region, in texels.
+         * @param data       Tightly packed rows in the target's SurfaceFormat, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * format bytes per texel.
+         * @return True once the region was recorded for upload; false for an out-of-range
+         *         face/level/region, a short buffer, or a multisampled target.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /** @brief Declared-format upload; the same exact bytes SetData() stores. */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /** @brief Declared-format readback; the same exact bytes GetData() returns. */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
 
     private:
         /// DX-144: CPU box-filter downsample cascade, per face, base level (0) -> levelCount_-1,
