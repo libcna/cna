@@ -67,7 +67,14 @@ Remove-Item $stdout, $stderr, $rcFile -Force -ErrorAction SilentlyContinue
 
 # A .cmd wrapper rather than passing the program straight to the task: it is what captures the exit
 # code and the two streams on the far side, where nothing of this session survives.
-$quoted = ($Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+# The line is read by cmd.exe, not by a shell that leaves arguments alone: `& | < > ^ ( )` are operators
+# or escapes outside double quotes (a ctest -R alternation became a pipe and the run ended in 20 s with
+# no report, plans/plan_directx12_parity.md DX12-0030), and a batch file expands `%` even inside quotes,
+# so it is doubled.
+$quoted = ($Arguments | ForEach-Object {
+    $argument = $_ -replace '%', '%%'
+    if ($argument -match '[\s"&|<>^()]') { '"' + ($argument -replace '"', '\"') + '"' } else { $argument }
+}) -join ' '
 $cmd = Join-Path $OutDir "$Name.run.cmd"
 # UTF-8 without a BOM, switched to code page 65001 on its second line. It used to be written as
 # ASCII, which turned every character of a non-ASCII executable, argument or working directory
