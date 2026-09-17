@@ -304,8 +304,8 @@ typedef void (*CNA_RenderTargetContentLostCallback)(
  * @brief Subscribes to a render target's ContentLost event.
  *
  * Raised when a renderer reports that it lost and recreated its device, which destroys the
- * contents of default-pool resources. **Only three renderer families can report that** --
- * `DIRECTX9`, `DIRECT2D` and `SKIA`. The rest never lose a device, so they never raise this, and a
+ * contents of default-pool resources. **Only two renderer families can report that** --
+ * `DIRECTX9` and `DIRECT2D`. The rest never lose a device, so they never raise this, and a
  * subscription on them is valid and simply silent. A caller-initiated
  * `cna_graphics_device_reset*` does not raise it either: the event means a renderer really lost
  * content, not that a reset happened.

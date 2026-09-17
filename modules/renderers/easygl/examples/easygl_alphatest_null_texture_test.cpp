@@ -98,8 +98,8 @@ class AlphaTestNullTextureTest : public Game
         {
             dev.Clear(kBackground);
             dev.setBlendStateProperty(BlendState::Opaque);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's
-            // winding is culled by the real default RasterizerState once EasyGL pushes it at
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this
+            // quad's winding is culled by the real default RasterizerState once EasyGL pushes it at
             // construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);

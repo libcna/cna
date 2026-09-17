@@ -117,7 +117,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads pixel data to a Color-compatible texture.
          *
-         * In a Skia build, ColorBgraEXT and ColorSrgbEXT also use this overload. Each Color's
+         * On a renderer that promotes them, ColorBgraEXT and ColorSrgbEXT also use this
+         * overload. Each Color's
          * R/G/B/A properties name the four raw transfer bytes in order; ColorBgraEXT sampling
          * therefore interprets those bytes as B/G/R/A, while ColorSrgbEXT decodes RGB once.
          * @param data         Pointer to the Color array.

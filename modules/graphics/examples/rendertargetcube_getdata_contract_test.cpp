@@ -1191,10 +1191,10 @@ class RenderTargetCubeGetDataContractTest : public Game
      * @brief W1 -- how a face UPLOADED through the inherited TextureCube::SetData relates to the
      *        same face read back.
      *
-     * EasyGL and Skia implement this upload; other renderers inherit the deterministic refusal.
+     * EasyGL implements this upload; other renderers inherit the deterministic refusal.
      * Where it is implemented, the round trip is measured rather than assumed because rendered
      * and uploaded writers need not share row orientation. Current EasyGL normalizes both writers
-     * to the same top-row-first public order, as does Skia's canonical CPU transfer shadow.
+     * to the same top-row-first public order.
      */
     void RunUploadRoundTrip(GraphicsDevice& dev)
     {

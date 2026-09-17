@@ -661,7 +661,7 @@ namespace
         //
         // Hardware instancing is this whole file's subject and needs BOTH a 3D pipeline and an
         // instancing path, so both capabilities are gated: a renderer with no 3D pipeline at all
-        // (e.g. OPENVG) and a renderer whose profile reports GraphicsCapability::Instancing =
+        // (e.g. SDL_RENDERER) and a renderer whose profile reports GraphicsCapability::Instancing =
         // false (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no glDrawElementsInstanced/
         // glVertexAttribDivisor, see docs/opengles2-renderer.md) each skip every leg here up
         // front.

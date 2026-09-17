@@ -7493,7 +7493,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsBackendCategory` and the `CNA_GRAPHICS_BACKEND_CATEGORY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies all 46 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies all 25 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7526,7 +7526,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 46 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
+      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 25 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
       "tests": "`CoreExtSmoke.c` classifies all 46 identities, pins three fixed answers a consumer can rely on, and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7556,7 +7556,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsBackendMaturity` and the `CNA_GRAPHICS_BACKEND_MATURITY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of all 46 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of all 25 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7589,7 +7589,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 46 public renderer identities and refuses anything else",
+      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 25 public renderer identities and refuses anything else",
       "tests": "`CoreExtSmoke.c` reads the maturity of all 46 identities and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",

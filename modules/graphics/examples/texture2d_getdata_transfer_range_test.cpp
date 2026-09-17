@@ -776,7 +776,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         //      level-0-sized capacity requirement (91) would wrongly reject this legal call and a
         //      level-0-sized region would wrongly demand 91 elements of output. A separate
         //      MIPMAPPED texture is used: uploading a level a non-mipmapped resource does not have
-        //      is rejected by the renderers that validate it (WebGPU, bgfx) and is not what this
+        //      is rejected by the renderers that validate it (WebGPU) and is not what this
         //      check is about.
         {
             if (kMipPolicy == MipPolicy::RejectConstruction)

@@ -296,10 +296,37 @@ running all five renderer gates rather than only the one being edited.
 
 ## RRC-007 — Second pass
 
-- [ ] Multi-spelling stale-reference audit rerun; every remaining hit classified as active (fixed),
+- [x] Multi-spelling stale-reference audit rerun; every remaining hit classified as active (fixed),
       historical, or retired-ID documentation.
 - [ ] Empty directories, dead includes and forward declarations, unused helpers, orphaned shaders and
       patches, stale TODOs, CMake variables without readers, dead links.
+
+### The stale-reference audit, and what "explain every remaining reference" means
+
+Spellings swept, for each of the 26 retired identities: the CMake selector (`BGFX`), the enum
+spelling (`Bgfx`), the upstream/lowercase form (`bgfx`) and the compile definition
+(`CNA_RENDERER_BGFX`). `scripts/` + `cmake/` + `modules/` + every `.md`.
+
+**Production code and build files carry no reference to a retired renderer as a live thing.** What
+remains is classified below; `scratchpad/classify.py` reproduces the counts. The rule that decides
+a bucket is a single question: *read today, does this sentence make a claim about what CNA
+currently supports?*
+
+| Class | Where | Disposition |
+|---|---|---|
+| **(a) Active claim** | A renderer list, a build/run instruction, a capability sentence in the present tense | **Fixed.** Includes the two glTF PBR refusal *runtime messages*, which named six retired renderers as alternatives for a user to switch to — the worst kind, because a user would follow the advice and hit a configure refusal. The real lists were derived from the guards' actual call sites, not guessed. Also the C ABI and XNA header docs naming `SKIA` as a device-reset renderer, `GraphicsCapability`'s 2D-only and volume-storage prose, `SpriteBatch::DrawMeshEXT`'s "implemented only by the Skia renderer", and `needsSurfacePresenter`'s "(SKIA, BLEND2D)" |
+| **(b) Legitimate historical** | 376 comment sites in `modules/*/tests/` and `modules/*/examples/` | **Kept, tagged.** These are dated task records (`REMED-GFX-###`, `Task ###`, `SKIA-###`) and defect analyses that explain *why a shared test exists* — `rendertarget_first_use_test.cpp` carries a 40-line reading of a bgfx-local defect, quoting bgfx's own source. Deleting them would destroy the reason the test is there while changing nothing about the tree. The first mention in a block gets `(retired 2026-09-17)` |
+| **(c) Retired-ID documentation** | `CNA/C/graphics.h`'s reserved-value comment, `cmake/RendererIdentities.cmake`, `scripts/check_renderer_identities.py`, `docs/removed-renderers.md`, `docs/renderer-registry.md`, `docs/c-api/ABI_VERSIONING.md`, `CLAUDE.md`/`AGENTS.md` | **Required to exist.** These *are* the record that a value is reserved. Removing them is how a value gets reused |
+| **(d) Frozen archives** | `audit/` (321 files), `remediation/`, `modularization/`, `integration/lanes/`, `spikes/`, per-renderer `plans/plan_*.md`, `NEXT*.md`, `handoff_*.md` | **Kept verbatim, bannered.** One banner per archive index rather than edits to ~300 files: they record audits that really ran against the tree of their own date, and rewriting them would destroy that. The banner says the archive predates the curation and names what no longer exists |
+
+Two judgement calls worth stating plainly. `docs/runtime-renderer-selection.md` keeps an `LLGL`
+fallback transcript and an `LLGL` binary-size row: both are *measurements that really happened*,
+the transcript is the only genuine (not simulated) environmental failure on record, and the size
+row is the only one that includes a large third-party renderer. Both are labelled historical rather
+than deleted or — worse — re-attributed to a surviving renderer, which would have been fabrication.
+The `docs/graphics-renderer-feature-matrix.md` Skia companion matrix went the other way and was
+deleted: every one of its 23 rows cited a `docs/skia-*.md` page or `plans/plan_skia.md` that was
+removed with the renderer in 2026-08, so nothing in it could be checked against anything.
 
 ## RRC-008 — Verification
 
@@ -322,5 +349,8 @@ reproduces on `next` before this branch, and fixing them would be unrelated refa
 | `misc/cnj.md` links `xnb.md` and `plans/plan_xnb.md` as if from the repo root, but the file is in `misc/`, so both resolve one level too high. The targets exist. | Stale link, pre-existing |
 | `misc/CNAEXT.md` links `docs/cnaext-nova3d.md`, which does not exist (same root-relative mistake, or a document never written). | Stale link, pre-existing |
 | 25 apparent "dead links" in `docs/input-public-api-frozen.md`, `docs/model-content-pipeline-support.md`, `docs/viewport-displaymode-adapter-support.md`, `docs/xna-content-pipeline-parity-report.md` and `plans/plan_graphics.md` are false positives: C++ generic arguments (`std::vector<int>`, `Keys`, `intcs`) that a markdown link checker reads as `[text](target)`. Nothing to fix. | Not a defect |
+| `tools/c-api/check_release_gate.py --check` reports the **limitations-matrix** criterion unmet: `generate_limitations.py` raises `RuntimeError: Explicit coverage rules matched no symbols: sprite-batch-begin-explicit-state`. Verified pre-existing by running the same tool in a worktree at the baseline commit `c0225e9d5`, where it fails with **four** unused rules rather than one — so this workstream did not cause it and in fact reduced it. The rule targets `SpriteBatch::Begin`, which this branch does not change in any way the parser reads (tested by restoring the committed header and re-running: identical failure). | Pre-existing tool defect |
+| `docs/c-api/RELEASE_GATE.md` is generated and its published header is stale at ABI `0.21.0` while the tree is at `0.28.0`. **Deliberately not regenerated**: `--write` bakes the traceback above into the published document as a criterion's "measurement", which is worse than a stale version line. Regenerating is correct once the limitations generator is fixed, and belongs to whoever owns that tool. | Pre-existing, blocked on the above |
 | 8 headless example targets fail to compile/link in an X11 multi-renderer build (`SDL_GetError` undefined). Present in the pre-work baseline; unrelated to renderer identities. | Pre-existing build defect |
 | No surviving renderer sets `needsSurfacePresenter`, so the `TERMINAL` platform has no renderer that presents CPU frames into a terminal. `BLEND2D` was the only one, and it was retired. This is a **consequence** of the curation, recorded rather than hidden; closing it needs an owner decision (teach `SOFTWARE` to use a surface presenter, or accept that `TERMINAL` is validation-only). | Consequence, needs owner decision |
+| `SpriteBatch::DrawMeshEXT` — the 2D triangle-mesh entry point — now has **no implementer**. It was added for Skia's bounded `SkVertices`/SkSL mesh ABI (`SKIA-144`–`157`) and Skia was retired in 2026-08; `IGraphicsRenderer::DrawMeshEXT`'s base implementation throws, and no renderer overrides it. The public CNAEXT method, its C ABI route (`CnaCApiGraphics.cpp`) and its shared sort-mode test all still exist and behave correctly — every renderer refuses, which is exactly what they did when Skia existed. **Not removed here:** deleting it would break the published C ABI, and it is not one of the 25 renderers this workstream retires. Comments corrected to stop implying Skia is present. Whether the surface stays is an owner decision. | Consequence, needs owner decision |

@@ -65,8 +65,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_SDL_GPU
     ++enabled;
 #endif
-    // plans/plan_opengles1.md: same class of gap DX2-84's comment above documents -- a new renderer that
-    // never gets an entry here makes this test report 0 enabled renderers rather than 1.
+    // plans/plan_opengles1.md (retired 2026-09-17): same class of gap DX2-84's comment above
+    // documents -- a new renderer that never gets an entry here makes this test report 0 enabled
+    // renderers rather than 1.
 #ifdef CNA_RENDERER_OPENGL4
     ++enabled;
 #endif
@@ -75,9 +76,10 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // CnaTests suite had never actually been run under CNA_GRAPHICS_RENDERER=OPENGL1 until this
     // audit did so.
     // plans/plan_wicked.md: same gap class the D3D9 comment above documents -- the registration union
-    // that added the WICKED identity everywhere else never conflicted on this file, so its silent
-    // omission surfaced only when the full CnaTests suite first ran under
-    // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers.
+    // that added the WICKED identity (retired 2026-09-17) everywhere else never conflicted on this
+    // file, so its silent omission surfaced only when the full CnaTests suite first ran under
+    // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers. The trap is not
+    // specific to that identity: this counter must gain an arm for every renderer that is added.
 #ifdef CNA_RENDERER_GDI
     ++enabled;
 #endif

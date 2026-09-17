@@ -103,9 +103,9 @@ class BasicEffectFogVulkanTest : public Game
         fx.setFogColorProperty(fogColor);
         fx.setFogStartProperty(fogStart);
         fx.setFogEndProperty(fogEnd);
-        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
-        // quad winding used throughout this pixel-test family is culled once the real
-        // default RasterizerState reaches the GPU.
+        // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): the standard
+        // NDC quad winding used throughout this pixel-test family is culled once the real default
+        // RasterizerState reaches the GPU.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 

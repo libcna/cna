@@ -4,7 +4,7 @@
  *
  * Exercises the XNA-like 3D subset (Vector3 / Matrix / VertexPositionColor /
  * VertexBuffer / IndexBuffer / BasicEffect / GraphicsDevice) with the EasyGL
- * renderer. SDL_Renderer and bgfx still throw a clear "3D not supported" error.
+ * renderer. A 2D-only renderer such as SDL_Renderer throws a clear "3D not supported" error.
  *
  * The scene is composed entirely from colored axis-aligned boxes built by the
  * demo-local AddBox / AddGround / AddFence / AddTree / AddPath helpers. No

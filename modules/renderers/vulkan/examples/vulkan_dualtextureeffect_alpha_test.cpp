@@ -94,9 +94,9 @@ protected:
         fx.setTexture2Property(&texWhite);
         fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
         fx.setAlphaProperty(0.5f);
-        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
-        // quad winding used throughout this pixel-test family is culled once the real
-        // default RasterizerState reaches the GPU.
+        // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): the standard
+        // NDC quad winding used throughout this pixel-test family is culled once the real default
+        // RasterizerState reaches the GPU.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);

@@ -261,7 +261,12 @@ namespace CNA::Internal::Renderers
          * whichever macros are defined rather than for the family being constructed, so the
          * question moves here, where it is answered per family.
          *
-         * True for the CPU-raster families that present through the platform (SKIA, BLEND2D).
+         * True for a CPU-raster family that presents through the platform rather than owning a
+         * swap chain. **No renderer in the tree sets it today**: the two that did, SKIA and
+         * BLEND2D, were retired in 2026-08 and on 2026-09-17. The field and
+         * `IPlatformSurfacePresenter` stay because the platform side is what a terminal or
+         * framebuffer target presents through -- see `plans/plan_renderer_cleanup.md`, which
+         * records that the `TERMINAL` platform now has no renderer that feeds it.
          */
         bool needsSurfacePresenter = false;
 

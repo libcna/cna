@@ -500,8 +500,8 @@ namespace Microsoft::Xna::Framework::Graphics
                         float layerDepth);
 
         /**
-         * @brief Draws a triangle-list 2D mesh through @p effect's own bounded SkVertices/SkSL
-         * mesh shader (SKIA-144-157, CNA_SKIA_SKSL_MESH_V1), composed with this SpriteBatch's
+         * @brief Draws a triangle-list 2D mesh through @p effect's own compiled mesh shader,
+         * composed with this SpriteBatch's
          * active transform matrix exactly like an ordinary sprite draw. An entirely different draw
          * primitive from every `Draw(Texture2D, ...)` overload above, which always submits one
          * quad; @p colors/@p uvs may be null when @p effect's own compiled program needs neither
@@ -511,11 +511,13 @@ namespace Microsoft::Xna::Framework::Graphics
          *       `SpriteSortMode::Immediate`: unlike ordinary sprite `Draw()` calls, a mesh draw
          *       does not participate in the deferred sort/batch queue, so it throws if the active
          *       `Begin()` used any other sort mode -- a declared, tested scope boundary, not a
-         *       silent misbatch. Currently implemented only by the Skia renderer; every other
-         *       renderer's `ISpriteBatchRenderer` throws `std::runtime_error` (matching `Draw()`'s
-         *       own existing "renderer does not support this" convention).
+         *       silent misbatch. **No renderer in the tree implements it today**: it was added
+         *       for the Skia renderer's bounded `SkVertices`/SkSL mesh ABI (`SKIA-144`-`157`) and
+         *       Skia was retired in 2026-08, so every renderer's `ISpriteBatchRenderer` throws
+         *       `std::runtime_error` (matching `Draw()`'s own existing "renderer does not support
+         *       this" convention). See `plans/plan_renderer_cleanup.md`.
          *
-         * @param effect      A `ShaderEffect` compiled from `CNA_SKIA_SKSL_MESH_V1` source.
+         * @param effect      A `ShaderEffect` compiled from a renderer's own mesh-shader source.
          * @param positions   Per-vertex 2D positions, in the same local space ordinary sprite
          *                    `Draw()` destination rectangles use. Must not be null.
          * @param colors      Optional per-vertex tint colours (straight alpha), or `nullptr`.

@@ -250,9 +250,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     # skipped, and said so.
     if(TARGET SDL3::SDL3)
         # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
-        # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
-        # production changed; this renderer is registered to show the construction was always legal
-        # and to keep it that way.
+        # RenderTarget2D construction and lifecycle that aborted the process on Bgfx, a renderer
+        # retired on 2026-09-17. Only Bgfx production changed; this renderer is registered to show
+        # the construction was always legal and to keep it that way.
         cna_headless_test(cna_test_headless_msaa_depth_contract
             ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_depth_contract_test.cpp)
         cna_register_renderer_test(NAME Headless_MsaaDepthContract COMMAND cna_test_headless_msaa_depth_contract

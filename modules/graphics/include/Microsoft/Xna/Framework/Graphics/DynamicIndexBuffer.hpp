@@ -56,7 +56,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Raised when this index buffer's content is lost to a device reset.
          *
          * Raised for real on the renderers whose API can lose a device (DirectX9,
-         * Direct2D, Skia). Families that cannot lose one never raise it.
+         * Direct2D). Families that cannot lose one never raise it.
          */
         System::EventHandler<System::EventArgs> ContentLost;
 

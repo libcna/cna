@@ -15,7 +15,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
 # plans/plan_opengl4.md GL4-1..GL4-12: real desktop OpenGL 4.x core-profile graphics renderer CTest
 # registration. Needs a real display/GPU (or a virtual one, e.g. Xvfb) -- same
-# SDL_VIDEODRIVER=x11/CNA_TEST_DISPLAY convention as the SDL_GPU/Vulkan/Bgfx/D3D11 registrations
+# SDL_VIDEODRIVER=x11/CNA_TEST_DISPLAY convention as the SDL_GPU/Vulkan/D3D11 registrations
 # above; a genuine OpenGL 4.x core-profile context cannot be created without one.
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
     enable_testing()

@@ -296,10 +296,10 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plans/plan_modern.md Phase 16: every renderer descriptor must at least parse. Three of them
-    # (OpenGL1, LLGL, bgfx) were left syntactically broken by one merge and nobody noticed, because
-    # a renderer identity is only compiled when someone selects it -- each was found by building
-    # that renderer, one at a time. This checks all 44 at once, in milliseconds, with no renderer
-    # selected and no compiler involved.
+    # (OpenGL1, LLGL, bgfx -- all three retired on 2026-09-17) were left syntactically broken by one
+    # merge and nobody noticed, because a renderer identity is only compiled when someone selects it
+    # -- each was found by building that renderer, one at a time. This checks every descriptor at
+    # once, in milliseconds, with no renderer selected and no compiler involved.
     if(Python3_Interpreter_FOUND)
         add_test(NAME CNAEXT_RendererDescriptorsParse
                  COMMAND ${Python3_EXECUTABLE}

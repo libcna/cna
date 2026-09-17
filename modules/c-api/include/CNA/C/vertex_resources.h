@@ -25,7 +25,7 @@ typedef CNA_Handle CNA_VertexBufferEventRegistrationHandle;
  * @brief Receives a dynamic vertex-buffer ContentLost notification.
  *
  * CNA raises this on the renderers whose API can actually lose a device (DirectX9,
- * Direct2D, Skia); families that cannot lose one never raise it.
+ * Direct2D); families that cannot lose one never raise it.
  *
  * @param vertex_buffer Dynamic vertex-buffer handle supplied at registration.
  * @param context Caller-owned context supplied at registration.
@@ -468,7 +468,7 @@ CNA_C_API CNA_Result cna_vertex_buffer_get_data_raw(
  * @brief Subscribes to a dynamic vertex buffer's ContentLost event.
  *
  * CNA raises this on the renderers whose API can actually lose a device (DirectX9,
- * Direct2D, Skia); families that cannot lose one never raise it. The callback and context remain caller-owned
+ * Direct2D); families that cannot lose one never raise it. The callback and context remain caller-owned
  * until unregistration or buffer destruction.
  *
  * @param vertex_buffer Dynamic vertex-buffer handle.

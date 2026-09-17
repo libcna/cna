@@ -83,8 +83,9 @@ protected:
             { Vector3( 1.0f, -1.0f, 0.0f), Vector2(1.0f, 0.0f) },
             { Vector3( 1.0f,  1.0f, 0.0f), Vector2(1.0f, 1.0f) },
         };
-        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
-        // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+        // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this quad's
+        // winding is culled by the real default RasterizerState once EasyGL pushes it at
+        // construction.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 

@@ -7,9 +7,9 @@
 // into a shared base class would be a large, high-risk, low-value mechanical refactor; this
 // header exists so *future* single-frame pixel tests can opt in and skip re-typing the same
 // ~20 lines of Game-subclass/main() boilerplate every time. Multi-frame state-machine tests
-// (e.g. examples/bgfx_render_target_usage_test.cpp) have per-test frame/stage logic that does
-// not fit this single-shot shape and should keep hand-rolling their own Game subclass, exactly
-// as they do today.
+// (e.g. examples/rendertarget_depthstencil_usage_test.cpp) have per-test frame/stage logic
+// that does not fit this single-shot shape and should keep hand-rolling their own Game
+// subclass, exactly as they do today.
 //
 // Usage:
 //
@@ -272,8 +272,9 @@ namespace CNA::Examples
         [[nodiscard]] int getResultProperty() const { return result_; }
 
         // Marks the overall result as failed for a check that is not a pixel comparison --
-        // e.g. "this unimplemented path must throw" (plans/plan_sokol.md SOKOL-20). Without this a
-        // derived test could only fail the run through ExpectPixel(), which would mean either
+        // e.g. "this unimplemented path must throw" (plans/plan_sokol.md SOKOL-20, retired
+        // 2026-09-17). Without this a derived test could only fail the run through ExpectPixel(),
+        // which would mean either
         // hand-rolling its own Game subclass for one non-pixel assertion or, worse, printing
         // [FAIL] while still exiting 0. Printing the message stays the caller's job, so the
         // wording can name whatever it actually checked.
