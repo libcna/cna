@@ -827,6 +827,14 @@ TEST(XnbContentPipelineTest, SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentS
         GTEST_SKIP() << "the active renderer draws the atlases but cannot read a render target back";
     }
     ASSERT_EQ(fromCnb.size(), fromXnb.size());
+
+    // The XNB atlas is DXT3 and is decoded by the GPU; the CNB atlas was decoded once, by the
+    // transcoder. BC2's interpolated palette entries are not bit-exact across decoders -- the
+    // VirtualBox Direct3D 11 driver gave 171 where the transcoder and Mesa give 170 (2/3 of 255),
+    // on 1 501 of 16 384 pixels (WINCLOSE-0049). A semantic difference -- a lost or moved glyph,
+    // unpremultiplied alpha, swapped channels -- is far more than one step, so one step is the
+    // tolerance, and anything beyond it is reported pixel by pixel.
+    constexpr int kDecoderRounding = 1;
     std::size_t differing = 0;
     std::size_t first = fromCnb.size();
     int largestDelta = 0;
@@ -838,12 +846,13 @@ TEST(XnbContentPipelineTest, SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentS
             std::abs(int{fromCnb[i].getBProperty()} - int{fromXnb[i].getBProperty()}),
             std::abs(int{fromCnb[i].getAProperty()} - int{fromXnb[i].getAProperty()})};
         const int delta = *std::max_element(deltas.begin(), deltas.end());
-        if (delta == 0) continue;
-        if (differing++ == 0) first = i;
         largestDelta = std::max(largestDelta, delta);
+        if (delta <= kDecoderRounding) continue;
+        if (differing++ == 0) first = i;
     }
     EXPECT_EQ(differing, 0u)
-        << "of " << fromCnb.size() << " pixels; largest channel difference " << largestDelta
+        << "pixels differ by more than " << kDecoderRounding << " of " << fromCnb.size()
+        << "; largest channel difference " << largestDelta
         << (differing == 0 ? std::string() :
             "; first at (" + std::to_string(first % atlasWidth) + ", " +
             std::to_string(first / atlasWidth) + "): CNB " + fromCnb[first].ToString() + ", XNB " +
