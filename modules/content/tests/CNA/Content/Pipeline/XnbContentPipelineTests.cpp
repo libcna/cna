@@ -4,6 +4,7 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -61,6 +62,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
@@ -811,7 +813,41 @@ TEST(XnbContentPipelineTest, SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentS
         return pixels;
     };
 
-    EXPECT_EQ(renderAtlas(b.getTextureEXT()), renderAtlas(a.getTextureEXT()));
+    // Compared pixel by pixel: gtest prints only a vector's first 32 elements, which for a font
+    // atlas are its transparent corner on both sides, so a plain vector comparison names nothing.
+    std::vector<Color> fromCnb;
+    std::vector<Color> fromXnb;
+    try
+    {
+        fromCnb = renderAtlas(b.getTextureEXT());
+        fromXnb = renderAtlas(a.getTextureEXT());
+    }
+    catch (const System::NotSupportedException&)
+    {
+        GTEST_SKIP() << "the active renderer draws the atlases but cannot read a render target back";
+    }
+    ASSERT_EQ(fromCnb.size(), fromXnb.size());
+    std::size_t differing = 0;
+    std::size_t first = fromCnb.size();
+    int largestDelta = 0;
+    for (std::size_t i = 0; i < fromCnb.size(); ++i)
+    {
+        const std::array<int, 4> deltas{
+            std::abs(int{fromCnb[i].getRProperty()} - int{fromXnb[i].getRProperty()}),
+            std::abs(int{fromCnb[i].getGProperty()} - int{fromXnb[i].getGProperty()}),
+            std::abs(int{fromCnb[i].getBProperty()} - int{fromXnb[i].getBProperty()}),
+            std::abs(int{fromCnb[i].getAProperty()} - int{fromXnb[i].getAProperty()})};
+        const int delta = *std::max_element(deltas.begin(), deltas.end());
+        if (delta == 0) continue;
+        if (differing++ == 0) first = i;
+        largestDelta = std::max(largestDelta, delta);
+    }
+    EXPECT_EQ(differing, 0u)
+        << "of " << fromCnb.size() << " pixels; largest channel difference " << largestDelta
+        << (differing == 0 ? std::string() :
+            "; first at (" + std::to_string(first % atlasWidth) + ", " +
+            std::to_string(first / atlasWidth) + "): CNB " + fromCnb[first].ToString() + ", XNB " +
+            fromXnb[first].ToString());
 }
 
 TEST(XnbContentPipelineTest, SoundEffectCodecMatrixPreservesDecodedPcmAndMetadata)
