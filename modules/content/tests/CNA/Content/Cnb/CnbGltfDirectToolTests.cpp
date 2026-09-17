@@ -63,7 +63,13 @@ namespace
 
     int RunTool(const std::string& command)
     {
+        // WINCLOSE-0040: cmd.exe cannot open /dev/null, so on Windows every command failed with
+        // exit 1 before the tool ever ran. NUL is its null device.
+#if defined(_WIN32)
+        return std::system((command + " >NUL 2>&1").c_str());
+#else
         return std::system((command + " >/dev/null 2>&1").c_str());
+#endif
     }
 
     std::vector<std::uint8_t> ReadFile(const std::filesystem::path& path)

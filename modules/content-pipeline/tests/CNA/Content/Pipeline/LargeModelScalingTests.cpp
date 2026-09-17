@@ -69,7 +69,13 @@ namespace
     [[nodiscard]] std::string Python()
     {
         const char* const configured = std::getenv("CNA_PYTHON");
+        // WINCLOSE-0040: on Windows the interpreter installs as `python`; `python3` there is the
+        // Microsoft Store alias, which prints "Python was not found" and exits 9009.
+#if defined(_WIN32)
+        return configured == nullptr ? "python" : configured;
+#else
         return configured == nullptr ? "python3" : configured;
+#endif
     }
 
     /** @brief Generates one scale and builds it, or returns false with why. */

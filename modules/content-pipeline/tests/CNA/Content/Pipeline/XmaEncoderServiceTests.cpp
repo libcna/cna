@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -139,6 +140,26 @@ namespace
         return path;
     }
 
+    /**
+     * @brief Runs a stub the way this host can run a script.
+     *
+     * WINCLOSE-0040: the stubs are Python scripts that POSIX runs by their shebang line. Windows
+     * has no shebang execution -- CreateProcess refused every stub with error 193 -- so there
+     * they go through the service's own documented seam for a program that must be run through
+     * another one, `launcher` (the field that exists for `wine`), with the interpreter Windows
+     * installs as `python` (`python3` is only the Microsoft Store alias there). CNA_PYTHON
+     * overrides it, as it does for the large-model generator.
+     */
+    void UseStubLauncher(Build::ExternalXmaEncoderOptions& options)
+    {
+#if defined(_WIN32)
+        const char* const configured = std::getenv("CNA_PYTHON");
+        options.launcher = configured == nullptr ? "python" : configured;
+#else
+        (void)options;
+#endif
+    }
+
     /** @brief The stub that behaves. */
     const char* kGoodStub = R"(#!/usr/bin/env python3
 import struct, sys
@@ -228,6 +249,7 @@ TEST(XmaEncoderService, AnAttachedEncoderIsDrivenByTheDocumentedContract)
     const Scratch scratch("attached");
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kGoodStub);
+    UseStubLauncher(options);
     const std::shared_ptr<const Build::XmaEncoderService> encoder =
         Build::MakeExternalXmaEncoder(options);
     ASSERT_TRUE(encoder->Available()) << encoder->UnavailableReason();
@@ -256,6 +278,7 @@ TEST(XmaEncoderService, AnEncoderThatWritesSomethingElseIsRefused)
     const Scratch scratch("wrong");
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kWrongStub);
+    UseStubLauncher(options);
     const AttachedEncoder attached(Build::MakeExternalXmaEncoder(options));
 
     Audio::AudioContent audio(WriteWav(scratch.Path(), "tone.wav"), Audio::AudioFileType::Wav);
@@ -277,6 +300,7 @@ TEST(XmaEncoderService, AnEncoderThatFailsIsReportedInItsOwnWords)
     const Scratch scratch("failing");
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kFailingStub);
+    UseStubLauncher(options);
     const AttachedEncoder attached(Build::MakeExternalXmaEncoder(options));
 
     Audio::AudioContent audio(WriteWav(scratch.Path(), "tone.wav"), Audio::AudioFileType::Wav);
@@ -315,6 +339,7 @@ sys.stderr.write('quality=' + quality + '\n')
 )";
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", stub);
+    UseStubLauncher(options);
     options.arguments = {"--quality", "{quality}", "--in", "{input}", "--out", "{output}"};
     const std::shared_ptr<const Build::XmaEncoderService> encoder =
         Build::MakeExternalXmaEncoder(options);
@@ -340,8 +365,10 @@ TEST(XmaEncoderService, TwoEncodersHaveTwoIdentities)
     const Scratch scratch("identity");
     Build::ExternalXmaEncoderOptions first;
     first.executable = WriteStubEncoder(scratch.Path(), "encoder-a", kGoodStub);
+    UseStubLauncher(first);
     Build::ExternalXmaEncoderOptions second;
     second.executable = WriteStubEncoder(scratch.Path(), "encoder-b", kGoodStub);
+    UseStubLauncher(second);
 
     const std::string one = Build::MakeExternalXmaEncoder(first)->Identity().ToString();
     const std::string other = Build::MakeExternalXmaEncoder(second)->Identity().ToString();
