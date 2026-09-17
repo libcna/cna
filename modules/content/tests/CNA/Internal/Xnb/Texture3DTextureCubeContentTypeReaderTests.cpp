@@ -174,7 +174,7 @@ namespace
     [[nodiscard]] bool DeviceRefusesOptionalPackedFormat(
         SurfaceFormat format, CNA::Internal::Renderers::RendererFormatVerdict verdict)
     {
-        return CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
+        return CNA_RENDERER_IS(DirectX11, DirectX12) && format == SurfaceFormat::Bgra4444 &&
                verdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
     }
 
@@ -320,7 +320,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicUncompressedFormatAndExactBytes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
 
     constexpr std::array<SurfaceFormat, 15> formats{{
         SurfaceFormat::Color,
@@ -379,7 +379,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicCompressedFormatAndExactBlocks)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
 
     constexpr std::array<SurfaceFormat, 3> formats{{
         SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
@@ -550,7 +550,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConst
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        Texture3DReaderPreservesEveryClassicVolumeFormatAndExactBytes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
 
     struct FormatCase
     {
@@ -610,7 +610,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        Texture3DReaderAcceptsDepthDominantMipChainAndPreservesEveryLevel)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
 
     const std::vector<std::vector<std::uint8_t>> expected{
         {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},

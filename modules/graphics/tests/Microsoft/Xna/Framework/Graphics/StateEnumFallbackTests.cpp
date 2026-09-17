@@ -150,7 +150,7 @@ TEST(StateEnumFallbackTest, RendererSeamUsesRecoveredMicrosoftFallbackOrdinals)
 
 TEST(StateEnumFallbackTest, InvalidBlendValuesRenderAsZeroAndAddWhileRemainingObservable)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice device = MakeDevice();
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
@@ -175,7 +175,7 @@ TEST(StateEnumFallbackTest, InvalidBlendValuesRenderAsZeroAndAddWhileRemainingOb
 
 TEST(StateEnumFallbackTest, InvalidCullAndFillRenderAsCullNoneAndSolid)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice device = MakeDevice();
     device.setBlendStateProperty(BlendState::Opaque);
     device.setDepthStencilStateProperty(DepthStencilState::None);
@@ -197,7 +197,7 @@ TEST(StateEnumFallbackTest, InvalidCullAndFillRenderAsCullNoneAndSolid)
 
 TEST(StateEnumFallbackTest, InvalidDepthComparisonRendersAsAlways)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice device = MakeDevice(DepthFormat::Depth24);
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setBlendStateProperty(BlendState::Opaque);
@@ -219,7 +219,7 @@ TEST(StateEnumFallbackTest, InvalidDepthComparisonRendersAsAlways)
 
 TEST(StateEnumFallbackTest, InvalidStencilValuesRenderAsAlwaysAndKeepOnBothWindings)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice device = MakeDevice(DepthFormat::Depth24Stencil8);
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setBlendStateProperty(BlendState::Opaque);
@@ -261,7 +261,7 @@ TEST(StateEnumFallbackTest, InvalidStencilValuesRenderAsAlwaysAndKeepOnBothWindi
 
 TEST(StateEnumFallbackTest, InvalidSpriteSamplerAddressRendersAsWrap)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice device = MakeDevice();
     Texture2D texture(device, 2, 2, false, SurfaceFormat::Color);
     const std::array texels{Color::Red, Color::Green, Color::Blue, Color::White};
@@ -285,7 +285,7 @@ TEST(StateEnumFallbackTest, InvalidSpriteSamplerAddressRendersAsWrap)
 
 TEST(StateEnumFallbackTest, InvalidSpriteSamplerFilterRendersAsLinear)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice device = MakeDevice();
     Texture2D texture(device, 2, 1, false, SurfaceFormat::Color);
     const std::array texels{Color::Red, Color::Green};
@@ -313,7 +313,7 @@ TEST(StateEnumFallbackTest, InvalidSpriteSamplerFilterRendersAsLinear)
 
 TEST(StateNumericFallbackTest, ReferenceStencilUsesTheLowEightBits)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
 
     GraphicsDevice device = MakeDevice(DepthFormat::Depth24Stencil8);
     device.setRasterizerStateProperty(RasterizerState::CullNone);

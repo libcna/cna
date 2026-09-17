@@ -78,7 +78,7 @@ namespace
 
 TEST(GraphicsProfileDrawStateFormatTest, FloatAndHalfTexturesRequirePurePointFiltering)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     constexpr std::array restrictedFormats = {
         SurfaceFormat::Single,
@@ -108,7 +108,7 @@ TEST(GraphicsProfileDrawStateFormatTest, FloatAndHalfTexturesRequirePurePointFil
 
 TEST(GraphicsProfileDrawStateFormatTest, EveryMixedFilterIsRejectedForRestrictedTextures)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     Texture2D texture(draw.device, 2, 2, false, SurfaceFormat::Single);
     draw.effect.setTextureProperty(&texture);
@@ -137,7 +137,7 @@ TEST(GraphicsProfileDrawStateFormatTest, EveryMixedFilterIsRejectedForRestricted
 
 TEST(GraphicsProfileDrawStateFormatTest, NonBlendableTargetsRejectBlendAndAllColorMasks)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     constexpr std::array restrictedFormats = {
         SurfaceFormat::Single,
@@ -174,7 +174,7 @@ TEST(GraphicsProfileDrawStateFormatTest, NonBlendableTargetsRejectBlendAndAllCol
 
 TEST(GraphicsProfileDrawStateFormatTest, HdrBlendableTargetAllowsBlending)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     RenderTarget2D target(
         draw.device, 8, 8, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
@@ -186,7 +186,7 @@ TEST(GraphicsProfileDrawStateFormatTest, HdrBlendableTargetAllowsBlending)
 
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchEnforcesFilteringAtItsRealFlushTime)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     Texture2D texture(draw.device, 2, 2, false, SurfaceFormat::Single);
     SpriteBatch batch(draw.device);
@@ -222,7 +222,7 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchEnforcesFilteringAtItsRealFl
 
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchCarriesFloatExtremesToTheRealRenderer)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     Texture2D texture(draw.device, 1, 1, false, SurfaceFormat::Color);
     const Color red = Color::Red;
@@ -247,7 +247,7 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchCarriesFloatExtremesToTheRea
 
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchRejectsBlendOnNonBlendableTarget)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw;
     Texture2D texture(draw.device, 1, 1, false, SurfaceFormat::Color);
     RenderTarget2D target(
@@ -264,7 +264,7 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchRejectsBlendOnNonBlendableTa
 
 TEST(GraphicsProfileDrawStateFormatTest, ReachNpotTextureRequiresClampOnBothAxes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw(GraphicsProfile::Reach);
     Texture2D texture(draw.device, 3, 5, false, SurfaceFormat::Color);
     draw.effect.setTextureProperty(&texture);
@@ -294,7 +294,7 @@ TEST(GraphicsProfileDrawStateFormatTest, ReachNpotTextureRequiresClampOnBothAxes
 
 TEST(GraphicsProfileDrawStateFormatTest, HiDefNpotTextureAllowsNonClampAddressing)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ProfileDraw draw(GraphicsProfile::HiDef);
     Texture2D texture(draw.device, 3, 5, false, SurfaceFormat::Color);
     draw.effect.setTextureProperty(&texture);
@@ -307,7 +307,7 @@ TEST(GraphicsProfileDrawStateFormatTest, HiDefNpotTextureAllowsNonClampAddressin
 
 TEST(GraphicsProfileDrawStateFormatTest, DeferredSpriteBatchUsesSamplerMutationAtEnd)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

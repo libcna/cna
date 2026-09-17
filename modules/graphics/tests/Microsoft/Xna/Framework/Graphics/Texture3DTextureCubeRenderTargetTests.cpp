@@ -225,7 +225,7 @@ namespace
         // TEXTURECUBE, and its RenderTargetCube renderer now uploads into it with the plain
         // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, Magnum, OpenGL4, Wicked, Igl, Rlgl, DirectX11);
+                               Software, Magnum, OpenGL4, Wicked, Igl, Rlgl, DirectX11, DirectX12);
     }
 }
 
@@ -283,7 +283,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, DirectX12);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

@@ -122,19 +122,19 @@ namespace
 
 TEST(GraphicsProfileDrawLimitTest, PersistentDrawsUseTheReachCeiling)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ExpectPersistentDrawCeiling(GraphicsProfile::Reach, 65'535);
 }
 
 TEST(GraphicsProfileDrawLimitTest, PersistentDrawsUseTheHiDefCeiling)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     ExpectPersistentDrawCeiling(GraphicsProfile::HiDef, 1'048'575);
 }
 
 TEST(GraphicsProfileDrawLimitTest, UserDrawsUseTheProfileCeilingAndReachRejectsWideIndices)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     BoundTriangle reach(GraphicsProfile::Reach);
     BoundTriangle hiDef(GraphicsProfile::HiDef);
     constexpr int reachMaximum = 65'535;

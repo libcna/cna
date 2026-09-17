@@ -511,7 +511,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto center = TriangleAt(0.0f, Color::Lime);
@@ -556,7 +556,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -594,7 +594,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHi
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto ignoredWithoutBase = TriangleAt(-0.75f, Color::Lime);
@@ -651,7 +651,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto decoy = CenterTriangle(Color::Red);
@@ -705,7 +705,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -745,7 +745,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, SdlGpu, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, SdlGpu, Software);
     RequireIndexedRendering();
 
     constexpr std::uint32_t highVertex = 65536u;
@@ -1136,7 +1136,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
     // plans/plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
     if (CNA_RENDERER_IS(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                        DirectX9, DirectX11, Software))
+                        DirectX9, DirectX11, DirectX12, Software))
     {
         const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
         ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
@@ -1151,7 +1151,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto left = TriangleAt(-0.65f, Color::Red);
@@ -1221,7 +1221,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Red);
@@ -1331,7 +1331,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto identical = CenterTriangle(Color::Blue);
@@ -2295,7 +2295,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     auto left = TriangleAt(-0.65f, Color::Red);
@@ -2366,7 +2366,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2439,7 +2439,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -2943,7 +2943,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeI
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);
@@ -2977,7 +2977,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex32)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);

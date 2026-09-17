@@ -24,7 +24,7 @@ using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 
 TEST(GraphicsProfileBlendStateTest, ReachRejectsSeparateAlphaAndDestinationSaturation)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     PresentationParameters parameters;
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
@@ -52,7 +52,7 @@ TEST(GraphicsProfileBlendStateTest, ReachRejectsSeparateAlphaAndDestinationSatur
 
 TEST(GraphicsProfileBlendStateTest, ReachRecognizesEquivalentColorAndAlphaFactors)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     PresentationParameters parameters;
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
@@ -67,7 +67,7 @@ TEST(GraphicsProfileBlendStateTest, ReachRecognizesEquivalentColorAndAlphaFactor
 
 TEST(GraphicsProfileBlendStateTest, HiDefAllowsSeparateAlphaAndDestinationSaturation)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     PresentationParameters parameters;
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
@@ -81,7 +81,7 @@ TEST(GraphicsProfileBlendStateTest, HiDefAllowsSeparateAlphaAndDestinationSatura
 
 TEST(GraphicsProfileBlendStateTest, MinAndMaxRequireOneOneFactorsInBothProfiles)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     PresentationParameters parameters;
     GraphicsDevice reach(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
