@@ -586,6 +586,36 @@ VirtualBox adapter, which refuses Direct3D 12. After the fix all three pass (WAR
 for render target, back buffer and a real target alike); the corpus stays 235/262 with the fixture still
 failing only "device Reset applies the adapter query's fixed depth format", as on DirectX11.
 
+### Final DirectX12 CnaTests (round I binaries)
+
+8 033/8 202, 2 failed (`CaseInsensitivePathTest` ×2, WINNATIVE-F26), 167 skipped, 0 broken shards.
+
+### MSVC AddressSanitizer (DirectX12, WARP)
+
+A separate RelWithDebInfo tree, `/fsanitize=address /Zi`, `/INCREMENTAL:NO /DEBUG:FASTLINK`, only
+`cna_stress_directx12_win32_present` and `CnaTests` built (953 s, 4.8 GB; deleted after the runs for disk).
+
+| Run | Result |
+|---|---|
+| stress, 1 000 frames, debug layer | all 94 back-buffer and 40 target checks exact, **0 AddressSanitizer reports**; FAIL on private bytes +168 MB — ASan's quarantine: with `ASAN_OPTIONS=quarantine_size_mb=1` the same run grows 3 MB and PASSes |
+| `CnaTests` renderer-facing suites (`*RenderTarget*:*Texture*:*SpriteBatch*:*Effect*:*Draw*:*D3D12*:*DirectX12*:*Instanc*:*Stencil*:*Blend*:*Sampler*:*Buffer*:*GraphicsDevice*:*Cube*`), 12 shards | 2 647 tests, 2 559 passed, 86 skipped, 2 failed, **0 AddressSanitizer reports**. The 2 (`EffectSourceCommandLineTest.*`) launch the content compiler executable, which this two-target tree did not build |
+
+### Warnings
+
+The full ASan build compiled every translation unit this branch touched: 86 warning lines (C4834, C4005,
+C4129) in 32 files, **none of them a file changed on this branch** (checked against
+`git diff --name-only c2721f86e HEAD`). The incremental DX11/DX12 builds of every round reported 0 warnings.
+
+### Linux regression for the generic changes
+
+`cmake-build-multi` (OPENGL33 default; VULKAN, SOFTWARE, HEADLESS compiled in), Xvfb `:99`:
+render-target/texture/device groups 312/312 on OpenGL33 and on Software; the broad subset
+`*RenderTarget*:*GraphicsDevice*:*Texture*:*SpriteBatch*:*Effect*:*Stencil*:*Draw*` on OpenGL33 2 069 passed,
+71 skipped, 3 failed — `IndexedDrawDeferredTest` strip tests asserting a Vulkan renderer under
+`#ifdef CNA_TEST_VULKAN_AVAILABLE`, which a multi-renderer tree defines while running OpenGL33 (untouched by
+this branch). A `PixelTestGame`-based example (`cna_test_headless_backbuffer_first_read`) builds and passes
+13/13 legs. MinGW cross build of `cmake-build-d3d11`: success.
+
 ### The 25 corpus failures shared by both D3D renderers (round H)
 
 None of these is a DirectX12 parity gap: each fails with the same first failing check on DirectX11. They
