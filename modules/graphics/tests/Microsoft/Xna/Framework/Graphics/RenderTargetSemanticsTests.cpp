@@ -40,6 +40,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -117,6 +118,46 @@ TEST(RenderTargetSemantics, DiscardContentsDoesNotKeepIt)
         << "DiscardContents must not preserve -- and this is the half that catches a renderer "
            "ignoring the flag, because such a renderer passes the PreserveContents test by never "
            "discarding anything";
+}
+
+// plans/plan_directx12_parity.md DX12-0023: a target destroyed while it is still bound. Its explicit
+// Dispose() refuses that, but a C++ object can simply go out of scope. The device must forget the
+// binding then: SetRenderTargets returns early for an unchanged binding set, compared by address
+// (SOFTWARE-222), so a stale binding made binding the NEXT target constructed at the same address a
+// silent no-op -- its Clear reached the back buffer (DirectX11) or no target at all (DirectX12,
+// which threw), and GetRenderTargets() handed out a dangling pointer. std::optional reuses its
+// storage, which makes the address reuse certain rather than likely.
+TEST(RenderTargetSemantics, ATargetDestroyedWhileBoundIsForgottenByTheDevice)
+{
+    GraphicsDevice device;
+    const int backBufferWidth = device.getPresentationParametersProperty().getBackBufferWidthProperty();
+    ASSERT_NE(backBufferWidth, kSize) << "the viewport check below needs distinguishable sizes";
+
+    std::optional<RenderTarget2D> slot;
+    slot.emplace(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                 RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&*slot);
+    device.Clear(Color(0x10, 0x20, 0x30, 0xFF));
+    slot.reset();
+
+    EXPECT_TRUE(device.GetRenderTargets().empty())
+        << "a destroyed target must not stay in the device's binding set";
+    EXPECT_EQ(device.getViewportProperty().getWidthProperty(), backBufferWidth)
+        << "forgetting the binding is an unbind: the viewport returns to the back buffer";
+
+    slot.emplace(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                 RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&*slot);
+    EXPECT_EQ(device.GetRenderTargets().size(), 1u);
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+    {
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to read back";
+    }
+    device.Clear(kPainted);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    EXPECT_EQ(FirstTexel(*slot).getPackedValueProperty(), kPainted.getPackedValueProperty())
+        << "the replacement at the dead target's address must really be bound and cleared";
 }
 
 // The properties a target reports about itself. Not a spelling check: each one is a value the

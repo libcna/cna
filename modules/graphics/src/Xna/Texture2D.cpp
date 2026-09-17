@@ -493,6 +493,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::Dispose(bool disposing)
     {
+        // DX12-0023: a RenderTarget2D destroyed while bound is unbound first, while its backend exists.
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->DetachDestroyedRenderTarget(this);
         renderer_.reset();
         Texture::Dispose(disposing);
     }

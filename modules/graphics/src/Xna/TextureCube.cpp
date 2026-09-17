@@ -222,6 +222,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void TextureCube::Dispose(bool disposing)
     {
+        // DX12-0023: a RenderTargetCube destroyed while bound is unbound first, while its backend exists.
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->DetachDestroyedRenderTarget(this);
         renderer_.reset();
         Texture::Dispose(disposing);
     }

@@ -1640,6 +1640,9 @@ namespace Microsoft::Xna::Framework::Graphics
         void DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept;
         void DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept;
         void DetachMovedTexture(const Texture* texture) noexcept;
+        // plans/plan_directx12_parity.md DX12-0023: called by a render target's destruction while its
+        // backend still exists. A binding that names it is unbound as SetRenderTarget(null) would be.
+        void DetachDestroyedRenderTarget(const Texture* texture) noexcept;
         void TransferMovedVertexBuffer(const VertexBuffer* source,
                                        const VertexBuffer* destination) noexcept;
         void TransferMovedIndexBuffer(const IndexBuffer* source,

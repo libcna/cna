@@ -1227,6 +1227,38 @@ namespace Microsoft::Xna::Framework::Graphics
         vertexTextures_.RemoveDisposedTexture(texture);
     }
 
+    void GraphicsDevice::DetachDestroyedRenderTarget(const Texture* texture) noexcept
+    {
+        bool bound = false;
+        for (const RenderTargetBinding& binding : currentRenderTargets_)
+            bound = bound || binding.getRenderTargetProperty() == texture;
+        if (!bound)
+            return;
+
+        // plans/plan_directx12_parity.md DX12-0023: RenderTarget2D/RenderTargetCube::Dispose refuse a
+        // bound target, but their destructors cannot, so this is only reached by an object destroyed
+        // while bound. Unbinding here -- before the caller releases the backend -- gives every renderer
+        // the same transition an explicit SetRenderTarget(null) would (resolve, mip regeneration,
+        // back buffer, viewport). Leaving the binding made SetRenderTargets' identity comparison
+        // (SOFTWARE-222) treat the next target built at the same address as already bound.
+        if (!isDisposed_)
+        {
+            try
+            {
+                SetRenderTargets({});
+                return;
+            }
+            catch (...)
+            {
+            }
+        }
+        // A disposed device, or a renderer that refused the transition: the renderer detaches its
+        // own side when the backend is released (DX-233); the public binding must not outlive the
+        // object either way.
+        currentRenderTargets_.clear();
+        renderTargetBound_ = false;
+    }
+
     void GraphicsDevice::TransferMovedVertexBuffer(
         const VertexBuffer* source, const VertexBuffer* destination) noexcept
     {
