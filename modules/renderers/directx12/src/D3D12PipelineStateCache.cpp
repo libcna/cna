@@ -155,10 +155,14 @@ namespace CNA::Internal::Renderers::DirectX12
         // D3D11DepthStencilStateCache::GetOrCreate, through the same D3DCommon mapping tables, so
         // one XNA DepthStencilState means the same thing on both D3D renderers by construction.
         D3D12_DEPTH_STENCIL_DESC& ds = psoDesc.DepthStencilState;
-        ds.DepthEnable = desc.depthEnable ? TRUE : FALSE;
+        // plans/plan_directx12_parity.md DX12-0027: a PSO for a surface without depth (DSVFormat UNKNOWN,
+        // e.g. DepthFormat::None) must not enable the tests. Nothing is bound to test against, so the
+        // result is the same, but the debug layer reports the mismatch (ID 680) on every such PSO.
+        const bool hasDepthStencil = desc.depthStencilFormat != DXGI_FORMAT_UNKNOWN;
+        ds.DepthEnable = desc.depthEnable && hasDepthStencil ? TRUE : FALSE;
         ds.DepthWriteMask = desc.depthWriteEnable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
         ds.DepthFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.depthFunc));
-        ds.StencilEnable = desc.stencilEnable ? TRUE : FALSE;
+        ds.StencilEnable = desc.stencilEnable && hasDepthStencil ? TRUE : FALSE;
         ds.StencilReadMask = static_cast<UINT8>(desc.stencilMask);
         ds.StencilWriteMask = static_cast<UINT8>(desc.stencilWriteMask);
 
