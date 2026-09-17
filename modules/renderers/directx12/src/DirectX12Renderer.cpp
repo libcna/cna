@@ -775,6 +775,14 @@ namespace CNA::Internal::Renderers::DirectX12
             auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
             if (FAILED(infoQueue->GetMessage(i, message, &length)))
                 continue;
+            // The storage filter denies INFO and MESSAGE, but only from the moment it is pushed: the
+            // debug layer stores its startup notices during device creation, before that, and with
+            // GPU-based validation on it always stores one (ID 1016, severity MESSAGE). They carry no
+            // verdict; counting them as warnings failed every GBV run (plans/plan_directx12_parity.md
+            // DX12-0025).
+            if (message->Severity == D3D12_MESSAGE_SEVERITY_INFO ||
+                message->Severity == D3D12_MESSAGE_SEVERITY_MESSAGE)
+                continue;
             D3D12DebugMessageEXT entry;
             entry.severity = static_cast<int>(message->Severity);
             entry.id = static_cast<int>(message->ID);
