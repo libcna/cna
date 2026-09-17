@@ -245,7 +245,7 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
     // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
     Project project("case");
     Tasks::BuildContent task = MakeBuild(project);
-    project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Tree.PNG");
+    (void)project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Tree.PNG");
     Tasks::TaskItem texture(
         (project.Source() / "Textures" / "tree.png").string());
     texture.SetMetadata("Name", "tree");
@@ -263,8 +263,8 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
     // ambiguity is refused rather than guessed at.
     Project ambiguous("case_ambiguous");
     Tasks::BuildContent second = MakeBuild(ambiguous);
-    ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Two.PNG");
-    ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/TWO.png");
+    (void)ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Two.PNG");
+    (void)ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/TWO.png");
     // WINCLOSE-0041: that tree cannot exist on a filesystem that folds case -- on Windows the
     // second copy replaces the first, leaving one file and nothing ambiguous to refuse. The first
     // half above is the one such a filesystem can exercise.
