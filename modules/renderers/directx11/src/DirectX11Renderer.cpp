@@ -2560,6 +2560,13 @@ namespace CNA::Internal::Renderers::DirectX11
             srvs[0] = GetSrvForTextureEXT(params.texture0);
             srvs[1] = GetSrvForTextureCubeEXT(params.envMap);
         }
+        else if (needsAlphaTest)
+        {
+            // plans/plan_directx12_parity.md DX12-0021: XNA samples an unbound AlphaTestEffect texture
+            // as opaque black; a null SRV here sampled as the diffuse colour's untextured result.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultOpaqueBlackSrvEXT();
+        }
         else if (needsPbr)
         {
             // plans/plan_cnj.md CNB-58 follow-up: when a given PBR map is unbound, fall back to a 1x1

@@ -1749,6 +1749,7 @@ namespace CNA::Internal::Renderers::DirectX12
         defaultWhiteTexture_.reset();
         defaultFlatNormalTexture_.reset();
         defaultOpaqueBlackTexture_.reset();
+        defaultOpaqueBlackCube_.reset();
         const auto resources = recoverableResources_;
         // Best-effort drain of anything in flight before tearing down -- mirrors the destructor's
         // own drain (it's not safe to release a fence/allocator/command list the GPU may still be
@@ -2145,6 +2146,18 @@ namespace CNA::Internal::Renderers::DirectX12
             defaultOpaqueBlackTexture_ = CreateTexture(img);
         }
         return defaultOpaqueBlackTexture_.get();
+    }
+
+    ITextureCubeRenderer* DirectX12Renderer::GetOrCreateDefaultOpaqueBlackCubeEXT()
+    {
+        if (!defaultOpaqueBlackCube_)
+        {
+            defaultOpaqueBlackCube_ = CreateTextureCube(1, false, 0);
+            const std::uint8_t opaqueBlack[4] = {0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+                (void)defaultOpaqueBlackCube_->SetData(face, 0, 0, 0, 1, 1, opaqueBlack, 4);
+        }
+        return defaultOpaqueBlackCube_.get();
     }
 
     ITextureRenderer* DirectX12Renderer::GetOrCreateDefaultFlatNormalTextureEXT()
@@ -3906,9 +3919,11 @@ namespace CNA::Internal::Renderers::DirectX12
             c.FogColor[1] = params.fogColor[1];
             c.FogColor[2] = params.fogColor[2];
 
+            // plans/plan_directx12_parity.md DX12-0021: XNA samples an unbound AlphaTestEffect texture as
+            // opaque black (easygl_alphatest_null_texture_test); the white texel drew DiffuseColor.
             srvTextures[0] = params.texture0 != nullptr
                 ? params.texture0
-                : GetOrCreateDefaultWhiteTextureEXT();
+                : GetOrCreateDefaultOpaqueBlackTextureEXT();
             // DX12-0012 (WINCLOSE-0026): Direct3D 9 channel expansion of the sampled texture.
             if (params.texture0 != nullptr)
                 D3DCommon::D3D9ChannelExpansion(params.texture0->GetSurfaceFormatEXT(),
@@ -4052,7 +4067,9 @@ namespace CNA::Internal::Renderers::DirectX12
             // Resolve lazy fallback resources before allocating frame constants. Creating either
             // fallback performs a synchronous texture upload, which submits the current frame
             // segment; allocating first would let the resumed segment reset and reuse those ranges.
-            srvTextures[0] = params.texture0;
+            // GLTF-386 (as DirectX11): glTF baseColorTexture is optional, and an absent base-colour map
+            // is opaque white -- factor-only PBR primitives must not sample the generic fallback below.
+            srvTextures[0] = params.texture0 ? params.texture0 : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
             srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
@@ -4373,13 +4390,34 @@ namespace CNA::Internal::Renderers::DirectX12
         // verified correct). Every texture's own SRV -- created once, at texture-construction time --
         // is bound directly, exactly like the original single-SRV path; no per-draw descriptor copy
         // is needed for any variant, dual_texture3d included. Sized 7 for the complete PBR range.
+        // plans/plan_directx12_parity.md DX12-0021: every texture slot a stock stage declares is bound to a
+        // real descriptor. An unbound slot used to pass a null GPU handle to SetGraphicsRootDescriptorTable,
+        // which is undefined. The values are DirectX11's established ones: DualTextureEffect and
+        // AlphaTestEffect were given XNA's opaque black above; SkinnedEffect and BasicEffect sample opaque
+        // white (GLTF-386, shared with Vulkan, EasyGL and OpenGL); EnvironmentMapEffect, for which DirectX11
+        // binds a null view, takes XNA's opaque black for both its texture and its cube. Resolved before
+        // the command list is touched, because creating a fallback records an upload.
+        for (int i = 0; i < numSrvs; ++i)
+        {
+            if (i == 1 && needsEnvMap)
+            {
+                if (srvCubeTexture == nullptr)
+                    srvCubeTexture = GetOrCreateDefaultOpaqueBlackCubeEXT();
+            }
+            else if (srvTextures[i] == nullptr)
+            {
+                srvTextures[i] = needsEnvMap ? GetOrCreateDefaultOpaqueBlackTextureEXT()
+                                             : GetOrCreateDefaultWhiteTextureEXT();
+            }
+        }
+
         D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[7]{};
         for (int i = 0; i < numSrvs; ++i)
         {
             // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only
             // ever set by the needsEnvMap branch above, every other variant's 2nd slot (if any) is a
             // plain Texture2D via srvTextures[1] (dual_texture3d).
-            srvHandles[i] = (i == 1 && srvCubeTexture != nullptr)
+            srvHandles[i] = (i == 1 && needsEnvMap)
                 ? GetSrvGpuHandleForTextureCubeEXT(srvCubeTexture)
                 : GetSrvGpuHandleForTextureEXT(srvTextures[i]);
         }

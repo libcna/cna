@@ -1007,6 +1007,9 @@ namespace CNA::Internal::Renderers::DirectX12
         /// opaque black (0,0,0,255) texture. XNA samples an unbound DualTextureEffect slot as opaque
         /// black; the white fallback lit the other layer at double brightness where XNA draws black.
         ITextureRenderer* GetOrCreateDefaultOpaqueBlackTextureEXT();
+        /// plans/plan_directx12_parity.md DX12-0021: a lazily created 1x1 opaque black cube, bound for an
+        /// EnvironmentMapEffect whose EnvironmentMap is unset instead of a null descriptor handle.
+        ITextureCubeRenderer* GetOrCreateDefaultOpaqueBlackCubeEXT();
 
         /// DX-111 (continued): shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib may be null for the non-indexed path (mirrors DirectX11Renderer's own
@@ -1220,6 +1223,7 @@ namespace CNA::Internal::Renderers::DirectX12
         std::unique_ptr<ITextureRenderer> defaultWhiteTexture_;
         std::unique_ptr<ITextureRenderer> defaultFlatNormalTexture_;
         std::unique_ptr<ITextureRenderer> defaultOpaqueBlackTexture_;
+        std::unique_ptr<ITextureCubeRenderer> defaultOpaqueBlackCube_;
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
         ID3D12Resource* boundColorResource_ = nullptr;
