@@ -105,6 +105,11 @@ TEST_F(MediaLibraryTestFixture, PlaylistEqualsReturnsFalseForNullOther)
 // millisecond count, since the probed values depend on each real encoder's own rounding.
 TEST_F(MediaLibraryTestFixture, PlaylistDurationIsARealNonZeroSumOfMemberSongDurations)
 {
+#if !defined(CNA_TEST_HAS_AUDIO_DURATION_PROBE)
+    // WINCLOSE-0041: without the optional FFmpeg backend every probed duration is the documented
+    // "unknown" zero (AudioDurationProbeUnavailable.cpp), so there is no real sum to assert.
+    GTEST_SKIP() << "this build has no audio duration probe (FFmpeg)";
+#endif
     Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
     ASSERT_NE(favorites, nullptr);
     const double ms = favorites->getDurationProperty().getTotalMillisecondsProperty();

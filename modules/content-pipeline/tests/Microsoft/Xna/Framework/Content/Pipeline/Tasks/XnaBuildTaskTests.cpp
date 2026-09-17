@@ -265,6 +265,19 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
     Tasks::BuildContent second = MakeBuild(ambiguous);
     ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Two.PNG");
     ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/TWO.png");
+    // WINCLOSE-0041: that tree cannot exist on a filesystem that folds case -- on Windows the
+    // second copy replaces the first, leaving one file and nothing ambiguous to refuse. The first
+    // half above is the one such a filesystem can exercise.
+    std::size_t spellings = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(ambiguous.Source() / "Textures"))
+    {
+        (void)entry;
+        ++spellings;
+    }
+    if (spellings < 2u)
+    {
+        GTEST_SKIP() << "this filesystem folds case, so two spellings of one name cannot coexist";
+    }
     Tasks::TaskItem two(
         (ambiguous.Source() / "Textures" / "two.png").string());
     two.SetMetadata("Name", "two");

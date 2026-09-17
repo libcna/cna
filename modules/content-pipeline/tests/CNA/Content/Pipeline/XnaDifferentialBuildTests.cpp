@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentTask.hpp"
 #include "XnaDifferentialCorpus.hpp"
@@ -158,6 +159,10 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     {
         if (notComparable.count(one.name) != 0u) { continue; }
         if (one.name.rfind("effect/", 0) == 0 && !haveFxc) { continue; }
+        // WINCLOSE-0041: likewise a font case in a build without the optional FreeType rasterizer,
+        // which can only answer with its own "no font rasterizer" refusal.
+        if (std::filesystem::path(one.source).extension() == ".spritefont" &&
+            !CNA::Content::Pipeline::IsFontRasterizationAvailable()) { continue; }
 
         OneSource source(one.name.substr(one.name.find('/') + 1u) + "_" + one.platform, one.source);
 

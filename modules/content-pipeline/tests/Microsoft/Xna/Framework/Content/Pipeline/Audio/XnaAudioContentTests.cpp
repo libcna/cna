@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/TestSupport/OracleCorpus.hpp"
 #include "CNA/Internal/Audio/MsAdpcmEncoder.hpp"
 #include "CNA/Internal/Audio/WavDecoder.hpp"
@@ -406,12 +407,24 @@ TEST(XnaAudioContent, RefusalsMatchXna)
                          return Describe(audio);
                      }),
               Expected("refusals/missing_file"));
-    EXPECT_EQ(Result([&mono]
+    const std::string wrongType = Result([&mono]
                      {
                          AudioContent audio(mono, AudioFileType::Mp3);
                          return Describe(audio);
-                     }),
-              Expected("refusals/wrong_file_type"));
+                     });
+    if (CNA::Content::Pipeline::BuildTimeMedia::IsAvailable())
+    {
+        EXPECT_EQ(wrongType, Expected("refusals/wrong_file_type"));
+    }
+    else
+    {
+        // WINCLOSE-0041: a build without the optional media decoder cannot read MP3 at all, and
+        // AudioContent::ReadThroughMediaDecoder deliberately says so rather than calling the file
+        // corrupt -- still a refusal, naming the missing decoder instead of XNA's sentence.
+        EXPECT_NE(wrongType.find(CNA::Content::Pipeline::BuildTimeMedia::UnavailableReason()),
+                  std::string::npos)
+            << wrongType;
+    }
     EXPECT_EQ(Result([]
                      {
                          AudioContent audio("", AudioFileType::Wav);
@@ -779,6 +792,13 @@ TEST(XnaAudioProcessors, RefusalsMatchXna)
     ScratchDirectory scratch("song");
     const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
     const auto audio = std::make_shared<AudioContent>(mono, AudioFileType::Wav);
+    if (!CNA::Content::Pipeline::BuildTimeMedia::IsAvailable())
+    {
+        // WINCLOSE-0041: writing the song's Windows Media file needs the optional media encoder;
+        // without one the processor refuses with XNA's own sentence for an encode it could not do.
+        EXPECT_THROW((void)song.Process(audio, context), InvalidContentException);
+        return;
+    }
     const auto written = song.Process(audio, context);
     ASSERT_NE(written, nullptr);
     EXPECT_EQ(written->FileName(), "asset.wma");

@@ -18,8 +18,10 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 
@@ -260,6 +262,11 @@ TEST(XnaContentProjectCommandLine, AFileTheProjectDoesNotListIsNotBuilt)
 // unchanged.
 TEST(XnaContentProjectCommandLine, TheProcessorDecidesWhichReadingOfAnAudioSourceIsBuilt)
 {
+    if (!Pipeline::BuildTimeMedia::IsAvailable())
+    {
+        // WINCLOSE-0041: the WMA reading needs the optional FFmpeg decoder.
+        GTEST_SKIP() << "this build has no media decoder";
+    }
     const Project project("audiopair");
     std::filesystem::copy_file(Locate("tests/assets/xna40/media/wma_mono_44100.wma"),
                                project.Source() / "music.wma");
@@ -537,6 +544,12 @@ TEST(XnaContentProjectCommandLine, CompressionOnTheCommandLineOverridesTheProjec
 // font was, and that is 260 of the sample corpus's assets.
 TEST(XnaContentProjectCommandLine, AFontDirectoryOnTheCommandLineReachesAProjectBuild)
 {
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        // WINCLOSE-0041: FreeType is an optional dependency, and the native Windows build has
+        // none; every sibling font test already skips on it.
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
     const Project project("font_directory");
     const std::filesystem::path font = Locate("tests/assets/fonts/LiberationMono-Regular.ttf");
     if (!std::filesystem::exists(font)) { GTEST_SKIP() << "the vendored test font is missing"; }

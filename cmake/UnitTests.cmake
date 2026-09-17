@@ -651,6 +651,14 @@ if(CNA_BUILD_TESTS)
         endif()
     endif()
 
+    # WINCLOSE-0041: the library-scan AudioDurationProbe is FFmpeg's (modules/video-ffmpeg); a build
+    # without it compiles AudioDurationProbeUnavailable, whose zero is the documented "unknown". The
+    # two media suites that assert a real probed sum need to know which one they are linked against.
+    if(CNA_FFMPEG_AVAILABLE AND DEFINED CNA_TEST_OBJECT_TARGET_media)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_media} PRIVATE
+            CNA_TEST_HAS_AUDIO_DURATION_PROBE=1)
+    endif()
+
     if(CNA_PLATFORM STREQUAL "SDL2")
         add_executable(cna_platform_sdl2_tests
             modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp)

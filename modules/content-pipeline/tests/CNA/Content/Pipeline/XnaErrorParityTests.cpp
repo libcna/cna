@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentTask.hpp"
 #include "XnaDifferentialCorpus.hpp"
@@ -186,6 +187,14 @@ namespace
         if (effect && !haveFxc)
         {
             return "no effect compiler on this machine";
+        }
+        // WINCLOSE-0041: FreeType is optional, and the native Windows build has none; a font case
+        // there can only be the pipeline's own "no font rasterizer" refusal.
+        const bool font = one.source.size() > 11u &&
+                          one.source.compare(one.source.size() - 11u, 11u, ".spritefont") == 0;
+        if (font && !CNA::Content::Pipeline::IsFontRasterizationAvailable())
+        {
+            return "this build has no font rasterizer";
         }
         return {};
     }

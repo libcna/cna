@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
+#include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 #include "CNA/Internal/HostProcess.hpp"
 
 namespace
@@ -92,6 +94,19 @@ namespace
             files.push_back({"tests/assets/xna40/source/probe.xml", "list.xml"});
             files.push_back({"tests/assets/xna40/source/xml_curve.xml", "curve.xml"});
         }
+        // WINCLOSE-0041: FreeType and the FFmpeg media decoder are optional dependencies, and the
+        // native Windows build has neither. A corpus file only such a build can refuse would make
+        // every run fail the same way, which says nothing about determinism.
+        const bool fonts = CNA::Content::Pipeline::IsFontRasterizationAvailable();
+        const bool media = CNA::Content::Pipeline::BuildTimeMedia::IsAvailable();
+        std::erase_if(files, [fonts, media](const CorpusFile& file)
+        {
+            const std::string name = file.as;
+            if (name.ends_with(".spritefont") || name.ends_with(".ttf")) return !fonts;
+            if (name.ends_with(".mp3") || name.ends_with(".wma") || name.ends_with(".wmv"))
+                return !media;
+            return false;
+        });
         return files;
     }
 

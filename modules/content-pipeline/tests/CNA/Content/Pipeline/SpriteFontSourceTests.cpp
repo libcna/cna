@@ -661,6 +661,12 @@ TEST(SpriteFontFamilyResolutionTest, AFamilyNameFindsAFontFileCalledSomethingEls
 
 TEST(SpriteFontFamilyResolutionTest, AFileNamedAfterTheFamilyStillWinsOverTheFamilyTable)
 {
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        // WINCLOSE-0041: FreeType is an optional dependency, and the native Windows build has
+        // none; every sibling font test already skips on it.
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
     if (!std::filesystem::exists(kTestFont)) { GTEST_SKIP() << "the vendored test font is missing"; }
     ScratchDirectory scratch("exact_name_first");
     // Two files, both the 'Liberation Mono' family: one named after the family and one not. The
@@ -716,6 +722,11 @@ TEST(SpriteFontFamilyResolutionTest, TheStyledFaceOfAFamilyIsChosenWhereTheFamil
 
 TEST(SpriteFontFamilyResolutionTest, AConfiguredDirectoryIsSearchedAndIsNotSticky)
 {
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        // WINCLOSE-0041: resolving a family name reads the font's own name table through FreeType.
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
     if (!std::filesystem::exists(kTestFont)) { GTEST_SKIP() << "the vendored test font is missing"; }
     ScratchDirectory fonts("configured_fonts");
     std::filesystem::copy_file(kTestFont, fonts.Path() / kTestFont.filename(),

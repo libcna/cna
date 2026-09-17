@@ -187,6 +187,11 @@ TEST_F(MediaLibraryTestFixture, AlbumGetTypeNameIsFullyQualified)
 // rounding.
 TEST_F(MediaLibraryTestFixture, AlbumDurationIsARealNonZeroSumOfMemberSongDurations)
 {
+#if !defined(CNA_TEST_HAS_AUDIO_DURATION_PROBE)
+    // WINCLOSE-0041: without the optional FFmpeg backend every probed duration is the documented
+    // "unknown" zero (AudioDurationProbeUnavailable.cpp), so there is no real sum to assert.
+    GTEST_SKIP() << "this build has no audio duration probe (FFmpeg)";
+#endif
     Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
     ASSERT_NE(alpha, nullptr);
     const double ms = alpha->getDurationProperty().getTotalMillisecondsProperty();

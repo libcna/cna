@@ -22,9 +22,11 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 
 namespace Canon = CNA::Content::Pipeline;
 
@@ -145,7 +147,7 @@ namespace
         const std::filesystem::path media = Locate("tests/assets/xna40/media");
         const std::filesystem::path font = Locate("tests/assets/fonts/LiberationMono-Regular.ttf");
         const std::filesystem::path model = Locate("tests/assets/xna40/model");
-        return {
+        std::vector<Route> routes{
             {".bmp", texture / "probe.bmp", {}},
             {".dds", texture / "probe.dds", {}},
             {".dib", texture / "probe.dib", {}},
@@ -166,6 +168,18 @@ namespace
             {".x", model / "quad_textured.x", {model / "surface.png"}},
             {".fbx", model / "fbx_quad_textured.fbx", {}},
         };
+        // WINCLOSE-0041: FreeType and the FFmpeg media decoder are optional dependencies, and the
+        // native Windows build has neither. A route whose importer needs one is not routable in
+        // such a build, which the pipeline says by name; it is not this test's finding.
+        std::erase_if(routes, [](const Route& route)
+        {
+            if (route.extension == ".spritefont")
+                return !CNA::Content::Pipeline::IsFontRasterizationAvailable();
+            if (route.extension == ".mp3" || route.extension == ".wma" || route.extension == ".wmv")
+                return !CNA::Content::Pipeline::BuildTimeMedia::IsAvailable();
+            return false;
+        });
+        return routes;
     }
 }
 
