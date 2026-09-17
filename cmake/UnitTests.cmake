@@ -68,6 +68,12 @@ if(CNA_BUILD_TESTS)
     # programs and the module probes above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
 
+    # Inspector support is a separately linked development tool. Its tests exercise the real
+    # socket agent and protocol library, so they are absent with the default compiled-out mode.
+    if(NOT CNA_BUILD_INSPECTOR)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/inspector/tests/.*\\.cpp$")
+    endif()
+
     # plans/plan_dx.md DX-250/DX-269: XmlSerializationEXTTests includes the optional
     # SharpRuntime::Xml.Serialization component directly. Windows intentionally omits that
     # component while its Diagnostics dependency still includes POSIX-only <poll.h> outside its
@@ -397,6 +403,9 @@ if(CNA_BUILD_TESTS)
     # construct a device because renderer families deliberately sit outside its dependency edge.
     set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext CNA)
     set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
+    if(CNA_BUILD_INSPECTOR)
+        set(CNA_TEST_GROUP_DEPENDENCY_inspector cna_inspector)
+    endif()
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
     # System::Xml::Serialization, so the group that tests it links that component too --
@@ -431,6 +440,7 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_FOCUSED_TARGET_graphics CnaGraphicsTests)
     set(CNA_TEST_FOCUSED_TARGET_graphics_ext CnaGraphicsExtTests)
     set(CNA_TEST_FOCUSED_TARGET_input CnaInputModuleTests)
+    set(CNA_TEST_FOCUSED_TARGET_inspector CnaInspectorTests)
     set(CNA_TEST_FOCUSED_TARGET_integration CnaIntegrationTests)
     set(CNA_TEST_FOCUSED_TARGET_math CnaMathTests)
     set(CNA_TEST_FOCUSED_TARGET_media CnaMediaTests)
@@ -567,6 +577,9 @@ if(CNA_BUILD_TESTS)
     endif()
     if(TARGET cna_content_compiler)
         target_link_libraries(CnaTests PRIVATE cna_content_compiler)
+    endif()
+    if(TARGET cna_inspector)
+        target_link_libraries(CnaTests PRIVATE cna_inspector)
     endif()
 
     # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which

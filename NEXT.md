@@ -1,5 +1,21 @@
 # NEXT.md
 
+## CNA Inspector complete (`INSP-0001`, 2026-09-17)
+
+The optional `modules/inspector` layer now consumes the immutable diagnostics provider version 1
+through a bounded authenticated binary protocol. A small application-side agent runs only after an
+explicit start call; the separate `cna-inspector` process owns the localhost HTTP bridge and its
+offline responsive browser UI. Session facts, frames, metrics, CPU zones, graphics/audio counters,
+resource metadata, accuracy classifications, and discontinuities are visible without putting JSON,
+HTTP, or browser code in engine hot paths.
+
+`CNA_BUILD_INSPECTOR` remains `OFF` by default, `CNA::Inspector` stays outside the `CNA` umbrella,
+and a started agent with no client performs zero provider calls. Resource metadata is demand-driven;
+preview is a separate manual, bounded, asynchronous capability with no renderer implementation
+installed by default. Linux tests and benchmarks plus a MinGW-w64 Winsock build are recorded in
+`docs/inspector.md`, `docs/inspector-benchmark.md`, and `plans/plan_inspector.md`. No diagnostics
+core file or provider contract changed.
+
 ## CNA diagnostics/profiler foundation complete (`DIAG-0001`, 2026-09-17)
 
 `modules/diagnostics` now provides CNA's renderer-independent, pull-based observation core with
@@ -11,10 +27,10 @@ and binary/Chrome Trace export without a profiler thread or producer-side global
 thread's first event.
 
 The stable in-process consumer boundary is `CNA::Diagnostics::IDiagnosticsProvider` version 1.
-The future Inspector is intentionally not implemented here: it should pull snapshots and sequenced
-event batches, place any transport/authentication/UI outside this module, and keep renderer GPU
-queries asynchronous behind `IDiagnosticsSource`. Exact versus estimated metrics, trace format,
-limits, test evidence, and measured overhead are recorded in `docs/diagnostics.md`,
+The completed Inspector consumes this contract without changing it: snapshots and sequenced event
+batches remain pull-based, transport/authentication/UI stay outside this module, and future renderer
+GPU timing remains asynchronous behind `IDiagnosticsSource`. Exact versus estimated metrics, trace
+format, limits, test evidence, and measured overhead are recorded in `docs/diagnostics.md`,
 `docs/diagnostics-benchmark.md`, and `plans/plan_diagnostics.md`.
 
 ## Current handoff — generated-report growth is closed (`CBIND-123`, 2026-08-30)

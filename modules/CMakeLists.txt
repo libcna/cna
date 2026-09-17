@@ -333,6 +333,7 @@ set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
 add_subdirectory(diagnostics)
+add_subdirectory(inspector)
 add_subdirectory(math)
 # The platform contract (plans/plan_platform.md): composed before the subsystems that will consume
 # it, so the read order matches the dependency direction even though CMake does not require it.
@@ -415,7 +416,7 @@ endif()
 # modules/<name>/examples/ or modules/<name>/benchmarks/, and TUs outside every declared
 # module still fail.
 set(_cna_framework_modules
-    c-api core diagnostics math platform runtime graphics input audio media video-ffmpeg content
+    c-api core diagnostics inspector math platform runtime graphics input audio media video-ffmpeg content
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules

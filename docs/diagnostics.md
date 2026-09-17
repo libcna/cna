@@ -206,9 +206,9 @@ more than 32,768 events.
 and never constructs a frame-sized or trace-sized JSON document in memory. CNA does not serialize
 JSON every frame.
 
-## Future Inspector handoff
+## Inspector integration
 
-The Inspector implementation should remain a consumer:
+The optional Inspector implemented in `modules/inspector` remains a version-1 consumer:
 
 1. Check provider interface version 1.
 2. Pull `Snapshot` at a modest UI refresh rate and `EventBatch` with a retained sequence cursor.
@@ -216,10 +216,13 @@ The Inspector implementation should remain a consumer:
    allocation or allocated mixer tracks as audible voices.
 4. Detect `eventsDroppedBeforeStart`, `producerEventsDropped`, and
    `eventHistoryOverwrites`, then show a discontinuity instead of inventing continuity.
-5. Add transport, authentication, resource previews, and browser assets outside the diagnostics
-   core. Resource previews require a separately authorized readback path and are not metadata.
+5. Transport, authentication, resource previews, and browser assets remain outside the diagnostics
+   core. Resource previews use a separately authorized readback path and are not metadata.
 6. Keep GPU query implementations renderer-local behind `IDiagnosticsSource`; never wait in the
    core or the Inspector transport.
+
+See [`inspector.md`](inspector.md) for activation, protocol, UI, security, limits, platform status,
+and its explicit preview source. The Inspector did not require a diagnostics provider change.
 
 ## Known limitations
 

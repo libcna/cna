@@ -89,6 +89,16 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
 - Core game loop and framework primitives are available (`Game`, `GameTime`, graphics types, input/audio surfaces).
 - Compatibility is partial and evolving; implementation status is tracked progressively in source.
 
+### Diagnostics and Inspector
+
+- `CNA_DIAGNOSTICS=OFF|STATS|FULL` provides the bounded renderer-independent profiler and resource
+  metadata foundation; `OFF` remains the default and compiles instrumentation out.
+- `CNA_BUILD_INSPECTOR=ON` optionally builds a separately linked, explicitly started application
+  agent and the standalone `cna-inspector` local browser bridge. It is authenticated,
+  demand-driven, localhost-only by default, and never embeds HTTP/JSON work in the game loop.
+- See [`docs/diagnostics.md`](docs/diagnostics.md) and [`docs/inspector.md`](docs/inspector.md) for
+  activation, security, protocol, supported views, performance measurements, and limitations.
+
 ### Input
 
 - `Keyboard`, `Mouse` (incl. `MouseCursor`), `GamePad` (up to 4 players), `TouchPanel`/`TouchCollection`,

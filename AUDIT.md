@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **Inspector extension note (2026-09-17, `INSP-0001`):** the optional
+> `CNA::Inspector` module and separate `cna-inspector` browser bridge are outside the XNA API
+> surface and outside the default `CNA` link umbrella. They consume the unchanged diagnostics
+> provider version 1 through bounded authenticated requests; no XNA declaration, diagnostics-core
+> contract, renderer behavior, or C ABI declaration was added. See `plans/plan_inspector.md` and
+> `docs/inspector.md` for the verified boundary.
+
 > **Diagnostics extension note (2026-09-17, `DIAG-0001`):** the new standard-library-only
 > `CNA::Diagnostics` module is outside the XNA API surface. Engine integration preserves XNA/FNA
 > behavior and is confined to common runtime, graphics-resource/device, and mixer seams; the one

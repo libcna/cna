@@ -116,6 +116,8 @@ endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_BUILD_BENCHMARKS "Build CNA microbenchmarks" OFF)
+option(CNA_BUILD_INSPECTOR
+    "Build the optional CNA Inspector agent, bridge executable, and local browser UI" OFF)
 set(CNA_DIAGNOSTICS "OFF" CACHE STRING
     "Profiler/diagnostics support: OFF, STATS, or FULL")
 set_property(CACHE CNA_DIAGNOSTICS PROPERTY STRINGS OFF STATS FULL)
