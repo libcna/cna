@@ -55,7 +55,12 @@ namespace CNA::Internal::Renderers::DirectX12
             range.NumDescriptors = 1;
             range.BaseShaderRegister = static_cast<UINT>(t);
             range.RegisterSpace = 0;
-            range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
+            // plans/plan_directx12_parity.md DX12-0026: DATA_VOLATILE, not DATA_STATIC. A frame is one
+            // command list, and XNA lets a game sample a render target and then render into it again in
+            // that frame (post-processing ping-pong, Backbuffer_PassOrder); DATA_STATIC promised the driver
+            // the texture's contents would not change until the list finished executing, and the debug
+            // layer rejected the transition to RENDER_TARGET (ID 1002, error).
+            range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             range.OffsetInDescriptorsFromTableStart = 0;
             srvRanges.push_back(range);
         }

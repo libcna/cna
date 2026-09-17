@@ -181,7 +181,9 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_DESCRIPTOR_RANGE1 textureRange{};
         textureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         textureRange.NumDescriptors = 1;
-        textureRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
+        // DX12-0026: DATA_VOLATILE -- a sprite's texture may become a render target later in the same
+        // frame's command list (see D3D12RootSignatureCache).
+        textureRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
         D3D12_DESCRIPTOR_RANGE1 samplerRange{};
         samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
         samplerRange.NumDescriptors = 1;
