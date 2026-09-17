@@ -2239,16 +2239,13 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 // SpriteBatch has to be refused at Draw(), before the sprite is queued -- not at the renderer seam.
 // A renderer-side refusal is reached from flushBatch(), i.e. from inside End(), which leaves
 // `begun` true AND the offending sprite in the queue: the next End() refuses it again and the
-// SpriteBatch is unusable for good. On NANOVG the same mistake is worse than a lost draw, because
-// its per-NVGcontext image handles collide across contexts and a foreign texture names a valid but
-// different image, so an unchecked draw silently paints the wrong picture.
+// SpriteBatch is unusable for good. On a renderer whose image handles are per-context the same
+// mistake is worse than a lost draw: a foreign texture can name a valid but different image, so an
+// unchecked draw silently paints the wrong picture.
 // -----------------------------------------------------------------------
 
 TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndStaysUsable)
 {
-    if (CNA_RENDERER_IS(Rlgl))
-        GTEST_SKIP() << "rlgl 6.0 has process-global state and permits only one live RLGL device";
-
     GraphicsDevice owning;
     GraphicsDevice other;
     Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);
@@ -2268,9 +2265,6 @@ TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndSta
 
 TEST(SpriteBatchCrossDeviceTest, DeferredRefusesAtDrawRatherThanWedgingTheBatchAtEnd)
 {
-    if (CNA_RENDERER_IS(Rlgl))
-        GTEST_SKIP() << "rlgl 6.0 has process-global state and permits only one live RLGL device";
-
     GraphicsDevice owning;
     GraphicsDevice other;
     Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);

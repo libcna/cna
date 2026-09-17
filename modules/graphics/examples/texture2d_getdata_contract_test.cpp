@@ -100,9 +100,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "BGFX";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "VULKAN";
@@ -130,9 +127,6 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "CANVAS";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-127: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

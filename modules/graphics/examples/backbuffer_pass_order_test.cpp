@@ -175,15 +175,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_BGFX)
-    // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157. bgfx submits both families
-    // immediately into a view, and bgfx's DEFAULT view mode radix-sorts a view's draws by sort key
-    // to minimise state changes -- which discards submission order, so within ONE bind cycle a 3D
-    // draw issued before a sprite still landed on top of it. Every view id is now set to
-    // ViewMode::Sequential at init, the within-view half of REMED-GFX-155's between-view ordering,
-    // and this declaration turned over; it was measured red the moment the fix landed.
-    constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, false, true, true, false};
 #elif defined(CNA_RENDERER_VULKAN)
     // REMED-GFX-143's primary subject. `orderedBackbufferSegments` was false until this task:
     // Phase 2 of RecordCommandBuffer was one trailing swapchain pass passed `kAllSegments`.
@@ -249,26 +240,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // `orderedBackbufferSegments` is true (LLGL-45, 2026-08-03): GroupFrameCommandsByTargetEXT()
-    // now segments `frameCommands_` in TRUE public order -- a new segment starts only when the
-    // target actually changes from the immediately preceding command, so a target that is
-    // produced, consumed by the backbuffer, then produced again gets its OWN new segment in its
-    // own original position instead of being collapsed into one bucket replayed before a trailing
-    // backbuffer pass. The former "swap chain always trails every other bucket" special case
-    // (REMED-GFX-143's own original LLGL fix, when this field was still false) is gone entirely --
-    // every segment's own BeginRenderPass() reloads its target's real prior content via a real
-    // AttachmentLoadOp::Load pass, so revisiting a target mid-frame is genuinely safe now too.
-    // Every other field reflects this renderer's own single ordered `frameCommands_` stream: Clear/
-    // Sprite/Primitives commands share ONE vector in public queue order (no separate per-family
-    // queues), so `mixedQueuesKeepPublicOrder` is real, and a `Clear()` queued after a draw within
-    // the SAME bucket replays after it too (`clearAfterDrawWinsOnBackbuffer`).
-    // `backbufferSpriteViewportIsLocal` and `backbufferSpriteScissorApplies` are both real (LLGL-39:
-    // sprite geometry is translated by the active Viewport's own X/Y before the letterbox scale;
-    // ComputeEffectiveScissor intersects the effective scissor with both the Viewport and any
-    // explicit ScissorRectangle, captured per FrameCommand at queue time).
-    constexpr Contract kContract{"LLGL", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, true, true, true, true, false};
 #else
 #error "REMED-GFX-143: this renderer has no declared backbuffer command-order contract."
 #endif

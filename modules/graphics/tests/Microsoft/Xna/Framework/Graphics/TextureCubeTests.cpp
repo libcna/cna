@@ -136,18 +136,12 @@ namespace
 {
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, Blend2D,
-                            OpenVg, PortableGL, TinyGL, PixiJs, NanoVg);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, PortableGL);
 }
 
 /// Level-0 readback and storage are the same set again.
 ///
-/// This briefly was not an alias: IGL exposes readback through `IFramebuffer` rather than
-/// `ITexture`, and a plain `TextureCube` owns no framebuffer, so its `GetData` refused (plans/plan_igl.md
-/// IGL-17). That turned out to be a limit of the renderer rather than of IGL -- a framebuffer is a
-/// cheap descriptor over an existing image, and `IglTextureCubeRenderer::GetData` now builds a
-/// throwaway one to read the requested face, the same move its own render-target readback already
-/// made for an MSAA resolve. Kept as its own named predicate rather than folded back into
+/// Kept as its own named predicate rather than folded back into
 /// `CubeStorageSupported`, because the two really are different questions and the next renderer to
 /// own cube pixels without being able to fetch them back should say so here.
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported()
@@ -155,12 +149,12 @@ namespace
     return CubeStorageSupported();
 }
 
-/// Readback ABOVE level 0 is a separate question. OpenGL ES 1.1 reads a cube face back by attaching
-/// it to a framebuffer, and GL_OES_framebuffer_object requires the attached level to be 0, so no mip
-/// level above 0 can be read there however much storage exists.
+/// Readback ABOVE level 0 is a separate question: a renderer that reads a cube face back by
+/// attaching it to a framebuffer whose attached level must be 0 can store a whole chain and still
+/// read only the base level. No current renderer is in that position.
 [[nodiscard]] inline bool CubeMipReadbackSupported()
 {
-    return !CNA_RENDERER_IS(OpenGLES1) && CubeLevel0ReadbackSupported();
+    return CubeLevel0ReadbackSupported();
 }
 
 /// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this renderer:

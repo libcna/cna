@@ -300,13 +300,7 @@ protected:
         };
         Texture2D redBlue = Texture2D::CreateFromPixels(device, 2, 1, redBluePixels);
 
-#if defined(CNA_RENDERER_BGFX)
-        DepthStencilState depthState;
-        depthState.setDepthBufferEnableProperty(false);
-        device.setDepthStencilStateProperty(depthState);
-#else
         device.SetDepthTestEnabled(false);
-#endif
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

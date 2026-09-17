@@ -191,7 +191,7 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 50>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 25>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -199,10 +199,8 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_OPENGL33, CNA::GraphicsRendererType::OpenGL33},
         {CNA_GRAPHICS_RENDERER_WEBGL1, CNA::GraphicsRendererType::WebGL1},
         {CNA_GRAPHICS_RENDERER_WEBGL2, CNA::GraphicsRendererType::WebGL2},
-        {CNA_GRAPHICS_RENDERER_BGFX, CNA::GraphicsRendererType::Bgfx},
         {CNA_GRAPHICS_RENDERER_VULKAN, CNA::GraphicsRendererType::Vulkan},
         {CNA_GRAPHICS_RENDERER_WEBGPU, CNA::GraphicsRendererType::WebGPU},
-        {CNA_GRAPHICS_RENDERER_MAGNUM, CNA::GraphicsRendererType::Magnum},
         {CNA_GRAPHICS_RENDERER_HEADLESS, CNA::GraphicsRendererType::Headless},
         {CNA_GRAPHICS_RENDERER_SOFTWARE, CNA::GraphicsRendererType::Software},
         {CNA_GRAPHICS_RENDERER_STUB, CNA::GraphicsRendererType::Stub},
@@ -211,38 +209,15 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_DIRECT2D, CNA::GraphicsRendererType::Direct2D},
         {CNA_GRAPHICS_RENDERER_CANVAS, CNA::GraphicsRendererType::Canvas},
         {CNA_GRAPHICS_RENDERER_HTML_DOM, CNA::GraphicsRendererType::HtmlDom},
-        {CNA_GRAPHICS_RENDERER_BLEND2D, CNA::GraphicsRendererType::Blend2D},
         {CNA_GRAPHICS_RENDERER_FREEDIRECT, CNA::GraphicsRendererType::FreeDirect},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},
-        {CNA_GRAPHICS_RENDERER_DIRECTX1, CNA::GraphicsRendererType::DirectX1},
-        {CNA_GRAPHICS_RENDERER_DIRECTX2, CNA::GraphicsRendererType::DirectX2},
-        {CNA_GRAPHICS_RENDERER_DIRECTX3, CNA::GraphicsRendererType::DirectX3},
-        {CNA_GRAPHICS_RENDERER_DIRECTX5, CNA::GraphicsRendererType::DirectX5},
-        {CNA_GRAPHICS_RENDERER_DIRECTX6, CNA::GraphicsRendererType::DirectX6},
-        {CNA_GRAPHICS_RENDERER_DIRECTX7, CNA::GraphicsRendererType::DirectX7},
-        {CNA_GRAPHICS_RENDERER_DIRECTX8, CNA::GraphicsRendererType::DirectX8},
-        {CNA_GRAPHICS_RENDERER_DIRECTX10, CNA::GraphicsRendererType::DirectX10},
         {CNA_GRAPHICS_RENDERER_SDL_GPU, CNA::GraphicsRendererType::SdlGpu},
-        {CNA_GRAPHICS_RENDERER_OPENGLES1, CNA::GraphicsRendererType::OpenGLES1},
         {CNA_GRAPHICS_RENDERER_OPENGL4, CNA::GraphicsRendererType::OpenGL4},
-        {CNA_GRAPHICS_RENDERER_OPENGL1, CNA::GraphicsRendererType::OpenGL1},
-        {CNA_GRAPHICS_RENDERER_OPENGL2, CNA::GraphicsRendererType::OpenGL2},
-        {CNA_GRAPHICS_RENDERER_WICKED, CNA::GraphicsRendererType::Wicked},
-        {CNA_GRAPHICS_RENDERER_SOKOL, CNA::GraphicsRendererType::Sokol},
-        {CNA_GRAPHICS_RENDERER_DILIGENT, CNA::GraphicsRendererType::Diligent},
-        {CNA_GRAPHICS_RENDERER_GLIDE, CNA::GraphicsRendererType::Glide},
         {CNA_GRAPHICS_RENDERER_GDI, CNA::GraphicsRendererType::Gdi},
-        {CNA_GRAPHICS_RENDERER_LLGL, CNA::GraphicsRendererType::Llgl},
         {CNA_GRAPHICS_RENDERER_METAL, CNA::GraphicsRendererType::Metal},
         {CNA_GRAPHICS_RENDERER_FNA3D, CNA::GraphicsRendererType::Fna3d},
         {CNA_GRAPHICS_RENDERER_SVG_DOM, CNA::GraphicsRendererType::SvgDom},
-        {CNA_GRAPHICS_RENDERER_OPENVG, CNA::GraphicsRendererType::OpenVg},
         {CNA_GRAPHICS_RENDERER_PORTABLEGL, CNA::GraphicsRendererType::PortableGL},
-        {CNA_GRAPHICS_RENDERER_TINYGL, CNA::GraphicsRendererType::TinyGL},
-        {CNA_GRAPHICS_RENDERER_IGL, CNA::GraphicsRendererType::Igl},
-        {CNA_GRAPHICS_RENDERER_PIXIJS, CNA::GraphicsRendererType::PixiJs},
-        {CNA_GRAPHICS_RENDERER_NANOVG, CNA::GraphicsRendererType::NanoVg},
-        {CNA_GRAPHICS_RENDERER_RLGL, CNA::GraphicsRendererType::Rlgl},
     }};
 
 // A retired identity's numeric value is never reused (see docs/c-api/ABI_VERSIONING.md), so
@@ -260,7 +235,7 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
 }
 
 // A renderer this table has never heard of resolves to CNA_GRAPHICS_RENDERER_UNKNOWN and is
-// refused by every route that takes an identity, which is how TINYGL, IGL and PIXIJS were
+// refused by every route that takes an identity, which is how three renderers were once
 // unreachable from C while the coverage matrix still called them mapped. Neither the table nor
 // the published identity range may fall behind the canonical enumeration again.
 static_assert(RendererIdentities.size() == CanonicalRendererCount(),

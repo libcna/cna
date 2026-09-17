@@ -58,9 +58,6 @@ using namespace CNA::Testing::Renderers;
 // widens from the DEFAULT renderer's macro to "compiled into this build", so a multi-renderer
 // build that holds one of these without selecting it still compiles its checks. Every test that
 // uses them is gated at runtime on the renderer actually being ACTIVE.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
-#define CNA_TEST_BGFX_AVAILABLE 1
-#endif
 #if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_PRESENT_WEBGPU)
 #define CNA_TEST_WEBGPU_AVAILABLE 1
 #endif
@@ -68,9 +65,6 @@ using namespace CNA::Testing::Renderers;
 #define CNA_TEST_VULKAN_AVAILABLE 1
 #endif
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
-#endif
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
@@ -376,29 +370,6 @@ namespace
         }
     };
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-    CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer* GetBgfxIndexRenderer(
-        IndexBuffer& buffer)
-    {
-        return dynamic_cast<
-            CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
-                &buffer.GetRenderer());
-    }
-
-    void ExpectExactBgfxIndexFlags(IndexBuffer& buffer, bool thirtyTwoBit)
-    {
-        auto* native = GetBgfxIndexRenderer(buffer);
-        ASSERT_NE(nullptr, native);
-        const std::uint16_t expected =
-            BGFX_BUFFER_ALLOW_RESIZE |
-            (thirtyTwoBit ? BGFX_BUFFER_INDEX32 : BGFX_BUFFER_NONE);
-        EXPECT_EQ(thirtyTwoBit, native->IsThirtyTwoBit());
-        EXPECT_EQ(expected, native->GetNativeCreationFlagsEXT());
-        EXPECT_EQ(
-            thirtyTwoBit,
-            0u != (native->GetNativeCreationFlagsEXT() & BGFX_BUFFER_INDEX32));
-    }
-#endif
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
     struct WebGpuErrorScopeState
@@ -511,7 +482,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto center = TriangleAt(0.0f, Color::Lime);
@@ -556,7 +527,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -594,7 +565,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHi
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto ignoredWithoutBase = TriangleAt(-0.75f, Color::Lime);
@@ -651,7 +622,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto decoy = CenterTriangle(Color::Red);
@@ -705,7 +676,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -745,7 +716,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, SdlGpu, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, SdlGpu, Software);
     RequireIndexedRendering();
 
     constexpr std::uint32_t highVertex = 65536u;
@@ -785,31 +756,6 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
     indexBuffer.GetData(shadow.data(), 3);
     EXPECT_EQ(indices, shadow);
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-    auto* native =
-        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
-            &indexBuffer.GetRenderer());
-    ASSERT_NE(nullptr, native);
-    static_assert(std::is_same_v<
-                  decltype(native->handle),
-                  bgfx::DynamicIndexBufferHandle>);
-    ASSERT_TRUE(bgfx::isValid(native->handle));
-    ExpectExactBgfxIndexFlags(indexBuffer, true);
-    const std::uint16_t creationFlags = native->GetNativeCreationFlagsEXT();
-    EXPECT_NE(0u, creationFlags & BGFX_BUFFER_INDEX32);
-    ASSERT_EQ(indices.size() * sizeof(std::uint32_t), native->cpuData.size());
-    EXPECT_EQ(
-        0,
-        std::memcmp(indices.data(), native->cpuData.data(), native->cpuData.size()));
-    std::cout
-        << "REMED-GFX-108 public static: logical format=ThirtyTwoBits"
-        << ", logical count=3, logical bytes=" << sizeof(indices)
-        << ", native handle=DynamicIndexBufferHandle"
-        << ", native creation flags=0x" << std::hex << creationFlags << std::dec
-        << ", uploaded bytes=" << native->cpuData.size()
-        << ", draw=TriangleList startIndex=0 baseVertex=0 primitiveCount=1"
-        << "\n";
-#endif
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
@@ -835,262 +781,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
     }
 }
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
-{
-    RequireIndexedRendering();
 
-    IndexBuffer static16(
-        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
-    DynamicIndexBuffer dynamic16(
-        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
-    IndexBuffer static32(
-        device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
-    DynamicIndexBuffer dynamic32(
-        device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
-
-    ExpectExactBgfxIndexFlags(static16, false);
-    ExpectExactBgfxIndexFlags(dynamic16, false);
-    ExpectExactBgfxIndexFlags(static32, true);
-    ExpectExactBgfxIndexFlags(dynamic32, true);
-
-    EXPECT_EQ(IndexElementSize::SixteenBits, static16.getIndexElementSizeProperty());
-    EXPECT_EQ(IndexElementSize::SixteenBits, dynamic16.getIndexElementSizeProperty());
-    EXPECT_EQ(IndexElementSize::ThirtyTwoBits, static32.getIndexElementSizeProperty());
-    EXPECT_EQ(IndexElementSize::ThirtyTwoBits, dynamic32.getIndexElementSizeProperty());
-    EXPECT_EQ(1, static16.getIndexCountProperty());
-    EXPECT_EQ(1, dynamic16.getIndexCountProperty());
-    EXPECT_EQ(1, static32.getIndexCountProperty());
-    EXPECT_EQ(1, dynamic32.getIndexCountProperty());
-
-    const std::array<std::uint16_t, 1> source16{65535u};
-    const std::array<std::uint32_t, 1> source32{65536u};
-    static16.SetData(source16.data(), 1);
-    dynamic16.SetData(source16.data(), 0, 1, SetDataOptions::Discard);
-    static32.SetData(source32.data(), 1);
-    dynamic32.SetData(source32.data(), 0, 1, SetDataOptions::Discard);
-
-    auto* static16Native = GetBgfxIndexRenderer(static16);
-    auto* dynamic16Native = GetBgfxIndexRenderer(dynamic16);
-    auto* static32Native = GetBgfxIndexRenderer(static32);
-    auto* dynamic32Native = GetBgfxIndexRenderer(dynamic32);
-    ASSERT_NE(nullptr, static16Native);
-    ASSERT_NE(nullptr, dynamic16Native);
-    ASSERT_NE(nullptr, static32Native);
-    ASSERT_NE(nullptr, dynamic32Native);
-    static_assert(std::is_same_v<
-                  decltype(static16Native->handle),
-                  bgfx::DynamicIndexBufferHandle>);
-
-    const std::uint16_t static16Handle = static16Native->handle.idx;
-    const std::uint16_t dynamic16Handle = dynamic16Native->handle.idx;
-    const std::uint16_t static32Handle = static32Native->handle.idx;
-    const std::uint16_t dynamic32Handle = dynamic32Native->handle.idx;
-    ASSERT_EQ(sizeof(source16), static16Native->cpuData.size());
-    ASSERT_EQ(sizeof(source16), dynamic16Native->cpuData.size());
-    ASSERT_EQ(sizeof(source32), static32Native->cpuData.size());
-    ASSERT_EQ(sizeof(source32), dynamic32Native->cpuData.size());
-    EXPECT_EQ(0, std::memcmp(
-        source16.data(), static16Native->cpuData.data(), sizeof(source16)));
-    EXPECT_EQ(0, std::memcmp(
-        source16.data(), dynamic16Native->cpuData.data(), sizeof(source16)));
-    EXPECT_EQ(0, std::memcmp(
-        source32.data(), static32Native->cpuData.data(), sizeof(source32)));
-    EXPECT_EQ(0, std::memcmp(
-        source32.data(), dynamic32Native->cpuData.data(), sizeof(source32)));
-
-    // GFX-054's public empty-upload contract returns before renderer dispatch. It therefore
-    // preserves the one-index shadow, handle identity, element width, and exact native flags.
-    static16.SetData(static_cast<const std::uint16_t*>(nullptr), 0);
-    dynamic16.SetData(
-        static_cast<const std::uint16_t*>(nullptr),
-        0,
-        0,
-        SetDataOptions::NoOverwrite);
-    static32.SetData(static_cast<const std::uint32_t*>(nullptr), 0);
-    dynamic32.SetData(
-        static_cast<const std::uint32_t*>(nullptr),
-        0,
-        0,
-        SetDataOptions::NoOverwrite);
-    EXPECT_EQ(static16Handle, static16Native->handle.idx);
-    EXPECT_EQ(dynamic16Handle, dynamic16Native->handle.idx);
-    EXPECT_EQ(static32Handle, static32Native->handle.idx);
-    EXPECT_EQ(dynamic32Handle, dynamic32Native->handle.idx);
-    ExpectExactBgfxIndexFlags(static16, false);
-    ExpectExactBgfxIndexFlags(dynamic16, false);
-    ExpectExactBgfxIndexFlags(static32, true);
-    ExpectExactBgfxIndexFlags(dynamic32, true);
-
-    std::array<std::uint16_t, 1> shadow16{};
-    std::array<std::uint32_t, 1> shadow32{};
-    static16.GetData(shadow16.data(), 1);
-    EXPECT_EQ(source16, shadow16);
-    dynamic16.GetData(shadow16.data(), 1);
-    EXPECT_EQ(source16, shadow16);
-    static32.GetData(shadow32.data(), 1);
-    EXPECT_EQ(source32, shadow32);
-    dynamic32.GetData(shadow32.data(), 1);
-    EXPECT_EQ(source32, shadow32);
-
-    // Renderer misuse is rejected instead of truncating 32-bit values or widening 16-bit data.
-    EXPECT_THROW(static16Native->SetData32(source32.data(), 1), std::runtime_error);
-    EXPECT_THROW(static32Native->SetData16(source16.data(), 1), std::runtime_error);
-
-    std::cout
-        << "REMED-GFX-108 bgfx flags: static16=0x" << std::hex
-        << static16Native->GetNativeCreationFlagsEXT()
-        << ", dynamic16=0x" << dynamic16Native->GetNativeCreationFlagsEXT()
-        << ", static32=0x" << static32Native->GetNativeCreationFlagsEXT()
-        << ", dynamic32=0x" << dynamic32Native->GetNativeCreationFlagsEXT()
-        << std::dec
-        << "; native handle type=DynamicIndexBufferHandle; one-index bytes=2/4\n";
-}
-#endif
-
-#ifdef CNA_TEST_BGFX_AVAILABLE
-TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCountAndHints)
-{
-    RequireIndexedRendering();
-
-    constexpr std::uint32_t highVertex = 65536u;
-    std::vector<VertexPositionColor> vertices(
-        static_cast<std::size_t>(highVertex) + 12u,
-        VertexPositionColor(Vector3(4.0f, 4.0f, 0.5f), Color::Black));
-    const auto unbasedPrefix = TriangleAt(-0.75f, Color::Lime);
-    const auto basedPrefix = TriangleAt(-0.25f, Color::Yellow);
-    const auto selected = TriangleAt(0.25f, Color::Red);
-    const auto basedSuffix = TriangleAt(0.75f, Color::Blue);
-    std::copy(
-        unbasedPrefix.begin(),
-        unbasedPrefix.end(),
-        vertices.begin() + highVertex);
-    std::copy(
-        basedPrefix.begin(),
-        basedPrefix.end(),
-        vertices.begin() + highVertex + 3u);
-    std::copy(
-        selected.begin(),
-        selected.end(),
-        vertices.begin() + highVertex + 6u);
-    std::copy(
-        basedSuffix.begin(),
-        basedSuffix.end(),
-        vertices.begin() + highVertex + 9u);
-
-    const std::array<std::uint32_t, 9> rangedIndices{
-        highVertex, highVertex + 1u, highVertex + 2u,
-        highVertex + 3u, highVertex + 4u, highVertex + 5u,
-        highVertex + 6u, highVertex + 7u, highVertex + 8u,
-    };
-    const std::array<std::uint32_t, 3> hintIndices{
-        highVertex + 9u,
-        highVertex + 10u,
-        highVertex + 11u,
-    };
-    VertexBuffer vertexBuffer(
-        device,
-        PositionColorDeclaration(),
-        static_cast<int>(vertices.size()),
-        BufferUsage::None);
-    DynamicIndexBuffer rangedBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 9, BufferUsage::None);
-    IndexBuffer hintBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
-    rangedBuffer.SetData(
-        rangedIndices.data(), 0, 9, SetDataOptions::Discard);
-    hintBuffer.SetData(hintIndices.data(), 3);
-
-#ifdef CNA_TEST_BGFX_AVAILABLE
-    ExpectExactBgfxIndexFlags(rangedBuffer, true);
-    ExpectExactBgfxIndexFlags(hintBuffer, true);
-#endif
-
-    BasicEffect effect(device);
-    effect.VertexColorEnabled = true;
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-
-    // Nonzero startIndex, positive baseVertex, and exact primitiveCount select only the
-    // middle logical 32-bit triangle. All decoded values remain above 65535.
-    device.SetIndexBuffer(&rangedBuffer);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.0f, 0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        3,
-        static_cast<int>(highVertex + 3u),
-        3,
-        3,
-        1);
-
-    // Exact, loose, and deliberately narrow hints must preserve identical high-index
-    // addressing. These calls also exercise startIndex/baseVertex zero.
-    device.SetIndexBuffer(&hintBuffer);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(-1.5f, -0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex + 9u),
-        3,
-        0,
-        1);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.75f, -0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        0,
-        static_cast<int>(vertices.size()),
-        0,
-        1);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.0f, -0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        0,
-        1,
-        0,
-        1);
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(
-        pixels.AtNdc(0.25f, 0.5f),
-        Color::Red,
-        "public Uint32 combined range selected");
-    ExpectExactColor(
-        pixels.AtNdc(-0.75f, 0.5f),
-        Color::Black,
-        "public Uint32 unbased prefix excluded");
-    ExpectExactColor(
-        pixels.AtNdc(-0.25f, 0.5f),
-        Color::Black,
-        "public Uint32 based prefix excluded");
-    ExpectExactColor(
-        pixels.AtNdc(0.75f, 0.5f),
-        Color::Black,
-        "public Uint32 primitiveCount suffix excluded");
-    ExpectExactColor(
-        pixels.AtNdc(-0.75f, -0.5f),
-        Color::Blue,
-        "public Uint32 exact hint");
-    ExpectExactColor(
-        pixels.AtNdc(0.0f, -0.5f),
-        Color::Blue,
-        "public Uint32 loose hint");
-    ExpectExactColor(
-        pixels.AtNdc(0.75f, -0.5f),
-        Color::Blue,
-        "public Uint32 narrow hint");
-}
-#endif
 
 TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths)
 {
@@ -1135,7 +826,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
         PrimitiveType::TriangleStrip, 0, 4, 4, 1, 2));
 
     // plans/plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
-    if (CNA_RENDERER_IS(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
+    if (CNA_RENDERER_IS(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
                         DirectX9, DirectX11, DirectX12, Software))
     {
         const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
@@ -1151,7 +842,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto left = TriangleAt(-0.65f, Color::Red);
@@ -1221,7 +912,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Red);
@@ -1286,7 +977,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueued
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
     // them, and an unmeasured renderer must not be asserted either way.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Blue);
@@ -1331,7 +1022,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto identical = CenterTriangle(Color::Blue);
@@ -1376,7 +1067,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
     // them, and an unmeasured renderer must not be asserted either way.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -1432,864 +1123,6 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
 }
 
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-TEST_F(IndexedDrawDeferredTest, BgfxIndexedAtoBtoACapturesEveryRangeAndBufferVersion)
-{
-    RequireIndexedRendering();
-
-    const auto left = TriangleAt(-0.65f, Color::Red);
-    const auto center = TriangleAt(0.0f, Color::Lime);
-    const auto right = TriangleAt(0.65f, Color::Blue);
-    std::array<VertexPositionColor, 9> vertices{
-        left[0], left[1], left[2],
-        center[0], center[1], center[2],
-        right[0], right[1], right[2],
-    };
-    auto sourceAFirst = std::array<std::uint16_t, 9>{
-        6, 6, 6,
-        0, 1, 2,
-        6, 6, 6,
-    };
-    auto sourceASecond = std::array<std::uint16_t, 9>{
-        3, 4, 5,
-        0, 0, 0,
-        0, 0, 0,
-    };
-    auto sourceB = std::array<std::uint16_t, 9>{
-        8, 8,
-        3, 4, 5,
-        3, 4, 5,
-        8,
-    };
-
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 9, BufferUsage::None);
-    IndexBuffer staticA(
-        device, IndexElementSize::SixteenBits, 9, BufferUsage::None);
-    DynamicIndexBuffer dynamicB(
-        device, IndexElementSize::SixteenBits, 9, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 9);
-    staticA.SetData(sourceAFirst.data(), 9);
-    dynamicB.SetData(sourceB.data(), 0, 9, SetDataOptions::Discard);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-
-    device.SetIndexBuffer(&staticA);
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 0, 0, 3, 3, 1);
-
-    staticA.SetData(sourceASecond.data(), 9);
-    device.SetIndexBuffer(&dynamicB);
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 0, 3, 3, 2, 2);
-
-    device.SetIndexBuffer(&staticA);
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 3, 3, 3, 0, 1);
-
-    sourceAFirst.fill(8);
-    sourceASecond.fill(0);
-    sourceB.fill(0);
-    vertices.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    device.SetIndexBuffer(nullptr);
-    device.SetVertexBuffer(nullptr);
-    staticA.Dispose();
-    dynamicB.Dispose();
-    vertexBuffer.Dispose();
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "indexed A first range/version");
-    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "indexed B start/count/buffer");
-    ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "indexed A base/range/new version");
-    ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "indexed A-to-B-to-A background");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxPublicThirtyTwoBitBuffersPreserveAtoBtoAVersions)
-{
-    RequireIndexedRendering();
-
-    constexpr std::uint32_t highVertex = 65536u;
-    const auto sourceTriangleA = CenterTriangle(Color::Red);
-    const auto sourceTriangleB = CenterTriangle(Color::Lime);
-    std::vector<VertexPositionColor> vertices(
-        static_cast<std::size_t>(highVertex) + 6u,
-        VertexPositionColor(Vector3(4.0f, 4.0f, 0.5f), Color::Black));
-    std::copy(
-        sourceTriangleA.begin(),
-        sourceTriangleA.end(),
-        vertices.begin() + highVertex);
-    std::copy(
-        sourceTriangleB.begin(),
-        sourceTriangleB.end(),
-        vertices.begin() + highVertex + 3u);
-    auto indicesA = std::array<std::uint32_t, 3>{
-        highVertex, highVertex + 2u, highVertex + 1u};
-    auto indicesB = std::array<std::uint32_t, 3>{
-        highVertex + 3u, highVertex + 5u, highVertex + 4u};
-
-    VertexBuffer vertexBuffer(
-        device,
-        PositionColorDeclaration(),
-        static_cast<int>(vertices.size()),
-        BufferUsage::None);
-    IndexBuffer staticBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
-    DynamicIndexBuffer dynamicBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
-
-    // Repeated ordinary updates before a draw retain one writable native allocation.
-    staticBuffer.SetData(indicesB.data(), 3);
-    auto* staticNative = GetBgfxIndexRenderer(staticBuffer);
-    ASSERT_NE(nullptr, staticNative);
-    const std::uint16_t staticWritableHandle = staticNative->handle.idx;
-    staticBuffer.SetData(indicesA.data(), 3);
-    EXPECT_EQ(staticWritableHandle, staticNative->handle.idx);
-
-    dynamicBuffer.SetData(indicesB.data(), 0, 3, SetDataOptions::NoOverwrite);
-    auto* dynamicNative = GetBgfxIndexRenderer(dynamicBuffer);
-    ASSERT_NE(nullptr, dynamicNative);
-    const std::uint16_t dynamicWritableHandle = dynamicNative->handle.idx;
-    dynamicBuffer.SetData(indicesA.data(), 0, 3, SetDataOptions::Discard);
-    EXPECT_EQ(dynamicWritableHandle, dynamicNative->handle.idx);
-    EXPECT_NE(staticNative->handle.idx, dynamicNative->handle.idx);
-    ExpectExactBgfxIndexFlags(staticBuffer, true);
-    ExpectExactBgfxIndexFlags(dynamicBuffer, true);
-
-    BasicEffect effect(device);
-    effect.VertexColorEnabled = true;
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-
-    device.SetIndexBuffer(&staticBuffer);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.65f, 0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex),
-        6,
-        0,
-        1);
-    const std::uint16_t staticVersionA = staticNative->handle.idx;
-
-    staticBuffer.SetData(indicesB.data(), 3);
-    const std::uint16_t staticVersionB = staticNative->handle.idx;
-    EXPECT_NE(staticVersionA, staticVersionB);
-    ExpectExactBgfxIndexFlags(staticBuffer, true);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.0f, 0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex),
-        6,
-        0,
-        1);
-
-    staticBuffer.SetData(indicesA.data(), 3);
-    const std::uint16_t staticVersionA2 = staticNative->handle.idx;
-    EXPECT_NE(staticVersionA, staticVersionA2);
-    EXPECT_NE(staticVersionB, staticVersionA2);
-    ExpectExactBgfxIndexFlags(staticBuffer, true);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.65f, 0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex),
-        6,
-        0,
-        1);
-
-    // Updating the equal-content static object must not mutate or replace the independent
-    // dynamic object, and neither buffer identity participates in pipeline compatibility.
-    EXPECT_EQ(dynamicWritableHandle, dynamicNative->handle.idx);
-    device.SetIndexBuffer(&dynamicBuffer);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.65f, -0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex),
-        6,
-        0,
-        1);
-    const std::uint16_t dynamicVersionA = dynamicNative->handle.idx;
-
-    dynamicBuffer.SetData(indicesB.data(), 0, 3, SetDataOptions::NoOverwrite);
-    const std::uint16_t dynamicVersionB = dynamicNative->handle.idx;
-    EXPECT_NE(dynamicVersionA, dynamicVersionB);
-    ExpectExactBgfxIndexFlags(dynamicBuffer, true);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.0f, -0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex),
-        6,
-        0,
-        1);
-
-    dynamicBuffer.SetData(indicesA.data(), 0, 3, SetDataOptions::Discard);
-    const std::uint16_t dynamicVersionA2 = dynamicNative->handle.idx;
-    EXPECT_NE(dynamicVersionA, dynamicVersionA2);
-    EXPECT_NE(dynamicVersionB, dynamicVersionA2);
-    ExpectExactBgfxIndexFlags(dynamicBuffer, true);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.65f, -0.5f, 0.0f));
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        0,
-        static_cast<int>(highVertex),
-        6,
-        0,
-        1);
-
-    std::array<std::uint32_t, 3> shadow{};
-    staticBuffer.GetData(shadow.data(), 3);
-    EXPECT_EQ(indicesA, shadow);
-    dynamicBuffer.GetData(shadow.data(), 3);
-    EXPECT_EQ(indicesA, shadow);
-    ASSERT_EQ(sizeof(indicesA), staticNative->cpuData.size());
-    ASSERT_EQ(sizeof(indicesA), dynamicNative->cpuData.size());
-    EXPECT_EQ(
-        0,
-        std::memcmp(
-            indicesA.data(), staticNative->cpuData.data(), staticNative->cpuData.size()));
-    EXPECT_EQ(
-        0,
-        std::memcmp(
-            indicesA.data(), dynamicNative->cpuData.data(), dynamicNative->cpuData.size()));
-
-    // Queued draws own every native version after public buffers and caller arrays cease to live.
-    indicesA.fill(0);
-    indicesB.fill(0);
-    std::fill(
-        vertices.begin(),
-        vertices.end(),
-        VertexPositionColor(Vector3(4.0f, 4.0f, 0.5f), Color::Black));
-    device.SetIndexBuffer(nullptr);
-    device.SetVertexBuffer(nullptr);
-    staticBuffer.Dispose();
-    dynamicBuffer.Dispose();
-    vertexBuffer.Dispose();
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(pixels.AtNdc(-0.65f, 0.5f), Color::Red, "static Uint32 A");
-    ExpectExactColor(pixels.AtNdc(0.0f, 0.5f), Color::Lime, "static Uint32 B");
-    ExpectExactColor(pixels.AtNdc(0.65f, 0.5f), Color::Red, "static Uint32 A restore");
-    ExpectExactColor(pixels.AtNdc(-0.65f, -0.5f), Color::Red, "dynamic Uint32 A");
-    ExpectExactColor(pixels.AtNdc(0.0f, -0.5f), Color::Lime, "dynamic Uint32 B");
-    ExpectExactColor(pixels.AtNdc(0.65f, -0.5f), Color::Red, "dynamic Uint32 A restore");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitRendererAtoBtoARendersExactPixels)
-{
-    RequireIndexedRendering();
-
-    struct PackedPositionColor
-    {
-        float x;
-        float y;
-        float z;
-        std::uint8_t r;
-        std::uint8_t g;
-        std::uint8_t b;
-        std::uint8_t a;
-    };
-    static_assert(sizeof(PackedPositionColor) == 16);
-
-    const auto red = CenterTriangle(Color::Red);
-    const auto lime = CenterTriangle(Color::Lime);
-    std::array<PackedPositionColor, 6> vertices{};
-    const auto pack = [](const VertexPositionColor& source)
-    {
-        return PackedPositionColor{
-            source.Position.X,
-            source.Position.Y,
-            source.Position.Z,
-            source.Color.getRProperty(),
-            source.Color.getGProperty(),
-            source.Color.getBProperty(),
-            source.Color.getAProperty(),
-        };
-    };
-    for (std::size_t i = 0; i < red.size(); ++i)
-    {
-        vertices[i] = pack(red[i]);
-        vertices[i + 3] = pack(lime[i]);
-    }
-
-    auto sourceA = std::array<std::uint32_t, 3>{0, 1, 2};
-    auto sourceB = std::array<std::uint32_t, 3>{3, 4, 5};
-    CNA::Internal::Renderers::Bgfx::BgfxVertexBufferRenderer vertexBuffer(6);
-    CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer indexBuffer(3, true);
-    vertexBuffer.SetData(vertices.data(), 6, sizeof(PackedPositionColor));
-    indexBuffer.SetData32(sourceA.data(), 3);
-
-    auto* renderer =
-        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(
-            &device.GetRenderer());
-    ASSERT_NE(nullptr, renderer);
-    ASSERT_TRUE(indexBuffer.IsThirtyTwoBit());
-    EXPECT_EQ(
-        BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
-        indexBuffer.GetNativeCreationFlagsEXT());
-
-    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
-    device.Clear(Color::Black);
-    const std::uint16_t versionA = indexBuffer.handle.idx;
-    renderer->DrawIndexedColoredPrimitives(
-        vertexBuffer,
-        indexBuffer,
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.68f, 0.0f, 0.0f),
-        identity,
-        identity,
-        PrimitiveType::TriangleList,
-        1);
-
-    indexBuffer.SetData32(sourceB.data(), 3);
-    const std::uint16_t versionB = indexBuffer.handle.idx;
-    EXPECT_NE(versionA, versionB);
-    EXPECT_TRUE(indexBuffer.IsThirtyTwoBit());
-    EXPECT_EQ(
-        BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
-        indexBuffer.GetNativeCreationFlagsEXT());
-    renderer->DrawIndexedColoredPrimitives(
-        vertexBuffer,
-        indexBuffer,
-        identity,
-        identity,
-        identity,
-        PrimitiveType::TriangleList,
-        1);
-
-    indexBuffer.SetData32(sourceA.data(), 3);
-    const std::uint16_t versionA2 = indexBuffer.handle.idx;
-    EXPECT_NE(versionB, versionA2);
-    EXPECT_NE(versionA, versionA2);
-    EXPECT_TRUE(indexBuffer.IsThirtyTwoBit());
-    EXPECT_EQ(
-        BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
-        indexBuffer.GetNativeCreationFlagsEXT());
-    renderer->DrawIndexedColoredPrimitives(
-        vertexBuffer,
-        indexBuffer,
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f),
-        identity,
-        identity,
-        PrimitiveType::TriangleList,
-        1);
-
-    sourceA.fill(5);
-    sourceB.fill(0);
-    vertices.fill({});
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(pixels.AtNdc(-0.68f), Color::Red, "native Uint32 A");
-    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "native Uint32 B");
-    ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "native Uint32 A restore");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitRendererHonorsRangeBaseAndCount)
-{
-    RequireIndexedRendering();
-
-    struct PackedPositionColor
-    {
-        float x;
-        float y;
-        float z;
-        std::uint8_t r;
-        std::uint8_t g;
-        std::uint8_t b;
-        std::uint8_t a;
-    };
-    static_assert(sizeof(PackedPositionColor) == 16);
-
-    std::vector<VertexPositionColor> sourceVertices;
-    AppendVertices(sourceVertices, TriangleAt(-0.75f, Color::Lime));
-    AppendVertices(sourceVertices, TriangleAt(-0.25f, Color::Yellow));
-    AppendVertices(sourceVertices, TriangleAt(0.25f, Color::Red));
-    AppendVertices(sourceVertices, TriangleAt(0.75f, Color::Blue));
-    std::array<PackedPositionColor, 12> vertices{};
-    for (std::size_t i = 0; i < vertices.size(); ++i)
-    {
-        vertices[i] = {
-            sourceVertices[i].Position.X,
-            sourceVertices[i].Position.Y,
-            sourceVertices[i].Position.Z,
-            sourceVertices[i].Color.getRProperty(),
-            sourceVertices[i].Color.getGProperty(),
-            sourceVertices[i].Color.getBProperty(),
-            sourceVertices[i].Color.getAProperty(),
-        };
-    }
-    const std::array<std::uint32_t, 9> indices{
-        0, 1, 2,
-        3, 4, 5,
-        6, 7, 8,
-    };
-
-    CNA::Internal::Renderers::Bgfx::BgfxVertexBufferRenderer vertexBuffer(12);
-    CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer indexBuffer(9, true);
-    vertexBuffer.SetData(vertices.data(), 12, sizeof(PackedPositionColor));
-    indexBuffer.SetData32(indices.data(), 9);
-    ASSERT_TRUE(indexBuffer.IsThirtyTwoBit());
-    EXPECT_EQ(
-        BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
-        indexBuffer.GetNativeCreationFlagsEXT());
-
-    auto* renderer =
-        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(
-            &device.GetRenderer());
-    ASSERT_NE(nullptr, renderer);
-    CNA::Internal::Renderers::GpuDrawParams params;
-    params.startIndex = 3;
-    params.baseVertex = 3;
-    params.minVertexIndex = 3;
-    params.numVertices = 3;
-    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
-
-    device.Clear(Color::Black);
-    renderer->DrawIndexedPrimitivesEx(
-        vertexBuffer,
-        indexBuffer,
-        identity,
-        identity,
-        identity,
-        PrimitiveType::TriangleList,
-        1,
-        params);
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(pixels.AtNdc(0.25f), Color::Red, "native Uint32 selected range");
-    ExpectExactColor(pixels.AtNdc(-0.75f), Color::Black, "native Uint32 prefix");
-    ExpectExactColor(pixels.AtNdc(-0.25f), Color::Black, "native Uint32 based prefix");
-    ExpectExactColor(pixels.AtNdc(0.75f), Color::Black, "native Uint32 suffix");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxBufferVersionsSurviveRenderTargetTransition)
-{
-    RequireIndexedRendering();
-
-    auto sourceA = CenterTriangle(Color::Red);
-    auto sourceB = CenterTriangle(Color::Lime);
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 3, BufferUsage::None);
-    vertexBuffer.SetData(sourceA.data(), 3);
-    RenderTarget2D target(
-        device,
-        96,
-        96,
-        false,
-        SurfaceFormat::Color,
-        DepthFormat::None,
-        0,
-        RenderTargetUsage::PreserveContents);
-
-    BasicEffect effect(device);
-    effect.VertexColorEnabled = true;
-    device.SetVertexBuffer(&vertexBuffer);
-    device.SetRenderTarget(&target);
-    device.Clear(Color::Black);
-
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.48f, 0.0f, 0.0f));
-    effect.Apply();
-    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
-
-    vertexBuffer.SetData(sourceB.data(), 3);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.48f, 0.0f, 0.0f));
-    effect.Apply();
-    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
-
-    // Switching targets creates an ordered view segment but must not submit, recycle, or mutate
-    // either version that the target's two queued draws already reference.
-    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-    device.Clear(Color::Black);
-    vertexBuffer.SetData(sourceA.data(), 3);
-    effect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.58f, 0.0f, 0.0f));
-    effect.Apply();
-    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
-
-    sourceA.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    sourceB.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    device.SetVertexBuffer(nullptr);
-    vertexBuffer.Dispose();
-
-    // One readback submits the complete target-A -> target-B -> backbuffer-A frame. Verify the
-    // restored A draw now, before using the target as a texture in the following frame.
-    const BackbufferSnapshot directBackbuffer = ReadBackbufferOnce(device);
-    ExpectExactColor(
-        directBackbuffer.AtNdc(0.58f), Color::Red,
-        "backbuffer segment retained restored vertex A");
-
-    // Sample the RenderTarget2D through the normal BasicEffect texture path into the left half of
-    // the next backbuffer. This verifies the target's exact queued pixels without relying on
-    // Texture2D's upload shadow (rendered target pixels exist only on the GPU).
-    const std::array<Microsoft::Xna::Framework::Graphics::VertexPositionTexture, 6>
-        targetQuad{
-            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
-                Vector3(-1.0f, 1.0f, 0.0f),
-                Microsoft::Xna::Framework::Vector2(0.0f, 0.0f)),
-            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
-                Vector3(-1.0f, -1.0f, 0.0f),
-                Microsoft::Xna::Framework::Vector2(0.0f, 1.0f)),
-            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
-                Vector3(0.0f, -1.0f, 0.0f),
-                Microsoft::Xna::Framework::Vector2(1.0f, 1.0f)),
-            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
-                Vector3(-1.0f, 1.0f, 0.0f),
-                Microsoft::Xna::Framework::Vector2(0.0f, 0.0f)),
-            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
-                Vector3(0.0f, -1.0f, 0.0f),
-                Microsoft::Xna::Framework::Vector2(1.0f, 1.0f)),
-            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
-                Vector3(0.0f, 1.0f, 0.0f),
-                Microsoft::Xna::Framework::Vector2(1.0f, 0.0f)),
-        };
-    BasicEffect sampleEffect(device);
-    sampleEffect.setWorldProperty(
-        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
-    sampleEffect.setViewProperty(
-        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
-    sampleEffect.setProjectionProperty(
-        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
-    sampleEffect.setTextureEnabledProperty(true);
-    sampleEffect.setTextureProperty(&target);
-    device.Clear(Color::Black);
-    sampleEffect.Apply();
-    device.DrawUserPrimitives(
-        PrimitiveType::TriangleList, targetQuad.data(), 0, 2);
-
-    const BackbufferSnapshot backbufferPixels = ReadBackbufferOnce(device);
-    ExpectExactColor(
-        backbufferPixels.AtNdc(-0.74f), Color::Red,
-        "target segment retained vertex A");
-    ExpectExactColor(
-        backbufferPixels.AtNdc(-0.26f), Color::Lime,
-        "target segment retained vertex B");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxPublicThirtyTwoBitRangesSurviveTargetSegmentation)
-{
-    RequireIndexedRendering();
-
-    std::vector<VertexPositionColor> vertices;
-    AppendVertices(vertices, TriangleAt(-0.75f, Color::Lime));
-    AppendVertices(vertices, TriangleAt(-0.25f, Color::Yellow));
-    AppendVertices(vertices, TriangleAt(0.25f, Color::Red));
-    AppendVertices(vertices, TriangleAt(0.75f, Color::Blue));
-    auto targetFirst = std::array<std::uint32_t, 9>{
-        0, 1, 2,
-        3, 4, 5,
-        6, 7, 8,
-    };
-    auto backbuffer = std::array<std::uint32_t, 9>{
-        9, 10, 11,
-        0, 0, 0,
-        0, 0, 0,
-    };
-    auto targetSecond = std::array<std::uint32_t, 9>{
-        3, 4, 5,
-        0, 0, 0,
-        0, 0, 0,
-    };
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(),
-        static_cast<int>(vertices.size()), BufferUsage::None);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 9, BufferUsage::None);
-    RenderTarget2D target(
-        device,
-        96,
-        96,
-        false,
-        SurfaceFormat::Color,
-        DepthFormat::None,
-        0,
-        RenderTargetUsage::PreserveContents);
-    vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
-    indexBuffer.SetData(targetFirst.data(), 9);
-    auto* native = GetBgfxIndexRenderer(indexBuffer);
-    ASSERT_NE(nullptr, native);
-    ExpectExactBgfxIndexFlags(indexBuffer, true);
-    const std::uint16_t targetFirstVersion = native->handle.idx;
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.SetIndexBuffer(&indexBuffer);
-
-    device.SetRenderTarget(&target);
-    device.Clear(Color::Black);
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 3, 3, 3, 3, 1);
-
-    indexBuffer.SetData(backbuffer.data(), 9);
-    const std::uint16_t backbufferVersion = native->handle.idx;
-    EXPECT_NE(targetFirstVersion, backbufferVersion);
-    ExpectExactBgfxIndexFlags(indexBuffer, true);
-    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-    device.Clear(Color::Black);
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 0, 9, 3, 0, 1);
-
-    indexBuffer.SetData(targetSecond.data(), 9);
-    const std::uint16_t targetSecondVersion = native->handle.idx;
-    EXPECT_NE(targetFirstVersion, targetSecondVersion);
-    EXPECT_NE(backbufferVersion, targetSecondVersion);
-    ExpectExactBgfxIndexFlags(indexBuffer, true);
-    device.SetRenderTarget(&target);
-    effect.Apply();
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 0, 3, 3, 0, 1);
-    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-
-    targetFirst.fill(0);
-    backbuffer.fill(0);
-    targetSecond.fill(0);
-    vertices.assign(
-        vertices.size(),
-        VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    device.SetIndexBuffer(nullptr);
-    device.SetVertexBuffer(nullptr);
-    indexBuffer.Dispose();
-    vertexBuffer.Dispose();
-
-    const BackbufferSnapshot directPixels = ReadBackbufferOnce(device);
-    ExpectExactColor(
-        directPixels.AtNdc(0.75f), Color::Blue,
-        "backbuffer retained indexed middle segment");
-    ExpectExactColor(
-        directPixels.AtNdc(0.25f), Color::Black,
-        "target indexed range did not leak to backbuffer");
-
-    SampleRenderTargetToBackbuffer(device, target);
-    const BackbufferSnapshot targetPixels = ReadBackbufferOnce(device);
-    ExpectExactColor(
-        targetPixels.AtNdc(-0.25f), Color::Yellow,
-        "target retained second indexed segment");
-    ExpectExactColor(
-        targetPixels.AtNdc(0.25f), Color::Red,
-        "target retained first indexed segment");
-    ExpectExactColor(
-        targetPixels.AtNdc(-0.75f), Color::Black,
-        "target excluded prefix geometry");
-    ExpectExactColor(
-        targetPixels.AtNdc(0.75f), Color::Black,
-        "target excluded suffix geometry");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxDrawUserBuffersOwnCopiedSourceBytes)
-{
-    RequireIndexedRendering();
-
-    auto left = TriangleAt(-0.65f, Color::Red);
-    auto center = TriangleAt(0.0f, Color::Lime);
-    auto right = TriangleAt(0.65f, Color::Blue);
-    std::array<std::uint16_t, 4> centerIndices{99, 0, 1, 2};
-    std::array<std::uint16_t, 4> rightIndices{99, 0, 1, 2};
-    struct CompactPositionColor
-    {
-        float x;
-        float y;
-        float z;
-        std::uint8_t r;
-        std::uint8_t g;
-        std::uint8_t b;
-        std::uint8_t a;
-    };
-    static_assert(sizeof(CompactPositionColor) == 16);
-    std::array<CompactPositionColor, 3> compactRight{};
-    for (std::size_t i = 0; i < right.size(); ++i)
-    {
-        compactRight[i] = {
-            right[i].Position.X,
-            right[i].Position.Y,
-            right[i].Position.Z,
-            right[i].Color.getRProperty(),
-            right[i].Color.getGProperty(),
-            right[i].Color.getBProperty(),
-            right[i].Color.getAProperty(),
-        };
-    }
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.Clear(Color::Black);
-    device.DrawUserPrimitives(
-        PrimitiveType::TriangleList,
-        left.data(), 0, 1);
-    device.DrawUserIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        center.data(), 0, 3,
-        centerIndices.data(), 1, 1);
-    device.DrawUserIndexedPrimitives(
-        PrimitiveType::TriangleList,
-        compactRight.data(), 0, 3,
-        rightIndices.data(), 1, 1,
-        PositionColorDeclaration());
-
-    left.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    center.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    right.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
-    centerIndices.fill(0);
-    rightIndices.fill(0);
-    compactRight.fill({});
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(
-        pixels.AtNdc(-0.65f), Color::Red,
-        "non-indexed typed DrawUser copy");
-    ExpectExactColor(
-        pixels.AtNdc(0.0f), Color::Lime,
-        "indexed typed DrawUser copy");
-    ExpectExactColor(
-        pixels.AtNdc(0.65f), Color::Blue,
-        "explicit-declaration DrawUser copy");
-}
-
-TEST_F(IndexedDrawDeferredTest, BgfxNativeBufferVersionCountsRemainBounded)
-{
-    RequireIndexedRendering();
-
-    // Let initialization-time deferred destroys settle before recording the process-wide bgfx
-    // handle allocator's baseline.
-    device.Present();
-    device.Present();
-    const bgfx::Stats* stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    const std::uint16_t processVertexBaseline = stats->numDynamicVertexBuffers;
-    const std::uint16_t processIndexBaseline = stats->numDynamicIndexBuffers;
-
-    auto verticesA = CenterTriangle(Color::White);
-    auto verticesB = CenterTriangle(Color::Lime);
-    const auto indicesA = std::array<std::uint32_t, 3>{0, 1, 2};
-    const auto indicesB = std::array<std::uint32_t, 3>{0, 2, 1};
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 3, BufferUsage::None);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(verticesA.data(), 3);
-    indexBuffer.SetData(indicesA.data(), 3);
-    ExpectExactBgfxIndexFlags(indexBuffer, true);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.SetIndexBuffer(&indexBuffer);
-
-    // Retire the vertex buffer's constructor-layout allocation before measuring its steady
-    // one-object baseline.
-    device.Present();
-    device.Present();
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    const std::uint16_t liveVertexBaseline = stats->numDynamicVertexBuffers;
-    const std::uint16_t liveIndexBaseline = stats->numDynamicIndexBuffers;
-    EXPECT_EQ(processVertexBaseline + 1u, liveVertexBaseline);
-    EXPECT_EQ(processIndexBaseline + 1u, liveIndexBaseline);
-
-    std::uint16_t warmVertexHighWater = liveVertexBaseline;
-    std::uint16_t warmIndexHighWater = liveIndexBaseline;
-    std::uint16_t finalVertexCount = liveVertexBaseline;
-    std::uint16_t finalIndexCount = liveIndexBaseline;
-    for (int frame = 0; frame < 32; ++frame)
-    {
-        device.Clear(Color::Black);
-        vertexBuffer.SetData(verticesA.data(), 3);
-        indexBuffer.SetData(indicesA.data(), 3);
-        ExpectExactBgfxIndexFlags(indexBuffer, true);
-        device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
-        device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
-
-        vertexBuffer.SetData(verticesB.data(), 3);
-        indexBuffer.SetData(indicesB.data(), 3);
-        ExpectExactBgfxIndexFlags(indexBuffer, true);
-        device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
-
-        vertexBuffer.SetData(verticesA.data(), 3);
-        indexBuffer.SetData(indicesA.data(), 3);
-        ExpectExactBgfxIndexFlags(indexBuffer, true);
-        device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
-        device.Present();
-
-        stats = bgfx::getStats();
-        ASSERT_NE(nullptr, stats);
-        finalVertexCount = stats->numDynamicVertexBuffers;
-        finalIndexCount = stats->numDynamicIndexBuffers;
-        if (frame < 4)
-        {
-            warmVertexHighWater = std::max(
-                warmVertexHighWater, finalVertexCount);
-            warmIndexHighWater = std::max(
-                warmIndexHighWater, finalIndexCount);
-        }
-        else
-        {
-            EXPECT_LE(finalVertexCount, warmVertexHighWater);
-            EXPECT_LE(finalIndexCount, warmIndexHighWater);
-        }
-    }
-
-    // The current object versions are the only survivors after bgfx's normal frame-fence
-    // retirement window; repeated A -> B -> A updates do not accumulate permanent allocations.
-    device.Present();
-    device.Present();
-    device.Present();
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    EXPECT_EQ(liveVertexBaseline, stats->numDynamicVertexBuffers);
-    EXPECT_EQ(liveIndexBaseline, stats->numDynamicIndexBuffers);
-    EXPECT_LE(finalVertexCount, warmVertexHighWater);
-    EXPECT_LE(finalIndexCount, warmIndexHighWater);
-    const std::uint16_t retiredVertexCount = stats->numDynamicVertexBuffers;
-    const std::uint16_t retiredIndexCount = stats->numDynamicIndexBuffers;
-
-    device.SetIndexBuffer(nullptr);
-    device.SetVertexBuffer(nullptr);
-    indexBuffer.Dispose();
-    vertexBuffer.Dispose();
-    device.Present();
-    device.Present();
-    device.Present();
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    EXPECT_EQ(processVertexBaseline, stats->numDynamicVertexBuffers);
-    EXPECT_EQ(processIndexBaseline, stats->numDynamicIndexBuffers);
-    std::cout
-        << "REMED-GFX-108/109 public Uint32 bgfx dynamic-handle cardinality:"
-        << " process baseline V/I="
-        << processVertexBaseline << "/" << processIndexBaseline
-        << ", two live public buffers=" << liveVertexBaseline << "/"
-        << liveIndexBaseline
-        << ", 32-frame warm high-water=" << warmVertexHighWater << "/"
-        << warmIndexHighWater
-        << ", post-fence live=" << retiredVertexCount << "/"
-        << retiredIndexCount
-        << ", post-dispose=" << stats->numDynamicVertexBuffers << "/"
-        << stats->numDynamicIndexBuffers << "\n";
-}
-#endif
 
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
 {
@@ -2439,7 +1272,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -2539,7 +1372,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Vulkan, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2618,7 +1451,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Vulkan, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2662,12 +1495,6 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     lineStripBuffer.SetData(
         lineStrip.data(), 0, 3, SetDataOptions::NoOverwrite);
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-    ExpectExactBgfxIndexFlags(triangleListBuffer, true);
-    ExpectExactBgfxIndexFlags(triangleStripBuffer, true);
-    ExpectExactBgfxIndexFlags(lineListBuffer, true);
-    ExpectExactBgfxIndexFlags(lineStripBuffer, true);
-#endif
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
@@ -2943,7 +1770,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeI
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);
@@ -2977,7 +1804,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex32)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, DirectX12, Software);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);

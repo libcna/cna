@@ -15,12 +15,7 @@
 # real GL renderer is a duplicate-symbol error by construction.
 set(CNA_RENDERER_REAL_GL_FAMILIES
     OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2   # EasyGL
-    OPENGL1 OPENGL2 OPENGL4 OPENGLES1            # native GL
-    OPENVG                                        # ShivaVG on a real GL context
-    NANOVG                                        # NanoVG's compiled-shader backend on a real GL context
-    MAGNUM                                        # Magnum's own GL wrappers
-    SOKOL                                         # sokol_gfx on GL
-    RLGL)                                         # standalone rlgl on a real GL context
+    OPENGL4)                                      # native GL
 
 # Identities served by one implementation family. Two of them in one binary would mean compiling
 # that family twice with different profile defines -- an ODR violation, not merely a name clash.
@@ -29,15 +24,11 @@ set(CNA_RENDERER_SHARED_EASYGL OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets
 # one of them at a time.
-set(CNA_RENDERER_WINDOWS_ONLY
-    DIRECTX1 DIRECTX2 DIRECTX3 DIRECTX5 DIRECTX6 DIRECTX7 DIRECTX8 DIRECTX9 DIRECTX10
-    DIRECTX11 DIRECTX12 DIRECT2D GLIDE GDI)
-# PIXIJS belongs here for the same reason as CANVAS/HTML_DOM/SVG_DOM: PixiJS is a browser
-# JavaScript library reached through EM_JS, and RendererSelection.cmake refuses it outside
-# Emscripten per identity. Listing it here is what makes the PAIRWISE rule state the reason --
-# a PIXIJS + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
-# whichever per-identity gate happens to fire first.
-set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS HTML_DOM SVG_DOM PIXIJS)
+set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11 DIRECTX12 DIRECT2D GDI)
+# Listing the browser renderers here is what makes the PAIRWISE rule state the reason -- a
+# CANVAS + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
+# whichever per-identity gate in RendererSelection.cmake happens to fire first.
+set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS HTML_DOM SVG_DOM)
 set(CNA_RENDERER_MACOS_ONLY METAL)
 
 # Rejects an unbuildable combination with a specific, actionable reason.
@@ -45,8 +36,8 @@ set(CNA_RENDERER_MACOS_ONLY METAL)
 # The reason is taken from ARGN rather than a named third parameter, and joined. Every call site
 # below writes its reason as several adjacent string literals so it can be wrapped at a readable
 # width -- CMake passes those as SEPARATE arguments, so a named `reason` parameter captured only the
-# first fragment and silently discarded the rest. That is not cosmetic: a PIXIJS + DIRECTX11 request
-# reported "PIXIJS builds only for Emscripten and DIRECTX11 only for" and stopped mid-sentence,
+# first fragment and silently discarded the rest. That is not cosmetic: a browser + DIRECTX11 request
+# reported "<X> builds only for Emscripten and DIRECTX11 only for" and stopped mid-sentence,
 # naming neither the second platform nor the fact that one toolchain cannot target both, which is
 # the entire content of the explanation.
 function(_cna_reject_combination first second)
@@ -77,16 +68,6 @@ function(cna_validate_renderer_combination)
     list(LENGTH _identities _count)
     if(_count LESS_EQUAL 1)
         return()
-    endif()
-
-    # GLIDE targets the native 32-bit x86 Glide ABI and pins the whole binary to it, so it cannot
-    # share a build with anything else regardless of what that other renderer is.
-    if("GLIDE" IN_LIST _identities)
-        list(REMOVE_ITEM _identities "GLIDE")
-        list(GET _identities 0 _other)
-        _cna_reject_combination("GLIDE" "${_other}"
-            "GLIDE pins the build to the native 32-bit (x86) Glide ABI, which every other renderer "
-            "in this project builds against a 64-bit toolchain.")
     endif()
 
     foreach(_first IN LISTS _identities)

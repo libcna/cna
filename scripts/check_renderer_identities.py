@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 50 public renderer identities. This check mechanically compares
+CNA has exactly 25 public renderer identities (plans/plan_renderer_cleanup.md). This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a
@@ -92,7 +92,7 @@ COUNTED_DOCUMENTS = {
 IDENTITY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+public\s+(?:renderer\s+)?identities")
 FAMILY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+implementation\s+families\b")
 
-# Canonical public identities: (cmake selection name, enum name). 50 entries.
+# Canonical public identities: (cmake selection name, enum name). 25 entries.
 IDENTITIES = [
     ("SDL_RENDERER", "SdlRenderer"),
     ("OPENGLES2", "OpenGLES2"),
@@ -100,10 +100,8 @@ IDENTITIES = [
     ("OPENGL33", "OpenGL33"),
     ("WEBGL1", "WebGL1"),
     ("WEBGL2", "WebGL2"),
-    ("BGFX", "Bgfx"),
     ("VULKAN", "Vulkan"),
     ("WEBGPU", "WebGPU"),
-    ("MAGNUM", "Magnum"),
     ("HEADLESS", "Headless"),
     ("SOFTWARE", "Software"),
     ("STUB", "Stub"),
@@ -112,38 +110,15 @@ IDENTITIES = [
     ("DIRECT2D", "Direct2D"),
     ("CANVAS", "Canvas"),
     ("HTML_DOM", "HtmlDom"),
-    ("BLEND2D", "Blend2D"),
     ("FREEDIRECT", "FreeDirect"),
     ("DIRECTX9", "DirectX9"),
-    ("DIRECTX1", "DirectX1"),
-    ("DIRECTX2", "DirectX2"),
-    ("DIRECTX3", "DirectX3"),
-    ("DIRECTX5", "DirectX5"),
-    ("DIRECTX6", "DirectX6"),
-    ("DIRECTX7", "DirectX7"),
-    ("DIRECTX8", "DirectX8"),
-    ("DIRECTX10", "DirectX10"),
     ("SDL_GPU", "SdlGpu"),
-    ("OPENGLES1", "OpenGLES1"),
     ("OPENGL4", "OpenGL4"),
-    ("OPENGL1", "OpenGL1"),
-    ("OPENGL2", "OpenGL2"),
-    ("WICKED", "Wicked"),
-    ("SOKOL", "Sokol"),
-    ("DILIGENT", "Diligent"),
-    ("GLIDE", "Glide"),
     ("GDI", "Gdi"),
-    ("LLGL", "Llgl"),
     ("METAL", "Metal"),
     ("FNA3D", "Fna3d"),
     ("SVG_DOM", "SvgDom"),
-    ("OPENVG", "OpenVg"),
     ("PORTABLEGL", "PortableGL"),
-    ("TINYGL", "TinyGL"),
-    ("IGL", "Igl"),
-    ("PIXIJS", "PixiJs"),
-    ("NANOVG", "NanoVg"),
-    ("RLGL", "Rlgl"),
 ]
 
 
@@ -158,14 +133,22 @@ def enum_identities():
 
 
 def cmake_identities():
-    path = os.path.join(REPO, "cmake", "RendererSelection.cmake")
+    """The CMake selection list: cmake/RendererIdentities.cmake's CNA_RENDERER_PUBLIC_IDENTITIES.
+
+    cmake/RendererSelection.cmake must publish exactly that list as CNA_GRAPHICS_RENDERER's STRINGS
+    rather than a literal copy of its own, or the two could drift.
+    """
+    path = os.path.join(REPO, "cmake", "RendererIdentities.cmake")
     text = open(path, encoding="utf-8").read()
-    m = re.search(
-        r"set_property\(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS((?:\s+\"[A-Z0-9_]+\")+)\)",
-        text)
+    m = re.search(r"set\(CNA_RENDERER_PUBLIC_IDENTITIES\s(.*?)\)", text, re.S)
     if not m:
-        sys.exit("cannot locate CNA_GRAPHICS_RENDERER STRINGS property")
-    return re.findall(r"\"([A-Z0-9_]+)\"", m.group(1))
+        sys.exit("cannot locate CNA_RENDERER_PUBLIC_IDENTITIES in cmake/RendererIdentities.cmake")
+    selection = open(os.path.join(REPO, "cmake", "RendererSelection.cmake"), encoding="utf-8").read()
+    if not re.search(r"set_property\(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "
+                     r"\$\{CNA_RENDERER_PUBLIC_IDENTITIES\}\)", selection):
+        sys.exit("cmake/RendererSelection.cmake no longer publishes CNA_RENDERER_PUBLIC_IDENTITIES "
+                 "as the CNA_GRAPHICS_RENDERER STRINGS property")
+    return re.findall(r"\b([A-Z][A-Z0-9_]*)\b", re.sub(r"#[^\n]*", "", m.group(1)))
 
 
 def family_count():

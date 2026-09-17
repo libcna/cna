@@ -143,14 +143,6 @@ namespace
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, true};
-#elif defined(CNA_RENDERER_BGFX)
-    // `depthRangeApplies` false: measured here. bgfx has no per-view depth-range call at all --
-    // `bgfx::setViewRect` carries no min/max depth and the range is expected to be folded into the
-    // projection matrix -- so Viewport.MinDepth/MaxDepth reach nothing. That is a distinct root
-    // cause from viewport capture (every X/Y/Width/Height check in this file passes on bgfx) and
-    // is recorded as its own finding rather than fixed here; checks E1/E2 assert the IGNORED
-    // outcome so the declaration is falsifiable in both directions.
-    constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true, true, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
@@ -170,11 +162,6 @@ namespace
     constexpr Contract kContract{"DIRECTX12", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true, true, true, true};
-#elif defined(CNA_RENDERER_LLGL)
-    // LLGL-53 forwards each deferred command's captured MinDepth/MaxDepth to LLGL::Viewport. The
-    // OpenGL module applies the range exactly; keep these checks on the honoured outcome so a
-    // future regression cannot silently collapse every draw back to [0,1].
-    constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true, true, true, false};
 #else
 #error "REMED-GFX-116: this renderer has no declared deferred-viewport contract."
 #endif

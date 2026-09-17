@@ -187,13 +187,6 @@ namespace
     constexpr Contract kContract{"SDL_GPU", true, true, false, true, true,
                                  true, true, false,
                                  true, true, true, true, false, true, false};
-#elif defined(CNA_RENDERER_BGFX)
-    // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
-    // readback over untouched memory; REMED-GFX-154 fixed that, so check S1 measures the ordered
-    // Clear on a multisampled destination instead of skipping it.
-    constexpr Contract kContract{"BGFX", true, true, true, true, true,
-                                 true, true, true,
-                                 true, true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does, and a
     // WGPURenderPassDescriptor has exactly one set of them. REMED-GFX-156 put Clear() into the same
@@ -223,17 +216,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, true, false, true, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // Cube targets and stencil testing are deliberately unsupported on the validated OpenGL path;
-    // their dedicated LLGL checks require deterministic NotSupportedException instead.
-    // `preferMultiSampling` false: measured -- RenderTarget2D.MultiSampleCount applies regardless of
-    // whether the device itself was constructed with PreferMultiSampling (LLGL reads a render
-    // target's own requested sample count at ITS OWN construction, not the swap chain's).
-    // `orderedClear`/`clearOnPreserveTarget` true: every command this renderer queues, including
-    // Clear(), replays in original public order within its own target's bucket.
-    constexpr Contract kContract{"LLGL", true, true, true, false, false,
-                                 true, true, false,
                                  true, true, true, true, false, true, false};
 #else
 #error "REMED-GFX-129: this renderer has no declared ordered-Clear contract."
@@ -1416,23 +1398,6 @@ class OrderedClearTest : public Game
     /// P3 -- the blend constant (GraphicsDevice.BlendFactor) still reaches the reopened pass.
     void RunBlendFactorAcrossClearBoundary(GraphicsDevice& dev)
     {
-#if defined(CNA_RENDERER_LLGL)
-        bool rejected = false;
-        try
-        {
-            BlendState factored;
-            factored.setColorSourceBlendProperty(Blend::BlendFactor);
-            dev.setBlendStateProperty(factored);
-        }
-        catch (const System::NotSupportedException&)
-        {
-            rejected = true;
-        }
-        check(rejected,
-              "P3 BlendFactor: LLGL OpenGL rejects the unsupported constant-blend-factor route "
-              "deterministically");
-        return;
-#endif
 
         ExpectClearBoundaryParity(
             dev, "P3 BlendFactor survives a Clear boundary",

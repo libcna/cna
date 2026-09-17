@@ -235,10 +235,10 @@ endfunction()
 # ---------------------------------------------------------------------------
 # Called from cmake/RendererSelection.cmake once CNA_GRAPHICS_RENDERER is known. Renderers
 # outside this list are not "probably broken" — they need a windowing/GL/native API that does not
-# exist on iOS (desktop OpenGL, Direct3D, GDI, Glide, a browser DOM), or a third-party dependency
-# this project has never configured for an iOS sysroot (Skia, Wicked, Diligent, bgfx, MoltenVK,
-# wgpu-native, LLGL, sokol, Magnum, FNA3D). Configuring them would fail deep inside a dependency
-# build with an unreadable error; this fails immediately with a readable one.
+# exist on iOS (desktop OpenGL, Direct3D, GDI, a browser DOM), or a third-party dependency this
+# project has never configured for an iOS sysroot (MoltenVK, wgpu-native, FNA3D). Configuring them
+# would fail deep inside a dependency build with an unreadable error; this fails immediately with a
+# readable one.
 #
 # Being on the list means CNA wires the renderer up for iOS, CI final-links it into a device app,
 # and the simulator smoke app exercises one frame. It does not mean correct pixels or any input,

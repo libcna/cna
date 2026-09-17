@@ -18,7 +18,7 @@
 // the C level on purpose -- no TypeScript, no binding layer.
 //
 // Reports in the same shape as every other CNA browser page, so
-// scripts/run_pixijs_browser_tests.mjs runs it unchanged.
+// scripts/run_browser_tests.mjs runs it unchanged.
 const requestedFrames = Number(new URLSearchParams(location.search).get('frames') || 5);
 const EXPECTED = 11;
 let passed = 0;

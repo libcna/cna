@@ -46,17 +46,8 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
-    # HTMLDOM-123: these two files are complete standalone Win32 programs used only by the
-    # dedicated GLIDE ABI DLL/loader targets in cmake/Tests/GlideTests.cmake.  They are not GTest
-    # translation units: one exports a DLL and the other defines its own main().  Letting the
-    # recursive test glob add them to CnaTests breaks every non-Windows configuration (including
-    # HTML_DOM/Emscripten) at <windows.h>, and would duplicate main in a Windows CnaTests link.
-    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-        ".*/CNA/Internal/Renderers/Glide/(FakeGlide3xDll|GlideAbiLoaderTests)\\.cpp$")
-
     # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
-    # standalone executables with their own main(), not GTest translation units -- same reason
-    # as the Glide ABI programs just above.
+    # standalone executables with their own main(), not GTest translation units.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
 
     # plans/plan_binding.md CBIND-033: the C API module owns its own test executables
@@ -64,8 +55,8 @@ if(CNA_BUILD_TESTS)
     # HandleRegistryTest.cpp and BoundaryDetailTest.cpp define their own main(), and
     # AbiHeaderCpp.cpp is a pure ABI compile check linked into cna_c_api_abi_smoke. Letting the
     # recursive glob add them to CnaTests fails the build at <CNA/C/abi.h> (the C API's include
-    # path is scoped to its own targets) and would duplicate main -- same reason as the Glide ABI
-    # programs and the module probes above.
+    # path is scoped to its own targets) and would duplicate main -- same reason as the module
+    # probes above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
 
     # plans/plan_dx.md DX-250/DX-269: XmlSerializationEXTTests includes the optional
@@ -315,32 +306,12 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
-    # plans/plan_wicked.md: the Wicked renderer's own regression suites live under
-    # modules/renderers/wicked/tests/, and the pipeline-key test among them includes the
-    # renderer's header, which resolves only when the WICKED renderer is configured (the
-    # WickedEngine include directories come with the renderer target). Excluded from every other
-    # renderer's corpus the same way the conditional files above are -- an unconditional glob of
-    # a renderer-local test directory otherwise breaks every other renderer's CnaTests configure.
-    # Under WICKED the corpus keeps them, and the dedicated cna_test_wicked_* targets
-    # (cmake/Tests/WickedTests.cmake) build them standalone as well.
-    if(NOT "WICKED" IN_LIST CNA_RENDERER_IDENTITIES)
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Wicked/.*\\.cpp$")
-    endif()
-
-    # plans/plan_magnum.md: the MAGNUM renderer's own GTest suite lives under
-    # modules/renderers/magnum/tests/ and includes the renderer's headers, which resolve only
-    # when the MAGNUM renderer is configured (the Magnum::GL include directories come with the
-    # renderer target). Excluded from every other renderer's corpus by the same convention as the
-    # Wicked directory above; under MAGNUM the corpus keeps it.
-    if(NOT "MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
-    endif()
-
     # plans/plan_fna3d.md: the FNA3D renderer's own GTest suites live under
     # modules/renderers/fna3d/tests/ and include the renderer's headers, which resolve only when
     # the FNA3D renderer is configured (the FNA3D/MojoShader include roots come with the renderer
-    # target). Excluded from every other renderer's corpus by the same convention as the Wicked
-    # and Magnum directories above; under FNA3D the corpus keeps them.
+    # target). Excluded from every other renderer's corpus -- an unconditional glob of a
+    # renderer-local test directory otherwise breaks every other renderer's CnaTests configure;
+    # under FNA3D the corpus keeps them.
     if(NOT "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
@@ -685,12 +656,11 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "SDL_AUDIODRIVER=dummy")
     endif()
 
-    # The metal and glide policy suites deliberately compile on every renderer (see their own
-    # header comments); their policy headers ride the unconditional header-interface targets
-    # those renderer modules always define.
+    # The metal policy suites deliberately compile on every renderer (see their own header
+    # comments); their policy headers ride the unconditional header-interface target that renderer
+    # module always defines.
     target_link_libraries(cna_test_build_config INTERFACE
-        cna_renderer_metal_headers
-        cna_renderer_glide_headers)
+        cna_renderer_metal_headers)
 
     # GltfImportCoreTests.cpp includes CNA/Internal/GltfImport/GltfImportCore.hpp directly (to call
     # ExtractMesh() without spawning the CLI tool), which itself includes cgltf.h -- CNA's own
@@ -746,7 +716,7 @@ if(CNA_BUILD_TESTS)
     endforeach()
 
     # ...and each compiled-in renderer's own public include root, for the same reason: those suites
-    # include their renderer's headers ("CNA/Internal/Renderers/Magnum/MagnumBuffers.hpp"), and only
+    # include their renderer's headers ("CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"), and only
     # the DEFAULT renderer's target contributes its include directory to this executable. Enabling
     # the define without the include root just moves the failure from "no tests" to "no such file".
     foreach(_cna_present_dir IN LISTS CNA_RENDERER_DIRS)
@@ -757,12 +727,10 @@ if(CNA_BUILD_TESTS)
     endforeach()
 
     # plans/plan_runtimerenderer.md RTR-P9-9, second half: a module's own include root is not enough when
-    # its PUBLIC headers include a third-party library's headers in turn. LLGL is the case that
-    # showed it -- modules/renderers/llgl/include/.../LlglSdlSurface.hpp opens with
-    # `#include <LLGL/Surface.h>`, and LLGL's include directory reaches the llgl module through the
-    # LLGL target it links, not through any directory of CNA's own. Adding only CNA's root moved the
-    # failure from "no tests" to "LLGL/Surface.h: No such file or directory" in a multi build
-    # containing LLGL.
+    # its PUBLIC headers include a third-party library's headers in turn: that library's include
+    # directory reaches the renderer module through the third-party target it links, not through
+    # any directory of CNA's own, so adding only CNA's root moved the failure from "no tests" to
+    # "<third-party header>: No such file or directory" in a multi build.
     #
     # Giving this executable each present renderer target's OWN include list keeps that generic:
     # whatever a renderer module compiles against, its device-free suites can compile against too,
@@ -801,23 +769,6 @@ if(CNA_BUILD_TESTS)
 
     if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
         target_link_libraries(cna_test_build_config INTERFACE WebGPU::WebGPU)
-    endif()
-
-    # plans/plan_magnum.md MAGNUM-40: the MAGNUM renderer's own tests exercise its XNA-ordinal -> Magnum-enum
-    # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
-    # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
-    # to this test executable only, and only in the Magnum configuration.
-    if("MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
-        target_link_libraries(cna_test_build_config INTERFACE Magnum::GL Magnum::Magnum)
-    endif()
-
-    # plans/plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
-    # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
-    # renderer target (same discipline as WebGPU just above), so expose them here too.
-    if("DILIGENT" IN_LIST CNA_RENDERER_IDENTITIES)
-        cna_link_diligent(${CNA_TEST_OBJECT_TARGET_renderers})
-        cna_link_diligent(CnaTests)
-        cna_link_diligent(CnaRendererTests)
     endif()
 
     if(CNA_ENABLE_NET)
@@ -1251,47 +1202,6 @@ if(CNA_BUILD_TESTS)
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
-            # plans/plan_dx2.md DX2-84 follow-up: this gap pre-dates DIRECTX2 (DIRECTX1 never got this wiring
-            # either, plans/plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
-            # directly through run-wine-directx1.sh by hand rather than via `ctest -L DIRECTX1`'s
-            # gtest_discover_tests(PRE_TEST) step) -- fixed here for both renderers together, same
-            # skip-gate reasoning as D3D9/D3D11/D3D12 above (a bare --gtest_list_tests never opens
-            # a real DirectDraw object).
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX1_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx1.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx2.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
-            # plans/plan_dx3.md: wired proactively (not discovered by a from-scratch regression this
-            # time) -- same DX2-84 finding/fix, applied up front for this new renderer.
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX3_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx3.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
-            # plans/plan_dx5.md: same proactive wiring as DIRECTX3.
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx5.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
-            # plans/plan_dx6.md: same proactive wiring as DIRECTX3/DIRECTX5.
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx6.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
-            # plans/plan_dx7.md: same proactive wiring as DIRECTX3/DIRECTX5/DIRECTX6.
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx7.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
-            # plans/plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
-            # D3D9's own run-wine-dxvk9.sh gate -- CNA_DX8_SKIP_DXVK_GATE for a binary that
-            # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx8.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
-            # plans/plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DIRECTX8's
-            # own gate -- CNA_D3D10_SKIP_DXVK_GATE for a binary that legitimately never opens a
-            # real D3D10 device (e.g. a bare --gtest_list_tests call).
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx10.sh")
         elseif("DIRECT2D" IN_LIST CNA_RENDERER_IDENTITIES)
             # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
             # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests

@@ -100,13 +100,7 @@ using namespace CNA::Testing::Renderers;
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
 // checks at runtime that bgfx is the ACTIVE renderer.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
-#define CNA_TEST_BGFX_AVAILABLE 1
-#endif
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-#include <bgfx/bgfx.h>
-#endif
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -138,8 +132,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedDiffuse()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, SdlGpu, Software, Rlgl);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
 }
 
 // The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
@@ -153,8 +147,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu, Software, Rlgl);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU,
+                           DirectX11, DirectX12, SdlGpu, Software);
 }
 
 
@@ -1470,242 +1464,3 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 // object counts, and they lag one frame, so every reading is taken after two Presents.
 // ---------------------------------------------------------------------------
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-
-class BgfxInstancedColorCardinalityTest : public InstancedDiffuseColorTest
-{
-protected:
-    struct Cardinality
-    {
-        std::uint16_t programs = 0;
-        std::uint16_t shaders = 0;
-        std::uint16_t uniforms = 0;
-        std::uint16_t vertexBuffers = 0;
-        std::uint16_t dynamicVertexBuffers = 0;
-        std::uint16_t dynamicIndexBuffers = 0;
-        std::uint32_t draws = 0;
-
-        [[nodiscard]] std::string ToString() const
-        {
-            std::ostringstream os;
-            os << "programs=" << programs << " shaders=" << shaders << " uniforms=" << uniforms
-               << " vb=" << vertexBuffers << " dynVb=" << dynamicVertexBuffers
-               << " dynIb=" << dynamicIndexBuffers << " draws=" << draws;
-            return os.str();
-        }
-    };
-
-    /// bgfx's counters lag one frame, so settle before reading.
-    Cardinality Measure()
-    {
-        device.Present();
-        device.Present();
-        const bgfx::Stats* stats = bgfx::getStats();
-        EXPECT_NE(nullptr, stats);
-        Cardinality out;
-        if (stats == nullptr)
-            return out;
-        out.programs = stats->numPrograms;
-        out.shaders = stats->numShaders;
-        out.uniforms = stats->numUniforms;
-        out.vertexBuffers = stats->numVertexBuffers;
-        out.dynamicVertexBuffers = stats->numDynamicVertexBuffers;
-        out.dynamicIndexBuffers = stats->numDynamicIndexBuffers;
-        out.draws = stats->numDraw;
-        return out;
-    }
-
-    static void ExpectNoCacheGrowth(
-        const Cardinality& baseline, const Cardinality& after, const char* leg)
-    {
-        EXPECT_EQ(baseline.programs, after.programs)
-            << leg << ": a program was created. Colour state is carried by uniforms, so no "
-               "DiffuseColor value and no VertexColorEnabled setting may select a new program. "
-               "baseline [" << baseline.ToString() << "] after [" << after.ToString() << ']';
-        EXPECT_EQ(baseline.shaders, after.shaders)
-            << leg << ": a shader was created. baseline [" << baseline.ToString()
-            << "] after [" << after.ToString() << ']';
-        EXPECT_EQ(baseline.uniforms, after.uniforms)
-            << leg << ": a uniform was created. REMED-GFX-215 reuses u_diffuseColor and "
-               "u_vertexColorEnabled3D, which the ordinary route already owns. baseline ["
-            << baseline.ToString() << "] after [" << after.ToString() << ']';
-        EXPECT_LE(after.dynamicVertexBuffers, baseline.dynamicVertexBuffers)
-            << leg << ": a per-draw vertex buffer was allocated. baseline ["
-            << baseline.ToString() << "] after [" << after.ToString() << ']';
-        EXPECT_LE(after.dynamicIndexBuffers, baseline.dynamicIndexBuffers)
-            << leg << ": a per-draw index buffer was allocated. baseline ["
-            << baseline.ToString() << "] after [" << after.ToString() << ']';
-    }
-};
-
-TEST_F(BgfxInstancedColorCardinalityTest, ColorStateCreatesNoProgramAndReusesTheCache)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
-    if (!InstancedDiffuse())
-        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
-    RequireInstancedRendering();
-
-    const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
-    const std::vector<PackedVertex> replaced = BuildPackedMesh(false, kReplacementColors);
-    const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(kColumnCount);
-    const std::array<MatrixRecord, 1> instances{ShiftMatrix(0)};
-
-    VertexBuffer meshBuffer(device, PackedDeclaration(), kMeshVertexCount, BufferUsage::None);
-    meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, 16);
-    VertexBuffer instanceBuffer(device, MatrixDeclaration(), 1, BufferUsage::None);
-    instanceBuffer.SetDataRaw(instances.data(), 1, 64);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, kMeshIndexCount, BufferUsage::None);
-    indexBuffer.SetData(indices.data(), kMeshIndexCount);
-    device.SetIndexBuffer(&indexBuffer);
-
-    BasicEffect effect(device);
-
-    // Warm every program the matrix can reach ONCE, so the baseline is the steady state rather
-    // than a cold cache. Both routes and both settings.
-    (void)RenderMesh(meshBuffer, instanceBuffer, effect, false, true, kNonNeutral);
-    (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
-    (void)RenderMesh(meshBuffer, instanceBuffer, effect, false, false, kNonNeutral);
-    (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, false, kNonNeutral);
-    const Cardinality baseline = Measure();
-    std::cout << "[ GFX-215  ] bgfx cardinality baseline: " << baseline.ToString() << std::endl;
-
-    // 1. Changing ONLY VertexColorEnabled, repeatedly and in both directions.
-    for (int repeat = 0; repeat < 4; ++repeat)
-    {
-        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
-        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, false, kNonNeutral);
-    }
-    ExpectNoCacheGrowth(baseline, Measure(), "vertexColorEnabled toggled 8 times");
-
-    // 2. Changing ONLY DiffuseColor -- eight distinct values, none of which may create anything.
-    for (int step = 0; step < 8; ++step)
-    {
-        const float t = static_cast<float>(step) / 8.0f;
-        const DiffuseState d{0.1f + 0.8f * t, 0.9f - 0.8f * t, 0.2f + 0.6f * t, 1.0f};
-        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, d);
-    }
-    ExpectNoCacheGrowth(baseline, Measure(), "eight distinct DiffuseColor values");
-
-    // 3. Changing ONLY the buffer CONTENTS.
-    for (int repeat = 0; repeat < 4; ++repeat)
-    {
-        meshBuffer.SetDataRaw(replaced.data(), kMeshVertexCount, 16);
-        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
-        meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, 16);
-        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
-    }
-    ExpectNoCacheGrowth(baseline, Measure(), "geometry colour buffer rewritten 8 times");
-
-    // 4. Returning to an earlier COMPLETE state must reuse, not recreate -- and the frame must
-    //    still be correct, so "no growth" cannot be satisfied by a stale program.
-    const FrameSnapshot returned =
-        RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
-    ExpectColumns(returned, true, kNonNeutral, kColumnColors, "cardinality/returned-state");
-    const Cardinality settled = Measure();
-    ExpectNoCacheGrowth(baseline, settled, "returned to an earlier complete state");
-    std::cout << "[ GFX-215  ] bgfx cardinality settled:  " << settled.ToString() << std::endl;
-}
-
-TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
-    if (!InstancedDiffuse())
-        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
-    RequireInstancedRendering();
-
-    const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
-    const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(kColumnCount);
-    const std::array<MatrixRecord, 1> instances{ShiftMatrix(0)};
-
-    VertexBuffer meshBuffer(device, PackedDeclaration(), kMeshVertexCount, BufferUsage::None);
-    meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, 16);
-    VertexBuffer instanceBuffer(device, MatrixDeclaration(), 1, BufferUsage::None);
-    instanceBuffer.SetDataRaw(instances.data(), 1, 64);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, kMeshIndexCount, BufferUsage::None);
-    indexBuffer.SetData(indices.data(), kMeshIndexCount);
-    device.SetIndexBuffer(&indexBuffer);
-    device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
-                             VertexBufferBinding(&instanceBuffer, 0, 1)});
-
-    BasicEffect effect(device);
-
-    // A clear-only frame first, so this backbuffer's own per-frame floor is measured rather than
-    // assumed. bgfx charges the clear one submit of its own.
-    device.Clear(Color::Black);
-    device.Present();
-    device.Clear(Color::Black);
-    device.Present();
-    const bgfx::Stats* emptyStats = bgfx::getStats();
-    ASSERT_NE(nullptr, emptyStats);
-    const std::uint32_t clearOnlyDraws = emptyStats->numDraw;
-    std::cout << "[ GFX-215  ] bgfx submits for a clear-only frame: " << clearOnlyDraws
-              << std::endl;
-
-    /// n public draws through @p instanced, in one frame, returning that frame's native submit
-    /// count. Every draw carries a DIFFERENT colour state, which is the case REMED-GFX-215 touches.
-    ///
-    /// The frame is rendered TWICE and the reading taken after the second Present, because
-    /// `bgfx::getStats()` reports the previous frame. Reading after a single Present would report
-    /// whatever ran before this call instead -- which is exactly the off-by-one-frame that makes an
-    /// n-draw frame look like an (n-1)-draw one.
-    const auto submitsFor = [&](bool instanced, int publicDraws) {
-        for (int pass = 0; pass < 2; ++pass)
-        {
-            device.Clear(Color::Black);
-            for (int i = 0; i < publicDraws; ++i)
-            {
-                ApplyEffect(effect, i % 2 == 0, i % 2 == 0 ? kNonNeutral : kAltState);
-                if (instanced)
-                    device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0,
-                                                   kMeshVertexCount, 0, kMeshPrimitiveCount, 1);
-                else
-                    device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0,
-                                                 kMeshVertexCount, 0, kMeshPrimitiveCount);
-            }
-            device.Present();
-        }
-        const bgfx::Stats* stats = bgfx::getStats();
-        EXPECT_NE(nullptr, stats);
-        return stats != nullptr ? stats->numDraw : 0u;
-    };
-
-    // THE A/B. The ordinary route has supplied these same two uniforms since Task 364, so if the
-    // instanced route now costs exactly what the ordinary route costs, the uniforms cost nothing.
-    // Both must also be exactly one native submit per public draw -- no extra draw, submit, view,
-    // frame, wait, readback or Present anywhere.
-    for (int publicDraws = 1; publicDraws <= 4; ++publicDraws)
-    {
-        device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
-        const std::uint32_t ordinary = submitsFor(false, publicDraws);
-        device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
-                                 VertexBufferBinding(&instanceBuffer, 0, 1)});
-        const std::uint32_t instanced = submitsFor(true, publicDraws);
-        std::cout << "[ GFX-215  ] bgfx submits for " << publicDraws
-                  << " public draw(s): ordinary=" << ordinary << " instanced=" << instanced
-                  << std::endl;
-
-        EXPECT_EQ(clearOnlyDraws + static_cast<std::uint32_t>(publicDraws), instanced)
-            << publicDraws << " public instanced draws must produce exactly " << publicDraws
-            << " native submits above the measured clear-only floor of " << clearOnlyDraws
-            << ". REMED-GFX-215 adds two setUniform calls to an existing submit";
-        EXPECT_EQ(ordinary, instanced)
-            << "the instanced route submitted " << instanced << " times for " << publicDraws
-            << " draws where the ordinary route -- which has supplied the same two uniforms since "
-               "Task 364 -- submitted " << ordinary
-            << ". Supplying a uniform costs no submit, so the two must agree";
-
-        const bgfx::Stats* stats = bgfx::getStats();
-        ASSERT_NE(nullptr, stats);
-        EXPECT_EQ(0u, stats->numBlit) << "the instanced colour path must issue no blit";
-    }
-}
-
-#endif   // CNA_TEST_BGFX_AVAILABLE

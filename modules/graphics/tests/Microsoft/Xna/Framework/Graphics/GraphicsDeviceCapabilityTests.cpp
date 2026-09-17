@@ -55,18 +55,6 @@ using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespac
 
 // This test target is built for multiple renderer families. Per-renderer arms below preserve each
 // accepted capability boundary rather than assuming one principal renderer's answers are universal.
-//
-// plans/plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable renderer this file's
-// original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
-// honest capability profile (modules/renderers/opengl1/examples/opengl1_graphics_capability_test.cpp, plans/plan_opengl1.md
-// phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
-// ARB_multitexture-based MRT or custom-shader Effect pipeline (this renderer's own design rule:
-// "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 renderer"), but DOES support
-// wireframe via real glPolygonMode(GL_LINE). EasyGL now likewise uses native polygon mode on
-// desktop or through optional GLES/WebGL extensions and truthfully reports false where none is
-// exposed. OcclusionQuery (plans/plan_opengl1.md item 23, EasyGL parity, added
-// 2026-07-20) is no longer one of the differing checks -- both renderers now genuinely support it
-// (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
 /// plans/plan_runtimerenderer.md RTR-P9-4: the per-renderer capability expectations. This was an
 /// `#if`/`#elif` chain of `constexpr bool`s, which in a multi-renderer build can only ever describe
@@ -85,13 +73,6 @@ struct CapabilityExpectation
     using CNA::GraphicsRendererType;
     switch (CNA::GraphicsRendererSelection::GetSelected())
     {
-        // OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query
-        // mechanism anywhere in the CM registry, and no shader compiler at all. Its `false` for
-        // these three is the truthful answer, and is asserted rather than left as a standing red --
-        // the point of the capability query is that a caller can trust it.
-        case GraphicsRendererType::OpenGLES1:
-            return {false, false, false};
-
         // The GLSL ES 1.00 profiles of the EasyGL family truthfully refuse the ES 3.0-level
         // features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays
         // true -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under
@@ -102,55 +83,6 @@ struct CapabilityExpectation
         case GraphicsRendererType::WebGL1:
             return {false, false, true};
 
-        // plans/plan_opengl1.md phase 12: a second, legitimately-different, equally-honest 3D-capable
-        // renderer -- no MRT and no custom-shader support in its fixed-function pipeline, reported
-        // truthfully rather than inherited. Occlusion queries became real in item 23
-        // (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer differs
-        // from EasyGL's.
-        case GraphicsRendererType::OpenGL1:
-            return {false, true, false};
-
-        // plans/plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
-        // IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection
-        // this renderer does not do, so custom effects are refused at the call site rather than
-        // approximated. MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with
-        // readback) are genuinely implemented.
-        case GraphicsRendererType::Wicked:
-            return {true, true, false};
-
-        // Skia: all three answers are structural rather than not-yet-implemented. SkCanvas produces
-        // exactly one colour result (docs/skia-renderer.md's MRT row, `Skia_MRT_Rejection`), raster
-        // final pixels cannot distinguish positive from zero coverage so no samples-passed query is
-        // definable at all, and the accepted custom-effect route is the narrow opt-in
-        // CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would promise.
-            return {false, false, false};
-
-        // Blend2D, same shape as Skia: BLContext produces exactly one colour result (no MRT
-        // mechanism), a raster surface has no samples-passed query to report, and this renderer
-        // implements no custom-shader Effect ABI at all (CreateEffectRenderer keeps the shared
-        // nullptr default). All three are honest structural refusals, not gaps.
-        //
-        // These three values are what this arm's comment always claimed, but the arm DEFINED
-        // nothing: `#elif defined(CNA_RENDERER_BLEND2D)` was followed straight by the next `#elif`,
-        // so a Blend2D build selected an empty arm, never reached the catch-all, and left
-        // kExpectMultipleRenderTargets and friends undefined at their use sites -- this file could
-        // not compile for that renderer at all. Same for OpenVG below. Neither is buildable in this
-        // environment, so the values are the documented intent rather than a measurement.
-        case GraphicsRendererType::Blend2D:
-            return {false, false, false};
-
-        // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query
-        // concept at all -- and no programmable shader stage for a genuinely custom Effect.
-        case GraphicsRendererType::OpenVg:
-            return {false, false, false};
-
-        // NanoVG, same shape as OpenVG: a 2D vector-graphics API with no 3D pipeline, no MRT
-        // mechanism (SetRenderTargets rejects every RenderTarget2D binding), no occlusion-query
-        // concept, and no caller-addressable programmable shader stage for a genuinely custom
-        // Effect (NanoVG's own GLSL pipeline is fixed and internal).
-        case GraphicsRendererType::NanoVg:
-            return {false, false, false};
-
         // PortableGL owns exactly one framebuffer per context and creates no render targets at all
         // (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and
         // its shader stage is a pair of C function pointers with nothing for a CNA Effect to be
@@ -160,22 +92,6 @@ struct CapabilityExpectation
         // modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
         case GraphicsRendererType::PortableGL:
             return {false, false, false};
-
-        // From `next`: TinyGL answers the same three refusals as PortableGL, for its own
-        // fixed-function reasons -- CreateRenderTarget2D()/CreateRenderTargetCube() keep
-        // IGraphicsRenderer's nullptr defaults, SetRenderTargets() refuses a non-empty binding, and
-        // CreateOcclusionQuery() keeps its nullptr default.
-        case GraphicsRendererType::TinyGL:
-            return {false, false, false};
-
-        // plans/plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,
-        // narrower profile at this point in its implementation -- no custom ShaderEffect
-        // compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41,
-        // a real IQuery, exact or binary depending on the device feature) are both real. Each answer
-        // is reported truthfully rather than inherited from EasyGL, and each moves when its own task
-        // lands.
-        case GraphicsRendererType::Diligent:
-            return {true, true, false};
 
         // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
         // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
@@ -193,27 +109,6 @@ struct CapabilityExpectation
         // stays an honest false independently of classic MRT support.
         case GraphicsRendererType::Software:
             return {true, true, false};
-
-        // plans/plan_igl.md IGL-61: IGL v1.1.1 exposes no occlusion-query object on any of its backends
-        // -- there is no IDevice factory for one and no encoder call to begin or end one, verified
-        // against the pinned source rather than assumed. IglRenderer reports the capability false
-        // and its IOcclusionQueryRenderer completes immediately with 0 samples, which is what keeps
-        // OcclusionQuery.IsComplete from spinning forever. MRT (2-4 RenderTarget2D slots,
-        // igl_mrt_test.cpp / igl_mrt4_test.cpp) and custom effects (igl_shadereffect_texture3d_test
-        // .cpp on the OpenGL backend) are genuinely implemented.
-        //
-        // This arm was missing entirely, so an IGL build took the default below and asserted a
-        // query capability the renderer documents that it does not have -- a standing red for the
-        // whole family rather than an honest expectation.
-        case GraphicsRendererType::Igl:
-            return {true, false, true};
-
-        // plans/plan_rlgl.md RLGL-040/RLGL-050/RLGL-052: the default GraphicsDevice uses Reach,
-        // whose XNA profile ceiling is one target. The renderer-local HiDef test separately proves
-        // all four native MRT slots. Exact GL queries and source ShaderEffect execution back the
-        // other two answers.
-        case GraphicsRendererType::Rlgl:
-            return {false, true, true};
 
         default:
             return {true, true, true};
@@ -240,7 +135,6 @@ struct CapabilityExpectation
     (defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_RLGL) && defined(CNA_RLGL_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX12) && defined(CNA_DIRECTX12_COMPILED_EFFECTS))
@@ -249,42 +143,15 @@ constexpr bool kExpectCompiledEffects = true;
 constexpr bool kExpectCompiledEffects = false;
 #endif
 
-// Both of these assert `true` for every 3D-capable renderer. A deliberately 2D-only renderer
-// answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
-// a standing red. Only the arm for the renderer being added is written here; the other 2D-only
-// identities in this repository are untouched by this file and keep whatever they answer today.
-/// plans/plan_runtimerenderer.md RTR-P9-4: the deliberately 2D-only renderers. Each answers false, and
-/// that is the correct answer rather than a gap. The other 2D-only identities in this repository
-/// are untouched by this file and keep whatever they answer today -- exactly as the `#else` arm
-/// this replaces did.
-[[nodiscard]] inline bool IsTwoDimensionalOnly()
-{
-    return CNA_RENDERER_IS(Blend2D, OpenVg, NanoVg);
-}
-
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
-    if (IsTwoDimensionalOnly())
-    {
-        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-            << "this 2D-only renderer claims a 3D pipeline -- every 3D route it owns refuses "
-               "through HandleUnsupported3DCall(), so a true report cannot be backed by anything";
-        return;
-    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 {
     GraphicsDevice gd;
-    if (IsTwoDimensionalOnly())
-    {
-        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-            << "this 2D-only renderer claims a depth/stencil buffer -- its render targets have no "
-               "attachment, and DepthStencilState::None is accepted only as the absence of one";
-        return;
-    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
 
@@ -543,44 +410,6 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_TRUE(reported)
         << "WebGPU under-reports WireFrame again -- WEBGPU-153's edge-expansion implementation is "
            "still in place while the capability claims the renderer cannot do it";
-#elif defined(CNA_RENDERER_DIRECTX1)
-    // DIRECTX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
-    // mode to report on and DirectX1Renderer::SupportsCapability answers false for every
-    // capability, WireFrame included. Same truthful-false shape as WebGPU above, for the opposite
-    // reason: nothing here could rasterize a triangle in the first place. (DIRECTX2..DIRECTX8 and D3D10
-    // report true and take the default arm below -- their fill mode is real, spike-verified on
-    // DIRECTX2's own software RGB device and on DIRECTX8/D3D10's DXVK GPU path.)
-    EXPECT_FALSE(reported)
-        << "DIRECTX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
-           "report cannot be backed by any rendering path";
-#elif defined(CNA_RENDERER_BLEND2D)
-    // Same truthful-false shape as Skia immediately above: Blend2D's BLContext has no polygon fill
-    // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and
-    // DrawColoredPrimitives/DrawIndexedColoredPrimitives refuse every 3D draw before any vertex
-    // input is inspected, so no polygon topology can reach a raster queue to be silently filled
-    // solid. Like Skia, WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle()
-    // (no pixel route to measure).
-    EXPECT_FALSE(reported)
-        << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
-           "no 3D draw route, so a true report cannot be backed by any rendering path";
-#elif defined(CNA_RENDERER_OPENVG)
-    // OpenVG is a 2D vector-graphics API: no polygon fill mode, no vertex/primitive route, no 3D
-    // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
-    // pure-virtuals all refuse through HandleUnsupported3DCall() before any topology could reach a
-    // draw. Like Skia/DIRECTX1/Stub it has no pixel route to measure, which is why
-    // WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle().
-    EXPECT_FALSE(reported)
-        << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
-           "report cannot be backed by any rendering path";
-#elif defined(CNA_RENDERER_NANOVG)
-    // NanoVG, same truthful-false shape as OpenVG immediately above: a 2D vector-graphics API
-    // with no polygon fill mode, no vertex/primitive route, no 3D pipeline at all --
-    // NanoVgRenderer's own 3D pure-virtuals all refuse through HandleUnsupported3DCall() before
-    // any topology could reach a draw. No pixel route to measure, so WireFrameTriangleOracle.hpp
-    // keeps this renderer out of HasPixelOracle() too.
-    EXPECT_FALSE(reported)
-        << "NANOVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
-           "report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could

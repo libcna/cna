@@ -33,10 +33,8 @@ function(_cna_renderer_identity_map out_var)
         OPENGL33     EasyGL|GetDescriptorOpenGL33
         WEBGL1       EasyGL|GetDescriptorWebGL1
         WEBGL2       EasyGL|GetDescriptorWebGL2
-        BGFX         Bgfx
         VULKAN       Vulkan
         WEBGPU       WebGPU
-        MAGNUM       Magnum
         HEADLESS     Headless
         SOFTWARE     Software
         STUB         Stub
@@ -47,36 +45,13 @@ function(_cna_renderer_identity_map out_var)
         CANVAS       Canvas
         HTML_DOM     HtmlDom
         SVG_DOM      SvgDom
-        BLEND2D      Blend2D
         FREEDIRECT   FreeDirect
         DIRECTX9     DirectX9
-        DIRECTX1     DirectX1
-        DIRECTX2     DirectX2
-        DIRECTX3     DirectX3
-        DIRECTX5     DirectX5
-        DIRECTX6     DirectX6
-        DIRECTX7     DirectX7
-        DIRECTX8     DirectX8
-        DIRECTX10    DirectX10
         SDL_GPU      SdlGpu
-        OPENGLES1    OpenGLES1
         OPENGL4      OpenGL4
-        OPENGL1      OpenGL1
-        OPENGL2      OpenGL2
-        WICKED       Wicked
-        SOKOL        Sokol
-        DILIGENT     Diligent
-        GLIDE        Glide
         GDI          Gdi
-        LLGL         Llgl
         METAL        Metal
-        FNA3D        Fna3d
-        OPENVG       OpenVg
-        TINYGL       TinyGL
-        IGL          Igl
-        PIXIJS       PixiJs
-        NANOVG       NanoVg
-        RLGL         Rlgl)
+        FNA3D        Fna3d)
 
     set(${out_var} "${_map}" PARENT_SCOPE)
 endfunction()

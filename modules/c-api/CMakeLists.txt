@@ -259,7 +259,7 @@ if(EMSCRIPTEN)
         execute_process(
             COMMAND ${CMAKE_COMMAND} -E env "NODE_PATH=${_cna_node_global_modules}"
                     "${NODE_JS_EXECUTABLE}"
-                    "${PROJECT_SOURCE_DIR}/scripts/run_pixijs_browser_tests.mjs"
+                    "${PROJECT_SOURCE_DIR}/scripts/run_browser_tests.mjs"
                     --check-playwright
             RESULT_VARIABLE _cna_playwright_missing
             OUTPUT_QUIET ERROR_QUIET)
@@ -273,7 +273,7 @@ if(EMSCRIPTEN)
             add_test(NAME CApi_WasmBrowserProbe
                 COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
                         "${NODE_JS_EXECUTABLE}"
-                        "${PROJECT_SOURCE_DIR}/scripts/run_pixijs_browser_tests.mjs"
+                        "${PROJECT_SOURCE_DIR}/scripts/run_browser_tests.mjs"
                         "$<TARGET_FILE_DIR:cna_c_api_wasm>"
                         "browser_probe.html")
             set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)

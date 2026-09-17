@@ -71,30 +71,26 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, OpenVg,
-                            PortableGL, TinyGL, PixiJs, NanoVg);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
+                            PortableGL);
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
 
-/// OpenGL ES 1.1 stores the whole declared chain and reads the base level back through a scratch
-/// framebuffer, but GL_OES_framebuffer_object requires an attached texture's level to be 0, so no
-/// mip level above 0 can be read there however much storage exists. That is exactly why these are
-/// three separate questions rather than one.
+/// Readback above the base level is its own question: a renderer can store a whole declared chain
+/// and still only be able to read level 0 back. Every current renderer that reads level 0 back
+/// reads every level back, so the answer is the same set today.
 [[nodiscard]] inline bool CubeMipReadbackSupported()
 {
-    return !CNA_RENDERER_IS(OpenGLES1) && CubeLevel0ReadbackSupported();
+    return CubeLevel0ReadbackSupported();
 }
 
-/// Whether this renderer can fetch a volume texture's voxels back to the CPU.
-///
-/// The same split cube faces already have here. IGL owns real volume pixels but IGL v1.1.1 cannot
-/// attach a 3D texture to a framebuffer, which is its only readback route -- verified by attempting
-/// it (`GL_INVALID_OPERATION ... invalid textarget GL_TEXTURE_3D`), see plans/plan_igl.md IGL-17. GetData
-/// refuses rather than fabricating voxels, and the shared layer raises NotSupportedException.
+/// Whether this renderer can fetch a volume texture's voxels back to the CPU. A renderer that owns
+/// volume pixels without a readback route refuses GetData rather than fabricating voxels, and the
+/// shared layer raises NotSupportedException; no current renderer is in that position.
 [[nodiscard]] inline bool VolumeReadbackSupported()
 {
-    return !CNA_RENDERER_IS(Igl);
+    return true;
 }
 
 namespace

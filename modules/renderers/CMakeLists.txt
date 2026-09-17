@@ -19,8 +19,8 @@ target_link_libraries(cna_renderer_common INTERFACE cna_build_config)
 # plans/plan_runtimerenderer.md RTR-P6-6: this family's target name, derived from its own directory.
 #
 # modules/renderers/<family> builds cna_renderer_<family>, '-' becoming '_'
-# (sdl-renderer -> cna_renderer_sdl_renderer). Checked against RendererSelection.cmake's 42
-# dir/target pairs before this was introduced: all 42 agree, so the mapping is a fact about the
+# (sdl-renderer -> cna_renderer_sdl_renderer). Checked against every RendererSelection.cmake
+# dir/target pair when this was introduced: all of them agree, so the mapping is a fact about the
 # layout rather than a convention this file hopes for.
 #
 # @param out_var Variable to receive the target name, in the caller's scope.
@@ -87,7 +87,7 @@ endfunction()
 #
 # plans/plan_runtimerenderer.md RTR-P6-6: the target name is DERIVED from the directory this is called
 # from -- modules/renderers/<family> builds cna_renderer_<family>, with '-' replaced by '_'.
-# Verified to hold for all 42 families against RendererSelection.cmake's own dir/target pairs.
+# Verified to hold for every family against RendererSelection.cmake's own dir/target pairs.
 # Deriving it locally removes the last reason for a family to read a global scalar that was set
 # somewhere else entirely: a family cannot now be handed the wrong target, because the only input
 # is where its own CMakeLists.txt lives.
@@ -114,16 +114,14 @@ foreach(_cna_renderer_dir IN LISTS CNA_RENDERER_DIRS)
     list(APPEND CNA_SELECTED_RENDERER_FAMILIES "${_cna_renderer_family}")
 endforeach()
 
-# metal and glide keep unconditional header-interface targets: their policy suites in
-# modules/renderers/{metal,glide}/tests are deliberately host-portable and compile into the
-# CnaTests corpus on every renderer (see the suites' own header comments), so their
-# CNA/Internal/Renderers/<X> policy headers must stay reachable in every configuration.
+# metal keeps an unconditional header-interface target: its policy suites in
+# modules/renderers/metal/tests are deliberately host-portable and compile into the CnaTests corpus
+# on every renderer (see the suites' own header comments), so its CNA/Internal/Renderers/Metal
+# policy headers must stay reachable in every configuration.
 add_subdirectory(metal)
-add_subdirectory(glide)
 
 # plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 and directx12
-# families only -- DIRECTX9 and DIRECTX10 are confirmed independent (design decisions 12 and the
-# plans/plan_d3d10.md link audit).
+# families only -- DIRECTX9 is confirmed independent (design decision 12).
 if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     add_subdirectory(common/d3d)
 endif()
@@ -170,7 +168,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     # happen outside this loop, invisible in single-renderer mode where the default is the only
     # renderer there is. Since RTR-P6-6 each family derives its own target from its own directory
     # (cna_add_renderer / cna_renderer_target_name) and publishes it into its own scope, so the
-    # overwrite has no remaining reader: verified across all 42 families that none reads
+    # overwrite has no remaining reader: verified across every family that none reads
     # ${RENDERER_TARGET} before establishing its own target.
     #
     # CNA_GRAPHICS_RENDERER and CNA_RENDERER_TARGET_DEFINE still are re-pointed: family
@@ -186,7 +184,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     endif()
     list(APPEND _cna_entered_families "${_cna_renderer_family}")
 
-    if(NOT _cna_renderer_family STREQUAL "metal" AND NOT _cna_renderer_family STREQUAL "glide")
+    if(NOT _cna_renderer_family STREQUAL "metal")
         add_subdirectory(${_cna_renderer_family})
     endif()
 endforeach()
@@ -198,7 +196,7 @@ set(CNA_GRAPHICS_RENDERER "${_cna_saved_graphics_renderer}")
 # select it (cmake/RendererDescriptorGate.cmake).
 cna_add_renderer_descriptor_gate()
 
-# CANVAS, HTML_DOM, SVG_DOM and PIXIJS are Emscripten-only selections, but their
+# CANVAS, HTML_DOM and SVG_DOM are Emscripten-only selections, but their
 # implementation-independent contract tests deliberately compile on a native host with EM_JS
 # bodies excluded. Register those opt-in host targets here, outside selected-renderer dispatch, so
 # they remain reachable without weakening any renderer's platform gate.
@@ -262,28 +260,4 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_SVG_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME SvgDomHostContracts COMMAND cna_test_svgdom_host)
     set_tests_properties(SvgDomHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(SvgDomHostContracts PROPERTIES LABELS "SVG_DOM;host-only")
-endif()
-
-# plans/plan_platform.md PLAT-58/PLAT-61: PIXIJS gained the same opt-in host target as its three
-# browser-only siblings when it was migrated off its raw SDL_Window* creation contract. Without
-# it the family's surface-contract tests would only ever compile under an Emscripten toolchain,
-# which is exactly how the regression stayed invisible on a native host.
-option(CNA_BUILD_PIXIJS_HOST_TESTS
-    "Build native host-side PixiJS renderer contract tests" OFF)
-if(CNA_BUILD_TESTS AND CNA_BUILD_PIXIJS_HOST_TESTS AND NOT EMSCRIPTEN)
-    add_executable(cna_test_pixijs_host
-        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/tests/CNA/Internal/Renderers/PixiJs/PixiJsRendererTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsRenderer.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsRenderTargetRenderer.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsSpriteBatchRenderer.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsTextureRenderer.cpp)
-    target_include_directories(cna_test_pixijs_host PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/include)
-    target_compile_definitions(cna_test_pixijs_host PRIVATE CNA_PIXIJS_HOST_TESTS=1)
-    target_link_libraries(cna_test_pixijs_host PRIVATE
-        cna_graphics_core cna_core cna_math gtest_main)
-    cna_link_sharp_runtime(cna_test_pixijs_host PRIVATE)
-    add_test(NAME PixiJsHostContracts COMMAND cna_test_pixijs_host)
-    set_tests_properties(PixiJsHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-    set_tests_properties(PixiJsHostContracts PROPERTIES LABELS "PIXIJS;host-only")
 endif()

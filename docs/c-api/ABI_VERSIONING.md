@@ -2,10 +2,35 @@
 
 ## ABI identity
 
-The ABI is `0.27.0`. It appends the `CNA_GRAPHICS_RENDERER_RLGL` renderer identity at value `51`
-and moves `CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `51`. Existing renderer values are
-unchanged; value `19` remains retired. The minor increments because the closed enumerable renderer
-range changed, allowing consumers to require the first ABI that can select and report RLGL.
+The ABI is `0.28.0`. It **retires twenty-five public renderer identities** -- `BGFX`, `MAGNUM`,
+`BLEND2D`, `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`,
+`DIRECTX10`, `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`,
+`OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG` and `RLGL` -- together with the twenty-five
+`CNA_GRAPHICS_RENDERER_*` constants that named them, and it moves `CNA_GRAPHICS_RENDERER_MAXIMUM`
+from `51` to `46` (`PORTABLEGL`, the highest surviving identity). CNA now has 25 public renderer
+identities (`plans/plan_renderer_cleanup.md`).
+
+That is an incompatible change, which under the `0.x` rule below requires exactly this
+minor-version increment, these release notes and an updated baseline.
+
+No surviving identity is renumbered: every one of the 25 keeps the value it had, so a binding that
+passes `CNA_GRAPHICS_RENDERER_VULKAN` (`8`) or `CNA_GRAPHICS_RENDERER_PORTABLEGL` (`46`) passes the
+same integer as before. What breaks is a binding that names one of the removed constants (it no
+longer compiles), passes one of their integers (every route now refuses it with
+`CNA_RESULT_INVALID_ARGUMENT`), or compares against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling
+moved down).
+
+The retired values are **permanently reserved** and are never assigned to another renderer:
+`7`, `10`, `19`, `20`, `23`--`30`, `32`, `34`--`39`, `41`, `45` and `47`--`51`. Because several of them
+lie above the new `MAXIMUM`, a future identity takes the next never-assigned value, **`52`**, not
+`MAXIMUM + 1`. `scripts/check_renderer_identities.py` fails the build if a retired value or name is
+reused, and `docs/removed-renderers.md` records each identity, its value, what it proved and the
+pinned dependency it wrapped.
+
+`0.27.0` appended the `CNA_GRAPHICS_RENDERER_RLGL` renderer identity at value `51` and moved
+`CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `51`. Existing renderer values were unchanged; value
+`19` remained retired. The minor incremented because the closed enumerable renderer range changed,
+allowing consumers to require the first ABI that can select and report RLGL.
 
 `0.26.0` appended **one detailed renderer-feature identity**,
 `CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING` (`31`). The answer is supported only when the

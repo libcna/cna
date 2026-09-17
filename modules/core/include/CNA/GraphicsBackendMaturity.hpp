@@ -26,7 +26,7 @@ namespace CNA
         /** @brief Actively developed; public behavior may still change. */
         Experimental,
 
-        /** @brief A legacy backend kept for compatibility, research, or demonstrating an old API -- not recommended for new work. */
+        /** @brief A legacy backend kept for compatibility, research, or demonstrating an old API -- not recommended for new work. Unused by any renderer today. */
         Historical,
 
         /** @brief No longer recommended; kept only until removal. Unused by any renderer today. */
@@ -56,9 +56,9 @@ namespace CNA
     /**
      * @brief Returns how confidently CNA recommends the given graphics renderer for real use.
      *
-     * Callable for any of the 50 public GraphicsRendererType identities, not only the one
-     * compiled into the current build -- e.g. to list every backend's maturity in a launcher or
-     * editor UI without compiling all 50 renderer variants.
+     * Callable for any public GraphicsRendererType identity, not only the one compiled into the
+     * current build -- e.g. to list every backend's maturity in a launcher or editor UI without
+     * compiling every renderer variant.
      *
      * @param type The renderer identity to classify.
      * @return The renderer's maturity.
@@ -71,7 +71,6 @@ namespace CNA
             case GraphicsRendererType::OpenGLES2:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
-            case GraphicsRendererType::Bgfx:
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::DirectX11:
@@ -80,7 +79,6 @@ namespace CNA
 
             case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Direct2D:
@@ -88,42 +86,17 @@ namespace CNA
             case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::OpenGL2:
             case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendMaturity::Supported;
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
-            case GraphicsRendererType::Wicked:
-            case GraphicsRendererType::Sokol:
-            case GraphicsRendererType::Diligent:
-            case GraphicsRendererType::Llgl:
-            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
-            case GraphicsRendererType::PixiJs:
-            case GraphicsRendererType::NanoVg:
-            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendMaturity::Experimental;
-
-            case GraphicsRendererType::DirectX1:
-            case GraphicsRendererType::DirectX2:
-            case GraphicsRendererType::DirectX3:
-            case GraphicsRendererType::DirectX5:
-            case GraphicsRendererType::DirectX6:
-            case GraphicsRendererType::DirectX7:
-            case GraphicsRendererType::DirectX8:
-            case GraphicsRendererType::DirectX10:
-            case GraphicsRendererType::OpenGLES1:
-            case GraphicsRendererType::OpenGL1:
-            case GraphicsRendererType::Glide:
-                return GraphicsBackendMaturity::Historical;
         }
         // Unreachable as long as every GraphicsRendererType member has an arm above; kept as a
         // trailing statement (not `default:`) so an omitted member has no compiler diagnostic to

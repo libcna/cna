@@ -13,9 +13,9 @@ static_assert(getCurrentGraphicsRendererType() == getCurrentGraphicsRendererType
 static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Rlgl) + 1;
-static_assert(kPublicRendererCount == 50,
-              "GraphicsRendererType must expose all 50 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
+static_assert(kPublicRendererCount == 25,
+              "GraphicsRendererType must expose all 25 public renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -56,10 +56,8 @@ namespace
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL1:      return "WEBGL1";
             case GraphicsRendererType::WebGL2:      return "WEBGL2";
-            case GraphicsRendererType::Bgfx:        return "BGFX";
             case GraphicsRendererType::Vulkan:      return "VULKAN";
             case GraphicsRendererType::WebGPU:      return "WEBGPU";
-            case GraphicsRendererType::Magnum:      return "MAGNUM";
             case GraphicsRendererType::Headless:    return "HEADLESS";
             case GraphicsRendererType::Software:    return "SOFTWARE";
             case GraphicsRendererType::DirectX11:       return "DIRECTX11";
@@ -67,39 +65,16 @@ namespace
             case GraphicsRendererType::Direct2D:    return "DIRECT2D";
             case GraphicsRendererType::Canvas:      return "CANVAS";
             case GraphicsRendererType::HtmlDom:     return "HTML_DOM";
-            case GraphicsRendererType::Blend2D:     return "BLEND2D";
             case GraphicsRendererType::FreeDirect:  return "FREEDIRECT";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";
-            case GraphicsRendererType::DirectX1:         return "DIRECTX1";
-            case GraphicsRendererType::DirectX2:         return "DIRECTX2";
-            case GraphicsRendererType::DirectX3:         return "DIRECTX3";
-            case GraphicsRendererType::DirectX5:         return "DIRECTX5";
-            case GraphicsRendererType::DirectX6:         return "DIRECTX6";
-            case GraphicsRendererType::DirectX7:         return "DIRECTX7";
-            case GraphicsRendererType::DirectX8:         return "DIRECTX8";
-            case GraphicsRendererType::DirectX10:       return "DIRECTX10";
             case GraphicsRendererType::SdlGpu:      return "SDL_GPU";
-            case GraphicsRendererType::OpenGLES1:   return "OPENGLES1";
             case GraphicsRendererType::OpenGL4:     return "OPENGL4";
-            case GraphicsRendererType::OpenGL1:     return "OPENGL1";
-            case GraphicsRendererType::OpenGL2:     return "OPENGL2";
-            case GraphicsRendererType::Wicked:      return "WICKED";
-            case GraphicsRendererType::Sokol:       return "SOKOL";
-            case GraphicsRendererType::Diligent:    return "DILIGENT";
-            case GraphicsRendererType::Glide:       return "GLIDE";
             case GraphicsRendererType::Gdi:         return "GDI";
-            case GraphicsRendererType::Llgl:        return "LLGL";
             case GraphicsRendererType::Metal:       return "METAL";
             case GraphicsRendererType::Fna3d:       return "FNA3D";
             case GraphicsRendererType::SvgDom:      return "SVG_DOM";
-            case GraphicsRendererType::OpenVg:      return "OPENVG";
             case GraphicsRendererType::PortableGL:  return "PORTABLEGL";
-            case GraphicsRendererType::TinyGL:      return "TINYGL";
-            case GraphicsRendererType::Igl:         return "IGL";
-            case GraphicsRendererType::PixiJs:      return "PIXIJS";
-            case GraphicsRendererType::NanoVg:      return "NANOVG";
-            case GraphicsRendererType::Rlgl:        return "RLGL";
         }
         return {};
     }

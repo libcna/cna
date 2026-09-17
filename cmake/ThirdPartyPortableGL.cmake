@@ -1,9 +1,8 @@
 # --- PortableGL (single-header CPU software OpenGL 3.x-ish implementation,
 #     https://github.com/rswinkle/PortableGL) ---
 #
-# Mirrors cmake/ThirdPartySokol.cmake's own pattern for a single-header upstream C library: the
-# header is fetched at configure time from the upstream repository at a pinned tag/commit, in the
-# same spirit as sokol's FetchContent block. There is nothing to build -- PortableGL is a single
+# A single-header upstream C library: the header is fetched at configure time from the upstream
+# repository at a pinned tag/commit through FetchContent. There is nothing to build -- PortableGL is a single
 # STB-style header -- so this only needs to put its directory on the include path; the one
 # translation unit that instantiates `#define PORTABLEGL_IMPLEMENTATION` is CNA's own
 # modules/renderers/portablegl/src/PortableGLImpl.cpp.

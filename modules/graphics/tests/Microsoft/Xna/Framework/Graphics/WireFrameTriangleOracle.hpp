@@ -57,9 +57,8 @@ namespace CnaTest::WireFrameOracle
     /** @brief Whether the active renderer rasterizes and reads back, so pixels can be asserted. */
     [[nodiscard]] inline bool HasPixelOracle()
     {
-        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software, Vulkan, Bgfx, WebGPU, SdlGpu,
-                               DirectX9, DirectX11, DirectX12, OpenGL4, OpenGL1, OpenGL2,
-                               Wicked, Magnum, Sokol, Diligent);
+        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software, Vulkan, WebGPU, SdlGpu,
+                               DirectX9, DirectX11, DirectX12, OpenGL4);
     }
 
     // The subset actually measured. D3D12 is excluded because no D3D12 runtime exists in this

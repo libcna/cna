@@ -117,22 +117,14 @@ void ExpectExactExceptionContaining(TCallable&& callable, const char* text)
 
 /// Whether this renderer can fetch a volume texture's voxels back to the CPU.
 ///
-/// Storage and readback were the same question for every renderer until IGL, exactly as they were
-/// for cube faces (see TextureCubeTests.cpp's own split). IGL owns real volume pixels --
-/// `IglTexture3DRenderer::SetData` uploads into an `igl::TextureType::ThreeD` resource and
-/// `Igl_ShaderEffectTexture3D` proves they sample correctly through a real custom shader -- but IGL
-/// v1.1.1 cannot attach a 3D texture to a framebuffer, which is the only readback it has.
-/// `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume
-/// (because `getNumLayers()` counts ARRAY layers, of which a volume has one) and the driver answers
-/// `GL_INVALID_OPERATION ... invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the
-/// same way. So `GetData` refuses rather than fabricating voxels, and the shared layer turns that
-/// into a NotSupportedException.
-///
-/// Verified by attempting it, not assumed -- see plans/plan_igl.md IGL-17. Without this arm an IGL build
-/// asserts a readback the renderer honestly cannot perform, in four tests at once.
+/// Storage and readback are separate questions, exactly as they are for cube faces (see
+/// TextureCubeTests.cpp's own split): a renderer can own real volume pixels and still have no route
+/// to fetch them back, in which case `GetData` refuses rather than fabricating voxels and the shared
+/// layer turns that into a NotSupportedException. Every current renderer that stores volumes reads
+/// them back, so the answer is `true` today.
 [[nodiscard]] bool VolumeReadbackSupported()
 {
-    return !CNA_RENDERER_IS(Igl);
+    return true;
 }
 }
 

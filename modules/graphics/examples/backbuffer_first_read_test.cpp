@@ -73,9 +73,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
-    constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
@@ -97,9 +94,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
-    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-161: this renderer has no declared first-read contract."
 #endif
@@ -107,11 +101,7 @@ namespace
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
     // pre-existing gap declared by REMED-GFX-165, NOT this task's subject). The rectangle legs
     // declare it as a boundary rather than failing it.
-#if defined(CNA_RENDERER_BGFX)
-    constexpr bool kSupportsSubRectangleBackbufferRead = false;
-#else
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
-#endif
 
     // The distinctive poison the caller pre-fills every destination element with. Every channel is
     // 0xCD -- distinct from every quadrant colour below, and A=0xCD so a renderer that writes RGB but

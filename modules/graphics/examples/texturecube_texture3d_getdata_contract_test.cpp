@@ -126,9 +126,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
@@ -160,9 +157,6 @@ namespace
                                  true, Support::Exact, Support::Exact, false};
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
 #else
 #error "REMED-GFX-130: this renderer has no declared TextureCube/Texture3D GetData contract."

@@ -21,29 +21,27 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**50 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
-against `modules/core/include/CNA/GraphicsRendererType.hpp` and `cmake/RendererSelection.cmake`
-(`OK: 50 public renderer identities preserved in the enum, selection list and runtime registry`). Selected at configure time via
-`-DCNA_GRAPHICS_RENDERER=<selector>`; implementations live in `modules/renderers/<family>/`.
+**25 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+against `modules/core/include/CNA/GraphicsRendererType.hpp`, `cmake/RendererIdentities.cmake`, the
+runtime registry and the C ABI. Selected at configure time via `-DCNA_GRAPHICS_RENDERER=<selector>`;
+implementations live in `modules/renderers/<family>/`. Twenty-five former identities were retired on
+2026-09-17 (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`).
 
-The 48 (this table's own count, pre-existing drift from the registry's true 50 -- IGL/PIXIJS are
-also live but not yet reflected below) map to concrete factories, because the five GL profiles
-(`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal EasyGL implementation
-while keeping distinct public contracts (context, shader profile, platform).
+The five GL profiles (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal
+EasyGL implementation while keeping distinct public contracts (context, shader profile, platform).
 
 | Class | Identities | Count |
 |---|---|---:|
 | No pixels (validation/no-op) | `HEADLESS`, `STUB` | 2 |
-| 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `OPENVG`, `NANOVG`, `FREEDIRECT`, `DIRECTX1`, `DIRECT2D`, `GDI` | 12 |
-| CPU 3D | `SOFTWARE`, `PORTABLEGL`, `TINYGL` | 3 |
-| Legacy / fixed-function 3D | `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`, `GLIDE` | 9 |
-| Programmable / modern | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `OPENGL2`, `OPENGL4`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU` | 15 |
-| Abstraction / engine RHI | `BGFX`, `MAGNUM`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, `FNA3D` | 7 |
-| **Total** | | **48** |
+| 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `FREEDIRECT`, `DIRECT2D`, `GDI` | 7 |
+| CPU 3D | `SOFTWARE`, `PORTABLEGL` | 2 |
+| Programmable / modern | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `OPENGL4`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU` | 13 |
+| Abstraction layer | `FNA3D` | 1 |
+| **Total** | | **25** |
 
-Notes that must not be misstated anywhere: `WEBGPU`, `SOKOL`, `DILIGENT`, `LLGL` and `WICKED` are
-experimental with bounded verified surfaces; `SKIA` is CPU-raster 2D only; the `ASCII` identity was
-**removed** in favour of the renderer-neutral `CNA::Graphics::AsciiPostProcessEffect`.
+Notes that must not be misstated anywhere: `WEBGPU` is experimental with a bounded verified
+surface; the `ASCII` identity was **removed** in favour of the renderer-neutral
+`CNA::Graphics::AsciiPostProcessEffect`.
 
 ## 2. Already planned, not yet started (from `FUTURE.md` Phase 2)
 

@@ -121,12 +121,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # plans/plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
     # asserts the probe closure links no native graphics SDK at all, which is a true statement about
     # a HEADLESS-only build and a FALSE one about a multi-renderer build that happens to default to
-    # HEADLESS -- such a binary legitimately links Vulkan, Skia or whatever else it was built with.
+    # HEADLESS -- such a binary legitimately links Vulkan, wgpu-native or whatever else it was built with.
     # Converting this to list membership would have made it fail for a correct build.
     if(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" AND NOT CNA_MULTI_RENDERER
             AND Python3_Interpreter_FOUND)
         set(_cna_native_sdk_forbid
-            "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|IGLLibrary|skia|sokol|[Ww]icked|shaderc")
+            "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|wgpu|webgpu|gdi32|shaderc")
         foreach(_cna_sdkfree_probe IN ITEMS probe_graphics probe_content probe_graphics_ext probe_devices_ext)
             add_test(NAME ModuleLinkClosure_NativeSdkFree_${_cna_sdkfree_probe}
                 COMMAND Python3::Interpreter
@@ -154,7 +154,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
                 --build-dir "${CMAKE_BINARY_DIR}"
                 --target probe_graphics
-                --forbid "d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|IGLLibrary|skia|sokol|[Ww]icked|GLESv1|shaderc"
+                --forbid "d3d|dxgi|ddraw|d2d1|wgpu|webgpu|gdi32|shaderc"
                 --require "vulkan")
     endif()
 

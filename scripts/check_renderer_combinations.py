@@ -31,7 +31,6 @@ RULES = {
     # keep in step -- and listing one here would demand documentation for a restriction that no
     # longer exists.
     "platform partition": "platform",
-    "GLIDE": "GLIDE",
 }
 
 

@@ -130,8 +130,6 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)

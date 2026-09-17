@@ -10,17 +10,16 @@ namespace CNA
      * @brief What kind of implementation technology a graphics backend uses.
      *
      * Orthogonal to GraphicsBackendMaturity, which classifies recommendation confidence instead
-     * of implementation technology. For example FREEDIRECT and the real DIRECTX3 renderer both
-     * target the DirectDraw/Direct3D 3 era, but FREEDIRECT reimplements that API surface itself
-     * (TranslationLayer) while DIRECTX3 talks to the real COM interfaces (Native) -- the same
-     * kind of split applies across most of the legacy DirectX family.
+     * of implementation technology. For example FREEDIRECT and DIRECTX9 both speak a DirectX-era
+     * API, but FREEDIRECT reimplements the DirectDraw surface itself (TranslationLayer) while
+     * DIRECTX9 talks to the real Direct3D 9 COM interfaces (Native).
      */
     enum class GraphicsBackendCategory
     {
         /** @brief Compiled against exactly one fixed real graphics API, with no runtime backend negotiation. */
         Native,
 
-        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as Bgfx/LLGL/Sokol/Diligent/Wicked/FNA3D/SDL_RENDERER/SDL_GPU/WebGPU), or reimplements another API's surface itself (FreeDirect/OpenVG). */
+        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as FNA3D/SDL_RENDERER/SDL_GPU/WebGPU), or reimplements another API's surface itself (FreeDirect). */
         TranslationLayer,
 
         /** @brief Renders entirely on the CPU; no real GPU driver is involved. */
@@ -56,8 +55,8 @@ namespace CNA
     /**
      * @brief Returns the implementation-technology category of the given graphics renderer.
      *
-     * Callable for any of the 50 public GraphicsRendererType identities, not only the one
-     * compiled into the current build.
+     * Callable for any public GraphicsRendererType identity, not only the one compiled into the
+     * current build.
      *
      * @param type The renderer identity to classify.
      * @return The renderer's category.
@@ -70,48 +69,24 @@ namespace CNA
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::Direct2D:
             case GraphicsRendererType::DirectX9:
-            case GraphicsRendererType::DirectX1:
-            case GraphicsRendererType::DirectX2:
-            case GraphicsRendererType::DirectX3:
-            case GraphicsRendererType::DirectX5:
-            case GraphicsRendererType::DirectX6:
-            case GraphicsRendererType::DirectX7:
-            case GraphicsRendererType::DirectX8:
-            case GraphicsRendererType::DirectX10:
-            case GraphicsRendererType::OpenGLES1:
             case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::OpenGL1:
-            case GraphicsRendererType::OpenGL2:
-            case GraphicsRendererType::Glide:
             case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendCategory::Native;
 
             case GraphicsRendererType::SdlRenderer:
-            case GraphicsRendererType::Bgfx:
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::Wicked:
-            case GraphicsRendererType::Sokol:
-            case GraphicsRendererType::Diligent:
-            case GraphicsRendererType::Llgl:
-            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
-            case GraphicsRendererType::OpenVg:
-            case GraphicsRendererType::NanoVg:
-            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:
@@ -119,7 +94,6 @@ namespace CNA
             case GraphicsRendererType::Canvas:
             case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::PixiJs:
                 return GraphicsBackendCategory::Web;
 
             case GraphicsRendererType::Headless:

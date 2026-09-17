@@ -159,10 +159,6 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
@@ -204,12 +200,6 @@ namespace
     // DX-260: D3D12 allocates the complete cube mip chain and supports exact per-level transfers,
     // matching its Texture3D path and the public TextureCube LevelCount contract.
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // The pinned OpenGL render system cannot sample cubes, so LLGL keeps exact transfer-only CPU
-    // face storage; Texture3D remains a native LLGL texture with exact mip transfers.
-    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #else

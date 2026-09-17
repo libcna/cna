@@ -119,15 +119,15 @@ if(CNA_BUILD_EXAMPLES)
 endif()
 
 # A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
-# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It is kept
-# to the one tuple that has a CPU presenter capable of reaching a terminal.
+# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It runs with
+# SOFTWARE, the CPU renderer the platform-ci TERMINAL leg configures.
 if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_PLATFORM STREQUAL "TERMINAL"
-   AND CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D" AND TARGET Python3::Interpreter)
-    add_test(NAME TerminalBlend2DDemoIntegration
+   AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE" AND TARGET Python3::Interpreter)
+    add_test(NAME TerminalSoftwareDemoIntegration
         COMMAND Python3::Interpreter
             "${CMAKE_SOURCE_DIR}/tools/platform/terminal_demo_integration_test.py"
             "$<TARGET_FILE:cna_demo_2d>")
-    set_tests_properties(TerminalBlend2DDemoIntegration PROPERTIES TIMEOUT 25)
+    set_tests_properties(TerminalSoftwareDemoIntegration PROPERTIES TIMEOUT 25)
 endif()
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
@@ -191,7 +191,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(NOT _cna_house3d_renderers)
             set(_cna_house3d_renderers ${CNA_GRAPHICS_RENDERER})
         endif()
-        set(_cna_house3d_windowless HEADLESS SOFTWARE STUB TINYGL PORTABLEGL)
+        set(_cna_house3d_windowless HEADLESS SOFTWARE STUB PORTABLEGL)
         # plans/plan_x11.md X11-0172: the smoke run also looks at what it drew -- two planes, the
         # nearer drawn first, must still show the nearer. It passed for months with a GL window
         # that had no depth buffer at all. Not for the renderers that keep no pixels to read back.

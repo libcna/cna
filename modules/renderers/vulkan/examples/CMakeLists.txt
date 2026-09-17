@@ -597,13 +597,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # first and encodes the survivors into colour probes, so it can tell the three aspects
         # apart instead of asserting one pixel.
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_clearoptions
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/bgfx/examples/bgfx_graphicsdevice_clearoptions_test.cpp)
+                        vulkan_graphicsdevice_clearoptions_test.cpp)
         # plan_vulkan.md VULKAN-183: 90 -> 300, with the measurement rather than on suspicion.
         # Standalone, this test takes 1.9 s on llvmpipe (:99, the configured display) and 121.5 s on
         # RADV through a compositor-less Xwayland, where each presented frame costs about a second.
-        # Its two siblings solved the same problem by turning vertical retrace off, which is the
-        # better fix and is not available here: the source belongs to the bgfx examples and this
-        # renderer only registers it, so the timeout is the renderer-local half of the answer.
+        # Its two siblings solved the same problem by turning vertical retrace off; this renderer-
+        # agnostic source was written without that switch, so the timeout is the renderer-local
+        # half of the answer.
         cna_register_renderer_test(NAME Vulkan_GraphicsDevice_ClearOptions COMMAND cna_test_vulkan_graphicsdevice_clearoptions
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -1221,13 +1221,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         endif()
 
         # Task 842 (Phase 73 Vulkan gap closure): verify MRT with mixed formats is rejected or
-        # handled per XNA constraints on Vulkan -- verbatim reuse of the renderer-agnostic test
-        # (Task 774's own file, no Bgfx-specific code at all: pure GraphicsDevice/RenderTarget2D
-        # API calls, no rendering). Confirms Task 774's shared-code Texture::ValidateFormat fix
+        # handled per XNA constraints on Vulkan -- reuse of Task 774's renderer-agnostic test (pure
+        # GraphicsDevice/RenderTarget2D API calls, no rendering), moved here when the renderer it
+        # was first written for was retired. Confirms Task 774's shared-code Texture::ValidateFormat fix
         # (RenderTarget2D/RenderTargetCube's own delegating constructors previously skipped it)
         # also holds on Vulkan.
         cna_vulkan_test(cna_test_vulkan_mrt_mixed_formats
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/bgfx/examples/bgfx_mrt_mixed_formats_test.cpp)
+                        vulkan_mrt_mixed_formats_test.cpp)
         cna_register_renderer_test(NAME Vulkan_MRT_MixedFormats COMMAND cna_test_vulkan_mrt_mixed_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # plan_vulkan.md VULKAN-405: this test's MRT proxy leaked its VkFramebuffer past
