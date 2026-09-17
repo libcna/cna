@@ -12,6 +12,7 @@
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Internal/Graphics/PresentationRect.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/Diagnostics/Instrumentation.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
@@ -58,6 +59,36 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        void RecordGraphicsDraw(bool indexed, std::int64_t primitiveCount) noexcept
+        {
+            static const CNA::Diagnostics::FrameCounterHandle drawCalls("Graphics/DrawCalls");
+            static const CNA::Diagnostics::FrameCounterHandle indexedCalls(
+                "Graphics/IndexedDrawCalls");
+            static const CNA::Diagnostics::FrameCounterHandle nonIndexedCalls(
+                "Graphics/NonIndexedDrawCalls");
+            static const CNA::Diagnostics::FrameCounterHandle primitives(
+                "Graphics/SubmittedPrimitives");
+            drawCalls.Add();
+            (indexed ? indexedCalls : nonIndexedCalls).Add();
+            primitives.Add(primitiveCount);
+        }
+
+        void RecordIndirectGraphicsDraw(bool indexed) noexcept
+        {
+            RecordGraphicsDraw(indexed, 0);
+            static const CNA::Diagnostics::FrameCounterHandle indirectCalls(
+                "Graphics/IndirectDrawCalls");
+            indirectCalls.Add();
+        }
+#define CNA_RECORD_GRAPHICS_DRAW(indexed, primitiveCount) \
+        RecordGraphicsDraw((indexed), (primitiveCount))
+#define CNA_RECORD_INDIRECT_GRAPHICS_DRAW(indexed) RecordIndirectGraphicsDraw(indexed)
+#else
+#define CNA_RECORD_GRAPHICS_DRAW(indexed, primitiveCount) do { } while (false)
+#define CNA_RECORD_INDIRECT_GRAPHICS_DRAW(indexed) do { } while (false)
+#endif
+
         // Matches FNA's internal GraphicsDevice.MAX_RENDERTARGET_BINDINGS.
         constexpr std::size_t MAX_RENDERTARGET_BINDINGS = 4;
 
@@ -1654,6 +1685,7 @@ namespace Microsoft::Xna::Framework::Graphics
             world, view, proj,
             primitiveType, primitiveCount, p
         );
+        CNA_RECORD_GRAPHICS_DRAW(false, primitiveCount);
     }
 
     void GraphicsDevice::DrawIndexedPrimitives(
@@ -1752,6 +1784,7 @@ namespace Microsoft::Xna::Framework::Graphics
             world, view, proj,
             primitiveType, primitiveCount, p
         );
+        CNA_RECORD_GRAPHICS_DRAW(true, primitiveCount);
     }
 
     void GraphicsDevice::DrawInstancedPrimitives(
@@ -1876,6 +1909,8 @@ namespace Microsoft::Xna::Framework::Graphics
             world, view, proj,
             primitiveType, primitiveCount, instanceCount, p
         );
+        CNA_RECORD_GRAPHICS_DRAW(
+            true, static_cast<std::int64_t>(primitiveCount) * instanceCount);
     }
 
     namespace {
@@ -1950,6 +1985,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->DrawPrimitivesIndirectEXT(
             currentVertexBuffer_->GetRenderer(), world, view, proj, primitiveType,
             argumentBuffer, argumentByteOffset, p);
+        CNA_RECORD_INDIRECT_GRAPHICS_DRAW(false);
     }
 
     void GraphicsDevice::DrawIndexedPrimitivesIndirectEXT(
@@ -1998,6 +2034,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->DrawIndexedPrimitivesIndirectEXT(
             currentVertexBuffer_->GetRenderer(), currentIndexBuffer_->GetRenderer(),
             world, view, proj, primitiveType, argumentBuffer, argumentByteOffset, p);
+        CNA_RECORD_INDIRECT_GRAPHICS_DRAW(true);
     }
 
     namespace
@@ -2075,6 +2112,7 @@ namespace Microsoft::Xna::Framework::Graphics
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(*tmpVb, world, view, proj, primitiveType, primitiveCount,
                                     drawParams);
+        CNA_RECORD_GRAPHICS_DRAW(false, primitiveCount);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(
@@ -2130,6 +2168,7 @@ namespace Microsoft::Xna::Framework::Graphics
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*tmpVb, *tmpIb, world, view, proj, primitiveType,
                                            primitiveCount, drawParams);
+        CNA_RECORD_GRAPHICS_DRAW(true, primitiveCount);
     }
 
     // -----------------------------------------------------------------------
@@ -2320,7 +2359,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
+          CNA_RECORD_GRAPHICS_DRAW(false, count); }
     }
 
     // DrawUserPrimitives — VertexPositionTexture
@@ -2351,7 +2391,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
+          CNA_RECORD_GRAPHICS_DRAW(false, count); }
     }
 
     // DrawUserPrimitives — VertexPositionColorTexture
@@ -2382,7 +2423,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
+          CNA_RECORD_GRAPHICS_DRAW(false, count); }
     }
 
     // DrawUserPrimitives — VertexPositionNormalTexture
@@ -2413,7 +2455,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
+          CNA_RECORD_GRAPHICS_DRAW(false, count); }
     }
 
     // DrawUserPrimitives — explicit VertexDeclaration (FNA second generic overload)
@@ -2451,6 +2494,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
+        CNA_RECORD_GRAPHICS_DRAW(false, primitiveCount);
     }
 
     // The object-to-stream conversion for the explicit-declaration draws. It runs here and only
@@ -2564,7 +2608,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2600,7 +2645,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2636,7 +2682,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2672,7 +2719,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     // DrawUserIndexedPrimitives — 32-bit index overloads
@@ -2710,7 +2758,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2746,7 +2795,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2782,7 +2832,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2818,7 +2869,8 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           applySamplerStatesToRenderer();
-          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+          CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
     }
 
     // DrawUserIndexedPrimitives — explicit VertexDeclaration (FNA second generic overloads)
@@ -2859,6 +2911,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+        CNA_RECORD_GRAPHICS_DRAW(true, primCount);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2894,6 +2947,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+        CNA_RECORD_GRAPHICS_DRAW(true, primCount);
     }
 
     // The indexed object-to-stream conversion. Like its non-indexed sibling it packs the source
@@ -3487,6 +3541,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
+        if (currentEffect_ != effect)
+            CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/EffectChanges", 1);
         currentEffect_ = effect;
     }
 
@@ -4994,6 +5050,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (renderer_)
                 renderer_->SetRenderTargets(nullptr, 0);
+            CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/RenderTargetChanges", 1);
             // The renderer transition is checked/transactional on D3D9.  Do not claim the
             // backbuffer or its dimensions until that native restoration actually succeeds.
             currentRenderTargets_.clear();
@@ -5100,6 +5157,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderer_)
             renderer_->SetRenderTargets(
                 descriptors.data(), static_cast<int>(descriptors.size()));
+        CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/RenderTargetChanges", 1);
 
         // CABI-28: bound for writing, so the content is no longer lost. Deliberately after the
         // renderer call above rather than beside the per-binding validation: a binding that throws

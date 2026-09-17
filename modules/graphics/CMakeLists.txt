@@ -11,7 +11,7 @@ cna_add_module(cna_graphics_core GraphicsCore
 # IGraphicsRenderer's window registry is keyed by the platform contract's WindowId. Public is
 # intentional: renderer modules include that common header and therefore need the platform include
 # interface too; the platform module itself depends only on cna_core_headers, so this adds no cycle.
-target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core cna_platform)
+target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core cna_diagnostics cna_platform)
 cna_link_sharp_runtime(cna_graphics_core PUBLIC Core.Base IO Collections.Core Text)
 # PLAT-65: generic image decode/encode uses CNA's already-vendored single-header stb copy. Keep it
 # private: no stb type crosses ImageLoader's RGBA8 boundary.

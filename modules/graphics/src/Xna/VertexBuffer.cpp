@@ -4,6 +4,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -154,6 +157,13 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->SetVertexDeclaration(vertexDeclaration_);
             renderer_->SetData(cpuShadow_.data(), vertexCount_, static_cast<std::size_t>(stride));
         }
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeBufferDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::VertexBuffer,
+            static_cast<std::uint64_t>(std::max(stride, 0)) *
+                static_cast<std::uint64_t>(std::max(vertexCount_, 0)),
+            "VertexBuffer"));
+#endif
     }
 
     std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>

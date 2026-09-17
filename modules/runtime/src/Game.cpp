@@ -5,6 +5,7 @@
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/Diagnostics/Instrumentation.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
@@ -593,6 +594,8 @@ namespace Microsoft::Xna::Framework
 
     void Game::Tick()
     {
+        CNA_DIAGNOSTICS_FRAME_SCOPE();
+        CNA_PROFILE_SCOPE_CATEGORY("Game/Tick", CNA::Diagnostics::Category::Core);
         AdvanceElapsedTime();
 
         if (IsFixedTimeStep_)
@@ -638,7 +641,11 @@ namespace Microsoft::Xna::Framework
                 ++stepCount;
 
                 AssertNotDisposed();
-                Update(gameTime_);
+                {
+                    CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
+                    Update(gameTime_);
+                }
+                CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
 
                 gameTime_.setTotalGameTimeProperty(
                     gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
@@ -683,7 +690,11 @@ namespace Microsoft::Xna::Framework
 
             accumulatedElapsedTime_ = System::TimeSpan::Zero;
             AssertNotDisposed();
-            Update(gameTime_);
+            {
+                CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
+                Update(gameTime_);
+            }
+            CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
 
             // Same rule as the fixed path: TotalGameTime is the time before this step. Measured
             // on the real XNA runtime with IsFixedTimeStep = false, where update 3 reports
@@ -699,8 +710,12 @@ namespace Microsoft::Xna::Framework
         }
         else if (BeginDraw())
         {
-            Draw(gameTime_);
-            EndDraw();
+            {
+                CNA_PROFILE_SCOPE_CATEGORY("Game/Draw", CNA::Diagnostics::Category::Draw);
+                Draw(gameTime_);
+                EndDraw();
+            }
+            CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/DrawCount", 1);
         }
     }
 
@@ -1045,6 +1060,8 @@ namespace Microsoft::Xna::Framework
             {
                 return;
             }
+            CNA_DIAGNOSTICS_FRAME_SCOPE();
+            CNA_PROFILE_SCOPE_CATEGORY("Game/Tick", CNA::Diagnostics::Category::Core);
 
             state.game->PollEvents();
 
@@ -1077,14 +1094,22 @@ namespace Microsoft::Xna::Framework
                 state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + stepSpan);
                 state.gameTime.setIsRunningSlowlyProperty(false);
 
-                state.game->Update(state.gameTime);
+                {
+                    CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
+                    state.game->Update(state.gameTime);
+                }
+                CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
                 updated = true;
             }
 
             if (updated && state.game->BeginDraw())
             {
-                state.game->Draw(state.gameTime);
-                state.game->EndDraw();
+                {
+                    CNA_PROFILE_SCOPE_CATEGORY("Game/Draw", CNA::Diagnostics::Category::Draw);
+                    state.game->Draw(state.gameTime);
+                    state.game->EndDraw();
+                }
+                CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/DrawCount", 1);
             }
 
             if (!state.game->RunApplication)

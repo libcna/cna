@@ -115,6 +115,26 @@ if(CNA_USE_CCACHE)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
+option(CNA_BUILD_BENCHMARKS "Build CNA microbenchmarks" OFF)
+set(CNA_DIAGNOSTICS "OFF" CACHE STRING
+    "Profiler/diagnostics support: OFF, STATS, or FULL")
+set_property(CACHE CNA_DIAGNOSTICS PROPERTY STRINGS OFF STATS FULL)
+string(TOUPPER "${CNA_DIAGNOSTICS}" _cna_diagnostics_normalized)
+if(NOT _cna_diagnostics_normalized MATCHES "^(OFF|STATS|FULL)$")
+    message(FATAL_ERROR
+        "CNA_DIAGNOSTICS must be OFF, STATS, or FULL (received '${CNA_DIAGNOSTICS}').")
+endif()
+set(CNA_DIAGNOSTICS "${_cna_diagnostics_normalized}" CACHE STRING
+    "Profiler/diagnostics support: OFF, STATS, or FULL" FORCE)
+if(CNA_DIAGNOSTICS STREQUAL "OFF")
+    set(CNA_DIAGNOSTICS_LEVEL 0)
+elseif(CNA_DIAGNOSTICS STREQUAL "STATS")
+    set(CNA_DIAGNOSTICS_LEVEL 1)
+else()
+    set(CNA_DIAGNOSTICS_LEVEL 2)
+endif()
+unset(_cna_diagnostics_normalized)
+message(STATUS "CNA: diagnostics ${CNA_DIAGNOSTICS}")
 # Example/demo applications. The registrations themselves are module-local
 # (modules/<name>/examples/CMakeLists.txt, modules/renderers/<family>/examples/CMakeLists.txt);
 # this option keeps its historical configure-wide meaning.

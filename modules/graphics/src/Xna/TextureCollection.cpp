@@ -3,6 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "CNA/Diagnostics/Instrumentation.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -88,7 +89,10 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "The texture belongs to a different GraphicsDevice.");
         }
-        textures_[static_cast<std::size_t>(index)] = texture;
+        Texture*& slot = textures_[static_cast<std::size_t>(index)];
+        if (slot != texture)
+            CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/TextureBindingChanges", 1);
+        slot = texture;
     }
 
     void TextureCollection::RemoveDisposedTexture(const Texture* tex)

@@ -1,5 +1,22 @@
 # NEXT.md
 
+## CNA diagnostics/profiler foundation complete (`DIAG-0001`, 2026-09-17)
+
+`modules/diagnostics` now provides CNA's renderer-independent, pull-based observation core with
+compile-time `OFF`, `STATS`, and `FULL` modes. OFF instrumentation does not evaluate its arguments,
+adds no graphics-resource state, and leaves no diagnostics references in inspected engine hot-path
+objects. STATS adds bounded frame history, counters/gauges, common graphics/audio statistics, and
+resource metadata. FULL adds nested per-thread CPU zones, markers, bounded event history, recording,
+and binary/Chrome Trace export without a profiler thread or producer-side global lock after a
+thread's first event.
+
+The stable in-process consumer boundary is `CNA::Diagnostics::IDiagnosticsProvider` version 1.
+The future Inspector is intentionally not implemented here: it should pull snapshots and sequenced
+event batches, place any transport/authentication/UI outside this module, and keep renderer GPU
+queries asynchronous behind `IDiagnosticsSource`. Exact versus estimated metrics, trace format,
+limits, test evidence, and measured overhead are recorded in `docs/diagnostics.md`,
+`docs/diagnostics-benchmark.md`, and `plans/plan_diagnostics.md`.
+
 ## Current handoff — generated-report growth is closed (`CBIND-123`, 2026-08-30)
 
 The tracked C API coverage file is now a compact summary and hash; its complete per-symbol matrix

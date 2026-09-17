@@ -24,6 +24,10 @@ namespace Microsoft::Xna::Framework::Graphics
               ? std::weak_ptr<void>(device->resourceDeviceLifetime_)
               : std::weak_ptr<void>{})
     {
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        diagnosticResource_ = CNA::Diagnostics::ResourceHandle(
+            CNA::Diagnostics::ResourceDescriptor{});
+#endif
         if (graphicsDevice_)
         {
             graphicsDevice_->AddResourceReference(this);
@@ -41,6 +45,10 @@ namespace Microsoft::Xna::Framework::Graphics
         , isDisposed_(false)
         // Disposing handlers deliberately not copied: each object owns its lifecycle
     {
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        diagnosticResource_ = CNA::Diagnostics::ResourceHandle(
+            CNA::Diagnostics::ResourceDescriptor{});
+#endif
     }
 
     GraphicsResource& GraphicsResource::operator=(const GraphicsResource& other)
@@ -55,6 +63,10 @@ namespace Microsoft::Xna::Framework::Graphics
             name_ = other.getNameProperty();
             tag_ = other.getTagProperty();
             isDisposed_ = false;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+            diagnosticResource_ = CNA::Diagnostics::ResourceHandle(
+                CNA::Diagnostics::ResourceDescriptor{});
+#endif
             // Disposing handlers deliberately not copied
         }
         return *this;
@@ -67,6 +79,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , name_(std::move(other.name_))
         , tag_(other.tag_)
         , isDisposed_(other.isDisposed_)
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        , diagnosticResource_(std::move(other.diagnosticResource_))
+#endif
     {
         if (other.sharedIdentity_)
         {
@@ -108,6 +123,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 name_ = std::move(other.name_);
                 tag_ = other.tag_;
                 isDisposed_ = other.isDisposed_;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+                diagnosticResource_ = std::move(other.diagnosticResource_);
+#endif
                 Disposing = std::move(other.Disposing);
                 sharedIdentity_ = std::move(other.sharedIdentity_);
                 for (GraphicsResource*& alias : sharedIdentity_->aliases)
@@ -144,6 +162,9 @@ namespace Microsoft::Xna::Framework::Graphics
             name_ = std::move(other.name_);
             tag_ = other.tag_;
             isDisposed_ = other.isDisposed_;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+            diagnosticResource_ = std::move(other.diagnosticResource_);
+#endif
             Disposing = std::move(other.Disposing);
             if (incomingDevice != nullptr && !incomingLifetime.expired())
                 incomingDevice->TransferResourceReference(&other, this);
@@ -234,7 +255,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
             identity->isDisposed = true;
             for (GraphicsResource* alias : identity->aliases)
+            {
                 alias->isDisposed_ = true;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+                alias->diagnosticResource_.Reset();
+#endif
+            }
 
             if (disposing)
             {
@@ -266,7 +292,18 @@ namespace Microsoft::Xna::Framework::Graphics
             graphicsDevice_->RemoveResourceReference(this);
         }
         isDisposed_ = true;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        diagnosticResource_.Reset();
+#endif
     }
+
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+    void GraphicsResource::UpdateDiagnosticResourceEXT(
+        const CNA::Diagnostics::ResourceDescriptor& descriptor) noexcept
+    {
+        diagnosticResource_.Update(descriptor);
+    }
+#endif
 
     std::shared_ptr<GraphicsResource::SharedIdentity>
     GraphicsResource::EnsureSharedIdentity() const
@@ -296,7 +333,13 @@ namespace Microsoft::Xna::Framework::Graphics
             std::remove(identity->aliases.begin(), identity->aliases.end(), this),
             identity->aliases.end());
         if (identity->canonical == this)
+        {
             identity->canonical = identity->aliases.empty() ? nullptr : identity->aliases.front();
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+            if (identity->canonical != nullptr)
+                identity->canonical->diagnosticResource_ = std::move(diagnosticResource_);
+#endif
+        }
 
         if (identity->aliases.empty() && !identity->isDisposed)
             identity->isDisposed = true;
@@ -314,6 +357,9 @@ namespace Microsoft::Xna::Framework::Graphics
         DetachSharedIdentity();
         sharedIdentity_ = identity;
         sharedIdentity_->aliases.push_back(this);
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        diagnosticResource_.Reset();
+#endif
         graphicsDevice_ = identity->graphicsDevice;
         graphicsDeviceLifetime_ = identity->graphicsDeviceLifetime;
         name_ = identity->name;

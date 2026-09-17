@@ -12,6 +12,7 @@
 
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Diagnostics/Instrumentation.hpp"
 
 #include <optional>
 
@@ -229,7 +230,10 @@ namespace CNA::Internal::Audio
         }
     }
 
-    void EndMixerEngineShutdown() noexcept {}
+    void EndMixerEngineShutdown() noexcept
+    {
+        CNA_DIAGNOSTICS_GAUGE_SET("Audio/AllocatedVoices", 0);
+    }
 
     MixerLock::MixerLock()
     {
@@ -370,7 +374,13 @@ namespace CNA::Internal::Audio
         // The safe point for tracks destroyed from their own stopped callback, as in the
         // SDL3_mixer facade.
         Mixer()->DrainDeferred();
-        return Mixer()->CreateTrack();
+        MixerTrack* track = Mixer()->CreateTrack();
+        if (track != nullptr)
+        {
+            CNA_DIAGNOSTICS_GAUGE_ADD("Audio/AllocatedVoices", 1);
+            CNA_DIAGNOSTICS_COUNTER_ADD("Audio/VoiceCreations", 1);
+        }
+        return track;
     }
 
     void DestroyMixerTrack(MixerTrack* track) noexcept
@@ -383,6 +393,7 @@ namespace CNA::Internal::Audio
         if (CnaMixer* mixer = Mixer())
         {
             mixer->DestroyTrack(track);
+            CNA_DIAGNOSTICS_GAUGE_ADD("Audio/AllocatedVoices", -1);
         }
     }
 

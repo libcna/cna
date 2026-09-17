@@ -2,6 +2,9 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -112,6 +115,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 rtCubeRenderer_->GetAppliedDepthStencilFormatEXT(
                     static_cast<int>(preferredDepthFormat)));
         }
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::RenderTargetCube, size_, size_, 1,
+            getLevelCountProperty(), 6, getFormatProperty(), "RenderTargetCube"));
+#endif
         // MultiSampleCount reflects the renderer's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
         if (rtCubeRenderer_)
