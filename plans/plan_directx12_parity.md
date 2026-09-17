@@ -482,7 +482,9 @@ SkinnedEffect and BasicEffect (GLTF-386, pinned by
 `GltfRendererPbrFallbackPolicy.DirectX11SkinnedEffectUsesOpaqueWhiteForMissingTexture`, for untextured glTF
 skins). DirectX12 follows DirectX11 there (parity), and XNA's black for AlphaTestEffect, DualTextureEffect
 and EnvironmentMapEffect where no such pin exists. Resolving SkinnedEffect/BasicEffect needs the glTF
-importer to bind its own white texture first — outside this workstream, recorded for the owner.
+importer to bind its own white texture first — outside this workstream, recorded for the owner. Resolved by
+`plans/plan_graphics_shared_cleanup.md` GSC-0004: measured XNA black for every classic stock effect, the
+glTF importer binds glTF's white itself.
 
 
 ## Rounds E, F and G — after the round-D follow-ups
@@ -644,9 +646,10 @@ selection (no `CNA_D3D12_ADAPTER`, or `=hardware`) and record:
    `MinLOD = FLOAT32_MAX` limitation measured by `minlod_probe`); run `minlod_probe.exe` on the same machine.
 4. `DescriptorCapacityContract` B1/C1 (mixed min/mag filters at a one-to-one footprint): expected to pass
    on hardware that applies the magnification half at LOD 0; run `pixelcenter_probe.exe` on the same machine.
-5. CnaTests, 27 shards, then again with `CNA_D3D12_DEBUG_LAYER=1`. The gtest listener does not fail a test:
-   it writes every test's debug-layer messages to `CNA_D3D12_DEBUG_REPORT` (the shard runner sets one per
-   shard), and the run is judged from those reports.
+5. CnaTests, 27 shards, then again with `CNA_D3D12_DEBUG_LAYER=1`. Since
+   `plans/plan_graphics_shared_cleanup.md` GSC-0006 the gtest listener fails a test on a CORRUPTION, an
+   ERROR or a WARNING outside its allowlist, and still writes report lines to `CNA_D3D_DEBUG_REPORT` (the
+   shard runner sets one per shard).
 6. `cna_stress_directx12_win32_present --frames 3000` with the debug layer, then 300 frames with
    `CNA_D3D12_GPU_VALIDATION=1`: back buffer = client size after every resize, churn exact, handle and
    private-byte growth bounded, zero debug-layer messages.
