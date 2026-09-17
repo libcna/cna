@@ -186,8 +186,11 @@ namespace CNA::Internal::Renderers::DirectX12
         src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         src.PlacedFootprint.Offset = upload.offset;
         src.PlacedFootprint.Footprint.Format = dxgiFormat_;
-        src.PlacedFootprint.Footprint.Width = static_cast<UINT>(levelW);
-        src.PlacedFootprint.Footprint.Height = static_cast<UINT>(levelH);
+        // plans/plan_directx12_parity.md DX12-0029: a block-compressed footprint is whole blocks, as
+        // GetCopyableFootprints reports it -- a 2x2 or 1x1 DXT mip is one 4x4 block. The texel size was
+        // rejected by the debug layer (ID 867, "must be a multiple of 4").
+        src.PlacedFootprint.Footprint.Width = static_cast<UINT>(compressed_ ? ((levelW + 3) / 4) * 4 : levelW);
+        src.PlacedFootprint.Footprint.Height = static_cast<UINT>(compressed_ ? rowCount * 4 : levelH);
         src.PlacedFootprint.Footprint.Depth = 1;
         src.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
