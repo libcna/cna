@@ -114,6 +114,10 @@ namespace
     /// Every fixture the runtime .gltf loader can actually produce a Model for: a rejection
     /// fixture has no model at all, and its refusal is asserted in full by
     /// GltfContainerValidation rather than half-asserted here.
+    // A loop over these shares one GraphicsDevice and gives each fixture its own ContentManager.
+    // One device per fixture made ~1 000 devices per suite -- more than the VirtualBox Direct3D 11
+    // driver hands one process before it stops (F24, WINCLOSE-0048) -- and a fresh device is not
+    // what any of these assertions is about.
     std::vector<std::string> LoadableFixtureIds()
     {
         std::vector<std::string> ids;
@@ -353,10 +357,10 @@ TEST(GltfDrawParamsOracleL6, APbrDrawYieldsEverySection211QuantityItCanCarry)
 TEST(GltfDrawParamsOracleL6, EveryDrawablePartOfEveryFixtureIsCaptured)
 {
     std::size_t totalParts = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -393,6 +397,7 @@ TEST(GltfConformanceL6, BoundWorldMatrixMatchesTheExpectedNodeWorld)
 {
     const Matrix appWorld = Matrix::CreateTranslation(100.0f, 200.0f, 300.0f);
 
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
@@ -406,7 +411,6 @@ TEST(GltfConformanceL6, BoundWorldMatrixMatchesTheExpectedNodeWorld)
             continue;
         }
 
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -453,10 +457,10 @@ TEST(GltfConformanceL6, ViewAndProjectionReachEveryDrawUnaltered)
     float expectedProjection[16];
     TestProjection().ToColumnMajor(expectedProjection);
 
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -487,10 +491,10 @@ TEST(GltfConformanceL6, NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3)
     // symmetric worlds it would pass whichever convention it used.
     std::size_t asymmetricWorlds = 0;
 
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -635,6 +639,7 @@ TEST(GltfConformanceL6, RotatedNonUniformScaleTransformsTheCorpusNormalByInverse
 TEST(GltfConformanceL6, MaterialFactorsReachTheBoundEffect)
 {
     std::size_t checked = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
@@ -643,7 +648,6 @@ TEST(GltfConformanceL6, MaterialFactorsReachTheBoundEffect)
         const JsonValue& material = FirstMaterial(fixture);
         if (material.type != JsonType::Object) { continue; }
 
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -737,10 +741,10 @@ TEST(GltfConformanceL6, SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex)
     using Microsoft::Xna::Framework::Graphics::SkinningData;
 
     std::size_t skinnedFixtures = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -803,10 +807,10 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
 
     std::size_t skinnedFixtures = 0;
     bool anyFixtureHasANonIdentityBindPose = false;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -963,10 +967,10 @@ TEST(GltfConformanceL6, OnlyAMaskMaterialWritesAnAlphaTestReference)
 {
     int maskDraws = 0;
     int nonMaskDraws = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -1001,6 +1005,7 @@ TEST(GltfConformanceL6, OnlyAMaskMaterialWritesAnAlphaTestReference)
 // than a field. The manifest's own importPolicy states which topology and how many primitives.
 TEST(GltfConformanceL6, CapturedTopologyAndPrimitiveCountMatchTheImportPolicy)
 {
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
@@ -1011,7 +1016,6 @@ TEST(GltfConformanceL6, CapturedTopologyAndPrimitiveCountMatchTheImportPolicy)
         const JsonValue& policy = Member(primitives.arrayValue.front(), "importPolicy");
         if (policy.type != JsonType::Object) { continue; }
 
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -1155,10 +1159,10 @@ TEST(GltfConformanceL6, EmissiveStrengthMultipliesTheFactorAndSurvivesAboveOne)
 TEST(GltfConformanceL6, EveryImportedPartOwnsItsBuffersSoItsOffsetsAreZero)
 {
     std::size_t checkedParts = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -1198,10 +1202,10 @@ TEST(GltfConformanceL6, EveryImportedPartOwnsItsBuffersSoItsOffsetsAreZero)
 TEST(GltfConformanceL6, EveryPbrDrawDeclaresItsTexturesColourSpace)
 {
     std::size_t checked = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -1326,10 +1330,10 @@ TEST(GltfConformanceL6, AMaterialDeclaringNeitherScalarGetsGltfsOwnDefaultOfOne)
 
 TEST(GltfConformanceL6, EveryLitDrawCarriesThreeLightsWithDisabledOnesAtZeroColour)
 {
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
@@ -1884,10 +1888,10 @@ void main() { FragColor = vVertexProbe; }
 TEST(GltfConformanceL6, NoImportedDrawArrivesWithFogEnabled)
 {
     std::size_t checked = 0;
+    GraphicsDevice gd;
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        GraphicsDevice gd;
         ContentManager cm(nullptr, CorpusDirectory().string());
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
