@@ -1,5 +1,7 @@
 # Lane card — `diligent` (Diligent Engine) · ✅ **INTEGRATED 2026-08-07** · merge `aa9f3fb5` — the thirteenth lane, Batch 3 closes
 
+> **Retired renderer — historical record.** The `DILIGENT` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 38 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Outcome.** Adapted, validated and merged in one session. Like `sokol` and unlike `wicked`/
 > `magnum`, the lane had genuinely been built and run before: a pre-adaptation build at its own fork
 > point reproduced its recorded results exactly, so the session started from a proven baseline.

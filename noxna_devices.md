@@ -477,7 +477,7 @@ design note supersedes it on every point where they'd otherwise duplicate.
      (CPU-side pixel buffer); a game almost certainly wants it as a
      `Microsoft::Xna::Framework::Graphics::Texture2D` to actually draw it, which means
      this capability cannot be designed in isolation from the graphics backend
-     (`EASYGL`/`VULKAN`/`BGFX`/`SDL_RENDERER`) the same way `Accelerometer`'s plain
+     (`EASYGL`/`VULKAN`/`SDL_RENDERER`) the same way `Accelerometer`'s plain
      `Vector3` output could be.
   3. **Permission UX varies enormously per platform** (a browser tab prompt vs. an
      Android runtime permission dialog vs. a macOS system privacy prompt), and a

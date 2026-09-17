@@ -49,10 +49,10 @@ can serve them. Each renderer family answers them through its own
 
 | Question | Field |
 |---|---|
-| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB`, `PORTABLEGL`, `TINYGL` |
+| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB`, `PORTABLEGL` |
 | Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
 | What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`/`Vulkan`/`Metal`), plus `wantsHighDpi` |
-| Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `OPENGL1` and `FNA3D` have real work here |
+| Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `OPENGL4` and `FNA3D` have real work here |
 | Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext`, `needsVulkanSurface` |
 
 These last three groups were function-pointer hooks (`prepareWindowFlags()`,
@@ -61,21 +61,17 @@ contract landed: every hook implementation only mapped the window kind onto flag
 library understood, and `WindowDescription` already carries those. `GraphicsDevice` performs the
 mapping once, so no descriptor names a windowing library at all.
 
-Four families compute their window flags at **runtime**, because their own native API is itself a
-runtime choice. This predates runtime renderer selection; the plan generalizes their existing
+One surviving family computes its window flags at **runtime**, because its own native API is itself
+a runtime choice. This predates runtime renderer selection; the plan generalizes that existing
 mechanism rather than inventing one:
 
 | Renderer | Decides | Via |
 |---|---|---|
-| `BGFX` | Vulkan vs OpenGL/GLES | `Bgfx::Detail::ResolveRendererType()`, honouring `CNA_BGFX_RENDERER` |
-| `LLGL` | OpenGL module needs a GL window; Vulkan module needs no flag | `Llgl::Detail::RendererModuleNeedsOpenGLWindow()` |
 | `FNA3D` | SDL_GPU / D3D11 / OpenGL | `FNA3D_PrepareWindowAttributes`, which also primes the GL attributes |
-| `DILIGENT` | D3D12 / Vulkan / D3D11 / OpenGL | `ParseDeviceTypeOverride()`, honouring `CNA_DILIGENT_DEVICE` |
 
-`DILIGENT` carries a documented limitation here: SDL3 rejects a window created with both
-`SDL_WINDOW_VULKAN` and `SDL_WINDOW_OPENGL`, so an `auto` build whose first preference fails at
-runtime cannot fall through across that boundary against an already-created window
-(plans/plan_diligent.md DILIGENT-57).
+Several retired renderers used the same mechanism (bgfx, LLGL and Diligent each chose their own
+native API at runtime), which is why the descriptor carries a hook for it rather than a fixed
+window kind. That generality is still earned by `FNA3D` alone today.
 
 ---
 
@@ -231,8 +227,7 @@ configure time, not merely to exist.
 |---|---|
 | `PORTABLEGL` + any real-OpenGL renderer | PORTABLEGL is a single-header C library that **defines** the global `gl*` symbols (`glClear`, `glDrawArrays`, …). Linking it beside a renderer that calls the real OpenGL of the same names is a duplicate-symbol error. |
 | `GDI` + `SOFTWARE` | GDI compiles the SOFTWARE module's own translation units a second time with `CNA_SOFTWARE_2D_ONLY`. Both in one binary would define the same functions twice with different bodies — an ODR violation. |
-| Renderers from different **platform** partitions | Windows-only (the DirectX family, `GLIDE`, `GDI`, `DIRECT2D`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `PIXIJS`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
-| `GLIDE` + anything | GLIDE pins the build to the native 32-bit x86 Glide ABI. |
+| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `DIRECT2D`, `GDI`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
 
 ### Verified combinations
 
@@ -240,20 +235,14 @@ configure time, not merely to exist.
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
-| `PIXIJS;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 configures and **links** — `cna_demo_renderer_selection` builds with all four families in one wasm bundle, and `PIXIJS` is carried whether or not it is the default. Its vendored `pixi.min.js` reaches the link line through `cna_renderer_pixijs`'s own `PUBLIC --extern-pre-js`, which is per-family rather than per-default. Runtime selection between them needs a real browser, not automated here; `PIXIJS`'s own pixel suite (`scripts/run_pixijs_browser_tests.mjs`) covers the single-renderer build |
-| `OPENGLES3;OPENGLES1;OPENVG;BLEND2D;SOFTWARE;HEADLESS` | ✅ six renderers; **17/17 dispatch tests** pass. `OPENGLES1` needs an ES 1.1-capable Mesa (`scripts/opengles1-test-env.sh`); without it the suite covers the other five and says so |
-| `OPENGLES3;WICKED;SOFTWARE;HEADLESS` | ✅ all four selectable. `WICKED` needs `SDL_VIDEODRIVER=x11` **and** `libdxcompiler.so` in the working directory — its shader compiler loads that path literally |
-| `OPENGLES3;DILIGENT;SOFTWARE;HEADLESS` | ✅ 17/17 dispatch tests. First heavy **external artifact** in a multi build — needs `-DCNA_SKIA_ROOT=` and `-DCNA_SKIA_BUILD_DIR=` |
-| `OPENGLES3;SOKOL;SOFTWARE;HEADLESS;STUB` | ✅ two GL-based abstractions in one binary; all five selectable |
-| `OPENGLES3;MAGNUM;SOFTWARE;HEADLESS` | ✅ all four selectable |
-| `OPENGLES3;SKIA;SOFTWARE;HEADLESS` | ✅ 17/17 dispatch tests. First heavy **external artifact** in a multi build — needs `-DCNA_SKIA_ROOT=` and `-DCNA_SKIA_BUILD_DIR=` |
-| `OPENGLES3;DILIGENT;SOFTWARE;HEADLESS` | ✅ all four selectable (`DILIGENT` needs `SDL_VIDEODRIVER=x11`). **Two-level dispatch verified**: CNA chooses DILIGENT at runtime, then DiligentCore chooses its own device — `CNA_DILIGENT_DEVICE=opengl` is still honoured |
-| `OPENGLES3;LLGL;SOFTWARE;HEADLESS` | ✅ all four selectable (`LLGL` needs `SDL_VIDEODRIVER=x11`; on Wayland it is the real fallback example above) |
 | `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 | `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
-| `OPENGLES3;OPENGL1;OPENGL2;OPENGL4;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Nine renderers, four independent OpenGL families among them, all selectable at runtime |
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
+
+Combinations whose evidence involved a renderer retired on 2026-09-17 are no longer listed:
+they cannot be configured any more, so the measurement is not reproducible. Those rows are in
+git history (`docs/removed-renderers.md` names the renderers).
 
 ### What a multi-renderer build makes newly testable
 
@@ -281,8 +270,10 @@ function-pointer call per `GraphicsDevice` construction and none per frame.
 
 ### A real fallback, start to finish
 
-`LLGL` needs SDL's `x11` video driver and cannot initialize on a Wayland session — a genuine
-environmental failure, nothing simulated:
+The transcript below was recorded in 2026-08 against `LLGL`, a renderer **retired on 2026-09-17**
+(`docs/removed-renderers.md`). It is kept because the failure it shows was a genuine environmental
+one rather than a simulated one, and because the resolution path it exercises is unchanged: LLGL
+needed SDL's `x11` video driver and could not initialize on a Wayland session.
 
 ```
 $ cna_demo_renderer_selection LLGL OPENGLES3 SOFTWARE
@@ -296,19 +287,14 @@ Fallback history (1 renderer(s) passed over):
   - LLGL (InitializationFailed): LLGL renderer: the SDL window exposes no X11 handles ...
 ```
 
-`DILIGENT` behaves the same way on Wayland, and shows that a renderer's *own* internal dispatch
-survives being wrapped in CNA's:
-
-```
-  - DILIGENT (InitializationFailed): CNA Diligent: no device type could be created --
-    tried Vulkan (unsupported SDL video driver for Diligent: wayland),
-    OpenGL (unsupported SDL video driver for Diligent: wayland)
-```
-
 Note what survives: `GetSelected()` still reports what was **asked for**, `GetActive()` reports what
 was **created**, and the renderer's own diagnostic reaches the history verbatim rather than being
-reduced to "it did not work". Without the chain argument the same command fails outright, which is
-the default.
+reduced to "it did not work". That last property matters most for a renderer that dispatches
+internally, where the interesting information is *which* of its own backends were tried; `FNA3D` is
+the surviving renderer of that shape.
+
+To reproduce the path today, without waiting for an environment that genuinely breaks, use the
+`CNA_DEBUG_FAIL_RENDERER_INIT` seam described under *Verifying a fallback chain* below.
 
 ### Smoke-testing several renderers from one build
 
@@ -355,8 +341,8 @@ and recreate the window. That second path is otherwise unreachable without a gen
 driver.
 
 It sits alongside the renderer-specific debug variables this project already has
-(`CNA_BGFX_TRACE_*`, `CNA_LLGL_DEBUG`) — a named test seam, not something the resolution path does
-on its own.
+(`CNA_SDLGPU_TRACE_*`, `CNA_D3D11_DEBUG_LAYER`, `CNA_WEBGPU_TRACE_DRAW_ORDER`) — a named test seam,
+not something the resolution path does on its own.
 
 ---
 
@@ -453,7 +439,12 @@ debug info, not renderers.
 | single | `HEADLESS` | 32.1 MB | — |
 | single | `SOFTWARE` | 32.1 MB | +0.0 MB |
 | single | `OPENGLES3` | 32.6 MB | +0.5 MB |
-| multi | `HEADLESS;LLGL;SOFTWARE;STUB` | 36.2 MB | **+4.1 MB** |
+| multi | `HEADLESS;LLGL;SOFTWARE;STUB` † | 36.2 MB | **+4.1 MB** |
+
+† `LLGL` was retired on 2026-09-17 (`docs/removed-renderers.md`); this row cannot be reconfigured
+today. It is kept because it is the only measurement here that includes a **large third-party**
+renderer, which is the case a reader most wants a number for. The three surviving rows above it are
+reproducible as written.
 
 Four renderers in one binary, including a large third-party one, cost about **13 %** over a
 single-renderer build of the same executable. That is the number to weigh against the convenience
@@ -461,20 +452,22 @@ of choosing a renderer at startup.
 
 ### Where the size goes, per renderer
 
-CNA's own renderer archives in that multi build:
+CNA's own renderer archives in that multi build (same 2026-08-15 measurement, so the retired LLGL
+row is carried with the same caveat):
 
 | Renderer archive | Size |
 |---|---|
-| `libcna_renderer_llgl.a` | 7.19 MB |
+| `libcna_renderer_llgl.a` † | 7.19 MB |
 | `libcna_renderer_software.a` | 6.19 MB |
 | `libcna_renderer_headless.a` | 3.97 MB |
 | `libcna_renderer_stub.a` | 1.65 MB |
 
-The third-party archives behind LLGL are much larger than CNA's own wrapper — `libLLGL_VulkanD.a`
+The third-party archives behind LLGL were much larger than CNA's own wrapper — `libLLGL_VulkanD.a`
 40.2 MB, `libLLGL_OpenGLD.a` 34.3 MB, `libLLGLD.a` 21.4 MB, `libLLGL_NullD.a` 7.2 MB — yet the
-final executable grows by only ~4 MB, because the linker takes what is referenced rather than whole
+final executable grew by only ~4 MB, because the linker takes what is referenced rather than whole
 archives. **A renderer's cost in the binary is not its library's size on disk**, and estimating from
-archive sizes overstates it by an order of magnitude here.
+archive sizes overstated it by an order of magnitude there. That conclusion is about linking, not
+about LLGL, and still applies to `VULKAN`, `WEBGPU` and `FNA3D`.
 
 ### What is NOT measured here, and why
 
@@ -483,7 +476,7 @@ archive sizes overstates it by an order of magnitude here.
   (`../CLAUDE.md`). Timing several full builds for a table was not judged worth that cost. The
   incremental cost is the one developers actually pay, and it is dominated by how many renderer
   archives must relink, which the per-renderer table above already indicates.
-- **Sets containing bgfx, FNA3D, WebGPU or the Windows/macOS families.** Those need dependencies or
+- **Sets containing FNA3D, WebGPU or the Windows/macOS families.** Those need dependencies or
   operating systems not available on the machine these numbers come from. Their rows are absent
   rather than estimated.
 - The `OPENGLES3` tree uses the Makefiles generator where the others use Ninja. That affects build

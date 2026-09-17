@@ -1,5 +1,7 @@
 # Magnum Backend Implementation Plan
 
+> **Retired renderer — historical record.** The `MAGNUM` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 10 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > CNA's `MAGNUM` backend renders through [Magnum](https://github.com/mosra/magnum)'s typed OpenGL
 > wrappers (`Magnum::GL`) on a desktop OpenGL 3.3 core context, with SDL3 still owning the window
 > and the GL context. It is CNA's fifteenth graphics backend and its first desktop-GL one — every

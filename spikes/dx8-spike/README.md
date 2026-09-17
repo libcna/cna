@@ -1,5 +1,7 @@
 # `dx8-spike` — `DX8-0` existence-gate spike findings (2026-07-21)
 
+> **Retired renderer — historical record.** The `DIRECTX8` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 29 is permanently reserved. This spike is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 Run under DXVK 2.6.0, `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset. `dx8_spike1`/`dx8_spike2` below
 were run against `WINEPREFIX=$HOME/.wine-cna-d3d11` (the same prefix D3D9/D3D11/D3D12 already use)
 with `d3d8` added as a native DLL override pointing at DXVK's own `d3d8.dll.so` (the packaged

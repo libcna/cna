@@ -89,7 +89,7 @@ bug. Opening the generated HTML directly from disk is not a valid threaded-Wasm 
 
 - **`EasyGL` is the default renderer on Emscripten** (and Linux) — `CMakeLists.txt`: "Emscripten uses
   WebGL 2 (= OpenGL ES 3.0), which the EasyGL renderer targets." No other renderer (`SDL_RENDERER`,
-  `VULKAN`, `BGFX`) has any Emscripten-specific wiring at all; selecting one of those for an
+  `VULKAN`) has any Emscripten-specific wiring at all; selecting one of those for an
   Emscripten build is untested and not a supported configuration today.
 - **C++ exceptions are force-enabled globally for Emscripten** (`-fexceptions
   -sNO_DISABLE_EXCEPTION_CATCHING=1`, applied before `sharp-runtime` is added) — Emscripten disables

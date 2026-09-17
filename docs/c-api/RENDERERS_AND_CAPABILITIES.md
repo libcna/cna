@@ -30,17 +30,28 @@ outputs unchanged. An unknown capability identifier returns `CNA_RESULT_INVALID_
 ## The two identity ranges are closed and enumerable
 
 `CNA_GRAPHICS_RENDERER_UNKNOWN` through `CNA_GRAPHICS_RENDERER_MAXIMUM`, and
-`CNA_GRAPHICS_CAPABILITY_THREE_D` through `CNA_GRAPHICS_CAPABILITY_MAXIMUM`, are contiguous with no
-gaps, so a consumer can walk either space without naming each member and without a table of its own
-that would drift. Anything above either maximum is refused by every route that accepts that
-identity; `CNA_GRAPHICS_RENDERER_UNKNOWN` is a value routes *report*, never one they accept.
+`CNA_GRAPHICS_CAPABILITY_THREE_D` through `CNA_GRAPHICS_CAPABILITY_MAXIMUM`, are **bounded** ranges,
+so a consumer can walk either space without naming each member and without a table of its own that
+would drift. Anything above either maximum is refused by every route that accepts that identity;
+`CNA_GRAPHICS_RENDERER_UNKNOWN` is a value routes *report*, never one they accept.
+
+**The renderer range is bounded but not contiguous, and a walker must expect gaps.** A retired
+identity's value is permanently reserved and never reassigned, so 7, 10, 19, 20, 23–30, 32, 34–39,
+41, 45 and 47–51 are holes: twenty-six identities have been retired (Skia in 2026-08, twenty-five
+more on 2026-09-17). A reserved value is a well-formed `uint32_t` in range that no longer names a
+renderer, and every route that takes a renderer identity refuses it with
+`CNA_RESULT_INVALID_ARGUMENT` — "not a public CNA renderer identity" — exactly as it refuses a value
+that was never assigned. Walking the range and keeping what is accepted is therefore correct; walking
+it and *assuming* each value names a renderer is not. The capability range has no such gaps.
 
 Both ranges are held against CNA's own enumerations at compile time, because they had already
 fallen behind: `TINYGL`, `IGL` and `PIXIJS` existed as CNA renderers with no C identity at all, so
 each was refused as "not a public CNA renderer identity" while the coverage matrix recorded it as
-mapped. The C identity table is now pinned to the count of renderers CNA declares, and the
-capability translation is exhaustive over CNA's enumeration, so a renderer or capability added to
-CNA without a C identity fails the build rather than reaching a consumer as `UNKNOWN`.
+mapped. (All three identities have since been retired, which does not weaken the point — the gate
+is what keeps the two sides equal in either direction.) The C identity table is pinned to the count
+of renderers CNA declares, and the capability translation is exhaustive over CNA's enumeration, so
+a renderer or capability added to CNA without a C identity fails the build rather than reaching a
+consumer as `UNKNOWN`, and one removed from CNA without its C constant being retired fails it too.
 That gate caught `NANOVG` during the `modern`-into-`next` merge, before the merged C library could
 publish a renderer it would later report as unknown.
 

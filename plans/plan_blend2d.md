@@ -1,5 +1,6 @@
 # Blend2D Graphics Renderer — Implementation Plan
 
+> **Retired renderer — historical record.** The `BLEND2D` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 20 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
 
 > **Renderer selection.** This document describes the renderer as a compile-time choice
 > (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since

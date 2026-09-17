@@ -23,8 +23,8 @@
 3. In practice: **Switch / Switch 2 / PS4 / PS5 / Xbox One / Series = yes, an NDA SDK and a
    registered developer account are required.** **PS Vita / PSP / PS2 / 3DS / Wii / GameCube /
    Dreamcast / Xbox Classic = no, a public homebrew SDK is sufficient**—and CNA is realistically
-   closer to that goal than one might expect because it has the `OPENGL1`, `OPENGLES1`, `SOFTWARE`,
-   `PORTABLEGL`, and `SDL_RENDERER` renderers.
+   closer to that goal than one might expect because it has the `SOFTWARE`, `PORTABLEGL`, and
+   `SDL_RENDERER` renderers.
 
 ---
 
@@ -163,7 +163,7 @@ A new concept alongside `CNA_GRAPHICS_RENDERER`, for example
 - `CNA_BUILD_TESTS=OFF`, `CNA_BUILD_EXAMPLES=OFF` (GoogleTest makes no sense on a console),
 - `CNA_ENABLE_NET=OFF` (ENet requires BSD sockets; networking on consoles is a platform service
   subject to certification),
-- `CNA_DEVICES=OFF`, media/FFmpeg off (already gated), Skia/Blend2D/Magnum/Diligent off,
+- `CNA_DEVICES=OFF`, media/FFmpeg off (already gated),
 - static linking, no `dlopen` (already satisfied),
 - a VFS layer instead of `std::filesystem`—`TitleContainer`/`StorageDevice` must support
   `host0:`/`ux0:`/`sdmc:`/`umd0:` paths and a read-only title sandbox,
@@ -180,8 +180,6 @@ Why Vita should come first:
 
 - SDL3 supports it in the public tree (no NDA),
 - VitaSDK is maintained and a CMake toolchain file exists,
-- `vitaGL` provides a GL1/GLES1-level API → it maps to CNA's **existing** `OPENGLES1` / `OPENGL1`
-  renderers,
 - 512 MB RAM (versus 32 MB on PS2) means a memory diet is not an immediate blocker,
 - the `SDL_RENDERER` and `SOFTWARE` fallbacks are available if the GL path causes trouble.
 
@@ -193,14 +191,10 @@ works, and `ContentManager` reads XNB from a read-only title path. Audio and 3D 
 This is where an actual new platform implementation is created (`CNA::Platform::KosPlatform`,
 `CNA::Platform::NxdkPlatform`, …). CNA has some interesting synergies that other frameworks do not:
 
-- **Dreamcast + `GLdc`** → the `OPENGL1` renderer is ideologically the exact target it was written
-  for.
-- **Xbox Classic + nxdk** → NV2A is a Direct3D 8-generation GPU. CNA has a `DIRECTX8` renderer,
-  but nxdk does not provide `d3d8.dll`—pbkit/XGU must be used. What can be reused is therefore the
-  **structure** of the DIRECTX8 renderer (fixed-function + register combiners, same hardware
-  generation), not its API calls.
-- **Wii/GameCube + `opengx`, 3DS + `picaGL`, PSP + `pspgl`** → again, GL1-level targets for
-  `OPENGL1` / `OPENGLES1`.
+- **Xbox Classic + nxdk** → NV2A is a Direct3D 8-generation GPU (fixed-function + register
+  combiners), and nxdk does not provide `d3d8.dll`—pbkit/XGU must be used.
+- **Wii/GameCube + `opengx`, 3DS + `picaGL`, PSP + `pspgl`, Dreamcast + `GLdc`** → again,
+  fixed-function GL1-level targets.
 - For the smallest platforms, `SOFTWARE` and `PORTABLEGL` remain the final fallback (both have only
   four references to SDL in this tree, so they are closest to being SDL-independent).
 
@@ -216,13 +210,13 @@ documentation. No SDK function name, header, or build script that refers to devk
 
 | Console | Recommended CNA renderer | Note |
 |---|---|---|
-| PS Vita | `OPENGLES1` / `OPENGL1` (vitaGL), `SDL_RENDERER` | lowest barrier to entry in the entire analysis |
-| PSP | `OPENGL1` (pspgl) or `SOFTWARE` | 480×272, fixed-function |
+| PS Vita | `SDL_RENDERER` (vitaGL is a GL1/GLES1-level API, which no current renderer targets) | lowest barrier to entry in the entire analysis |
+| PSP | `SOFTWARE` | 480×272, fixed-function |
 | PS2 | custom `gsKit`/`ps2gl` backend, or `SOFTWARE` | 32 MB RAM is a hard limit |
-| 3DS | `OPENGL1` (picaGL) | two screens fall outside the XNA model; address as CNAEXT |
-| Wii / GameCube | `OPENGL1` (opengx) | libogc GX is fixed-function |
-| Dreamcast | `OPENGL1` (GLdc) | 16 MB RAM, the tightest profile |
-| Xbox Classic | new `NXDK` renderer (pbkit/XGU) | structure shared with `DIRECTX8` |
+| 3DS | `SOFTWARE` / `PORTABLEGL` fallback only | two screens fall outside the XNA model; address as CNAEXT |
+| Wii / GameCube | `SOFTWARE` / `PORTABLEGL` fallback only | libogc GX is fixed-function |
+| Dreamcast | `SOFTWARE` / `PORTABLEGL` fallback only | 16 MB RAM, the tightest profile |
+| Xbox Classic | new `NXDK` renderer (pbkit/XGU) | NV2A is fixed-function + register combiners |
 | Switch / Switch 2 | NDA (deko3d / Vulkan-like) | outside the public repository |
 | PS4 / PS5 | NDA (GNM/GNMX, AGC) | outside the public repository |
 | Xbox One / Series | NDA (D3D12X) | structure shared with `DIRECTX12` |
@@ -469,7 +463,7 @@ This is the more interesting option for CNA:
    precompiled path (again, `docs/fx-bytecode-support-plans/plan.md`).
 4. **The remaining difference is dependency discipline.** FNA needs SDL + a runtime on consoles.
    CNA currently also needs `sharp-runtime` and, depending on the profile, FFmpeg, ENet,
-   GoogleTest, Skia, Blend2D, and so on. The console profile from Section 3 is therefore a
+   GoogleTest, and so on. The console profile from Section 3 is therefore a
    prerequisite in this model too.
 
 In other words, FNA and MonoGame do not support consoles because they have access to something CNA

@@ -110,12 +110,7 @@ them verifiable on this host:
 |---|---|---|
 | `directx11` | `D3D11StateObjectCache.cpp` `GetOrCreate` | `lround(-0.0001)` is **0** -- the bias is dropped entirely |
 | `vulkan` | `VulkanRenderer::ApplyRasterizerState` | unscaled into `vkCmdSetDepthBias`'s `depthBiasConstantFactor` |
-| `magnum` | `MagnumRenderer.cpp:874` | unscaled into `Renderer::setPolygonOffset` |
-| `opengl2` | `OpenGL2Renderer.cpp:3831` | unscaled into `glPolygonOffset` |
-| `opengl1` | `OpenGL1Renderer.cpp:377` | unscaled into `glPolygonOffset` |
 | `portablegl` | `PortableGLRenderer.cpp:1348` | unscaled into `glPolygonOffset` |
-
-`opengles1` is exempt: ES 1.1 has no `glPolygonOffset` and it already discards both values.
 
 ## Browser fullscreen reports a drawable the browser does not present (found 2026-09-08)
 

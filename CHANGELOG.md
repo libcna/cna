@@ -28,6 +28,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   fog, and the XNA pixel-center convention; lighting and the remaining effect/resource families
   are under active development in `plans/plan_rlgl.md`. The append-only C
   renderer identity advances the experimental C ABI to 0.27.0.
+  **Retired before this release** with the renderer-set curation below; the entry is kept because
+  the C ABI passed through 0.27.0 and value 51 is permanently reserved.
 - A native Win32 platform backend, selected with `CNA_PLATFORM=WIN32` on Windows targets and
   refused loudly everywhere else. It is built directly on user32/gdi32/opengl32/ole32/shell32 and
   uses no SDL for windowing, events, keyboard, mouse, text input, timing, clipboard, displays or
@@ -37,6 +39,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   `NativeWindowHandle`, and no renderer changed. See
   [`docs/platform-win32.md`](docs/platform-win32.md) for the capability boundary and
   [`plans/plan_win32.md`](plans/plan_win32.md) for the task log.
+
+### Removed
+
+- **Twenty-five public renderer identities**, leaving a curated set of 25 over 21 implementation
+  families: `BGFX`, `MAGNUM`, `BLEND2D`, `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`,
+  `DIRECTX6`, `DIRECTX7`, `DIRECTX8`, `DIRECTX10`, `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`,
+  `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`, `OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG` and `RLGL`,
+  with their implementations, dependencies, patches, CI jobs and documentation
+  (`plans/plan_renderer_cleanup.md`, [`docs/removed-renderers.md`](docs/removed-renderers.md)).
+  Selecting one is now a configure error naming the identity and its reserved C ABI value, never a
+  silent fallback to another renderer. No surviving identity is renumbered: their C ABI values are
+  unchanged, the retired values are permanently reserved, and the C ABI is `0.28.0` with
+  `CNA_GRAPHICS_RENDERER_MAXIMUM` at 46 (`PORTABLEGL`).
 
 ### Changed
 
@@ -75,6 +90,8 @@ release contains, not what changed since a previous tag.
   `BGFX`, `FNA3D`, `OPENGL4` and the EasyGL-backed GL family (`OPENGLES3`, `OPENGL33`, `WEBGL1`,
   `WEBGL2`, `OPENGLES2`) are the mature ones; `WEBGPU`, `SKIA`, `SOKOL`, `DILIGENT`, `IGL`,
   `PIXIJS` and the legacy DirectX identities carry documented, narrower capability boundaries.
+  (That was this release's set; 25 of those identities were retired after it — see the Unreleased
+  section above.)
 - **Platform abstraction.** `CNA::Platform::IPlatform` with `SDL3`, `SDL2`, `HEADLESS` and
   `TERMINAL` implementations, on independent CMake axes from the renderer and audio choices
   ([`docs/platform-abstraction.md`](docs/platform-abstraction.md)).

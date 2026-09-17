@@ -48,7 +48,7 @@ running the input tests. EasyGL is the default.
 ```bash
 # Configure with tests enabled (pick ONE backend):
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
-# or VULKAN / BGFX / SDL_RENDERER
+# or VULKAN / SDL_RENDERER
 
 # Build the test binary:
 cmake --build cmake-build-input-easygl --target CnaTests
@@ -67,7 +67,7 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 > `--gtest_shuffle --gtest_repeat=5`, so every invocation runs the filtered subset five times, each under
 > a fresh shuffle seed. The input state is a process-wide singleton (`InputManager`, `GestureDetector`,
 > the `MouseCursor` stock cursors), so a future static-state leak would resurface as an order-dependent
-> failure here. This gate must stay **green on every built backend** (EasyGL / Vulkan / bgfx /
+> failure here. This gate must stay **green on every built backend** (EasyGL / Vulkan /
 > SDL_RENDERER — the command is identical and backend-agnostic). For a deeper sweep, invoke the binary
 > directly with a higher `--gtest_repeat` and the `CNA_INPUT_TEST_FILTER` value.
 
@@ -86,7 +86,7 @@ Recorded **2026-07-16** (updated from the 2026-07-06 baseline as part of `plans/
 Input subsystem grew substantially in between — including the `feature/xnb` merge and the
 `audit_input.md` Phase 13 defect-remediation pass) in this checkout: Debian 13, g++ 14.2.0, CMake
 3.31.6, Ninja 1.12.1. Input is backend-agnostic — the input-filter count is identical on EasyGL /
-Vulkan / bgfx / SDL_RENDERER.
+Vulkan / SDL_RENDERER.
 
 **Pinned versions (INPUT-DOC-014 / INP-0196).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
 Ninja 1.12.1, Debian 13).
@@ -225,7 +225,7 @@ deviations.
 |---------|-------|-----|
 | CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init --recursive` |
 | CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
-| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=VULKAN` (or BGFX / SDL_RENDERER) |
+| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=VULKAN` (or SDL_RENDERER) |
 | `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |
 | ASan reports leaks in `libGLX_mesa` | third-party Mesa GLX at process exit (not CNA) | run with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (what CI uses) |
 | Gamepad panels stay "disconnected" in `demo_input` | no controller / SDL can't map the device | attach a controller SDL knows (see `gamecontrollerdb`); Steam Input presents a virtual pad |

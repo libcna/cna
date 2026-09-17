@@ -1,14 +1,18 @@
 # CNA renderer registry
 
-CNA exposes exactly **50 public renderer identities** over 46 implementation families. The newest,
-`RLGL`, is the standalone `rlgl.h` low-level OpenGL renderer tracked in `plans/plan_rlgl.md`; it is
-registered with a runtime-validated device/clear/readback/present/resize slice. It does not build
-or use the raylib application framework. EasyGL is an internal implementation shared by five
-public GL profiles and does not add a public identity. Internal renderer/API choices made by bgfx, Sokol,
-Diligent, LLGL, IGL, or another abstraction likewise do not add CNA identities.
+CNA exposes exactly **25 public renderer identities** over 21 implementation families. EasyGL is an
+internal implementation shared by five public GL profiles and does not add a public identity.
+Internal renderer/API choices made by an abstraction such as FNA3D likewise do not add CNA
+identities.
 
-The dense C++ enum has 50 entries. The “C ABI value” column below is intentionally not dense:
-value 19 belonged to the removed Skia identity and is permanently retired.
+CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
+meaningful platform coverage, compatibility value, architectural value, or a capability not
+reasonably covered by the existing set; renderer count is not a goal in itself, and twenty-six
+identities have been retired (`docs/removed-renderers.md`).
+
+The C++ enum is dense. The "C ABI value" column below is intentionally **not** dense: a retired
+identity's value is permanently reserved and never reassigned, so the range has gaps at 7, 10, 19,
+20, 23–30, 32, 34–39, 41, 45 and 47–51. The next new identity takes value 52.
 
 ## Canonical public identities
 
@@ -20,10 +24,8 @@ value 19 belonged to the removed Skia identity and is permanently retired.
 | 4 | `OpenGL33` | `OPENGL33` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGL33` | shared EasyGL factory | non-Emscripten |
 | 5 | `WebGL1` | `WEBGL1` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL1` | shared EasyGL factory | Emscripten |
 | 6 | `WebGL2` | `WEBGL2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL2` | shared EasyGL factory | Emscripten |
-| 7 | `Bgfx` | `BGFX` | `CNA_RENDERER_BGFX` | bgfx / `BgfxRenderer` | dependency |
 | 8 | `Vulkan` | `VULKAN` | `CNA_RENDERER_VULKAN` | Vulkan / `VulkanRenderer` | Vulkan SDK/runtime |
 | 9 | `WebGPU` | `WEBGPU` | `CNA_RENDERER_WEBGPU` | wgpu-native / `WebGPURenderer` | wgpu-native |
-| 10 | `Magnum` | `MAGNUM` | `CNA_RENDERER_MAGNUM` | Magnum / `MagnumRenderer` | non-Emscripten + dependency |
 | 11 | `Headless` | `HEADLESS` | `CNA_RENDERER_HEADLESS` | Headless / `HeadlessRenderer` | none |
 | 12 | `Software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | Software / `SoftwareRenderer` | none |
 | 13 | `Stub` | `STUB` | `CNA_RENDERER_STUB` | Stub / `StubRenderer` | none |
@@ -32,69 +34,47 @@ value 19 belonged to the removed Skia identity and is permanently retired.
 | 16 | `Direct2D` | `DIRECT2D` | `CNA_RENDERER_DIRECT2D` | Direct2D / `Direct2DRenderer` | Windows |
 | 17 | `Canvas` | `CANVAS` | `CNA_RENDERER_CANVAS` | Canvas / `CanvasRenderer` | Emscripten |
 | 18 | `HtmlDom` | `HTML_DOM` | `CNA_RENDERER_HTML_DOM` | HTML DOM / `HtmlDomRenderer` | Emscripten |
-| 20 | `Blend2D` | `BLEND2D` | `CNA_RENDERER_BLEND2D` | Blend2D / `Blend2DRenderer` | pinned Blend2D+AsmJit FetchContent |
 | 21 | `FreeDirect` | `FREEDIRECT` | `CNA_RENDERER_FREEDIRECT` | FreeDirect / `FreeDirectRenderer` | free-direct dependency |
 | 22 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
-| 23 | `DirectX1` | `DIRECTX1` | `CNA_RENDERER_DIRECTX1` | DIRECTX1 / `DirectX1Renderer` | Windows |
-| 24 | `DirectX2` | `DIRECTX2` | `CNA_RENDERER_DIRECTX2` | DIRECTX2 / `DirectX2Renderer` | Windows |
-| 25 | `DirectX3` | `DIRECTX3` | `CNA_RENDERER_DIRECTX3` | DIRECTX3 / `DirectX3Renderer` | Windows |
-| 26 | `DirectX5` | `DIRECTX5` | `CNA_RENDERER_DIRECTX5` | DIRECTX5 / `DirectX5Renderer` | Windows |
-| 27 | `DirectX6` | `DIRECTX6` | `CNA_RENDERER_DIRECTX6` | DIRECTX6 / `DirectX6Renderer` | Windows |
-| 28 | `DirectX7` | `DIRECTX7` | `CNA_RENDERER_DIRECTX7` | DIRECTX7 / `DirectX7Renderer` | Windows |
-| 29 | `DirectX8` | `DIRECTX8` | `CNA_RENDERER_DIRECTX8` | DIRECTX8 / `DirectX8Renderer` | Windows |
-| 30 | `DirectX10` | `DIRECTX10` | `CNA_RENDERER_DIRECTX10` | Direct3D 10 / `DirectX10Renderer` | Windows |
 | 31 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL GPU runtime |
-| 32 | `OpenGLES1` | `OPENGLES1` | `CNA_RENDERER_OPENGLES1` | GLES 1.1 / `OpenGLES1Renderer` | system GLESv1_CM |
 | 33 | `OpenGL4` | `OPENGL4` | `CNA_RENDERER_OPENGL4` | OpenGL 4 / `OpenGL4Renderer` | system OpenGL |
-| 34 | `OpenGL1` | `OPENGL1` | `CNA_RENDERER_OPENGL1` | OpenGL 1 / `OpenGL1Renderer` | Linux or Windows |
-| 35 | `OpenGL2` | `OPENGL2` | `CNA_RENDERER_OPENGL2` | OpenGL 2 / `OpenGL2Renderer` | system OpenGL |
-| 36 | `Wicked` | `WICKED` | `CNA_RENDERER_WICKED` | Wicked / `WickedRenderer` | non-Emscripten + dependency |
-| 37 | `Sokol` | `SOKOL` | `CNA_RENDERER_SOKOL` | Sokol / `SokolRenderer` | configured native API |
-| 38 | `Diligent` | `DILIGENT` | `CNA_RENDERER_DILIGENT` | Diligent / `DiligentRenderer` | DiligentCore |
-| 39 | `Glide` | `GLIDE` | `CNA_RENDERER_GLIDE` | Glide / `GlideRenderer` | 32-bit Windows |
 | 40 | `Gdi` | `GDI` | `CNA_RENDERER_GDI` | GDI / `GdiRenderer` | Windows |
-| 41 | `Llgl` | `LLGL` | `CNA_RENDERER_LLGL` | LLGL / `LlglRenderer` | LLGL dependency |
 | 42 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
 | 43 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
 | 44 | `SvgDom` | `SVG_DOM` | `CNA_RENDERER_SVG_DOM` | SVG DOM / `SvgDomRenderer` | Emscripten |
-| 45 | `OpenVg` | `OPENVG` | `CNA_RENDERER_OPENVG` | ShivaVG / `OpenVgRenderer` | desktop OpenGL (compat profile) |
 | 46 | `PortableGL` | `PORTABLEGL` | `CNA_RENDERER_PORTABLEGL` | PortableGL / `PortableGLRenderer` | none (CPU-only, fetched header) |
-| 47 | `TinyGL` | `TINYGL` | `CNA_RENDERER_TINYGL` | TinyGL / `TinyGLRenderer` | none (CPU-only, fetched+built source) |
-| 48 | `Igl` | `IGL` | `CNA_RENDERER_IGL` | IGL / `IglRenderer` | IGL dependency (OpenGL/GLX or Vulkan) |
-| 49 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
-| 50 | `NanoVg` | `NANOVG` | `CNA_RENDERER_NANOVG` | NanoVG / `NanoVgRenderer` | desktop OpenGL 2.x+ |
-| 51 | `Rlgl` | `RLGL` | `CNA_RENDERER_RLGL` | standalone rlgl / `RlglRenderer` | desktop OpenGL 3.3 core + fetched header |
 
-The five GL profiles share one implementation target, macro, and factory, so 50 public identities
-map to 46 concrete implementation factories. Their public contracts remain distinct because the
+The five GL profiles share one implementation target, macro, and factory, so 25 public identities
+map to 21 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
-renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
-`EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.
+renamed free-direct-backed identity (it was called `DIRECTX3` before 2026-08-04). `EASYGL` is not
+an accepted selector, and neither is any retired name: `cmake/RendererIdentities.cmake` refuses a
+retired selector by name, with its reserved value, rather than falling back to a default.
 
 ## Capability classes
 
 - **No renderer:** `STUB` is a no-op; `HEADLESS` is validation/trace-oriented and makes no pixel
   fidelity claim.
-- **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `BLEND2D`, `FREEDIRECT`,
-  `DIRECTX1`, `DIRECT2D`, and `GDI`.
-- **CPU bounded 3D:** `SOFTWARE`, `PORTABLEGL`, `TINYGL`.
-- **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `TINYGL` (also CPU, above), `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
-  `DIRECTX7`, `DIRECTX8`, and `GLIDE`.
+- **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `FREEDIRECT`, `DIRECT2D`, and
+  `GDI`.
+- **CPU bounded 3D:** `SOFTWARE`, `PORTABLEGL`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES2` (deliberately the
   narrowest of the GL family -- shader-based but bounded by core OpenGL ES 2.0, see
-  `docs/opengles2-renderer.md`), `OPENGLES3`, `OPENGL33`, `WEBGL1`,
-  `WEBGL2`, `BGFX`, `VULKAN`, `WEBGPU`, `MAGNUM`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU`,
-  `OPENGL4`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, `METAL`, and `RLGL`.
+  `docs/opengles2-renderer.md`), `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `VULKAN`, `WEBGPU`,
+  `DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU`, `OPENGL4`, and `METAL`.
+- **Abstraction layer:** `FNA3D` selects SDL_GPU, Direct3D 11 or OpenGL at runtime; that internal
+  choice is not another CNA identity.
 
-These classes are descriptive, not blanket parity claims. `WEBGPU` and the new `RLGL` remain experimental. The
-accepted Sokol route is GLCORE; the accepted LLGL runtime is OpenGL on Linux/X11/x86_64; Diligent's
-internal native API is not another CNA identity; Metal's adapted native macOS validation remains an
-external gate. A capability query and each renderer document remain authoritative for the narrower
-operation-level boundary.
+These classes are descriptive, not blanket parity claims. `WEBGPU` remains experimental. Metal's
+adapted native macOS validation remains an external gate. A capability query and each renderer
+document remain authoritative for the narrower operation-level boundary.
 
 ## Registration invariants
 
 `GraphicsRendererType`, its canonical name, CMake selector, compile definition/profile, selected
 target, factory branch, and platform/dependency gate must agree. No public selector/name may be
-duplicated. Every accepted selector either reaches its factory or rejects at its documented gate.
-The default is `WEBGL2` under Emscripten, `OPENGLES3` on Linux, and `SDL_RENDERER` elsewhere.
+duplicated, and no retired name or C ABI value may be reused. Every accepted selector either
+reaches its factory or rejects at its documented gate; every retired one is refused by name at
+configure time. `scripts/check_renderer_identities.py` holds the enum, the CMake list, the runtime
+registry, the C ABI table and the retired-value table to each other. The default is `WEBGL2` under
+Emscripten, `OPENGLES3` on Linux, and `SDL_RENDERER` elsewhere.

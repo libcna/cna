@@ -149,7 +149,7 @@ modules/net
 
 Renderer implementations are also physically separated.
 
-The current repository documentation states that there are **42 renderer implementation families exposing 46 public renderer identities**.
+The current repository documentation states that there are **21 renderer implementation families exposing 25 public renderer identities**.
 
 Examples include:
 
@@ -165,11 +165,9 @@ Metal
 SDL GPU
 SDL Renderer
 FNA3D
-Skia
 Software
 HTML DOM
 SVG DOM
-OpenVG
 and many others
 ```
 

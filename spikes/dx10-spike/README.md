@@ -1,5 +1,7 @@
 # `dx10-spike` — `DX10-0` existence-gate spike findings (2026-07-21)
 
+> **Retired renderer — historical record.** The `DIRECTX10` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 30 is permanently reserved. This spike is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 Run under DXVK 2.6.0, `DISPLAY=:0` (the REAL desktop — see "Present() crashes under Xvfb" below for
 why), `WAYLAND_DISPLAY` unset. Wine prefix `~/.wine-cna-dx10` (a copy of the already-Vulkan/DXVK-
 proven `~/.wine-cna-d3d11`, with a real fix applied — see "Broken d3d10 symlinks" below).

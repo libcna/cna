@@ -115,7 +115,7 @@ path used everywhere else, so no browser-specific input code exists in CNA. Brow
     `FixedHeightDynamicWidth`, where the rectangle is the whole drawable and the offsets are zero.
     (This bullet used to say EasyGL had no offset and did not need one; that stopped being true
     when the renderer gained its own `GetDefaultViewportRect()` override.)
-  - **Vulkan / bgfx** — pass-through (no logical-presentation scaling).
+  - **Vulkan** — pass-through (no logical-presentation scaling).
 
   The conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse
   readback works (X11, not Wayland — see the Wayland section).

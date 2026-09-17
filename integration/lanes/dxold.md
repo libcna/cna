@@ -1,5 +1,7 @@
 # Lane card — `dxold` · **FOURTH INTEGRATION LANE (closes Batch 0)** · **ADAPTED**
 
+> **Retired renderer — historical record.** The `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8` renderer identities were retired on 2026-09-17; their implementations were removed from the tree and their C ABI values are permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 | Field | Value |
 |---|---|
 | Logical lane | `dxold` |

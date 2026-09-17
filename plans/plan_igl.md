@@ -1,5 +1,7 @@
 # plan_igl.md — the IGL (facebook/igl) graphics renderer
 
+> **Retired renderer — historical record.** The `IGL` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 48 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 CNA's 48th public renderer identity, of the 49 that exist today (it was the 47th when this plan was
 written; `TINYGL` landed before it in `scripts/check_renderer_identities.py`'s own order, and
 `PIXIJS` after). Like `LLGL`, and unlike every renderer that names a native

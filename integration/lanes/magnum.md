@@ -1,5 +1,7 @@
 # Lane card — `magnum` · ✅ **INTEGRATED 2026-08-06** · merge `e7d46c4c` — the eleventh lane, Batch 2 closes 2 of 2
 
+> **Retired renderer — historical record.** The `MAGNUM` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 10 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Outcome.** Verified, recreated, validated and merged in one session. The backend had never
 > been checked out, built or run; it now builds against the pinned Corrade/Magnum revisions,
 > renders on a real GL context, and passes the full corpus with zero backend-owned failures.

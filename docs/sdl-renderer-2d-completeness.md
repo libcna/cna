@@ -155,7 +155,7 @@ not isolated API/exception checks:
 
 | Sample | Status | Notes |
 |---|---|---|
-| `cna_demo_2d` (existing cross-renderer 2D sprite demo) | ✅ (fixed) | Already had `Vulkan_Demo2D_SmokeTest`/`Bgfx_Demo2D_SmokeTest` (Tasks 88/89) but no SDL_Renderer registration despite running correctly — closed via new `SDL_Renderer_Demo2D_SmokeTest`. |
+| `cna_demo_2d` (existing cross-renderer 2D sprite demo) | ✅ (fixed) | Already had `Vulkan_Demo2D_SmokeTest` (Task 88) but no SDL_Renderer registration despite running correctly — closed via new `SDL_Renderer_Demo2D_SmokeTest`. |
 | Bouncing-sprite physics | ✅ | New minimal sample; 5-frame bounce cycle with an independently-computed expected position, verified via pixel readback. |
 | Keyboard-driven sprite | ✅ | New minimal sample; uses the established `InputManager::SetKeyState` headless-input-injection seam. |
 | Two-glyph `SpriteFont::DrawString` text | ✅ | New minimal sample; proves multi-glyph kerning-driven layout, not just one enlarged/overlapping glyph. |

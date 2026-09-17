@@ -112,18 +112,18 @@ rather than silently left undocumented.
 
 ## Support matrix
 
-| Feature | SDL_Renderer | EasyGL | Vulkan | Bgfx |
-|---|---|---|---|---|
-| Property surface (`Characters`/`DefaultCharacter`/`LineSpacing`/`Spacing`) | ✅ (shared C++) | ✅ (shared C++) | ✅ (shared C++) | ✅ (shared C++) |
-| `MeasureString(string)` | ✅ Task 422 | ✅ (shared C++) | ✅ (shared C++) | ✅ (shared C++) |
-| `MeasureString(StringBuilder)` | ✅ Task 423 (fixed) | ✅ (shared C++) | ✅ (shared C++) | ✅ (shared C++) |
-| Single-glyph placement | ✅ Task 690 | ✅ Task 424 | — not pixel-verified | — not pixel-verified |
-| Multi-glyph spacing/kerning | ✅ Task 691 | ✅ Task 425 | — not pixel-verified | — not pixel-verified |
-| Newline (`LineSpacing`) | ✅ Task 692 | ✅ Task 426 | — not pixel-verified | — not pixel-verified |
-| Default-character fallback | ✅ Task 693 | ✅ Task 427 | — not pixel-verified | — not pixel-verified |
-| `SpriteEffects` flip (single-axis) | ✅ fixed Task 694 | ✅ Task 428 | ✅ (shared fix) | ✅ (shared fix) |
-| `SpriteEffects` flip (combined, both axes) | ❌ not representable | ❌ not representable | ❌ not representable | ❌ not representable |
-| Rotation / origin / scale | ✅ Task 694 | ✅ Task 429 | — not pixel-verified | — not pixel-verified |
+| Feature | SDL_Renderer | EasyGL | Vulkan |
+|---|---|---|---|
+| Property surface (`Characters`/`DefaultCharacter`/`LineSpacing`/`Spacing`) | ✅ (shared C++) | ✅ (shared C++) | ✅ (shared C++) |
+| `MeasureString(string)` | ✅ Task 422 | ✅ (shared C++) | ✅ (shared C++) |
+| `MeasureString(StringBuilder)` | ✅ Task 423 (fixed) | ✅ (shared C++) | ✅ (shared C++) |
+| Single-glyph placement | ✅ Task 690 | ✅ Task 424 | — not pixel-verified |
+| Multi-glyph spacing/kerning | ✅ Task 691 | ✅ Task 425 | — not pixel-verified |
+| Newline (`LineSpacing`) | ✅ Task 692 | ✅ Task 426 | — not pixel-verified |
+| Default-character fallback | ✅ Task 693 | ✅ Task 427 | — not pixel-verified |
+| `SpriteEffects` flip (single-axis) | ✅ fixed Task 694 | ✅ Task 428 | ✅ (shared fix) |
+| `SpriteEffects` flip (combined, both axes) | ❌ not representable | ❌ not representable | ❌ not representable |
+| Rotation / origin / scale | ✅ Task 694 | ✅ Task 429 | — not pixel-verified |
 
 Legend: ✅ verified working · ❌ confirmed not implemented/not representable · — not yet exercised
 by a dedicated pixel test on that renderer (the underlying logic is shared C++, so it very likely
@@ -132,11 +132,11 @@ are).
 
 ## Open, tracked follow-up work
 
-- **Vulkan/Bgfx SpriteFont pixel-verification**: neither renderer has its own dedicated
+- **Vulkan SpriteFont pixel-verification**: the renderer has no dedicated
   single-glyph/multi-glyph/newline/default-char/effects/rotation-scale pixel-test pass the way
   SDL_Renderer (Tasks 690–694) and EasyGL (Tasks 424–429) now do. The underlying `DrawString`
   logic is entirely shared C++, so this is a confidence/coverage gap rather than a known bug, but
-  it has not been closed the same rigorous way for these 2 renderers.
+  it has not been closed the same rigorous way for this renderer.
 - **Combined `SpriteEffects` flip** (§7): a genuine, minor API-completeness gap versus FNA's
   `[Flags]` enum. Not scoped to this phase; would need `SpriteEffects` operator overloads plus a
   4th `axisDir`/`axisIsMirrored` table entry in `SpriteBatch.cpp` if ever prioritized.

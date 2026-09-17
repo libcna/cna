@@ -64,16 +64,14 @@ not identities. Exactly one family's `${RENDERER_TARGET}` is configured per buil
 (`RENDERER_DIR = modules/renderers/<family>`); each family's `CMakeLists.txt` owns its
 specific SDK links, carried over branch-for-branch from the former central manifest.
 
-bgfx, blend2d, canvas, diligent, direct2d, directx1, directx2, directx3, directx5,
-directx6, directx7, directx8, directx9, directx10, directx11, directx12, easygl,
-fna3d, freedirect, gdi, glide, headless, html-dom, llgl, magnum, metal, opengl1,
-opengl2, opengl4, opengles1, openvg, portablegl, sdl-gpu, sdl-renderer, skia,
-software, sokol, stub, svg-dom, vulkan, webgpu, wicked.
+canvas, direct2d, directx9, directx11, directx12, easygl, fna3d, freedirect, gdi,
+headless, html-dom, metal, opengl4, portablegl, sdl-gpu, sdl-renderer, software,
+stub, svg-dom, vulkan, webgpu.
 
 Common helper targets (deliberate sharing, not public identities):
 
 - **modules/renderers/common/d3d** — `cna_renderer_d3dcommon`, consumed by the d3d11
-  and d3d12 families only. D3D9 and D3D10 are independent (their own format/state mapping;
+  and d3d12 families only. D3D9 is independent (its own format/state mapping;
   verified mechanically by include and link audit during the physical move).
 - **software 2D units in GDI** — under GDI the software module publishes its eight shared
   CPU-2D translation units (`CNA_GDI_SOFTWARE_SOURCES`) plus `cna_renderer_software_headers`;
@@ -81,10 +79,10 @@ Common helper targets (deliberate sharing, not public identities):
   is the one documented target-membership exception to location==ownership.
 - **d3d9 effect sub-target** — `cna_renderer_d3d9_effect` (the isolated
   d3dcompiler-carrying custom-ShaderEffect path) lives inside modules/renderers/directx9.
-- **metal + glide header interfaces** — `cna_renderer_metal_headers` /
-  `cna_renderer_glide_headers` are defined unconditionally: those families' policy/ABI test
-  suites deliberately compile into the CnaTests corpus on every renderer, so their
-  `CNA/Internal/Renderers/<X>` policy headers stay reachable in every configuration.
+- **metal header interface** — `cna_renderer_metal_headers` is defined unconditionally: that
+  family's policy/ABI test suite deliberately compiles into the CnaTests corpus on every
+  renderer, so its `CNA/Internal/Renderers/Metal` policy headers stay reachable in every
+  configuration.
 
 ## Module examples — modules/<name>/examples/
 
@@ -121,7 +119,7 @@ implemented on `feature/module-examples` and promoted to `develop` on 2026-08-10
   get the root's headless-safe skip convention through `cna_apply_skip_convention()`
   (cmake/TestHelpers.cmake).
 - **Top-level `examples/` holds exactly one thing**: `examples/golden/`, the cross-renderer
-  golden oracle corpus (SHARED_EXAMPLE_ASSET). The easygl/opengl1/opengl2/opengl4/skia
+  golden oracle corpus (SHARED_EXAMPLE_ASSET). The easygl/opengl4
   suites load those PNGs at run time via CWD-relative `"examples/golden/*.png"` literals
   from the repo-root test working directory, so the corpus deliberately stays at that
   documented shared location.
@@ -160,8 +158,4 @@ miscellaneous dumping ground again.
   composition umbrella and net, with per-probe link-closure gates
   (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free /
   VULKAN closure configuration gates.
-bgfx, blend2d, canvas, diligent, direct2d, directx1, directx2, directx3, directx5,
-directx6, directx7, directx8, directx9, directx10, directx11, directx12, easygl,
-fna3d, freedirect, gdi, glide, headless, html-dom, llgl, magnum, metal, opengl1,
-opengl2, opengl4, opengles1, openvg, portablegl, sdl-gpu, sdl-renderer, skia,
-software, sokol, stub, svg-dom, vulkan, webgpu, wicked.
+- `scripts/check_renderer_identities.py` — pins the 25 public renderer identities.

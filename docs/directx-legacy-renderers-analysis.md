@@ -8,6 +8,17 @@
 > tasks, edit any plan file, or change any build. Any real renderer would need its own `plan_dx*.md`,
 > its own owner authorization, and its own existence-gate spike — exactly as `plans/plan_freedirect.md`/`plans/plan_dx9.md`
 > already did.
+>
+> **Outcome, added 2026-09-17.** The question this document asked was later answered by building the
+> renderers: `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8` and
+> `DIRECTX10` all shipped as real CNA renderer identities, each with its own plan and spike. All of
+> them were **retired on 2026-09-17** when CNA curated its renderer set down to 25 identities, and
+> their implementations, plans' live status and per-renderer documents were removed
+> (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`). CNA's Direct3D identities today
+> are `DIRECTX9`, `DIRECTX11` and `DIRECTX12`; the one legacy-lineage renderer that survives is
+> `FREEDIRECT`, which is the DirectDraw-based renderer that held the name `DIRECTX3` before
+> 2026-08-04 and was renamed rather than retired. This analysis is kept as the survey that informed
+> those decisions -- including the decision to stop -- and nothing in it describes current support.
 
 ---
 
@@ -203,7 +214,8 @@ Two things worth calling out from the matrix:
   `DrawIndexedPrimitive` (added in the DIRECTX3 SDK, not the DIRECTX2 SDK), works correctly and is what the
   shipping `DIRECTX2` renderer is actually built on (owner-confirmed scope decision). Measured result:
   real geometry, real order-independent depth-test occlusion, real one-texture sampling, and real
-  per-draw rasterizer/depth/blend/sampler state (`docs/directx2-renderer.md`) — closer in practice to the
+  per-draw rasterizer/depth/blend/sampler state (measured in the shipped renderer, whose
+  `docs/directx2-renderer.md` was removed with it) — closer in practice to the
   `DrawPrimitive`-model row below than to the execute-buffer-only figure this row describes.
   Lighting/fog/multitexture/stencil remain out of scope (matching the `Software` renderer's own
   identical, pre-existing v1 boundary), so the DIRECTX2/3 row's per-feature table below still describes

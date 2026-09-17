@@ -1,5 +1,7 @@
 # OpenGL ES 1.1 Backend Implementation Plan
 
+> **Retired renderer — historical record.** The `OPENGLES1` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 32 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > The OpenGLES1 backend was authorized and started on **2026-07-21** as CNA's sixth graphics
 > backend: a genuine **OpenGL ES 1.1 fixed-function ("Common"/CM profile)** implementation,
 > deliberately independent of the EasyGL backend (EasyGL targets WebGL2/OpenGL ES 3.0, a

@@ -66,7 +66,7 @@ this document designs the "engine orchestration" half that `CNA_CNAEXT` was crea
 │         · VertexPositionNormalTangent(Skinned) · SkinnedModelEXT           │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  IGraphicsRenderer   (compile-time selection: CNA_GRAPHICS_RENDERER)        │
-│  EasyGL · Vulkan · Bgfx · SdlGpu · WebGPU · D3D9/11/12 · SDL_Renderer      │
+│  EasyGL · Vulkan · SdlGpu · WebGPU · D3D9/11/12 · SDL_Renderer            │
 │  · Software · Canvas · FreeDirect · Headless                             │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -112,7 +112,6 @@ the stride‑56 skinned+color layout used by `SkinnedEffect.VertexColorEnabled` 
 |---|---|---|---|
 | EasyGL (OpenGL ES 3.2) | ✅ | ✅ | Golden‑image (reference) |
 | Vulkan | ✅ | ✅ | Hand‑derived BRDF + goldens |
-| Bgfx | ✅ | ✅ | Analytic BRDF |
 | SdlGpu | ✅ | ✅ | Hand‑derived |
 | WebGPU | ✅ (unskinned) | ⬜ (no skinning path yet) | Hand‑derived |
 | D3D11 | ✅ | ✅ | GPU‑verified (Wine+DXVK, real HW) |
@@ -624,7 +623,7 @@ Same "EasyGL is the reference, others follow independently" model that Phases 13
 
 | Subsystem | Reference (do first) | Follow‑ups | Never (documented fallback) |
 |---|---|---|---|
-| Float render targets (HDR) | EasyGL | Vulkan, SdlGpu, Bgfx, WebGPU, D3D11/12 | SDL_Renderer, Canvas, FreeDirect, Software, Headless |
+| Float render targets (HDR) | EasyGL | Vulkan, SdlGpu, WebGPU, D3D11/12 | SDL_Renderer, Canvas, FreeDirect, Software, Headless |
 | Post‑process passes (bloom/SSAO/tonemap/FXAA) | EasyGL | all shader‑capable renderers | 2D‑only renderers |
 | Shadow maps / CSM | EasyGL | all 3D renderers | 2D‑only renderers |
 | Skybox + IBL | EasyGL | all 3D renderers | 2D‑only renderers |
@@ -753,7 +752,7 @@ implementation precedes its per‑renderer follow‑ups.
 |---|---|---|
 | N10 | `GraphicsCapability::{FloatRenderTargets,ComputeShaders,StorageBuffers,SeamlessCubeMapFilter}` | ✅ **as two, not four** (`MOD-102`). `FloatRenderTargets`, `HalfFloatRenderTargets` and `ComputeShaders` exist; `StorageBuffers` was dropped as a synonym of `ComputeShaders`, and `SeamlessCubeMapFilter` because the IBL convolution runs on the CPU picking the face from the direction — seamless by construction, with nothing to ask about. All three are **derived** capabilities, answered by a false-by-default renderer virtual rather than a renderer's own switch, many of which end `default: return true` |
 | N11 | Thread `RenderTarget2D`'s `SurfaceFormat` into `CreateRenderTarget2DEXT`; EasyGL RGBA16F/32F FBOs | ✅ (`MOD-100`–`MOD-141`). Note the spelling: the virtual is `CreateRenderTarget2DEXT` and already existed — see correction C1. The threading half was already done too (C2); the real work was EasyGL's float FBOs and the per-format verdict, verified end to end by `HdrRenderTargetRoundTripTests` against Mesa llvmpipe |
-| N12 | Float render targets on Vulkan / SdlGpu / Bgfx / WebGPU / D3D11 / D3D12 | ⬜ |
+| N12 | Float render targets on Vulkan / SdlGpu / WebGPU / D3D11 / D3D12 | ⬜ |
 
 ### HDR pipeline & post‑processing
 
@@ -933,7 +932,7 @@ Nova‑3D is a planned CNA‑based 3D framework / Urho3D‑like renderer. It wil
 - **CNA `CNA::Graphics` engine layer** for the HDR pipeline, shadows, IBL, post‑processing, and
   compute.
 
-Nova‑3D never calls OpenGL/Vulkan/D3D/bgfx directly — all GPU access flows through the CNA renderer
+Nova‑3D never calls OpenGL/Vulkan/D3D directly — all GPU access flows through the CNA renderer
 interface.
 
 **What Nova‑3D can actually rely on today** — as opposed to what this section intends — is

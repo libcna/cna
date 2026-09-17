@@ -236,7 +236,7 @@ output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core an
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
 shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL2, OpenGL4, DirectX9/11/12, Bgfx, Diligent, Magnum, SDL GPU and Vulkan sample them, and the remaining four
+OpenGL4, DirectX9/11/12, SDL GPU and Vulkan sample them, and the remaining
 renderer bindings stay explicitly open.
 
 ---
@@ -297,23 +297,16 @@ properties and the two named specular properties; no existing index changes mean
 selector bits 5/6, the separate four affine extension rows and colour-space state. Import and direct/offline parity use
 independent texture views, UV selectors, transforms and samplers. Renderer source-policy tests pin
 both samples and their Khronos channel/colour-space equations. EasyGL supplies the official
-Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL2/4 compile natively; DirectX11/12
+Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL4 compiles natively; DirectX11/12
 cross-compile after all rigid/skinned and single/dual-UV HLSL variants pass D3DCompile. DirectX9's
 rigid/skinned ps_3_0 programs use seven samplers and 278 of 512 instruction slots; their 5,588-byte
 bytecode, exact c24–c29 register layout and MinGW renderer build are regenerated and verified.
-Magnum binds the same white identity maps on units 5/6; its shared rigid/skinned GLSL compiles and
-passes the six-check analytic Fresnel witness on an Xvfb llvmpipe OpenGL 4.5 context.
 SDL GPU likewise binds white identity maps plus the separately imported sampler states at bindings
 5/6. Its regenerated 12,656-byte fragment SPIR-V, rigid/skinned PBR tests and seven-check analytic
 Fresnel/factor test all pass on a software GPU under Xvfb.
 Vulkan carries seven independent image/sampler pairs through both descriptor layouts, a 124-float
 PBR block and rigid/skinned single/dual-UV SPIR-V. Its validation-clean lavapipe runs pass the
 22-check texture-slot program plus the golden and analytic Fresnel programs under Xvfb.
-Diligent uses seven named dynamic shader resources and independent sampler slots, a 76-float PBR
-constant block, and stride-60/76 dual-UV variants alongside the existing stride-48/68 programs.
-Its shared HLSL is compiled through both Vulkan and OpenGL under Xvfb; each device type passes
-21/21 material-map pixels, 22/22 texture-slot pixels, 7/7 analytic Fresnel pixels and 12/12 sRGB
-pixels.
 
 ---
 

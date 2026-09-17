@@ -1,5 +1,7 @@
 # sokol_gfx Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `SOKOL` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 37 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Status legend** (matches this repo's own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
 > ⬜ not implemented.

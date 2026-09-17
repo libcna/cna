@@ -137,7 +137,7 @@ open. Treat GDI as a compatibility renderer under validation, not yet as a relea
   RGB uses `min(sourceAlpha, 1-destinationAlpha)` and alpha uses one. The 2D regression uses
   asymmetric RGB plus distinct nontrivial source/destination alpha values so substituting inverse
   source alpha cannot pass. Current GDI and Software blend controls pass.
-- REMED-GFX-232 keeps the integration branch's depth-only DIRECTX3 renderer truthful after introducing
+- REMED-GFX-232 keeps the integration branch's depth-only DIRECTX3 (retired 2026-09-17) renderer truthful after introducing
   the standalone stencil hook: `SupportsStencilBuffer()` now returns false, matching its
   `GraphicsCapability::StencilBuffer` answer and documented lack of a stencil plane. The focused
   DIRECTX3 capability executable compares the two answers directly and passes 1/1 through Wine/Xvfb
@@ -379,8 +379,7 @@ CNA_GDI_DIRTY_PRESENTATION=1 CNA_GDI_PRESENT_FILTER=halftone CNA_GDI_DWM_FLUSH=0
   ASan/UBSan reports**. Six standalone controls passed: effects **7/7**, Additive **29/29**,
   scissor **44/44**, render-target readback **102/102**, SpriteBatch viewport **19/19**, and
   Texture2D GetData **40/40**. LeakSanitizer with `detect_leaks=1` was unusable under ptrace, so the
-  valid rerun used `detect_leaks=0`. Full native `CnaTests` cannot compile because the accepted
-  Glide `FakeGlide3xDll` fixture includes `windows.h`; Glide was not reopened. The focused run
+  valid rerun used `detect_leaks=0`. The focused run
   excluded the unrelated integration-baseline Software `SetRenderTargets_FourTargets` expectation
   mismatch and Pulse-sensitive capability matrix; neither is a GDI finding.
 - REMED-GFX-223's principal current OPENGLES3/EasyGL control passed **8/8** focused runtime
@@ -389,19 +388,9 @@ CNA_GDI_DIRTY_PRESENTATION=1 CNA_GDI_PRESENT_FILTER=halftone CNA_GDI_DWM_FLUSH=0
   actual `CnjCacheIsolationTest` passed **2/2** on Mesa OpenGL ES 3.2 llvmpipe/Xvfb display `:105`.
   Shared Texture2D cache code is unchanged, REMED-GFX-223 is preserved, and REMED-GFX-224 remains
   open.
-- DIRECTX3 built for x64 MinGW and its `DirectX3_GraphicsCapability` runtime passed **1/1** through
-  Wine/Xvfb with the DirectDraw-engagement wrapper, closing REMED-GFX-232 validation. Sokol at
-  pinned `27b4960` received a current-source native GLCORE build and passed Smoke, Instanced3D, and
-  WireFrame **3/3** on llvmpipe/Xvfb.
-- Diligent pinned v2.5.6 `b036337` passed exact generated compile probes for the current
-  `DiligentRenderer.cpp` and shared `GraphicsDevice.cpp` under `CNA_RENDERER_DILIGENT`; this
-  was compile-only, with no current runtime or full DiligentCore rebuild. Skia pinned `ebf5052`,
-  with matching local raster archives, passed equivalent current-source probes under
-  `CNA_RENDERER_SKIA`; it was compile-only and emitted only external Skia
-  `clang::reinitializes` warnings under GCC. Current 32-bit i686 MinGW
-  `GlideRenderer.cpp` and shared `GraphicsDevice.cpp` probes passed under
-  `CNA_RENDERER_GLIDE`; Glide was compile-only because `glide3x.dll` was unavailable, and the
-  accepted renderer was not reopened.
+- DIRECTX3 (retired 2026-09-17) built for x64 MinGW and its `DirectX3_GraphicsCapability` runtime
+  passed **1/1** through Wine/Xvfb with the DirectDraw-engagement wrapper, closing REMED-GFX-232
+  validation.
 - REMED-GFX-229/230/231/232/233 and REMED-BUILD-017/018 are resolved for their automated scope;
   REMED-GFX-233 was pre-existing at the integration base and exposed and closed here. GDI-054's
   handle-oracle hardening also passes. No unresolved GDI supported-path finding remains.

@@ -146,7 +146,7 @@ Or more type-safe variants for:
 * Android native window;
 * web canvas.
 
-Then Vulkan, OpenGL, DirectX, GDI or Glide will not know whether the window was created by SDL3, SDL2, SDL1 or a future native platform backend.
+Then Vulkan, OpenGL, DirectX or GDI will not know whether the window was created by SDL3, SDL2, SDL1 or a future native platform backend.
 
 The exceptions will be the deliberately SDL-specific graphics backends:
 
@@ -366,7 +366,7 @@ Game
   ↓
 GraphicsDevice
   ↓
-Vulkan / Bgfx / OpenGL / GDI / Glide
+Vulkan / OpenGL / GDI
 ```
 
 Not:

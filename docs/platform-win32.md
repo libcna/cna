@@ -160,7 +160,7 @@ The native window handle is the entire contract between this platform and a rend
 
 ```
 Win32Platform → IPlatformWindow::GetNativeHandle() → NativeWindowSystem::Win32 + HWND
-              → TryGetWin32() → DirectX11Renderer / DirectX12Renderer / GDI / Direct2D / bgfx / …
+              → TryGetWin32() → DirectX11Renderer / DirectX12Renderer / GDI / Direct2D / …
 ```
 
 No renderer receives a `Win32Window*`, no renderer includes a platform implementation header, and
@@ -204,8 +204,8 @@ configuration that has said no to every axis skips it. Tests and examples keep S
 large number of their fixtures genuinely use it; that is a property of the fixtures, not of the
 framework.
 
-Five renderer families still require SDL3 by identity or by upstream dependency — `SDL_RENDERER`,
-`SDL_GPU`, `FNA3D`, `FREEDIRECT`, `LLGL` — and selecting one of them keeps it, correctly.
+Four renderer families still require SDL3 by identity or by upstream dependency — `SDL_RENDERER`,
+`SDL_GPU`, `FNA3D`, `FREEDIRECT` — and selecting one of them keeps it, correctly.
 
 ---
 

@@ -1,5 +1,7 @@
 # RLGL Renderer Plan
 
+> **Retired renderer — historical record.** The `RLGL` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 51 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 **Status:** Complete — RLGL-022 declares EasyGL-equivalent classic XNA 4.0 renderer parity on the validated Linux SDL3-offscreen/Mesa configuration; explicitly unvalidated platforms and modern CNAEXT facilities remain listed separately
 **Target identity:** `RLGL`
 **Primary parity reference:** EasyGL

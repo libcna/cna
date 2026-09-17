@@ -1,5 +1,32 @@
 # NEXT.md
 
+> **Reading this file after 2026-09-17.** Twenty-five renderer identities were retired that day
+> (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`), leaving **25 public identities
+> over 21 implementation families**. Every entry below dated before then is a historical handoff and
+> many of them describe renderers CNA no longer has — bgfx, Magnum, Wicked, Sokol, Diligent, Glide,
+> LLGL, IGL, PixiJS, NanoVG, rlgl, TinyGL, OpenVG, Blend2D, the legacy OpenGL and DirectX series.
+> They are kept because they are the record of work that was really done and really measured; none
+> of them describes current support, and a renderer count quoted in one of them (35, 46, 48, 50, …)
+> is the count on that date, not today's.
+
+## Renderer set curated to 25 identities (`plans/plan_renderer_cleanup.md`, 2026-09-17)
+
+CNA now maintains a **curated** renderer set. Twenty-five identities were removed together with
+their implementations, dependencies, CI jobs and renderer-specific tests; the surviving twenty-five
+keep their C ABI values unchanged, and the twenty-six retired values (including Skia's 19, retired
+in 2026-08) are **permanently reserved and never reassigned** — the next new identity takes 52.
+
+- Retired selectors are refused **by name at configure time** with their reserved value, before any
+  availability probe, so nothing silently falls back to a default
+  (`cmake/RendererIdentities.cmake`).
+- Renderer *count is not a goal*. A new renderer is added only for meaningful platform coverage,
+  compatibility value, architectural value, or a capability the set does not reasonably cover.
+  `docs/renderer-expansion-candidates.md` is research, not a roadmap, and `misc/FUTURE.md`'s
+  Phase 2 renderer-expansion programme is closed.
+- One consequence recorded rather than hidden: **no surviving renderer sets
+  `needsSurfacePresenter`**, so the `TERMINAL` platform currently has no renderer that presents CPU
+  frames into a terminal.
+
 ## Current handoff — generated-report growth is closed (`CBIND-123`, 2026-08-30)
 
 The tracked C API coverage file is now a compact summary and hash; its complete per-symbol matrix

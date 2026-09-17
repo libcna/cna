@@ -1,5 +1,7 @@
 # DirectX 8 (`IDirect3D8`/`IDirect3DDevice8`, DXVK-delivered, fixed-function) Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `DIRECTX8` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 29 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Status (2026-07-21): DONE.** `DX8-0` existence-gate spike complete; implementation phases
 > T1-T8 all complete, built, and verified: 20/20 `DX8`-labeled CTests pass
 > (`Dx8_LegacyInterfaceDiscipline` + 19 example-based tests), no new regressions in the

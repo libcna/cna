@@ -93,7 +93,7 @@ behavior was compared, per the task's own explicit instruction.
 ## 4. Phase 1 — minimal CNA culling reproducer (no Model/FBX/texture/lighting/bones/animation)
 
 Two new permanent regression tests were added to `cna_graphics`, both registered on all 3
-runnable renderers (EasyGL, Vulkan, Bgfx):
+runnable renderers (EasyGL, Vulkan, Bgfx (retired 2026-09-17)):
 
 ### 4.1 `modules/graphics/examples/rasterizerstate_cullmode_camera_test.cpp`
 
@@ -338,8 +338,8 @@ at the tool level, so a *fresh* conversion for those samples could reproduce the
 sake)
 
 While building §4.2's test, an early draft used one shared `VertexBuffer`/`IndexBuffer` read at
-two different `startIndex` offsets (0 and 3). On Bgfx only, the second draw silently redrew the
-**first** triangle's own indices instead of the requested second range.
+two different `startIndex` offsets (0 and 3). On Bgfx (retired 2026-09-17) only, the second draw
+silently redrew the **first** triangle's own indices instead of the requested second range.
 
 **Root cause, confirmed by direct source reading**:
 `BgfxRenderer::DrawIndexedPrimitivesEx`'s non-wireframe branch calls the offset-less
@@ -377,7 +377,7 @@ evidence that closed this investigation.
 ### `cna_graphics`
 
 - **New**: `modules/graphics/examples/rasterizerstate_cullmode_camera_test.cpp` (§4.1), registered on EasyGL/
-  Vulkan/Bgfx.
+  Vulkan/Bgfx (retired 2026-09-17).
 - **New**: `modules/graphics/examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
   EasyGL/Vulkan/Bgfx.
 - **New**: this document + `docs/xna_culling_compatibility_audit_images/` (3 reference
@@ -435,5 +435,5 @@ Diagnostic-only changes made and **reverted, not committed**:
 - `fbx_ascii2model.py`'s own root cause for *why* it produces reversed winding is still not
   pinned down to an exact line (§5.6) — the shipped data fix does not depend on finding it, but a
   future FBX conversion through this same tool could reproduce the defect until that's fixed too.
-- The Bgfx `startIndex`/`baseVertex` bug (§8) is real but **unrelated** to this investigation's
-  own root cause — don't conflate the two if revisiting either.
+- The Bgfx (retired 2026-09-17) `startIndex`/`baseVertex` bug (§8) is real but **unrelated** to
+  this investigation's own root cause — don't conflate the two if revisiting either.

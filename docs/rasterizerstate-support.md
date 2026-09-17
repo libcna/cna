@@ -1,7 +1,7 @@
 # RasterizerState Support Matrix
 
 Phase 38 (`plans/plan_graphics.md` Tasks 321–330) audited and pixel-verified `RasterizerState`
-conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
+conformance against FNA across the EasyGL and Vulkan graphics renderers. This document
 summarizes the findings.
 
 ---
@@ -154,20 +154,18 @@ section.
 
 ## Summary: what actually works today, per renderer
 
-| Feature | EasyGL | Vulkan | Bgfx |
-|---|---|---|---|
-| `RasterizerState` API/presets/`Name` | ✅ (fixed, Task 321) | ✅ (fixed, Task 321) | ✅ (fixed, Task 321) |
-| Default `RasterizerState` on `GraphicsDevice` (values + `Name`) | ✅ (fixed, Tasks 312/321/322) | ✅ (fixed, Tasks 312/321/322) | ✅ (fixed, Tasks 312/321/322) |
-| `CullMode::None`/`CullClockwiseFace`/`CullCounterClockwiseFace` | ✅ | ✅ | 🔍 not pixel-verified (no readback API) |
-| `FillMode::Solid` | ✅ | ✅ | 🔍 not pixel-verified |
-| `FillMode::WireFrame` | ✅ (GL_LINES emulation) | ✅ (`VK_POLYGON_MODE_LINE`) | 🔍 not pixel-verified |
-| `DepthBias` / `SlopeScaleDepthBias` | 🔍 not pixel-verified (no EasyGL test registered) | ✅ (except the pre-existing `-1e6` sub-case) | 🔍 not pixel-verified |
-| `ScissorTestEnable` + `GraphicsDevice.ScissorRectangle` | ✅ | ✅ | 🔍 not pixel-verified |
-| State object freeze/immutability | N/A — FNA has none either, confirmed no bug | N/A | N/A |
+| Feature | EasyGL | Vulkan |
+|---|---|---|
+| `RasterizerState` API/presets/`Name` | ✅ (fixed, Task 321) | ✅ (fixed, Task 321) |
+| Default `RasterizerState` on `GraphicsDevice` (values + `Name`) | ✅ (fixed, Tasks 312/321/322) | ✅ (fixed, Tasks 312/321/322) |
+| `CullMode::None`/`CullClockwiseFace`/`CullCounterClockwiseFace` | ✅ | ✅ |
+| `FillMode::Solid` | ✅ | ✅ |
+| `FillMode::WireFrame` | ✅ (GL_LINES emulation) | ✅ (`VK_POLYGON_MODE_LINE`) |
+| `DepthBias` / `SlopeScaleDepthBias` | 🔍 not pixel-verified (no EasyGL test registered) | ✅ (except the pre-existing `-1e6` sub-case) |
+| `ScissorTestEnable` + `GraphicsDevice.ScissorRectangle` | ✅ | ✅ |
+| State object freeze/immutability | N/A — FNA has none either, confirmed no bug | N/A |
 
-Legend: ✅ verified working · ❌ confirmed broken/absent · 🔍 not empirically verified this phase
-(Bgfx has no GPU pixel-readback API in this project, so its rasterizer-state coverage is
-smoke-test/no-regression only by design).
+Legend: ✅ verified working · ❌ confirmed broken/absent · 🔍 not empirically verified this phase.
 
 ## Open, tracked follow-up work
 

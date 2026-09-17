@@ -103,7 +103,7 @@ true on both):
 | `MultipleRenderTargets` | true (up to 4) | **false**; `maxMrtTargets_` pinned to 1, so `SetRenderTargets(count>1)` throws the family's own over-the-ceiling `std::runtime_error` (the MRT boundary the family's lifecycle/diagnostic tests record) | no `glDrawBuffers` in core ES 2.0 |
 | `OcclusionQuery` | true | **false** | no query objects in ES 2.0 |
 | `Texture3D` | true | **false** | no 3D textures in ES 2.0 (`Texture3D` construction is refused at the XNA layer) |
-| `Instancing` | true | **false**; `DrawInstancedPrimitivesEx` takes the shared base-class refusal (the same `std::runtime_error` route OPENGLES1 keeps) | no `glDrawElementsInstanced`/`glVertexAttribDivisor` in core ES 2.0 |
+| `Instancing` | true | **false**; `DrawInstancedPrimitivesEx` takes the shared base-class refusal (a `std::runtime_error`) | no `glDrawElementsInstanced`/`glVertexAttribDivisor` in core ES 2.0 |
 | `MultiStreamVertexInput` | true | **false** (rejected before native submission) | same attrib-divisor-era plumbing gap as WEBGL1 |
 | `WireFrame` | true | `GL_OES_element_index_uint` present (true on Mesa and essentially all real ES 2.0 drivers) | the line re-expansion uses 32-bit indices, an extension in ES 2.0 |
 | `AnisotropicFiltering` | extension query | extension query (unchanged rule; applied per texture object instead of per sampler object) | `GL_EXT_texture_filter_anisotropic` |

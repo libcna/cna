@@ -44,9 +44,7 @@ profiles.
 |---|---|---|---|---|
 | **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Correct; the count is precise only where the driver has `GL_SAMPLES_PASSED`** |
 | **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions plus multi-draw-span (Task 854) — genuinely discriminating in this sandbox (Mesa Lavapipe) | **Fully correct** |
-| **Bgfx** | ✅ Yes (Task 448) — real `bgfx::submit(id, program, occlusionQuery)` attachment | Shared XNA validation (SOFTWARE-199) | ⚠️ Not verifiable in this sandbox (see below); dedicated-view gap open (Task 917) | **Fixed, with caveats** |
 | **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only renderer, Task 727) |
-| **Skia raster** | N/A — no 3D submission/depth surface | N/A | Raster emulation disproved (SKIA-104) | **Correctly unsupported** (SKIA-105) |
 
 ### EasyGL — correct, with a precision boundary that depends on the profile
 
@@ -117,7 +115,7 @@ the project owner's decision to do the full fix:
 1. **Tagging** — a new `VulkanOcclusionQueryRenderer* occlusionQuery` field on `Pending3DDraw`, set
    uniformly by a new `VulkanRenderer::PushPending3DDraw()` choke point (all 6
    `pending3D_.push_back` call sites now route through it) from a new `activeOcclusionQuery_`
-   member, set by `Begin()` and cleared by `End()` (mirrors Bgfx's own convention).
+   member, set by `Begin()` and cleared by `End()`.
 2. **Multi-draw-span policy** — a query MAY span multiple draw calls, as long as they all land in
    the same render pass (i.e. target the same render target/backbuffer with no intervening
    `SetRenderTarget` switch): `RecordCommandBuffer`'s `draw3DFor()` tracks contiguous runs of draws
@@ -138,65 +136,17 @@ New `modules/renderers/vulkan/examples/vulkan_occlusionquery_pixelcount_test.cpp
 pass): a fully-visible 64×64 quad reports `PixelCount()==4096` (the exact pixel count); a quad
 fully hidden behind a nearer opaque occluder reports `PixelCount()==0`; a 3rd scenario draws 2
 non-overlapping half-quads inside ONE `Begin()`/`End()` span and confirms `PixelCount()==4096`
-(summed across both draws), directly exercising decision 2's multi-draw-span policy. Unlike Bgfx's
-own identical-shaped test, this sandbox's software Vulkan renderer (Mesa Lavapipe) reports fully
-accurate, discriminating pixel counts — no sandbox-limitation caveat needed. Verified via `git
+(summed across both draws), directly exercising decision 2's multi-draw-span policy. This sandbox's
+software Vulkan renderer (Mesa Lavapipe) reports fully accurate, discriminating pixel counts — no
+sandbox-limitation caveat needed. Verified via `git
 stash` revert-and-rebuild (reverting reproduced exactly the predicted failure, the 2
 query-correlation checks failing with `IsComplete()` never becoming true).
-
-### Bgfx — fixed, with two honestly-documented caveats
-
-Before Task 448, `BgfxOcclusionQueryRenderer::Begin()`/`End()` were literal empty no-ops — no
-`bgfx::setCondition()` or occlusion-query `submit()` overload was used anywhere, so the created
-query handle was never wired to any draw call at all.
-
-**Fixed**: `BgfxRenderer` now tracks an `activeOcclusionQuery_` handle, set by `Begin()` and
-cleared by `End()`; a new `SubmitViewProgram()` helper routes all 12 3D-draw `submit()` call sites
-through bgfx's own dedicated `submit(id, program, occlusionQuery, depth, flags)` overload whenever
-a query is active — this exactly matches bgfx's documented API contract and its own official
-`26-occlusion` example's usage of the same overload. Since bgfx submits every 3D draw call
-synchronously (unlike Vulkan's deferred command recording), no correlation/tagging machinery is
-needed for the attachment itself.
-
-**Caveat 1 — discriminating power could not be established in this sandbox.** Sabotaging
-`Begin()`/`End()` back to pure no-ops (the exact pre-fix state) and rerunning the new
-`Bgfx_OcclusionQuery` test produced IDENTICAL `IsComplete()`/`PixelCount()` behavior to the fixed
-version — this sandbox's software Mesa GL 2.1 (llvmpipe) renderer returns a non-`NoResult` value
-even for a query handle that was NEVER submitted anywhere at all. Neither value can serve as a
-discriminating signal in this specific environment (a genuine software-driver limitation, matching
-this project's own already-established `Bgfx_RenderTarget2D_MsaaResolve`/Vulkan-DRI3-unavailable
-precedent for this exact sandbox — not a CNA code defect). The shipped test honestly asserts only
-what does discriminate here (no throw, correct rendering unaffected by the new plumbing), reporting
-`IsComplete()`/`PixelCount()` informationally only, with the limitation explained in the test
-file's own header comment.
-
-**Caveat 2 — new Task 917, dedicated-view architecture gap.** bgfx's own official example attaches
-its occlusion-measurement `submit()` to a SEPARATE, dedicated view from the "real" visible-scene
-view, specifically so the query's own sample count isn't polluted by other geometry drawn earlier
-in the same view/depth buffer. CNA's fix currently attaches the query to whichever view the game's
-normal 3D draw already targets, shared with everything else drawn there that frame. Reproducing
-bgfx's dedicated-view pattern (likely reusing the existing `Detail::AllocateRtViewId()`/
-`ReleaseRtViewId()` free-list infrastructure already used for render targets, Task 910) is needed
-for a query's result to reflect ONLY its own geometry's true visibility against the real scene's
-already-drawn depth. Not attempted — a real further architecture addition, deferred, and one this
-specific software-rendering sandbox couldn't verify anyway.
 
 ### SDL_Renderer — correctly unsupported
 
 `CreateOcclusionQuery()` correctly calls `ThrowNo3D("CreateOcclusionQuery")` (Task 727), matching
 this 2D-only renderer's established "throw at construction for unsupported 3D constructs" pattern.
 Since construction itself throws, `Begin()`/`End()` are unreachable — consistent, no gap.
-
-### Skia raster — correctly unsupported
-
-The selected CPU raster `SkCanvas` exposes completed colour pixels, not per-draw samples that pass
-depth/stencil testing. `Skia_OcclusionQuery_Feasibility` proves framebuffer differences cannot
-even recover EasyGL's boolean result: a full same-colour/destination-preserving draw and a draw with
-zero coverage have byte-identical output. The pinned raster build excludes Ganesh/Graphite and has
-no depth attachment. Capability reporting stays false, and SOFTWARE-199 rejects the public
-constructor before a null query object can escape (Reach rejects by profile, and an incapable
-HiDef renderer rejects by its capability answer). The complete reasoning is in
-`docs/skia-occlusion-query-feasibility.md`.
 
 ## Summary
 
@@ -206,6 +156,4 @@ HiDef renderer rejects by its capability answer). The complete reasoning is in
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
 | Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions plus multi-draw-span, genuinely discriminating in this sandbox |
-| Bgfx | ✅ Wiring fixed per bgfx's documented API (Task 448); pixel-level correctness unverifiable in this sandbox; dedicated-view gap for true scene-depth correctness still open (Task 917) |
 | SDL_Renderer | ✅ Correctly throws at construction (2D-only renderer, Task 727) |
-| Skia raster | ✅ Framebuffer/mask/GPU alternatives audited; unsupported public construction is rejected (SKIA-104–105 / SOFTWARE-199) |

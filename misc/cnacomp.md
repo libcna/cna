@@ -87,7 +87,7 @@ Make presets set `CNA_SANITIZE=address`, `thread`, or `undefined` and give the i
 - reject ThreadSanitizer combined with AddressSanitizer;
 - reject or explicitly document incompatibility with IPO/LTO, PGO-use, coverage, and Emscripten;
 - apply the sanitizer link option to every final executable/shared library that contains instrumented objects;
-- retain narrowly justified exclusions such as Skia's `-fno-sanitize=vptr` as target-local exceptions.
+- retain narrowly justified exclusions as target-local exceptions.
 
 ### 4. Presets describe product configurations, not a reusable build policy matrix
 
@@ -173,7 +173,7 @@ Acceptance criterion: a feature stays only if it improves the target metric on a
 ### Phase D — optional specialized optimization
 
 1. PGO: use separate generate/use build directories and a deterministic, representative workload. Generic framework PGO is risky because a demo's hot path may not match client applications.
-2. CPU tuning: never use `-march=native` for redistributable CNA artifacts. Permit an explicitly named local profile or well-defined package baseline only after recording the minimum ISA and testing fallback distribution builds. TinyGL's upstream host-specific choice should remain isolated.
+2. CPU tuning: never use `-march=native` for redistributable CNA artifacts. Permit an explicitly named local profile or well-defined package baseline only after recording the minimum ISA and testing fallback distribution builds.
 3. Unity builds: keep them off globally. They can improve clean builds but damage incremental rebuilds, use more RAM, surface ODR/include-order bugs, and interact poorly with the deliberately broad cross-platform/renderer matrix. Pilot only on a proven leaf target.
 4. C++ modules: do not make them a compilation-speed project until toolchain support, dependency scanning, consumer packaging, and all cross-compiles have a separately approved design.
 

@@ -1,5 +1,7 @@
 # OpenVG existence-gate spike
 
+> **Retired renderer — historical record.** The `OPENVG` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 45 is permanently reserved. This spike is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 Standalone probe proving ShivaVG (the chosen OpenVG 1.1 implementation, see
 `cmake/ThirdPartyOpenVG.cmake` and `docs/openvg-renderer.md`) actually renders under this
 project's toolchain and Xvfb-based headless validation environment, before any CNA renderer code

@@ -23,7 +23,7 @@ environment/session.
 
 ### Automated (headless) baseline
 - `CnaTests` full suite (clean builds, task 862, incl. the task-858 offset test): **1964/1964**
-  (EasyGL, Vulkan); **1968/1968** (bgfx, +4 bgfx-specific).
+  (EasyGL, Vulkan); **1968/1968** (bgfx (retired 2026-09-17), +4 bgfx-specific).
 - Input filter: **217** tests, identical on all three backends.
 
 > **Superseded (2026-07-05):** the counts above are the historical record for **2026-07-04** (pre-Phase-I15).

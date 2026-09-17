@@ -734,8 +734,8 @@ all the same -- nothing can be added to the window any more -- and says so on st
 **Vulkan uses `VK_KHR_xlib_surface`.** `GetInstanceExtensions()` returns
 `{VK_KHR_surface, VK_KHR_xlib_surface}`, and `vkCreateXlibSurfaceKHR` is resolved through the
 caller's own `vkGetInstanceProcAddr`. Renderers that already obtain an X11 surface themselves from
-the generic `NativeWindowHandle` — `vulkan`, `wicked`, `llgl`, `diligent`, `webgpu`, `bgfx`,
-`igl` all call `TryGetX11` — keep doing so unchanged. There is deliberately no second, competing
+the generic `NativeWindowHandle` — `vulkan` and `webgpu` both call `TryGetX11` — keep doing so
+unchanged. There is deliberately no second, competing
 surface-creation path.
 
 **CPU frames go through `XImage`/`XPutImage`.** RGBA8 is converted to the window visual's own

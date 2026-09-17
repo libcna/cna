@@ -56,12 +56,12 @@ clipboard, dialogs, tray, camera, Vulkan surface, surface presentation, power in
   `SDL_SysWMinfo`, but that union is deliberately not part of the initial backend contract: every
   window system needs its own typed mapping and its own test, and shipping an untested one would
   be exactly the fabricated capability claim the contract forbids. Until it exists, renderers that
-  reach a window system directly — the `DIRECTX*` family, `GDI`, `GLIDE`, `METAL` — cannot run on
+  reach a window system directly — the `DIRECTX*` family, `GDI`, `METAL` — cannot run on
   this platform. Renderers that go through `IPlatformGlContext` can, because a GL context is
   identified by `WindowId`, never by a native handle.
 - **No surface presentation.** `CreateSurfacePresenter()` throws
-  `PlatformNotSupportedException(SurfacePresentation)`, so the CPU-raster renderers that present
-  through the platform (`SKIA`, `BLEND2D`) have no path here yet.
+  `PlatformNotSupportedException(SurfacePresentation)`. No renderer in the tree asks for a surface
+  presenter today, so nothing selects that path here.
 - **No mouse or gamepad service.** `Mouse` and `GamePad` see a null service and report their
   documented empty state. Mouse *events* still arrive — motion, buttons and wheel are translated
   into `PlatformEvent` — but there is no per-frame mouse snapshot service, and no cursor,
@@ -122,11 +122,10 @@ Two honest limits:
 
 | Renderer | On SDL2 |
 |---|---|
-| `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL1`, `OPENGL2`, `OPENGL4`, `OPENGLES1` | supported — `IPlatformGlContext` |
+| `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4` | supported — `IPlatformGlContext` |
 | `HEADLESS`, `STUB`, `SOFTWARE`, `PORTABLEGL` | supported — need no window |
 | `SDL_RENDERER`, `SDL_GPU`, `FNA3D`, `FREEDIRECT` | **rejected at configure time** when audio is also SDL2 |
-| `SKIA`, `BLEND2D` | not yet — need `IPlatformSurfacePresenter` |
-| `DIRECTX*`, `GDI`, `GLIDE`, `METAL` | not yet — need a native window handle |
+| `DIRECTX*`, `GDI`, `METAL` | not yet — need a native window handle |
 | `VULKAN` | not yet — needs `IPlatformVulkanSurface` |
 
 `cmake/Sdl2OnlyConfiguration.cmake` rejects the four allowlisted SDL3 renderer families when both
@@ -141,8 +140,8 @@ reporting success.
 The "not yet" rows are **not** rejected at configure time, and deliberately so: they already refuse
 correctly at run time, naming the capability they need. `VULKAN` reaches
 `RequirePlatformVulkanSurface`, which throws `PlatformNotSupportedException(VulkanSurface)` when the
-service is null; `SKIA` and `BLEND2D` reach `CreateSurfacePresenter`, which throws
-`PlatformNotSupportedException(SurfacePresentation)`. That is the contract's own answer — a false
+service is null, and any renderer that asks for a surface presenter reaches `CreateSurfacePresenter`,
+which throws `PlatformNotSupportedException(SurfacePresentation)`. That is the contract's own answer — a false
 capability refuses, it does not no-op — so a second, earlier gate would restate it rather than add
 anything. `TERMINAL` has a configure-time renderer gate (PLAT-140) for a different reason: several
 of the renderers it excludes would otherwise demand an SDK or a driver at *configure* time, long

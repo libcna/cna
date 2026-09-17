@@ -1,12 +1,21 @@
 # CNA renderer naming migration (2026-08)
 
+> **Historical campaign record.** This document describes the 2026-08 normalization as it stood
+> then. Twenty-five renderer identities were retired on 2026-09-17, and `SKIA` in 2026-08; the
+> names below that belong to them are kept as the record of what the campaign renamed, tagged
+> where they first appear in each section, and are refused by name at configure time today with
+> their C ABI values permanently reserved. CNA now carries 25 public renderer identities over 21
+> implementation families — `cmake/RendererIdentities.cmake` is the live registry and
+> [`removed-renderers.md`](removed-renderers.md) records every retirement.
+
 The owner-directed terminology + renderer-identity normalization performed on
 `feature/renderer-naming-normalization` (base: post-modularization `develop`
 `25db3ccbe`, endpoint `16f76cf1a`). It is a deliberate, breaking naming
 normalization of the source and build surface — no renderer behavior, module
 boundary, dependency edge, or SharpRuntime component mapping changed, and no
-compatibility aliases were kept. The public renderer identity count is **41
-before and exactly 41 after**.
+compatibility aliases were kept. The public renderer identity list came out
+**exactly the same length as it went in** — the campaign renamed identities
+without adding or removing one.
 
 **Status: complete and public.** Promoted to `develop` on 2026-08-10 by the
 pre-renderer-expansion fast-forward, together with its accepted descendant
@@ -42,10 +51,10 @@ Unchanged on purpose (not CNA graphics-renderer terminology):
 - other subsystems' backend concepts: net (`ENetBackend`), audio prose
   ("audio backend"), and their docs (`docs/input-backend.md`,
   `docs/devices-native-backend-design.md`);
-- third-party/upstream API vocabulary: Skia `GrBackendRenderTarget`/
-  `GrBackendSurface`/`SkSurfaces::WrapBackendRenderTarget`, sokol
-  `sg_query_backend`/`SG_BACKEND_*`, bgfx `bgfx::RendererType::*` (including its
-  `OpenGLES` value and name string);
+- third-party/upstream API vocabulary: Skia (retired 2026-08) `GrBackendRenderTarget`/
+  `GrBackendSurface`/`SkSurfaces::WrapBackendRenderTarget`, sokol (retired 2026-09-17)
+  `sg_query_backend`/`SG_BACKEND_*`, bgfx (retired 2026-09-17) `bgfx::RendererType::*`
+  (including its `OpenGLES` value and name string);
 - historical evidence: `audit/`, `modularization/` campaign records, plan
   ledgers (`plan_*.md`, `NEXT*.md` task histories), spike directories, and the
   historical `BackendLibraries.cmake` references that describe the pre-Phase-3
@@ -57,20 +66,22 @@ Public identities (selector / enum / module directory / main class):
 
 | Old selector | New selector | Old enum | New enum | Old module dir | New module dir | Main class |
 |---|---|---|---|---|---|---|
-| `DX1` | `DIRECTX1` | `Dx1` | `DirectX1` | `renderers/dx1` | `renderers/directx1` | `DirectX1Renderer` |
-| `DX2` | `DIRECTX2` | `Dx2` | `DirectX2` | `renderers/dx2` | `renderers/directx2` | `DirectX2Renderer` |
-| `DX3` | `DIRECTX3` | `Dx3` | `DirectX3` | `renderers/dx3` | `renderers/directx3` | `DirectX3Renderer` |
-| `DX5` | `DIRECTX5` | `Dx5` | `DirectX5` | `renderers/dx5` | `renderers/directx5` | `DirectX5Renderer` |
-| `DX6` | `DIRECTX6` | `Dx6` | `DirectX6` | `renderers/dx6` | `renderers/directx6` | `DirectX6Renderer` |
-| `DX7` | `DIRECTX7` | `Dx7` | `DirectX7` | `renderers/dx7` | `renderers/directx7` | `DirectX7Renderer` |
-| `DX8` | `DIRECTX8` | `Dx8` | `DirectX8` | `renderers/dx8` | `renderers/directx8` | `DirectX8Renderer` |
+| `DX1` | `DIRECTX1` (retired 2026-09-17) | `Dx1` | `DirectX1` | `renderers/dx1` | `renderers/directx1` | `DirectX1Renderer` |
+| `DX2` | `DIRECTX2` (retired 2026-09-17) | `Dx2` | `DirectX2` | `renderers/dx2` | `renderers/directx2` | `DirectX2Renderer` |
+| `DX3` | `DIRECTX3` (retired 2026-09-17) | `Dx3` | `DirectX3` | `renderers/dx3` | `renderers/directx3` | `DirectX3Renderer` |
+| `DX5` | `DIRECTX5` (retired 2026-09-17) | `Dx5` | `DirectX5` | `renderers/dx5` | `renderers/directx5` | `DirectX5Renderer` |
+| `DX6` | `DIRECTX6` (retired 2026-09-17) | `Dx6` | `DirectX6` | `renderers/dx6` | `renderers/directx6` | `DirectX6Renderer` |
+| `DX7` | `DIRECTX7` (retired 2026-09-17) | `Dx7` | `DirectX7` | `renderers/dx7` | `renderers/directx7` | `DirectX7Renderer` |
+| `DX8` | `DIRECTX8` (retired 2026-09-17) | `Dx8` | `DirectX8` | `renderers/dx8` | `renderers/directx8` | `DirectX8Renderer` |
 | `D3D9` | `DIRECTX9` | `D3D9` | `DirectX9` | `renderers/d3d9` | `renderers/directx9` | `DirectX9Renderer` |
-| `D3D10` | `DIRECTX10` | `D3D10` | `DirectX10` | `renderers/d3d10` | `renderers/directx10` | `DirectX10Renderer` |
+| `D3D10` | `DIRECTX10` (retired 2026-09-17) | `D3D10` | `DirectX10` | `renderers/d3d10` | `renderers/directx10` | `DirectX10Renderer` |
 | `D3D11` | `DIRECTX11` | `D3D11` | `DirectX11` | `renderers/d3d11` | `renderers/directx11` | `DirectX11Renderer` |
 | `D3D12` | `DIRECTX12` | `D3D12` | `DirectX12` | `renderers/d3d12` | `renderers/directx12` | `DirectX12Renderer` |
 
 There is intentionally **no DIRECTX4** (CNA never had that identity).
-`DIRECT2D` and `FREEDIRECT` are unchanged. Macro/target/test surfaces follow:
+`DIRECT2D` and `FREEDIRECT` are unchanged — and the `DIRECTX3` row above is the *real*
+DirectX 3 renderer, not the `free-direct`-backed renderer that had held that name until
+2026-08-04 and is `FREEDIRECT`, which survives. Macro/target/test surfaces follow:
 `CNA_RENDERER_DIRECTX<N>`, `cna_renderer_directx<N>`, `cmake/Tests/DirectX<N>Tests.cmake`,
 ctest names `DirectX<N>_*`, wine runners `scripts/run-wine-directx{1..8,10}.sh`,
 discipline checks `scripts/check-directx*`, examples `examples/directx<N>_*.cpp`,
@@ -95,7 +106,8 @@ Native Microsoft vocabulary intentionally retained:
 - `ID3D11Device`, `D3D12_*`/`D3D11_*` native macros, `d3d9/d3d11/d3d12/dxgi/
   d3dcompiler` link libraries, `d3d*.h`/`.dll` names, `D3DCompile`, DXVK/vkd3d
   tool scripts (`run-wine-dxvk.sh`, `run-wine-dxvk9.sh`, `run-wine-vkd3d.sh`),
-  and the DiligentCore/sokol native-API axes (their own `D3D11`/`D3D12` values).
+  and the DiligentCore/sokol native-API axes (both retired 2026-09-17; their own
+  `D3D11`/`D3D12` values).
 - Plan-ledger task IDs (`DX2-46`, `DX7-0`, `D9-23`, …) are historical
   identifiers and are preserved verbatim.
 
@@ -104,7 +116,7 @@ Native Microsoft vocabulary intentionally retained:
 The established OpenGL ES 3.x EasyGL route is now selected as **OPENGLES3**:
 `GraphicsRendererType::OpenGLES3`, `-DCNA_GRAPHICS_RENDERER=OPENGLES3` (still the
 Linux default), `CNA_RENDERER_OPENGLES3` option, `CNA_GL_PROFILE_OPENGLES3`
-profile define. `OPENGLES1` is unchanged; **OPENGLES2 did not exist yet at
+profile define. `OPENGLES1` (retired 2026-09-17) is unchanged; **OPENGLES2 did not exist yet at
 migration time** — the future expansion was reserved to add it so the family
 reads OPENGLES1/OPENGLES2/OPENGLES3. (Since realized: the Phase-2 expansion
 added `OPENGLES2` on 2026-08-10 on exactly that reserved name — see
@@ -112,7 +124,7 @@ added `OPENGLES2` on 2026-08-10 on exactly that reserved name — see
 EasyGL remains the internal shared implementation of the GL profiles (four at
 migration time, five since the `OPENGLES2` addition:
 `CNA_RENDERER_EASYGL`, `cna_renderer_easygl`, `EasyGLRenderer`) and is still not
-a public identity. bgfx's upstream `RendererType::OpenGLES` is untouched.
+a public identity. bgfx's (retired 2026-09-17) upstream `RendererType::OpenGLES` is untouched.
 
 ## 4. NOXNA → CNAEXT
 
@@ -136,20 +148,29 @@ Active CNA preprocessor uses of `NOXNA` are zero.
 
 ## 5. Canonical identity registry after normalization
 
+The registry exactly as it stood at normalization time — a historical snapshot, not the live
+list:
+
 `SDL_RENDERER OPENGLES3 OPENGL33 WEBGL1 WEBGL2 BGFX VULKAN WEBGPU MAGNUM
 HEADLESS SOFTWARE STUB DIRECTX11 DIRECTX12 DIRECT2D CANVAS HTML_DOM SKIA ASCII
 FREEDIRECT DIRECTX9 DIRECTX1 DIRECTX2 DIRECTX3 DIRECTX5 DIRECTX6 DIRECTX7
 DIRECTX8 DIRECTX10 SDL_GPU OPENGLES1 OPENGL4 OPENGL1 OPENGL2 WICKED SOKOL
 DILIGENT GLIDE GDI LLGL METAL OPENVG`
 
-41 identities at normalization time; `OPENVG` (claude/renderer-openvg-c2wnet, ShivaVG-backed 2D
-vector-graphics renderer) is the first Phase 2 addition on top of that baseline, bringing the
-live count to 42.
+`OPENVG` (retired 2026-09-17; ShivaVG-backed 2D vector-graphics renderer) was the first Phase 2
+addition on top of that baseline.
 
-Pinned by `scripts/check_renderer_identities.py` against both registries
-(`GraphicsRendererType` enum and the `CNA_GRAPHICS_RENDERER` STRINGS list); the
-old selectors (`DX1`..`DX8`, `D3D9`..`D3D12`, `OPENGLES`) are rejected as
-unknown. See `docs/renderer-registry.md` for the full table.
+Names in the snapshot that no longer name a renderer: `SKIA` was retired in 2026-08, and `BGFX`,
+`MAGNUM`, `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`,
+`DIRECTX10`, `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`
+and `OPENVG` on 2026-09-17. Each is refused by name at configure time and keeps its C ABI value
+permanently reserved; see [`removed-renderers.md`](removed-renderers.md).
+
+The live registry is `cmake/RendererIdentities.cmake` — 25 public renderer identities over 21
+implementation families — pinned by `scripts/check_renderer_identities.py` against the
+`GraphicsRendererType` enum and the `CNA_GRAPHICS_RENDERER` STRINGS list, which also rejects the
+old selectors (`DX1`..`DX8`, `D3D9`..`D3D12`, `OPENGLES`) as unknown. See
+[`renderer-registry.md`](renderer-registry.md) for the full table.
 
 ## 6. Consumer migration summary
 

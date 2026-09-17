@@ -51,8 +51,8 @@ specifically want a CNA extension your original XNA code never used.
 
 ## Choosing a renderer
 
-CNA has 4 pluggable graphics renderers, chosen at CMake configure time
-(`-DCNA_GRAPHICS_RENDERER=<SDL_RENDERER|OPENGLES3|OPENGL33|WEBGL1|WEBGL2|VULKAN|BGFX>`). Full per-feature detail is in
+CNA has 25 public renderer identities over 21 implementation families, chosen at CMake configure
+time (`-DCNA_GRAPHICS_RENDERER=<SDL_RENDERER|OPENGLES2|OPENGLES3|OPENGL33|WEBGL1|WEBGL2|VULKAN|WEBGPU|HEADLESS|SOFTWARE|STUB|DIRECTX11|DIRECTX12|DIRECT2D|CANVAS|HTML_DOM|FREEDIRECT|DIRECTX9|SDL_GPU|OPENGL4|GDI|METAL|FNA3D|SVG_DOM|PORTABLEGL>`). Full per-feature detail is in
 `docs/graphics-renderer-feature-matrix.md`; the practical summary:
 
 - **Your game is 2D only** (SpriteBatch/SpriteFont, no 3D models or stock Effects): any renderer
@@ -66,9 +66,8 @@ CNA has 4 pluggable graphics renderers, chosen at CMake configure time
 - **Your game loads custom compiled XNA/FNA effects:** choose **FNA3D**. It is currently the only
   renderer that advertises `GraphicsCapability::CompiledEffects`; all other renderers reject the
   same constructor explicitly instead of substituting a stock shader.
-- **Vulkan** and **Bgfx** both have working 3D pipelines (core MVP/lighting/texture/fog is
-  pixel-verified on all 3), but each has its own real, currently-open gaps — see the next section
-  before picking one over EasyGL.
+- **Vulkan** has a working 3D pipeline (core MVP/lighting/texture/fog is pixel-verified), but has
+  its own real, currently-open gaps — see the next section before picking it over EasyGL.
 
 ## What fully works today
 
@@ -100,7 +99,7 @@ briefly so old bookmarks/searches still find them, not because they're still ris
 - ~~`IndexElementSize` (32-bit index buffers)~~ — **fixed, Task 921** (2026-07-09). CNA's values now
   match FNA exactly (`SixteenBits=0`, `ThirtyTwoBits=1`).
 - ~~Vulkan `BlendState`~~ — **fixed, Task 868** (2026-07-09). Vulkan now applies the real requested
-  blend state, same as EasyGL/Bgfx.
+  blend state, same as EasyGL.
 - ~~EasyGL anisotropic filtering~~ — **fixed, Task 918** (2026-07-09). `TextureFilter::Anisotropic`
   now issues a real `GL_EXT_texture_filter_anisotropic` call on EasyGL too.
 - ~~`Model` root bone~~ — **fixed, Task 916** (2026-07-09). The constructor now takes an optional
@@ -124,9 +123,6 @@ Real, currently-open caveats worth knowing about instead:
   pipeline sites. Kept struck through rather than deleted: a known-issues list that warns readers
   away from a working feature does the same harm as one that hides a broken one, and someone who
   remembers this entry should be able to see it was retracted (`VULKAN-481`).
-- **Bgfx: `DrawIndexedPrimitivesEx`'s non-wireframe path silently discards `startIndex`/`baseVertex`**
-  (Task 954) — not hit by any current CNA sample (every `Model`/`ModelMeshPart` owns its own buffer
-  starting at 0), but affects a genuine sub-range indexed draw if your game does one.
 - ~~`EnvironmentMapEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 890** (2026-07-11):
   `DirectionalLight1`/`2` now forward correctly on all 3 renderers.
 - ~~`SkinnedEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 893** (2026-07-11):
@@ -228,7 +224,7 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 | `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `CNAEXT`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
 | `SpriteSortMode` (all 4 values) | ✅ | |
 | `transformMatrix` in `Begin()` | ✅ | |
-| Custom `Effect` via `Begin(effect)` | ⚠️ (SDL_Renderer only) | Throws by design on SDL_Renderer (no shader stage there); works on EasyGL/Vulkan/Bgfx. |
+| Custom `Effect` via `Begin(effect)` | ⚠️ (SDL_Renderer only) | Throws by design on SDL_Renderer (no shader stage there); works on EasyGL/Vulkan. |
 | `DrawString` (6 overloads) | ✅ | |
 
 **`SpriteFont`**
@@ -248,7 +244,7 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 | `Texture2D(GraphicsDevice&, int width, int height, bool mipMap, SurfaceFormat)` | ✅ | |
 | `FromStream(GraphicsDevice&, Stream&)` (2 overloads) | ✅ | PNG/JPEG/GIF are detected by signature, matching measured Microsoft XNA behavior. DDS is available through explicit `CNAEXT DDSFromStreamEXT`; BMP/TGA/QOI/PSD/HDR/PNM remain outside the classic API. |
 | `SetData(Color* data, int elementCount)` | ✅ | |
-| `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level > 0` (mip levels) is a silent no-op on Vulkan/Bgfx (Task 867) and throws on SDL_Renderer by design (Task 681); `level == 0` is fully correct everywhere. |
+| `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level > 0` (mip levels) is a silent no-op on Vulkan (Task 867) and throws on SDL_Renderer by design (Task 681); `level == 0` is fully correct everywhere. |
 | `GetData` (3 overloads) | ✅ | Pure CPU-side cache read on every renderer — renderer-independent by construction. |
 | `SaveAsPng`/`SaveAsJpeg` (stream + file-path `CNAEXT` overloads) | ✅ | |
 | Non-`Color` `SurfaceFormat` for real GPU sampling | ⛔ BLOCKED | Task 732 — file I/O round-trips fine; GPU texture upload of non-`Color` formats does not. |
@@ -287,15 +283,15 @@ established convention throughout — see `docs/xna-4-api-coverage.md`'s deviati
 `protected`, per `CLAUDE.md`'s visibility table). No signature or overload-count mismatch found —
 unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
 
-| Effect | Construction | Core rendering (EasyGL / Vulkan / Bgfx) | Known caveats |
+| Effect | Construction | Core rendering (EasyGL / Vulkan) | Known caveats |
 |---|---|---|---|
-| `BasicEffect` | ✅ | ✅ / ✅ / ✅ | None — no open gaps on any 3D renderer (per Task 483's table). |
-| `AlphaTestEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on Vulkan/Bgfx (Task 887). |
-| `DualTextureEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on all 3 3D renderers (Task 889). |
-| `EnvironmentMapEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890, fixed 2026-07-11, was missing on all 3 renderers not just Vulkan/Bgfx) and base-lerp alpha scaling (Task 891) are both fixed. |
-| `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 893), `SpecularColor`/`Power` (Task 894), and `WeightsPerVertex` GPU enforcement (Task 895) all fixed 2026-07-11, all three were missing on all 3 renderers not just Vulkan/Bgfx. |
-| Fog (all 5 effects) | — | ✅ / ✅ / ✅ | Fully implemented on every 3D renderer for every effect, including Vulkan's `env_map3d`/`skinned3d` (Task 899, closed 2026-07-07) — a stale "Vulkan still lacks fog" claim in this same file's own per-renderer table (Task 484) was found and corrected while writing this checklist. |
-| `ShaderEffect` (CNAEXT custom shader) | ✅ (constructor exists on all 3) | ✅ / ✅ / ❌ | Bgfx's `CreateEffectRenderer` returns `nullptr` for it — the one whole-feature 3D gap left. |
+| `BasicEffect` | ✅ | ✅ / ✅ | None — no open gaps on any 3D renderer (per Task 483's table). |
+| `AlphaTestEffect` | ✅ | ✅ / ✅ | `VertexColorEnabled` missing on Vulkan (Task 887). |
+| `DualTextureEffect` | ✅ | ✅ / ✅ | `VertexColorEnabled` missing on EasyGL and Vulkan (Task 889). |
+| `EnvironmentMapEffect` | ✅ | ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890, fixed 2026-07-11, was missing on EasyGL too, not just Vulkan) and base-lerp alpha scaling (Task 891) are both fixed. |
+| `SkinnedEffect` | ✅ | ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 893), `SpecularColor`/`Power` (Task 894), and `WeightsPerVertex` GPU enforcement (Task 895) all fixed 2026-07-11, all three were missing on EasyGL too, not just Vulkan. |
+| Fog (all 5 effects) | — | ✅ / ✅ | Fully implemented on every 3D renderer for every effect, including Vulkan's `env_map3d`/`skinned3d` (Task 899, closed 2026-07-07) — a stale "Vulkan still lacks fog" claim in this same file's own per-renderer table (Task 484) was found and corrected while writing this checklist. |
+| `ShaderEffect` (CNAEXT custom shader) | ✅ (constructor exists on both) | ✅ / ✅ | |
 
 **`Model` / `ModelMesh` / `ModelBone`**
 
@@ -307,7 +303,7 @@ an intentional, documented CNA convenience, not a signature mismatch.
 
 | Member | Status | Note |
 |---|---|---|
-| `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL/Vulkan/Bgfx; throws on SDL_Renderer by design. |
+| `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL/Vulkan; throws on SDL_Renderer by design. |
 | Constructing a `Model` by hand (`CNAEXT` constructors) | ✅ | **Fixed, Task 916** (2026-07-09) — an optional `rootBoneIndex` parameter (default `0`) now lets you specify a root bone other than `bones[0]`. |
 | Loading a `Model` via `ContentManager` | ⚠️ | An `.xnb` model loads through `ModelReader`, and the reader is swept over a corpus by the `CnaXnbModelCorpusSweep` ctest; CNA's own `.cnb`/`.model.json` routes remain. The loader gaps recorded under Task 440 (bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring) are tracked separately, so check a real authored model rather than assuming either extreme. See "Content pipeline" above. |
 | `ModelMesh`/`ModelBone` collections (`ModelMeshCollection`, `ModelBoneCollection`) | ✅ | `TryGetValue`/`Contains`/`begin()`/`end()` all present (Tasks 432/433). |
@@ -338,7 +334,7 @@ knowledge.
 ### Picking/overriding the renderer at configure time
 
 ```bash
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDL_RENDERER / VULKAN / BGFX
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDL_RENDERER / VULKAN
 cmake --build build --target CnaTests
 ```
 
@@ -353,17 +349,14 @@ included) — not repeated here.
 | `CNA: Missing sibling repository 'sharp-runtime'` / `'easy-gl'` | These are sibling checkouts next to this repo, **not** git submodules — `git submodule update --init` will not fetch them | `cd ..` and `git clone` the missing repo next to this one (the error message prints the exact URL) |
 | `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_image`/`SDL_mixer` are empty | `git submodule update --init --recursive`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
 | `Could not find a package configuration file for Vulkan` (`VULKAN` renderer) | `find_package(Vulkan REQUIRED)` — no Vulkan SDK/loader installed | Install your distro's `vulkan-sdk`/`libvulkan-dev` package (or the LunarG SDK) before configuring |
-| CMake FetchContent hangs/fails on `bgfx.cmake` clone (`BGFX` renderer) | `BGFX` fetches `bgfx.cmake` from GitHub at configure time — needs network access and can be slow the first time | Retry, or pre-seed a local clone and point `FETCHCONTENT_SOURCE_DIR_BGFX_CMAKE` at it |
 | `CNA_ENABLE_VIDEO=ON` cannot find FFmpeg | The required FFmpeg development packages are missing; this is independent of the graphics renderer | Install `libavcodec-dev libavformat-dev libavutil-dev libswresample-dev`, use the default `AUTO` fallback, or configure `-DCNA_ENABLE_VIDEO=OFF` for a game without video. See [video-backend.md](video-backend.md). |
 
 ### Common runtime failures
 
 | Symptom | Cause | Fix / is it a bug? |
 |---|---|---|
-| Any 3D call (`BasicEffect`, `Model::Draw`, render targets with depth, etc.) throws `std::runtime_error` | You're on **SDL_Renderer** | Not a bug — SDL_Renderer is 2D-only by design (see "Choosing a renderer" above). Switch to EasyGL/Vulkan/Bgfx for 3D. |
-| `bgfx::init failed` or a native-window-handle error on the `BGFX` renderer | No usable native window handle for bgfx's chosen renderer under your current SDL video driver | Check `SDL_GetCurrentVideoDriver()` output (included in the real error message); try forcing a renderer via `CNA_BGFX_RENDERER` below |
-| Bgfx picks the wrong graphics API (e.g. tries Vulkan on a machine without a Vulkan ICD) | Bgfx's renderer auto-detection (`bgfx::RendererType::Count`) picked something unavailable | Set the `CNA_BGFX_RENDERER` environment variable to force one: `AUTO`, `OPENGL`, `OPENGLES3`, `VULKAN`, `METAL`, `DIRECT3D11`, `DIRECT3D12`, or `NOOP` (case-insensitive; an unsupported value throws immediately with this exact list) |
-| Blank/black window, or GL-based renderers (EasyGL/Bgfx-OpenGL) fail to create a context in CI/headless environments | No real X server / GPU driver — common under Xvfb with only a software (`llvmpipe`) GL driver | Expected in headless CI; tests still run against software rendering. If entire runs fail rather than just individual pixel-tolerance edge cases, confirm an X server is actually reachable (`DISPLAY` env var, or pass `-DCNA_TEST_DISPLAY=:99` at configure time to point the whole `ctest` suite at a specific Xvfb display) |
+| Any 3D call (`BasicEffect`, `Model::Draw`, render targets with depth, etc.) throws `std::runtime_error` | You're on **SDL_Renderer** | Not a bug — SDL_Renderer is 2D-only by design (see "Choosing a renderer" above). Switch to EasyGL/Vulkan for 3D. |
+| Blank/black window, or GL-based renderers (EasyGL) fail to create a context in CI/headless environments | No real X server / GPU driver — common under Xvfb with only a software (`llvmpipe`) GL driver | Expected in headless CI; tests still run against software rendering. If entire runs fail rather than just individual pixel-tolerance edge cases, confirm an X server is actually reachable (`DISPLAY` env var, or pass `-DCNA_TEST_DISPLAY=:99` at configure time to point the whole `ctest` suite at a specific Xvfb display) |
 | Pixel-comparison example/tests fail after an intentional rendering change | Golden images are stale references, not a bug | Re-run the specific test with `CNA_UPDATE_GOLDEN=1` set to regenerate the golden PNG, then review the diff before committing it |
 | Flaky/inconsistent test failures that don't reproduce in isolation | **Never run multiple renderers' full `ctest` suites concurrently** — confirmed to cause transient GPU/driver-contention false failures (`NEXT.md` §2) | Run renderer test suites sequentially; re-run any single anomalous test in isolation (`ctest -R <TestName>`) before treating it as a real regression |
 
@@ -372,7 +365,6 @@ included) — not repeated here.
 Before filing anything, check `docs/xna-4-api-coverage.md`'s "Per-renderer Graphics support" table
 (Task 484), "Known deviations from XNA/FNA" list (Task 485), and `NEXT.md` §5 (the actively
 maintained current bug list) — most currently-open gaps already have a task number and a documented
-root cause (e.g. Vulkan's `RasterizerState.DepthBias` no-op, Bgfx's `DrawIndexedPrimitivesEx`
-`startIndex`/`baseVertex` gap/954, `EnvironmentMapEffect`/`SkinnedEffect`'s dropped
-`DirectionalLight1`/`2`). If your symptom isn't listed there, it's more likely a genuinely new
+root cause (e.g. Vulkan's `RasterizerState.DepthBias` no-op, `EnvironmentMapEffect`/`SkinnedEffect`'s
+dropped `DirectionalLight1`/`2`). If your symptom isn't listed there, it's more likely a genuinely new
 finding worth its own task.
