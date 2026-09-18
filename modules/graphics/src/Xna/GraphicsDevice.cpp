@@ -3546,12 +3546,15 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto& descriptor =
             activeDescriptor_ != nullptr ? *activeDescriptor_ : selectedDescriptor();
 
-        // No real window, ever -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
+        // No real window -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
         // needsVideoSubsystem check. GraphicsRendererCreateArgs::window stays nullptr;
         // UpdateViewportFromWindow() already falls back to the renderer's own GetViewportSize()
         // first and only touches the window if that yields nothing, and
         // applyPresentationParametersToWindow() already early-returns without one, so
         // neither needs its own guard.
+        //
+        // "Ever" used to be the right word here and no longer is, for one family on one kind of
+        // platform; the next paragraph is that exception and its boundary.
         // A CPU-raster family owns no swap chain, so its finished frame reaches a screen only
         // through IPlatformSurfacePresenter -- and a presenter is created against a window. Whether
         // such a family gets one is therefore the PLATFORM's answer, not the renderer's, which is
