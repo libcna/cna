@@ -302,5 +302,41 @@ nothing.
 
 ## CTC-10 — validation
 
-See the final report. ABI `0.29.0`, 4,055 exports, 221 structs — unchanged, and `git diff` over
-`modules/c-api/` and `tools/c-api/abi_baseline.json` is empty, so no C ABI or API expansion occurred.
+| Check | Result |
+|---|---|
+| `cna_c_api` build | clean |
+| `generate_coverage_inventory.py --check` | **exit 0** |
+| `generate_limitations.py --check` | **exit 0** |
+| `check_release_gate.py --check` | **exit 0** (recorded "not ready", correctly) |
+| `--approve-rule-symbols` | **exit 0** (output reviewer-gated, not committed) |
+| `generate_abi_baseline.py --check --library` | 221 structs, **4,055 exports** |
+| `check_declared_exports.py --library` | declared and exported agree exactly: 4,055 |
+| `check_doc_export_counts.py` | 6 prose counts agree with 4,055 |
+| `check_renderer_identities.py` | 25 identities / 21 families / 26 retired / next free 52 |
+| `ctest -R '^CApi'` | **111/111** |
+| `ctest -R 'Terminal\|Software'` | **157/157** |
+| `CApiCoverageScopeModel` | **21/21** |
+
+ABI `0.29.0`, 4,055 exports, 221 structs — unchanged. `git diff` over `modules/c-api/` and
+`tools/c-api/abi_baseline.json` is empty, so no C ABI or API expansion occurred.
+
+### The backlog this leaves, honestly stated
+
+| Owner | Status | Rows | Logical APIs |
+|---|---|---:|---:|
+| `CBIND-127` — runtime surface added after the campaign closed | ⬜ | 320 | 259 |
+| `CBIND-117` — Model-v2 CPU API scope question | 🟨 | 134 | 133 |
+| `CBIND-122`, `CBIND-125`, `CBIND-120`, `CBIND-121` — open dispositions | ⬜ | 14 | 14 |
+| **total planned** | | **468** | **406** |
+
+`CBIND-127` concentrates where the tree grew after its slices closed: `graphics-ext` 133,
+`graphics` 113, `content` 43, `runtime` 11, `input` 10, `math` 10. The largest single families are
+`StorageBuffer` (30), `ShaderPackageEXT` (28), `StorageTexture2D` (26), `Texture2DArray` (25) and
+`TextureCube`'s typed transfers (23).
+
+The audit estimated 388 genuinely missing logical APIs. The measured figure is **259** for
+`CBIND-127`, and the difference is accounted for rather than assumed: 41 rows were verified as
+already bound and recorded, 40 as having no C form, and the audit's H2 bucket also contained rows
+that belong to the still-open `CBIND-117` scope question rather than to missing bindings. Moving in
+the other direction, 38 rows the audit had placed in H1 turned out to be genuinely missing. The
+recomputation was done from the rules, not from the heuristic that produced the estimate.
