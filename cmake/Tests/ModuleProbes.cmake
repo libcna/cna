@@ -375,6 +375,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
 
+        # plans/plan_binding.md CBIND-126: the model underneath that gate.
+        #
+        # CApiCoverageMatrix above proves the tracked summary matches the tree; it cannot prove the
+        # tree was measured correctly. These are fixture tests for the scope, ownership and rule
+        # resolution rules themselves -- that an unclassified module stops the gate rather than
+        # becoming a finished task's debt, that `detail/` is excluded in every capitalization, and
+        # that two rules can overlap without either silently winning. They need no Doxygen and run
+        # in well under a second, so they are a gate rather than a report.
+        add_test(NAME CApiCoverageScopeModel
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_coverage_scope.py")
+
         # plans/plan_binding.md CBIND-038: the pure-C compatibility matrix, also a gate.
         #
         # The declaration and the published matrix must not drift apart, for the same reason the
