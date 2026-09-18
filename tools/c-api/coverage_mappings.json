@@ -19090,7 +19090,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: `Dispose` on a type whose C form is a POD. The four state objects inherit `GraphicsResource::Dispose` from the canonical class hierarchy, but the C ABI binds them as fixed-layout structures initialised by `cna_*_state_init` and owned by the caller's storage. There is no handle to release, so there is no create/destroy pair for a dispose route to complete; this is a protected C++ lifetime mechanic with no C surface rather than a missing operation.",
+      "mapping": "No C mapping: `Dispose` on a type whose C form is a POD. The four state objects inherit `GraphicsResource::Dispose` from the canonical class hierarchy, but the C ABI binds them as fixed-layout structures initialised by `cna_*_state_init` and owned by the caller's own storage. There is no handle to release, so there is no create/destroy pair for a dispose route to complete, and a caller that lets the structure go out of scope has already done everything disposal would do.",
       "tests": "C/C++ ABI layout assertions and `cna_*_state_init` default-value checks in strict-C `GraphicsStateSmoke.c`; no route allocates a state object",
       "status": "not-applicable",
       "task": "CBIND-126",

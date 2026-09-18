@@ -38,7 +38,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `afdc2b58fe04ed22e81226ba6a4598330de5e944278b80bcedc700f94dd7432a`.
+Full inventory SHA-256: `fb7d5748d11d356aa492a9dfb3dd225f76451cde6984a3c8544c38e039182974`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

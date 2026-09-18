@@ -182,6 +182,14 @@
         "a private implementation helper"
       ],
       "note": "`ContentManager` declares `private:` and then uses a `DEF_PROP` property macro, after which Doxygen reports the following members as public. `ResolveExistingAssetPath` is one: it is a private helper the loader calls to find which extension of an asset actually exists on disk, and CNA's visibility rules say a private member is not C API surface. Its neighbour `BuildAssetPath` is in the same private block and is currently recorded as implemented against `cna_content_manager_copy_asset_path`; that route really does call `BuildAssetPath`, so the mapping is not false, but the two rows disagree about whether a private member is bindable. Whoever revisits that row should settle it for both."
+    },
+    {
+      "id": "pod-valued-types",
+      "title": "Types the C ABI binds as a structure the caller owns",
+      "match": [
+        "a type whose C form is a POD"
+      ],
+      "note": "Where the canonical type is a settings bag with no identity of its own, the C ABI binds it as a fixed-layout structure the caller stores and copies directly, rather than as a handle. The lifetime members of such a type -- its dispose, its destructor -- have nothing to do in C, because there is no handle to release and the caller's own storage ends the object's life. Adding a route for them would imply the structure holds something it does not."
     }
   ],
   "environment": [

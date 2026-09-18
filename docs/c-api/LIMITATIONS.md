@@ -70,7 +70,7 @@ A deleted copy constructor or assignment operator has no behavior to expose. Its
 
 An iterator has no fixed size, no stable representation and no C spelling. Every collection this ABI exposes is iterated as a count plus indexed access, or through an explicit enumerator handle where the canonical type has one.
 
-### Protected members with no derived class to hang them on — 80 symbols
+### Protected members with no derived class to hang them on — 76 symbols
 
 A protected member is mappable only when this ABI supplies a derived class that would override it. Where it does -- a game component's hooks -- the member is mapped; where the derived class is the caller's C++ code, there is nothing for C to override.
 
@@ -117,6 +117,10 @@ A few engine-layer resources expose the renderer object behind them through an `
 ### Private implementation helpers the inventory reports as public — 1 symbols
 
 `ContentManager` declares `private:` and then uses a `DEF_PROP` property macro, after which Doxygen reports the following members as public. `ResolveExistingAssetPath` is one: it is a private helper the loader calls to find which extension of an asset actually exists on disk, and CNA's visibility rules say a private member is not C API surface. Its neighbour `BuildAssetPath` is in the same private block and is currently recorded as implemented against `cna_content_manager_copy_asset_path`; that route really does call `BuildAssetPath`, so the mapping is not false, but the two rows disagree about whether a private member is bindable. Whoever revisits that row should settle it for both.
+
+### Types the C ABI binds as a structure the caller owns — 4 symbols
+
+Where the canonical type is a settings bag with no identity of its own, the C ABI binds it as a fixed-layout structure the caller stores and copies directly, rather than as a handle. The lifetime members of such a type -- its dispose, its destructor -- have nothing to do in C, because there is no handle to release and the caller's own storage ends the object's life. Adding a route for them would imply the structure holds something it does not.
 
 ## Limitations that are not about symbols
 
