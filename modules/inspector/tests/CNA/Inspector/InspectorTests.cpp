@@ -442,7 +442,17 @@ namespace CNA::Inspector
         EXPECT_NE(html.find("__CNA_UI_TOKEN__"), std::string_view::npos);
         EXPECT_EQ(html.find("https://"), std::string_view::npos);
         EXPECT_EQ(html.find("http://"), std::string_view::npos);
-        EXPECT_NE(script.find("state.events.length>1000"), std::string_view::npos);
+        EXPECT_NE(script.find("const eventRetention=1000"), std::string_view::npos);
+        EXPECT_NE(script.find("state.events.length>eventRetention"), std::string_view::npos);
+        // The event views follow the live tail instead of replaying history they would discard,
+        // and loss is reported relative to when the view connected.
+        EXPECT_NE(script.find("newest-cursor>retain"), std::string_view::npos);
+        EXPECT_NE(script.find("state.lossBaseline=lossCounters("), std::string_view::npos);
+        EXPECT_EQ(script.find("eventHistoryOverwrites"), std::string_view::npos)
+            << "cumulative ring overwrites are normal operation, not a loss for this view";
+        EXPECT_EQ(script.find("?.value??'0'"), std::string_view::npos)
+            << "an unpublished metric must not be shown as a measured zero";
+        EXPECT_NE(html.find("rel=\"icon\""), std::string_view::npos);
         EXPECT_NE(script.find("refresh-resources"), std::string_view::npos);
         EXPECT_NE(script.find("method:'POST'"), std::string_view::npos);
         EXPECT_NE(script.find("X-CNA-Inspector-UI-Token"), std::string_view::npos);

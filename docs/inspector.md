@@ -103,6 +103,19 @@ build-inspector/modules/inspector/cna-inspector \
 The tool prints an ephemeral `http://127.0.0.1:<port>/` URL. `--http-port` selects a fixed browser
 port. `--help` lists the complete command line.
 
+### Trying it without a game of your own
+
+`cna_inspector_demo` is a small game that opts in exactly as above. It draws sprites into a render
+target, owns textures and buffers, publishes CPU zones and markers, and creates and destroys a
+texture every two seconds, so every view has live data. It runs under any platform, including
+`HEADLESS`, and is built with `CNA_BUILD_EXAMPLES` (on by default):
+
+```sh
+cmake --build <build-dir> --target cna_inspector_demo cna-inspector
+<build-dir>/cna_inspector_demo --port 47001          # prints the port and token; --seconds N exits
+CNA_INSPECTOR_TOKEN='<token>' <build-dir>/modules/inspector/cna-inspector --agent-port 47001
+```
+
 ## Security model
 
 Inspector exposes application names, build facts, timing data, resource labels, resource sizes,
@@ -217,7 +230,22 @@ connected/reconnecting state.
 - **Events**: bounded filterable log containing sequence, frame, thread, kind, category, name,
   duration, and value.
 
-Any loss produces a visible discontinuity banner. Estimated, exact, and unavailable values remain
+Events and the CPU profiler follow the live tail. On connect they start from the most recent 1,000
+events instead of replaying the provider's history, and a view that falls more than 1,000 events
+behind skips ahead rather than replaying events it would discard. Replaying at one bounded batch
+per poll left these views seconds or minutes behind the game, and never caught up once the game
+produced events faster than the view pulled them.
+
+Any loss produces a visible discontinuity banner. It reports what this view actually missed since
+it connected: events it did not receive, and producer drops and malformed profiling operations
+that occurred after it connected. The provider's counters are cumulative for the whole process,
+and ring-buffer overwrites are normal operation once the history wraps, so reporting either raw
+would leave the banner on permanently and hide the losses that matter.
+
+A metric the running build has not published is shown as `—`, never as a measured zero. In
+particular, `SpriteBatch` submits sprites to the renderer directly rather than through
+`GraphicsDevice` draw calls, so a game that draws only with `SpriteBatch` publishes
+`Graphics/SpriteSubmissions` but no `Graphics/DrawCalls`. Estimated, exact, and unavailable values remain
 visually distinct. The UI does not imply total process memory, driver memory, device state, shader
 reflection, input state, or subsystem data that CNA has not actually published.
 

@@ -170,9 +170,12 @@ int RunInspector(int argc, char** argv)
         std::cerr << "could not start CNA Inspector browser bridge: " << error << '\n';
         return 1;
     }
+    // Flushed explicitly: Run() never returns, so when stdout is a pipe or a file (a launcher
+    // script, tee, an IDE) a buffered line would never appear, and with the default ephemeral
+    // port this URL is the one thing the user needs.
     std::cout << "CNA Inspector is available at http://127.0.0.1:"
               << bridge.GetHttpPort() << "/\n"
-              << "The bridge is localhost-only. Press Ctrl+C to stop it.\n";
+              << "The bridge is localhost-only. Press Ctrl+C to stop it." << std::endl;
     return bridge.Run();
 }
 }

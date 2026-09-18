@@ -23,6 +23,16 @@ if(CNA_BUILD_INSPECTOR)
     target_link_libraries(cna-inspector PRIVATE cna_inspector CNA::ProjectOptions)
     set_target_properties(cna-inspector PROPERTIES OUTPUT_NAME "cna-inspector")
 
+    # A game that opts in exactly as docs/inspector.md describes, so the agent, the bridge and the
+    # browser UI can be exercised end to end against real engine data. It stays a console
+    # program on Windows because it prints the port and token the bridge needs.
+    if(CNA_BUILD_EXAMPLES)
+        add_executable(cna_inspector_demo examples/inspector_demo.cpp)
+        target_link_libraries(cna_inspector_demo PRIVATE CNA CNA::Inspector SHARP_RUNTIME)
+        set_target_properties(cna_inspector_demo PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    endif()
+
     if(CNA_BUILD_BENCHMARKS)
         add_executable(cna_inspector_benchmark benchmarks/InspectorBenchmark.cpp)
         target_link_libraries(cna_inspector_benchmark PRIVATE

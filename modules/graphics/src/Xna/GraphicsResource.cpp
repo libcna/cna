@@ -63,10 +63,13 @@ namespace Microsoft::Xna::Framework::Graphics
             name_ = other.getNameProperty();
             tag_ = other.getTagProperty();
             isDisposed_ = false;
-#if CNA_DIAGNOSTICS_LEVEL >= 1
-            diagnosticResource_ = CNA::Diagnostics::ResourceHandle(
-                CNA::Diagnostics::ResourceDescriptor{});
-#endif
+            // No diagnostic registration is made here. Every caller of this operator (BlendState,
+            // DepthStencilState, RasterizerState, SamplerState, VertexDeclaration) follows it with
+            // ShareResourceIdentityWith(), which makes this object an alias of `other` and drops
+            // any registration it holds, because the shared identity already has one. Registering
+            // here only published a create/destroy pair per assignment: SpriteBatch::Begin
+            // assigns four states per call, which flooded the event stream and put a map insert
+            // and erase on the draw path even in STATS.
             // Disposing handlers deliberately not copied
         }
         return *this;

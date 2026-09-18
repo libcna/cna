@@ -3,8 +3,9 @@
 Status: complete (`AUD-DIAG-INSP-0001`, started and completed 2026-09-17)
 
 Follow-up: `AUD-DIAG-INSP-0002` (2026-09-18) closes the socket and HTTP hypotheses this pass
-recorded as **NOT TESTED IN THIS AUDIT PASS**, and `AUD-DIAG-INSP-0003` (2026-09-18) closes
-invalid UTF-8 and parser fuzzing. See the *Follow-up fixes* sections below.
+recorded as **NOT TESTED IN THIS AUDIT PASS**, `AUD-DIAG-INSP-0003` (2026-09-18) closes
+invalid UTF-8 and parser fuzzing, and `AUD-DIAG-INSP-0004` (2026-09-18) is the first end-to-end run
+against a real game in a real browser. See the *Follow-up fixes* sections below.
 
 ## Evidence vocabulary
 
@@ -464,3 +465,78 @@ search the input space the way libFuzzer would.
 - The workstream is sufficiently validated for the explicitly scoped C++ correctness,
   concurrency, lifetime, regression, and performance concerns and can move to normal maintenance.
   This conclusion does not close the separately untested networking/security scope.
+
+## Follow-up fixes (`AUD-DIAG-INSP-0004`, 2026-09-18): first end-to-end run
+
+Until this task nothing in the tree started an agent except the tests and a benchmark with a fake
+provider, so the Inspector had never been used as a product: a game, its agent, the bridge and a
+browser together. The serial-bridge defect of `AUD-DIAG-INSP-0002` already implied as much, since a
+browser would have hit it within the first minute.
+
+### Method
+
+- **PROVEN** host: `cna_inspector_demo` (new, `modules/inspector/examples/`), a game that opts in
+  exactly as `docs/inspector.md` describes. It draws 48 sprites into a render target and composes
+  it, owns two textures, a render target and a vertex and an index buffer, publishes CPU zones,
+  markers and a gauge, and creates and destroys a texture every two seconds. HEADLESS platform and
+  renderer, NULL audio, Diagnostics FULL, Debug.
+- **PROVEN** browser: Google Chrome 152, headless, driven over the DevTools Protocol (Node 20's
+  built-in WebSocket, no dependency). Each run loads the page, refreshes resources, visits all
+  eight views with a screenshot of each, records every console message, exception, CSP report and
+  network request, then kills the game while the page is open.
+
+### What held
+
+- **TESTED**: session negotiation and metadata, the frame-time graph and FPS (60.2), CPU zones and
+  the timeline, markers, resource metadata, and the Input view's explicit unavailable state. No
+  JavaScript exception and no CSP violation in any run. Resource metadata is exact end to end: every
+  described resource carried its kind, size and byte estimate, and their sum matched the provider's
+  total to the byte (535,552).
+- **TESTED**: killing the game turns the page to RECONNECTING within one poll, it keeps polling at
+  about two requests per second without flooding, and the bridge survives.
+
+### Defects found and fixed
+
+1. **State assignment re-registered resources (high).** `GraphicsResource::operator=` registered a
+   new diagnostic resource that `ShareResourceIdentityWith()` released a few lines later, in every
+   one of its five callers. `SpriteBatch::Begin` assigns four states, so every call published four
+   create/destroy pairs and did a map insert and erase on the draw path, in STATS as well. Found by
+   backtracing a registration in gdb. The assignment no longer registers.
+   `StateAssignmentAndSpriteBatchBeginRegisterNoTransientResources` consumed 303 resource IDs where
+   103 were expected before the fix, and exactly 103 after.
+2. **Event views were not live (high).** The page read events from the oldest in the 32,768-entry
+   history at 512 per 500 ms. Measured: the Events view showed frame 1,368 while the game was at
+   frame 2,519, about 19 s behind, and it can never catch up once a game produces events faster
+   than 1,024 per second. The page now starts at the live tail and skips ahead when more than 1,000
+   events behind; after the fix the newest event shown was from the current frame.
+3. **Loss banner was permanent (medium).** It showed the process-cumulative ring-overwrite counter,
+   which is non-zero as soon as the history wraps, and displayed a real gap for only one poll. It now
+   reports what this view missed since it connected, and keeps it. After the fix it stayed empty
+   through 60 s of normal operation with the ring wrapped.
+4. **Unpublished metrics shown as zero (medium).** A metric the build never published read as `0`,
+   so a `SpriteBatch`-only game showed "Draw calls 0". It now shows `—`, the UI's own convention.
+5. **Bridge URL never appeared when stdout was redirected (medium).** The line was not flushed before
+   `Run()`, which never returns, so a launcher script, `tee` or an IDE never showed the ephemeral URL.
+6. **`/favicon.ico` 404 on every load (low)**, logged as a console error. The page now declares an
+   empty icon.
+
+### Found and left open
+
+- **`SpriteBatch::Begin(SpriteSortMode, BlendState)` takes `BlendState` by value** and forwards it by
+  value, so each call constructs two new `BlendState` objects, each with a heap-allocated state.
+  C# passes a reference. Diagnostics reports these lifetimes correctly; the cost is the engine's.
+  Fixing it changes a public XNA API signature, which is outside this task.
+- **19 of 25 resources in the demo are `unknown`**: the stock and `SpriteBatch`-owned state objects and
+  vertex declarations are `GraphicsResource`s that never describe themselves. Truthful, but it puts
+  the described textures and buffers below a page of empty rows.
+- **`SpriteBatch` draws are not draw calls**: sprites go to the renderer directly, not through
+  `GraphicsDevice`, so a `SpriteBatch`-only game publishes no `Graphics/DrawCalls`. Now stated as
+  `—` in the UI and documented, not invented.
+
+### Verification
+
+| Configuration | Result |
+|---|---|
+| Debug FULL HEADLESS/NULL (`build-probe/`) | Graphics 2,326 passed, Runtime 174, Diagnostics 40/40, Inspector 27/27 |
+| End to end, Chrome 152 headless | all eight views populated, no exception, no CSP report; live tail, empty banner, game-exit recovery |
+| Demo, `-Wall -Wextra -Wshadow -Wconversion -Werror` | clean |

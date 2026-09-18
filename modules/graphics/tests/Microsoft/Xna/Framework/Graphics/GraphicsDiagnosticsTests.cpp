@@ -75,6 +75,13 @@ namespace
         EndFrame();
     }
 
+    // Registering a throwaway handle reveals the next resource ID, so the difference between two
+    // probes counts every registration made in between, including ones already released again.
+    [[nodiscard]] ResourceId ProbeNextResourceId()
+    {
+        return CNA::Diagnostics::ResourceHandle(CNA::Diagnostics::ResourceDescriptor{}).GetId();
+    }
+
     TEST(GraphicsDiagnosticsTest, TextureMetadataUsesStableEstimatedPayloadAndUnregisters)
     {
         ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
@@ -116,6 +123,32 @@ namespace
             EXPECT_EQ(GetProvider().CaptureSnapshot().resources.size(), baseline + 1);
         }
         EXPECT_EQ(GetProvider().CaptureSnapshot().resources.size(), baseline);
+    }
+
+    TEST(GraphicsDiagnosticsTest, StateAssignmentAndSpriteBatchBeginRegisterNoTransientResources)
+    {
+        // Assignment used to register a new resource that ShareResourceIdentityWith() released a
+        // few lines later, so every SpriteBatch::Begin published four create/destroy pairs.
+        ASSERT_TRUE(SetRuntimeMode(Mode::Stats));
+        GraphicsDevice device;
+        Texture2D texture(device, 2, 2, false, SurfaceFormat::Color);
+        SpriteBatch batch(device);
+        BlendState first;
+        BlendState second;
+        batch.Begin();
+        batch.Draw(texture, Vector2(0.0f, 0.0f), Color::White);
+        batch.End();
+
+        const ResourceId before = ProbeNextResourceId();
+        for (int iteration = 0; iteration < 50; ++iteration)
+        {
+            second = first;
+            batch.Begin();
+            batch.Draw(texture, Vector2(0.0f, 0.0f), Color::White);
+            batch.End();
+        }
+        const ResourceId after = ProbeNextResourceId();
+        EXPECT_EQ(after, before + 1) << "only the second probe may have registered";
     }
 
     TEST(GraphicsDiagnosticsTest, TextureByteEstimateIsExactAndSaturatesAtSupportedLimits)
