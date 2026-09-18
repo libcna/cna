@@ -228,6 +228,51 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        /**
+         * @brief Uploads raw vertex bytes with a streaming hint, for a stride known only at run time.
+         *
+         * The streaming counterpart of VertexBuffer::SetDataRaw(), and it exists for the same
+         * reason: a caller-defined layout whose stride is data rather than a C++ type's size
+         * cannot instantiate `SetData<TVertex>`, because that overload derives the transfer span
+         * from `sizeof(TVertex)`. The contract is the raw one — exactly `count * stride`
+         * contiguous bytes read from @p data — not the generic overload's tightly-packed elements
+         * written at @p stride spacing.
+         *
+         * @param data    Pointer to the raw vertex data; at least `count * stride` readable bytes.
+         *                May be null only when @p count is zero, which uploads nothing.
+         * @param count   Number of vertices.
+         * @param stride  Size of one vertex in bytes.
+         * @param options Streaming hint (Discard / NoOverwrite / None).
+         */
+        CNAEXT void SetDataRawWithOptionsEXT(
+            const void* data, int count, int stride, SetDataOptions options)
+        {
+            VertexBuffer::SetDataRawWithOptions(data, 0, count, stride, options);
+        }
+
+        /**
+         * @brief Writes raw vertex bytes into a window of this buffer, with a streaming hint.
+         *
+         * SetDataRawWithOptionsEXT() windowed, the way VertexBuffer::SetDataRawAtEXT() windows
+         * VertexBuffer::SetDataRaw(). Anything outside the window keeps whatever it held, and
+         * @p offsetInBytes must land on a vertex boundary.
+         *
+         * @p options is accepted for conformance and not forwarded: a windowed write is composed
+         * in the CPU shadow and uploaded whole, which cannot keep a `NoOverwrite` promise.
+         *
+         * @param offsetInBytes Byte offset into **this buffer**, a multiple of @p stride.
+         * @param data    Pointer to the raw vertex data; at least `count * stride` readable bytes.
+         *                May be null only when @p count is zero, which uploads nothing.
+         * @param count   Number of vertices to write.
+         * @param stride  Size of one vertex in bytes.
+         * @param options Streaming hint; see above.
+         */
+        CNAEXT void SetDataRawAtWithOptionsEXT(
+            int offsetInBytes, const void* data, int count, int stride, SetDataOptions options)
+        {
+            VertexBuffer::SetDataRawAtWithOptions(offsetInBytes, data, 0, count, stride, options);
+        }
+
     private:
         /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
         bool contentLost_ = false;

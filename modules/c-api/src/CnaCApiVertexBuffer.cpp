@@ -884,11 +884,14 @@ namespace {
  * canonical API puts them -- a streaming hint means nothing on a static buffer. So this refuses a
  * static one rather than inventing a reachable path the canonical layer does not have.
  *
- * The **windowed** template is the one used for both routes, because it takes the stride as an
- * argument while the narrower template derives it from `sizeof(TVertex)` -- and a stride that is
- * only known at run time cannot be a type's size. Instantiating it with a byte and passing
- * `startIndex` 0 makes `data` the exact bytes to upload, which is what a caller-defined vertex type
- * amounts to: uploaded exactly as it sits in memory.
+ * Both routes call `DynamicVertexBuffer`'s raw CNAEXT forwarders rather than a `SetData<TVertex>`
+ * template. Instantiating the windowed template with a byte used to be equivalent, and
+ * SOFTWARE-249 ended that: it restored XNA's generic semantics, where the source is tightly packed
+ * `sizeof(T)` elements written into buffer locations separated by `vertexStride`. With `TVertex` a
+ * byte that copies `vertexCount` single bytes at `vertexStride` spacing instead of the
+ * `vertexCount * vertexStride` contiguous bytes this ABI documents, and it also loses the raw
+ * route's vertex-boundary check and its zero-count no-op (see
+ * plans/plan_capi_smoke_stability.md CSS-4). The raw routes are what the header already promises.
  */
 [[nodiscard]] CNA_Result RequireDynamicForOptions(
     const VertexBufferResource& resource,
@@ -1111,10 +1114,8 @@ CNA_Result cna_vertex_buffer_set_data_raw_with_options(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        dynamic->SetData<std::uint8_t>(
-            0,
-            static_cast<const std::uint8_t*>(data),
-            0,
+        dynamic->SetDataRawWithOptionsEXT(
+            data,
             static_cast<int>(vertexCount),
             static_cast<int>(vertexStride),
             static_cast<SetDataOptions>(options));
@@ -1160,10 +1161,9 @@ CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        dynamic->SetData<std::uint8_t>(
+        dynamic->SetDataRawAtWithOptionsEXT(
             static_cast<int>(bufferOffsetInBytes),
-            static_cast<const std::uint8_t*>(data),
-            0,
+            data,
             static_cast<int>(vertexCount),
             static_cast<int>(vertexStride),
             static_cast<SetDataOptions>(options));

@@ -177,12 +177,22 @@ static int validate_base_effect(const CNA_Handle device)
     REQUIRE(cna_effect_pass_collection_get_at(passes, 0U, &pass) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_apply(effect) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_apply(pass) == CNA_RESULT_SUCCESS);
+    /* SOFTWARE-257: clearing the current technique is refused, because Microsoft XNA's setter
+       rejects null with ArgumentNullException. FNA omits that managed check, and this test was
+       written against the behaviour CNA had copied from it. The refusal leaves the selection
+       intact, so the pass still applies and the technique still reads back as the indexed one. */
     REQUIRE(cna_effect_set_current_technique(effect, CNA_INVALID_HANDLE) ==
-                CNA_RESULT_SUCCESS &&
-            cna_effect_pass_apply(pass) == CNA_RESULT_INVALID_STATE);
-    CNA_EffectTechniqueHandle absent = UINT64_MAX;
-    REQUIRE(cna_effect_get_current_technique(effect, &absent) == CNA_RESULT_SUCCESS &&
-            absent == CNA_INVALID_HANDLE);
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_effect_pass_apply(pass) == CNA_RESULT_SUCCESS);
+    CNA_EffectTechniqueHandle retained = UINT64_MAX;
+    uint64_t retained_identity = 0U;
+    REQUIRE(cna_effect_get_current_technique(effect, &retained) == CNA_RESULT_SUCCESS &&
+            retained != CNA_INVALID_HANDLE &&
+            cna_effect_technique_get_identity(retained, &retained_identity) ==
+                CNA_RESULT_SUCCESS && retained_identity == indexed_identity);
+    /* The query mints a new owned alias, which the refused clear no longer leaves as the invalid
+       handle that owned nothing. Release it, or cna_game_destroy refuses on a live game child. */
+    REQUIRE(cna_effect_technique_destroy(retained) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_set_current_technique(effect, indexed) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_apply(pass) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_technique_create_named(string_view("Foreign"), &foreign) ==

@@ -149,7 +149,10 @@ static CNA_Result create_vertex_buffer(
 {
     const CNA_VertexBufferCreateInfo info = {
         sizeof(CNA_VertexBufferCreateInfo), UINT32_C(1), CNA_INVALID_HANDLE,
-        0, CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U}};
+        /* Three vertices, matching the three indices below. SOFTWARE-204 made a vertex_count of
+           zero an argument error, as XNA's own vertexCount <= 0 check does, and the header says
+           positive; an empty vertex declaration is still fine. */
+        3, CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U}};
     return cna_vertex_buffer_create(device, &info, outBuffer);
 }
 

@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -712,10 +714,10 @@ static CNA_Result on_load(
         return CNA_RESULT_SUCCESS;
     }
     if (
-        !validate_all_typed(device) ||
-        !validate_default_and_raw(device) ||
-        !validate_raw_with_options(device) ||
-        !validate_lifecycle_and_failures(device, state)) {
+        !CNA_TEST_STAGE(validate_all_typed(device)) ||
+        !CNA_TEST_STAGE(validate_default_and_raw(device)) ||
+        !CNA_TEST_STAGE(validate_raw_with_options(device)) ||
+        !CNA_TEST_STAGE(validate_lifecycle_and_failures(device, state))) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->borrowed_device = device;
@@ -744,7 +746,7 @@ int main(void)
         cna_graphics_device_get_renderer_info(state.borrowed_device, &stale) !=
             CNA_RESULT_INVALID_HANDLE ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     return 0;
 }

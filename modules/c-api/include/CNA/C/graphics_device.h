@@ -722,7 +722,8 @@ CNA_C_API CNA_Result cna_graphics_device_clear_rgba(
  * @param color Color value for the color buffer.
  * @param depth Depth value in the inclusive range 0 through 1. Must be finite.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-finite depth,
- * `CNA_RESULT_NOT_SUPPORTED` when the backend has no depth buffer, or another documented
+ * `CNA_RESULT_INVALID_STATE` when this device has no depth buffer to clear,
+ * `CNA_RESULT_NOT_SUPPORTED` when the backend cannot clear one it has, or another documented
  * handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_graphics_device_clear_color_depth(
@@ -739,7 +740,8 @@ CNA_C_API CNA_Result cna_graphics_device_clear_color_depth(
  * @param depth Depth value in the inclusive range 0 through 1. Must be finite.
  * @param stencil Stencil value for the stencil buffer.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown option bit or a
- * non-finite depth, `CNA_RESULT_NOT_SUPPORTED` when the backend cannot clear a selected buffer, or
+ * non-finite depth, `CNA_RESULT_INVALID_STATE` when a selected depth or stencil buffer does not
+ * exist on this device, `CNA_RESULT_NOT_SUPPORTED` when the backend cannot clear one that does, or
  * another documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_graphics_device_clear_options(

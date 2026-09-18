@@ -461,6 +461,11 @@ static CNA_Result on_load(
             return CNA_RESULT_INVALID_STATE;
         }
     } else if (
+        /* SOFTWARE-208 enforces XNA's profile ceilings, and 32-bit indices are HiDef-only. The
+           device defaults to Reach, so ask for HiDef before the 32-bit legs below -- the same
+           move GraphicsDeviceSmoke.c already makes for OcclusionQuery. */
+        cna_graphics_device_set_graphics_profile_ext(
+            device, CNA_GRAPHICS_PROFILE_HI_DEF) != CNA_RESULT_SUCCESS ||
         !validate_transfer(
             device, CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS,
             CNA_FALSE, CNA_SET_DATA_NONE) ||

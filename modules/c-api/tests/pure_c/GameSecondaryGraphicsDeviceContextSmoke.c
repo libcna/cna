@@ -48,6 +48,12 @@ static CNA_Result on_draw(
     }
     parameters.back_buffer_width = 64;
     parameters.back_buffer_height = 64;
+    /* The clear below asks for depth and stencil, so the device has to be created with them.
+       cna_presentation_parameters_init defaults to DepthFormat::None, and SOFTWARE-333 stopped
+       masking a clear of an attachment that does not exist -- Microsoft XNA reports
+       InvalidOperationException where FNA silently dropped the flags. Depth24 alone will not do:
+       it carries no stencil plane. */
+    parameters.depth_stencil_format = CNA_DEPTH_FORMAT_DEPTH24_STENCIL8;
     result = cna_graphics_device_create(
         0U, CNA_GRAPHICS_PROFILE_REACH, &parameters, &state->secondary);
     if (result != CNA_RESULT_SUCCESS) {

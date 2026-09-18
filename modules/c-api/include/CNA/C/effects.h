@@ -1426,9 +1426,14 @@ CNA_C_API CNA_Result cna_effect_get_current_technique(
     CNA_EffectTechniqueHandle* out_technique);
 
 /**
- * @brief Selects a technique belonging to this effect, or clears it with the invalid handle.
+ * @brief Selects a technique belonging to this effect.
+ *
+ * The selection cannot be cleared: `CNA_INVALID_HANDLE` is refused with
+ * `CNA_RESULT_INVALID_ARGUMENT` and leaves the current technique unchanged, matching XNA's
+ * `ArgumentNullException` on a null assignment.
+ *
  * @param effect Effect handle.
- * @param technique Technique view from this effect, or `CNA_INVALID_HANDLE`.
+ * @param technique Technique view from this effect.
  * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_effect_set_current_technique(

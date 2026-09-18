@@ -211,3 +211,73 @@ a standalone device owns no `Game`, so it never reaches `UninstallPlatform`. Mea
 this test against `ab75e340e`'s `Game.cpp` and `CurrentPlatform.cpp` and re-running it.
 
 **Stress:** 200 subprocess iterations of each of the seven modes — 1 400 processes, 0 failures.
+
+## CSS-4 — the thirteen assertions, classified
+
+Every one is a deliberate C++ change that landed while `-DCNA_BUILD_C_API=ON` did not compile, with
+one exception: `CApi_VertexBufferSmoke` is a **genuine wrapper defect** that the same window hid.
+Each row's evidence is the commit that made the change, the plan row stating the reasoning, and a
+C++ test that pins the new behaviour — a value that merely makes the test pass was not accepted as
+evidence for any of them.
+
+| Test | What failed | Class | Evidence | Fix |
+|---|---|---|---|---|
+| `GraphicsDeviceSmoke` | default `Viewport().MaxDepth` expected `1.0f` | stale | `a0a3bc8d4` SOFTWARE-201; `ViewportTests.cpp:21` `DefaultConstructorZeroFields` | expect `0.0f` |
+| `GraphicsDeviceSmoke` | `Viewport::ToString` expected `0.250000` | stale | SOFTWARE-201 + `a24bd647c` SOFTWARE-203 `setprecision(7)`; `ViewportTests.cpp:352` | expect `0.25` |
+| `GraphicsDeviceSmoke` | 16 vertex sampler slots on every profile | stale | `6c1d1c451` SOFTWARE-225: 4 under HiDef, **0** under Reach, and vertex fetch takes no `Color` | size the loop from the device's profile; expect the `Color` vertex bind to be refused |
+| `GraphicsDeviceSmoke` | clearing depth/stencil accepted as `NOT_SUPPORTED` | stale | `08c9cae96` SOFTWARE-333; `BackBufferDepthStencilContractTests.cpp:482` | expect `INVALID_STATE` when the plane does not exist |
+| `GraphicsDeviceSmoke` | unbound draw expected `CNA_RESULT_INTERNAL` | stale | SOFTWARE-209 missing-effect guard, scope settled by `ba7604944` SOFTWARE-322; `DrawUserIndexedPrimitivesTests.cpp:88` | expect `INVALID_STATE` |
+| `Draw3DSmoke` | fixed three-plane clear | stale | SOFTWARE-333, as above | derive the mask from the device's `depth_stencil_format` |
+| `GameSecondaryGraphicsDeviceContext` | same, on a secondary device | stale | SOFTWARE-333, as above | create that device with `DEPTH24_STENCIL8`, which is what it asks to clear |
+| `VertexValueSmoke` | `VertexPositionColor` default expected white | stale | `5018ea222` SOFTWARE-240 (with `890eaf5d3`); FNA and XNA both leave it all-zero | expect all-zero |
+| `VertexValueSmoke` | two `GetHashCode` results expected `0` | stale | `bb7d58a4a` SOFTWARE-241 replaced FNA's zero stub with XNA's word-XOR for the four classic types | assert equal values hash equally, the one property that holds for all of them |
+| `VertexValueSmoke` | `VertexElement::ToString` expected `{{…UsageIndex: 3}}` | stale | `8bd5fd504` SOFTWARE-202; `VertexElementTests.cpp:190` | single braces, no space |
+| `VertexBufferSmoke` | raw-with-options readback was all zeros | **defect** | see below | route to the raw C++ methods the header already describes |
+| `IndexBufferSmoke` | 32-bit index buffers expected under Reach | stale | `6c1172e30` SOFTWARE-208; `GraphicsProfileResourceCeilingTests.cpp` | request HiDef first, as `GraphicsDeviceSmoke` already does for `OcclusionQuery` |
+| `EffectSmoke` | clearing `CurrentTechnique` expected to succeed | stale | `585b45dcf` SOFTWARE-257; `EffectTests.cpp:802` `SetCurrentTechniqueRejectsNull` | expect `INVALID_ARGUMENT`, and release the alias the query now mints |
+| `ModelMeshPartSmoke`, `SkinnedModelSmoke` | `vertex_count` of `0` expected to be accepted | stale | `6e8324327` SOFTWARE-204, which also re-documented the field as positive | ask for the three vertices the three indices need |
+| `MorphTargetSmoke` | a tangent read on a target with no tangents expected refusal | stale | `2c08fdcca` BINDFIX-009, reported by cna-java | expect success with count `0`, which the next check in the same test already required |
+| `TextureSmoke` | 6 elements for a 2×2 region; every non-`COLOR` type expected refused | stale | `14c815cb7` SOFTWARE-276; `Texture2DTests.cpp:1094` | exact totals, and accept the widths that divide the texel and total exactly |
+| `ContentSmoke` | `Alpha8` expected to be undecodable | stale | `cedfc735c` SOFTWARE-275 gave the reader every classic format | use an out-of-range ordinal, as the C++ mirror already does |
+| `DevicesSmoke` | desktop expected `DeviceType::Device` | stale | `cb2c902087` SAMPLE-061 and the rewritten `Environment.hpp` contract | ask `cna_platform_get_is_mobile_ext`, the discriminator the C++ asks |
+
+### The genuine defect: raw vertex uploads stopped being raw
+
+`cna_vertex_buffer_set_data_raw_with_options` and its `_at_` sibling routed through the *generic*
+`DynamicVertexBuffer::SetData<TVertex>` template instantiated with `std::uint8_t`. The wrapper's own
+comment said why that was equivalent: "passing `startIndex` 0 makes `data` the exact bytes to
+upload". `d14d9482b` (SOFTWARE-249) ended that, correctly — it restored XNA's generic semantics,
+where tightly packed `sizeof(T)` source elements are written into buffer locations separated by
+`vertexStride`. With `T` a byte, that copies `vertexCount` **single bytes at `vertexStride`
+spacing** instead of the `vertexCount * vertexStride` contiguous bytes
+`vertex_resources.h:402` documents. The vertices read back as zeros; the raw route's
+vertex-boundary check and its zero-count no-op were bypassed too.
+
+The C contract was right and the C++ change was right; only the wrapper's choice of door was wrong.
+`SetDataRawWithOptions`/`SetDataRawAtWithOptions` are `protected` on `VertexBuffer`, so
+`DynamicVertexBuffer` gains two public CNAEXT forwarders — the streaming counterparts of the public
+`SetDataRaw`/`SetDataRawAtEXT` pair that already exist for the same reason — and both routes call
+those. No C signature, symbol or constant changes.
+
+### Two documentation defects repaired alongside
+
+- `effects.h:1429` promised that `CNA_INVALID_HANDLE` clears the current technique. SOFTWARE-257
+  made that a refusal; the Doxygen now says so.
+- `graphics_device.h:726,:743` promised `CNA_RESULT_NOT_SUPPORTED` for a missing depth/stencil
+  plane. SOFTWARE-333 made it `CNA_RESULT_INVALID_STATE`; three of the stale C assertions were
+  written against that promise, so the header was the thing that was wrong.
+
+### Two suites that failed silently now say where
+
+`VertexBufferSmoke.c` printed nothing at all on failure — the crash then overwrote its exit code,
+so the defect above left no trace anywhere. It and `GraphicsDeviceSmoke.c`'s stage chain now use
+`CnaTestReport.h`, which is what found the fifth `GraphicsDeviceSmoke` expectation.
+
+### Coverage accounting
+
+The two new public C++ methods are bound by the two C routes that call them, so they are recorded
+in the existing `vertex-buffer-raw-with-options` rule rather than left unmapped. Measured either
+side of the change, the unmapped total is **3 007 planned rows over 14 tasks — identical**. The
+pre-existing generator failures are untouched, and `docs/c-api/COVERAGE.md` cannot be regenerated on
+this branch for the same pre-existing reason (`--write` hits the planned-row-owner error), having
+already been stale by roughly 3 200 symbols at the branch point.

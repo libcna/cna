@@ -658,11 +658,17 @@ static int validate_unavailable(const CNA_Handle game)
 static int validate_identities(void)
 {
     CNA_DeviceType device_type = UINT32_MAX;
-#if defined(__EMSCRIPTEN__)
-    const CNA_DeviceType expected_device_type = CNA_DEVICE_TYPE_EMULATOR;
-#else
-    const CNA_DeviceType expected_device_type = CNA_DEVICE_TYPE_DEVICE;
-#endif
+    /* SAMPLE-061 settled the mapping and Environment.hpp documents it: Device for the mobile
+       targets that have physical sensors, Emulator for desktop and browser, which emulate the
+       Windows Phone input environment. The old rule here was the one before it, Web -> Emulator
+       and everything else Device. Ask the same discriminator the C++ asks rather than deciding it
+       again from preprocessor macros. */
+    CNA_Bool is_mobile = CNA_FALSE;
+    if (cna_platform_get_is_mobile_ext(&is_mobile) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    const CNA_DeviceType expected_device_type =
+        is_mobile == CNA_TRUE ? CNA_DEVICE_TYPE_DEVICE : CNA_DEVICE_TYPE_EMULATOR;
     return sizeof(CNA_DeviceType) == sizeof(uint32_t) &&
         CNA_DEVICE_TYPE_DEVICE == UINT32_C(0) && CNA_DEVICE_TYPE_EMULATOR == UINT32_C(1) &&
         CNA_DEVICE_TYPE_MAXIMUM == CNA_DEVICE_TYPE_EMULATOR &&

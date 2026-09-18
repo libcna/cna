@@ -145,12 +145,30 @@ static int clear_and_confirm(
      * DepthStencilState.Default keeps depth testing on and the triangle sits at z = 0, so against
      * undefined depth the LessEqual test could discard every fragment: the draw then reported
      * success while changing no pixel, which reads exactly like a broken draw path and is not one.
-     * Clearing target, depth and stencil together is what XNA's own Clear(Color) does.
+     *
+     * The mask is the planes this device actually has, not a fixed three. SOFTWARE-333 stopped
+     * masking a clear of an attachment that does not exist -- Microsoft XNA reports
+     * InvalidOperationException where FNA silently dropped the flags -- and XNA's own
+     * Clear(Color) derives the same set rather than asserting all three. A C-API game gets no
+     * GraphicsDeviceManager, so its device comes from default PresentationParameters, whose
+     * DepthFormat is None; with no depth plane there is no undefined depth for the test above to
+     * be about, and the flag would only be refused.
      */
-    if (cna_graphics_device_clear_options(
-            graphics_device,
-            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL,
-            clear_color, 1.0F, 0) != CNA_RESULT_SUCCESS) {
+    CNA_PresentationParameters active;
+    if (!REPORT(cna_presentation_parameters_init(&active) == CNA_RESULT_SUCCESS) ||
+        !REPORT(cna_graphics_device_get_presentation_parameters(graphics_device, &active) ==
+                CNA_RESULT_SUCCESS)) {
+        return 0;
+    }
+    uint32_t options = CNA_CLEAR_OPTION_TARGET;
+    if (active.depth_stencil_format != CNA_DEPTH_FORMAT_NONE) {
+        options |= CNA_CLEAR_OPTION_DEPTH_BUFFER;
+    }
+    if (active.depth_stencil_format == CNA_DEPTH_FORMAT_DEPTH24_STENCIL8) {
+        options |= CNA_CLEAR_OPTION_STENCIL;
+    }
+    if (!REPORT(cna_graphics_device_clear_options(
+                    graphics_device, options, clear_color, 1.0F, 0) == CNA_RESULT_SUCCESS)) {
         return 0;
     }
     if (!state->has_readback) {
