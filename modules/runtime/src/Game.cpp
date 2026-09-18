@@ -164,16 +164,34 @@ namespace Microsoft::Xna::Framework
         // predecessor which is destroyed first would restore a dangling pointer on its own way
         // out. Keeping the order in one place lets a game remove itself from the middle, which is
         // the case that actually goes wrong.
+        //
+        // Both holders are deliberately IMMORTAL -- allocated once and never destroyed -- for the
+        // same reason X11Error.cpp's are (plans/plan_native_platform_validation.md NPV-0102): a
+        // Game can be destroyed at ANY point of process teardown, so a registry it unregisters
+        // itself from has to stay valid for longer than any ordinary static.
+        //
+        // The owner that proved it is the C API. Its handle registry owns each C-created Game
+        // through a shared_ptr in a function-local static, and that static is constructed on the
+        // first handle-creating C call -- necessarily BEFORE this file's statics, which are
+        // constructed inside that same call by the Game it is creating. Reverse-order destruction
+        // therefore always destroys this stack first and the registry that still holds the Game
+        // second, so ~Game read a freed vector at exit: AddressSanitizer reported
+        // heap-use-after-free at UninstallPlatform's std::find, freed by this vector's own
+        // destructor under __run_exit_handlers, for every C API smoke test that left a game handle
+        // alive (plans/plan_capi_smoke_stability.md CSS-2). That ordering is not a race that
+        // sometimes loses -- it is fixed and always wrong -- and it cannot be corrected by
+        // reordering, because the registry has to exist before the object it is about to store.
+        // Never destroying these makes UninstallPlatform valid at any point of process teardown.
         std::mutex& PlatformStackMutex()
         {
-            static std::mutex mutex;
-            return mutex;
+            static auto* const mutex = new std::mutex();
+            return *mutex;
         }
 
         std::vector<CNA::Platform::IPlatform*>& PlatformStack()
         {
-            static std::vector<CNA::Platform::IPlatform*> stack;
-            return stack;
+            static auto* const stack = new std::vector<CNA::Platform::IPlatform*>();
+            return *stack;
         }
 
         /// Installs the game's owned platform as the process-wide one in a single step.
