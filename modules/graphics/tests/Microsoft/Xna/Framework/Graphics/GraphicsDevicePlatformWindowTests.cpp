@@ -354,7 +354,8 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      AViewportRefreshSurvivesAWindowThatRefusesItsDrawableSize)
 {
-#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
+#if defined(CNA_PLATFORM_SDL3) || \
+    !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
     GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
 #else
     // UpdateViewportFromWindow() is what GameWindow.ClientSizeChanged runs, from inside the frame's

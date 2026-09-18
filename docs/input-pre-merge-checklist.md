@@ -18,7 +18,7 @@ manual/hardware verification is tracked separately (see the "Input stable" gate,
       gaps**; regenerated `docs/input-member-parity-matrix.md` committed if it changed.
 - [ ] **Test coverage** — `python3 tools/input_parity/check_input_test_coverage.py` reports **0 orphans**.
 - [ ] **Input subset green on every backend** — `ctest -L input` (baked `--gtest_shuffle --gtest_repeat=5`)
-      passes on EasyGL / Vulkan / bgfx / SDL_RENDERER (CI matrix), under `xvfb-run` + `SDL_VIDEODRIVER=x11`.
+      passes on EasyGL / Vulkan / SDL_RENDERER (CI matrix), under `xvfb-run` + `SDL_VIDEODRIVER=x11`.
 - [ ] **Sanitizers clean** — the ASan+UBSan config runs the input subset green with
       `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (0 ASan/UBSan errors).
 - [ ] **Deviations intact** — every accepted deviation (DEC-* / KBD-011 / INPUT-TOUCH-024) still has its

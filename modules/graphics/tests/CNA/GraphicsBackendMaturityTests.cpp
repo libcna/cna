@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMaturity());
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Rlgl) + 1;
-static_assert(kPublicRendererCount == 50,
-              "GraphicsRendererType must expose all 50 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
+static_assert(kPublicRendererCount == 25,
+              "GraphicsRendererType must expose all 25 public renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
 {
@@ -51,7 +51,6 @@ namespace
             case GraphicsRendererType::OpenGLES2:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
-            case GraphicsRendererType::Bgfx:
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::DirectX11:
@@ -60,7 +59,6 @@ namespace
 
             case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Direct2D:
@@ -68,41 +66,18 @@ namespace
             case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::OpenGL2:
             case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendMaturity::Supported;
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
-            case GraphicsRendererType::Wicked:
-            case GraphicsRendererType::Sokol:
-            case GraphicsRendererType::Diligent:
-            case GraphicsRendererType::Llgl:
-            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::PixiJs:
-            case GraphicsRendererType::TinyGL:
-            case GraphicsRendererType::NanoVg:
-            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendMaturity::Experimental;
 
-            case GraphicsRendererType::DirectX1:
-            case GraphicsRendererType::DirectX2:
-            case GraphicsRendererType::DirectX3:
-            case GraphicsRendererType::DirectX5:
-            case GraphicsRendererType::DirectX6:
-            case GraphicsRendererType::DirectX7:
-            case GraphicsRendererType::DirectX8:
-            case GraphicsRendererType::DirectX10:
-            case GraphicsRendererType::OpenGLES1:
-            case GraphicsRendererType::OpenGL1:
-            case GraphicsRendererType::Glide:
                 return GraphicsBackendMaturity::Historical;
         }
         return std::nullopt;

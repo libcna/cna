@@ -55,11 +55,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
-    constexpr bool kRasterizes = true;
-    constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;

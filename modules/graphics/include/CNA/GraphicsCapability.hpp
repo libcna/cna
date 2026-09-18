@@ -15,8 +15,8 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Several renderers, including the native 2D renderer, Canvas, GDI, and the
-         * Skia raster renderer, are intentionally 2D-only and lack this entirely. Query the selected
+         * clears and state). Several renderers, including the native 2D renderer, Canvas and GDI,
+         * are intentionally 2D-only and lack this entirely. Query the selected
          * renderer rather than inferring support from its name. GDI's separate 2D stencil-mask
          * extension does not imply a 3D pipeline.
          */
@@ -46,12 +46,11 @@ namespace CNA
         /**
          * @brief Real volume (3D) texture storage -- Texture3D::SetData()/GetData() actually
          * persist and retrieve pixel data, not just validate arguments. This capability describes
-         * storage only and never promises shader sampling: Skia reports it true for bounded CPU
-         * transfer/readback storage while keeping its 3D and custom-effect capabilities false, even
-         * though Skia separately offers a narrow, opt-in shader-sampling extension
-         * (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, `docs/skia-cube-volume-sampling-contract.md`)
-         * that this flag does not represent and that does not imply general/stock 3D or effect
-         * support. Headless has no real texture resource by design; Software provides exact CPU
+         * storage only and never promises shader sampling. A renderer may report it true for
+         * bounded CPU transfer/readback storage while keeping its 3D and custom-effect capabilities
+         * false; the flag never implies general/stock 3D or effect support, and a renderer that
+         * offers shader sampling advertises that separately.
+         * Headless has no real texture resource by design; Software provides exact CPU
          * volume storage and transfer without advertising a CNAEXT shader-sampling path.
          */
         Texture3D,

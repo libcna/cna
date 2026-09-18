@@ -4,12 +4,13 @@
 # needs even when that family is not selected: it is what GraphicsRendererRegistry hands
 # GraphicsDevice, and it answers the window/context questions BEFORE any renderer exists. It is
 # also the one file per family that no ordinary configuration compiles -- a single-renderer build
-# enters exactly one family's directory, so 44 of the 45 descriptors are never seen by a compiler.
+# enters exactly one family's directory, so every other family's descriptor is never seen by a
+# compiler.
 #
-# That is how three descriptors reached the integration branch with unbalanced braces and
-# statements sitting directly inside a namespace body: the families they belong to (BGFX, LLGL,
-# OPENGL1) were simply never configured after the file was written, and every gate the project
-# had reads the sources as TEXT rather than compiling them.
+# That is how three descriptors once reached the integration branch with unbalanced braces and
+# statements sitting directly inside a namespace body: the families they belonged to were simply
+# never configured after the file was written, and every gate the project had read the sources as
+# TEXT rather than compiling them.
 #
 # This target closes that hole with the real build system: every registered family's descriptor is
 # compiled by SOMETHING in every configuration -- by its own family target when the family is part
@@ -26,8 +27,6 @@ option(CNA_BUILD_RENDERER_DESCRIPTOR_GATE
 # The families whose descriptor legitimately cannot be compiled outside its own family target,
 # because it reaches into that family's third-party SDK to answer a question honestly:
 #
-#   bgfx      -- ResolvedWindowKind() asks bgfx itself which native API it will pick
-#                (bgfx::RendererType, from <bgfx/bgfx.h>).
 #   directx9  -- design decision 9's adapterQueries answer from real D3DCAPS9 / D3DFORMAT values
 #                (<d3d9.h>).
 #   directx11 -- DX-214/DX-225 gave it the same treatment as directx9: the descriptor creates a
@@ -37,7 +36,7 @@ option(CNA_BUILD_RENDERER_DESCRIPTOR_GATE
 #
 # None can be made self-contained without dropping behaviour, so for these the "compiled at
 # least once in a configuration where the family is available" rule is met by the family's OWN
-# target: a BGFX, DIRECTX9, DIRECTX11 or DIRECTX12 build each compiles theirs for real. Every
+# target: a DIRECTX9, DIRECTX11 or DIRECTX12 build each compiles theirs for real. Every
 # other family's descriptor needs nothing but CNA's own headers, and this list is deliberately
 # hard to grow -- a new family is gated by default, and excluding it takes a deliberate edit
 # with a reason.
@@ -47,7 +46,7 @@ option(CNA_BUILD_RENDERER_DESCRIPTOR_GATE
 # were already deferred by the branch above this list. A native Linux build that selects a
 # non-DirectX renderer is the configuration that compiles them here, and it cannot -- the Windows
 # SDK headers they now include do not exist on it.
-set(CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES bgfx directx9 directx11 directx12)
+set(CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES directx9 directx11 directx12)
 
 # Defines the descriptor gate target. Must be called from modules/renderers/CMakeLists.txt, after
 # CNA_SELECTED_RENDERER_FAMILIES has been established.
@@ -131,8 +130,8 @@ function(cna_add_renderer_descriptor_gate)
         cna_renderer_common cna_graphics_core cna_core cna_math)
     cna_link_sharp_runtime(cna_renderer_descriptor_gate PRIVATE)
 
-    # A descriptor may consult its own family's pre-construction helpers -- IGL's backend
-    # resolution, LLGL's, Diligent's device selection, EasyGL's GL profile, FNA3D's window flags --
+    # A descriptor may consult its own family's pre-construction helpers -- EasyGL's GL profile,
+    # FNA3D's window flags --
     # and those headers live on a family target this configuration does not build. Every family's
     # public root is namespaced CNA/Internal/Renderers/<Family>/, so making them all reachable here
     # cannot shadow anything.

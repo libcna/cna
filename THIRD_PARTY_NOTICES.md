@@ -2,31 +2,6 @@ This project contains code derived from or based on portions of FNA.
 FNA is licensed under the Microsoft Public License (Ms-PL).
 FNA copyright: Ethan Lee and the MonoGame Team.
 
-## rlgl (RLGL graphics renderer)
-
-The optional `RLGL` renderer compiles the standalone `src/rlgl.h` implementation from official
-raylib 6.0 at commit `dbc56a87da87d973a9c5baa4e7438a9d20121d28`. CMake fetches the source
-only when the renderer is selected; CNA does not build or initialize the raylib framework. The
-upstream source retains this zlib/libpng license notice:
-
-```text
-Copyright (c) 2013-2026 Ramon Santamaria (@raysan5)
-
-This software is provided "as-is", without any express or implied warranty. In no event
-will the authors be held liable for any damages arising from the use of this software.
-
-Permission is granted to anyone to use this software for any purpose, including commercial
-applications, and to alter it and redistribute it freely, subject to the following restrictions:
-  1. The origin of this software must not be misrepresented; you must not claim that you
-  wrote the original software. If you use this software in a product, an acknowledgment
-  in the product documentation would be appreciated but is not required.
-
-  2. Altered source versions must be plainly marked as such, and must not be misrepresented
-  as being the original software.
-
-  3. This notice may not be removed or altered from any source distribution.
-```
-
 ## DirectXMesh (build-time mesh optimization in the Content Pipeline)
 
 `modules/content-pipeline/src/Internal/DirectXMeshOptimizeFaces.cpp` is adapted from Microsoft's
@@ -254,20 +229,6 @@ SDK, which exists on no platform CNA builds on. See
 `modules/renderers/fna3d/effects/README.md` for the full provenance table and
 `docs/fna3d-renderer.md` for what it means for the renderer's capability boundary.
 
-## Skia (optional Skia 2D raster / Ganesh backend dependency)
-
-The experimental `SKIA` graphics backend links against Skia, Google's 2D graphics library, at the
-pinned revision `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`. Skia is licensed under the BSD 3-Clause
-License; copyright Google Inc. CNA's CMake integration (`cmake/ThirdPartySkia.cmake`,
-`cmake/ThirdPartySkiaGanesh.cmake`) links a separately built, unmodified upstream static-archive
-artifact; Skia's source is not copied into the CNA source tree, matching `wgpu-native`'s pattern
-below. See the upstream checkout's own `LICENSE` file for the complete license text.
-
-Two mutually exclusive GN-built artifacts of the same pinned checkout exist: the validated CPU
-raster artifact (`docs/skia-developer-build.md`, the release-gated `CNA_GRAPHICS_BACKEND=SKIA`
-selection) and a separately pinned Ganesh/OpenGL artifact (`docs/skia-ganesh-artifact.md`, SKIA-159,
-not yet wired into any backend selection). Both are the same upstream project and license.
-
 ## wgpu-native (optional WebGPU backend dependency)
 
 The experimental `WEBGPU` graphics backend uses `wgpu-native`, a native implementation of the
@@ -275,86 +236,6 @@ WebGPU C API maintained by the gfx-rs project. CNA's CMake integration downloads
 unmodified upstream binary release; the library is not copied into the CNA source tree.
 `wgpu-native` is available under the Apache License 2.0 and MIT License. See the upstream release
 package for the complete license texts and notices that apply to the selected binary.
-
-## DiligentCore (DILIGENT backend dependency)
-
-The experimental `DILIGENT` graphics backend uses DiligentCore, the render-device/swap-chain layer
-of Diligent Engine by Diligent Graphics LLC. CNA's CMake integration fetches an unmodified upstream
-checkout at the pinned tag `v2.5.6` (recursive submodules included) at configure time and builds it
-from source; nothing is copied into the CNA source tree and no local patch is carried. DiligentCore
-is available under the Apache License 2.0. Its own vendored third-party components -- glslang,
-SPIRV-Tools, SPIRV-Cross, SPIRV-Headers, Vulkan-Headers, volk and xxHash -- carry their own
-licenses; see `License.txt` and `ThirdParty/` in the fetched upstream checkout for the complete
-license texts and notices.
-
-## sokol (SOKOL backend dependency)
-
-The experimental `SOKOL` graphics backend uses `sokol_gfx.h` and `sokol_log.h` from the sokol
-single-header library collection by Andre Weissflog. CNA's CMake integration fetches an unmodified
-upstream checkout at a pinned commit at configure time; the headers are not copied into the CNA
-source tree. sokol is available under the zlib/libpng license. See `LICENSE` in the fetched
-upstream checkout for the complete license text.
-
-The `SOKOL` backend's shaders are compiled offline by `sokol-shdc`, from the companion sokol-tools
-project (MIT licensed). The generated header checked in at
-`src/CNA/Internal/Backends/Sokol/shaders/sokol_shaders.hpp` is machine-generated output derived
-from CNA's own shader sources; the `sokol-shdc` binary itself is not vendored and is not required
-for an ordinary build.
-
-## TinyGL (TINYGL renderer dependency)
-
-The `TINYGL` graphics renderer uses TinyGL, originally by Fabrice Bellard and currently maintained
-as the [C-Chads/tinygl](https://github.com/C-Chads/tinygl) fork by Gek (DMHSW) and the C-Chads.
-CNA's CMake integration (`cmake/ThirdPartyTinyGL.cmake`) fetches an unmodified upstream checkout at
-a pinned commit at configure time and builds its own `tinygl-static` target; no TinyGL source is
-copied into the CNA source tree. See `LICENSE` in the fetched upstream checkout for the complete
-license text.
-
-TinyGL is distributed under a zlib-style license with one clause that differs from plain zlib and is
-the reason this section is required rather than merely courteous:
-
-> Copyright (C) 1997-2021 Fabrice Bellard, Gek (DMHSW), C-Chads
->
-> The origin of this software must not be misrepresented; you must not claim that you wrote the
-> original software. If you use this software in a product, an acknowledgment in the product and its
-> documentation *is* required.
-
-This section, together with `docs/tinygl-renderer.md` and `plans/plan_tinygl.md`, is that acknowledgment.
-A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
-TinyGL at all.
-
-## NanoVG (NANOVG renderer dependency)
-
-The `NANOVG` graphics renderer uses [memononen/nanovg](https://github.com/memononen/nanovg) by
-Mikko Mononen. CNA's CMake integration (`cmake/ThirdPartyNanoVG.cmake`) fetches an unmodified
-upstream checkout at a pinned commit (`ce3bf745eb2d2dbc14a50bf2446783f691ac4353`) at configure time
-and compiles its backend-agnostic core into CNA's own `cna_thirdparty_nanovg` target; the GL2 render
-backend header is included by `modules/renderers/nanovg/src/NanoVgGl.cpp`. No NanoVG source is
-copied into the CNA source tree, and no upstream file is modified. See `LICENSE.txt` in the fetched
-upstream checkout for the complete license text.
-
-NanoVG is distributed under the zlib license:
-
-> Copyright (c) 2013 Mikko Mononen memon@inside.org
->
-> This software is provided 'as-is', without any express or implied warranty. In no event will the
-> authors be held liable for any damages arising from the use of this software.
->
-> Permission is granted to anyone to use this software for any purpose, including commercial
-> applications, and to alter it and redistribute it freely, subject to the following restrictions:
->
-> 1. The origin of this software must not be misrepresented; you must not claim that you wrote the
->    original software. If you use this software in a product, an acknowledgment in the product
->    documentation would be appreciated but is not required.
-> 2. Altered source versions must be plainly marked as such, and must not be misrepresented as
->    being the original software.
-> 3. This notice may not be removed or altered from any source distribution.
-
-NanoVG itself bundles `fontstash.h`, `stb_image.h` and `stb_truetype.h`, which CNA compiles as part
-of `nanovg.c`; those carry their own permissive notices in the same upstream checkout.
-
-A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
-NanoVG at all.
 
 ## FreeType (optional SpriteFont content-pipeline dependency)
 

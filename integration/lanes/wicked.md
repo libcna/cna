@@ -1,5 +1,7 @@
 # Lane card — `wicked` (Wicked Engine) · ✅ **INTEGRATED 2026-08-05** · merge `683a00a5` — the tenth lane
 
+> **Retired renderer — historical record.** The `WICKED` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 36 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Outcome. Both blockers were repaired in-lane and the lane merged the same day.** The follow-up
 > session resumed exactly where the record below left off: it reproduced `WICKED-77` and
 > `WICKED-78` from the preserved reproducers, root-caused both, fixed both, completed the

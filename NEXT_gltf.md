@@ -321,7 +321,10 @@ found by *running the thing that was said to be impossible* rather than by reaso
   `CNA_D3D11_VIRTUAL_DESKTOP` on Xvfb (`GLTF-471`).
 - **The SOFTWARE L7 policy was not blocked by the environment at all** — the harness's own
   identity check made it structurally unrunnable (`GLTF-467`).
-- **A real ES 1.1 driver is on this host** (found by `GLTF-473`, 2026-08-18). `docs/opengles1-renderer.md`
+- **A real ES 1.1 driver is on this host** (found by `GLTF-473`, 2026-08-18). `OPENGLES1` was
+  retired on 2026-09-17, so this entry is history: the renderer no longer exists and neither does
+  the document it names. The ES 1.1 driver itself is still installed, which is why the recipe is
+  kept. `docs/opengles1-renderer.md`
   records a side-by-side Mesa build from 2026-07-22 and it is still installed at
   `~/deps/mesa-es1-install` with `gles1: enabled`, so `OPENGLES1` can be built **and run**, not merely
   compiled. Configure `cmake-build-opengles1` normally (`-DCNA_GRAPHICS_RENDERER=OPENGLES1`; CMake

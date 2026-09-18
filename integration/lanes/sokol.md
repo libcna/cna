@@ -1,5 +1,7 @@
 # Lane card — `sokol` (sokol_gfx) · ✅ **INTEGRATED 2026-08-07** · merge `37066e45` — the twelfth lane, Batch 3 opens
 
+> **Retired renderer — historical record.** The `SOKOL` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 37 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Outcome.** Adapted, validated and merged in one session. The lane was inventory-classified
 > `UNKNOWN` / `NEEDS VALIDATION`, but unlike `wicked` and `magnum` it had genuinely been built and
 > run before: a pre-adaptation build at its own fork point reproduced its recorded results exactly,

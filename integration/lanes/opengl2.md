@@ -1,5 +1,7 @@
 # Lane `opengl2` — native desktop OpenGL 2.1 (compatibility profile) graphics backend
 
+> **Retired renderer — historical record.** The `OPENGL2` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 35 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 **Status: ✅ INTEGRATED 2026-08-05 · ADAPTATION · merge `9e6d62ed`** (signed, `--no-ff`,
 parents `c0876fca` + `289410a6`). Ninth logical lane, **fifth and final lane of Batch 1**.
 Nothing was pushed.

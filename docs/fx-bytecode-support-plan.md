@@ -79,8 +79,7 @@ machinery — no constructor accepting bytecode at all (not even a throwing stub
 concrete stock effect builds its `Parameters`/`Techniques` by hand in C++. Adding real bytecode
 support touches: a new vendored native dependency, a container-format parser, two independent
 GPU-shader-translation paths (EasyGL/GLSL is close to free via MojoShader itself; Vulkan/SPIR-V
-needs the extra glslang hop; Bgfx uses neither GLSL nor raw SPIR-V as its native shader format
-and needs its own feasibility investigation before any implementation work is scheduled), the
+needs the extra glslang hop), the
 `Effect`/`EffectPass`/`EffectParameter`/`EffectTechnique` wiring, `Clone()` (Task 883, opened by
 Task 351), real test fixtures, and developer docs. That is the same shape and scale as the
 WebGPU renderer (Phases 56–69), which is why it gets its own dedicated phase and task-number block
@@ -114,17 +113,13 @@ Summary:
    better) before the translation task itself is scheduled.
 5. Vulkan path implementation: MojoShader GLSL output → SPIR-V via the Task 4 compiler → Vulkan
    pipeline creation.
-6. Bgfx feasibility investigation (no implementation yet): bgfx's native shader format comes from
-   its own `shaderc`/binary-shader pipeline, not raw GLSL or SPIR-V source — determine whether
-   bgfx's runtime APIs can consume MojoShader/glslang output at all before committing to an
-   approach.
-7. Wire parsed reflection data + compiled per-renderer programs into `Effect`, add the real
+6. Wire parsed reflection data + compiled per-renderer programs into `Effect`, add the real
    `Effect(GraphicsDevice*, bytecs bytecode[])` constructor and `Clone()` (folding in Task 883's
    already-identified `EffectPass::owner_` aliasing hazard).
-8. Test fixtures: since this project has no XNA Content Pipeline tooling to compile a real `.fx`
+7. Test fixtures: since this project has no XNA Content Pipeline tooling to compile a real `.fx`
    file, source or hand-produce real compiled-effect bytecode blobs for tests (this is a real,
    distinct blocker, not incidental — tracked as its own task rather than assumed solvable inline).
-9. Developer documentation covering the full feature once implemented.
+8. Developer documentation covering the full feature once implemented.
 
 Each task's exact wording and scope lives in `plans/plan_graphics.md` — this document exists to carry
 the reasoning that produced that list, not to duplicate it verbatim.

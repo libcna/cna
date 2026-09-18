@@ -80,13 +80,7 @@ using namespace CNA::Testing::Renderers;
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
 // checks at runtime that bgfx is the ACTIVE renderer.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
-#define CNA_TEST_BGFX_AVAILABLE 1
-#endif
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
-#endif
 #ifdef CNA_RENDERER_VULKAN
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
@@ -412,10 +406,11 @@ namespace
     };
 }
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX10) || defined(CNA_RENDERER_DIRECTX11) || \
+#if defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_SOFTWARE)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
@@ -650,16 +645,6 @@ TEST_F(PointListPrimitiveTest, IndexedPointListHonorsThirtyTwoBitIndexElements)
     vertexBuffer.SetData(vertices.data(), 8);
     indexBuffer.SetData(indices.data(), 8);
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-    auto* nativeIndex =
-        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
-            &indexBuffer.GetRenderer());
-    ASSERT_NE(nullptr, nativeIndex);
-    EXPECT_TRUE(nativeIndex->IsThirtyTwoBit());
-    EXPECT_EQ(
-        static_cast<std::uint16_t>(BGFX_BUFFER_ALLOW_RESIZE | BGFX_BUFFER_INDEX32),
-        nativeIndex->GetNativeCreationFlagsEXT());
-#endif
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
@@ -1272,8 +1257,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(
-        Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
     RequirePointRendering();
 
     const int width = BackbufferWidth();
@@ -1313,139 +1297,6 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
         pixels, Color::Black, 3, "non-indexed point range with vertexStart");
 }
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-// Bgfx expresses topology as per-submission state (BGFX_STATE_PT_*), not as a cached graphics
-// pipeline object, so switching to and from point topology must not allocate any native resource.
-TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    RequirePointRendering();
-
-    device.Present();
-    device.Present();
-    const bgfx::Stats* stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    const std::uint16_t processVertexBaseline = stats->numDynamicVertexBuffers;
-    const std::uint16_t processIndexBaseline = stats->numDynamicIndexBuffers;
-
-    const int width = BackbufferWidth();
-    const int height = BackbufferHeight();
-    const std::array<VertexPositionColor, 3> vertices{
-        MakePoint(width, height, PointSpec{width / 4, height / 2, Color::Red, 0.5f}),
-        MakePoint(width, height, PointSpec{width / 2, height / 2, Color::Lime, 0.5f}),
-        MakePoint(width, height, PointSpec{3 * width / 4, height / 2, Color::Blue, 0.5f}),
-    };
-    const std::array<std::uint16_t, 3> indices{0, 1, 2};
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 3, BufferUsage::None);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 3);
-    indexBuffer.SetData(indices.data(), 3);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.SetIndexBuffer(&indexBuffer);
-
-    device.Present();
-    device.Present();
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    const std::uint16_t liveVertexBaseline = stats->numDynamicVertexBuffers;
-    const std::uint16_t liveIndexBaseline = stats->numDynamicIndexBuffers;
-    EXPECT_EQ(processVertexBaseline + 1u, liveVertexBaseline);
-    EXPECT_EQ(processIndexBaseline + 1u, liveIndexBaseline);
-
-    for (int frame = 0; frame < 24; ++frame)
-    {
-        device.Clear(Color::Black);
-        device.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 3, 0, 1);
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
-        device.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 3, 0, 3);
-        device.DrawIndexedPrimitives(PrimitiveType::LineList, 0, 0, 3, 0, 1);
-        device.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 3, 2, 1);
-        device.Present();
-
-        stats = bgfx::getStats();
-        ASSERT_NE(nullptr, stats);
-        EXPECT_LE(stats->numDynamicVertexBuffers, liveVertexBaseline);
-        EXPECT_LE(stats->numDynamicIndexBuffers, liveIndexBaseline);
-    }
-
-    device.SetVertexBuffer(nullptr);
-    device.SetIndexBuffer(nullptr);
-    vertexBuffer.Dispose();
-    indexBuffer.Dispose();
-    device.Present();
-    device.Present();
-
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    EXPECT_EQ(processVertexBaseline, stats->numDynamicVertexBuffers);
-    EXPECT_EQ(processIndexBaseline, stats->numDynamicIndexBuffers);
-}
-
-// REMED-GFX-113 result on the exact buffer REMED-GFX-111 used to pin the defect. Bgfx used to bind
-// the whole bound vertex buffer for every non-indexed draw, so all seven vertices became points;
-// the binding is now the exact [vertexStart, vertexStart + primitiveCount) element range and only
-// the three requested points render. The topology itself is REMED-GFX-111's own result and is still
-// asserted here: three point-sized marks, never area geometry.
-TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequestedVertices)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    RequirePointRendering();
-
-    const int width = BackbufferWidth();
-    const int height = BackbufferHeight();
-    const std::array<PointSpec, 3> wanted{
-        PointSpec{width / 4, height / 4, Color::Red, 0.5f},
-        PointSpec{width / 2, height / 2, Color::Lime, 0.5f},
-        PointSpec{3 * width / 4, 3 * height / 4, Color::Blue, 0.5f},
-    };
-    const std::array<PointSpec, 4> outside{
-        PointSpec{width / 16, height / 16, Color::Magenta, 0.5f},
-        PointSpec{15 * width / 16, height / 16, Color::Magenta, 0.5f},
-        PointSpec{width / 16, 15 * height / 16, Color::Magenta, 0.5f},
-        PointSpec{15 * width / 16, 15 * height / 16, Color::Magenta, 0.5f},
-    };
-
-    const std::array<VertexPositionColor, 7> vertices{
-        MakePoint(width, height, outside[0]),
-        MakePoint(width, height, outside[1]),
-        MakePoint(width, height, wanted[0]),
-        MakePoint(width, height, wanted[1]),
-        MakePoint(width, height, wanted[2]),
-        MakePoint(width, height, outside[2]),
-        MakePoint(width, height, outside[3]),
-    };
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 7, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 7);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.DrawPrimitives(PrimitiveType::PointListEXT, 2, 3);
-
-    const FrameSnapshot pixels = CaptureBackbuffer(device);
-    ExpectPointRendered(pixels, wanted[0], "requested point 0 renders");
-    ExpectPointRendered(pixels, wanted[1], "requested point 1 renders");
-    ExpectPointRendered(pixels, wanted[2], "requested point 2 renders");
-    // REMED-GFX-111 result: every consumed vertex becomes a point, never area geometry.
-    ExpectPointCoverageBudget(
-        pixels, Color::Black, 3, "exact-range non-indexed point coverage");
-    // REMED-GFX-113 result: the four decoy vertices outside [2, 5) are never consumed.
-    ExpectColorAbsent(
-        pixels, Color::Magenta,
-        "decoy points before and after the requested non-indexed range");
-}
-#endif
 
 // The SDL GPU renderer maps PointListEXT to its native point-list topology and consumes exactly
 // primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel

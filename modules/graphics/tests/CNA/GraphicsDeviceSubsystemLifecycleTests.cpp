@@ -160,7 +160,7 @@ namespace
         [[nodiscard]] static std::optional<GraphicsRendererType> AbsentRenderer()
         {
         for (int ordinal = 0;
-                 ordinal <= static_cast<int>(GraphicsRendererType::Rlgl); ++ordinal)
+                 ordinal <= static_cast<int>(GraphicsRendererType::PortableGL); ++ordinal)
             {
                 const auto candidate = static_cast<GraphicsRendererType>(ordinal);
                 if (!GraphicsRendererSelection::IsAvailable(candidate))

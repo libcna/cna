@@ -262,9 +262,9 @@ std::shared_ptr<Texture2D> Texture2DReader::Read(ContentReader& reader, std::sha
 
 The real work is `SurfaceFormat` coverage: `Color`, `Bgr565`, `Bgra5551`, `Bgra4444`, `Dxt1`,
 `Dxt3`, `Dxt5`, `NormalizedByte2/4`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2`,
-`Vector4`, `HalfSingle`, `HalfVector2/4`, `HdrBlendable`. Some map directly onto an existing bgfx/
+`Vector4`, `HalfSingle`, `HalfVector2/4`, `HdrBlendable`. Some map directly onto an existing
 backend texture format; others need a conversion pass at load time. This should be scoped per
-backend (SDL_Renderer, EasyGL, Vulkan, Bgfx each have their own existing `SurfaceFormat` handling to
+backend (SDL_Renderer, EasyGL, Vulkan each have their own existing `SurfaceFormat` handling to
 extend, not replace) rather than assumed to be a single shared conversion table.
 
 ## `SpriteFont`: reasonable once the generic-collection readers exist
@@ -297,7 +297,7 @@ model loader with the exact same limitations as the first.
 
 An XNA `.xnb`-embedded effect is not source `.fx` text — it is a platform-dependent *compiled*
 shader bytecode blob (D3D9-oriented on a real Windows-built XNB), which none of CNA's backends
-(EasyGL/GLSL, Vulkan/SPIR-V, Bgfx) can consume directly. `plans/plan_graphics.md` Phase 74 already tracks
+(EasyGL/GLSL, Vulkan/SPIR-V) can consume directly. `plans/plan_graphics.md` Phase 74 already tracks
 interpreting compiled `.fx` bytecode via MojoShader for `Effect`'s bytecode constructor (currently
 `System::NotImplementedException` in `Effect.cpp`). The two efforts are related but independently
 scoped: a general XNB loader is the superset container format everything (including compiled

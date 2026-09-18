@@ -144,6 +144,12 @@ set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
 # suite against a virtual display (Xvfb) instead of the real desktop.
 set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creating ctest tests")
 
+# Renderer identities (plans/plan_renderer_cleanup.md RRC-002): the public set, and the refusal of a
+# retired or unknown renderer name through any of CNA_GRAPHICS_RENDERER, CNA_GRAPHICS_RENDERERS or a
+# CNA_RENDERER_<X> switch. First, before the SDL2 and SDL availability gates read the selection, so
+# a refused name fails before any dependency is configured instead of falling back to a default.
+include(cmake/RendererIdentities.cmake)
+
 # Apple platform resolution (macOS/iOS, plans/plan_apple.md). Must run before the vendored SDL builds
 # below: those are separate cmake invocations that inherit nothing from this cache, so the
 # sysroot/architecture/deployment target this file settles has to exist before they are launched.
@@ -264,7 +270,7 @@ cna_apply_sharp_runtime_build_support()
 
 include(cmake/RendererSelection.cmake)
 
-# Runtime payloads such as Wicked Engine's shader compiler belong beside the
+# Runtime payloads such as wgpu-native's shared library belong beside the
 # final application, not beside CNA's intermediate static renderer archive.
 include(cmake/RendererRuntime.cmake)
 
@@ -312,10 +318,6 @@ add_subdirectory(modules)
 # renderer needs), and the framework-module demos own
 # modules/<name>/examples/CMakeLists.txt the same way. The per-family registration
 # knowledge that used to sit here as one include-per-family travels with those files.
-#
-# Wicked's registration stays: it registers only the module's own unit tests
-# (modules/renderers/wicked/tests/), no examples.
-include(cmake/Tests/WickedTests.cmake)
 
 include(cmake/Harnesses.cmake)
 include(cmake/XnaPipelineParityGates.cmake)

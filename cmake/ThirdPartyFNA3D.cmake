@@ -1,9 +1,8 @@
 # --- FNA3D (3D graphics library for FNA, https://github.com/FNA-XNA/FNA3D) ---
 #
 # plans/plan_fna3d.md FNA3D-1 / design decision 1: FNA3D is fetched at configure time from the upstream
-# repository at a pinned tag, in the same spirit as the SOKOL/BGFX/WEBGPU integrations. FNA3D is a
-# real multi-file C library (not a single-header drop-in), so unlike sokol this actually builds a
-# static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
+# repository at a pinned tag, in the same spirit as the WEBGPU integration. FNA3D is a real
+# multi-file C library (not a single-header drop-in), so this actually builds a static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
 # because FNA3D's own CMakeLists.txt compiles MojoShader's translation units directly. CNA carries
 # a narrow compatibility/conformance patch series for that exact submodule revision; the
 # fetch/configure path applies it automatically and idempotently.

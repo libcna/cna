@@ -137,16 +137,12 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
-#elif defined(CNA_RENDERER_RLGL)
-    constexpr const char* kRendererName = "RLGL";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
@@ -1641,11 +1637,6 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
-#if defined(CNA_RENDERER_RLGL)
-        // RLGL enforces XNA's Reach ceiling of one simultaneous target; exercise the native MRT
-        // path under the profile that exposes XNA's four-slot contract.
-        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
-#endif
     }
 
     /** @brief 0 when every check passed, 1 otherwise. */

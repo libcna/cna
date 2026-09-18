@@ -123,8 +123,9 @@ protected:
             fx.Apply();
 
             makeQuad(0.0f, kBlue);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
-            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this
+            // quad's winding is culled by the real default RasterizerState once EasyGL pushes it at
+            // construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
@@ -148,8 +149,9 @@ protected:
             fx.Apply();
 
             makeQuad(0.45f, kBlue);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
-            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this
+            // quad's winding is culled by the real default RasterizerState once EasyGL pushes it at
+            // construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
@@ -175,8 +177,9 @@ protected:
             fx.Apply();
 
             makeQuad(0.9f, kBlue);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
-            // is culled by the real default RasterizerState once EasyGL pushes it at construction.
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this
+            // quad's winding is culled by the real default RasterizerState once EasyGL pushes it at
+            // construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);

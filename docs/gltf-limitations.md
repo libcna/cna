@@ -60,8 +60,8 @@ every lit file would be far worse than the approximation.
 | `KHR_materials_unlit` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | yes | Maps to LightingEnabled = false on BasicEffect, with baseColorFactor as the diffuse colour. SkinnedEffect has no such flag -- real XNA's has none either -- so a skinned unlit material is approximated with an all-white ambient and no directional light, which is unlit apart from any specular term. | `GLTF-337` |
 | `KHR_materials_pbrSpecularGlossiness` | **APPROXIMATED_AND_REPORTED** | no | Archived by Khronos but present in older assets, so converted rather than refused: diffuse becomes the base colour, metallic 0, roughness 1 - glossiness. Not claimed, because specularFactor -- a coloured specular reflection -- has no metallic-roughness equivalent, so a file REQUIRING the extension is asking for something the conversion cannot deliver. | `GLTF-349` |
 | `KHR_materials_variants` | **IMPLEMENTED_AND_TESTED** | yes | The source-order variant table and sparse primitive mappings are preserved. Model's CNAEXT selection API swaps the complete material-dependent part state, including effect, vertex layout, textures and samplers, on both direct glTF and offline .cnj paths while leaving the default mapping unchanged. | `GLTF-341` |
-| `KHR_materials_ior` | **IMPLEMENTED_AND_TESTED** | yes | IOR is converted to dielectric F0/F90 and consumed by rigid and skinned PBR shaders on all 15 PBR renderers. Analytic factor-only and grazing pixel witnesses cover the core default and authored endpoints. | `GLTF-343` |
-| `KHR_materials_specular` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | no | Factor and colour are consumed by all 15 PBR renderers. Both optional texture inputs survive direct import and offline `.cnj`, including independent UV, transform, sampler and colour-space state; EasyGL, OpenGL2, OpenGL4, DirectX9/11/12, Bgfx, Diligent, Magnum, SDL GPU and Vulkan sample them, while 4 PBR renderer bindings remain pending. Required use therefore remains refused and optional use is warned by name. | `GLTF-344` |
+| `KHR_materials_ior` | **IMPLEMENTED_AND_TESTED** | yes | IOR is converted to dielectric F0/F90 and consumed by rigid and skinned PBR shaders on every PBR renderer. Analytic factor-only and grazing pixel witnesses cover the core default and authored endpoints. | `GLTF-343` |
+| `KHR_materials_specular` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | no | Factor and colour are consumed by every PBR renderer. Both optional texture inputs survive direct import and offline `.cnj`, including independent UV, transform, sampler and colour-space state; EasyGL, OpenGL4, DirectX9/11/12, SDL GPU and Vulkan sample them, while the remaining PBR renderer bindings remain pending. Required use therefore remains refused and optional use is warned by name. | `GLTF-344` |
 | `KHR_materials_clearcoat` | **PARSED_BUT_IGNORED** | no | A second specular lobe -- a large shader change. | `GLTF-345` |
 | `KHR_materials_sheen` | **PARSED_BUT_IGNORED** | no | A third BRDF lobe, same shape of change as clearcoat. | `GLTF-346` |
 | `KHR_materials_volume` | **PARSED_BUT_IGNORED** | no | Meaningless without a real transmission pass, which CNA does not have. | `GLTF-347` |
@@ -128,8 +128,8 @@ downgrade CNA performs names itself in one place. `CNA/Internal/Graphics/VertexD
 
 `KHR_materials_specular`'s optional `specularTexture` and `specularColorTexture` now have dedicated
 PBR-effect and `GpuDrawParams` slots. Direct and offline import retain each map's independent UV,
-transform and sampler; the colour map also retains its sRGB declaration. EasyGL, OpenGL2,
-OpenGL4, DirectX9/11/12, Bgfx, Diligent, Magnum, SDL GPU and Vulkan apply the extension's multiply-before-clamp
+transform and sampler; the colour map also retains its sRGB declaration. EasyGL,
+OpenGL4, DirectX9/11/12, SDL GPU and Vulkan apply the extension's multiply-before-clamp
 Fresnel equation.
 The modern DirectX pair additionally uses white t5/t6 fallbacks and its stride-60/76 dual-UV
 variants, with every HLSL variant regenerated through Microsoft's D3D compiler.
@@ -138,14 +138,8 @@ its rigid, skinned and analytic Fresnel pixel witnesses pass under Xvfb. Vulkan 
 independent image/sampler pairs through rigid and skinned descriptor sets, including dual-UV
 selectors and separate extension transforms; its 22-check texture program and its rigid/skinned
 golden and Fresnel programs pass on validation-clean lavapipe under Xvfb.
-Diligent carries the same seven named resources, independent sampler slots, four extension-transform
-rows and seven-bit UV selector through a 76-float constant block; its rigid/skinned stride-48/60/68/76
-programs pass 21/21 material-map, 22/22 texture-slot, 7/7 analytic Fresnel and 12/12 sRGB pixels on
-both Vulkan and OpenGL under Xvfb. Bgfx binds identity-white stages 5/6, carries independent
-extension transforms plus the seven-bit UV selector through rigid/skinned stride-48/60/68/76
-programs, and compiles all four shader dialects. Its OpenGL path passes 21/21 material-map, 22/22
-texture-slot, 7/7 analytic Fresnel and 12/12 sRGB pixels under Xvfb. Validation continues to name
-the extension until the remaining four PBR renderers consume the same state (`GLTF-344`).
+Validation continues to name
+the extension until the remaining PBR renderers consume the same state (`GLTF-344`).
 
 ---
 
@@ -173,22 +167,15 @@ side of it; `docs/gltf-renderer-pbr-fallbacks.md` records the renderer matrix an
 importer carries it in full (stride 60 for a rigid primitive, stride 80 for a skinned one since
 `GLTF-463`), `PbrEffect::VertexColorEnabledEXT` and `SkinnedPbrEffect::VertexColorEnabledEXT` carry the
 switch, and §3.9.2's product — `baseColorFactor` × `baseColorTexture` × `COLOR_0`, alpha included — is
-evaluated by **fifteen of the seventeen** PBR renderers. The other two do **not** substitute the
-identity and draw the surface anyway: they **refuse the draw** through the shared
+evaluated by **every PBR renderer but one**. That one does **not** substitute the
+identity and draw the surface anyway: it **refuses the draw** through the shared
 `RequireVertexColourPbrSupportEXT`, naming the renderer, the specification section and the way out.
 Accepting a valid asset and rendering it with different core semantics would be a wrong picture
 reported as success; refusing it is limited backend coverage, which is what it actually is.
 
 One qualification belongs next to that count, measured by drawing rather than by reading shader
-source (`GLTF-472`). `LLGL` applied the product only where a base-colour texture was bound: it
-treated `PbrEffect`'s base-colour map as mandatory and refused the draw without one, so it could not
-draw a material carrying only a `baseColorFactor` — glTF's own default material, §3.9.2. `GLTF-474`
-removed that rule, along with `SDL_GPU`'s and `DILIGENT`'s own unreachable strides, so all three now
-draw every canonical glTF stride. **`OPENGLES1` is outside the seventeen and refuses**: it has no PBR path at all,
-and used to route a PBR draw to its fixed-function colour path, which reads a four-byte colour at
-offset 12 — the `NORMAL` floats on a stride-60 record. `GLTF-473` replaced that with an explicit
-refusal naming the semantic, the offset, what the record actually keeps there and the effect
-responsible, verified against a real `OpenGL ES-CM 1.1` driver. Nothing in the tree now accepts a
+source (`GLTF-472`). `GLTF-474` removed `SDL_GPU`'s own unreachable strides, so it now
+draws every canonical glTF stride. Nothing in the tree now accepts a
 valid core glTF primitive and renders it with different semantics.
 
 An **uncoloured** primitive is unaffected everywhere — its slot holds opaque white, the multiplier's

@@ -83,9 +83,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
-    constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
@@ -107,9 +104,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
-    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-165: this renderer has no declared backbuffer-readback contract."
 #endif
@@ -121,13 +115,8 @@ namespace
     //     (the rectangle-coordinate path through GraphicsDevice::GetBackBufferData is unchanged by this
     //     task, so this is Bgfx's own ReadBackbuffer, not the shared fix).
     //   - BGFX faults inside a runtime backbuffer resize (its bgfx::reset path, cf. REMED-GFX-158).
-#if defined(CNA_RENDERER_BGFX)
-    constexpr bool kSupportsSubRectangleBackbufferRead = false;
-    constexpr bool kSupportsRuntimeResize = false;
-#else
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
     constexpr bool kSupportsRuntimeResize = true;
-#endif
 
     // Two distinctive, non-default, non-square backbuffer sizes that cannot be confused with a common
     // 800x480 default, a 64x64 fixture default or each other. Odd on purpose: an off-by-one in a

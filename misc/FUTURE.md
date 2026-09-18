@@ -4,7 +4,8 @@ Date: 2026-08-09 (updated 2026-08-10 — all pre-expansion preparation is comple
 the final physical module/package layout, the renderer terminology normalization and the
 module-owned examples are all promoted to `develop`; reconciled 2026-08-21 — Phase 2's renderer
 table and Phase 5's body text had fallen behind the status table above, which was already being
-kept current; both are now brought in line with it)
+kept current; both are now brought in line with it; **revised 2026-09-17** — renderer expansion is
+no longer a roadmap commitment, see Phase 2 below)
 
 > **THIS DOCUMENT IS A ROADMAP, NOT AUTHORIZATION TO START FUTURE WORK.**
 >
@@ -19,21 +20,20 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | Horizon | Item | State |
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
-| **CURRENT** | Public CNA renderer identities | **50** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererSelection.cmake`, pinned by `scripts/check_renderer_identities.py`. 41 at the 2026-08-10 pre-expansion promotion, **−1** for the `ASCII` renderer identity (migrated to a renderer-neutral post-process effect), **+6** for `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL`, all integrated on the `11branches` integration branch, **+1** for `TINYGL` (2026-08-13, the first identity delivered from `docs/renderer-expansion-candidates.md`), **+1** for `IGL` (2026-08-15), **+1** for `PIXIJS`, **+1** for `NANOVG` (2026-08-19, the second identity delivered from `docs/renderer-expansion-candidates.md`, §A6) |
+| **CURRENT** | Public CNA renderer identities | **25** over 21 implementation families — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererIdentities.cmake`, pinned by `scripts/check_renderer_identities.py`. Twenty-six identities are retired (`docs/removed-renderers.md`) |
 | **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, plans/MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
-| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: seven additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL`, `IGL` — are implemented on their own lanes and integrated. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
+| **CLOSED** | Phase 2 — renderer expansion | **closed 2026-09-17**: the renderer set is curated rather than grown, and 25 identities were retired (`plans/plan_renderer_cleanup.md`) |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **CURRENT** | Phase 5 — glTF correctness campaign | **in progress on `feature/gltf`, ahead of its stated Phase 4 dependency** (started 2026-08-11 from `gltfissues.md`'s analysis and a forensic audit that reproduced eight defects, D1–D8, every one of which produced a *model that rendered*). The working record is `plans/plan_gltf.md`: 475 rows, **470 closed**, and all eight audit defects `fixed` in the corpus defect ledger. The evidence base is a generated 148-asset corpus, the exact L0–L6 numerical ladder run per commit under ASan+UBSan, a required production-viewer OPENGLES3 L7 gate with 137 deterministic PNGs plus 8 deterministic safe rejections, the 13-case pinned Khronos comparison and the completed 15-case Gate C viewer retake (`docs/gltf-conformance.md`). **`GLTF CORE 2.0 CORRECT` was declared on 2026-08-15** after all 20 §27.1 rows and the fresh four-renderer Gate B were green — and that declaration was later found premature (`plans/plan_gltf.md` §27.1.2: four core divergences sat inside rows that were green). The milestone in force is now the **qualified** `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3), which states renderer coverage beside it rather than inside it: 15 of 17 PBR renderers apply `COLOR_0` and the other 2 refuse such a draw by name. Phase 5 remains current, rather than complete: `GLTF-459` (**GLTF ROBUST**), optional-extension/renderer-specific L7 residue and the retrospective are still open |
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
-- CNA does **not** have 55 renderers. It has **50** (mechanically counted,
-  `scripts/check_renderer_identities.py`): 41 at the pre-expansion promotion, minus the removed
-  `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
-  `PORTABLEGL`, `TINYGL`, `IGL`, `PIXIJS` and `NANOVG`.
+- CNA does **not** have 50-something renderers. It has **25** public identities over 21
+  implementation families (mechanically counted, `scripts/check_renderer_identities.py`). The count
+  peaked at 50 and was deliberately reduced on 2026-09-17; a renderer count is not a goal.
 - Modularization is complete **and promoted**, including the final physical module/package
   layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
   physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —
@@ -48,9 +48,9 @@ Explicitly **not** true today, and not to be stated as true anywhere:
   found premature, and the milestone in force is the qualified
   **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`** (`plans/plan_gltf.md` §27.1.3) — the importer, the `.cnj`
   path, the vertex ABI and the effect/draw-parameter runtime model, with renderer coverage stated as
-  coverage. Four PBR renderers refuse `COLOR_0` by name, `LLGL` cannot draw a material with no
-  base-colour texture, and `OPENGLES1` renders a PBR draw through its fixed-function colour path
-  (`GLTF-473`). The separate `cna-gltf-viewer` completed the pinned Gate C
+  coverage: the PBR renderers that do not evaluate `COLOR_0` refuse the draw by name rather than
+  substituting the identity (`GLTF-465`), and the fixed-function renderer that read such a record
+  through the wrong byte offsets (`GLTF-473`) has since been retired. The separate `cna-gltf-viewer` completed the pinned Gate C
   retake, dual UV transport/selection is pixel- and Khronos-proven, and every remaining limitation
   is enumerated in `docs/gltf-limitations.md` and reported rather than silent. Optional material
   extensions and renderer-specific whole-corpus L7 policies remain §27.2/ROBUST work; the CORE
@@ -75,69 +75,27 @@ needed migrating.
 
 ---
 
-## Phase 2 — renderer expansion (IN PROGRESS)
+## Phase 2 — renderer expansion (CLOSED 2026-09-17)
 
-Unblocked by Phase 1's promotion and **in progress**. Every remaining item still requires its own
-fresh explicit owner instruction before work begins, and must start from the stable modularized
-public `develop` base, not from an older pre-modularization commit.
+This phase was written when adding renderers was the plan. It is closed, and its target-count
+arithmetic is withdrawn.
 
-Current public renderer count before this phase: **41** (the 2026-08-10 pre-expansion promotion).
-Six of the items in the table below have since been implemented and integrated — `OPENGLES2`,
-`FNA3D`, `OPENVG`, `SVG_DOM`, `IGL` and `PORTABLEGL` (rows 1, 2, 3, 4, 5 and 12) — plus `BLEND2D`,
-delivered on its own lane and no longer listed as a planned addition here. Three more identities,
-`TINYGL`, `PIXIJS` and `NANOVG`, landed from the separate `docs/renderer-expansion-candidates.md`
-roadmap and are not rows in this table. Together with the removal of the `ASCII` renderer identity
-(migrated to a renderer-neutral post-process effect, outside this phase's scope), the live count is
-**50** (mechanically counted, `scripts/check_renderer_identities.py`; see the status table at the
-top of this document). The remaining items in this table are still unstarted and each still
-requires its own fresh explicit owner instruction.
+**CNA intentionally maintains a curated renderer set.** A new renderer is added only when it
+provides meaningful platform coverage, compatibility value, architectural value, or a capability
+not reasonably covered by the existing renderer set. The number of renderers is not a goal, and no
+number is a target. On 2026-09-17 twenty-five identities were retired for exactly that reason
+(`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`), leaving 25 public identities over
+21 implementation families.
 
-This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer implementations.
+Of the additions this phase once listed, `OPENGLES2`, `FNA3D`, `SVG_DOM` and `PORTABLEGL` are live
+identities today; `OPENVG`, `IGL`, `BLEND2D`, `TINYGL`, `PIXIJS` and `NANOVG` were delivered and
+later retired. `NVRHI`, `KORE`, `METHANEKIT`, `LINAGX`, `TEMPEST`, `THORVG` and `REACT_DOM` were
+never started, and this document no longer proposes them: they survive only as research in
+[`../docs/renderer-expansion-candidates.md`](../docs/renderer-expansion-candidates.md), which is a
+catalogue, not a roadmap. Any future renderer needs a fresh explicit owner instruction that states
+which of the four criteria above it satisfies.
 
-### Planned additions
-
-| # | Public identity | Notes |
-|---:|---|---|
-| 1 | `OPENGLES2` | **INTEGRATED** (`feature/opengles2`) — public CNA OpenGL ES 2 renderer/profile, reusing the EasyGL ES 2 capability as its own fifth GL profile (`CNA_GL_PROFILE_OPENGLES2`) with truthful ES 2.0 capability and platform reporting. See `plans/plan_opengles2.md` / `docs/opengles2-renderer.md`. |
-| 2 | `FNA3D` | **INTEGRATED** (`feature/fna3d`) — FNA3D pinned at release 26.08, executing XNA's own compiled stock effects through MojoShader; selects SDL_GPU/Direct3D 11/OpenGL at runtime. See `docs/fna3d-renderer.md` and `plans/plan_fna3d.md`. |
-| 3 | `OPENVG` | **INTEGRATED** (`feature/openvg`) — OpenVG 1.1 via ShivaVG on a real desktop OpenGL context. 2D-only (no 3D pipeline, no render targets). See `docs/openvg-renderer.md`. |
-| 4 | `SVG_DOM` | **INTEGRATED** (`feature/svgdom`) — Emscripten-only, 2D-only; renders `SpriteBatch` output as real pooled SVG DOM elements (`<svg>`/`<image>`/`feColorMatrix`), distinct from both `CANVAS` (rasterized) and `HTML_DOM` (CSS `<div>`s). See `docs/svg-dom-renderer.md`; real-browser validation remains an external Emscripten-SDK gate. |
-| 5 | `IGL` | **INTEGRATED** (2026-08-15) — Facebook IGL, driving its own OpenGL (GLX) or Vulkan backend, fixed for the process by `CNA_IGL_BACKEND`. See `plans/plan_igl.md` / `docs/igl-renderer.md`. |
-| 6 | `NVRHI` | NVIDIA NVRHI. |
-| 7 | `KORE` | Kode/Kore — https://github.com/Kode/Kore |
-| 8 | `METHANEKIT` | MethaneKit RHI. |
-| 9 | `LINAGX` | LinaGX. |
-| 10 | `TEMPEST` | Tempest. |
-| 11 | `THORVG` | ThorVG. |
-| 12 | `PORTABLEGL` | **INTEGRATED** (`feature/portablegl`) — CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU or window required. See `docs/portablegl-renderer.md`. |
-| 13 | `REACT_DOM` | A distinct React/DOM-oriented CNA rendering implementation, **only if** the final architecture proves it can truthfully satisfy a useful CNA graphics contract. It must not be counted merely as a conceptual alias of an existing identity. |
-
-That is `OPENGLES2` + 12 new renderer implementations = **13 additions** in this table, of which
-seven are already integrated (the six marked INTEGRATED above, plus `BLEND2D`, which was delivered
-on its own lane and is no longer listed as a planned addition).
-
-### Target count
-
-    50 live today (mechanically counted, `scripts/check_renderer_identities.py`) + 7 still-unstarted
-    additions from the table above = 57 public CNA renderer identities if every remaining planned
-    identity in this table lands
-
-`TINYGL`, `PIXIJS` and `NANOVG` are already included in the 50 but are not rows in this table —
-they were delivered from the separate `docs/renderer-expansion-candidates.md` roadmap, outside
-Phase 2's original 13-item list.
-
-(The original 55 target assumed the `ASCII` renderer identity would remain; it was removed in
-favour of a renderer-neutral post-process effect, so the arithmetic ceiling from this table alone
-is one lower.)
-
-**This count is a TARGET, not an invariant.** After implementation, recount public identities
-mechanically from the actual registry and report the truthful result. If `REACT_DOM` cannot
-truthfully satisfy a CNA graphics contract, or any other planned identity is withdrawn, the real
-number is lower and the real number is what gets reported.
-
-### Requirements for every new renderer
-
-Each new renderer must:
+### Requirements for any renderer that is ever added
 
 - begin from one stable modularized `develop` baseline;
 - be implemented against the modular renderer system from inception, not retrofitted;
@@ -146,8 +104,8 @@ Each new renderer must:
 - have deterministic unsupported-path rejection;
 - provide permanent tests;
 - avoid silent fallback to another CNA renderer;
-- distinguish public CNA identity from internal native/RHI API choices, exactly as the existing
-  LLGL/Diligent/Sokol/bgfx/Skia identities already do.
+- distinguish public CNA identity from internal native/RHI API choices, exactly as the `FNA3D`
+  identity does today.
 
 ---
 

@@ -77,7 +77,7 @@ Two halves with different answers.
   so copying XNA's shape would have kept the undefined behaviour.
 - **ABI CLASSIFICATION** — **D**. The C boundary's own finiteness guards on the four XNA-shaped
   sprite routes are gone, so values this ABI refused now succeed.
-  `cna_sprite_batch_draw_mesh_ext` keeps its guard, having no XNA counterpart and so its own
+  `cna_sprite_batch_draw_mesh_ext` kept its guard, having no XNA counterpart and so its own
   contract.
 - **STATUS** — `RESOLVED`. **Downstream must re-review**: values this ABI refused now succeed. The
   Int32 destination range check is unchanged and still refuses a finite value too large to be a
@@ -95,8 +95,8 @@ Two halves with different answers.
   `_unsubscribe_content_lost` bind the render-target half that buffers already had.
 - **ABI CLASSIFICATION** — **D** for the event becoming real; **C** for the two additive routes.
 - **CNA TEST** — `ContentLostProbe`, `CApi_RenderTargetLifetimeSmoke`, and `ContentLostTests.cpp`.
-- **STATUS** — `RESOLVED where loss is real`. Only `directx9`, `direct2d` and `skia` report a device
-  reset; the other 44 renderer families never lose content and so never raise it. This is
+- **STATUS** — `RESOLVED where loss is real`. Only `directx9` and `direct2d` report a device
+  reset; every other renderer family never loses content and so never raises it. This is
   deliberate — firing on a caller-initiated `Reset` would make the event noise.
 - **CORRECTION, and it was a real defect.** An earlier revision of this row claimed "a write clears
   the flag". That was true of the dynamic buffers and false of the render targets:

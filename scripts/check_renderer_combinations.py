@@ -31,7 +31,6 @@ RULES = {
     # keep in step -- and listing one here would demand documentation for a restriction that no
     # longer exists.
     "platform partition": "platform",
-    "GLIDE": "GLIDE",
 }
 
 
@@ -42,7 +41,11 @@ def known_identities():
     block = re.search(r"IDENTITIES = \[(.*?)\n\]", text, re.S)
     if block is None:
         raise SystemExit("check_renderer_identities.py: IDENTITIES table not found")
-    return {name for name, _enum in re.findall(r'\("([A-Z0-9_]+)", "(\w+)"\)', block.group(1))}
+    # The table's rows are (cmake name, enum name, C ABI value); only the cmake name is wanted
+    # here. Matching the first two fields and ignoring the rest keeps this working if the row
+    # grows again -- it has once, when RRC-006 pinned the ABI value.
+    return {name for name, _enum in
+            re.findall(r'\("([A-Z0-9_]+)",\s*"(\w+)"', block.group(1))}
 
 
 def main():

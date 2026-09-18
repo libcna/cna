@@ -1,5 +1,7 @@
 # Lane `opengles1` — OpenGL ES 1.1 fixed-function graphics backend
 
+> **Retired renderer — historical record.** The `OPENGLES1` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 32 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 **Status: ✅ INTEGRATED 2026-08-05 · ADAPTATION · merge `df6b7cc6`** (signed, `--no-ff`,
 parents `99ae7d11` + `b811d76d`). Sixth logical lane, **second of Batch 1**. Nothing was pushed.
 

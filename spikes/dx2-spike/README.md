@@ -1,5 +1,7 @@
 # `dx2-spike` — `DX2-0` existence-gate spike findings (2026-07-20)
 
+> **Retired renderer — historical record.** The `DIRECTX2` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 24 is permanently reserved. This spike is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 Everything here has actually been run under real Wine `ddraw.dll`/`d3d.dll` (Wine 10.0~repack-6,
 `WINEPREFIX=$HOME/.wine-cna-dx1`, `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset). None of it is a
 sketch. Kept checked in per the same rationale as `dx9-spike/README.md`: rewriting working,

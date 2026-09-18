@@ -112,7 +112,6 @@ existing hand-rolled-JSON-parser convention (no new JSON library dependency) use
 |---|---|
 | EasyGL | Real, GPU-skinning proven end-to-end (`modules/gamer-services/examples/avatar_real_render_integration_test.cpp`, pixel-readback, passing) |
 | Vulkan | Real skinned pipeline exists (descriptor sets, per-frame bone UBO, dedicated pipeline); not yet smoke-tested for this feature |
-| Bgfx | Real bone-uniform wiring exists; not yet smoke-tested for this feature |
 | SDL_Renderer | 2D-only; any 3D resource creation (e.g. the `VertexBuffer`/`SkinnedEffect` this extension needs) already throws the pre-existing, tested `"SDL_Renderer does not support 3D: ..."` error — no new guard code was needed |
 
 ## Real content integration (Task 11.11)

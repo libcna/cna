@@ -67,17 +67,30 @@ The single most important design conclusion:
 > A terminal platform needs **no new renderer**. It needs a `IPlatformSurfacePresenter`
 > implementation.
 
-`IPlatformSurfacePresenter` (PLAT-127) exists because PLAT-3's audit found `SKIA` and `BLEND2D`
-rasterise on the CPU and use `SDL_Renderer` only to get finished pixels onto the window. Its
+`IPlatformSurfacePresenter` (PLAT-127) exists because PLAT-3's audit found CPU-rasterising
+renderers that used `SDL_Renderer` only to get finished pixels onto the window. Its
 contract is "present this RGBA buffer to this window, with scaling and vsync". A terminal is
 simply another device that can accept that buffer — it just quantises instead of blitting.
+`BLEND2D` (retired 2026-09-17) was the only renderer that presented CPU frames through
+`IPlatformSurfacePresenter`, and no renderer in the tree requests a presenter today.
+
+**What that costs, precisely** (`plans/plan_renderer_cleanup.md` `RRC-010`). The terminal platform
+itself is unaffected: it is compiled into every POSIX build, and its 134 unit tests — including the
+36 pseudo-TTY tests that drive `TerminalSurfacePresenter` directly — run and pass in
+`CnaPlatformTests`. What cannot happen today is a *game* reaching the terminal, because
+`GraphicsDevice` builds a presenter only for a renderer whose descriptor sets
+`needsSurfacePresenter`. The end-to-end demo test `TerminalSoftwareDemoIntegration` is therefore
+registered `DISABLED` rather than left failing, and re-enabling it is one property removal once a CPU
+renderer requests a presenter. `SOFTWARE` needs more than the flag to become that renderer:
+`SoftwareRenderer::Present()` is currently empty and the descriptor sets `needsWindow = false`, which
+makes `GraphicsDevice` drop the window the presenter is created against.
 
 ```text
 Game
   ↓
 GraphicsDevice
   ↓
-SOFTWARE / SKIA / BLEND2D  (CPU rasteriser — unchanged, knows nothing about terminals)
+a CPU rasteriser  (unchanged, knows nothing about terminals)
   ↓  RGBA8 frame
 IPlatformSurfacePresenter
   ├── Sdl3SurfacePresenter   → SDL_UpdateTexture / SDL_RenderPresent      (PLAT-128)
@@ -95,7 +108,7 @@ Consequences worth stating plainly:
   renderer refuses at selection time, deterministically, rather than crashing on a null handle.
 - **The "window" is the terminal viewport.** `IPlatformWindow::GetClientBounds()` returns
   `columns × cellWidth` by `rows × cellHeight` in virtual pixels. Resize arrives via `SIGWINCH`.
-- **Only CPU renderers are selectable.** `SOFTWARE`, `SKIA`, `BLEND2D`, `PORTABLEGL`, `HEADLESS`,
+- **Only CPU renderers are selectable.** `SOFTWARE`, `PORTABLEGL`, `HEADLESS`,
   `STUB`. That is a capability answer, not a limitation to hide.
 
 ---

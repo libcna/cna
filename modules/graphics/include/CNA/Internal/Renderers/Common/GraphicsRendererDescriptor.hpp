@@ -261,7 +261,26 @@ namespace CNA::Internal::Renderers
          * whichever macros are defined rather than for the family being constructed, so the
          * question moves here, where it is answered per family.
          *
-         * True for the CPU-raster families that present through the platform (SKIA, BLEND2D).
+         * True for a CPU-raster family that presents through the platform rather than owning a
+         * swap chain. **No renderer in the tree sets it today**: the two that did, SKIA and
+         * BLEND2D, were retired in 2026-08 and on 2026-09-17.
+         *
+         * **Audited and deliberately kept** (`plans/plan_renderer_cleanup.md` `RRC-010`), unlike
+         * the 2D mesh entry point that `RRC-009` audited the same way and deleted. The difference
+         * is which side of the seam is missing: that one had no *implementation* anywhere, so the
+         * call could only ever throw, while this flag's consumer is complete and tested and only
+         * its producer is absent. `GraphicsDevice::createRenderer()` reads it to build an
+         * `IPlatformSurfacePresenter`; that interface is pure-virtual on `IPlatform`, implemented by
+         * five retained backends, and `TerminalSurfacePresenter` turns the RGBA8 frame into ANSI
+         * under 36 passing pseudo-TTY tests. `cmake/RendererSelection.cmake` still reserves
+         * `TERMINAL` for `SOFTWARE`, `PORTABLEGL`, `HEADLESS` and `STUB`.
+         *
+         * So this is the one switch a working, retained output path is waiting on, not dead state:
+         * deleting it would force a later session to reintroduce the identical field. What it needs
+         * is a renderer that sets it -- which is feature work, and `RRC-010` records that BLEND2D's
+         * combination of `needsWindow = true`, `windowKind = Plain` and this flag is the shape that
+         * worked. Until then `TERMINAL` has no renderer feeding it, and its demo integration test is
+         * registered `DISABLED` rather than left failing.
          */
         bool needsSurfacePresenter = false;
 

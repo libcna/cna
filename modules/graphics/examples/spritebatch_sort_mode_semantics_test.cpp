@@ -24,11 +24,15 @@
 //      VULKAN-057 rather than papered over here: leg B reports the measurement and asserts only
 //      what Immediate must do regardless (draw every sprite, in place, in issue order).
 //
-//   3. The one thing the mode genuinely gates today is `DrawMeshEXT`, which refuses any sort mode
-//      but Immediate. Leg B2 uses it as the discriminator: under Deferred the sort-mode refusal
-//      must fire, under Immediate it must not (this renderer then refuses on capability grounds
-//      instead, which is a different message and a different reason). That leg fails the moment
-//      Begin() stops carrying the mode to the seam.
+//   3. What still discriminates the modes above the renderer is the device-level Immediate
+//      mutual exclusion: XNA coordinates every SpriteBatch on one GraphicsDevice and Immediate is
+//      mutually exclusive with all of them, so a second Begin() is refused in both directions
+//      involving Immediate and allowed for two Deferred batches. Leg B2 asserts all three, which
+//      fails the moment Begin() stops recording the mode. It replaces an earlier probe that used
+//      `SpriteBatch::DrawMeshEXT`'s Immediate-only refusal as the instrument; that entry point was
+//      removed with the renderer curation (plan_renderer_cleanup.md RRC-009) because no renderer
+//      implemented it. The mutual-exclusion route needs no renderer capability at all, so unlike
+//      the mesh probe it means the same thing on every renderer.
 //
 // Leg C covers SpriteSortMode::Texture, and its first draft asserted the opposite of the actual
 // contract, so the correction is recorded here rather than quietly dropped. "Two overlapping
@@ -48,8 +52,6 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
-#include "Microsoft/Xna/Framework/Vector2.hpp"
-#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -162,37 +164,32 @@ class SortModeSemanticsTest final : public Game
         return true;
     }
 
-    /// Issues a DrawMeshEXT under `mode` and reports which refusal, if any, came back.
-    /// `SpriteBatch::DrawMeshEXT` rejects every sort mode but Immediate BEFORE it touches the
-    /// renderer, so the message identifies whether Begin() carried the mode down to the seam.
-    enum class MeshOutcome { NoThrow, RefusedForSortMode, RefusedForCapability };
-
-    static MeshOutcome ProbeMeshGate(GraphicsDevice& dev, SpriteSortMode mode)
+    /// Opens a batch under `outer`, then tries to open a second one under `inner`, and reports
+    /// whether the device's Immediate mutual-exclusion refused the second Begin().
+    ///
+    /// This is the discriminator for "Begin() carried the mode down": XNA coordinates every
+    /// SpriteBatch on one GraphicsDevice, and Immediate is mutually exclusive with all of them,
+    /// so the refusal fires only when the first Begin() actually recorded Immediate. It needs no
+    /// renderer capability of any kind, so it means the same thing on every renderer.
+    static bool SecondBeginRefused(GraphicsDevice& dev, SpriteSortMode outer, SpriteSortMode inner)
     {
-        BasicEffect effect(dev);
-        const std::array<Vector2, 3> positions{Vector2(0, 0), Vector2(2, 0), Vector2(0, 2)};
-        const std::array<Color, 3> colors{Color(255, 255, 255, 255), Color(255, 255, 255, 255),
-                                          Color(255, 255, 255, 255)};
-        const std::array<Vector2, 3> uvs{Vector2(0, 0), Vector2(1, 0), Vector2(0, 1)};
-        const std::array<std::uint16_t, 3> indices{0, 1, 2};
-
-        SpriteBatch batch(dev);
-        batch.Begin(mode, BlendState::Opaque, nullptr, nullptr, nullptr);
-        MeshOutcome outcome = MeshOutcome::NoThrow;
-        try
+        SpriteBatch first(dev);
+        first.Begin(outer, BlendState::Opaque, nullptr, nullptr, nullptr);
+        bool refused = false;
         {
-            batch.DrawMeshEXT(effect, positions.data(), colors.data(), uvs.data(), 3,
-                              indices.data(), 3);
+            SpriteBatch second(dev);
+            try
+            {
+                second.Begin(inner, BlendState::Opaque, nullptr, nullptr, nullptr);
+                try { second.End(); } catch (const std::exception&) { }
+            }
+            catch (const std::exception&)
+            {
+                refused = true;
+            }
         }
-        catch (const std::exception& e)
-        {
-            const std::string what = e.what();
-            outcome = what.find("requires SpriteSortMode::Immediate") != std::string::npos
-                          ? MeshOutcome::RefusedForSortMode
-                          : MeshOutcome::RefusedForCapability;
-        }
-        try { batch.End(); } catch (const std::exception&) { /* a refused mesh must not wedge End */ }
-        return outcome;
+        try { first.End(); } catch (const std::exception&) { }
+        return refused;
     }
 
 protected:
@@ -244,20 +241,25 @@ protected:
             std::fflush(stdout);
         }
 
-        // B2. The sort mode does reach the renderer seam, and DrawMeshEXT is what proves it: it
-        //     refuses every mode but Immediate, before the renderer is consulted. Under Immediate
-        //     that refusal must NOT fire -- this renderer may still refuse the mesh on capability
-        //     grounds, which is a different message and a different reason.
+        // B2. Begin() records the sort mode, and the device-level Immediate mutual exclusion is
+        //     what proves it: an Immediate batch blocks any second batch, and an active Immediate
+        //     batch blocks a Deferred one, while two Deferred batches may coexist. All three
+        //     answers come from `sortMode_` as Begin() stored it, so this leg fails the moment
+        //     Begin() stops carrying the mode -- which is exactly what it is here to catch.
         {
-            const MeshOutcome deferredGate  = ProbeMeshGate(dev, SpriteSortMode::Deferred);
-            const MeshOutcome immediateGate = ProbeMeshGate(dev, SpriteSortMode::Immediate);
-            check(deferredGate == MeshOutcome::RefusedForSortMode &&
-                      immediateGate != MeshOutcome::RefusedForSortMode,
-                  "B2 Begin() carries the sort mode to the seam: Deferred refused the mesh for its "
-                  "sort mode, Immediate did not (" +
-                      std::string(immediateGate == MeshOutcome::NoThrow ? "accepted"
-                                                                        : "refused on capability") +
-                      ")");
+            const bool immediateThenDeferred =
+                SecondBeginRefused(dev, SpriteSortMode::Immediate, SpriteSortMode::Deferred);
+            const bool deferredThenImmediate =
+                SecondBeginRefused(dev, SpriteSortMode::Deferred, SpriteSortMode::Immediate);
+            const bool deferredThenDeferred =
+                SecondBeginRefused(dev, SpriteSortMode::Deferred, SpriteSortMode::Deferred);
+            check(immediateThenDeferred && deferredThenImmediate && !deferredThenDeferred,
+                  "B2 Begin() carries the sort mode: Immediate+Deferred refused (" +
+                      std::string(immediateThenDeferred ? "yes" : "no") +
+                      "), Deferred+Immediate refused (" +
+                      std::string(deferredThenImmediate ? "yes" : "no") +
+                      "), Deferred+Deferred allowed (" +
+                      std::string(deferredThenDeferred ? "no" : "yes") + ")");
         }
 
         // C. Texture sort mode: nothing is lost, and grouping never reorders within a group.

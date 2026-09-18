@@ -415,12 +415,9 @@ set(_cna_framework_modules
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
-    bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
-    directx7 directx8 directx9 directx10 directx11 directx12
-    easygl fna3d freedirect gdi glide headless html-dom igl llgl magnum metal nanovg opengl1
-    opengl2 opengl4 opengles1 openvg pixijs portablegl rlgl sdl-gpu sdl-renderer software sokol
-    stub svg-dom tinygl vulkan
-    webgpu wicked common/d3d common/mojoshader)
+    canvas direct2d directx9 directx11 directx12 easygl fna3d freedirect gdi headless html-dom
+    metal opengl4 portablegl sdl-gpu sdl-renderer software stub svg-dom vulkan webgpu
+    common/d3d common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"

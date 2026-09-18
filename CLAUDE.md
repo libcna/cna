@@ -428,8 +428,6 @@ directory and is shared by all multi-renderer work.
   scripts and backups; build artifacts there are discarded, forcing wasteful full rebuilds.
 - **Use `ccache`** when available (`CNA_USE_CCACHE=ON`; pass
   `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` on a fresh configure if the cache shows it NOTFOUND).
-- **bgfx:** do not re-clone. Prefer a reusable `~/deps/bgfx`; the bgfx `shaderc` tool (needed to
-  regenerate `bgfx_shaders.hpp`) can also be built from `cmake-build-bgfx/_deps/bgfx_cmake-src/`.
 - **Build parallelism is not capped.** Earlier revisions of this file required `-j3`/`-j4` because
   the machine had a cooling fault; that hardware was repaired on 2026-08-22 and the ceiling was
   lifted with it. Use the whole machine — `-j$(nproc)` or plain `--parallel`. The one thing still
@@ -541,53 +539,30 @@ See `docs/platform-abstraction.md` for the contract and implementation checklist
 task/evidence log is `plans/plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
-(`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
-`MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` |
-`HTML_DOM` | `NANOVG` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
-`DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
-`WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL` | `IGL` | `PIXIJS` | `RLGL`). These are exactly 50
-public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
-`ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
-`CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
+(`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `VULKAN` | `WEBGPU` |
+`HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` | `HTML_DOM` |
+`FREEDIRECT` | `DIRECTX9` | `SDL_GPU` | `OPENGL4` | `GDI` | `METAL` | `FNA3D` | `SVG_DOM` |
+`PORTABLEGL`). These are exactly **25 public identities** over 21 implementation families; EasyGL
+remains an internal implementation shared by five GL profiles. The canonical list lives in
+`cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
+
+CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
+meaningful platform coverage, compatibility value, architectural value, or a capability not
+reasonably covered by the existing set -- never because the count would grow. Twenty-six identities
+are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`,
+`OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`, `OPENVG`,
+`TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`), and the former `ASCII` identity was replaced by the
+renderer-neutral `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`, see
+`docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
+with its permanently reserved C ABI value; its number is never reassigned. Do not resurrect one
+without a fresh owner instruction -- see `plans/plan_renderer_cleanup.md` and
+`docs/removed-renderers.md`.
+
 `WEBGPU` is experimental but past a 2D baseline, with a real 3D route (stock effects, instancing,
 render targets, MSAA, fog parity, GPU-native compressed textures, stencil ops) and Emscripten
 browser support. `plans/plan_webgpu.md`'s top-of-file status summary is the single source of truth
 for current `WEBGPU-*` task status — do not duplicate it here. See `docs/webgpu-renderer.md` for
 the capability boundary.
-`MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
-`plans/plan_magnum.md` for its own capability boundary.
-`DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
-(DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
-`plans/plan_diligent.md` and `docs/diligent-renderer.md`.
-`TINYGL` is the fixed-function CPU OpenGL renderer (C-Chads/tinygl) -- the fixed-function
-counterpart to `PORTABLEGL`'s shader-era CPU OpenGL. Its transparency is a 1-bit colour-key cutout,
-not alpha blending, and it has no stencil, scissor, render targets or shaders of any kind; see
-`docs/tinygl-renderer.md` and `plans/plan_tinygl.md` for the full boundary.
-`IGL` (facebook/igl) is the second portable-abstraction identity after `LLGL`: it drives IGL's own
-OpenGL (GLX) or Vulkan backend, fixed for the process by `CNA_IGL_BACKEND` because the platform
-window's render intent must be decided before the renderer exists -- see `plans/plan_igl.md` and
-`docs/igl-renderer.md`.
-`NANOVG` is a 2D-only renderer that puts `SpriteBatch` output through NanoVG's own compiled GLSL
-vector-rasterization pipeline (memononen/nanovg, GL2 backend) on a desktop OpenGL context it
-creates itself; see `docs/nanovg-renderer.md` and `plans/plan_nanovg.md`.
-`RLGL` is the experimental standalone-rlgl renderer on a CNA-owned desktop OpenGL 3.3 core
-context. Its device/clear/readback/present/resize slice is runtime-validated on Linux; texture,
-draw, effect and render-target work remains explicit and unavailable. See `docs/rlgl-renderer.md`
-and `plans/plan_rlgl.md`.
-The `SKIA` identity was retired on 2026-08-30 and is the one renderer NOT restored on 2026-09-04;
-its identity number stays a permanent gap in the C ABI range. See `docs/removed-renderers.md`.
-`PIXIJS` is the newest renderer, Emscripten-only and 2D-only in its v1 scope, rendering
-`SpriteBatch` output through pooled `PIXI.Sprite` objects (pixijs.com) rather than raw WebGL calls
-or Canvas2D/DOM primitives. It builds under a real Emscripten toolchain and its draw path is
-pixel-verified in a real browser (`scripts/run_pixijs_browser_tests.mjs`); its
-browser-independent contracts also build and run natively via `CNA_BUILD_PIXIJS_HOST_TESTS=ON`.
-Because PixiJS is a retained scene graph and `SpriteBatch` is not, this renderer **commits at every
-submission point** -- `End()` (and each `Draw()` in `SpriteSortMode::Immediate`) rasterizes into
-the active target rather than leaving sprites parented for a later `Present()`. Preserve that when
-changing it: ordering, per-batch blend/sampler state and texture lifetime all depend on it. See
-`plans/plan_pixijs.md` and `docs/pixijs-renderer.md` for the current status and the capability boundary
-(no 3D, no custom `Effect`, no MRT, no depth/stencil).
 
 ---
 
@@ -672,9 +647,8 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 # Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
 
-# Magnum — required only for CNA_GRAPHICS_RENDERER=MAGNUM (desktop OpenGL). Magnum itself is
-# fetched/built by cmake/ThirdPartyMagnum.cmake; these are the system GL/X11 headers it links
-# against. Add libegl1-mesa-dev as well when configuring with -DCNA_MAGNUM_USE_EGL=ON.
+# Desktop OpenGL and X11 development headers -- needed by the desktop GL renderers (OPENGL33,
+# OPENGL4, OPENGLES2/3) and by the X11 platform backend.
 sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev
 
 # Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore

@@ -1470,39 +1470,6 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
                 cna_sprite_batch_draw_string(sprite_batch, &foreign) ==
                     CNA_RESULT_INVALID_HANDLE;
 
-            /* A mesh draw needs an effect from the same game and validated arrays. */
-            CNA_EffectHandle effect = CNA_INVALID_HANDLE;
-            if (ok && cna_basic_effect_create(graphics_device, &effect) == CNA_RESULT_SUCCESS) {
-                const CNA_Vector2 positions[3] = {{0.0F, 0.0F}, {4.0F, 0.0F}, {0.0F, 4.0F}};
-                const CNA_Color colors[3] = {
-                    {255U, 0U, 0U, 255U}, {0U, 255U, 0U, 255U}, {0U, 0U, 255U, 255U}};
-                const CNA_Vector2 uvs[3] = {{0.0F, 0.0F}, {1.0F, 0.0F}, {0.0F, 1.0F}};
-                const uint16_t mesh_indices[3] = {0U, 1U, 2U};
-                CNA_SpriteMeshEXT mesh = {
-                    sizeof(CNA_SpriteMeshEXT), UINT32_C(1), effect, positions, colors, uvs,
-                    mesh_indices, 3U, 3U};
-                CNA_SpriteMeshEXT empty = mesh;
-                empty.vertex_count = 0U;
-                CNA_SpriteMeshEXT no_positions = mesh;
-                no_positions.positions = 0;
-                ok = is_supported(cna_sprite_batch_draw_mesh_ext(sprite_batch, &mesh)) &&
-                    cna_sprite_batch_draw_mesh_ext(sprite_batch, 0) ==
-                        CNA_RESULT_INVALID_ARGUMENT &&
-                    cna_sprite_batch_draw_mesh_ext(sprite_batch, &empty) ==
-                        CNA_RESULT_INVALID_ARGUMENT &&
-                    cna_sprite_batch_draw_mesh_ext(sprite_batch, &no_positions) ==
-                        CNA_RESULT_INVALID_ARGUMENT;
-                /* Optional colors and texture coordinates default cleanly. */
-                if (ok) {
-                    CNA_SpriteMeshEXT minimal = mesh;
-                    minimal.colors = 0;
-                    minimal.texture_coordinates = 0;
-                    ok = is_supported(cna_sprite_batch_draw_mesh_ext(sprite_batch, &minimal));
-                }
-                ok = ok && cna_effect_destroy(effect) == CNA_RESULT_SUCCESS;
-            } else {
-                ok = 0;
-            }
             ok = ok && is_supported(cna_sprite_batch_end(sprite_batch));
         } else if (begun != CNA_RESULT_NOT_SUPPORTED) {
             ok = 0;

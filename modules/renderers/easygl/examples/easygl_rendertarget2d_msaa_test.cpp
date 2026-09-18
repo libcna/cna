@@ -66,7 +66,7 @@ class RenderTarget2DMsaaTest : public Game
                            DepthFormat::None, multiSampleCount, RenderTargetUsage::DiscardContents);
 
         device.setBlendStateProperty(BlendState::Opaque);
-        // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
+        // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): once
         // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this triangle's winding is culled unless explicitly disabled.
         device.setRasterizerStateProperty(RasterizerState::CullNone);

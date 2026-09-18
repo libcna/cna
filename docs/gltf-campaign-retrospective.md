@@ -25,7 +25,7 @@ were not the hard features; they were the **rules that were already implemented 
 | Implemented, and wrong in a way that renders | `GLTF-461`: flat normals *averaged* at shared vertices instead of split per face | A vertex-split that renumbers every per-vertex stream including morph deltas |
 | Implemented, and abandoned under a combination | `GLTF-462`/`463`: `COLOR_0` on a metallic-roughness material dropped the whole material model, taking the authored `NORMAL` with it | Two new vertex strides and an ABI change across seventeen renderers |
 | Declared, and unreachable | `GLTF-472`: two renderers' complete `COLOR_0` shaders sat behind a draw route that never selected them | One predicate each — and a new class of test |
-| Refused for the wrong reason | `GLTF-473`: `OPENGLES1` read a PBR record's `NORMAL` floats as a vertex colour | A shared guard, and a rule about *when* a refusal counts |
+| Refused for the wrong reason | `GLTF-473`: `OPENGLES1` (retired 2026-09-17) read a PBR record's `NORMAL` floats as a vertex colour | A shared guard, and a rule about *when* a refusal counts |
 
 The pattern across all four rows: **the implementation was present and the wiring was not.** That is
 worth naming because it is invisible to the review style this project otherwise does well — reading
@@ -48,7 +48,8 @@ value was not evenly distributed either.
 
 **The gap the ladder did not cover, and the lesson of the last week:** every layer above reads either
 data or source. None of them asks whether a draw *arrives*. Five defects lived in exactly that gap —
-`SDL_GPU` and `DILIGENT`'s unreachable `COLOR_0` (`GLTF-472`), `OPENGLES1`'s misread PBR record
+`SDL_GPU` and `DILIGENT`'s (retired 2026-09-17) unreachable `COLOR_0` (`GLTF-472`), `OPENGLES1`'s
+(retired 2026-09-17) misread PBR record
 (`GLTF-473`), and `OPENGL4`'s and `DILIGENT`'s stride-chosen programs (`GLTF-475`) — and **every
 static inventory in the repository reported all five as correct**, because each renderer genuinely
 declared the layout and genuinely contained the shader expression the audit greps for.
@@ -67,7 +68,7 @@ was drawing the same input **black**. A source audit finds the instance it was l
 draw enumerates the instances that exist.
 
 **And a sixth, which is a different lesson: a label is not evidence either.** `GLTF-476` began by
-asking what the specular inventory's "factor-only" label for `IGL` was based on. Nothing: the
+asking what the specular inventory's "factor-only" label for `IGL` (retired 2026-09-17) was based on. Nothing: the
 partition asked whether a renderer's sources mention `pbrNormalMap`, and `IGL` did. Counting the PBR
 draw parameters each renderer actually names put `IGL` at **6 of 20** against 14–20 for the other
 fifteen, and the fourteen it dropped included four **core** glTF 2.0 material inputs — normal scale,
@@ -104,7 +105,7 @@ the last week; **three were false**:
 | Recorded blocker | Reality |
 |---|---|
 | DirectX11 L7 "needs a DXVK'd Wine prefix this environment does not have" | It had one (`GLTF-471`) |
-| `OPENGLES1` cannot be run — no ES 1.1 driver | The side-by-side Mesa build from 2026-07-22 was still installed (`GLTF-473`) |
+| `OPENGLES1` (retired 2026-09-17) cannot be run — no ES 1.1 driver | The side-by-side Mesa build from 2026-07-22 was still installed (`GLTF-473`) |
 | DirectX9 shaders "regenerated only through the pinned `d3dcompiler_47.dll` … which this environment does not have" | The DLL was in `~/.cache/winetricks`, SHA-256-identical to the pinned value (`GLTF-465`) |
 | WebGPU needs a wgpu-native artifact | **True** — it was downloaded, once, into `~/deps` |
 

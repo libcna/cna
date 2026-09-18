@@ -1,12 +1,12 @@
 # INPUT-CI-001 / INPUT-CI-002 / INPUT-CI-005 — CI for the Input track.
 #
 # Matrix of build configurations, each running the (backend-agnostic) input test suite headless:
-#   - OPENGLES3 / SDL_RENDERER / Vulkan / bgfx : four renderer identities.
+#   - OPENGLES3 / SDL_RENDERER / Vulkan        : three renderer identities.
 #   - ASan+UBSan (on OPENGLES3)                : built with -DCNA_SANITIZE=address,undefined; any UB /
 #                                             memory error fails the job (halt_on_error=1).
 # All sibling repos (sharp-runtime, easy-gl, meta-gl) are public and clone over HTTPS with no token.
-# third_party/enet is committed here; SDL/SDL_image/SDL_mixer/googletest are submodules; bgfx is
-# FetchContent'd at configure time. The prebuilt SDL is cached (built uninstrumented, shared by all).
+# third_party/enet is committed here; SDL/SDL_image/SDL_mixer/googletest are submodules. The prebuilt
+# SDL is cached (built uninstrumented, shared by all).
 name: input-ci
 
 on:
@@ -51,11 +51,6 @@ jobs:
             ubsan_options: ""
           - name: Vulkan
             renderer: VULKAN
-            sanitize: ""
-            asan_options: ""
-            ubsan_options: ""
-          - name: bgfx
-            renderer: BGFX
             sanitize: ""
             asan_options: ""
             ubsan_options: ""

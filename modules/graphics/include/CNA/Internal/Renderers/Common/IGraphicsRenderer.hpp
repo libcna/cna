@@ -75,7 +75,7 @@ namespace CNA::Internal::Renderers
      * renderer's existing factor/function→native mapping is untouched; only this genuinely-new
      * output state is added. `colorWriteChannels[i]` holds the raw XNA `ColorWriteChannels` int
      * (bit0=R, bit1=G, bit2=B, bit3=A; 15 = All) — a bit layout identical to the native colour
-     * masks of Vulkan/D3D9/D3D11/D3D12/WebGPU/SDL_GPU/bgfx, so the value is usable directly on
+     * masks of Vulkan/D3D9/D3D11/D3D12/WebGPU/SDL_GPU, so the value is usable directly on
      * mask-capable renderers and via the ColorWriteHas* helpers on boolean renderers.
      */
     struct BlendWriteState
@@ -1095,7 +1095,8 @@ namespace CNA::Internal::Renderers
         // rendered cube face back to the CPU" and makes `TextureCube::GetData` raise
         // System::NotSupportedException (REMED-GFX-130).
         //
-        // REMED-GFX-134 implemented it on every renderer that owns a rendered cube resource:
+        // REMED-GFX-134 implemented it on every renderer that owned a rendered cube resource at
+        // the time (Bgfx, named below, was retired on 2026-09-17):
         // EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 joined SdlGpu and WebGPU, each reusing the
         // mechanism its plain-TextureCube sibling already uses in the same file plus that
         // renderer's own rendered-face specifics -- REMED-GFX-067's `originBottomLeft` row
@@ -1104,7 +1105,7 @@ namespace CNA::Internal::Renderers
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (native 2D, ASCII, Canvas, DIRECTX3, GDI)
+        // that create no cube render target at all (native 2D, Canvas, FreeDirect, GDI)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -1223,7 +1224,7 @@ namespace CNA::Internal::Renderers
      * was missing was any SUPPORTED way for an application to ask which payload dialect it should
      * supply, so the only way to know was to infer it from the build's renderer identity. That is
      * wrong twice over: in a multi-renderer build the identity is not the active renderer, and a
-     * renderer that is itself an abstraction over several native APIs (IGL, LLGL, Diligent) does
+     * renderer that is itself an abstraction over several native APIs (FNA3D) does
      * not have one answer per build at all -- IGL's is chosen per process by `CNA_IGL_BACKEND`.
      *
      * `Unknown` is the honest default and what every renderer that has not declared one answers.
@@ -1559,27 +1560,6 @@ namespace CNA::Internal::Renderers
                            quantise(destinationWidth), quantise(destinationHeight)),
                  sourceRectangle, color, rotation, origin, effects, layerDepth);
         }
-
-        /**
-         * SKIA-157: draws a triangle-list 2D mesh through @p effect's own bound custom shader
-         * (SKIA-144-156's bounded SkVertices/SkSL mesh ABI) -- an entirely different draw
-         * primitive from every `Draw()` overload above, which always submits exactly one
-         * quad through the built-in or `cnaTexture0`-shaped sprite shader. Composes with the
-         * active `SetTransformMatrix()` the same way ordinary sprite draws do; @p colors/@p uvs
-         * may be null if @p effect's compiled program declares no vertex-colour combine / no
-         * texture children respectively. Default: throws, since only a renderer with a real mesh
-         * ABI (Skia) can implement this -- every other renderer's `ISpriteBatchRenderer` correctly
-         * keeps rejecting it rather than silently drawing nothing or falling back to sprite mode.
-         */
-        virtual void DrawMeshEXT(
-            Effect& /*effect*/,
-            const Vector2* /*positions*/, const Color* /*colors*/, const Vector2* /*uvs*/,
-            int /*vertexCount*/, const std::uint16_t* /*indices*/, int /*indexCount*/)
-        {
-            throw std::runtime_error(
-                "This renderer does not support DrawMeshEXT (SKIA-144-157's bounded SkVertices "
-                "mesh ABI is Skia-specific).");
-        }
     };
 
     /**
@@ -1603,7 +1583,7 @@ namespace CNA::Internal::Renderers
     {
         /// Public binding slot -- the stream's index in the `SetVertexBuffers` array. Also the
         /// native input slot on every API that has one (D3D11/D3D12 `InputSlot`, Vulkan
-        /// `binding`, WebGPU vertex-buffer index, bgfx stream index, SDL_GPU `slot`).
+        /// `binding`, WebGPU vertex-buffer index, SDL_GPU `slot`).
         int slot = 0;
 
         /// Renderer resource for this stream. Never null for `slot < vertexStreamCount`. Only
@@ -1790,8 +1770,8 @@ namespace CNA::Internal::Renderers
         /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Renderers that generate both lighting
-        /// families honour this (D3D9, D3D11, D3D12, WebGPU, Vulkan, bgfx, EasyGL, OpenGL4,
-        /// Magnum, Diligent); fixed-function renderers evaluate lighting per vertex by construction; a
+        /// families honour this (D3D9, D3D11, D3D12, WebGPU, Vulkan, EasyGL, OpenGL4);
+        /// fixed-function renderers evaluate lighting per vertex by construction; a
         /// renderer with neither renders per-pixel regardless of its value -- a known, tracked
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
         /// when `lightingEnabled` is true.
@@ -2913,7 +2893,7 @@ namespace CNA::Internal::Renderers
         /// Microsoft::Xna::Framework::Graphics::DepthFormat (None=0, Depth16=1, Depth24=2,
         /// Depth24Stencil8=3), passed as `int` to avoid coupling this renderer-agnostic header
         /// to the XNA namespace — mirrors CreateTexture3D/CreateTextureCube's `surfaceFormat`
-        /// convention. EasyGL and Bgfx honor the exact requested format (None omits the
+        /// convention. EasyGL honors the exact requested format (None omits the
         /// depth/stencil attachment entirely); **Vulkan now does too** — Task 911 made the
         /// architectural change this comment used to describe as pending, so each render target
         /// picks its own real `VkFormat` via `PickDepthFormat` (`VK_FORMAT_UNDEFINED` for
@@ -3374,9 +3354,12 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool SupportsDepthBuffer() const { return SupportsDepthStencil(); }
 
         /// Returns whether the default back buffer has a usable stencil plane. Kept separate
-        /// from SupportsDepthBuffer() because historical APIs such as Glide expose Z but no
-        /// stencil; GraphicsDevice::Clear must then retain a requested depth clear and discard
-        /// only the impossible stencil portion.
+        /// from SupportsDepthBuffer() because an API can expose Z without stencil -- the case
+        /// that motivated the split was Glide, a renderer retired on 2026-09-17, and no renderer
+        /// in the tree overrides the two differently today. The split stays because the
+        /// distinction is a property of graphics APIs rather than of that renderer:
+        /// GraphicsDevice::Clear must retain a requested depth clear and discard only the
+        /// impossible stencil portion, which it cannot do if the two questions share an answer.
         [[nodiscard]] virtual bool SupportsStencilBuffer() const { return SupportsDepthStencil(); }
 
         /**
@@ -4083,7 +4066,9 @@ namespace CNA::Internal::Renderers
     // against (EasyGL's own suite carried a comment about the resulting ambiguity), and it is a
     // standing invitation for a newly added family to define the colliding symbol and appear to
     // work -- which PIXIJS did, undetected until a build tried to link it beside another
-    // renderer. scripts/check_runtime_renderer_discipline.py now fails on such a definition.
+    // renderer. (That renderer was retired on 2026-09-17; the trap it walked into was never
+    // specific to it, which is why this note outlives it.)
+    // scripts/check_runtime_renderer_discipline.py now fails on such a definition.
     //
     // The creation contract itself (GraphicsRendererCreateArgs above) deliberately contains only
     // platform value types; renderer-family-specific native API work starts behind that boundary.

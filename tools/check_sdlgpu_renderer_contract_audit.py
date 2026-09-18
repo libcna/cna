@@ -166,8 +166,6 @@ OUT_GRAPHICS_METHODS = {
     "DebugRestoreContext",
 }
 
-OUT_SPRITE_METHODS = {"DrawMeshEXT"}
-
 OUT_INTERFACE_METHODS = {
     "IOcclusionQueryRenderer": {"PixelCountIsPreciseEXT"},
     "ITextureCubeRenderer": {"BindGL", "GetSizeEXT", "GetSurfaceFormatEXT"},
@@ -646,8 +644,6 @@ def scope_for(interface: str, name: str) -> str:
         return "out"
     if interface == "IGraphicsRenderer" and name in OUT_GRAPHICS_METHODS:
         return "out"
-    if interface == "ISpriteBatchRenderer" and name in OUT_SPRITE_METHODS:
-        return "out"
     if name in OUT_INTERFACE_METHODS.get(interface, set()):
         return "out"
     return "classic-xna-observable"
@@ -663,8 +659,6 @@ def evidence_for(interface: str, name: str, scope: str) -> str:
         if name not in GRAPHICS_EVIDENCE:
             raise RuntimeError(f"no reviewed evidence owner for IGraphicsRenderer::{name}")
         return GRAPHICS_EVIDENCE[name]
-    if interface == "ISpriteBatchRenderer" and scope == "out":
-        return "out: modern CNAEXT mesh submission"
     return INTERFACE_EVIDENCE[interface]
 
 

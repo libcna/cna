@@ -65,9 +65,9 @@ jobs:
             display: false
           # A pseudo-TTY test runs a real 2D game, keyboard byte, resize and terminal restore;
           # no X11/Wayland service is involved.
-          - name: Terminal + Blend2D + Null audio
+          - name: Terminal + Software + Null audio
             platform: TERMINAL
-            renderer: BLEND2D
+            renderer: SOFTWARE
             audio: "NULL"
             display: false
     env:
@@ -195,9 +195,14 @@ jobs:
         working-directory: build
         run: env -u DISPLAY -u WAYLAND_DISPLAY ./cna_demo_2d --smoke 6
 
+      # Currently reports "Not Run (Disabled)" and passes: the integration test needs a renderer
+      # whose descriptor sets needsSurfacePresenter, and none does since BLEND2D was retired
+      # (plans/plan_renderer_cleanup.md RRC-010). The step stays so the leg re-arms by itself the
+      # moment that property is removed. The TERMINAL platform's own 134 unit tests, including the
+      # 36 pseudo-TTY presenter tests, run in the CnaPlatformTests step above and are unaffected.
       - name: Run terminal 2D demo integration through a pseudo-TTY
         if: matrix.platform == 'TERMINAL'
-        run: ctest --test-dir build -R '^TerminalBlend2DDemoIntegration$' --output-on-failure
+        run: ctest --test-dir build -R '^TerminalSoftwareDemoIntegration$' --output-on-failure
 
       # Run once rather than six times; configure already invokes the same checks for every
       # matrix cell, while this explicit step keeps their commands visible in the CI log.

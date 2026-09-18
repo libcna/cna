@@ -1,5 +1,7 @@
 # NanoVG existence-gate spike
 
+> **Retired renderer — historical record.** The `NANOVG` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 50 is permanently reserved. This spike is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 Standalone probe proving [NanoVG](https://github.com/memononen/nanovg) (memononen/nanovg, pinned
 commit `ce3bf745eb2d2dbc14a50bf2446783f691ac4353`, zlib license) actually renders under this
 project's toolchain and Xvfb-based headless validation environment, before any CNA renderer code

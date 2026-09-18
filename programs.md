@@ -30,7 +30,7 @@ sudo apt-get install -y \
   apitrace apitrace-tracers
 ```
 
-That's the full desktop-Linux (EasyGL + Vulkan + Bgfx + SDL_Renderer) build+test+debug set. See
+That's the full desktop-Linux (EasyGL + Vulkan + SDL_Renderer) build+test+debug set. See
 below for what each line is for, and what's optional.
 
 ---
@@ -72,9 +72,8 @@ offer that video driver).
 - **X11 libs** (`libx11-dev` + `libxext-dev`/`libxrandr-dev`/`libxinerama-dev`/`libxcursor-dev`/
   `libxi-dev`/`libxfixes-dev`/`libxss-dev`) — SDL3's X11 video backend.
 - **`libgl1-mesa-dev`, `libegl1-mesa-dev`, `libglu1-mesa-dev`, `mesa-common-dev`** — OpenGL/EGL
-  headers. Needed by: SDL3's own GL context creation, the `EASYGL` backend (`../easy-gl`, GL ES
-  3.2 via the `easy-gl` wrapper), and the `BGFX` backend (bgfx creates its own context via **EGL**
-  on Linux — see `bgfx/src/glcontext_egl.cpp` — not GLX).
+  headers. Needed by SDL3's own GL context creation and the `EASYGL` backend (`../easy-gl`, GL ES
+  3.2 via the `easy-gl` wrapper).
 - **`libasound2-dev`, `libpulse-dev`** — SDL3's audio backends (ALSA, PulseAudio), used by
   `Microsoft::Xna::Framework::Audio`/`SDL3_mixer`.
 
@@ -130,8 +129,8 @@ sudo apt-get install -y xvfb mesa-utils
   note"). Start it with e.g. `Xvfb :99 -screen 0 1280x1024x24 &` before running any
   `SDL_VIDEODRIVER=x11 DISPLAY=:99 ...` command.
 - **`mesa-utils`** — provides `glxinfo` (`glxinfo -B` is the fastest way to check what GL version a
-  given `DISPLAY` actually negotiates/supports — this was essential when root-causing why bgfx's
-  OpenGL backend reports "OpenGL 2.1" even though the underlying driver supports much more).
+  given `DISPLAY` actually negotiates/supports — essential when root-causing why a GL backend
+  reports a lower version than the underlying driver actually supports).
 
 > **Note on real GPU vs. software rendering**: if the target machine has a real GPU with proper
 > kernel driver support (confirmed in this project's own sandbox: `glxinfo -B` on the *real* display
@@ -139,8 +138,8 @@ sudo apt-get install -y xvfb mesa-utils
 > still typically fall back to **llvmpipe** (software Mesa) unless it's specifically configured with
 > GPU passthrough (e.g. `Xvfb` + DRI3, or running tests against the real display instead). Both
 > paths work for this project's tests; llvmpipe is just slower and has its own quirks (documented in
-> `NEXT.md` §5 — e.g. bgfx's OpenGL backend negotiating only a legacy GL 2.1 context in this
-> specific software-GL environment).
+> `NEXT.md` §5 — e.g. a GL backend negotiating only a legacy GL 2.1 context in this specific
+> software-GL environment).
 
 ## 7. Debugging tools
 
@@ -160,17 +159,13 @@ sudo apt-get install -y apitrace apitrace-tracers
   [renderdoc.org](https://renderdoc.org) (e.g. to `~/Downloads/renderdoc_<version>`, no install step
   needed — `bin/`, `lib/`, `include/` are all self-contained). **Real findings from actually using it
   in this sandbox (2026-07-11, Task 952)**, so a future session doesn't have to re-discover them:
-    - `bgfx` only calls its own RenderDoc auto-load when `bgfx::Init::debug` or `::profile` is `true`
-      (CNA sets neither) — the harmless `BX WARN dlopen failed` log line you'll see by default is
-      this, **not** evidence RenderDoc itself is missing/broken.
     - Getting a capture requires `LD_PRELOAD=<path>/lib/librenderdoc.so <binary>`, not a plain
       runtime `dlopen()` from within your own code — RenderDoc's hooking only intercepts a
       subsequent `dlopen("libGL.so.1")` if it's preloaded first (same requirement as `apitrace`'s
       own interposer).
-    - A capture only actually gets recorded on a frame submitted via
-      `bgfx::frame(BGFX_FRAME_DEBUG_CAPTURE)` (a real public bgfx flag) — or by calling RenderDoc's
-      own `RENDERDOC_API_1_6_0::StartFrameCapture`/`EndFrameCapture` directly (works from any code in
-      the process once the library is loaded, not just from bgfx's internal integration).
+    - A capture only actually gets recorded by calling RenderDoc's own
+      `RENDERDOC_API_1_6_0::StartFrameCapture`/`EndFrameCapture` directly (works from any code in
+      the process once the library is loaded).
     - **`qrenderdoc --python <script>.py`** (this Linux tarball's *only* way to get the
       `import renderdoc` Python scripting API — it ships no standalone importable module, only
       `qrenderdoc`'s own embedded interpreter) **hangs indefinitely under this sandbox's `Xvfb`**,
@@ -182,8 +177,7 @@ sudo apt-get install -y apitrace apitrace-tracers
       `Xvfb`, or a RenderDoc build with the `offscreen` Qt platform plugin.
     - **`renderdoccmd convert -c zip.xml -f cap.rdc -o out.xml` works perfectly headless** (no GUI,
       no hang) and is a genuinely useful substitute for a lot of what the GUI would show: a fully
-      structured, `grep`/Python-parseable XML dump of every recorded GL call, in bgfx's *actual
-      view-processing order* (not just call-issue order like `apitrace dump`), including every
+      structured, `grep`/Python-parseable XML dump of every recorded GL call, including every
       argument. `renderdoccmd thumb -o out.png <capture>.rdc` extracts a quick sanity-check
       thumbnail. Both were sufficient to rule out several hypotheses (FBO handle validity, view-id
       targeting, texture-handle identity) with hard evidence — see `plans/plan_graphics.md`'s Task 952

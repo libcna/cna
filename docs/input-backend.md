@@ -304,8 +304,8 @@ process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=
 determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
 filter variable if you want more iterations.
 
-Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES3` for `VULKAN` or `BGFX` to verify the same input tests on the
-other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just
+Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES3` for `VULKAN` to verify the same input tests on the
+other backends. The full suite is just
 `./cmake-build-input-easygl/CnaTests` with no filter.
 
 ---

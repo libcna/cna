@@ -108,7 +108,7 @@ protected:
                                4, RenderTargetUsage::DiscardContents);
             const int v = rt.getMultiSampleCountProperty();
             check(v == 4 || v == 0,
-                  "Ctor3 multiSample=4: MultiSampleCount == 4 (EasyGL, real) or 0 (Vulkan/Bgfx, not yet implemented)");
+                  "Ctor3 multiSample=4: MultiSampleCount == 4 (EasyGL, real) or 0 (Vulkan, not yet implemented)");
         }
         {
             RenderTarget2D rt(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None,

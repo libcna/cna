@@ -72,8 +72,11 @@ def main() -> int:
     # tripped when eleven identities were removed on 2026-08-30, reporting a correct parse
     # as a broken parser. Held against the registry gate's canonical table instead, so it
     # measures agreement rather than size, and stays true whichever way the count moves.
+    # Rows are (cmake name, enum name, C ABI value); the enum name is the second field. Do not
+    # anchor on the closing paren -- the row gained a third field in RRC-006 and an anchored
+    # pattern matched nothing, which this very tripwire then reported as a broken parser.
     canonical = re.findall(
-        r'\(\s*"[A-Z0-9_]+"\s*,\s*"(\w+)"\s*\)',
+        r'\(\s*"[A-Z0-9_]+"\s*,\s*"(\w+)"',
         (root / "scripts/check_renderer_identities.py").read_text(encoding="utf-8"))
     if sorted(names) != sorted(canonical):
         missing, extra = set(canonical) - set(names), set(names) - set(canonical)

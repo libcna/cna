@@ -160,8 +160,6 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
@@ -176,8 +174,6 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-167: this renderer has no declared deferred-source lifetime contract."
 #endif

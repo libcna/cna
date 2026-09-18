@@ -59,7 +59,8 @@ declaration directly. STUB and HEADLESS keep honest non-rendering capability bou
   (`GLTF-473`) draw the colour-carrying and the whole PBR/skinned record families through a **live
   device**. These are standing renderer-conformance gates, not artefacts of the glTF campaign that
   found the bugs, and the reason to keep them is empirical: between them they found three defects
-  (`SDL_GPU`'s and `DILIGENT`'s unreachable `COLOR_0` shaders and `OPENGLES1`'s misread PBR records)
+  (`SDL_GPU`'s and `DILIGENT`'s (retired 2026-09-17) unreachable `COLOR_0` shaders and `OPENGLES1`'s
+  (retired 2026-09-17) misread PBR records)
   that **every static inventory in this repository reported as correct**, and the search they
   prompted found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a
   draw sees what it reads.
@@ -77,9 +78,6 @@ declaration directly. STUB and HEADLESS keep honest non-rendering capability bou
   as a table over every canonical stride. It needs no device, so it runs in every build.
 - `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,
   `HEADLESS`, `OPENGLES3`, `VULKAN` and `SOFTWARE` on every relevant push and pull request.
-  **`OPENGLES1` is not in that matrix and cannot be**: the runner's Mesa is built with `gles1`
-  disabled, so the renderer compiles but cannot create a device. It is exercised locally against the
-  side-by-side ES 1.1 Mesa build recorded in `NEXT_gltf.md`, which is where its evidence comes from.
 - `scripts/gltf-renderer-parity.sh` compares each renderer against the same committed L1–L5
   goldens. The 2026-08-14 four-renderer run was byte-identical for all 42 selected L1–L5 tests;
   HEADLESS, OPENGLES3 and Vulkan also had identical outcomes for all 507 tests in `*Gltf*`.

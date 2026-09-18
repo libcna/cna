@@ -42,9 +42,8 @@ pinned by FNA3D.
 
 XNA 4.0 itself was a thin wrapper over Direct3D 9, and modern Windows XNA/FNA-style games run
 closest to their original execution environment on a real Direct3D renderer, not through OpenGL/
-Vulkan/bgfx translation layers. `D3D11` is CNA's first **native** Direct3D renderer (as opposed to
-`BGFX`, which can already select a D3D11/D3D12 renderer *internally* on Windows, but that's bgfx's
-own abstraction, not CNA's) — it gives this project a dependency-free Windows path and direct
+Vulkan translation layers. `D3D11` is CNA's first **native** Direct3D renderer — it gives this
+project a dependency-free Windows path and direct
 control over the exact Direct3D calls made, matching `CLAUDE.md`'s "preserve XNA-style APIs...
 using modern C++23 internals" mandate more directly than routing through a third abstraction layer.
 

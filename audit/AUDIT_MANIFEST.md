@@ -1,5 +1,19 @@
 # AUDIT_MANIFEST.md — Master Work-Queue Index
 
+> **Predates the 2026-09-17 renderer curation.** This archive was written when CNA had many more
+> renderer identities than it has now, and it names renderers that **no longer exist**: bgfx,
+> Magnum, Wicked, Sokol, Diligent, Glide, LLGL, IGL, rlgl, TinyGL, NanoVG, PixiJS, OpenVG, Blend2D,
+> Skia, the legacy OpenGL profiles (OPENGL1/OPENGL2/OPENGLES1) and the legacy DirectX series
+> (DIRECTX1-8, DIRECTX10). Twenty-five identities were retired on 2026-09-17 and Skia in 2026-08,
+> leaving **25 public renderer identities over 21 implementation families**
+> (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`). It also predates the physical
+> module layout, so the `src/`, `include/` and `cmake/` paths it names have moved or gone.
+>
+> Nothing here is edited to match today's tree: it is the record of an audit that really ran against
+> the tree of its own date, and rewriting it would destroy that. Read every renderer name, file path
+> and count in it as a fact about that date, never as current CNA support.
+
+
 This is the authoritative index of every manifest shard. Each shard file under `manifest/<shard>.md` lists every eligible first-party source-like file in that subsystem with a per-file audit status (`PENDING` / `IN_PROGRESS` / `AUDITED` / `BLOCKED`). See `AUDIT_SCOPE.md` for the classification rules that produced this split between AUDIT and EXEMPT, and `AUDIT_PROGRESS.md` for the live rollup and resume point.
 
 Manifest shards are an organizational device only (grouped roughly by subsystem/backend so progress can be tracked and committed in logical batches) — they are not called out by name in the audit prompt itself, but every eligible file from the full repository inventory appears in exactly one shard below.

@@ -1,5 +1,7 @@
 # Lane `opengl1` — legacy desktop OpenGL 1.x fixed-function graphics backend
 
+> **Retired renderer — historical record.** The `OPENGL1` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 34 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 **Status: ✅ INTEGRATED 2026-08-05 · ADAPTATION · merge `c0876fca`** (signed, `--no-ff`,
 parents `bc29a976` + `91344935`). Eighth logical lane, **fourth of Batch 1**. Nothing was pushed.
 

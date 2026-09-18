@@ -27,25 +27,24 @@ namespace
 {
     /// Every public identity, DERIVED from the enum rather than restated beside it.
     ///
-    /// It used to be a hand-written list of 46 entries carrying a comment about not silently
-    /// testing fewer identities than exist -- and then it did exactly that: TINYGL, IGL and
-    /// PIXIJS were added to the enum and never to this list, so the completeness test below
-    /// stopped covering the three newest names without anything failing. A restated list cannot
-    /// keep that promise; a derived one can. Rlgl is the last enumerator, which is the same
-    /// range tryParseGraphicsRendererName() itself walks, so a new identity is covered the moment
-    /// it is declared. It read PixiJs until 2026-09-04, which was already one identity short the
-    /// day NanoVg was declared after it -- the exact failure this derivation exists to prevent.
+    /// It used to be a hand-written list carrying a comment about not silently testing fewer
+    /// identities than exist -- and then it did exactly that: three identities were added to the
+    /// enum and never to this list, so the completeness test below stopped covering the newest
+    /// names without anything failing. A restated list cannot keep that promise; a derived one can.
+    /// PortableGL is the last enumerator, which is the same range tryParseGraphicsRendererName()
+    /// itself walks, so a new identity is covered the moment it is declared -- provided this line
+    /// moves to the new last enumerator with it, which the static_assert below forces.
     constexpr std::size_t RendererIdentityCount =
-        static_cast<std::size_t>(GraphicsRendererType::Rlgl) + 1;
+        static_cast<std::size_t>(GraphicsRendererType::PortableGL) + 1;
 
     /// scripts/check_renderer_identities.py is the registry gate for the public count; this
     /// restates it deliberately, as a tripwire rather than as a second list -- adding an identity
     /// fails here until the gate, the documentation and this number are updated together.
-    static_assert(RendererIdentityCount == 50,
+    static_assert(RendererIdentityCount == 25,
                   "the number of public renderer identities changed -- update "
-                  "scripts/check_renderer_identities.py, cmake/RendererRegistry.cmake and the "
-                  "documented count in the same change (plans/plan_runtimerenderer.md design "
-                  "decision 10)");
+                  "scripts/check_renderer_identities.py, cmake/RendererIdentities.cmake, "
+                  "cmake/RendererRegistry.cmake and the documented count in the same change "
+                  "(plans/plan_runtimerenderer.md design decision 10)");
 
     constexpr std::array<GraphicsRendererType, RendererIdentityCount> MakeAllRendererTypes()
     {

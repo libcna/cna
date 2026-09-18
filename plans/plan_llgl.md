@@ -1,5 +1,7 @@
 # LLGL Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `LLGL` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 41 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Authoritative post-audit integration disposition (2026-08-09).** This block supersedes stale
 > status cells and broad capability claims in the historical diary below while preserving that
 > diary as the original lane record. The supported public contract is one backend identity,

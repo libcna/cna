@@ -17,7 +17,7 @@ XNA 4.0 documentation and plans/plan_graphics.md. Build was not run during analy
 |---|---|
 | API surface (headers + signatures present) | **~85 %** |
 | Functional gameplay code — EasyGL / Vulkan | **~70 %** |
-| Functional gameplay code — Bgfx | **~63 %** |
+| Functional gameplay code — Bgfx (retired 2026-09-17) | **~63 %** |
 
 **Justification for ~70 % functional (EasyGL/Vulkan):**  
 Graphics (the largest namespace) is ~92–93 % functional. Input is ~90 %. Audio
@@ -117,7 +117,7 @@ this row's original "will not compile at all" claim is stale.**
 
 ---
 
-### Bgfx (`cmake-build-bgfx`)
+### Bgfx — retired 2026-09-17 (`cmake-build-bgfx`)
 
 | Feature | Status |
 |---|---|
@@ -150,7 +150,7 @@ this row's original "will not compile at all" claim is stale.**
 | **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plans/plan_audio.md` |
 | **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |
 | **Media library (Album/Artist/Genre) — ~5 %** | Minor for most games | Song/Video playback real; device media-library browsing = pure stubs |
-| **Bgfx: EnvironmentMapEffect** | Medium | No cube-map reflection shader; falls back to lit shader |
+| **Bgfx (retired 2026-09-17): EnvironmentMapEffect** | Medium | No cube-map reflection shader; falls back to lit shader |
 | **Bgfx: ShaderEffect** | Medium | Custom GLSL/SPIR-V effects not wired in Bgfx renderer |
 | **Bgfx: MSAA** | Low | Framework supports it; just not forwarded to bgfx init |
 

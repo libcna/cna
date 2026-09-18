@@ -13,7 +13,7 @@ on it) rather than assuming either way.
   repository. §5 is the current known-bugs-and-limitations list; treat it as the source of truth for
   "is X still broken" over any dated snapshot below.
 - **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
-  (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does renderer X support feature Y."
+  (SDL_Renderer/EasyGL/Vulkan/DirectX). Start here for "does renderer X support feature Y."
 - **[`renderer-capability-profiles.md`](renderer-capability-profiles.md)** — the additive detailed
   feature/limit/per-format query model, its generated English limitations report and the matching
   C ABI. Start here when the legacy 64-bit capability summary is too coarse.
@@ -31,51 +31,15 @@ on it) rather than assuming either way.
   `../plans/plan_modern.md`, the running ledger `../NEXT_modern.md`, the measurements
   [`cnaext-perf.md`](cnaext-perf.md), and the fifteen-minute introduction
   [`cnaext-getting-started.md`](cnaext-getting-started.md).
-- **[`tinygl-renderer.md`](tinygl-renderer.md)** — capability boundary for `TINYGL`, the
-  fixed-function CPU OpenGL renderer (C-Chads/tinygl); task breakdown in `../plans/plan_tinygl.md`, and
-  the pre-implementation probe in `../tinygl-spike/README.md`.
-- **[`rlgl-renderer.md`](rlgl-renderer.md)** — current verified boundary, build/update/debug guide,
-  and platform status for the experimental standalone-rlgl OpenGL 3.3 renderer; the authoritative
-  EasyGL-parity ledger is `../plans/plan_rlgl.md`, with systematic comparison evidence in
-  [`rlgl-parity-campaign.md`](rlgl-parity-campaign.md).
 - **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
   **41** possible future renderer identities, screened against the live registry and against the
   "no alias identities" rule, plus the list of things that must *not* become identities. A
   catalog only: it authorizes nothing, exactly like `../FUTURE.md`.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
   limitations for the experimental fifth renderer; detailed remaining work is in `../plans/plan_webgpu.md`.
-- **[`sokol-renderer.md`](sokol-renderer.md)** — capability boundary, build options and known
-  limitations for the experimental `sokol_gfx` renderer (a pixel-verified 2D baseline; no 3D path,
-  render targets or custom effects yet); task breakdown is in `../plans/plan_sokol.md`.
-- **[`diligent-renderer.md`](diligent-renderer.md)** — capability boundary, build options, the
-  runtime device-type selection (`CNA_DILIGENT_DEVICE`) and known limitations for the experimental
-  Diligent Engine renderer, the one renderer whose native graphics API is chosen at run time rather
-  than by the CMake option; task breakdown is in `../plans/plan_diligent.md`.
-- **[`skia-renderer.md`](skia-renderer.md)** — current verified CPU-raster 2D capability boundary,
-  dependency policy, tests, and explicit direct/emulation decisions; the 249-entry API ledger is
-  [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md), active work is in
-  `../plans/plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
-  is [`skia-developer-build.md`](skia-developer-build.md). The accepted raster-versus-GPU decision
-  and future acceleration reopening gate are in
-  [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md); the final CPU-raster checklist is
-  [`skia-release-gate.md`](skia-release-gate.md). The checked routing inventory for the active
-  post-baseline expansion is
-  [`skia-successor-contract-matrix.md`](skia-successor-contract-matrix.md); its shared checked
-  allocation and oracle rules are
-  [`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md). Arbitrary blend work
-  is anchored by the explicit [`skia-source-alpha-contract.md`](skia-source-alpha-contract.md).
-  The normative 27-value format layout, sampling and renderability design is
-  [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md).
-  The internal all-selector implementation is documented in
-  [`skia-generated-blender.md`](skia-generated-blender.md) and its exact raster surface is promoted
-  by SKIA-124. Checked 2D mip storage is documented in the successor resource policy; public mip
-  construction remains gated by SKIA-126 and later tasks.
 - **[`canvas-renderer.md`](canvas-renderer.md)** — current status for the Emscripten-only HTML Canvas
   2D renderer, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plans/plan_canvas.md`.
-- **[`glide-renderer.md`](glide-renderer.md)** — build/runtime setup and current native
-  fixed-function 2D plus constrained color/textured-vertex 3D scope of the Windows-only historical
-  Glide 3.x renderer, which dynamically loads an external emulator DLL.
 - **[`html-dom-renderer.md`](html-dom-renderer.md)** — current status for the Emscripten-only HTML DOM
   renderer, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
   rasterizing into a canvas; detailed task breakdown is in `../plans/plan_html_dom.md`.
@@ -122,8 +86,8 @@ original phase closed — check each file's own status banner/date.
   870) and `ReferenceStencil` (Task 872, Vulkan-only) corrected from stale ❌ to ✅/fixed.
 - `sampler-state-support.md` — **refreshed 2026-07-11**: mip-level `SetData` (Tasks 924-926) and
   EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.
-- `rasterizerstate-support.md` — Phase 38 audit; Bgfx `DepthBias` status here predates Task 767's
-  later fix (see `graphics-renderer-feature-matrix.md` instead for current Bgfx `DepthBias` status).
+- `rasterizerstate-support.md` — Phase 38 audit; see `graphics-renderer-feature-matrix.md` for the
+  current per-renderer `DepthBias` status.
 - `model-content-pipeline-support.md` — current as of Task 916 (2026-07-09); honestly documents
   real remaining content-pipeline-loader gaps (no bone hierarchy, no `ParentBone`/`BoundingSphere`).
 - `occlusionquery-support.md` — current; tracks the Task 447/854 Vulkan fix correctly.
@@ -162,8 +126,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
   in the simulator, but still lacks physical-device and feature evidence). Task breakdown is in
   `../plans/plan_apple.md`.
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
-- **[`skia-renderer.md`](skia-renderer.md)** — the experimental Skia CPU-raster 2D renderer; unlike
-  an accelerated Skia/GPU path, only its evidence-linked bounded feature table is advertised.
 - `canvas-renderer.md` — the CANVAS (HTML Canvas 2D) renderer's own completeness status; unlike the
   others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
   the doc's own caveat.
@@ -175,11 +137,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `ascii-renderer.md` — **historical**: completeness status for the former `ASCII` (SDL-windowed
   retro glyph-grid) graphics renderer, removed 2026-08 in favor of the post-process effect above;
   see `../plans/plan_ascii.md` for the full historical task-by-task detail.
-- `freedirect-renderer.md` — FreeDirect (formerly `DIRECTX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
+- `freedirect-renderer.md` — FreeDirect (DirectDraw via the `../free-direct` sibling; named `DIRECTX3` before 2026-08-04)'s own completeness status,
   current as of `plans/plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
-- `glide-renderer.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;
-  runtime verification needs a separately supplied `glide3x.dll`, so this repository does not
-  claim a bundled emulator.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 

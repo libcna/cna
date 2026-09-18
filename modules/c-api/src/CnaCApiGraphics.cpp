@@ -349,10 +349,8 @@ static_assert(
         case CNA::GraphicsRendererType::OpenGL33: return CNA_GRAPHICS_RENDERER_OPENGL33;
         case CNA::GraphicsRendererType::WebGL1: return CNA_GRAPHICS_RENDERER_WEBGL1;
         case CNA::GraphicsRendererType::WebGL2: return CNA_GRAPHICS_RENDERER_WEBGL2;
-        case CNA::GraphicsRendererType::Bgfx: return CNA_GRAPHICS_RENDERER_BGFX;
         case CNA::GraphicsRendererType::Vulkan: return CNA_GRAPHICS_RENDERER_VULKAN;
         case CNA::GraphicsRendererType::WebGPU: return CNA_GRAPHICS_RENDERER_WEBGPU;
-        case CNA::GraphicsRendererType::Magnum: return CNA_GRAPHICS_RENDERER_MAGNUM;
         case CNA::GraphicsRendererType::Headless: return CNA_GRAPHICS_RENDERER_HEADLESS;
         case CNA::GraphicsRendererType::Software: return CNA_GRAPHICS_RENDERER_SOFTWARE;
         case CNA::GraphicsRendererType::Stub: return CNA_GRAPHICS_RENDERER_STUB;
@@ -361,38 +359,15 @@ static_assert(
         case CNA::GraphicsRendererType::Direct2D: return CNA_GRAPHICS_RENDERER_DIRECT2D;
         case CNA::GraphicsRendererType::Canvas: return CNA_GRAPHICS_RENDERER_CANVAS;
         case CNA::GraphicsRendererType::HtmlDom: return CNA_GRAPHICS_RENDERER_HTML_DOM;
-        case CNA::GraphicsRendererType::Blend2D: return CNA_GRAPHICS_RENDERER_BLEND2D;
         case CNA::GraphicsRendererType::FreeDirect: return CNA_GRAPHICS_RENDERER_FREEDIRECT;
         case CNA::GraphicsRendererType::DirectX9: return CNA_GRAPHICS_RENDERER_DIRECTX9;
-        case CNA::GraphicsRendererType::DirectX1: return CNA_GRAPHICS_RENDERER_DIRECTX1;
-        case CNA::GraphicsRendererType::DirectX2: return CNA_GRAPHICS_RENDERER_DIRECTX2;
-        case CNA::GraphicsRendererType::DirectX3: return CNA_GRAPHICS_RENDERER_DIRECTX3;
-        case CNA::GraphicsRendererType::DirectX5: return CNA_GRAPHICS_RENDERER_DIRECTX5;
-        case CNA::GraphicsRendererType::DirectX6: return CNA_GRAPHICS_RENDERER_DIRECTX6;
-        case CNA::GraphicsRendererType::DirectX7: return CNA_GRAPHICS_RENDERER_DIRECTX7;
-        case CNA::GraphicsRendererType::DirectX8: return CNA_GRAPHICS_RENDERER_DIRECTX8;
-        case CNA::GraphicsRendererType::DirectX10: return CNA_GRAPHICS_RENDERER_DIRECTX10;
         case CNA::GraphicsRendererType::SdlGpu: return CNA_GRAPHICS_RENDERER_SDL_GPU;
-        case CNA::GraphicsRendererType::OpenGLES1: return CNA_GRAPHICS_RENDERER_OPENGLES1;
         case CNA::GraphicsRendererType::OpenGL4: return CNA_GRAPHICS_RENDERER_OPENGL4;
-        case CNA::GraphicsRendererType::OpenGL1: return CNA_GRAPHICS_RENDERER_OPENGL1;
-        case CNA::GraphicsRendererType::OpenGL2: return CNA_GRAPHICS_RENDERER_OPENGL2;
-        case CNA::GraphicsRendererType::Wicked: return CNA_GRAPHICS_RENDERER_WICKED;
-        case CNA::GraphicsRendererType::Sokol: return CNA_GRAPHICS_RENDERER_SOKOL;
-        case CNA::GraphicsRendererType::Diligent: return CNA_GRAPHICS_RENDERER_DILIGENT;
-        case CNA::GraphicsRendererType::Glide: return CNA_GRAPHICS_RENDERER_GLIDE;
         case CNA::GraphicsRendererType::Gdi: return CNA_GRAPHICS_RENDERER_GDI;
-        case CNA::GraphicsRendererType::Llgl: return CNA_GRAPHICS_RENDERER_LLGL;
         case CNA::GraphicsRendererType::Metal: return CNA_GRAPHICS_RENDERER_METAL;
         case CNA::GraphicsRendererType::Fna3d: return CNA_GRAPHICS_RENDERER_FNA3D;
         case CNA::GraphicsRendererType::SvgDom: return CNA_GRAPHICS_RENDERER_SVG_DOM;
-        case CNA::GraphicsRendererType::OpenVg: return CNA_GRAPHICS_RENDERER_OPENVG;
         case CNA::GraphicsRendererType::PortableGL: return CNA_GRAPHICS_RENDERER_PORTABLEGL;
-        case CNA::GraphicsRendererType::TinyGL: return CNA_GRAPHICS_RENDERER_TINYGL;
-        case CNA::GraphicsRendererType::Igl: return CNA_GRAPHICS_RENDERER_IGL;
-        case CNA::GraphicsRendererType::PixiJs: return CNA_GRAPHICS_RENDERER_PIXIJS;
-        case CNA::GraphicsRendererType::NanoVg: return CNA_GRAPHICS_RENDERER_NANOVG;
-        case CNA::GraphicsRendererType::Rlgl: return CNA_GRAPHICS_RENDERER_RLGL;
     }
     return CNA_GRAPHICS_RENDERER_UNKNOWN;
 }
@@ -1947,103 +1922,6 @@ CNA_Result cna_sprite_batch_draw_string(
             std::numeric_limits<uint64_t>::max()) {
             ++font->texture->activeBatchReferenceCount;
             spriteBatch->retainedTextures.push_back(font->texture);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sprite_batch_draw_mesh_ext(
-    const CNA_Handle spriteBatchHandle,
-    const CNA_SpriteMeshEXT* const mesh)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (mesh == nullptr || mesh->struct_size < sizeof(CNA_SpriteMeshEXT) ||
-            mesh->struct_version != StructureVersion || mesh->positions == nullptr ||
-            mesh->indices == nullptr || mesh->vertex_count == 0U || mesh->index_count == 0U ||
-            mesh->vertex_count > static_cast<uint64_t>(INT32_MAX) ||
-            mesh->index_count > static_cast<uint64_t>(INT32_MAX)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SpriteBatch mesh command is invalid.");
-        }
-
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!spriteBatch->begun) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The SpriteBatch is not inside a begin/end interval.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        const CNA_Result effectResult =
-            GetRuntimeHandles().Get(mesh->effect, ObjectKind::Effect, &effect);
-        if (effectResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                effectResult,
-                ErrorCategoryForResult(effectResult),
-                "The Effect handle is invalid for this call.");
-        }
-        if (effect->parentGame != spriteBatch->parentGame) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Effect belongs to a different game than the SpriteBatch.");
-        }
-
-        const auto vertexCount = static_cast<std::size_t>(mesh->vertex_count);
-        std::vector<Vector2> positions;
-        std::vector<Vector2> textureCoordinates;
-        std::vector<Color> colors;
-        positions.reserve(vertexCount);
-        for (std::size_t index = 0U; index < vertexCount; ++index) {
-            if (!std::isfinite(mesh->positions[index].x) ||
-                !std::isfinite(mesh->positions[index].y)) {
-                return Fail(
-                    CNA_RESULT_INVALID_ARGUMENT,
-                    CNA_ERROR_CATEGORY_ARGUMENT,
-                    "A mesh position component is not finite.");
-            }
-            positions.emplace_back(mesh->positions[index].x, mesh->positions[index].y);
-        }
-        if (mesh->texture_coordinates != nullptr) {
-            textureCoordinates.reserve(vertexCount);
-            for (std::size_t index = 0U; index < vertexCount; ++index) {
-                textureCoordinates.emplace_back(
-                    mesh->texture_coordinates[index].x, mesh->texture_coordinates[index].y);
-            }
-        }
-        // Native Color carries a vtable, so C colors are converted rather than reinterpreted.
-        colors.reserve(vertexCount);
-        for (std::size_t index = 0U; index < vertexCount; ++index) {
-            const CNA_Color value = mesh->colors != nullptr
-                ? mesh->colors[index]
-                : CNA_Color{UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(255)};
-            colors.emplace_back(value.r, value.g, value.b, value.a);
-        }
-
-        // Mesh submission has no capability flag: the renderer interface's own default
-        // implementation throws for every backend that has not implemented it. Every state and
-        // argument precondition is already decided above, so the remaining native failure from
-        // this one call is exactly that unsupported-operation case.
-        try {
-            spriteBatch->value->DrawMeshEXT(
-                *effect->value,
-                positions.data(),
-                colors.data(),
-                textureCoordinates.empty() ? nullptr : textureCoordinates.data(),
-                static_cast<int>(vertexCount),
-                mesh->indices,
-                static_cast<int>(mesh->index_count));
-        } catch (const std::runtime_error& exception) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                exception.what());
         }
         return CNA_RESULT_SUCCESS;
     });

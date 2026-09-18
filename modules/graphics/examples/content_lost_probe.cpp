@@ -3,7 +3,7 @@
 // plans/plan_cabi.md CABI-15: does ContentLost actually reach the resources a reset destroys?
 //
 // The event fires only where a renderer reports a real device reset, and the three families that
-// can (DirectX9, Direct2D, Skia) are not built here. So this drives the same entry point the
+// can (DirectX9, Direct2D) are not built here. So this drives the same entry point the
 // renderer callback drives -- GraphicsDevice::NotifyContentLostResourcesEXT -- and checks the
 // contract around it: false before, true and raised after, and cleared by writing content again.
 //

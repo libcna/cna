@@ -71,7 +71,7 @@ all use the CPU rasterizer; triangle strips preserve XNA's alternating winding a
 non-indexed user/buffer draws. That makes it useful for:
 
 - **Deterministic pixel tests** that need no GPU driver, display server, or Xvfb at all — unlike
-  the existing EasyGL/BGFX/Vulkan golden-image tests (see `docs/graphics-renderer-feature-matrix.md`),
+  the existing EasyGL/Vulkan golden-image tests (see `docs/graphics-renderer-feature-matrix.md`),
   which all need a real GPU context even under Xvfb.
 - **Server/CI environments** with no GPU whatsoever.
 - **Running the stock-effect classic XNA/Core graphics subset on the CPU**, including complete

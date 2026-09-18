@@ -128,7 +128,7 @@ class EnvironmentMapAlphaScaledLerpTest : public Game
         {
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): once
             // GraphicsDevice's real default RasterizerState is pushed to every renderer,
             // this quad's winding is culled unless explicitly disabled.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);

@@ -87,7 +87,7 @@ constructor. Task 896 (2026-07-10ish) found and fixed this exact class of bug fo
 |---|---|---|---|
 | EasyGL | Plain OpenGL raw default: **disabled** (`easygl::Device::initialize()` never calls `set_depth_test_enabled(true)`) | Plain OpenGL raw default: **disabled** (behaviourally equivalent to Opaque, since Opaque = One/Zero = no-op blend) | **Depth: NO. Blend: coincidentally yes** (raw-disabled happens to look like Opaque). |
 | Vulkan | `depthTestEnabled_ = true`, `depthWriteEnabled_ = true` (own C++ member defaults) | `blendEnabled_ = false` (own C++ member default) | **Yes, by coincidence of its own member initializers** -- unaffected by this bug either way. |
-| Bgfx | `depthFlags_ = BGFX_STATE_DEPTH_TEST_LESS \| BGFX_STATE_WRITE_Z` (own member default) | `blendFlags_ = BGFX_STATE_BLEND_ALPHA` (own member default) | **Depth: yes (coincidence). Blend: NO** -- alpha blending was silently ON by default. |
+| Bgfx (retired 2026-09-17) | `depthFlags_ = BGFX_STATE_DEPTH_TEST_LESS \| BGFX_STATE_WRITE_Z` (own member default) | `blendFlags_ = BGFX_STATE_BLEND_ALPHA` (own member default) | **Depth: yes (coincidence). Blend: NO** -- alpha blending was silently ON by default. |
 
 Real FNA's own `GraphicsDevice.cs` constructor (authoritative reference, confirmed by direct
 source read):
@@ -174,7 +174,7 @@ code ever explicitly sets it.
 
 New shared (3-renderer) regression test: `modules/graphics/examples/graphicsdevice_default_state_occlusion_test.cpp`,
 registered as `EasyGL_GraphicsDevice_DefaultStateOcclusion` / `Vulkan_GraphicsDevice_
-DefaultStateOcclusion` / `Bgfx_GraphicsDevice_DefaultStateOcclusion`.
+DefaultStateOcclusion` / `Bgfx_GraphicsDevice_DefaultStateOcclusion` (Bgfx retired 2026-09-17).
 
 **Deliberately unlike every other depth/blend test in this project** (which all explicitly call
 `setDepthStencilStateProperty()`/`setBlendStateProperty()`/`setRasterizerStateProperty()` before
@@ -255,8 +255,8 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
   drawing (a reasonable test-isolation habit) and so structurally cannot catch this class of bug.
   `graphicsdevice_default_state_occlusion_test.cpp` (§7) is deliberately the one exception -- keep
   it that way if it's ever "cleaned up" to match the other tests' style.
-- Bgfx's own default blend state was ALSO wrong (`BGFX_STATE_BLEND_ALPHA` instead of no-blend) --
-  fixed as a side effect of the same constructor change, not a coincidence: same root cause,
+- Bgfx (retired 2026-09-17)'s own default blend state was ALSO wrong (`BGFX_STATE_BLEND_ALPHA`
+  instead of no-blend) -- fixed as a side effect of the same constructor change, not a coincidence: same root cause,
   different renderer, different one of the 3 states.
 - A second, unrelated, still-open state-leak bug (`SpriteBatch`'s blend state not restored after
   `End()`, EasyGL) was found and documented (§8) but deliberately not fixed here -- Task 956.

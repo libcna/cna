@@ -121,12 +121,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # plans/plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
     # asserts the probe closure links no native graphics SDK at all, which is a true statement about
     # a HEADLESS-only build and a FALSE one about a multi-renderer build that happens to default to
-    # HEADLESS -- such a binary legitimately links Vulkan, Skia or whatever else it was built with.
+    # HEADLESS -- such a binary legitimately links Vulkan, wgpu-native or whatever else it was built with.
     # Converting this to list membership would have made it fail for a correct build.
     if(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" AND NOT CNA_MULTI_RENDERER
             AND Python3_Interpreter_FOUND)
         set(_cna_native_sdk_forbid
-            "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|IGLLibrary|skia|sokol|[Ww]icked|shaderc")
+            "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|wgpu|webgpu|gdi32|shaderc")
         foreach(_cna_sdkfree_probe IN ITEMS probe_graphics probe_content probe_graphics_ext probe_devices_ext)
             add_test(NAME ModuleLinkClosure_NativeSdkFree_${_cna_sdkfree_probe}
                 COMMAND Python3::Interpreter
@@ -154,7 +154,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
                 --build-dir "${CMAKE_BINARY_DIR}"
                 --target probe_graphics
-                --forbid "d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|IGLLibrary|skia|sokol|[Ww]icked|GLESv1|shaderc"
+                --forbid "d3d|dxgi|ddraw|d2d1|wgpu|webgpu|gdi32|shaderc"
                 --require "vulkan")
     endif()
 
@@ -172,6 +172,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         add_test(NAME RendererIdentityRegistry
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
+
+        # plans/plan_renderer_cleanup.md RRC-009/RRC-010: the two API decisions the 25-identity
+        # curation forced, held in opposite directions -- the removed 2D mesh entry point stays
+        # removed, and the retained surface-presenter flag stays retained only while the platform
+        # code it was kept for still exists. The script names both symbols; this comment does not,
+        # so that the gate's own "no active file names the removed API" rule stays strict.
+        add_test(NAME RendererCurationApiDecisions
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_removed_renderer_api.py")
 
         # plans/plan_modern.md MOD-2216: checked-in packages must remain derivable from their
         # declared source files. This is deliberately an offline authoring gate: the generator
@@ -562,6 +571,75 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 -DCNA_RENDERER_DEFAULT_EXPECTED=${_cna_case_expected}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/RendererDefaultCase.cmake)
         set_tests_properties(CnaRendererDefaultSelection_${_cna_case_name}
+            PROPERTIES LABELS "renderer;configuration")
+    endforeach()
+
+    # plans/plan_renderer_cleanup.md RRC-006: every retired renderer selector must be REFUSED, by
+    # name, on every route that can name one -- and the refusal must say it was retired rather than
+    # merely unknown.
+    #
+    # The case list is generated from CNA_RENDERER_RETIRED_IDENTITIES itself rather than written
+    # out here, so retiring a renderer cannot add a name to the refusal list without also adding
+    # its test. A literal list would have to be maintained in a third place and would silently stop
+    # covering identity 26.
+    #
+    # "removed-renderers.md" is the expected text because it is the one phrase the retired-identity
+    # message has and the unknown-identity message does not, so it distinguishes "we removed this on
+    # purpose, here is the record" from "you misspelled something" -- which is the whole point of
+    # refusing by name. It is also short enough to survive CMake's own message wrapping; longer
+    # phrases in that message are broken across lines and would never be found.
+    foreach(_cna_retired_entry IN LISTS CNA_RENDERER_RETIRED_IDENTITIES)
+        string(REGEX REPLACE "=.*$" "" _cna_retired_name "${_cna_retired_entry}")
+        add_test(NAME CnaRendererRetired_Selector_${_cna_retired_name}
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_RETIRED_CASE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/RendererIdentities.cmake
+                -DCNA_RETIRED_CASE_ROUTE=SELECTOR
+                -DCNA_RETIRED_CASE_IDENTITY=${_cna_retired_name}
+                -DCNA_RETIRED_CASE_OUTCOME=REFUSE
+                -DCNA_RETIRED_CASE_EXPECTED=removed-renderers.md
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/RendererRetiredIdentityCase.cmake)
+        set_tests_properties(CnaRendererRetired_Selector_${_cna_retired_name}
+            PROPERTIES LABELS "renderer;configuration")
+    endforeach()
+
+    # The other two routes, plus the controls that keep the refusal honest. BGFX and RLGL stand in
+    # for the whole retired set on the SET and OPTION routes -- the per-identity sweep above already
+    # proves the table is complete, so repeating 26 identities on three routes would buy nothing but
+    # 78 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
+    # CNA_RENDERER_<X>=ON option are read by different code than the cache selector.
+    #
+    # The ACCEPT and unknown-name controls exist because a refusal that refuses everything is not a
+    # working gate: without them, a bug that rejected all input would pass all 26 cases above.
+    set(_cna_retired_route_cases
+        # name|route|identity|outcome|expected text
+        "SetMember_BGFX|SET|BGFX|REFUSE|removed-renderers.md"
+        "SetMember_OPENGLES1|SET|OPENGLES1|REFUSE|removed-renderers.md"
+        "Option_RLGL|OPTION|RLGL|REFUSE|removed-renderers.md"
+        "Option_DIRECTX7|OPTION|DIRECTX7|REFUSE|removed-renderers.md"
+        "LiveSelectorAccepted_VULKAN|SELECTOR|VULKAN|ACCEPT|"
+        "LiveSelectorAccepted_PORTABLEGL|SELECTOR|PORTABLEGL|ACCEPT|"
+        "LiveSetMemberAccepted_STUB|SET|STUB|ACCEPT|"
+        "UnknownNameStillUnknown|SELECTOR|NOT_A_RENDERER|REFUSE|unknown graphics renderer")
+    foreach(_cna_retired_route_case IN LISTS _cna_retired_route_cases)
+        string(REPLACE "|" ";" _cna_retired_fields "${_cna_retired_route_case}")
+        list(GET _cna_retired_fields 0 _cna_case_name)
+        list(GET _cna_retired_fields 1 _cna_case_route)
+        list(GET _cna_retired_fields 2 _cna_case_identity)
+        list(GET _cna_retired_fields 3 _cna_case_outcome)
+        list(LENGTH _cna_retired_fields _cna_retired_field_count)
+        set(_cna_case_expected "")
+        if(_cna_retired_field_count GREATER 4)
+            list(GET _cna_retired_fields 4 _cna_case_expected)
+        endif()
+        add_test(NAME CnaRendererRetired_${_cna_case_name}
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_RETIRED_CASE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/RendererIdentities.cmake
+                -DCNA_RETIRED_CASE_ROUTE=${_cna_case_route}
+                -DCNA_RETIRED_CASE_IDENTITY=${_cna_case_identity}
+                -DCNA_RETIRED_CASE_OUTCOME=${_cna_case_outcome}
+                -DCNA_RETIRED_CASE_EXPECTED=${_cna_case_expected}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/RendererRetiredIdentityCase.cmake)
+        set_tests_properties(CnaRendererRetired_${_cna_case_name}
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
 endif()

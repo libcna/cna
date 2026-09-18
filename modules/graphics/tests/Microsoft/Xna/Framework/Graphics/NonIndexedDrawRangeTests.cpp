@@ -87,13 +87,7 @@ using namespace CNA::Testing::Renderers;
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
 // checks at runtime that bgfx is the ACTIVE renderer.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
-#define CNA_TEST_BGFX_AVAILABLE 1
-#endif
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
-#endif
 
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
@@ -713,7 +707,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsPrimitiveCountAtVertexStartZ
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -744,7 +738,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsNonzeroVertexStartToEndOfBuf
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -776,7 +770,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsFirstMiddleAndFinalRanges)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -827,7 +821,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDynamicDrawHonorsRangeAndCount)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -858,7 +852,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredNonIndexedRangesAtoBtoAKeepTheirOwnRange
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -914,7 +908,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredRangesSurviveBufferVersionChangesBetween
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -967,7 +961,7 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1036,7 +1030,7 @@ TEST_F(NonIndexedDrawRangeTest, DrawUserPrimitivesKeepsItsCopiedExactRange)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1065,7 +1059,7 @@ TEST_F(NonIndexedDrawRangeTest, UntypedDrawUserPrimitivesUploadsOnlyTheRequested
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1096,7 +1090,7 @@ TEST_F(NonIndexedDrawRangeTest, BufferedNonIndexedRangeHandlingMatchesRendererSa
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1268,7 +1262,7 @@ TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactC
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1326,7 +1320,7 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1382,217 +1376,6 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
         << "one topology's draw consumed another topology's vertices";
 }
 
-#ifdef CNA_TEST_BGFX_AVAILABLE
-// The exact native binding, not just its pixels. bgfx offers no way to read a submitted draw's
-// stream range back, so BgfxRenderer records the (startVertex, numVertices) pair it handed
-// to bgfx::setVertexBuffer; this asserts that pair equals the public element offset and the
-// topology-derived vertex count for every topology. The whole-buffer overload this replaced passed
-// (0, UINT32_MAX) and let bgfx clamp to the buffer's own allocated size.
-TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    RequireRangeRendering();
-
-    auto* renderer =
-        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(&device.GetRenderer());
-    ASSERT_NE(nullptr, renderer);
-
-    const SlotLayout layout = BackbufferLayout();
-    struct BindingCase
-    {
-        PrimitiveType primitive;
-        int vertexStart;
-        int primitiveCount;
-        std::uint32_t expectedCount;
-    };
-    constexpr std::array<BindingCase, 8> cases{{
-        {PrimitiveType::TriangleList, 0, 1, 3},
-        {PrimitiveType::TriangleList, 6, 3, 9},
-        {PrimitiveType::TriangleList, 18, 1, 3},
-        {PrimitiveType::TriangleStrip, 2, 2, 4},
-        {PrimitiveType::LineList, 4, 3, 6},
-        {PrimitiveType::LineStrip, 2, 3, 4},
-        {PrimitiveType::PointListEXT, 2, 3, 3},
-        {PrimitiveType::PointListEXT, 6, 1, 1},
-    }};
-
-    BasicEffect effect(device);
-    for (const BindingCase& bindingCase : cases)
-    {
-        const RangePlan plan = BuildRangePlan(
-            layout, bindingCase.primitive,
-            bindingCase.vertexStart, bindingCase.primitiveCount);
-        const int vertexCount = static_cast<int>(plan.vertices.size());
-        VertexBuffer vertexBuffer(
-            device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
-        vertexBuffer.SetData(plan.vertices.data(), vertexCount);
-
-        ApplyVertexColorEffect(effect);
-        device.Clear(Color::Black);
-        device.SetVertexBuffer(&vertexBuffer);
-        device.DrawPrimitives(
-            bindingCase.primitive, bindingCase.vertexStart, bindingCase.primitiveCount);
-
-        EXPECT_EQ(
-            static_cast<std::uint32_t>(bindingCase.vertexStart),
-            renderer->lastNonIndexedBindStartEXT_)
-            << TopologyName(bindingCase.primitive)
-            << ": native startVertex is not the public vertexStart element offset";
-        EXPECT_EQ(bindingCase.expectedCount, renderer->lastNonIndexedBindCountEXT_)
-            << TopologyName(bindingCase.primitive)
-            << ": native numVertices is not the topology-derived consumed count";
-        EXPECT_LE(
-            renderer->lastNonIndexedBindStartEXT_ + renderer->lastNonIndexedBindCountEXT_,
-            static_cast<std::uint32_t>(vertexCount))
-            << TopologyName(bindingCase.primitive)
-            << ": native binding leaves the logical vertex buffer";
-        device.SetVertexBuffer(nullptr);
-    }
-}
-
-// FillMode.WireFrame re-expands triangles into an absolute-index line list, so that path owns its
-// range through its own indices and must keep binding from element zero -- while still drawing only
-// the requested triangles' edges.
-TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexStart)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    RequireRangeRendering();
-
-    auto* renderer =
-        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(&device.GetRenderer());
-    ASSERT_NE(nullptr, renderer);
-
-    const SlotLayout layout = BackbufferLayout();
-    const RangePlan plan =
-        BuildRangePlan(layout, PrimitiveType::TriangleList, 6, 3);
-    const int vertexCount = static_cast<int>(plan.vertices.size());
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
-    vertexBuffer.SetData(plan.vertices.data(), vertexCount);
-
-    RasterizerState wireframe;
-    wireframe.setCullModeProperty(
-        Microsoft::Xna::Framework::Graphics::CullMode::None);
-    wireframe.setFillModeProperty(FillMode::WireFrame);
-    device.setRasterizerStateProperty(wireframe);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.DrawPrimitives(PrimitiveType::TriangleList, 6, 3);
-
-    // The expanded indices are absolute (vertexStart + local), so the stream must start at zero.
-    EXPECT_EQ(0u, renderer->lastNonIndexedBindStartEXT_)
-        << "the wireframe path's absolute expanded indices need a zero-based vertex binding";
-    EXPECT_EQ(
-        static_cast<std::uint32_t>(vertexCount), renderer->lastNonIndexedBindCountEXT_)
-        << "the wireframe path must keep every vertex its expanded indices can address bound";
-
-    const FrameSnapshot pixels =
-        CaptureBackbuffer(device, layout.width, layout.height);
-    ExpectRangeExclusive(pixels, plan, Color::Black, "wireframe range");
-    device.setRasterizerStateProperty(RasterizerState::CullNone);
-}
-
-// Narrowing the binding must stay free: no repacking, no per-draw handle and no extra native
-// buffer version. REMED-GFX-109's cardinality therefore stays at the one-object baseline across
-// many different ranges and returns to the process baseline after disposal.
-TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedRangesAllocateNoPerDrawNativeResources)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    RequireRangeRendering();
-
-    device.Present();
-    device.Present();
-    const bgfx::Stats* stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    const std::uint16_t processVertexBaseline = stats->numDynamicVertexBuffers;
-
-    const SlotLayout layout = BackbufferLayout();
-    const RangePlan plan =
-        BuildRangePlan(layout, PrimitiveType::TriangleList, 0, 1);
-    const int vertexCount = static_cast<int>(plan.vertices.size());
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
-    vertexBuffer.SetData(plan.vertices.data(), vertexCount);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.SetVertexBuffer(&vertexBuffer);
-
-    device.Present();
-    device.Present();
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    const std::uint16_t liveVertexBaseline = stats->numDynamicVertexBuffers;
-    EXPECT_EQ(processVertexBaseline + 1u, liveVertexBaseline);
-
-    for (int frame = 0; frame < 24; ++frame)
-    {
-        device.Clear(Color::Black);
-        for (int slot = 0; slot < kSlotCount; ++slot)
-            device.DrawPrimitives(PrimitiveType::TriangleList, slot * 3, 1);
-        device.DrawPrimitives(PrimitiveType::TriangleList, 0, kSlotCount);
-        device.DrawPrimitives(PrimitiveType::LineList, 4, 3);
-        device.DrawPrimitives(PrimitiveType::PointListEXT, 5, 4);
-        device.Present();
-
-        stats = bgfx::getStats();
-        ASSERT_NE(nullptr, stats);
-        EXPECT_LE(stats->numDynamicVertexBuffers, liveVertexBaseline);
-    }
-
-    device.SetVertexBuffer(nullptr);
-    vertexBuffer.Dispose();
-    device.Present();
-    device.Present();
-
-    stats = bgfx::getStats();
-    ASSERT_NE(nullptr, stats);
-    EXPECT_EQ(processVertexBaseline, stats->numDynamicVertexBuffers);
-}
-
-// The public buffer may be disposed while draws that referenced it are still queued for the frame.
-TEST_F(NonIndexedDrawRangeTest, BgfxDisposingAfterQueuedRangedDrawsIsSafe)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
-    // run only when bgfx is the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
-    RequireRangeRendering();
-
-    const SlotLayout layout = BackbufferLayout();
-    const RangePlan plan =
-        BuildRangePlan(layout, PrimitiveType::TriangleList, 0, 1);
-    const int vertexCount = static_cast<int>(plan.vertices.size());
-
-    {
-        DynamicVertexBuffer vertexBuffer(
-            device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
-        vertexBuffer.SetData(plan.vertices.data(), 0, vertexCount, SetDataOptions::None);
-
-        BasicEffect effect(device);
-        ApplyVertexColorEffect(effect);
-        device.Clear(Color::Black);
-        device.SetVertexBuffer(&vertexBuffer);
-        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
-        device.DrawPrimitives(PrimitiveType::TriangleList, 9, 1);
-        vertexBuffer.SetData(plan.vertices.data(), 0, vertexCount, SetDataOptions::None);
-        device.DrawPrimitives(PrimitiveType::TriangleList, 18, 1);
-        device.SetVertexBuffer(nullptr);
-        vertexBuffer.Dispose();
-    }
-
-    EXPECT_NO_THROW(device.Present());
-    EXPECT_NO_THROW(device.Present());
-}
-#endif
 
 // REMED-GFX-119. Software raster's non-indexed paths address the bound buffer with the raw loop
 // ordinal, so `vertexStart` never selects the first consumed vertex. The three tests below separate

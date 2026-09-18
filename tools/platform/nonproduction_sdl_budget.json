@@ -103,7 +103,7 @@
     },
     "modules/graphics/examples/common/PixelTestGame.hpp": {
       "category": "renderer-integration-executable",
-      "max_references": 21
+      "max_references": 12
     },
     "modules/graphics/examples/common/SdlTestGraphicsServices.hpp": {
       "category": "renderer-integration-executable",
@@ -225,149 +225,9 @@
       "category": "containment-assertion",
       "max_references": 12
     },
-    "modules/renderers/bgfx/examples/bgfx_gfx196_noop_reset_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/blend2d/examples/blend2d_renderer_correctness_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 50
-    },
-    "modules/renderers/blend2d/examples/blend2d_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
     "modules/renderers/canvas/examples/canvas_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 9
-    },
-    "modules/renderers/diligent/examples/diligent_alphatest_fog_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_anisotropic_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_backbuffer_readback_bounds_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 25
-    },
-    "modules/renderers/diligent/examples/diligent_capability_consistency_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_clear_readback_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_colored3d_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_depthbias_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_device_selection_integration_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_drawoffset_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_dualtexture_envmap_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_fillmode_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_instance_binding_offsets_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_instanced_stride_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_instanced_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_lighting_fidelity_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_mip_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_model_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_mrt_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_msaa_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_multisamplemask_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_npot_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_occlusionquery_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_pbr_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_referencestencil_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_rendertarget_mipgen_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_rendertarget_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_rendertargetcube_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_scissor_pipelinecache_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_setdataoptions_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_skinned_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/diligent/examples/diligent_vertexlit_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
     },
     "modules/renderers/direct2d/examples/direct2d_2d_parity_test.cpp": {
       "category": "renderer-integration-executable",
@@ -377,93 +237,9 @@
       "category": "renderer-integration-executable",
       "max_references": 2
     },
-    "modules/renderers/directx1/examples/directx1_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx1/examples/directx1_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx1/examples/directx1_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
     "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 19
-    },
-    "modules/renderers/directx2/examples/directx2_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx2/examples/directx2_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx2/examples/directx2_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx3/examples/directx3_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx3/examples/directx3_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx3/examples/directx3_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx5/examples/directx5_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx5/examples/directx5_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx5/examples/directx5_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx6/examples/directx6_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx6/examples/directx6_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx6/examples/directx6_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx7/examples/directx7_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx7/examples/directx7_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx7/examples/directx7_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx8/examples/directx8_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
-    "modules/renderers/directx8/examples/directx8_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/directx8/examples/directx8_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
     },
     "modules/renderers/directx9/examples/directx9_hresult_test.cpp": {
       "category": "renderer-integration-executable",
@@ -629,141 +405,25 @@
       "category": "renderer-integration-executable",
       "max_references": 53
     },
-    "modules/renderers/glide/examples/glide_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
     "modules/renderers/headless/examples/headless_smoke_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 7
+      "max_references": 6
     },
     "modules/renderers/html-dom/examples/htmldom_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 10
     },
-    "modules/renderers/llgl/examples/llgl_resize_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/llgl/examples/llgl_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 7
-    },
     "modules/renderers/metal/examples/metal_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
-    },
-    "modules/renderers/nanovg/examples/nanovg_blend_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/nanovg/examples/nanovg_immediate_mode_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/nanovg/examples/nanovg_presentation_viewport_scissor_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 51
-    },
-    "modules/renderers/nanovg/examples/nanovg_sampler_state_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/nanovg/examples/nanovg_sprite_rasterization_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/nanovg/examples/nanovg_spritebatch_rotation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/nanovg/examples/nanovg_texture_orientation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/nanovg/examples/nanovg_unsupported_3d_behavior_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 7
-    },
-    "modules/renderers/opengl1/examples/opengl1_anisotropic_gl_state_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 3
-    },
-    "modules/renderers/opengl1/examples/opengl1_graphics_capability_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 3
-    },
-    "modules/renderers/opengl1/examples/opengl1_msaa_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/opengl1/examples/opengl1_presentationmode_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 11
-    },
-    "modules/renderers/opengl1/examples/opengl1_swapinterval_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 11
-    },
-    "modules/renderers/opengl2/examples/opengl2_presentation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/opengl2/examples/opengl2_presentationmode_letterbox_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/opengl2/examples/opengl2_presentationmode_overscan_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/opengl2/examples/opengl2_presentationmode_stretch_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/opengl2/examples/opengl2_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 8
-    },
-    "modules/renderers/opengl2/examples/opengl2_texture3d_mip_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
     },
     "modules/renderers/opengl4/examples/opengl4_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 11
     },
-    "modules/renderers/openvg/examples/openvg_blend_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/openvg/examples/openvg_modern_state_guard_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/openvg/examples/openvg_presentation_viewport_scissor_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 47
-    },
-    "modules/renderers/openvg/examples/openvg_spritebatch_rotation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
-    "modules/renderers/openvg/examples/openvg_texture_orientation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 12
-    },
-    "modules/renderers/openvg/examples/openvg_unsupported_3d_behavior_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 7
-    },
     "modules/renderers/portablegl/examples/portablegl_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 5
-    },
-    "modules/renderers/rlgl/examples/rlgl_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 4
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
       "category": "renderer-integration-executable",
@@ -1117,14 +777,6 @@
       "category": "renderer-integration-executable",
       "max_references": 2
     },
-    "modules/renderers/sokol/examples/sokol_gl_context_transactional_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 19
-    },
-    "modules/renderers/sokol/examples/sokol_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 8
-    },
     "modules/renderers/stub/examples/stub_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 7
@@ -1132,10 +784,6 @@
     "modules/renderers/svg-dom/examples/svgdom_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 7
-    },
-    "modules/renderers/tinygl/examples/tinygl_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
     }
   }
 }

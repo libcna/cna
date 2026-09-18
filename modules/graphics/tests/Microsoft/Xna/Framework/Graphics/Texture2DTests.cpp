@@ -520,46 +520,27 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
     EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
-#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
     EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
     EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
-#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
-#endif
 }
 
 TEST_F(LevelCountTest, NpotFullPartialRowsAndEveryMipRoundTripExactly)
 {
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    GTEST_SKIP() << "this renderer deliberately has no mipmapped Texture2D storage";
-#else
     constexpr int width = 3;
     constexpr int height = 5;
     Texture2D texture(gd, width, height, true, SurfaceFormat::Color);
@@ -624,7 +605,6 @@ TEST_F(LevelCountTest, NpotFullPartialRowsAndEveryMipRoundTripExactly)
     Color mipTwoReadback(0, 0, 0, 0);
     texture.GetData(2, nullptr, &mipTwoReadback, 0, 1);
     ExpectExactColor(mipTwoReadback, mipTwoSource);
-#endif
 }
 
 // -----------------------------------------------------------------------
@@ -640,14 +620,6 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
     constexpr int kHeight = 7;
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    // These renderers own level 0 only, so the mipmapped texture this test needs cannot be
-    // constructed at all -- the refusal itself is the contract worth asserting here (see
-    // LevelCountTest above).
-    EXPECT_THROW(Texture2D(gd, kWidth, kHeight, true, SurfaceFormat::Color),
-                 System::NotSupportedException);
-    GTEST_SKIP() << "this renderer stores level 0 only -- no mip chain exists to walk";
-#else
     constexpr int kLevelCount = 4;
     Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
     ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);
@@ -655,7 +627,6 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
     const std::vector<std::vector<Color>> expected =
         PopulateEveryMip(texture, kWidth, kHeight);
     ExpectEveryMipExact(texture, kWidth, kHeight, expected);
-#endif
 }
 
 TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSourceUnchanged)
@@ -789,7 +760,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // Software retains the signed values in its canonical CPU sampling plane.
     // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
     // FNA3D's D3D11 mapping (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -803,7 +774,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM; DirectX11 as
     // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, Rlgl, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -821,7 +792,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
     // DirectX11: DXGI_FORMAT_B5G5R5A1_UNORM, a<<15|r<<10|g<<5|b field for field (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, Rlgl, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -1169,14 +1140,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
 
     for (SurfaceFormat format : kAllFormats)
     {
-        // plans/plan_runtimerenderer.md RTR-P9-4: the Skia-promoted format list, evaluated at runtime so
-        // this assertion describes the ACTIVE renderer rather than the build default.
-        const bool skia = false;
-        // plans/plan_igl.md IGL-71: IGL's promoted set is deliberately two formats wide, not a mirror of
-        // everything it can store. A format is here only once the whole public path is verified end
-        // to end on both its backends, and only if its texel is a multiple of four bytes -- the
-        // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
-        const bool igl = CNA_RENDERER_IS(Igl);
+        // plans/plan_runtimerenderer.md RTR-P9-4: every flag below is evaluated at runtime, so this
+        // assertion describes the ACTIVE renderer rather than the build default.
         // WEBGPU-184/SDLGPU-69: these renderers provide the signed-normalized formats end to end.
         // The name keeps its EasyGL prefix only because the list began there.
         const bool easyGlSignedNormalized =
@@ -1224,10 +1189,6 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // not an alternative to it.
         const bool profileAllows =
             Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
-        // RLGL-011: all twenty classic XNA Texture2D formats have exact transfer and sampled-pixel
-        // evidence. Extension formats appended after HdrBlendable retain their separate verdicts.
-        const bool rlglClassic = CNA_RENDERER_IS(Rlgl) &&
-            static_cast<int>(format) <= static_cast<int>(SurfaceFormat::HdrBlendable);
         // WEBGPU-144/SDLGPU-69: block-compressed support is a runtime storage decision. WebGPU and
         // SDL GPU may upload native BC blocks; SDL GPU can instead decode them into RGBA8 while
         // preserving the public compressed-transfer contract.
@@ -1239,7 +1200,6 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool rendererBlockCompressed =
             gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
         const bool supported = profileAllows && (format == SurfaceFormat::Color
-            || rlglClassic
             || rendererBlockCompressed
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
@@ -1269,48 +1229,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
                 && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
                     || format == SurfaceFormat::Dxt5)
                 && gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
-                       CNA::Internal::Renderers::RendererFormatVerdict::Supported)
-            || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
-            || (skia && (false
-            || format == SurfaceFormat::Bgr565
-            || format == SurfaceFormat::Bgra5551
-            || format == SurfaceFormat::Bgra4444
-            || format == SurfaceFormat::Rgba1010102
-            || format == SurfaceFormat::Rg32
-            || format == SurfaceFormat::Rgba64
-            || format == SurfaceFormat::Alpha8
-            || format == SurfaceFormat::ColorBgraEXT
-            || format == SurfaceFormat::ColorSrgbEXT
-            || format == SurfaceFormat::ByteEXT
-            || format == SurfaceFormat::UShortEXT
-            || format == SurfaceFormat::Single
-            || format == SurfaceFormat::Vector2
-            || format == SurfaceFormat::Vector4
-            || format == SurfaceFormat::HalfSingle
-            || format == SurfaceFormat::HalfVector2
-            || format == SurfaceFormat::HalfVector4
-            || format == SurfaceFormat::NormalizedByte2
-            || format == SurfaceFormat::NormalizedByte4
-            || format == SurfaceFormat::HdrBlendable
-            // The renderer-selection audit found that the block-compressed formats belong here.
-            // This list used to omit them while SkiaRenderer accepted them, so the two halves of
-            // the contract contradicted each other and this loop failed on SKIA for as long as both
-            // had their current contents.
-            //
-            // The implementation is the half that is right, and that was checked rather than
-            // assumed: SkiaTextureRenderer.cpp carries IsCompressedTextureFormat, the correct block
-            // sizes (8 bytes for Dxt1, 16 for the rest) and real decoders -- DxtUtil::DecompressDxt1
-            // /Dxt3/Dxt5 and Bc7Util::DecompressBc7 -- decoding to RGBA for the CPU raster surface,
-            // and it throws NotSupportedException for a format it has no decoder for. That is
-            // genuine support, not silent acceptance, so a test demanding a throw was asserting the
-            // opposite of what the renderer does.
-            || format == SurfaceFormat::Dxt1
-            || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5
-            || format == SurfaceFormat::Bc7EXT
-            || format == SurfaceFormat::Bc7SrgbEXT
-            )))
-            ;
+                       CNA::Internal::Renderers::RendererFormatVerdict::Supported));
         if (supported)
         {
             EXPECT_NO_THROW(Texture2D(gd, 4, 4, false, format))

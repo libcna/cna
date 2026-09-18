@@ -29,7 +29,7 @@ at all three params-carrying draw entry points but has never executed here.
 | CMake target | `cna_renderer_fna3d` |
 | Namespace | `CNA::Internal::Renderers::Fna3d` |
 | Main class | `Fna3dRenderer` |
-| Category | Portable RHI (like `LLGL`, `DILIGENT`, `SOKOL`, `BGFX`) — not one native API |
+| Category | Portable RHI — not one native API |
 
 ## Upstream
 
@@ -69,8 +69,7 @@ Driver selection happens *before* the window exists, because
 `FNA3D_PrepareWindowAttributes()` also primes the GL attributes the window's visual is chosen
 from. `GraphicsDevice` therefore calls `Fna3d::Detail::PrepareWindowNeedsOpenGl()` while assembling
 the platform-neutral `WindowDescription`. The FNA3D implementation interprets its SDL flags at
-the renderer edge and exposes only the resulting OpenGL requirement to graphics — the same
-runtime-decides-the-intent shape LLGL, Diligent and bgfx use.
+the renderer edge and exposes only the resulting OpenGL requirement to graphics.
 
 ## Shaders: the one thing FNA3D constrains
 
@@ -181,7 +180,6 @@ fixed from the descriptor's own request.
 | Area | Behaviour |
 |---|---|
 | Custom `ShaderEffect` (GLSL/HLSL source) | `CreateEffectRenderer` returns null; `CustomEffects` is false. FNA3D compiles no shader source. |
-| `DrawMeshEXT` | Inherits the shared refusal — that is Skia's bounded `SkVertices` ABI. |
 | Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA's sampled `Texture2DArray` extension is not a render target, and FNA3D's binding has no slice field. |
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
@@ -203,7 +201,7 @@ would need a shared-contract change, so each is reported rather than faked:
 | `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | The buffer renderer interfaces expose no readback; XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. |
 
 A public block-compressed `Texture2D` is blocked one level above this renderer as well: the shared
-`Texture::ValidateFormat` admits only `SurfaceFormat::Color` for every renderer except Skia. The
+`Texture::ValidateFormat` admits only `SurfaceFormat::Color` for every renderer. The
 renderer contract has no such restriction — an `ImageData` naming a compressed format reaches
 `CreateTexture` directly — and that is the layer `Fna3d_Compressed` measures.
 

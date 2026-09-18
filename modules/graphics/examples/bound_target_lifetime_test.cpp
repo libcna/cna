@@ -161,8 +161,6 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
@@ -177,8 +175,6 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-168: this renderer has no declared bound-target lifetime contract."
 #endif
@@ -211,11 +207,7 @@ namespace
      * to appear here. Silence is not a declaration, which is why the measured-zero case needs one.
      */
     constexpr bool kRenderTargetMipReadable =
-#if defined(CNA_RENDERER_BGFX)
-        false;
-#else
         true;
-#endif
 
     /**
      * @brief Whether the mip level > 0 of a MULTI-target set's member is publicly readable.
@@ -229,7 +221,7 @@ namespace
      * wraps real Vulkan and shares the same MRT/mip-regeneration path.
      */
     constexpr bool kMrtSlotMipReadable =
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_LLGL)
+#if defined(CNA_RENDERER_VULKAN)
         false;
 #else
         true;

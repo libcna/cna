@@ -620,8 +620,8 @@ in three shared sources. And one row changed this renderer because EasyGL was ri
 
 `ShaderEffect` takes a **renderer-specific payload** by contract, and this renderer's is compiled
 **SPIR-V**. Since `VULKAN-264`, `GraphicsDevice::GetShaderDialectEXT()` reports `SpirV`, explicitly
-distinguishing this bytecode intake from IGL's Vulkan backend, which reports `GlslVulkan` and
-compiles source. Hand native CNA Vulkan GLSL text and the effect is refused with a message that says
+naming this bytecode intake rather than a source-compiling dialect. Hand native CNA Vulkan GLSL text
+and the effect is refused with a message that says
 so; the check is the SPIR-V magic word, not the payload's length. That distinction is not pedantry:
 until `VULKAN-256`
 the refusal was a *length* check, so GLSL whose byte count happened to be a multiple of four went

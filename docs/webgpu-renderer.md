@@ -297,7 +297,7 @@ all have since shipped — see the "Important limitations" section below for the
 the frame's own command encoder, `wgpuBufferMapAsync` polling. Because a naive implementation could
 only ever observe the *previous* frame's content on a swapchain-backed target, `Present()` was
 refactored into a shared `EnsureFrameRendered()` so `GetBackBufferData()` can force an on-demand
-render of whatever's queued so far in the current `Draw()` call — matching Vulkan/Bgfx's own
+render of whatever's queued so far in the current `Draw()` call — matching Vulkan's own
 on-demand-submit readback semantics. New `WebGPU_Clear_Readback` CTest.
 
 Writing that test's alpha case then found and fixed a real, previously-unknown bug (`WEBGPU-132`):
@@ -405,8 +405,8 @@ target: its own colour texture, always created in the swapchain's own chosen for
 time) renders into it unchanged, with zero new pipeline-cache dimensions; and its own depth
 texture created in the exact format the requested `DepthFormat` maps to (`WEBGPU-39`,
 `MapDepthFormatEXT()`: `None`→no depth texture, `Depth16`→`Depth16Unorm`, `Depth24`→`Depth24Plus`,
-`Depth24Stencil8`→`Depth24PlusStencil8`, the same per-value mapping `VulkanRenderer::PickDepthFormat()`/
-EasyGL/Bgfx do). The pass's depth attachment, the pipeline's `depthStencil` state (null for `None`,
+`Depth24Stencil8`→`Depth24PlusStencil8`, the same per-value mapping `VulkanRenderer::PickDepthFormat()`
+and EasyGL do). The pass's depth attachment, the pipeline's `depthStencil` state (null for `None`,
 where no depth test happens) and the stencil load/store ops (named only on a stencil-carrying format)
 are all threaded from that real format via `replayDepthFormat_`/`replayDepthHasStencil_`, and the
 format is part of the 3D and sprite pipeline keys so a pass with a different depth format gets its own
@@ -1284,8 +1284,8 @@ block bytes. Reachable via the direct `Texture2D(device, w, h, mipMap, SurfaceFo
 `SetData(blockBytes, count)` API **and now via the content loaders too** (Phase 2, XNB-24):
 `Texture2D::DDSFromStreamEXT` and the `.xnb` `Texture2DReader` keep DXT content compressed and upload
 the raw blocks instead of CPU-decoding to Color. Both loaders gate on a new renderer-opt-in capability
-`LoadsCompressedContentNativelyEXT()` (default false; WebGPU-only, so Skia and every other renderer
-keep their existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`, so a
+`LoadsCompressedContentNativelyEXT()` (default false; WebGPU-only, so every other renderer
+keeps its existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`, so a
 loaded DXT texture keeps its `Dxt*` format exactly when the device can transfer it and decodes to Color
 otherwise. `WebGPU_CompressedContent` proves both loaders take the native path (format preserved, full
 mip chain, renders correctly). Baking this Phase-2 path exposed and fixed a compressed-mip upload bug:

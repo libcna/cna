@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCategory());
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Rlgl) + 1;
-static_assert(kPublicRendererCount == 50,
-              "GraphicsRendererType must expose all 50 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
+static_assert(kPublicRendererCount == 25,
+              "GraphicsRendererType must expose all 25 public renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -48,48 +48,24 @@ namespace
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::Direct2D:
             case GraphicsRendererType::DirectX9:
-            case GraphicsRendererType::DirectX1:
-            case GraphicsRendererType::DirectX2:
-            case GraphicsRendererType::DirectX3:
-            case GraphicsRendererType::DirectX5:
-            case GraphicsRendererType::DirectX6:
-            case GraphicsRendererType::DirectX7:
-            case GraphicsRendererType::DirectX8:
-            case GraphicsRendererType::DirectX10:
-            case GraphicsRendererType::OpenGLES1:
             case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::OpenGL1:
-            case GraphicsRendererType::OpenGL2:
-            case GraphicsRendererType::Glide:
             case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendCategory::Native;
 
             case GraphicsRendererType::SdlRenderer:
-            case GraphicsRendererType::Bgfx:
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::Wicked:
-            case GraphicsRendererType::Sokol:
-            case GraphicsRendererType::Diligent:
-            case GraphicsRendererType::Llgl:
-            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
-            case GraphicsRendererType::OpenVg:
-            case GraphicsRendererType::NanoVg:
-            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:
@@ -97,7 +73,6 @@ namespace
             case GraphicsRendererType::Canvas:
             case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::PixiJs:
                 return GraphicsBackendCategory::Web;
 
             case GraphicsRendererType::Headless:

@@ -169,11 +169,6 @@ namespace
     // return bug as expected output and thereby hid the conformance failure.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_BGFX)
-    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan. EasyGL's
-    // formerly identical output was corrected by SOFTWARE-310.
-    constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
@@ -206,9 +201,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, true, false};
 #else
 #error "REMED-GFX-146: this renderer has no declared deferred-scissor contract."
 #endif

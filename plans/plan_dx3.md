@@ -1,5 +1,7 @@
 # DirectX 3 (real, DirectDraw v2 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `DIRECTX3` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 25 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Naming: rename executed 2026-08-04 (owner instruction, dxold integration).** This backend
 > is CNA's real, Route-B "DirectX 3" implementation per `plan_dxold.md`'s roadmap (row 3). It was
 > originally built and shipped under the temporary CMake name `DX30`, because the `DX3` name was

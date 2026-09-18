@@ -588,9 +588,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
     # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
     # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
-    # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
-    # including the bound target's), so this run is what establishes that D3D9 already honoured the
-    # contract rather than being made to.
+    # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer
+    # binding, including the bound target's) and that renderer was retired on 2026-09-17, so this
+    # run is what establishes that D3D9 already honoured the contract rather than being made to.
     cna_directx9_test(cna_test_directx9_rt_first_use ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_first_use_test.cpp)
     cna_directx9_ctest_command(_directx9_rt_first_use_cmd cna_test_directx9_rt_first_use)
     cna_register_renderer_test(NAME DirectX9_RenderTarget_FirstUse

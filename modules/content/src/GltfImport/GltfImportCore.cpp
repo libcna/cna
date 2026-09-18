@@ -4645,16 +4645,16 @@ namespace CNA::Internal::GltfImport
                  "GLTF-341"},
                 {"KHR_materials_ior", GltfExtensionSupportEXT::Implemented, true,
                  "IOR is converted to dielectric F0/F90 and consumed by rigid and skinned PBR "
-                 "shaders on all 15 PBR renderers. Analytic factor-only and grazing pixel "
+                 "shaders on every PBR renderer. Analytic factor-only and grazing pixel "
                  "witnesses cover the core default and authored endpoints.",
                  "GLTF-343"},
                 {"KHR_materials_specular", GltfExtensionSupportEXT::ImplementedWithNamedLimit,
                  false,
-                 "Factor and colour are converted to dielectric F0/F90 and consumed by all 15 "
-                 "PBR renderers. The optional specularTexture and specularColorTexture now survive "
+                 "Factor and colour are converted to dielectric F0/F90 and consumed by every "
+                 "PBR renderer. The optional specularTexture and specularColorTexture now survive "
                  "direct import and offline .cnj with independent UV, transform, sampler and "
-                 "colour-space state. EasyGL, OpenGL2, OpenGL4, DirectX9, DirectX11, DirectX12, "
-                 "Bgfx, Diligent, Magnum, SDL GPU and Vulkan sample both maps; the remaining 4 PBR renderer shader bindings are pending. "
+                 "colour-space state. EasyGL, OpenGL4, DirectX9, DirectX11, DirectX12, SDL GPU and "
+                 "Vulkan sample both maps; the remaining PBR renderer shader bindings are pending. "
                  "Required use remains refused and optional use is warned by name.",
                  "GLTF-344"},
                 {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,

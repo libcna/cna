@@ -75,9 +75,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr const char* kRendererName = "BGFX";
-    constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
@@ -99,9 +96,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
-    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-162: this renderer has no declared backbuffer-readback capability contract."
 #endif
@@ -109,11 +103,7 @@ namespace
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
     // pre-existing gap declared by REMED-GFX-165). The sub-rectangle success legs declare it as a
     // boundary rather than failing it. It has no bearing on the Headless rejection contract.
-#if defined(CNA_RENDERER_BGFX)
-    constexpr bool kSupportsSubRectangleBackbufferRead = false;
-#else
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
-#endif
 
     // Odd, non-square, not a common default -- matches REMED-GFX-165/161's canonical size.
     constexpr int kW = 37;

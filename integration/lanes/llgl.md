@@ -1,5 +1,7 @@
 # Lane card — `llgl` · **INTEGRATED 2026-08-09**
 
+> **Retired renderer — historical record.** The `LLGL` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 41 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 | Field | Value |
 |---|---|
 | Logical lane | `llgl` |

@@ -199,16 +199,6 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
   snapshot that names the dying buffer or image view and retires both behind the same frame fence.
   This preserves submitted work and prevents recycled native handles from selecting stale bindings.
 
-### Bgfx
-
-- Bgfx handles (`bgfx::TextureHandle`, `bgfx::VertexBufferHandle`, etc.) are freed
-  via `bgfx::destroy(handle)` inside the renderer destructor.
-- Bgfx queues destructions internally; the actual GPU deallocation may be deferred to
-  the next `bgfx::frame()` call.
-- Do not call `bgfx::shutdown()` before all resource renderers are destroyed. The
-  `GraphicsDevice::Dispose()` order guarantees this as long as `bgfx::shutdown()` is
-  called inside `destroyNativeResources()`.
-
 ### SDL_Renderer
 
 - `SDL_Texture` objects are destroyed with `SDL_DestroyTexture`. The `SDL_Renderer`

@@ -65,7 +65,7 @@ protected:
         device.Clear(Color(0, 255, 0, 255));
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
-        // Task 896 finding (mirrors the Bgfx sibling\'s Task 364/884 fix): this quad\'s
+        // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this quad\'s
         // winding is culled under FNA\'s real default RasterizerState.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

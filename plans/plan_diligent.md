@@ -1,5 +1,7 @@
 # Diligent Engine Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `DILIGENT` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 38 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Integrated 2026-08-07 as the thirteenth post-audit lane and CNA's 31st public backend
 > identity.** Adapted from `feature/diligent` (`1ab12b50`, preserved behind
 > `archive/preintegration/diligent-20260804`) onto `integration/post-audit-phase1` as 69 signed

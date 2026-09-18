@@ -1,15 +1,7 @@
 # SurfaceFormat Renderer Support — CNA
 
 > Generated from source inspection against Tasks 174, 281.
-> Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer renderers.
-
-> Skia successor note (SKIA-134): this historical cross-renderer document does not define the Skia
-> implementation routes. The checked, current 27-value Skia contract is
-> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135–139 have promoted
-> `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`,
-> `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Single`, `Vector2`, `Vector4`, `HalfSingle`,
-> `HalfVector2`, `HalfVector4`, `HdrBlendable`, `Bgra5551`, `NormalizedByte2`, and
-> `NormalizedByte4` for Skia `Texture2D`; the remaining format gates are tracked by SKIA-140–143.
+> Covers: EasyGL, Vulkan, SDL_Renderer renderers.
 
 ---
 
@@ -136,23 +128,22 @@ filled with the same value (no vertex-color tint) — and compares the two backb
 Before the fix: vertex-color path read 188, textured path read 128 (diff 60, confirming both bugs).
 After the fix: both read exactly 128 (diff 0). Full Vulkan ctest suite: 1944/1945 (only the
 pre-existing, already-documented `Vulkan_DepthBias` failure remains; `Vulkan_FillMode_WireFrame`'s
-known order-dependent flakiness is unrelated and unaffected). EasyGL and Bgfx were checked and have
-no equivalent bug — neither has any `SRGB`/`Srgb` format reference anywhere in their renderer source.
+known order-dependent flakiness is unrelated and unaffected). EasyGL was checked and has
+no equivalent bug — it has no `SRGB`/`Srgb` format reference anywhere in its renderer source.
 
 ---
 
 ## How format selection works (current state)
 
 Historically `Texture2D` stored the requested `SurfaceFormat` in `format_` but did not forward it
-to the renderers covered by this document. `ImageData` now carries the format ordinal. Skia uses
-that for its promoted formats; EasyGL uses it for `NormalizedByte4` on OpenGL ES 3/OpenGL 3.3/
-WebGL 2 profiles, storing exact signed bytes as `GL_RGBA8_SNORM`.
+to the renderers covered by this document. `ImageData` now carries the format ordinal. EasyGL uses
+it for `NormalizedByte4` on OpenGL ES 3/OpenGL 3.3/WebGL 2 profiles, storing exact signed bytes as
+`GL_RGBA8_SNORM`.
 
 `Texture3D` and `TextureCube` receive `surfaceFormat` as an `int` argument in
 `CreateTexture3D` / `CreateTextureCube`, but every renderer ignores it (`/* surfaceFormat */`).
 
-Other accepted textures in the historical renderers below remain RGBA8 unorm. Skia's broader
-current exceptions are documented only in its checked matrix linked above.
+Other accepted textures in the historical renderers below remain RGBA8 unorm.
 
 ---
 
@@ -169,35 +160,35 @@ current exceptions are documented only in its checked matrix linked above.
 
 ## Format table
 
-| SurfaceFormat | Bytes/px | EasyGL | Vulkan | Bgfx | SDL_Renderer | Notes |
-|---|---|---|---|---|---|---|
-| **Color** | 4 | ✅ GL_RGBA8 | ✅ VK_FORMAT_R8G8B8A8_UNORM | ✅ RGBA8 | ✅ RGBA32 | RGBA byte order; only fully supported format |
-| Bgr565 | 2 | ❌ | ❌ | ❌ | ❌ | Format not forwarded; RGBA8 used instead |
-| Bgra5551 | 2 | ❌ | ❌ | ❌ | ❌ | Same |
-| Bgra4444 | 2 | ❌ | ❌ | ❌ | ❌ | Same |
-| **Dxt1** | 0.5 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | `DDSFromStreamEXT` (.DDS): CPU-decompressed to RGBA8 before upload — works, but 8× VRAM overhead. Direct `SetData` with compressed blocks: ❌ misinterpreted as RGBA8. No native GPU DXT path. |
-| **Dxt3** | 1 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
-| **Dxt5** | 1 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
-| NormalizedByte2 | 2 | ❌ | ❌ | ❌ | ❌ | Signed 8-bit per channel; no signed GL/Vk format used |
-| NormalizedByte4 | 4 | ✅ GL_RGBA8_SNORM (ES 3-class profiles) | ❌ | ❌ | ❌ | Signed bytes upload and sample in [-1,1]; ES 2/WebGL 1 reject clearly |
-| Rgba1010102 | 4 | ❌ | ❌ | ❌ | ❌ | 10-bit per channel; requires GL_RGB10_A2 / VK_FORMAT_A2B10G10R10_UNORM_PACK32 |
-| Rg32 | 4 | ❌ | ❌ | ❌ | — | 16-bit per channel RG; requires GL_RG16 / VK_FORMAT_R16G16_UNORM |
-| Rgba64 | 8 | ❌ | ❌ | ❌ | — | 16-bit per channel RGBA; requires GL_RGBA16 / VK_FORMAT_R16G16B16A16_UNORM |
-| Alpha8 | 1 | ❌ | ❌ | ❌ | ❌ | Single alpha channel; requires GL_R8 + swizzle or GL_ALPHA |
-| Single | 4 | ❌ | ❌ | ❌ | — | 32-bit float R; requires GL_R32F / VK_FORMAT_R32_SFLOAT |
-| Vector2 | 8 | ❌ | ❌ | ❌ | — | 32-bit float RG; requires GL_RG32F |
-| Vector4 | 16 | ❌ | ❌ | ❌ | — | 32-bit float RGBA; requires GL_RGBA32F |
-| HalfSingle | 2 | ❌ | ❌ | ❌ | — | 16-bit half float R; requires GL_R16F |
-| HalfVector2 | 4 | ❌ | ❌ | ❌ | — | 16-bit half float RG; requires GL_RG16F |
-| HalfVector4 | 8 | ❌ | ❌ | ❌ | — | 16-bit half float RGBA; requires GL_RGBA16F — key format for HDR (CNAEXT N11) |
-| HdrBlendable | 8 | ❌ | ❌ | ❌ | — | Alias for RGBA16F in FNA; same as HalfVector4 |
-| ColorBgraEXT | 4 | ❌ | ❌ | ❌ | ❌ | XNA3 legacy ABGR byte order; stored as RGBA8, byte order not respected |
-| **ColorSrgbEXT** | 4 | ❌ | ❌ | ❌ | ❌ | Stored as linear RGBA8; sRGB flag silently ignored; requires GL_SRGB8_ALPHA8 / VK_FORMAT_R8G8B8A8_SRGB |
-| Dxt5SrgbEXT | 1 | ❌ | ❌ | ❌ | ❌ | CPU decompression path (see Dxt5 above) drops the sRGB flag |
-| Bc7EXT | 1 | ❌ | ❌ | ❌ | ❌ | No BC7 decode/upload path at all (unlike Dxt1/3/5's CPU-decompress fallback) |
-| Bc7SrgbEXT | 1 | ❌ | ❌ | ❌ | ❌ | Same as Bc7EXT, plus sRGB |
-| ByteEXT | 1 | ❌ | ❌ | ❌ | ❌ | Single unsigned byte channel; requires GL_R8 |
-| UShortEXT | 2 | ❌ | ❌ | ❌ | ❌ | Single unsigned short channel; requires GL_R16 |
+| SurfaceFormat | Bytes/px | EasyGL | Vulkan | SDL_Renderer | Notes |
+|---|---|---|---|---|---|
+| **Color** | 4 | ✅ GL_RGBA8 | ✅ VK_FORMAT_R8G8B8A8_UNORM | ✅ RGBA32 | RGBA byte order; only fully supported format |
+| Bgr565 | 2 | ❌ | ❌ | ❌ | Format not forwarded; RGBA8 used instead |
+| Bgra5551 | 2 | ❌ | ❌ | ❌ | Same |
+| Bgra4444 | 2 | ❌ | ❌ | ❌ | Same |
+| **Dxt1** | 0.5 | ⚠️ | ⚠️ | ⚠️ | `DDSFromStreamEXT` (.DDS): CPU-decompressed to RGBA8 before upload — works, but 8× VRAM overhead. Direct `SetData` with compressed blocks: ❌ misinterpreted as RGBA8. No native GPU DXT path. |
+| **Dxt3** | 1 | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
+| **Dxt5** | 1 | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
+| NormalizedByte2 | 2 | ❌ | ❌ | ❌ | Signed 8-bit per channel; no signed GL/Vk format used |
+| NormalizedByte4 | 4 | ✅ GL_RGBA8_SNORM (ES 3-class profiles) | ❌ | ❌ | Signed bytes upload and sample in [-1,1]; ES 2/WebGL 1 reject clearly |
+| Rgba1010102 | 4 | ❌ | ❌ | ❌ | 10-bit per channel; requires GL_RGB10_A2 / VK_FORMAT_A2B10G10R10_UNORM_PACK32 |
+| Rg32 | 4 | ❌ | ❌ | — | 16-bit per channel RG; requires GL_RG16 / VK_FORMAT_R16G16_UNORM |
+| Rgba64 | 8 | ❌ | ❌ | — | 16-bit per channel RGBA; requires GL_RGBA16 / VK_FORMAT_R16G16B16A16_UNORM |
+| Alpha8 | 1 | ❌ | ❌ | ❌ | Single alpha channel; requires GL_R8 + swizzle or GL_ALPHA |
+| Single | 4 | ❌ | ❌ | — | 32-bit float R; requires GL_R32F / VK_FORMAT_R32_SFLOAT |
+| Vector2 | 8 | ❌ | ❌ | — | 32-bit float RG; requires GL_RG32F |
+| Vector4 | 16 | ❌ | ❌ | — | 32-bit float RGBA; requires GL_RGBA32F |
+| HalfSingle | 2 | ❌ | ❌ | — | 16-bit half float R; requires GL_R16F |
+| HalfVector2 | 4 | ❌ | ❌ | — | 16-bit half float RG; requires GL_RG16F |
+| HalfVector4 | 8 | ❌ | ❌ | — | 16-bit half float RGBA; requires GL_RGBA16F — key format for HDR (CNAEXT N11) |
+| HdrBlendable | 8 | ❌ | ❌ | — | Alias for RGBA16F in FNA; same as HalfVector4 |
+| ColorBgraEXT | 4 | ❌ | ❌ | ❌ | XNA3 legacy ABGR byte order; stored as RGBA8, byte order not respected |
+| **ColorSrgbEXT** | 4 | ❌ | ❌ | ❌ | Stored as linear RGBA8; sRGB flag silently ignored; requires GL_SRGB8_ALPHA8 / VK_FORMAT_R8G8B8A8_SRGB |
+| Dxt5SrgbEXT | 1 | ❌ | ❌ | ❌ | CPU decompression path (see Dxt5 above) drops the sRGB flag |
+| Bc7EXT | 1 | ❌ | ❌ | ❌ | No BC7 decode/upload path at all (unlike Dxt1/3/5's CPU-decompress fallback) |
+| Bc7SrgbEXT | 1 | ❌ | ❌ | ❌ | Same as Bc7EXT, plus sRGB |
+| ByteEXT | 1 | ❌ | ❌ | ❌ | Single unsigned byte channel; requires GL_R8 |
+| UShortEXT | 2 | ❌ | ❌ | ❌ | Single unsigned short channel; requires GL_R16 |
 
 ---
 
@@ -207,7 +198,6 @@ current exceptions are documented only in its checked matrix linked above.
 |---------|-----------|-----------|-------------|----------------------|----------------------|
 | EasyGL | GL_RGBA8; GL_RGBA8_SNORM for NormalizedByte4 on ES 3-class profiles | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_DEPTH_COMPONENT24 |
 | Vulkan | VK_FORMAT_R8G8B8A8_UNORM | VK_FORMAT_R8G8B8A8_UNORM | VK_FORMAT_R8G8B8A8_UNORM | swapchain format¹ | D32_SFLOAT or D24_UNORM_S8² |
-| Bgfx | RGBA8 | RGBA8 | RGBA8 | RGBA8 | D24S8 |
 | SDL_Renderer | SDL_PIXELFORMAT_RGBA32 | — | — | SDL_PIXELFORMAT_RGBA32 | — |
 
 ¹ Vulkan swapchain prefers `VK_FORMAT_B8G8R8A8_UNORM`; falls back to first format reported by the
@@ -259,7 +249,7 @@ To properly support non-Color formats, the following refactors are needed:
    `ImageData::surfaceFormat`; each renderer must still opt a format into its verified mapping.
 
 2. **Add a format dispatch function in each renderer** — map `SurfaceFormat` enum to
-   the native `metagl::InternalFormat` / `VkFormat` / `bgfx::TextureFormat`.
+   the native `metagl::InternalFormat` / `VkFormat`.
 
 3. **Keep the RGBA8 path as the default fallback** — unknown or unsupported formats
    should throw `std::runtime_error` rather than silently using RGBA8.

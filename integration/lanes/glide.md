@@ -1,5 +1,7 @@
 # Lane card — `glide` · ✅ **INTEGRATED 2026-08-08** · merge `677f4c59` — the sixteenth lane
 
+> **Retired renderer — historical record.** The `GLIDE` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 39 is permanently reserved. This integration lane is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Outcome.** Glide's technical integration gates pass. The original 32-commit history was
 > preserved, replayed chronologically with unchanged author/date/subject metadata, adapted to the
 > current graphics contracts, and merged signed `--no-ff`. The merge tree equals the validated

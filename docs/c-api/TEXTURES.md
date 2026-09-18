@@ -60,8 +60,7 @@ failure leaves the texture unchanged.
 Surface-format creation and successful typed transfer remain native-renderer capabilities.
 HEADLESS and SDL_RENDERER currently create Color textures only. HEADLESS exercises higher mip
 uploads; SDL_RENDERER has no native mip-level upload path, so a compatible level-above-zero upload
-returns `CNA_RESULT_NOT_SUPPORTED` before changing the CPU shadow. The Skia build exposes its
-larger promoted native format set, but that matrix does not yet have C-only runtime evidence.
+returns `CNA_RESULT_NOT_SUPPORTED` before changing the CPU shadow.
 
 ## Images, files and streams
 

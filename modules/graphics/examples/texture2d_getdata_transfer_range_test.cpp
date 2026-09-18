@@ -150,10 +150,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "EASYGL";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_BGFX)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "BGFX";
-    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "VULKAN";
@@ -190,10 +186,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "CANVAS";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "LLGL";
-    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
 #error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
 #endif
@@ -784,7 +776,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         //      level-0-sized capacity requirement (91) would wrongly reject this legal call and a
         //      level-0-sized region would wrongly demand 91 elements of output. A separate
         //      MIPMAPPED texture is used: uploading a level a non-mipmapped resource does not have
-        //      is rejected by the renderers that validate it (WebGPU, bgfx) and is not what this
+        //      is rejected by the renderers that validate it (WebGPU) and is not what this
         //      check is about.
         {
             if (kMipPolicy == MipPolicy::RejectConstruction)

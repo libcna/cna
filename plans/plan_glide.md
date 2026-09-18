@@ -1,5 +1,7 @@
 # Glide 3.x backend plan
 
+> **Retired renderer — historical record.** The `GLIDE` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 39 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 ## Goal and non-goal
 
 The goal is authentic **Glide 3.x** submission to a caller-installed emulator such as dgVoodoo2,

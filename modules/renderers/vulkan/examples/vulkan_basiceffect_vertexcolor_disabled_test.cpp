@@ -107,9 +107,9 @@ protected:
         {
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): the standard NDC
-            // quad winding used throughout this pixel-test family is culled once the real
-            // default RasterizerState reaches the GPU.
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): the
+            // standard NDC quad winding used throughout this pixel-test family is culled once the
+            // real default RasterizerState reaches the GPU.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             fx.Apply();
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);

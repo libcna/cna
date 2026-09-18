@@ -2,7 +2,8 @@
 
 **Status: 2026-08-11.** Same 39-scene corpus (`tools/xna-oracle/scenes/*.scene`), same checked-in
 real XNA 4.0 reference images (`tools/xna-oracle/reference/*.png`), same `scripts/xna-diff.py`
-tolerance-0 comparison the D3D9 (`D9-A6`), EasyGL and OpenGLES1 (`OPENGLES1-78`) measurements
+tolerance-0 comparison the D3D9 (`D9-A6`), EasyGL and OpenGLES1 (retired 2026-09-17,
+`OPENGLES1-78`) measurements
 already use — now also run through the FNA3D renderer (`plans/plan_fna3d.md` FNA3D-26).
 
 Run: `scripts/run-oracle-corpus-diff-fna3d.sh ./cmake-build-fna3d/cna_oracle_render_fna3d`,
@@ -24,7 +25,7 @@ three effect families had ever been rendered by FNA3D in any test.
 
 The reference images were captured against the real XNA 4.0 runtime on a different rasteriser, so
 the corpus carries a host-wide divergence that is not renderer-specific — which is exactly why the
-EasyGL and OpenGLES1 measurements are framed the same way. A renderer at 10/39 on this machine is
+EasyGL and OpenGLES1 (retired 2026-09-17) measurements are framed the same way. A renderer at 10/39 on this machine is
 at the established baseline. The useful signal is the **per-scene** comparison below.
 
 ## Where FNA3D is byte-identical to the EasyGL baseline
@@ -40,7 +41,7 @@ GL-versus-XNA divergence rather than anything FNA3D-specific:
 `sprite_multitexture_quad`, `sprite_wrap_quad`).
 
 `dualtexture_quad` at 307 is worth calling out: that is the scene whose second UV set OpenGLES1
-silently dropped (`OPENGLES1-81`, a real defect found only by this corpus). FNA3D matches the
+(retired 2026-09-17) silently dropped (`OPENGLES1-81`, a real defect found only by this corpus). FNA3D matches the
 EasyGL number, so its dual-UV path carries the second coordinate set correctly.
 
 ## Where FNA3D is better than the EasyGL baseline

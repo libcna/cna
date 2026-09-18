@@ -1,8 +1,8 @@
 # AlphaTestEffect Exactness Support Matrix
 
 Phase 43 (`plans/plan_graphics.md` Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
-conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
-summarizes the findings and closes the phase.
+conformance against FNA across EasyGL and Vulkan. This document summarizes the findings and
+closes the phase.
 
 ---
 
@@ -23,7 +23,7 @@ Task 371 found **zero existing test coverage** for `AlphaTestEffect`. Task 372 w
 362's `BasicEffectTests.cpp` style): 27 tests covering all 8 property defaults, a setter round-trip
 per property, `Clone()`, and `GetTypeName()`. No new bugs found — pure test-authoring.
 
-## 2. CompareFunction pixel coverage, all 3 renderers (Tasks 373–375)
+## 2. CompareFunction pixel coverage (Tasks 373–375)
 
 Task 373 extended Task 190's EasyGL boundary-only coverage (which only ever tested the exact
 `alpha==reference` point) with a genuine 3-point sweep (`64/255` below, `128/255` at, `192/255`
@@ -34,15 +34,6 @@ confirmed unique, giving the sweep real discriminating power beyond a single bou
 
 Task 374 ported the identical sweep to Vulkan — the **first-ever** `AlphaTestEffect`
 `CompareFunction` pixel coverage Vulkan had. 24/24 PASS, byte-for-byte same expected values.
-
-Task 375 ported the sweep to Bgfx — again the first-ever Bgfx coverage for this. Found one
-integration issue (not an `AlphaTestEffect` bug): copying Task 190/373's
-`dev.SetDepthTestEnabled(false)` call verbatim crashed, since `GraphicsDevice::
-SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` are unconditional-throw stubs on
-Bgfx — a known, pre-existing, intentional gap (2 other existing Bgfx tests already document
-skipping the same call). Fixed by removing the call (harmless here since every iteration clears
-before drawing a single quad at `z=0`). Also needed the standard `RasterizerState::CullNone`
-workaround (Task 884). 24/24 PASS after the fix.
 
 ## 3. Reference-alpha scaling (Task 376)
 
@@ -65,17 +56,17 @@ test.cpp`) using two `CompareFunction::Greater` reference thresholds chosen so "
 used" and "diffuse-alpha-alone" hypotheses diverge — 2/2 PASS, exact match. EasyGL reuses the same
 generic per-stride shaders `BasicEffect` uses, which already carry the correct vertex-color logic.
 
-**Vulkan and Bgfx: real bug found, `VertexColorEnabled` has zero effect, true by default — not
-fixed here.** Both renderers route `AlphaTestEffect` through one generic alpha-test
-pipeline/shader (`alpha_test3d.vert/frag.glsl` on Vulkan; `vs/fs_alpha_test3d.sc` on Bgfx) that
-only ever declares `position`+`texcoord` vertex inputs, never a color attribute — and critically,
+**Vulkan: real bug found, `VertexColorEnabled` has zero effect, true by default — not fixed
+here.** Vulkan routes `AlphaTestEffect` through one generic alpha-test pipeline/shader
+(`alpha_test3d.vert/frag.glsl`) that only ever declares `position`+`texcoord` vertex inputs,
+never a color attribute — and critically,
 `AlphaTestEffect`'s own defaults already route essentially all real-world usage through this
 pipeline (`AlphaFunction=Greater`, `ReferenceAlpha=0` already produces `alphaTestActive=true`).
 Verified empirically with a temporary, uncommitted Vulkan port of the same test: both cases failed
 with vertex color completely dropped, matching the predicted `TextureColor×DiffuseColor×Alpha`-only
-formula exactly. **Opened Task 887** to unify Vulkan/Bgfx's alpha-test dispatch with their
-already-correct per-stride pipelines (mirroring EasyGL's architecture) — a genuinely large,
-6-shader-file, 2-renderer change, not a Task-377-sized fix.
+formula exactly. **Opened Task 887** to unify Vulkan's alpha-test dispatch with its
+already-correct per-stride pipelines (mirroring EasyGL's architecture) — a genuinely large
+shader change, not a Task-377-sized fix.
 
 ## 5. Fog behavior (Task 378)
 
@@ -91,46 +82,32 @@ A 3-point Z-sweep pixel test (`easygl_alphatest_fog_test.cpp`) proved genuine in
 on/off switch — 3/3 PASS, near-exact match. Verified genuine discriminating power via `git stash`:
 2/3 assertions correctly failed pre-fix.
 
-**Much larger finding at the time, since fixed:** grepping every `.glsl` (Vulkan) and `.sc` (Bgfx)
-shader file in both renderers for "fog" found **zero matches anywhere** — fog was a total,
-project-wide no-op on Vulkan and Bgfx for **every** 3D effect, including `BasicEffect`, despite
+**Much larger finding at the time, since fixed:** grepping every `.glsl` (Vulkan) shader file for
+"fog" found **zero matches anywhere** — fog was a total, project-wide no-op on Vulkan for
+**every** 3D effect, including `BasicEffect`, despite
 `BasicEffect::FillGpuDrawParams()` already forwarding the fields correctly on the C++ side.
 **Opened Task 888** to track it; **fixed by Task 899 (closed 2026-07-07)** — fog uniforms/varyings
-and the blend formula were added across every 3D shader on both renderers, including
+and the blend formula were added across every 3D shader on Vulkan, including
 `AlphaTestEffect`'s. See `docs/graphics-renderer-feature-matrix.md`'s "Fog, all applicable
 effects/pipelines" row for current status.
 
 ## 6. Null/disabled texture behavior (Task 379)
 
-**Real bug found and fixed on Bgfx — general, not `AlphaTestEffect`-specific.** FNA's
-`AlphaTestEffect` has no `TextureEnabled` flag; every shader variant unconditionally samples
+FNA's `AlphaTestEffect` has no `TextureEnabled` flag; every shader variant unconditionally samples
 `Texture`. Task 379 treated the null result as undefined and invented opaque white. SOFTWARE-303
 instead measured Microsoft XNA 4.0: the sampler returns opaque black. **EasyGL and Software now
-match that result.** Bgfx's historical bug was separate — all 7 texture-binding call sites in
-`DrawPrimitivesEx` only bound a texture when one was present, with no fallback at all; a
-null-texture draw left whatever the *previous*
-draw had bound (confirmed empirically: black, not the previous texture nor the correct fallback).
-
-Task 379 added a `defaultWhiteTexture3D_` and an `else` branch to all 7 call sites uniformly. The
-change affected every texture-sampling dispatch branch (`dualTexture`, `skinned`, `envMap`,
-`alphaTest`, `lighting`, `textureEnabled`, `textureEnabled+vertexColorEnabled`), not just the one
-`AlphaTestEffect` happens to exercise. One pixel test per renderer, 3/3 PASS on all 3 renderers,
-verified discriminating via `git stash`, but its white value was not XNA-conformant. **Noted**:
-Bgfx's second texture slot (`texColor3DSampler2_`, used only by `DualTextureEffect`) had the
-identical gap, deliberately left
-for whoever next touches `DualTextureEffect` in Phase 44 — `DualTextureEffect` always requires both
-textures by design, unlike `AlphaTestEffect`, so the impact is much narrower.
+match that result.**
 
 ## Support matrix
 
-| Feature | EasyGL | Vulkan | Bgfx |
-|---|---|---|---|
-| Property defaults (8/8) | ✅ Task 371/372 | ✅ (shared C++) | ✅ (shared C++) |
-| `AlphaTest` switch, all 8 `CompareFunction` values | ✅ Task 373 | ✅ Task 374 | ✅ fixed Task 375 (depth-state stub) |
-| `ReferenceAlpha` 0–255 scaling, boundary + out-of-range | ✅ Task 376 | ✅ (shared C++) | ✅ (shared C++) |
-| `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 | ❌ Task 887 | ❌ Task 887 |
-| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 | ✅ fixed Task 899 (2026-07-07) | ✅ fixed Task 899 (2026-07-07) |
-| Null texture samples opaque black | ✅ SOFTWARE-303 | ❌ retains old white convention | ❌ retains old white convention |
+| Feature | EasyGL | Vulkan |
+|---|---|---|
+| Property defaults (8/8) | ✅ Task 371/372 | ✅ (shared C++) |
+| `AlphaTest` switch, all 8 `CompareFunction` values | ✅ Task 373 | ✅ Task 374 |
+| `ReferenceAlpha` 0–255 scaling, boundary + out-of-range | ✅ Task 376 | ✅ (shared C++) |
+| `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 | ❌ Task 887 |
+| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 | ✅ fixed Task 899 (2026-07-07) |
+| Null texture samples opaque black | ✅ SOFTWARE-303 | ❌ retains old white convention |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
 
@@ -138,11 +115,10 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 
 Phase 43 opened 2 new tracked tasks:
 
-- **Task 887** — unify Vulkan/Bgfx's alpha-test pipeline dispatch with their already-correct
+- **Task 887** — unify Vulkan's alpha-test pipeline dispatch with its already-correct
   per-stride textured/colored-textured pipelines (mirroring EasyGL's architecture), so
-  `VertexColorEnabled` actually affects the alpha-test comparison on those 2 renderers. A 6-shader-
-  file, 2-renderer change.
+  `VertexColorEnabled` actually affects the alpha-test comparison there.
 - ~~**Task 888**~~ — **fixed by Task 899** (closed 2026-07-07): real fog is now implemented on
-  Vulkan and Bgfx, project-wide, for every 3D effect including `AlphaTestEffect`.
+  Vulkan, project-wide, for every 3D effect including `AlphaTestEffect`.
 
 This closes Phase 43 (`plans/plan_graphics.md` Tasks 371–380) in full.

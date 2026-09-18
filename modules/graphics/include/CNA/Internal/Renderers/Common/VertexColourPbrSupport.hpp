@@ -59,7 +59,7 @@ namespace CNA::Internal::Renderers
      *
      * @param params Draw state as the effect filled it.
      * @param strideInBytes The vertex buffer's stride.
-     * @param rendererName Short renderer identifier, e.g. "BGFX".
+     * @param rendererName Short renderer identifier, e.g. "METAL".
      * @throws std::runtime_error When the draw carries an enabled `COLOR_0` on stride 60 or 80.
      */
     inline void RequireVertexColourPbrSupportEXT(const GpuDrawParams& params,
@@ -75,8 +75,8 @@ namespace CNA::Internal::Renderers
             "including its alpha. This renderer does not evaluate it yet (plans/plan_gltf.md GLTF-465), so "
             "the draw is refused rather than rendered with the opaque-white identity, which would be "
             "a visibly wrong surface reported as a successful draw. Use a renderer that implements it "
-            "(EasyGL: OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, SOFTWARE, IGL, OPENGL2, OPENGL4, "
-            "VULKAN, DIRECTX9, DIRECTX11, DIRECTX12, MAGNUM, DILIGENT, BGFX, LLGL, SDL_GPU, WEBGPU), or "
+            "(EasyGL: OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, SOFTWARE, OPENGL4, VULKAN, "
+            "DIRECTX9, DIRECTX11, DIRECTX12, SDL_GPU, WEBGPU), or "
             "set "
             "VertexColorEnabledEXT=false on the effect to accept "
             "the identity deliberately.");
@@ -90,9 +90,11 @@ namespace CNA::Internal::Renderers
      * metallic-roughness path whatsoever, whose stock-effect selector would otherwise fall through
      * and shade an authored glTF material as something else entirely.
      *
-     * The partition is the same and so is the reasoning. `SOKOL`, `TINYGL`, `GLIDE`, `OPENGLES1`
-     * and `PORTABLEGL` already refuse such a draw in their own words; this is that decision made
-     * once, so a renderer cannot join them by accident or drift out of them silently.
+     * The partition is the same and so is the reasoning. `PORTABLEGL` already refuses such a draw
+     * in their own words; this is that decision made once, so a renderer cannot join them by
+     * accident or drift out of them silently. (Four more renderers refused it in their own words
+     * until 2026-09-17 -- `SOKOL`, `TINYGL`, `GLIDE` and `OPENGLES1` -- which is why the shared
+     * guard was worth extracting even though one caller remains.)
      *
      * Call it at the entry of the params-carrying draw paths, before any GPU state is touched: a
      * refusal that happens after the data has been submitted through the wrong shading model is not
@@ -112,8 +114,8 @@ namespace CNA::Internal::Renderers
             "metallic-roughness, emissive or occlusion maps. Shading it with the nearest stock "
             "effect would present a visibly different material as a successful draw, so the draw is "
             "refused instead (plans/plan_gltf.md GLTF-477). Use a renderer that implements the model "
-            "(EasyGL: OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, OPENGL2, OPENGL4, VULKAN, IGL, "
-            "MAGNUM, DILIGENT, BGFX, LLGL, SDL_GPU, WEBGPU, DIRECTX9/11/12), or a reduced one whose "
+            "(EasyGL: OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, OPENGL4, VULKAN, SDL_GPU, WEBGPU, "
+            "DIRECTX9/11/12), or a reduced one whose "
             "boundary is documented (SOFTWARE).");
     }
 }

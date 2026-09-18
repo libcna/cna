@@ -4,13 +4,13 @@
 > the central finding of §4 below) **is fixed** — real per-pipeline depth-compare op, full
 > front/back `VkStencilOpState`, and stencil reference/masks as true dynamic state. `ReferenceStencil`
 > independent-override is also now connected on Vulkan specifically (an undocumented side effect of
-> the same fix); it remains unconnected on EasyGL/Bgfx (Task 872). §4 and the summary table below
+> the same fix); it remains unconnected on EasyGL (Task 872). §4 and the summary table below
 > describe the pre-fix investigation and are kept for their diagnostic detail — the ❌/"not fixed"
 > markers for Vulkan in them are historical, not current. See `AUDIT.md`'s `DepthStencilState` row
 > or `NEXT.md` §5 for current status.
 
 Phase 37 (`plans/plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
-conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
+conformance against FNA across EasyGL and Vulkan. This document
 summarizes the findings.
 
 ---
@@ -88,13 +88,6 @@ a fully-bypassed stencil test also always "passes." A 4th column with a delibera
 read-back reference (which a working implementation must *reject*) was required to give the test
 real discriminating power. Task 318 applied this lesson from the start.
 
-**Bgfx**: `ApplyDepthStencilState`'s state-application code was confirmed fully correct by direct
-reading (`depthFunc` mapped via a complete `BGFX_STATE_DEPTH_TEST_*` switch; real front/back
-`BGFX_STENCIL_*` state built via a `BuildBgfxStencil` helper). Whether Bgfx's window/backbuffer
-actually has a physical stencil buffer allocated (the exact class of gap found and fixed on EasyGL,
-see below) has **not been verified** — worth checking before assuming Bgfx's stencil support is any
-better in practice than EasyGL's was before Task 315's fix.
-
 ### Task 315's EasyGL fix
 
 Before Task 315, no EasyGL window in this project ever requested `SDL_GL_STENCIL_SIZE` — the
@@ -122,13 +115,13 @@ Two distinct findings:
 1. **Fixed** (same shape as Task 309): `GraphicsDevice::setDepthStencilStateProperty` never
    propagated an assigned state's own `ReferenceStencil` into `GraphicsDevice`'s own field, so
    `getReferenceStencilProperty()` could return stale data. Fixed.
-2. **Confirmed broken on all 3 renderers, tracked as new Task 872, not fixed**:
+2. **Confirmed broken on both renderers, tracked as new Task 872, not fixed**:
    `GraphicsDevice::setReferenceStencilProperty` is a pure local no-op with **zero renderer
    connection** — `IGraphicsRenderer` has no `SetReferenceStencil` method at all. Unlike Task 870,
    this is **not Vulkan-specific** — confirmed failing identically on both EasyGL and Vulkan via a
    dedicated pixel test. Unlike `BlendFactor`'s case (Task 309), where the renderer-side method
    already existed and just wasn't being invoked, here there is no existing code path to wire up;
-   fixing this needs new interface surface across all 3 renderers.
+   fixing this needs new interface surface across both renderers.
 
 ---
 
@@ -137,24 +130,23 @@ Two distinct findings:
 **Updated 2026-07-11** — the Vulkan column below reflects Task 870's fix (previously all ❌; see
 the status banner at the top of this document).
 
-| Feature | EasyGL | Vulkan | Bgfx |
-|---|---|---|---|
-| `DepthStencilState` API/presets/`Name` | ✅ | ✅ | ✅ |
-| Default `DepthStencilState`/`RasterizerState` on `GraphicsDevice` | ✅ (fixed) | ✅ (fixed) | ✅ (fixed) |
-| `DepthBufferWriteEnable` | ✅ | ✅ | 🔍 not pixel-verified (no readback API) |
-| `DepthBufferFunction` (all `CompareFunction` values) | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
-| `StencilEnable` | ✅ (fixed, Task 315) | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
-| `StencilMask` / `StencilWriteMask` | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
-| Front-face `StencilFail`/`StencilDepthBufferFail`/`StencilPass` | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
-| `TwoSidedStencilMode` / back-face (CCW) ops | ✅ | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
-| `ReferenceStencil` via `DepthStencilState` assignment | ✅ (fixed, Task 319) | ✅ (fixed, Task 870) | 🔍 not pixel-verified |
-| `ReferenceStencil` independent override (no state reassignment) | ❌ (Task 872) | ✅ (fixed — side effect of Task 870) | ❌ (Task 872) |
-| `GraphicsDevice::Clear(ClearOptions::Stencil, ...)` actually clears stencil | ❌ (Task 871) | ❌ (Task 871) | ❓ unverified |
-| Physical stencil buffer exists on the default window | ✅ (fixed, Task 315) | ✅ (Task 870 fixed the compare/stencil pipeline; format-preference order noted in §4 was corrected alongside it) | ❓ unverified |
+| Feature | EasyGL | Vulkan |
+|---|---|---|
+| `DepthStencilState` API/presets/`Name` | ✅ | ✅ |
+| Default `DepthStencilState`/`RasterizerState` on `GraphicsDevice` | ✅ (fixed) | ✅ (fixed) |
+| `DepthBufferWriteEnable` | ✅ | ✅ |
+| `DepthBufferFunction` (all `CompareFunction` values) | ✅ | ✅ (fixed, Task 870) |
+| `StencilEnable` | ✅ (fixed, Task 315) | ✅ (fixed, Task 870) |
+| `StencilMask` / `StencilWriteMask` | ✅ | ✅ (fixed, Task 870) |
+| Front-face `StencilFail`/`StencilDepthBufferFail`/`StencilPass` | ✅ | ✅ (fixed, Task 870) |
+| `TwoSidedStencilMode` / back-face (CCW) ops | ✅ | ✅ (fixed, Task 870) |
+| `ReferenceStencil` via `DepthStencilState` assignment | ✅ (fixed, Task 319) | ✅ (fixed, Task 870) |
+| `ReferenceStencil` independent override (no state reassignment) | ❌ (Task 872) | ✅ (fixed — side effect of Task 870) |
+| `GraphicsDevice::Clear(ClearOptions::Stencil, ...)` actually clears stencil | ❌ (Task 871) | ❌ (Task 871) |
+| Physical stencil buffer exists on the default window | ✅ (fixed, Task 315) | ✅ (Task 870 fixed the compare/stencil pipeline; format-preference order noted in §4 was corrected alongside it) |
 
 Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/inconsistent ·
-🔍 not empirically verified this phase (Bgfx has no GPU pixel-readback API in this project, so its
-depth/stencil coverage is smoke-test/no-regression only by design) · ❓ not investigated at all.
+❓ not investigated at all.
 
 ## Open, tracked follow-up work
 
@@ -167,7 +159,5 @@ depth/stencil coverage is smoke-test/no-regression only by design) · ❓ not in
 - **Task 871** — `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` (and the stencil clear
   value) on every renderer.
 - **Task 872** — `GraphicsDevice.ReferenceStencil`'s independent-override behavior has no renderer
-  connection on EasyGL/Bgfx; needs a new `IGraphicsRenderer::SetReferenceStencil` method and
-  per-renderer plumbing there. (Vulkan is already connected, an undocumented side effect of Task 870.)
-- Bgfx's physical stencil-buffer existence (the same class of gap Task 315 found and fixed on
-  EasyGL) has not been checked — worth verifying before relying on Bgfx stencil support in practice.
+  connection on EasyGL; needs a new `IGraphicsRenderer::SetReferenceStencil` method and
+  plumbing there. (Vulkan is already connected, an undocumented side effect of Task 870.)

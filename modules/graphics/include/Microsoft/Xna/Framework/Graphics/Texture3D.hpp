@@ -514,9 +514,10 @@ namespace Microsoft::Xna::Framework::Graphics
         int width_;
         int height_;
         int depth_;
-        // SKIA-149: shared (not unique) ownership so a SkiaEffectRenderer can hold a weak_ptr for
+        // SKIA-149: shared (not unique) ownership so an effect renderer can hold a weak_ptr for
         // volume-sampling lifetime tracking, matching Texture2D's identical ITextureRenderer
-        // pattern. Texture3D itself remains non-copyable; this only lets a second, weak observer
+        // pattern. (The renderer that needed it, Skia, was retired in 2026-08; the shape is kept
+        // because Texture2D's identical one is still load-bearing.) Texture3D itself remains non-copyable; this only lets a second, weak observer
         // outlive a single call without becoming the resource's owner.
         std::shared_ptr<CNA::Internal::Renderers::ITexture3DRenderer> renderer_;
     };

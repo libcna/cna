@@ -101,12 +101,8 @@ namespace
         return "D3D11";
 #elif defined(CNA_RENDERER_DIRECTX12)
         return "D3D12";
-#elif defined(CNA_RENDERER_BGFX)
-        return "BGFX";
 #elif defined(CNA_RENDERER_WEBGPU)
         return "WEBGPU";
-#elif defined(CNA_RENDERER_OPENGLES1)
-        return "OPENGLES1";
 #elif defined(CNA_RENDERER_SOFTWARE)
         return "SOFTWARE";
 #elif defined(CNA_RENDERER_HEADLESS)

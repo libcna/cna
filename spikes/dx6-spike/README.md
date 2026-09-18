@@ -1,5 +1,7 @@
 # `dx6-spike` — `DX6-0` existence-gate spike findings (2026-07-21)
 
+> **Retired renderer — historical record.** The `DIRECTX6` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 27 is permanently reserved. This spike is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 Run under real Wine `ddraw.dll`/`d3d.dll` (Wine 10.0~repack-6, `WINEPREFIX=$HOME/.wine-cna-dx1`,
 `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset) — same environment `dx1-spike`/`dx2-spike`/
 `dx3-spike`/`dx5-spike` used.

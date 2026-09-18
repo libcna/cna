@@ -16,7 +16,7 @@ rediscovering the problem.
 
 **Found:** 2026-09-08, through SAMPLE-073 (SoccerPitch).
 **Fixed in:** EasyGL only (`2ce1cf2ff`).
-**Open in:** `directx11`, `vulkan`, `magnum`, `opengl2`, `opengl1`, `portablegl`.
+**Open in:** `directx11`, `vulkan`, `portablegl`.
 
 ### The false premise
 
@@ -75,15 +75,9 @@ Tests: `EasyGLDepthBias.IsScaledByTheDepthBuffersOwnResolution`,
 |---|---|---|
 | `directx11` | `D3D11StateObjectCache.cpp`, `D3D11RasterizerStateCache::GetOrCreate` | **`0`** — `lround(-0.0001)` rounds it away, so the bias is dropped entirely |
 | `vulkan` | `VulkanRenderer::ApplyRasterizerState` | unscaled into `vkCmdSetDepthBias`'s `depthBiasConstantFactor` |
-| `magnum` | `MagnumRenderer.cpp:874` | unscaled into `Renderer::setPolygonOffset` |
-| `opengl2` | `OpenGL2Renderer.cpp:3831` | unscaled into `glPolygonOffset` |
-| `opengl1` | `OpenGL1Renderer.cpp:377` | unscaled into `glPolygonOffset` |
 | `portablegl` | `PortableGLRenderer.cpp:1348` | unscaled into `glPolygonOffset` |
 
-`opengles1` is **exempt**: ES 1.1 has no `glPolygonOffset` and it already discards both values
-explicitly (`OpenGLES1Renderer.cpp:2613`).
-
-`software`, `tinygl` and the 2D-only renderers have no depth bias to get wrong.
+`software` and the 2D-only renderers have no depth bias to get wrong.
 
 ### Why they were not fixed with EasyGL
 
@@ -95,7 +89,7 @@ provides.
 Two of them are reachable with effort rather than new hardware, and are the natural place to
 start: **Vulkan** runs here on the real display (AMD 780M + RADV), and **directx11** runs under
 Wine with DXVK — the recipe is in the memory notes and in `docs/`. `directx11` is also the worst
-of the six, because it does not merely weaken the bias, it deletes it.
+of them, because it does not merely weaken the bias, it deletes it.
 
 `CLAUDE.md`: where XNA and FNA disagree, XNA wins. This is measured against real XNA.
 

@@ -225,7 +225,7 @@ namespace
         // TEXTURECUBE, and its RenderTargetCube renderer now uploads into it with the plain
         // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, Magnum, OpenGL4, Wicked, Igl, Rlgl, DirectX11, DirectX12);
+                               Software, OpenGL4, DirectX11, DirectX12);
     }
 }
 

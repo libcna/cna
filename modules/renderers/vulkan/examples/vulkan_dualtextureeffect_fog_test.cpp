@@ -147,8 +147,8 @@ class DualTextureFogVulkanTest : public Game
         {
             dev.Clear(kBlack);
             dev.setBlendStateProperty(BlendState::Opaque);
-            // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's
-            // winding is culled under FNA's real default RasterizerState.
+            // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this
+            // quad's winding is culled under FNA's real default RasterizerState.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.setDepthStencilStateProperty(DepthStencilState::None);
 #if defined(CNA_RENDERER_DIRECTX9)

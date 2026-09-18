@@ -1,5 +1,7 @@
 # CNA OPENGL1 Backend Plan
 
+> **Retired renderer — historical record.** The `OPENGL1` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 34 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 ## Scope
 `OPENGL1` is a genuinely independent, native legacy desktop OpenGL backend. It MUST NOT depend on EasyGL and MUST NOT route rendering through SDL_Renderer, SDL_GPU, bgfx, or the modern EasyGL backend. SDL is used only for the window and OpenGL context.
 

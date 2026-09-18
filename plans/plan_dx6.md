@@ -1,5 +1,7 @@
 # DirectX 6 (DirectDraw v4 + Direct3D v3, real stencil) Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `DIRECTX6` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 27 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
+
 > **Status (2026-07-21): `DX6-0` spike AND implementation phases R1-R8 all complete and verified.**
 > 20/20 `DX6`-labeled CTests pass (19 ported + the new `Dx6_Stencil` real stencil write-then-test
 > proof), first try after fixing the CMake registry wiring. Targeted cross-backend regression

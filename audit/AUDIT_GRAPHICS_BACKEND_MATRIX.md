@@ -1,5 +1,19 @@
 # AUDIT_GRAPHICS_BACKEND_MATRIX.md — Cross-Backend Capability Matrix
 
+> **Predates the 2026-09-17 renderer curation.** This archive was written when CNA had many more
+> renderer identities than it has now, and it names renderers that **no longer exist**: bgfx,
+> Magnum, Wicked, Sokol, Diligent, Glide, LLGL, IGL, rlgl, TinyGL, NanoVG, PixiJS, OpenVG, Blend2D,
+> Skia, the legacy OpenGL profiles (OPENGL1/OPENGL2/OPENGLES1) and the legacy DirectX series
+> (DIRECTX1-8, DIRECTX10). Twenty-five identities were retired on 2026-09-17 and Skia in 2026-08,
+> leaving **25 public renderer identities over 21 implementation families**
+> (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`). It also predates the physical
+> module layout, so the `src/`, `include/` and `cmake/` paths it names have moved or gone.
+>
+> Nothing here is edited to match today's tree: it is the record of an audit that really ran against
+> the tree of its own date, and rewriting it would destroy that. Read every renderer name, file path
+> and count in it as a fact about that date, never as current CNA support.
+
+
 **Status: POPULATED, static review + full runtime verification (2026-07-19, Pass 4 + Pass 6).** All
 16 backend shards, the full `xna-graphics` shard (191 files), and every `tests-*`/`examples-tests-*`
 shard are directly audited (static review). Since Pass 4 first populated this matrix, **Pass 6 has

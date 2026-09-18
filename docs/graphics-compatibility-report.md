@@ -36,7 +36,7 @@ per-renderer awareness).
 |---|---|---|---|
 | EasyGL | 166/168 = **98.81%** | 4522/4525 = **99.93%** (4527/4530 = **99.93%** after Task 498's 5 new tests) | Tasks 493/494/498 |
 | Vulkan | 87/93 = **93.55%** | 4369/4378 = **99.79%** | Task 495, cross-checked against Task 911's baseline |
-| Bgfx | 54/56 = **96.43%** | 4413/4414 = **99.98%** baseline, but see correction below | Task 496, cross-checked against Task 448's baseline |
+| Bgfx (retired 2026-09-17) | 54/56 = **96.43%** | 4413/4414 = **99.98%** baseline, but see correction below | Task 496, cross-checked against Task 448's baseline |
 | SDL_Renderer | 67/67 = **100.00%** (2D-only, by design) | 4410/4421 = **99.75%** (11 failures, all by-design "3D not supported" throws, not bugs) | Task 497 |
 
 **Correction found while cross-checking (2026-07-09):** `docs/xna-4-api-coverage.md`'s per-renderer
@@ -68,7 +68,8 @@ directly from the table's own ✅/⚠️/❌/N/A marks (not from memory):
 **Important honest caveat, not glossed over**: the "Tested" axis in Task 483's table is a single
 blended column — "is this class exercised by at least one automated test on at least one renderer"
 — it does **not** decompose into a per-class-per-renderer cross-tabulation (e.g. "is `SkinnedEffect`
-tested on Bgfx specifically"). That finer-grained data doesn't exist as a single queryable table
+tested on Bgfx specifically" — Bgfx was retired 2026-09-17). That finer-grained data doesn't exist
+as a single queryable table
 anywhere in this project today; the closest real proxy is Task 484's per-renderer table's own
 "Fully correct" / "Partial" prose columns, which are renderer-scoped but not a strict per-class
 matrix. **This is a real gap in this project's own tracking granularity, not something this report
@@ -139,8 +140,9 @@ unqualified "1.0"/"100%" claim, which the real numbers in this report do not yet
 **What "~90%, test-execution-verified" means concretely:**
 
 - Tasks 491–499 (this entire Phase 55) all genuinely pass their own stated criteria. Every test
-  failure encountered across all 4 renderers — EasyGL, Vulkan, Bgfx, SDL_Renderer, both
-  integration-only and full-suite runs (§1 above) — is a previously-documented, understood issue.
+  failure encountered across all 4 renderers — EasyGL, Vulkan, Bgfx (retired 2026-09-17),
+  SDL_Renderer, both integration-only and full-suite runs (§1 above) — is a previously-documented,
+  understood issue.
   None is an unexplained new regression.
 - Per §2 above, **100% of the 26 major Graphics classes rate ✅ on Present and ✅ on Tested**, and
   **0 of the 26 rate ❌ on Implemented** (22 fully ✅, 4 rated ⚠️ partial) — this is what "~90%" is

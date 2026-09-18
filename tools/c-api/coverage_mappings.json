@@ -5792,15 +5792,15 @@
       ]
     },
     {
-      "id": "spritebatch-text-and-mesh",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::(?:SpriteBatch|~SpriteBatch|GetTypeName|DrawString|DrawMeshEXT)$",
+      "id": "spritebatch-text",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::(?:SpriteBatch|~SpriteBatch|GetTypeName|DrawString)$",
       "kinds": [
         "constructor",
         "destructor",
         "method"
       ],
-      "mapping": "`cna_sprite_batch_draw_string` with a versioned `CNA_SpriteTextCommand`, `cna_sprite_batch_draw_mesh_ext` with a versioned `CNA_SpriteMeshEXT`, and `cna_sprite_batch_get_type_name_size`/`_copy_type_name`. All six `DrawString` overloads collapse into one command: both native text types are copied before layout, so a UTF-8 view expresses either, and the parameter shapes differ only in which transform fields stay at their defaults. Mesh colors and positions are converted rather than reinterpreted because the native Color carries a vtable, and a renderer without mesh submission reports `NOT_SUPPORTED`. `cna_sprite_batch_create` is the only C construction: the canonical default constructor produces a deviceless batch and the other takes a renderer-private object, so neither has a C form; `cna_sprite_batch_destroy` is the destructor route",
-      "tests": "exact type-name bytes with capacity atomicity, malformed and non-finite command rejection, refusal outside a begin/end interval, default and full transform draws, foreign-font refusal, mesh submission with and without optional colors/texture coordinates, malformed mesh rejection and honest backend refusal in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "mapping": "`cna_sprite_batch_draw_string` with a versioned `CNA_SpriteTextCommand`, and `cna_sprite_batch_get_type_name_size`/`_copy_type_name`. All six `DrawString` overloads collapse into one command: both native text types are copied before layout, so a UTF-8 view expresses either, and the parameter shapes differ only in which transform fields stay at their defaults. `cna_sprite_batch_create` is the only C construction: the canonical default constructor produces a deviceless batch and the other takes a renderer-private object, so neither has a C form; `cna_sprite_batch_destroy` is the destructor route",
+      "tests": "exact type-name bytes with capacity atomicity, malformed and non-finite command rejection, refusal outside a begin/end interval, default and full transform draws, foreign-font refusal in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F6",
       "signature_regex": "^(?:\\(\\)|\\(std::unique_ptr< ISpriteBatchRenderer > renderer\\)|\\(\\) override|\\(\\) const override|\\(const SpriteFont &spriteFont.*\\)|\\(Effect &effect.*\\))$",
@@ -7493,7 +7493,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsBackendCategory` and the `CNA_GRAPHICS_BACKEND_CATEGORY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies all 46 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies all 25 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7526,7 +7526,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 46 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
+      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 25 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
       "tests": "`CoreExtSmoke.c` classifies all 46 identities, pins three fixed answers a consumer can rely on, and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7556,7 +7556,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsBackendMaturity` and the `CNA_GRAPHICS_BACKEND_MATURITY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of all 46 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of all 25 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7589,7 +7589,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 46 public renderer identities and refuses anything else",
+      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 25 public renderer identities and refuses anything else",
       "tests": "`CoreExtSmoke.c` reads the maturity of all 46 identities and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
