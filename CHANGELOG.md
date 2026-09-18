@@ -80,6 +80,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   nonblocking result polling, plus debug-utils pass regions and one-copy structured logger output,
   verified on RADV and llvmpipe.
 
+### Fixed
+
+- **A game can run in a terminal again.** The renderer-set curation retired `BLEND2D`, the only
+  renderer that presented CPU frames through `IPlatformSurfacePresenter`, which left
+  `CNA_PLATFORM=TERMINAL` with a complete, tested presenter and nothing feeding it — the
+  configuration built and displayed nothing. `SOFTWARE` now requests a presenter and hands it each
+  finished frame; its framebuffer is already RGBA8, row-major, top row first and tightly packed, so
+  the handover costs no conversion and no copy. Whether a CPU renderer is given a window is the
+  platform's answer rather than the renderer's — it gets one where the platform reports surface
+  presentation and no native window handle, which is a terminal and nothing else today — so
+  `SOFTWARE` on a windowing platform, under `HEADLESS`, or with its output piped behaves exactly as
+  before. The end-to-end pseudo-TTY test disabled by the curation is enabled and passing
+  (`plans/plan_terminal_capi_repair.md`).
+- **`-DCNA_BUILD_C_API=ON` builds again**, at three independent root causes rather than by
+  suppression: the effect collections' `operator[](int)` returns `T*` since XNA's null-index
+  semantics were restored, and `CnaCApiEffects.cpp` still took its address; the C API links
+  `CNA_GamerServices` unconditionally while `CNA_ENABLE_NET=OFF` does not build it, which is now a
+  configure-time refusal naming the option instead of a missing-include failure in every
+  translation unit; and both ABI walls still asserted `0.27.0` against a header declaring `0.29.0`.
+  With the library buildable, the ABI baseline is measured by its own generator against the real
+  `.so` for the first time since the break — 221 struct layouts and 4,055 exported symbols,
+  identical to the values recorded by hand, with the ABI unchanged at `0.29.0` — and
+  `docs/c-api/RELEASE_GATE.md` regenerates normally instead of publishing a traceback.
+
 ## [0.1.0-alpha.1] — 2026-08-20
 
 First tagged release. CNA has been developed continuously since 2025-02-22; this tag names a

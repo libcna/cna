@@ -23,9 +23,12 @@ in 2026-08) are **permanently reserved and never reassigned** — the next new i
   compatibility value, architectural value, or a capability the set does not reasonably cover.
   `docs/renderer-expansion-candidates.md` is research, not a roadmap, and `misc/FUTURE.md`'s
   Phase 2 renderer-expansion programme is closed.
-- One consequence recorded rather than hidden: **no surviving renderer sets
-  `needsSurfacePresenter`**, so the `TERMINAL` platform currently has no renderer that presents CPU
-  frames into a terminal.
+- One consequence was recorded rather than hidden, and has since been repaired: the curation left
+  **no surviving renderer setting `needsSurfacePresenter`**, so `TERMINAL` had no renderer that
+  presented CPU frames into a terminal. `SOFTWARE` sets it and feeds the presenter its finished
+  backbuffer (`plans/plan_terminal_capi_repair.md` `TCR-2`), and
+  `TerminalSoftwareDemoIntegration` — registered `DISABLED` for exactly that reason — is enabled
+  and passing again.
 
 ## Current handoff — generated-report growth is closed (`CBIND-123`, 2026-08-30)
 
