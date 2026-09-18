@@ -258,7 +258,7 @@ none are trivial engineering either.
 | `Microsoft::Xna::Framework` (root) | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Audio` | ✅ | ✅ | Implemented (see §4 for the small remaining accepted-deviation list) |
 | `Microsoft::Xna::Framework::Content` | ✅ | ✅ | Partial (see §3) |
-| `Microsoft::Xna::Framework::Design` | ✅ | ❌ | Intentionally excluded (see §6) |
+| `Microsoft::Xna::Framework::Design` | ✅ | ✅ | Complete opt-in tooling module; all 13 public XNA types (see §6 and `framework-design.md`) |
 | `Microsoft::Xna::Framework::GamerServices` | ❌ (not in FNA) | ✅ | Implemented — real Achievements, Avatar (full real-rendering extension, see `docs/avatar-real-rendering-ext.md`), Friends, Presence, Leaderboards, Privileges, Profile, SignedInGamer, Guide (see §3/§4) |
 | `Microsoft::Xna::Framework::Graphics` | ✅ | ✅ | Implemented / Stub |
 | `Microsoft::Xna::Framework::Graphics::PackedVector` | ✅ | ✅ | Implemented |
@@ -718,15 +718,13 @@ implementations:
 
 ### `Microsoft::Xna::Framework::Design` — TypeConverter classes
 
-FNA provides 13 TypeConverter subclasses (e.g. `BoundingBoxConverter`, `ColorConverter`) that integrate XNA math types with `System.ComponentModel.TypeDescriptor` for use in .NET design-time editors (Visual Studio property grid).
-
-**Why excluded from CNA:**
-- `System.ComponentModel` is a .NET-only framework; no C++ equivalent exists.
-- CNA has no design-time editors.
-- These classes have zero runtime value for game code.
-- Implementing a `TypeConverter` abstraction in sharp-runtime solely for this purpose would add significant complexity for no benefit.
-
-**Decision:** Permanently excluded. If ever revisited, a minimal `ITypeConverter` interface could be added to sharp-runtime with no-op converters.
+Implemented as the opt-in `CNA::Design` module. The local XNA 4.0 assembly confirms exactly
+13 public types: `MathTypeConverter` plus converters for BoundingBox, BoundingSphere, Color,
+Matrix, Plane, Point, Quaternion, Ray, Rectangle, Vector2, Vector3, and Vector4. Converter
+association, culture-sensitive component strings, ordered properties, value recreation, and
+executable InstanceDescriptors are supported. SharpRuntime supplies a small real ComponentModel
+substrate and explicit constructor/property metadata; no general Reflection implementation or UI
+designer dependency was introduced. See `docs/framework-design.md`.
 
 ### `Microsoft::Xna::Framework::Content` — XNB pipeline classes
 
@@ -961,7 +959,6 @@ behavior or a genuinely unimplemented feature).
 
 ### What remains missing or incomplete
 
-- `Design` namespace TypeConverter classes (intentionally excluded)
 - `ContentReader` XNB-based class (deferred; CNA uses non-XNB approach)
 - `ContentSerializerAttribute` family (intentionally excluded)
 - **Updated 2026-07-09 (Task 481):** the 2 items previously listed here are
@@ -991,7 +988,6 @@ behavior or a genuinely unimplemented feature).
 
 ### What is intentionally excluded
 
-- `Design` namespace — requires `System.ComponentModel` which has no C++ equivalent
 - `ContentReader` and XNB pipeline — CNA uses file-extension approach, not XNB
 - All FNA-internal implementation classes
 

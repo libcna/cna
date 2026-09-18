@@ -27,6 +27,7 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
     Threading
     Text
     Globalization
+    ComponentModel
     Storage
     Security.Cryptography
     Xml

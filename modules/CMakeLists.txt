@@ -332,6 +332,7 @@ set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
 add_subdirectory(math)
+add_subdirectory(design)
 # The platform contract (plans/plan_platform.md): composed before the subsystems that will consume
 # it, so the read order matches the dependency direction even though CMake does not require it.
 add_subdirectory(platform)
@@ -371,9 +372,10 @@ add_library(cna_cnaext INTERFACE)
 add_library(CNA::CnaExt ALIAS cna_cnaext)
 target_link_libraries(cna_cnaext INTERFACE cna_graphics_ext cna_devices_ext)
 
-# --- Compatible umbrella. `CNA` keeps its historical meaning for every consumer: the whole
-# framework plus the selected renderer, with the aggregate public include surface (via the
-# module targets) and the public defines.
+# --- Compatible runtime umbrella. `CNA` keeps its historical meaning for every game consumer:
+# the runtime framework plus the selected renderer, with the aggregate public include surface
+# and public defines. Tooling-only CNA::Design remains opt-in so converter registration and
+# ComponentModel implementation code do not enter games that never use them.
 add_library(CNA INTERFACE)
 target_link_libraries(CNA INTERFACE
         cna_runtime
@@ -411,7 +413,7 @@ endif()
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    c-api core math platform runtime graphics input audio media video-ffmpeg content
+    c-api core math design platform runtime graphics input audio media video-ffmpeg content
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules

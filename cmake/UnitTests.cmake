@@ -331,7 +331,7 @@ if(CNA_BUILD_TESTS)
     # header without calling into that subsystem. Preserve that compile-only visibility without
     # linking/building every module into every focused executable.
     foreach(_cna_test_include_module IN ITEMS
-            audio content core devices devices-ext gamer-services graphics graphics-ext input math
+            audio content core design devices devices-ext gamer-services graphics graphics-ext input math
             media net platform runtime storage)
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/${_cna_test_include_module}/include")
             target_include_directories(cna_test_build_config INTERFACE
@@ -357,6 +357,7 @@ if(CNA_BUILD_TESTS)
     # asserts rather than assumes.
     set(CNA_TEST_GROUP_DEPENDENCY_content_pipeline cna_content_pipeline cna_content_compiler)
     set(CNA_TEST_GROUP_DEPENDENCY_core cna_core)
+    set(CNA_TEST_GROUP_DEPENDENCY_design cna_design)
     set(CNA_TEST_GROUP_DEPENDENCY_devices cna_devices)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_gamer_services CNA_GamerServices)
@@ -394,6 +395,7 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_FOCUSED_TARGET_content CnaContentTests)
     set(CNA_TEST_FOCUSED_TARGET_content_pipeline CnaContentPipelineTests)
     set(CNA_TEST_FOCUSED_TARGET_core CnaCoreTests)
+    set(CNA_TEST_FOCUSED_TARGET_design CnaDesignTests)
     set(CNA_TEST_FOCUSED_TARGET_devices CnaDevicesTests)
     set(CNA_TEST_FOCUSED_TARGET_devices_ext CnaDevicesExtTests)
     set(CNA_TEST_FOCUSED_TARGET_gamer_services CnaGamerServicesTests)
@@ -526,6 +528,7 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(CnaTests PRIVATE
         cna_test_build_config
         CNA
+        cna_design
         gtest_main)
 
     # The build-time-only content-pipeline module is not part of the CNA runtime umbrella by

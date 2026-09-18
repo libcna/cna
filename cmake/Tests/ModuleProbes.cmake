@@ -30,6 +30,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     cna_add_module_probe(probe_math CNA::Math
         "libcna_(?!math)|libCNA_|libSDL3|libenet|libav|cna_renderer_")
 
+    # Design: the opt-in tooling layer closes only over math and sharp-runtime's
+    # ComponentModel substrate; no runtime, renderer, SDL, media or networking dependency.
+    cna_add_module_probe(probe_design CNA::Design
+        "libcna_(?!design|math)|libCNA_|libSDL3|libenet|libav|cna_renderer_")
+
     # Core: logging/exceptions only; SDL3 is an accepted PRIVATE implementation detail of
     # Logger.cpp, everything else stays out.
     cna_add_module_probe(probe_core CNA::Core

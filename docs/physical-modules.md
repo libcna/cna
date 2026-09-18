@@ -19,6 +19,7 @@ umbrella targets and the physical source-partition validator.
 |---|---|---|---|---|
 | modules/core | base | `cna_core` (`CNA::Core`); `cna_core_headers` (`CNA::CoreHeaders`, header-only surface) | — (SDL3 private) | Core.Base |
 | modules/math | base | `cna_math` (`CNA::Math`) | core-headers (headers-only: CNAEXT marker) | Core.Base |
+| modules/design | opt-in tooling | `cna_design` (`CNA::Design`) | math | ComponentModel (and its public closure) |
 | modules/runtime | base | `cna_runtime` (`CNA::Runtime`) | graphics, input, content, audio, media, core, math | Core.Base, IO |
 | modules/graphics | base | `cna_graphics_core` (`CNA::GraphicsCore`) | math, core; private: input (cycle), selected renderer (factory edge) | Core.Base, IO, Collections.Core, Text |
 | modules/input | base | `cna_input` (`CNA::Input`) | graphics, math, core | Core.Base |
@@ -36,9 +37,11 @@ umbrella targets and the physical source-partition validator.
 
 Umbrellas (defined in `modules/CMakeLists.txt`):
 
-- **`CNA`** — the historical full-framework INTERFACE umbrella: all modules + the selected
+- **`CNA`** — the historical full-runtime INTERFACE umbrella: runtime modules + the selected
   renderer + the shared build flags. Existing `target_link_libraries(game CNA)` consumers keep
-  working unchanged and receive the aggregate include surface through target composition.
+  working unchanged and receive the aggregate runtime include surface through target composition.
+  The design/tooling-only `CNA::Design` module is deliberately opt-in so ordinary games do not
+  link converter registration or ComponentModel implementation code.
 - **`cna_cnaext` / `CNA::CnaExt`** — compatibility umbrella; the former STATIC library's
   implementation is now the graphics-ext module, and the umbrella composes
   `CNA::GraphicsExt` + `CNA::DevicesExt` as an INTERFACE.
@@ -153,7 +156,7 @@ miscellaneous dumping ground again.
 - `modularization/tools/check_include_reachability.py` — every `#include "CNA/..."`
   / `"Microsoft/..."` in every module TU (transitively through headers) must resolve through
   the declared module graph; config-gated renderer includes are attributed to their renderer.
-- `cmake/Tests/ModuleProbes.cmake` — minimal-link probes for math, core, graphics, content,
+- `cmake/Tests/ModuleProbes.cmake` — minimal-link probes for math, design, core, graphics, content,
   runtime, input, audio, media, storage, devices, devices-ext, graphics-ext, the CnaExt
   composition umbrella and net, with per-probe link-closure gates
   (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free /
