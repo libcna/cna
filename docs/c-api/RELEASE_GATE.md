@@ -8,10 +8,9 @@ This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the p
 
 ## Verdict
 
-**Not ready.** 2 criteria are unmet.
+**Not ready.** 1 criteria are unmet.
 
-- ❌ **No public C++ symbol is unaccounted for** — coverage inventory error: A planned row names a task that cannot own it. Unfinished work must name an unfinished task: either open a task for these symbols and point owner_task() at it, or map them..
-- ❌ **A known-limitations matrix a reader can act on** — limitations error: A planned row names a task that cannot own it. Unfinished work must name an unfinished task: either open a task for these symbols and point owner_task() at it, or map them..
+- ❌ **No public C++ symbol is unaccounted for** — 468 public symbols are still unmapped.
 
 This verdict is measured on every run, not written down once. A criterion recorded as met
 that stops being met fails the check; so does a criterion recorded as blocked that has
@@ -24,8 +23,8 @@ decided not to ship.
 |---|---|---|---|
 | ✅ | **The compatibility matrix is real, current and honest** | Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration. | 23 declared cells across 7 toolchains |
 | ✅ | **No unreviewed ABI break** | Every struct layout, field offset, scalar width, constant value and exported symbol is recorded, and a change to any of them arrives as a reviewable diff. | 221 struct layouts and 4055 exported symbols recorded |
-| ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | coverage inventory error: A planned row names a task that cannot own it. Unfinished work must name an unfinished task: either open a task for these symbols and point owner_task() at it, or map them. |
-| ❌ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | limitations error: A planned row names a task that cannot own it. Unfinished work must name an unfinished task: either open a task for these symbols and point owner_task() at it, or map them. |
+| ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | 468 public symbols are still unmapped |
+| ✅ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | docs/c-api/LIMITATIONS.md is current: 15 partially mapped symbols in 9 groups, 509 unmapped in 83 groups |
 | ✅ | **A real C application, built the way a consumer builds one** | A complete C program exists, is built from outside the source tree against an installed CNA through find_package, and is run. | hello_cna is built from an installed prefix and run by CApi_InstalledConsumer |
 | ✅ | **The package is installable and findable** | `find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version. | CNAConfig.cmake, a version file from abi.h, and a CNACApi component |
 | ✅ | **The consumer documentation exists** | Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented. | 13 documents present |
@@ -59,7 +58,7 @@ The seventh merge reopened it on 2026-08-28 at **15 rows**, and this one ran the
 
 `CBIND-116` then bound all 15: `ObjectDictionaryEXT` through a loader route and eleven reading routes, `ReflectiveSharedTypeReader` and `RegisterShared` through `cna_reflective_type_reader_builder_register_shared`, and `BasicEffect`'s `VertexColorEnabled` pair through the routes that already answered for the public field beside it. **Not one row was reclassified**: 0 moved to `partial` and 0 to `not-applicable`, the counts for both are unchanged at 15 and 460, and the two new rules name only the 15 stable IDs they were reviewed against. Binding them also corrected two documentation defects the work measured rather than inherited: the canonical `ReflectiveTypeReader` header and this API's own `CBIND-105` text both said a second registration under a canonical name replaces the first, and the reader table keeps the first instead.
 
-### ❌ A known-limitations matrix a reader can act on
+### ✅ A known-limitations matrix a reader can act on
 
 *Evidence:* docs/c-api/LIMITATIONS.md, gated by CApiLimitations
 

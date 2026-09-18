@@ -6,13 +6,39 @@
 
 The mandatory coverage gate derives the complete public C++ declaration inventory from
 `modules/*/include/{Microsoft,CNA}/**/*.hpp` and maps every symbol through
-`tools/c-api/coverage_mappings.json`. Paths containing `Internal` or `Detail`, the whole
-`modules/platform` substrate, and the C API's own headers are excluded by declared rules.
+`tools/c-api/coverage_mappings.json`. Every module is classified as runtime C API scope or
+out of it by `MODULE_SCOPE`, which is a total function over the modules that exist: a new
+or renamed module stops this gate rather than inheriting a default. Paths whose segments
+are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **553 headers**, **9499 symbols**, **8349 implemented**, **15 partial**, **668 planned**, **467 not applicable**. Explicitly excluded internal/detail headers: **132**.
+Snapshot: **556 headers**, **9355 symbols**, **8363 implemented**, **15 partial**, **468 planned**, **509 not applicable**. Explicitly excluded headers: **287**.
 
-Full inventory SHA-256: `74267a1da5ced7f9e36e4673afe7d9bcc1207b6ab30ade2610e9b64b5b67d6eb`.
+## Out of runtime C API scope
+
+Real public C++ surface the runtime C ABI deliberately does not expose. These headers are
+not counted above, and their declarations are not missing C bindings.
+
+| Module or subtree | Headers | Why |
+|---|---:|---|
+| `modules/audio` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/content` internal/detail paths | 43 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/content-pipeline` | 107 | CBIND-117, owner decision 2026-09-18: the Content Pipeline is a build-time tool, not part of the runtime a game links. `cna_c_api` does not link `cna_content_pipeline`, so its declarations cannot be missing *runtime* C bindings |
+| `modules/core` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/gamer-services` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/graphics` internal/detail paths | 32 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/net` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/phone` | 9 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
+| `modules/platform` | 27 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
+| `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
+| `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
+
+Full inventory SHA-256: `afdc2b58fe04ed22e81226ba6a4598330de5e944278b80bcedc700f94dd7432a`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -32,18 +58,18 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 48 | 1267 | 563 | 10 | 665 | 29 |
-| `core` | 15 | 157 | 151 | 0 | 0 | 6 |
+| `content` | 41 | 784 | 561 | 10 | 188 | 25 |
+| `core` | 15 | 143 | 137 | 0 | 0 | 6 |
 | `devices` | 20 | 215 | 187 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 54 | 676 | 641 | 0 | 0 | 35 |
-| `graphics` | 141 | 2642 | 2609 | 0 | 3 | 30 |
-| `graphics-ext` | 93 | 1406 | 1335 | 0 | 0 | 71 |
-| `input` | 50 | 864 | 836 | 0 | 0 | 28 |
-| `math` | 23 | 928 | 927 | 0 | 0 | 1 |
+| `graphics` | 143 | 2821 | 2639 | 0 | 116 | 66 |
+| `graphics-ext` | 98 | 1549 | 1335 | 0 | 133 | 81 |
+| `input` | 50 | 874 | 836 | 0 | 10 | 28 |
+| `math` | 24 | 938 | 927 | 0 | 10 | 1 |
 | `media` | 24 | 337 | 285 | 0 | 0 | 52 |
 | `net` | 23 | 269 | 252 | 1 | 0 | 16 |
-| `runtime` | 20 | 302 | 225 | 4 | 0 | 73 |
+| `runtime` | 22 | 313 | 225 | 4 | 11 | 73 |
 | `storage` | 3 | 42 | 42 | 0 | 0 | 0 |
 
 ## Status definitions
