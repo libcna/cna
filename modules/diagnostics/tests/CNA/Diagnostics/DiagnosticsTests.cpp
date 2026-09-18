@@ -8,6 +8,7 @@
 #include <atomic>
 #include <barrier>
 #include <limits>
+#include <random>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -54,6 +55,38 @@ namespace
             total += resource.estimatedBytes;
         }
         return total;
+    }
+
+    [[nodiscard]] bool IsValidUtf8Text(std::string_view value)
+    {
+        std::size_t index = 0;
+        while (index < value.size())
+        {
+            const auto first = static_cast<unsigned char>(value[index]);
+            std::size_t length = 0;
+            unsigned char secondMinimum = 0x80U;
+            unsigned char secondMaximum = 0xBFU;
+            if (first < 0x80U) length = 1;
+            else if (first >= 0xC2U && first <= 0xDFU) length = 2;
+            else if (first == 0xE0U) { length = 3; secondMinimum = 0xA0U; }
+            else if (first >= 0xE1U && first <= 0xECU) length = 3;
+            else if (first == 0xEDU) { length = 3; secondMaximum = 0x9FU; }
+            else if (first >= 0xEEU && first <= 0xEFU) length = 3;
+            else if (first == 0xF0U) { length = 4; secondMinimum = 0x90U; }
+            else if (first >= 0xF1U && first <= 0xF3U) length = 4;
+            else if (first == 0xF4U) { length = 4; secondMaximum = 0x8FU; }
+            else return false;
+            if (index + length > value.size()) return false;
+            for (std::size_t offset = 1; offset < length; ++offset)
+            {
+                const auto continuation = static_cast<unsigned char>(value[index + offset]);
+                const unsigned char minimum = offset == 1 ? secondMinimum : 0x80U;
+                const unsigned char maximum = offset == 1 ? secondMaximum : 0xBFU;
+                if (continuation < minimum || continuation > maximum) return false;
+            }
+            index += length;
+        }
+        return true;
     }
 #endif
 
@@ -461,6 +494,65 @@ namespace
         BeginFrame();
         EndFrame();
         EXPECT_EQ(source->calls, 1);
+    }
+
+    TEST(DiagnosticsSourceTest, ASourceEndingAFrameFromCollectIsRefusedNotDeadlocked)
+    {
+        // Collect() runs while frame completion holds its non-recursive mutex, so a source that
+        // ends a frame from inside it used to block forever on that same thread.
+        class Source final : public IDiagnosticsSource
+        {
+        public:
+            void Collect(FrameStatisticsSink&) override
+            {
+                ++calls;
+                EndFrame();
+            }
+            int calls = 0;
+        };
+
+        RuntimeModeGuard mode(Mode::Stats);
+        auto source = std::make_shared<Source>();
+        SourceRegistration registration = RegisterSource(source);
+        const std::uint64_t malformedBefore =
+            GetProvider().CaptureSnapshot().malformedFrameCount;
+        const std::uint64_t frameBefore = GetProvider().CaptureSnapshot().currentFrameNumber;
+
+        BeginFrame();
+        EndFrame();
+
+        EXPECT_EQ(source->calls, 1);
+        EXPECT_EQ(GetProvider().CaptureSnapshot().malformedFrameCount, malformedBefore + 1)
+            << "the nested end is reported like any other malformed transition";
+        // The outer frame still completes, and frame accounting keeps working afterwards.
+        EXPECT_EQ(GetProvider().CaptureSnapshot().currentFrameNumber, frameBefore + 1);
+        BeginFrame();
+        EndFrame();
+        EXPECT_EQ(source->calls, 2);
+    }
+
+    TEST(DiagnosticsMetricsTest, InvalidUtf8MetricAndResourceNamesAreStoredValid)
+    {
+        RuntimeModeGuard mode(Mode::Stats);
+        const CounterHandle counter("Tests/Metrics/Bad\xFFName");
+        counter.Add(1);
+        ResourceDescriptor descriptor;
+        descriptor.kind = ResourceKind::Custom;
+        descriptor.label = "Tests/Resources/Bad\xC3";
+        descriptor.format = "Fmt\xED\xA0\x80";
+        const ResourceHandle handle(descriptor);
+        const ResourceId id = handle.GetId();
+        ASSERT_NE(id, 0U);
+
+        const Snapshot snapshot = GetProvider().CaptureSnapshot();
+        const MetricSample* metric = FindMetric(snapshot, "Tests/Metrics/Bad\xEF\xBF\xBDName");
+        ASSERT_NE(metric, nullptr) << "the invalid byte is stored as U+FFFD";
+        EXPECT_TRUE(IsValidUtf8Text(metric->name));
+        const auto resource = std::find_if(snapshot.resources.begin(), snapshot.resources.end(),
+            [id](const ResourceRecord& record) { return record.id == id; });
+        ASSERT_NE(resource, snapshot.resources.end());
+        EXPECT_TRUE(IsValidUtf8Text(resource->label));
+        EXPECT_TRUE(IsValidUtf8Text(resource->format));
     }
 
     TEST(DiagnosticsRuntimeModeTest, OffStatsAndFullTransitionsPreserveMetricSemantics)
@@ -980,6 +1072,103 @@ namespace
     {
         std::istringstream malformed("not-a-cna-trace");
         EXPECT_THROW((void)Trace::ReadBinary(malformed), std::runtime_error);
+    }
+
+    TEST(DiagnosticsTraceTest, InvalidUtf8NamesStillProduceValidChromeJson)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        RecordingSession session = StartRecording(8);
+        // A lone continuation byte, a truncated sequence, an overlong encoding, a UTF-16
+        // surrogate and a value above U+10FFFF. None of these may reach the JSON unchanged.
+        // Split so the escape stops at 0x80: in "\x80End" the E is a hex digit and would
+        // be swallowed into one out-of-range escape.
+        const NameHandle lone("Tests/Trace/Bad\x80" "End");
+        const NameHandle truncated("Tests/Trace/Bad\xE2\x82");
+        const NameHandle overlong("Tests/Trace/Bad\xC0\xAF");
+        const NameHandle surrogate("Tests/Trace/Bad\xED\xA0\x80");
+        const NameHandle tooLarge("Tests/Trace/Bad\xF5\x80\x80\x80");
+        for (const NameHandle* name : {&lone, &truncated, &overlong, &surrogate, &tooLarge})
+            MarkEvent(*name, Category::Application);
+        const Trace trace = StopRecording(session);
+        ASSERT_EQ(trace.GetEvents().size(), 5u);
+
+        std::ostringstream chrome;
+        ASSERT_TRUE(trace.WriteChromeTrace(chrome));
+        const std::string json = chrome.str();
+        EXPECT_TRUE(IsValidUtf8Text(json)) << "Chrome trace JSON must be valid UTF-8";
+        EXPECT_NE(json.find("\xEF\xBF\xBD"), std::string::npos)
+            << "invalid bytes should survive as U+FFFD rather than vanish";
+        EXPECT_EQ(json.front(), '{');
+        EXPECT_EQ(json.back(), '}');
+        for (const EventRecord& event : trace.GetEvents())
+            EXPECT_TRUE(IsValidUtf8Text(trace.ResolveName(event.name)));
+    }
+
+    TEST(DiagnosticsTraceTest, RandomlyMutatedTracesAreRejectedOrReadBackCleanly)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        RecordingSession session = StartRecording(8);
+        const NameHandle marker("Tests/Trace/Fuzz");
+        {
+            ZoneScope outer(marker);
+            MarkEvent(marker, Category::Graphics, 5);
+        }
+        const Trace seed = StopRecording(session);
+        std::ostringstream binary;
+        ASSERT_TRUE(seed.WriteBinary(binary));
+        const std::string original = binary.str();
+        ASSERT_FALSE(original.empty());
+
+        // Deterministic so a failure is reproducible from the seed alone.
+        std::mt19937 random(0x0DDBA11U);
+        std::size_t parsed = 0;
+        std::size_t rejected = 0;
+        for (int iteration = 0; iteration < 3000; ++iteration)
+        {
+            std::string mutated = original;
+            const int mutations =
+                1 + static_cast<int>(random() % 4U);
+            for (int mutation = 0; mutation < mutations; ++mutation)
+            {
+                switch (random() % 3U)
+                {
+                    case 0:
+                        mutated[random() % mutated.size()] =
+                            static_cast<char>(random() % 256U);
+                        break;
+                    case 1:
+                        mutated.resize(random() % mutated.size() + 1);
+                        break;
+                    default:
+                        mutated.insert(random() % mutated.size(), 1,
+                                       static_cast<char>(random() % 256U));
+                        break;
+                }
+            }
+            std::istringstream input(mutated);
+            try
+            {
+                const Trace decoded = Trace::ReadBinary(input);
+                ++parsed;
+                // Whatever it accepted must still be internally coherent and exportable.
+                EXPECT_LE(decoded.GetEvents().size(), EventHistoryCapacity);
+                for (const EventRecord& event : decoded.GetEvents())
+                    EXPECT_TRUE(IsValidUtf8Text(decoded.ResolveName(event.name)));
+                std::ostringstream chrome;
+                if (decoded.WriteChromeTrace(chrome))
+                {
+                    EXPECT_TRUE(IsValidUtf8Text(chrome.str()));
+                }
+            }
+            catch (const std::exception&)
+            {
+                ++rejected;
+            }
+        }
+        // The point is that nothing crashed, over-allocated or escaped its bounds; both
+        // outcomes are acceptable, and both must occur for the corpus to be meaningful.
+        EXPECT_GT(rejected, 0u);
+        EXPECT_EQ(parsed + rejected, 3000u);
     }
 #endif
 }

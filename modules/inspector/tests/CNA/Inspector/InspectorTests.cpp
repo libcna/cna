@@ -13,6 +13,7 @@
 #include <array>
 #include <chrono>
 #include <memory>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -256,6 +257,142 @@ namespace CNA::Inspector
         ASSERT_EQ(decoded.events.size(), 1U);
         EXPECT_EQ(decoded.events[0].name, "Game/Update");
         EXPECT_EQ(decoded.events[0].event.value, -3);
+    }
+
+    // Seeded, so a failure reproduces from the seed alone. Every mutated payload must either be
+    // rejected by its decoder or decode into a value the encoder can emit again. The encoder
+    // enforces UTF-8 and every protocol bound, so re-encoding checks both at once; a decoder that
+    // accepted what the encoder refuses would make the agent fail when it answered.
+    template<typename Message>
+    void FuzzDecoder(const Packet& seed,
+                     std::mt19937& random,
+                     int iterations,
+                     std::size_t& accepted,
+                     std::size_t& rejected)
+    {
+        for (int iteration = 0; iteration < iterations; ++iteration)
+        {
+            Packet packet = seed;
+            auto& payload = packet.payload;
+            const int mutations = 1 + static_cast<int>(random() % 4U);
+            for (int mutation = 0; mutation < mutations && !payload.empty(); ++mutation)
+            {
+                switch (random() % 4U)
+                {
+                    case 0:
+                        payload[random() % payload.size()] = static_cast<std::uint8_t>(random());
+                        break;
+                    case 1:
+                        payload.resize(random() % payload.size());
+                        break;
+                    case 2:
+                        payload.insert(payload.begin()
+                                           + static_cast<std::ptrdiff_t>(random() % (payload.size() + 1)),
+                                       static_cast<std::uint8_t>(random()));
+                        break;
+                    default:
+                    {
+                        // Aim at length and count fields with an extreme little-endian value.
+                        const std::size_t at = random() % payload.size();
+                        const std::uint32_t extreme = (random() & 1U) != 0 ? 0xFFFFFFFFU : 0x7FFFFFFFU;
+                        for (std::size_t byte = 0; byte < 4 && at + byte < payload.size(); ++byte)
+                            payload[at + byte] = static_cast<std::uint8_t>(extreme >> (byte * 8U));
+                        break;
+                    }
+                }
+            }
+            packet.header.payloadBytes = static_cast<std::uint32_t>(payload.size());
+            Message decoded;
+            std::string error;
+            bool decodedCleanly = false;
+            ASSERT_NO_THROW(decodedCleanly = ProtocolCodec::Decode(packet, decoded, error))
+                << "decoders report hostile input through their result, not by throwing";
+            if (!decodedCleanly)
+            {
+                ++rejected;
+                continue;
+            }
+            ++accepted;
+            EXPECT_NO_THROW((void)ProtocolCodec::Encode(decoded, 1))
+                << "decoder accepted a value the encoder refuses";
+        }
+    }
+
+    TEST(InspectorProtocolTests, MutatedPayloadsAreRejectedOrDecodeIntoEncodableValues)
+    {
+        std::mt19937 random(0x1A5BEC7U);
+        std::size_t accepted = 0;
+        std::size_t rejected = 0;
+
+        SnapshotResponse snapshot;
+        snapshot.includedParts = static_cast<std::uint32_t>(SnapshotPart::Metrics)
+            | static_cast<std::uint32_t>(SnapshotPart::Frames)
+            | static_cast<std::uint32_t>(SnapshotPart::Resources);
+        snapshot.snapshot = MakeSnapshot();
+        snapshot.metricCount = 1;
+        snapshot.frameCount = 1;
+        snapshot.resourceCount = 1;
+        FuzzDecoder<SnapshotResponse>(ProtocolCodec::Encode(snapshot, 1), random, 2000,
+                                      accepted, rejected);
+
+        EventsResponse events;
+        events.oldestAvailableSequence = 1;
+        events.newestAvailableSequence = 3;
+        for (std::uint64_t sequence = 1; sequence <= 3; ++sequence)
+        {
+            ResolvedEvent event;
+            event.event.sequence = sequence;
+            event.event.name = 1;
+            event.name = "Tests/Fuzz/Event";
+            events.events.push_back(event);
+        }
+        FuzzDecoder<EventsResponse>(ProtocolCodec::Encode(events, 1), random, 2000,
+                                    accepted, rejected);
+
+        HelloRequest hello;
+        hello.clientName = "fuzz-client";
+        hello.authenticationToken = "fuzz-token";
+        FuzzDecoder<HelloRequest>(ProtocolCodec::Encode(hello, 1), random, 2000,
+                                  accepted, rejected);
+
+        FuzzDecoder<EventsRequest>(ProtocolCodec::Encode(EventsRequest{5, 10}, 1), random, 1000,
+                                   accepted, rejected);
+
+        // Both outcomes must occur, or the corpus is not exercising anything.
+        EXPECT_GT(rejected, 0U);
+        EXPECT_GT(accepted, 0U);
+        EXPECT_EQ(accepted + rejected, 7000U);
+    }
+
+    TEST(InspectorProtocolTests, RandomHeadersNeverAdmitAnOversizedPayload)
+    {
+        // The receive path allocates the payload from this field before reading it, so a header
+        // that decodes must never carry a size above the protocol bound.
+        PacketHeader validHeader;
+        validHeader.type = MessageType::Ping;
+        validHeader.requestId = 1;
+        const std::vector<std::uint8_t> valid = ProtocolCodec::EncodeHeader(validHeader);
+        ASSERT_EQ(valid.size(), 24U);
+
+        std::mt19937 random(0x4EAD3E5U);
+        std::size_t accepted = 0;
+        for (int iteration = 0; iteration < 20000; ++iteration)
+        {
+            std::vector<std::uint8_t> bytes = valid;
+            // Mostly keep the magic so mutations reach the fields behind it.
+            const std::size_t first = (iteration % 4 == 0) ? 0U : 4U;
+            const int mutations = 1 + static_cast<int>(random() % 6U);
+            for (int mutation = 0; mutation < mutations; ++mutation)
+                bytes[first + random() % (bytes.size() - first)] = static_cast<std::uint8_t>(random());
+            PacketHeader header;
+            std::string error;
+            if (!ProtocolCodec::DecodeHeader(bytes, header, error))
+                continue;
+            ++accepted;
+            EXPECT_LE(header.payloadBytes, MaximumPayloadBytes);
+            EXPECT_EQ(header.flags, 0U);
+        }
+        EXPECT_GT(accepted, 0U) << "the corpus must reach headers that decode";
     }
 
     TEST(InspectorProtocolTests, RejectsTruncationTrailingBytesAndInvalidBounds)

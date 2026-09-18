@@ -61,8 +61,75 @@ namespace CNA::Diagnostics
             return static_cast<T>(bits);
         }
 
-        void WriteJsonString(std::ostream& output, std::string_view value)
+        // Length of the UTF-8 sequence starting at `first`, and the inclusive range its second
+        // byte may take. The narrowed second-byte ranges are what reject overlong encodings,
+        // UTF-16 surrogates and anything above U+10FFFF, which a plain "0x80-0xBF continuation"
+        // check would let through.
+        struct Utf8Sequence
         {
+            std::size_t length = 0;
+            unsigned char secondMinimum = 0x80U;
+            unsigned char secondMaximum = 0xBFU;
+        };
+
+        [[nodiscard]] Utf8Sequence ClassifyUtf8(unsigned char first) noexcept
+        {
+            if (first < 0x80U) return {1, 0, 0};
+            if (first >= 0xC2U && first <= 0xDFU) return {2, 0x80U, 0xBFU};
+            if (first == 0xE0U) return {3, 0xA0U, 0xBFU};
+            if (first >= 0xE1U && first <= 0xECU) return {3, 0x80U, 0xBFU};
+            if (first == 0xEDU) return {3, 0x80U, 0x9FU};
+            if (first >= 0xEEU && first <= 0xEFU) return {3, 0x80U, 0xBFU};
+            if (first == 0xF0U) return {4, 0x90U, 0xBFU};
+            if (first >= 0xF1U && first <= 0xF3U) return {4, 0x80U, 0xBFU};
+            if (first == 0xF4U) return {4, 0x80U, 0x8FU};
+            return {0, 0, 0};
+        }
+
+        // Returns `value` as valid UTF-8, replacing each invalid byte with U+FFFD. Names reach the
+        // profiler from game code and from loaded trace files, and neither is required to be valid
+        // UTF-8; emitting the bytes unchanged would produce malformed JSON, and rejecting the name
+        // outright would lose it. One replacement per bad byte keeps the rest of the name readable.
+        [[nodiscard]] std::string SanitizeUtf8(std::string_view value)
+        {
+            static constexpr std::string_view Replacement = "\xEF\xBF\xBD";
+            std::string sanitized;
+            sanitized.reserve(value.size());
+            std::size_t index = 0;
+            while (index < value.size())
+            {
+                const auto first = static_cast<unsigned char>(value[index]);
+                const Utf8Sequence sequence = ClassifyUtf8(first);
+                if (sequence.length == 1)
+                {
+                    sanitized.push_back(value[index++]);
+                    continue;
+                }
+                bool valid = sequence.length != 0 && index + sequence.length <= value.size();
+                for (std::size_t offset = 1; valid && offset < sequence.length; ++offset)
+                {
+                    const auto continuation = static_cast<unsigned char>(value[index + offset]);
+                    const unsigned char minimum = offset == 1 ? sequence.secondMinimum : 0x80U;
+                    const unsigned char maximum = offset == 1 ? sequence.secondMaximum : 0xBFU;
+                    valid = continuation >= minimum && continuation <= maximum;
+                }
+                if (!valid)
+                {
+                    sanitized.append(Replacement);
+                    ++index;
+                    continue;
+                }
+                sanitized.append(value.substr(index, sequence.length));
+                index += sequence.length;
+            }
+            return sanitized;
+        }
+
+        void WriteJsonString(std::ostream& output, std::string_view rawValue)
+        {
+            // A Trace can be loaded from a file this process did not write, so the export
+            // validates rather than trusting what it holds.
+            const std::string value = SanitizeUtf8(rawValue);
             output.put('"');
             for (const unsigned char character : value)
             {
@@ -241,11 +308,15 @@ namespace CNA::Diagnostics
         {
             try
             {
-                if (name.empty() || name.size() > MaximumTraceNameBytes)
+                if (name.empty())
+                    return 0;
+                // Sanitizing can grow a name by up to three bytes per invalid byte, so the bound
+                // applies to what is actually stored.
+                std::string key = SanitizeUtf8(name);
+                if (key.size() > MaximumTraceNameBytes)
                     return 0;
                 State& state = GetState();
                 const std::lock_guard lock(state.metricMutex);
-                std::string key(name);
                 if (const auto found = state.metricIds.find(key); found != state.metricIds.end())
                 {
                     const MetricSlot& slot = state.metrics[found->second - 1];
@@ -256,7 +327,7 @@ namespace CNA::Diagnostics
                     return 0;
                 const MetricId id = static_cast<MetricId>(state.metricCount + 1);
                 MetricSlot& slot = state.metrics[state.metricCount];
-                slot.name.assign(name);
+                slot.name = key;
                 slot.kind = kind;
                 slot.unit = unit;
                 slot.accuracy = accuracy;
@@ -295,15 +366,17 @@ namespace CNA::Diagnostics
         {
             try
             {
-                if (name.empty() || name.size() > MaximumTraceNameBytes)
+                if (name.empty())
+                    return 0;
+                const std::string key = SanitizeUtf8(name);
+                if (key.size() > MaximumTraceNameBytes)
                     return 0;
                 State& state = GetState();
                 const std::lock_guard lock(state.nameMutex);
-                const std::string key(name);
                 if (const auto found = state.nameIds.find(key); found != state.nameIds.end())
                     return found->second;
                 if (state.names.size() >= MaximumTraceNames ||
-                    state.nameBytes > MaximumTraceTotalNameBytes - name.size())
+                    state.nameBytes > MaximumTraceTotalNameBytes - key.size())
                     return 0;
                 const NameId id = static_cast<NameId>(state.names.size());
                 state.names.push_back(key);
@@ -439,8 +512,8 @@ namespace CNA::Diagnostics
             ResourceRecord record;
             record.id = id;
             record.kind = descriptor.kind;
-            record.label.assign(descriptor.label);
-            record.format.assign(descriptor.format);
+            record.label = SanitizeUtf8(descriptor.label);
+            record.format = SanitizeUtf8(descriptor.format);
             record.width = descriptor.width;
             record.height = descriptor.height;
             record.depth = descriptor.depth;
@@ -643,6 +716,26 @@ namespace CNA::Diagnostics
         void FinishFrame(bool reportMalformed) noexcept
         {
             State& state = GetState();
+            // Source callbacks run inside frame completion while frameCompletionMutex is held.
+            // A source that ends a frame from its own Collect() would deadlock on that
+            // non-recursive mutex, so re-entry is refused and counted like any other malformed
+            // frame transition instead.
+            static thread_local bool completingFrame = false;
+            if (completingFrame)
+            {
+                if (reportMalformed &&
+                    state.runtimeMode.load(std::memory_order_relaxed) != Mode::Off)
+                {
+                    state.malformedFrames.fetch_add(1, std::memory_order_relaxed);
+                }
+                return;
+            }
+            completingFrame = true;
+            struct ReentryGuard
+            {
+                ~ReentryGuard() { flag = false; }
+                bool& flag;
+            } reentryGuard{completingFrame};
             const std::lock_guard completionLock(state.frameCompletionMutex);
             {
                 const std::lock_guard frameLock(state.frameMutex);
@@ -1323,7 +1416,10 @@ namespace CNA::Diagnostics
             input.read(name.data(), static_cast<std::streamsize>(name.size()));
             if (!input)
                 throw std::runtime_error("Truncated CNA profiler trace name");
-            trace.names_.emplace_back(id, std::move(name));
+            // A trace file is not necessarily one this process wrote, so its names carry the
+            // same validity guarantee as a live registration rather than being handed to
+            // consumers as raw bytes.
+            trace.names_.emplace_back(id, SanitizeUtf8(name));
         }
         trace.events_.reserve(static_cast<std::size_t>(eventCount));
         for (std::uint64_t index = 0; index < eventCount; ++index)

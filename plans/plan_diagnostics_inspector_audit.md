@@ -3,7 +3,8 @@
 Status: complete (`AUD-DIAG-INSP-0001`, started and completed 2026-09-17)
 
 Follow-up: `AUD-DIAG-INSP-0002` (2026-09-18) closes the socket and HTTP hypotheses this pass
-recorded as **NOT TESTED IN THIS AUDIT PASS**. See *Follow-up fixes* below.
+recorded as **NOT TESTED IN THIS AUDIT PASS**, and `AUD-DIAG-INSP-0003` (2026-09-18) closes
+invalid UTF-8 and parser fuzzing. See the *Follow-up fixes* sections below.
 
 ## Evidence vocabulary
 
@@ -378,10 +379,75 @@ permitted. Two of them were real defects and are fixed; the remainder are record
 | Debug FULL `-Wall -Wextra -Wpedantic -Werror` | 36/36 + 25/25 |
 | MinGW-w64 x86-64 cross-build | `cna_diagnostics` and `cna_inspector` compile and link, Winsock branch included |
 
-Still **NOT TESTED**: fuzzing and offensive parser corpora, invalid-UTF-8 JSON escaping in the
-Chrome trace and bridge writers, and execution on native Windows or macOS. Duplicate and
-conflicting `Content-Length` headers were tested live and are inert, because the bridge closes the
-connection after one request and never reads a body.
+Duplicate and conflicting `Content-Length` headers were tested live and are inert, because the
+bridge closes the connection after one request and never reads a body. Fuzzing and invalid UTF-8
+were closed by `AUD-DIAG-INSP-0003` below.
+
+## Follow-up fixes (`AUD-DIAG-INSP-0003`, 2026-09-18)
+
+Closes the last two items `AUD-DIAG-INSP-0002` left **NOT TESTED** and one source-review finding.
+
+### Invalid UTF-8 names (medium)
+
+- **PROVEN** root cause: names reach the profiler from game code and from trace files, and neither
+  is required to be valid UTF-8. Nothing validated them. The Chrome exporter copied bytes straight
+  into its JSON, producing a document a strict parser rejects. The Inspector encoder does validate,
+  so it threw on the first invalid name; the agent contains that as a structured error, but the
+  name stays in the registry, so **every later events response failed** for the rest of the process.
+- **PROVEN** fix: one validator rejects overlong encodings, UTF-16 surrogates, values above
+  U+10FFFF, truncated sequences and stray continuation bytes, replacing each invalid byte with
+  U+FFFD so the name stays readable instead of vanishing. It runs where names enter: event and zone
+  names, metric names, resource labels and formats, and names read by `Trace::ReadBinary`. The Chrome
+  exporter validates again, because a `Trace` may come from a file this process did not write. Size
+  bounds now apply to the sanitized form, which can be up to three times longer.
+- **TESTED**: `InvalidUtf8NamesStillProduceValidChromeJson` covers all five invalid forms;
+  `InvalidUtf8MetricAndResourceNamesAreStoredValid` covers the metric and resource paths at STATS.
+
+### Parser fuzzing (previously NOT TESTED)
+
+Seeded and deterministic, so a failure reproduces from the seed and runs in ordinary CI.
+
+- **TESTED** CNATRACE: 3,000 mutations of a real trace (byte overwrite, truncation, insertion). Every
+  input is rejected or read back into a trace whose names are valid UTF-8 and whose export is valid
+  UTF-8 JSON. **This found a defect**: `ReadBinary` stored file names unchecked, so `ResolveName` on a
+  loaded trace returned invalid UTF-8 to consumers. Fixed as above.
+- **TESTED** Inspector payloads: 7,000 mutations across `SnapshotResponse`, `EventsResponse`,
+  `HelloRequest` and `EventsRequest`, including extreme values aimed at length and count fields. No
+  decoder threw, and every value a decoder accepted re-encoded; the encoder enforces UTF-8 and every
+  bound, so that checks both. **No defect found** — the protocol codec holds.
+- **TESTED** Inspector headers: 20,000 mutated headers; none that decoded carried a payload size above
+  the 8 MiB bound the receive path allocates from.
+
+### Frame completion re-entry (low)
+
+- **PROVEN** root cause: source callbacks run while frame completion holds `frameCompletionMutex`,
+  which is not recursive. A source that called `EndFrame()` from its own `Collect()` blocked forever.
+- **PROVEN** fix: a thread-local guard refuses the nested end and counts it as a malformed frame
+  transition; the outer frame still completes.
+- **TESTED**: `ASourceEndingAFrameFromCollectIsRefusedNotDeadlocked`. Against the previous code the
+  same test deadlocks and is killed by its 20-second limit.
+
+### Verification after `AUD-DIAG-INSP-0003`
+
+| Configuration | Result |
+|---|---|
+| Release FULL HEADLESS/NULL, Inspector ON | Diagnostics 40/40, Inspector 27/27, Graphics 2,325 passed, Runtime 174 passed |
+| Release STATS / OFF | 16/16 and 2/2 |
+| Release FULL ALSA | Audio diagnostics 1/1 |
+| Debug FULL ASan+UBSan | 40/40 + 27/27, no report |
+| Debug FULL TSan, Inspector ON | 40/40 + 27/27, no race report |
+| Debug FULL `-Wall -Wextra -Wpedantic -Werror` | 40/40 + 27/27, no warning in any of the seven configurations |
+| MinGW-w64 x86-64 cross-build | `cna_diagnostics` and `cna_inspector` compile and link |
+
+The strict build caught two defects in this task's own new tests before commit. One was a
+dangling `else` around an `EXPECT_TRUE`. The other was the literal `"Bad\x80End"`: `E` is a hex
+digit, so C++ reads `\x80E` as a single out-of-range escape, and in the non-strict build that case
+had silently become the valid ASCII byte `0x0E`, passing without testing a continuation byte at
+all. Both are fixed; the literal is split so the escape ends at `0x80`.
+
+Still **NOT TESTED**: execution on native Windows or macOS. The fuzzers are seeded mutation corpora,
+not coverage-guided fuzzing; they exercise every decoder that parses untrusted input but do not
+search the input space the way libFuzzer would.
 
 ## Remaining limitations
 
