@@ -5,6 +5,19 @@
 
 Reproduce with `python3 tools/c-api/audit_coverage_backlog.py`.
 
+> **Superseded — historical record.** Every defect this audit found was repaired on branch
+> `capi-coverage-tooling-cleanup` (`plans/plan_capi_coverage_tooling_cleanup.md`, `CBIND-126`), so
+> the numbers below describe the tree as it was on 2026-09-18 *before* that work, not as it is. The
+> current measurement is `docs/c-api/COVERAGE.md`, and the live backlog is `CBIND-127`.
+>
+> Two figures here did not survive verification and are corrected there. The 83 rows called "already
+> bound; only the mapping rule is missing" were checked one at a time against the exported routes:
+> **41 were, 42 were not** — 38 had no route at all and 4 were C++ move constructors. And the
+> estimate of **388** genuinely missing logical APIs measures **259** once the build-time pipeline,
+> `Microsoft::Phone` and the still-open `CBIND-117` scope question are told apart from missing
+> runtime bindings. The partition below is a heuristic, which
+> `audit_coverage_backlog.py`'s own docstring now quantifies; the rules file is the evidence.
+
 ---
 
 ## The answer
