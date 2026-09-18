@@ -194,8 +194,12 @@ static int validate_data(const CNA_MorphTargetDataEXTHandle data)
         CNA_Vector3 readback[1] = {{0.0F, 0.0F, 0.0F}};
         uint64_t tangent_count = UINT64_MAX;
 
+        /* BINDFIX-009: a target index is in range when the target exists, whatever its tangent
+           array holds, so a target with no tangent deltas reports zero of them rather than
+           refusing. The check three lines below already required exactly this shape of target 1. */
         REQUIRE(cna_morph_target_data_ext_copy_tangent_deltas(
-                    data, 0U, 0, 0U, &tangent_count) == CNA_RESULT_INVALID_ARGUMENT);
+                    data, 0U, 0, 0U, &tangent_count) == CNA_RESULT_SUCCESS &&
+                tangent_count == 0U);
         REQUIRE(cna_morph_target_data_ext_set_tangent_deltas(data, 0U, tangents, 1U) ==
                     CNA_RESULT_SUCCESS &&
                 cna_morph_target_data_ext_copy_tangent_deltas(

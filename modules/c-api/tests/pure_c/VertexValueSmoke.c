@@ -160,9 +160,9 @@ static int validate_defaults(void)
         CNA_VertexValue expected;
         memset(&actual, 0xa5, sizeof(actual));
         memset(&expected, 0, sizeof(expected));
-        if (type == CNA_VERTEX_TYPE_POSITION_COLOR) {
-            expected.position_color.color = (CNA_Color){255U, 255U, 255U, 255U};
-        }
+        /* Every type defaults to all-zero. SOFTWARE-240 removed the white VertexPositionColor
+           CNA had invented: neither XNA nor FNA gives the struct a parameterless constructor, so
+           its Color member is Color()'s packed zero. */
         if (cna_vertex_value_init_default(type, &actual) != CNA_RESULT_SUCCESS ||
             memcmp(&actual, &expected, sizeof(actual)) != 0) {
             return 0;
@@ -175,9 +175,11 @@ static int validate_defaults(void)
 static int validate_vertex_case(const VertexCase* const test_case)
 {
     const CNA_VertexValue value = sample_vertex(test_case->type);
+    const CNA_VertexValue same = value;
     CNA_VertexValue different = value;
     CNA_Bool predicate = CNA_FALSE;
     int32_t hash = -1;
+    int32_t same_hash = -2;
     uint32_t stride = 0U;
     uint64_t count = 0U;
     CNA_VertexElement elements[6];
@@ -193,8 +195,13 @@ static int validate_vertex_case(const VertexCase* const test_case)
             CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
         cna_vertex_value_not_equals(test_case->type, &value, &value, &predicate) !=
             CNA_RESULT_SUCCESS || predicate != CNA_FALSE ||
+        /* Equal values hash equally -- the whole of what a hash promises, and all that can be
+           asserted across these types. SOFTWARE-241 replaced FNA's zero stub with XNA's exact
+           word-XOR for the four classic types, while the three CNAEXT-only ones still return
+           zero, so neither zero nor non-zero is a property of the surface as a whole. */
         cna_vertex_value_get_hash_code(test_case->type, &value, &hash) != CNA_RESULT_SUCCESS ||
-        hash != 0 ||
+        cna_vertex_value_get_hash_code(test_case->type, &same, &same_hash) !=
+            CNA_RESULT_SUCCESS || same_hash != hash ||
         cna_vertex_type_get_stride(test_case->type, &stride) != CNA_RESULT_SUCCESS ||
         stride != test_case->stride ||
         cna_vertex_type_copy_elements(test_case->type, 0, 0U, &count) !=
@@ -268,11 +275,14 @@ static int validate_vertex_element(void)
     CNA_VertexElement different = value;
     CNA_Bool predicate = CNA_FALSE;
     int32_t hash = -1;
+    int32_t same_hash = -2;
     uint64_t count = 0U;
     char bytes[96];
     char too_small = 'e';
+    /* SOFTWARE-202: single braces and no space. FNA concatenates literal "{{"/"}}" and an extra
+       space; XNA passes escaped braces to string.Format, which emits one of each. */
     static const char Expected[] =
-        "{{Offset:20 Format:Vector4 Usage:Tangent UsageIndex: 3}}";
+        "{Offset:20 Format:Vector4 Usage:Tangent UsageIndex:3}";
     different.offset = 24U;
     if (cna_vertex_element_equals(value, value, &predicate) != CNA_RESULT_SUCCESS ||
         predicate != CNA_TRUE ||
@@ -282,7 +292,9 @@ static int validate_vertex_element(void)
         predicate != CNA_TRUE ||
         cna_vertex_element_not_equals(value, value, &predicate) != CNA_RESULT_SUCCESS ||
         predicate != CNA_FALSE ||
-        cna_vertex_element_get_hash_code(value, &hash) != CNA_RESULT_SUCCESS || hash != 0 ||
+        cna_vertex_element_get_hash_code(value, &hash) != CNA_RESULT_SUCCESS ||
+        cna_vertex_element_get_hash_code(value, &same_hash) != CNA_RESULT_SUCCESS ||
+        same_hash != hash ||
         cna_vertex_element_get_string_byte_count(value, &count) != CNA_RESULT_SUCCESS ||
         count != sizeof(Expected) - 1U ||
         cna_vertex_element_copy_string(value, &too_small, 1U, &count) !=

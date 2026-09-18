@@ -163,18 +163,41 @@ static int validate_transfer_failures(const CNA_Handle texture)
     memset(raw, 0, sizeof(raw));
     memset(destination, 0x5a, sizeof(destination));
 
+    /* SOFTWARE-276 restored XNA's cross-width transfers: an element whose size divides the
+       uncompressed texel is legal when the total still matches the region exactly. This region is
+       16 SurfaceFormat::Color texels, 64 bytes, and the transfer asks for 16 elements -- so
+       exactly the four-byte types are accepted and every other width is refused, either for not
+       dividing the texel or for not totalling 64. The widths are fixed ABI facts of the packed
+       type each identity names. */
+    static const uint32_t ElementByteWidths[] = {
+        4U,  /* COLOR            */ 2U,  /* BGR565           */ 2U,  /* BGRA5551         */
+        2U,  /* BGRA4444         */ 1U,  /* BYTE             */ 2U,  /* NORMALIZED_BYTE2 */
+        4U,  /* NORMALIZED_BYTE4 */ 4U,  /* RGBA1010102      */ 4U,  /* RG32             */
+        8U,  /* RGBA64           */ 1U,  /* ALPHA8           */ 4U,  /* SINGLE           */
+        8U,  /* VECTOR2          */ 16U, /* VECTOR4          */ 2U,  /* HALF_SINGLE      */
+        4U,  /* HALF_VECTOR2     */ 8U,  /* HALF_VECTOR4     */ 2U   /* USHORT           */
+    };
+    const uint32_t ColorTexelBytes = 4U;
+    const uint64_t RegionTexels = 16U;
+
     for (CNA_TextureDataType type = CNA_TEXTURE_DATA_BGR565;
          type <= CNA_TEXTURE_DATA_USHORT;
          ++type) {
+        const uint32_t width = ElementByteWidths[type];
+        const int exact = (ColorTexelBytes % width) == 0U &&
+            (uint64_t)width * RegionTexels == RegionTexels * ColorTexelBytes;
+        const CNA_Result expected = exact ? CNA_RESULT_SUCCESS : CNA_RESULT_INVALID_ARGUMENT;
         uint8_t before[sizeof(destination)];
         memcpy(before, destination, sizeof(before));
         required = UINT64_C(999);
-        if (cna_texture2d_set_data(texture, type, &transfer, raw, 17U) !=
-                CNA_RESULT_INVALID_ARGUMENT ||
+        if (cna_texture2d_set_data(texture, type, &transfer, raw, 17U) != expected ||
             cna_texture2d_get_data(
-                texture, type, &transfer, destination, 17U, &required) !=
-                CNA_RESULT_INVALID_ARGUMENT ||
-            required != 16U || memcmp(destination, before, sizeof(before)) != 0) {
+                texture, type, &transfer, destination, 17U, &required) != expected ||
+            required != 16U) {
+            return 0;
+        }
+        /* A refused read must leave the destination exactly as it was. */
+        if (!exact && memcmp(destination, before, sizeof(before)) != 0) {
             return 0;
         }
     }
@@ -292,7 +315,10 @@ static int validate_cpu_texture_and_encoding(uint8_t** const out_png, uint64_t* 
         return 0;
     }
 
-    CNA_Texture2DTransfer rectangle = make_transfer(0, 1U, 6U);
+    /* Four elements for a 2x2 region. SOFTWARE-276 restored XNA's ValidateTotalSize, which
+       requires sizeof(T) * elementCount to equal the selected region's storage exactly; FNA's
+       lower-authority rule allowed the surplus this used to ask for. */
+    CNA_Texture2DTransfer rectangle = make_transfer(0, 1U, 4U);
     rectangle.has_rectangle = CNA_TRUE;
     rectangle.rectangle = (CNA_Rectangle){1, 1, 2, 2};
     CNA_Color patch[7] = {

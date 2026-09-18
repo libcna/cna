@@ -830,9 +830,12 @@ static int write_unsupported_texture_asset(void)
         asset, offset, "Microsoft.Xna.Framework.Content.Texture2DReader");
     offset = push_seven_bit(asset, offset, UINT32_C(0));
     offset = push_seven_bit(asset, offset, UINT32_C(1));
-    /* Alpha8 is a real SurfaceFormat, but CNA's XNB Texture2DReader does not implement it. The
-       loader must report that content failure honestly rather than fabricating Color data. */
-    offset = push_u32_le(asset, offset, CNA_SURFACE_FORMAT_ALPHA8);
+    /* An ordinal no SurfaceFormat has. Alpha8 used to serve here, but SOFTWARE-275 gave the XNB
+       reader every classic XNA format, so Alpha8 now decodes and fails later against the Reach
+       profile instead -- a renderer- and profile-dependent verdict, no use as one expected value.
+       An out-of-range ordinal is what the reader itself genuinely cannot decode, which is the
+       content failure this fixture is for, and is what the C++ mirror of it uses. */
+    offset = push_u32_le(asset, offset, UINT32_C(999));
     offset = push_u32_le(asset, offset, UINT32_C(1));
     offset = push_u32_le(asset, offset, UINT32_C(1));
     offset = push_u32_le(asset, offset, UINT32_C(1));

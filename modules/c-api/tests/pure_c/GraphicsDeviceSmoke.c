@@ -79,8 +79,11 @@ static int validate_identities(void)
 static int validate_construction(void)
 {
     CNA_Viewport viewport = {7, 7, 7, 7, 7.0F, 7.0F};
+    /* All six fields zero. SOFTWARE-201: XNA's Viewport is a value type with no parameterless
+       constructor, so default(Viewport).MaxDepth is 0; only the two parameterized forms below
+       install the 0..1 range. CNA's old 1.0f default contradicted even its own documentation. */
     if (cna_viewport_init(&viewport) != CNA_RESULT_SUCCESS ||
-        !viewport_equals(viewport, (CNA_Viewport){0, 0, 0, 0, 0.0F, 1.0F})) {
+        !viewport_equals(viewport, (CNA_Viewport){0, 0, 0, 0, 0.0F, 0.0F})) {
         return 0;
     }
 
@@ -219,8 +222,10 @@ static int validate_transforms(void)
 
 static int validate_string(void)
 {
+    /* SOFTWARE-201 moved this off std::to_string and SOFTWARE-203 set precision(7), so a float
+       prints as XNA prints it -- "0.25", not "0.250000". */
     static const char Expected[] =
-        "{X:1 Y:2 Width:3 Height:4 MinDepth:0.250000 MaxDepth:0.750000}";
+        "{X:1 Y:2 Width:3 Height:4 MinDepth:0.25 MaxDepth:0.75}";
     const size_t expected_length = sizeof(Expected) - 1U;
     const CNA_Viewport viewport = {1, 2, 3, 4, 0.25F, 0.75F};
 
@@ -721,14 +726,37 @@ static int read_slot(
         CNA_RESULT_SUCCESS;
 }
 
+/*
+ * SOFTWARE-225 restored XNA's collection boundary: sixteen pixel sampler slots in every profile,
+ * but the vertex collection is constructed with four slots under HiDef and **none** under Reach.
+ * So the number of vertex slots is a question to ask the device, not a constant; this device
+ * defaults to Reach, where every vertex slot is out of range.
+ */
+static uint32_t vertex_slot_count(const CNA_Handle graphics_device)
+{
+    CNA_GraphicsProfile profile = CNA_GRAPHICS_PROFILE_REACH;
+    if (cna_graphics_device_get_graphics_profile(graphics_device, &profile) !=
+            CNA_RESULT_SUCCESS) {
+        return 0U;
+    }
+    return profile == CNA_GRAPHICS_PROFILE_HI_DEF ? 4U : 0U;
+}
+
 static int validate_texture_collections(CNA_Handle graphics_device)
 {
     CNA_TextureSlotInfo info;
+    const uint32_t vertex_slots = vertex_slot_count(graphics_device);
     for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
         if (!read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, slot, &info) ||
-            info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE ||
-            !read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, slot, &info) ||
             info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+        if (slot < vertex_slots) {
+            if (!read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, slot, &info) ||
+                info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE) {
+                return 0;
+            }
+        } else if (read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, slot, &info)) {
             return 0;
         }
     }
@@ -762,14 +790,17 @@ static int validate_texture_collections(CNA_Handle graphics_device)
         return 0;
     }
 
-    /* A bound slot reports the owning C handle on both stages. */
+    /*
+     * A bound pixel slot reports the owning C handle. The vertex stage refuses this texture in
+     * either profile, and for two independent SOFTWARE-225 reasons: under Reach the collection has
+     * no slot 0 at all, and vertex texture fetch admits only the seven float/half formats, of
+     * which SurfaceFormat::Color is not one.
+     */
     if (cna_graphics_device_set_texture(
             graphics_device, CNA_SHADER_STAGE_PIXEL, 3U, texture) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_set_texture(
-            graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, texture) != CNA_RESULT_SUCCESS ||
+            graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, texture) == CNA_RESULT_SUCCESS ||
         !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 3U, &info) ||
-        info.bound != CNA_TRUE || info.texture != texture ||
-        !read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, &info) ||
         info.bound != CNA_TRUE || info.texture != texture ||
         !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 4U, &info) ||
         info.bound != CNA_FALSE) {
@@ -788,8 +819,9 @@ static int validate_texture_collections(CNA_Handle graphics_device)
         cna_graphics_device_unbind_texture(graphics_device, texture) != CNA_RESULT_SUCCESS ||
         !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 5U, &info) ||
         info.bound != CNA_FALSE ||
-        !read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, &info) ||
-        info.bound != CNA_FALSE ||
+        (vertex_slots > 0U &&
+         (!read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, &info) ||
+          info.bound != CNA_FALSE)) ||
         cna_graphics_device_unbind_texture(graphics_device, texture) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_unbind_texture(graphics_device, CNA_INVALID_HANDLE) !=
             CNA_RESULT_INVALID_HANDLE) {
@@ -880,24 +912,48 @@ static int is_supported(const CNA_Result result)
     return result == CNA_RESULT_SUCCESS || result == CNA_RESULT_NOT_SUPPORTED;
 }
 
+/*
+ * SOFTWARE-333: asking to clear a plane this device does not have is InvalidOperationException in
+ * Microsoft XNA, which the wrapper maps to CNA_RESULT_INVALID_STATE. FNA masked the flags away
+ * instead, and is_supported() was written against that. A C-API game's device comes from default
+ * PresentationParameters, whose DepthFormat is None, so here the refusal is the correct answer --
+ * and on a device that does have the plane, the renderer's own verdict is.
+ */
+static int clear_ok(const CNA_Result result, const int plane_exists)
+{
+    return plane_exists ? is_supported(result) : result == CNA_RESULT_INVALID_STATE;
+}
+
 static int validate_frame_control(CNA_Handle graphics_device, DeviceState* state)
 {
     const CNA_Color color = {10U, 20U, 30U, 40U};
+    CNA_PresentationParameters active;
+    if (cna_presentation_parameters_init(&active) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_presentation_parameters(graphics_device, &active) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    const int has_depth = active.depth_stencil_format != CNA_DEPTH_FORMAT_NONE;
+    const int has_stencil = active.depth_stencil_format == CNA_DEPTH_FORMAT_DEPTH24_STENCIL8;
     if (cna_graphics_device_clear_rgba(graphics_device, 0.25F, 0.5F, 0.75F, 1.0F) !=
             CNA_RESULT_SUCCESS ||
         cna_graphics_device_clear_rgba(graphics_device, 0.0F, 0.0F, 0.0F, NAN) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_graphics_device_clear_rgba(graphics_device, INFINITY, 0.0F, 0.0F, 1.0F) !=
             CNA_RESULT_INVALID_ARGUMENT ||
-        !is_supported(cna_graphics_device_clear_color_depth(graphics_device, color, 1.0F)) ||
+        !clear_ok(
+            cna_graphics_device_clear_color_depth(graphics_device, color, 1.0F), has_depth) ||
         cna_graphics_device_clear_color_depth(graphics_device, color, NAN) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         !is_supported(cna_graphics_device_clear_options(
             graphics_device, CNA_CLEAR_OPTION_TARGET, color, 1.0F, 0)) ||
-        !is_supported(cna_graphics_device_clear_options(
-            graphics_device,
-            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL,
-            color, 1.0F, 3)) ||
+        !clear_ok(
+            cna_graphics_device_clear_options(
+                graphics_device,
+                CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER |
+                    CNA_CLEAR_OPTION_STENCIL,
+                color, 1.0F, 3),
+            has_depth && has_stencil) ||
         cna_graphics_device_clear_options(
             graphics_device, UINT32_C(8), color, 1.0F, 0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_graphics_device_clear_options(
@@ -1166,7 +1222,16 @@ static int validate_draw_and_extensions(CNA_Handle graphics_device)
         return 0;
     }
 
-    /* Without bindings, every buffered draw route fails; a 2D-only backend refuses it outright. */
+    /*
+     * Without bindings, every buffered draw route fails; a 2D-only backend refuses it outright.
+     *
+     * On a 3D backend the refusal is now XNA's own device-state guard rather than a native error
+     * that leaked out as CNA_RESULT_INTERNAL. SOFTWARE-209 added the missing-effect guard and
+     * SOFTWARE-322 settled which checks run before a draw reaches the renderer at all: required
+     * counts, profile ceilings and device state. Nothing here has applied an effect or bound a
+     * vertex buffer, so InvalidOperationException is the answer, and CNA_RESULT_INVALID_STATE is
+     * its canonical mapping.
+     */
     CNA_Bool supports_3d = CNA_FALSE;
     if (cna_graphics_device_supports_capability(
             graphics_device, CNA_GRAPHICS_CAPABILITY_THREE_D, &supports_3d) !=
@@ -1174,7 +1239,7 @@ static int validate_draw_and_extensions(CNA_Handle graphics_device)
         return 0;
     }
     const CNA_Result expected_without_bindings =
-        supports_3d == CNA_TRUE ? CNA_RESULT_INTERNAL : CNA_RESULT_NOT_SUPPORTED;
+        supports_3d == CNA_TRUE ? CNA_RESULT_INVALID_STATE : CNA_RESULT_NOT_SUPPORTED;
     if (cna_graphics_device_draw_primitives(
             graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 1) !=
             expected_without_bindings ||
@@ -1564,15 +1629,15 @@ static CNA_Result on_load(
     CNA_Handle graphics_device = CNA_INVALID_HANDLE;
     if (game_time != 0 ||
         cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
-        !validate_capability_profile(graphics_device) ||
-        !validate_device_state(graphics_device) ||
-        !validate_texture_collections(graphics_device) ||
-        !validate_device_events(graphics_device, state) ||
-        !validate_frame_control(graphics_device, state) ||
-        !validate_backbuffer_window(graphics_device) ||
-        !validate_buffer_binding(graphics_device) ||
-        !validate_draw_and_extensions(graphics_device) ||
-        !validate_sprite_text_and_queries(graphics_device)) {
+        !CNA_TEST_STAGE(validate_capability_profile(graphics_device)) ||
+        !CNA_TEST_STAGE(validate_device_state(graphics_device)) ||
+        !CNA_TEST_STAGE(validate_texture_collections(graphics_device)) ||
+        !CNA_TEST_STAGE(validate_device_events(graphics_device, state)) ||
+        !CNA_TEST_STAGE(validate_frame_control(graphics_device, state)) ||
+        !CNA_TEST_STAGE(validate_backbuffer_window(graphics_device)) ||
+        !CNA_TEST_STAGE(validate_buffer_binding(graphics_device)) ||
+        !CNA_TEST_STAGE(validate_draw_and_extensions(graphics_device)) ||
+        !CNA_TEST_STAGE(validate_sprite_text_and_queries(graphics_device))) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stale_device = graphics_device;
