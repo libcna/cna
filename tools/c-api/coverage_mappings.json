@@ -884,7 +884,7 @@
         "operator",
         "field"
       ],
-      "mapping": "owned standalone or game-child `CNA_Handle` resources; versioned common/2D/storage snapshots; all constructors and factories through device, file, encoded-memory, RGBA8 and CPU-only creation; every typed full/mip/rectangle transfer through `CNA_Texture2DTransfer` plus `CNA_TextureDataType`; direct raw-RGBA8 upload through the native SetDataRGBA route; Texture format/block/alignment validation helpers; exact type-name count/copy; and PNG/JPEG memory/file encoding. Stream objects, native renderer pointers, weak pointers, protected construction and copy/move storage remain behind the adapter; their safe observable state is exposed without crossing the ABI",
+      "mapping": "owned standalone or game-child `CNA_Handle` resources; versioned common/2D/storage snapshots; all constructors and factories through device, file, encoded-memory, RGBA8 and CPU-only creation; every typed full/mip/rectangle transfer through `CNA_Texture2DTransfer` plus `CNA_TextureDataType`; direct raw-RGBA8 upload through the native SetDataRGBA route; Texture format/block/alignment validation helpers; exact type-name count/copy; and PNG/JPEG memory/file encoding. Stream objects, native renderer pointers, weak pointers, protected construction and copy/move storage remain behind the adapter; their safe observable state is exposed without crossing the ABI The generic `SetData<T>`/`GetData<T>` overloads are `cna_texture2d_set_data`/`_get_data` with `T` supplied as a `CNA_TextureDataType`: the 18 named representations are the closed set this header's contract asserts, and `CNA_Texture2DTransfer` carries the level, the optional rectangle and the caller-array window the overloads differ by. A caller-defined `T` with no named representation travels as `CNA_TEXTURE_DATA_BYTE` where the surface format accepts it, because the generic templates forward with `sizeof(T)` and validate only the byte extent. The `std::nullptr_t` overload gets no route of its own because it is not an operation -- it exists so a literal `nullptr` keeps selecting the `Color` path in C++ overload resolution, and in C a null `data` pointer is refused by the single route's array-window validation, which is the same observable answer.",
       "tests": "all 27 formats, 18 transfer representations, constructors/factories, common and 2D properties, full/rectangle/mip transfers, PNG/JPEG memory and file round-trips, both stream-decode variants, storage/type-name snapshots, lifecycle, atomic capacity failures and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035C4",
@@ -924,6 +924,7 @@
         "CPP-30E256BA6EEB",
         "CPP-335AA0A1FB7C",
         "CPP-3418F7E03D2A",
+        "CPP-3530B56B840D",
         "CPP-35DBE2BCD96E",
         "CPP-35EB9D6ABAAF",
         "CPP-36557A1E2432",
@@ -937,6 +938,7 @@
         "CPP-432E82D0FE92",
         "CPP-47654FC9AE9B",
         "CPP-47E05B46C9AF",
+        "CPP-484602007032",
         "CPP-49DBA70323A8",
         "CPP-4C60073CC822",
         "CPP-4E958DB8775C",
@@ -956,8 +958,10 @@
         "CPP-5F016EF30178",
         "CPP-600787A892D6",
         "CPP-645E9BB738D1",
+        "CPP-6490B388B384",
         "CPP-6805407E0845",
         "CPP-68229F1DE3D9",
+        "CPP-683643E5EE22",
         "CPP-6B420E48086C",
         "CPP-6BC40939B5C7",
         "CPP-6DF49147B47F",
@@ -993,6 +997,7 @@
         "CPP-ADBA3231B2F8",
         "CPP-AE81DB182A20",
         "CPP-AF839579648F",
+        "CPP-B04266AD4394",
         "CPP-B0916C2F720D",
         "CPP-B0B40D9702A5",
         "CPP-B1130D10AC76",
@@ -1002,6 +1007,7 @@
         "CPP-BBAB77ACCCD0",
         "CPP-BD19142BF6AD",
         "CPP-BEE704A960BD",
+        "CPP-BFC5360FE94E",
         "CPP-C2A06DEA93A3",
         "CPP-C36CE4309929",
         "CPP-C3B331EDBA09",
@@ -1023,6 +1029,7 @@
         "CPP-E61A8207E230",
         "CPP-E81C9A540340",
         "CPP-EC3CF794A771",
+        "CPP-ED1BFF40B8C6",
         "CPP-ED4E9761C627",
         "CPP-F20AA31DDE29",
         "CPP-F49CBF594E48",
@@ -1047,7 +1054,7 @@
         "operator",
         "field"
       ],
-      "mapping": "owned game-child `CNA_Handle` resources; versioned 3D/cube create, property and full/mip/box/face/rectangle Color transfer descriptors; direct Texture3D raw-byte SetDataPointerEXT route; exact native type-name count/copy; generic Texture/GraphicsResource operations; RenderTargetCube inheritance; and copied-memory DDS cube decoding. Native renderer pointers, protected construction, copy/move storage and Sharp Runtime streams remain behind the adapter; missing storage returns an explicit atomic NOT_SUPPORTED result",
+      "mapping": "owned game-child `CNA_Handle` resources; versioned 3D/cube create, property and full/mip/box/face/rectangle Color transfer descriptors; direct Texture3D raw-byte SetDataPointerEXT route; exact native type-name count/copy; generic Texture/GraphicsResource operations; RenderTargetCube inheritance; and copied-memory DDS cube decoding. Native renderer pointers, protected construction, copy/move storage and Sharp Runtime streams remain behind the adapter; missing storage returns an explicit atomic NOT_SUPPORTED result The two `std::nullptr_t` `GetData` shims are `cna_texturecube_get_data`'s null-destination refusal. Neither introduces a transfer: they exist so a literal `nullptr` keeps selecting the `Color` overload once the packed, float and raw templates joined the set, and C has no overload set to preserve -- a null destination with a non-zero window is refused by array-window validation before any native call. The **typed** cube and volume overloads beside them remain unbound and are tracked as such; there is no cube or volume analogue of `CNA_TextureDataType`.",
       "tests": "all six cube faces, full/rectangle/mip transfers and validation, Texture3D capability refusal, DDS memory decoding refusal, common Texture and GraphicsResource state, RenderTargetCube inheritance, disposal/parent order and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureVolumeSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035C5",
@@ -1064,6 +1071,7 @@
         "CPP-509A63F38823",
         "CPP-5733D9EAEDA4",
         "CPP-5AC0749394C7",
+        "CPP-5B073B6E698E",
         "CPP-5D9AEA5D6142",
         "CPP-5FBA0AE0CD1F",
         "CPP-617268F49947",
@@ -1091,6 +1099,7 @@
         "CPP-D6B7604D9B60",
         "CPP-D74E69CF4878",
         "CPP-E083649B9463",
+        "CPP-E9FD78BFE751",
         "CPP-FC24DB23B45D"
       ]
     },
@@ -1106,7 +1115,7 @@
         "operator",
         "event"
       ],
-      "mapping": "owned game-child `CNA_VertexBufferHandle` resources created as static or dynamic buffers; copied declaration metadata, versioned info and caller-array transfer descriptors; all seven typed SetData/GetData families, raw-byte upload, dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter. `SetDataRawAtEXT` and `GetDataRawEXT` become `cna_vertex_buffer_set_data_raw_at` and `cna_vertex_buffer_get_data_raw`: the offset every other transfer route here carries indexes the caller's array, and these two index the buffer, which is what XNA's `offsetInBytes` means. **Documented deviation, about cost rather than result:** no renderer contract here takes a destination offset, so the window is composed on the CPU shadow and the whole buffer is re-uploaded",
+      "mapping": "owned game-child `CNA_VertexBufferHandle` resources created as static or dynamic buffers; copied declaration metadata, versioned info and caller-array transfer descriptors; all seven typed SetData/GetData families, raw-byte upload, dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter. `SetDataRawAtEXT` and `GetDataRawEXT` become `cna_vertex_buffer_set_data_raw_at` and `cna_vertex_buffer_get_data_raw`: the offset every other transfer route here carries indexes the caller's array, and these two index the buffer, which is what XNA's `offsetInBytes` means. **Documented deviation, about cost rather than result:** no renderer contract here takes a destination offset, so the window is composed on the CPU shadow and the whole buffer is re-uploaded `GetData<TVertex>` is `cna_vertex_buffer_get_data_raw` under the same flattening the set side uses -- the typed routes answer the seven built-in families a `CNA_VertexType` can name, and these answer the application-defined layout that has no identity for the ABI to carry. The two `DynamicVertexBuffer` templates are `VertexBuffer`'s own, appearing on the derived type only because `using VertexBuffer::SetData;` makes them declarations of it; the derived class's own contribution is the `SetDataOptions` family bound separately, and `CNA_VertexBufferCreateInfo.dynamic` is what selects the native class behind one handle.",
       "tests": "all seven built-in vertex types through count and source/destination-window transfers, all four dynamic option overloads, raw upload, copied declaration independence, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `VertexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan, raw readback whole and windowed, a windowed upload that rewrites one vertex while its neighbour survives, and the refusals for a window past the end, an unaligned offset, a stride that is not the declaration's and a zero stride",
       "status": "implemented",
       "task": "CBIND-035C6",
@@ -1121,9 +1130,11 @@
         "CPP-19A2F4927863",
         "CPP-1C1BA848E1FE",
         "CPP-23CCC13E7E2F",
+        "CPP-2AECA334B10C",
         "CPP-2B69E64A2A7E",
         "CPP-2D48203B3685",
         "CPP-3423BEC1D66C",
+        "CPP-4521F7FDE012",
         "CPP-46A9F1BE9B0B",
         "CPP-4BA1C9DFCF3E",
         "CPP-5694A413A82E",
@@ -1135,6 +1146,7 @@
         "CPP-77B218CC11C6",
         "CPP-7D51F1061D10",
         "CPP-82DA8FE7864D",
+        "CPP-8339BCA6C38D",
         "CPP-843C58127F80",
         "CPP-8B27CE9C7B3E",
         "CPP-8E04AF737CE8",
@@ -1145,6 +1157,7 @@
         "CPP-A64CE812CB2B",
         "CPP-A7C5B2AFD9B0",
         "CPP-AD25B677203B",
+        "CPP-ADE360D3FAC1",
         "CPP-AFB18F686AB5",
         "CPP-B6D38917E030",
         "CPP-BF7F018620A2",
@@ -1160,6 +1173,7 @@
         "CPP-D734CFF2A66E",
         "CPP-D91E866D8259",
         "CPP-DFDBFCF08428",
+        "CPP-EA83A5956674",
         "CPP-EC071DC28CCF",
         "CPP-ED5745EBCBEA",
         "CPP-F0121DC09155",
@@ -1184,26 +1198,37 @@
         "operator",
         "event"
       ],
-      "mapping": "owned game-child `CNA_IndexBufferHandle` resources created as static or dynamic 16/32-bit buffers; versioned create/info and caller-array transfer descriptors; count and window SetData/GetData routes, all dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter. `SetDataAtEXT` becomes `cna_index_buffer_set_data_at`, whose `buffer_offset_in_bytes` indexes the buffer while the descriptor's `start_index` keeps indexing the caller's array. **Documented deviations:** it accepts no `SetDataOptions` other than None, because a windowed upload promises to keep the rest of the buffer and `Discard` promises the opposite; and it costs a whole-buffer re-upload, since no renderer contract here takes a destination offset",
+      "mapping": "owned game-child `CNA_IndexBufferHandle` resources created as static or dynamic 16/32-bit buffers; versioned create/info and caller-array transfer descriptors; count and window SetData/GetData routes, all dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter. `SetDataAtEXT` becomes `cna_index_buffer_set_data_at`, whose `buffer_offset_in_bytes` indexes the buffer while the descriptor's `start_index` keeps indexing the caller's array. **Documented deviations:** it accepts no `SetDataOptions` other than None, because a windowed upload promises to keep the rest of the buffer and `Discard` promises the opposite; and it costs a whole-buffer re-upload, since no renderer contract here takes a destination offset The generic `SetData<TIndex>`/`GetData<TIndex>` overloads are the same routes with the element width carried by `CNA_IndexBufferTransfer.index_element_size`, a closed set naming exactly the two widths an index buffer can hold; `SetDataBytesAtInternal` uses that width for byte arithmetic only, so either `TIndex` travels byte-for-byte. The nine `DynamicIndexBuffer` declarations are answered by the same handle: six are `IndexBuffer`'s own overloads appearing on the derived type because `using IndexBuffer::SetData;` makes them declarations of it -- a `using` declaration introduces no operation -- and the other three are its `SetDataOptions` overloads, carried by the descriptor's `options` field. `CNA_IndexBufferCreateInfo.dynamic` is what chooses the native class, which is why one handle serves both kinds. One arm is deliberately narrower than the declaration: `cna_index_buffer_set_data_at` refuses a `SetDataOptions` other than `None` by name, because a windowed upload promises to keep the rest of the buffer and `Discard` promises the opposite.",
       "tests": "16-bit and 32-bit count/source-window/destination-window transfers, static and dynamic construction, Discard/NoOverwrite, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `IndexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan, and a windowed upload that rewrites one index while its neighbours survive, refusing a window past the end, an unaligned offset and a streaming hint",
       "status": "implemented",
       "task": "CBIND-035C7",
       "approved_symbols": [
         "CPP-085F46A4835F",
+        "CPP-099D1936876B",
         "CPP-0B3C5DAA5A7D",
+        "CPP-1012EB143366",
+        "CPP-11169C1266C6",
+        "CPP-12075274D949",
         "CPP-12B2373D3194",
+        "CPP-150654AB5A00",
         "CPP-168122FF0AAD",
         "CPP-16DC18B41C83",
+        "CPP-184DA3BC4417",
         "CPP-1E3D30CEE9E9",
+        "CPP-2E0F73F17257",
         "CPP-2FED90BC53E5",
         "CPP-39F89C019248",
+        "CPP-3E7581C763E3",
         "CPP-4F54BC07970C",
         "CPP-59989379BA34",
         "CPP-5DA23F328B37",
+        "CPP-762B1B0F1F20",
         "CPP-80E5FB04527F",
         "CPP-810E246D950D",
         "CPP-87F4685C6494",
         "CPP-8F228773D4C5",
+        "CPP-8F75676E93F4",
+        "CPP-997DE11AB443",
         "CPP-9F8A1A66E082",
         "CPP-9FB6863FD677",
         "CPP-A6F1022E7114",
@@ -1212,7 +1237,9 @@
         "CPP-BAC4DB0A697E",
         "CPP-C228622F23B5",
         "CPP-C75CBFCE788E",
+        "CPP-C7B196F8EEFE",
         "CPP-CAE50D6A744F",
+        "CPP-D07A0523954F",
         "CPP-D265F5E1DA92",
         "CPP-D7041B99EA9F",
         "CPP-D7CF1115C027",
@@ -1222,6 +1249,7 @@
         "CPP-F0ED8292E2AF",
         "CPP-F44A4CBFA7E4",
         "CPP-F4B93AD3FADC",
+        "CPP-F8A991BE2E1A",
         "CPP-FDB8E1EF8A5D"
       ]
     },
@@ -1513,11 +1541,12 @@
         "field",
         "alias"
       ],
-      "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; compiled bytecode judged as an argument before a renderer is consulted -- empty and structurally invalid bytes are refused as arguments, the MGFX container as an unsupported format, and acceptance of valid bytecode is the renderer's answer through `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`; `cna_effect_get_is_compiled_ext` maps `GetCompiledRuntimePtr` as the one fact a C caller can act on, because the runtime object itself is renderer-owned implementation C can neither construct nor call into, and `cna_effect_clone` carries that state to the clone because `Clone()` is an ordinary virtual now and clones the runtime and parameter values itself; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations. `DeclareUniformBlockEXT` becomes `cna_shader_effect_declare_uniform_block_ext`, taking `CNA_StringView` members like every other named string in this ABI and copying them into NUL-terminated storage for a canonical signature that wants `const char* const*` -- a view carries a length, not a terminator, and may point into the middle of a larger buffer",
+      "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; compiled bytecode judged as an argument before a renderer is consulted -- empty and structurally invalid bytes are refused as arguments, the MGFX container as an unsupported format, and acceptance of valid bytecode is the renderer's answer through `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`; `cna_effect_get_is_compiled_ext` maps `GetCompiledRuntimePtr` as the one fact a C caller can act on, because the runtime object itself is renderer-owned implementation C can neither construct nor call into, and `cna_effect_clone` carries that state to the clone because `Clone()` is an ordinary virtual now and clones the runtime and parameter values itself; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations. `DeclareUniformBlockEXT` becomes `cna_shader_effect_declare_uniform_block_ext`, taking `CNA_StringView` members like every other named string in this ABI and copying them into NUL-terminated storage for a canonical signature that wants `const char* const*` -- a view carries a length, not a terminator, and may point into the middle of a larger buffer The `(GraphicsDevice&, const std::string& stockTechniqueName)` constructor is protected and takes no argument a caller chooses: each stock subclass passes the exact technique name XNA's embedded blob reflects, which is why it exists rather than a mutable-name property. It therefore has no route of its own for the same reason the protected copy constructor does not -- C cannot call it and the canonical API does not intend anyone to. What it produces is bound and asserted: each `cna_*_effect_create` route runs it, and the reflected name is read back through `cna_effect_get_techniques` and `cna_effect_technique_copy_name`.",
       "tests": "base/material/shader/sprite construction and same-type clones, the three renderer-independent compiled-bytecode refusals, the compiled-runtime presence answer and its preservation across a clone asserted as a relationship rather than a constant, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan, and a two-member std140 block declaration with its clear-by-zero-count form and the refusals for a negative block size and for either array being null with a non-zero count",
       "status": "implemented",
       "task": "CBIND-035D5",
       "approved_symbols": [
+        "CPP-016E2137C95E",
         "CPP-054BCFF9D9BA",
         "CPP-0797E6BA2057",
         "CPP-104D135C299E",
@@ -1603,7 +1632,7 @@
         "field",
         "alias"
       ],
-      "mapping": "owned `CNA_EffectHandle` BasicEffect game children plus standalone or stable nested `CNA_DirectionalLightHandle` values; generic IEffectMatrices/IEffectFog/IEffectLights operations, exact three-light indexed views and default lighting; all BasicEffect transform, vertex-color, material, alpha, texture, fog and lighting properties; same-device retained Texture2D handles and clone-aware ownership. Renderer-only GpuDrawParams remain private and are consumed through Apply/draw paths",
+      "mapping": "owned `CNA_EffectHandle` BasicEffect game children plus standalone or stable nested `CNA_DirectionalLightHandle` values; generic IEffectMatrices/IEffectFog/IEffectLights operations, exact three-light indexed views and default lighting; all BasicEffect transform, vertex-color, material, alpha, texture, fog and lighting properties; same-device retained Texture2D handles and clone-aware ownership. Renderer-only GpuDrawParams remain private and are consumed through Apply/draw paths The four-argument `DirectionalLight` constructor is `cna_effect_lights_get_directional_light`, which hands back the three stable member views an effect owns -- and those three are what this constructor builds, so a write travels through to the effect's parameters, which is what the parameter arguments exist for; `cna_effect_clone` carries their cached values to a clone, which is what `cloneSource` is for. `cna_directional_light_create` is the *other* constructor, a standalone default light with no parameters behind it. **A C caller cannot bind a new light to three effect-parameter handles of its own choosing**: every parameter-bound light reachable here is one an effect owns, which is where the canonical API puts them.",
       "tests": "exact BasicEffect and DirectionalLight defaults, all matrix/fog/light/material/texture properties, three stable shared light aliases, default three-point lighting constants, generic interface success/refusal, same-type state clone and texture retention, nested-light lifetime after parent destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `BasicEffectSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035D6",
@@ -1626,6 +1655,7 @@
         "CPP-327D67CF65E4",
         "CPP-34D15EFD9699",
         "CPP-384E7BA3F31E",
+        "CPP-3B624A8E49BD",
         "CPP-4110A9246DFC",
         "CPP-422C84D82FA4",
         "CPP-4328689B2670",
@@ -5238,7 +5268,7 @@
         "constructor",
         "method"
       ],
-      "mapping": "owned generation/type/thread-validated `CNA_VertexDeclarationHandle` plus empty, computed-stride and explicit-stride creation, exact type-name count/copy, stride query, atomic element copy and destruction; initializer-list and vector explicit-stride constructors share one copied-array route",
+      "mapping": "owned generation/type/thread-validated `CNA_VertexDeclarationHandle` plus empty, computed-stride and explicit-stride creation, exact type-name count/copy, stride query, atomic element copy and destruction; initializer-list and vector explicit-stride constructors share one copied-array route The `std::vector<VertexElement>` constructor is `cna_vertex_declaration_create` with the vector flattened to the pointer-and-count the rest of this ABI uses: the array is copied during the call and the stride is computed from the elements, exactly as this overload computes it.",
       "tests": "all constructors and queries, computed/explicit/empty declarations, exact type name, copy capacity, invalid elements/ranges, wrong-kind/stale/wrong-thread handles and destruction in strict-C `VertexResourceSmoke.c`, plus C/C++ handle assertions",
       "status": "implemented",
       "task": "CBIND-035C2",
@@ -5247,6 +5277,7 @@
         "CPP-5ECE7A5A0AE8",
         "CPP-908325261080",
         "CPP-B2279C8F47FB",
+        "CPP-C5C784CB9386",
         "CPP-CF23B7B0FF17",
         "CPP-D1702DB77F5A",
         "CPP-D3C6ECFBFD3A",
@@ -5831,7 +5862,7 @@
         "destructor",
         "method"
       ],
-      "mapping": "owned game-child `CNA_OcclusionQueryHandle` values through `cna_occlusion_query_create`, `_begin`, `_end`, `_get_is_complete`, `_get_pixel_count`, `_has_renderer` and `_destroy`. Creation refuses a backend without the occlusion-query capability, and the handle is a full graphics resource: the generic `cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes accept it, which is where the protected `Dispose(bool)` and `GetTypeName` behavior is observed",
+      "mapping": "owned game-child `CNA_OcclusionQueryHandle` values through `cna_occlusion_query_create`, `_begin`, `_end`, `_get_is_complete`, `_get_pixel_count`, `_has_renderer` and `_destroy`. Creation refuses a backend without the occlusion-query capability, and the handle is a full graphics resource: the generic `cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes accept it, which is where the protected `Dispose(bool)` and `GetTypeName` behavior is observed The parameterless `Dispose()` and the base `Dispose(bool)` are `GraphicsResource`'s own declarations, appearing on this type because `using GraphicsResource::Dispose;` makes them declarations of it. Both are answered where the rule already points: an occlusion-query handle is accepted by `ResolveGraphicsResource`, so `cna_graphics_resource_dispose` is explicit disposal that keeps the handle and `cna_occlusion_query_destroy` is disposal plus release.",
       "tests": "capability-accurate creation or refusal, begin/end, completeness and pixel-count reads, renderer state, generic graphics-resource string access, double destroy and null-output failures in strict-C `GraphicsDeviceSmoke.c`, plus a C/C++ handle-width assertion under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F6",
@@ -5842,8 +5873,10 @@
         "CPP-3A8099791957",
         "CPP-3BBDCFDCD2E9",
         "CPP-4C2A56E857EA",
+        "CPP-641967F1C74A",
         "CPP-65810A612F31",
         "CPP-7E0FDC19ED61",
+        "CPP-80F1472D16DB",
         "CPP-B10D11B37374",
         "CPP-E1ABA2F4D9EC"
       ]
@@ -14597,7 +14630,7 @@
         "destructor",
         "method"
       ],
-      "mapping": "`cna_storage_buffer_create`, `_set_bytes`, `_get_bytes`, `_get_byte_size` and `_destroy` over an owned `CNA_StorageBufferHandle`. The canonical constructor throws where the renderer has no compute support; that reaches C as `CNA_RESULT_NOT_SUPPORTED` with the output handle left invalid, which is the arm a renderer without compute actually takes.",
+      "mapping": "`cna_storage_buffer_create`, `_set_bytes`, `_get_bytes`, `_get_byte_size` and `_destroy` over an owned `CNA_StorageBufferHandle`. The canonical constructor throws where the renderer has no compute support; that reaches C as `CNA_RESULT_NOT_SUPPORTED` with the output handle left invalid, which is the arm a renderer without compute actually takes. `cna_storage_buffer_destroy` releases the owned handle; the registry drops its last reference, the destructor runs and the protected `Dispose(bool)` override runs inside it -- the two halves of the dispose pattern reaching C as the single operation a handle-owning ABI can offer. The route is not a silent no-op on an invalid handle: an already-released buffer is an error, so a double release is visible rather than absorbed.",
       "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
       "status": "implemented",
       "task": "CBIND-084A",
@@ -14607,7 +14640,9 @@
         "CPP-6CD80E95D7EB",
         "CPP-830A08E9C520",
         "CPP-8BBC5284442F",
-        "CPP-9F86C3FDD19D"
+        "CPP-9D6FBCB42AC9",
+        "CPP-9F86C3FDD19D",
+        "CPP-CF5A86B7693B"
       ]
     },
     {
@@ -14996,11 +15031,13 @@
         "method"
       ],
       "signature_regex": ".*template.*|.*TVertex.*",
-      "mapping": "`cna_vertex_buffer_set_data`, which is the same operation with the element type selected by a versioned descriptor instead of a template parameter: `transfer->vertex_type` names the built-in vertex structure, `data` is the typed array and `capacity` is its element count. That is the flattening this campaign settled for `IPackedVectorT` -- a closed set of element types the ABI names, rather than a template C cannot instantiate.",
+      "mapping": "`cna_vertex_buffer_set_data`, which is the same operation with the element type selected by a versioned descriptor instead of a template parameter: `transfer->vertex_type` names the built-in vertex structure, `data` is the typed array and `capacity` is its element count. That is the flattening this campaign settled for `IPackedVectorT` -- a closed set of element types the ABI names, rather than a template C cannot instantiate. The source-window and explicit-stride templates are the same raw route: `sizeof(TVertex)` is `vertex_stride`, the element count is `vertex_count`, and `startIndex` is the caller advancing its own pointer through a contiguous array. `offsetInBytes` becomes `cna_vertex_buffer_set_data_raw_at`'s `buffer_offset_in_bytes`, the one offset in this family that indexes the buffer rather than the caller's array. The five-argument overload's ability to space destination slots wider than `sizeof(TVertex)` is **not** reproduced: the raw window is `vertex_count * vertex_stride` contiguous bytes, and an interleaved destination stride has no route rather than a simulated one.",
       "tests": "`VertexBufferSmoke.c` and `Draw3DSmoke.c` typed set-data coverage",
       "status": "implemented",
       "task": "CBIND-080",
       "approved_symbols": [
+        "CPP-7EC6E6C7C305",
+        "CPP-F0070722A19F",
         "CPP-FFE25DBCD3E6"
       ]
     },
@@ -18968,6 +19005,169 @@
         "CPP-E126699F37DC",
         "CPP-E3D095C0C473",
         "CPP-FA742DF14CAE"
+      ]
+    },
+    {
+      "id": "graphics-state-value-semantics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?P<t>BlendState|DepthStencilState|RasterizerState|SamplerState)::(?P=t)$",
+      "signature_regex": "^\\(const [A-Za-z]+ &other\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: a C++ copy constructor. The four canonical state objects are bound as fixed-layout `CNA_*State` PODs initialised by `cna_*_state_init`, so a C caller copies one by assigning the structure -- the language already gives it what this constructor gives C++. Introducing `cna_blend_state_copy` would add a route that does nothing a plain `=` does not, and would imply the POD has hidden state it does not have. These are movable values whose C form is the value itself.",
+      "tests": "C/C++ ABI size, alignment and offset assertions for each state POD, and the `cna_*_state_init` default-value checks in strict-C `GraphicsStateSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-3B04854DE270",
+        "CPP-A42D7F186F81",
+        "CPP-D2A56647410D",
+        "CPP-5C081F345D60"
+      ]
+    },
+    {
+      "id": "graphics-state-copy-assignment",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:BlendState|DepthStencilState|RasterizerState|SamplerState)::operator=$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "No C mapping: a C++ copy-assignment operator. The C ABI has no assignment form to bind; the state is a POD and a C caller assigns the structure directly. These are movable values whose C form is the value itself.",
+      "tests": "C/C++ ABI size, alignment and offset assertions for each state POD in strict-C `GraphicsStateSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-D66CAE1B27C9",
+        "CPP-CB16FE95AA14",
+        "CPP-015902A1AE84",
+        "CPP-742EF84EDEBA"
+      ]
+    },
+    {
+      "id": "graphics-resource-move-semantics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?P<t>GraphicsResource|RenderTarget2D|Texture2D|TextureCube|VertexDeclaration)::(?:(?P=t)|operator=)$",
+      "signature_regex": "^\\([A-Za-z0-9_]+ &&other\\).*$",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: the C++ move constructor and move-assignment operator. A C caller holds an opaque handle, and moving one handle into another is a plain pointer assignment that transfers nothing the ABI tracks -- ownership is carried by the create/destroy pair, not by the variable that names it. Binding either would offer a second name for the same resource while leaving the destroy contract ambiguous about which name owns it.",
+      "tests": "handle lifetime, double-destroy rejection and stale-handle rejection in strict-C `LifecycleSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-3D7D44AE7E75",
+        "CPP-4FC4926B250C",
+        "CPP-7F6DE3E7CA95",
+        "CPP-894609A0E44E",
+        "CPP-8B535E4FF7D2",
+        "CPP-92FB48FA6631",
+        "CPP-964AEC78149D",
+        "CPP-E593117CB0CA",
+        "CPP-F7116E65C550",
+        "CPP-F8C878089EFB"
+      ]
+    },
+    {
+      "id": "vertex-declaration-value-semantics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexDeclaration::(?:VertexDeclaration|operator=)$",
+      "signature_regex": "^\\(const VertexDeclaration &other\\)$",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: the C++ copy constructor and copy-assignment operator. A C caller builds a declaration from its element array through `cna_vertex_declaration_create`, which is the operation that duplicates one; the copy is a value needs C++ expresses with a constructor and C expresses by calling create again with the same elements.",
+      "tests": "`cna_vertex_declaration_create` element round-trip and stride checks in strict-C `GraphicsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-FDBAC42AE790",
+        "CPP-236EAA0DCBB4"
+      ]
+    },
+    {
+      "id": "graphics-state-pod-dispose",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:BlendState|DepthStencilState|RasterizerState|SamplerState)::Dispose$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: `Dispose` on a type whose C form is a POD. The four state objects inherit `GraphicsResource::Dispose` from the canonical class hierarchy, but the C ABI binds them as fixed-layout structures initialised by `cna_*_state_init` and owned by the caller's own storage. There is no handle to release, so there is no create/destroy pair for a dispose route to complete, and a caller that lets the structure go out of scope has already done everything disposal would do.",
+      "tests": "C/C++ ABI layout assertions and `cna_*_state_init` default-value checks in strict-C `GraphicsStateSmoke.c`; no route allocates a state object",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-28185B5DBE5C",
+        "CPP-F9DE9CBF6B20",
+        "CPP-A511AFCEDCBC",
+        "CPP-4E6E18A9E602"
+      ]
+    },
+    {
+      "id": "graphics-test-peer-friendship",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::CompiledEffectTestAccess|GraphicsDevice::(?:GraphicsDevicePlatformWindowTestPeer|(?:StorageBuffer|StorageTexture2D|Texture2DArray)GraphicsDeviceTestPeer))$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a friendship declaration, not a member. Each names a `CNA::Internal`/`CNA::TestSupport` peer that the graphics tests use to reach private state; Doxygen reports the `friend` line as a member with an empty signature. There is no callable behaviour here for any caller, C or C++, so there is nothing to bind.",
+      "tests": "Doxygen declaration inventory; the friendship grants access to the C++ test peers and declares no operation",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-1A03DC2F402C",
+        "CPP-AC90364C4B52",
+        "CPP-917539F35877",
+        "CPP-4B8BD28DC78F",
+        "CPP-5A969B0F7873"
+      ]
+    },
+    {
+      "id": "buffer-internal-set-data-helpers",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::ThrowIfDisposedForCloneInternal|IndexBuffer::SetDataBytesAtInternal|VertexBuffer::SetData(?:At|ElementsAt)Internal)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a private implementation helper that only exists because the public operation above it is a template. `VertexBuffer::SetData<T>` and `IndexBuffer::SetData<T>` must live in the header, so they dispatch to a non-template `*Internal` body carrying the element size and a `useOptions` discriminator; `ThrowIfDisposedForCloneInternal` is the `CNAEXT`-marked guard `Effect::Clone` runs. The behaviour a caller can observe is the public operation's, and that operation is bound -- `cna_vertex_buffer_set_data`, `cna_index_buffer_set_data` and `cna_effect_clone` each carry it. Binding the helper would publish a dispatch artifact and a second, weaker spelling of an operation the ABI already has.",
+      "tests": "`cna_vertex_buffer_set_data`/`cna_index_buffer_set_data` element-size, offset and options coverage and `cna_effect_clone` disposed-source rejection in strict-C `GraphicsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-00A41DAD6871",
+        "CPP-F8A43D4C6F59",
+        "CPP-C383FC54AF3B",
+        "CPP-395C1E7C7EF7",
+        "CPP-D9E74FF2FA94",
+        "CPP-05D6929569A5",
+        "CPP-8035F52B939E"
+      ]
+    },
+    {
+      "id": "sprite-batch-dispose-pattern",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Dispose$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_sprite_batch_destroy`. The route cancels any active interval, releases every retained texture reference, calls the canonical parameterless `Dispose()` and then releases the C handle, so the two halves of the dispose pattern reach C as one operation: the public dispose is what the route calls and the protected `Dispose(bool)` override is what that call runs. The other two declarations are `GraphicsResource`'s own, appearing here because `using GraphicsResource::Dispose;` makes them declarations of `SpriteBatch` too, and a `using` declaration introduces no operation. Unlike every other graphics resource in this ABI a SpriteBatch is **not** reachable through the generic `cna_graphics_resource_*` routes -- its handle kind is not among those `ResolveGraphicsResource` accepts -- so this route is the only door, and destroying during an active interval cancels that interval without flushing deferred commands.",
+      "tests": "strict-C `LifecycleSmoke.c`, `GraphicsDeviceSmoke.c`, `GraphicsSurfaceSmoke.c`, `OwnedGraphicsDeviceSmoke.c` and `StressSmoke.c`, which cover destruction during an active interval, retained-texture release and double-release rejection",
+      "status": "implemented",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-0EFA49309FA4",
+        "CPP-9A87BC8499EC",
+        "CPP-81ADC38E9FB1"
+      ]
+    },
+    {
+      "id": "graphics-device-clear-vector4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::Clear$",
+      "signature_regex": "^\\(ClearOptions options, const Vector4 &color, float depth, int stencil\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_graphics_device_clear_options` composed with `cna_color_init_vector4`. The canonical Vector4 overload is not a separate clear: it quantizes through `Color` and calls the `ClearOptions`/`Color` overload, which is Microsoft XNA's behaviour and a deliberate divergence from FNA's raw-float forwarding. C reaches the same result by the same two steps -- `cna_color_init_vector4` is the `Color(Vector4)` conversion and `cna_graphics_device_clear_options` is the overload it feeds -- so the composition is bit-identical rather than merely similar, and a dedicated float-channel clear route would be a second spelling of one operation. The unmasked float-channel path that genuinely differs already has its own route, `cna_graphics_device_clear_rgba`.",
+      "tests": "strict-C `GraphicsDeviceSmoke.c`, `Draw3DSmoke.c` and `GameSecondaryGraphicsDeviceContextSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-126",
+      "approved_symbols": [
+        "CPP-7C30FA27BE3F"
       ]
     }
   ]

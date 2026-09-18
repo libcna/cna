@@ -30,7 +30,12 @@ from typing import Iterable
 
 SCHEMA_VERSION = 1
 PUBLIC_ROOTS = ("Microsoft", "CNA")
-EXCLUDED_PATH_SEGMENTS = ("Internal", "Detail")
+# Compared case-insensitively. CBIND-126: the tuple used to be matched exactly, and
+# `modules/content-pipeline/**/Graphics/detail/` and `**/Serialization/Intermediate/detail/` -- both
+# spelled the C++-idiomatic lowercase way -- were therefore admitted as public API, putting 316
+# implementation-detail declarations into the coverage matrix. The segment names are the policy;
+# their capitalization never was.
+EXCLUDED_PATH_SEGMENTS = ("internal", "detail")
 
 # CBIND-047, decided by the project owner on 2026-08-16: the platform-abstraction module is a
 # substrate the C ABI is built ON, not a surface it exposes. A C caller reaches platform behaviour
@@ -45,7 +50,108 @@ EXCLUDED_PATH_SEGMENTS = ("Internal", "Detail")
 # and a scope rule that large has to be a recorded decision rather than a quiet widening of an
 # exclusion list -- which is why it names its owner, its date and its reason here and is reported
 # by name in COVERAGE.md.
-EXCLUDED_MODULES = ("platform",)
+#
+# CBIND-126, 2026-09-18: that reasoning is now the general model rather than one special case.
+# `MODULE_SCOPE` below classifies *every* module, because the failure this repaired was not a wrong
+# exclusion -- it was a missing one. When the Content Pipeline became its own module on 2026-09-03
+# nothing classified `content-pipeline` at all, so 2,554 of its declarations fell through
+# `owner_task()` to a completed task and were reported as missing runtime C bindings for a fortnight.
+# A table that must name every module cannot fail that way: a new or renamed module stops the gate
+# and asks, instead of quietly becoming someone else's debt.
+
+
+class Scope:
+    """Why a module is, or is not, part of the runtime C API's coverage obligation."""
+
+    #: Public surface a C application is meant to reach through the C ABI.
+    RUNTIME = "runtime"
+    #: Real public C++ surface that the runtime C ABI deliberately does not expose.
+    OUT_OF_SCOPE = "out-of-scope"
+
+
+# Every directory under `modules/` that publishes an `include/` tree must appear here exactly once;
+# `validate_module_scope` fails the gate otherwise. The reason string is rendered in COVERAGE.md, so
+# an exclusion cannot be invisible.
+MODULE_SCOPE: dict[str, tuple[str, str]] = {
+    "audio": (Scope.RUNTIME, ""),
+    "content": (Scope.RUNTIME, ""),
+    "core": (Scope.RUNTIME, ""),
+    "devices": (Scope.RUNTIME, ""),
+    "devices-ext": (Scope.RUNTIME, ""),
+    "gamer-services": (Scope.RUNTIME, ""),
+    "graphics": (Scope.RUNTIME, ""),
+    "graphics-ext": (Scope.RUNTIME, ""),
+    "input": (Scope.RUNTIME, ""),
+    "math": (Scope.RUNTIME, ""),
+    "media": (Scope.RUNTIME, ""),
+    "net": (Scope.RUNTIME, ""),
+    "runtime": (Scope.RUNTIME, ""),
+    "storage": (Scope.RUNTIME, ""),
+    "c-api": (
+        Scope.OUT_OF_SCOPE,
+        "the C ABI itself; a binding cannot be a binding target",
+    ),
+    "platform": (
+        Scope.OUT_OF_SCOPE,
+        "CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI "
+        "is built on, not a surface it exposes. Its public headers are its internal contract -- the "
+        "renderers and the runtime are its consumers, not applications -- and IPlatform deals in "
+        "C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form",
+    ),
+    "content-pipeline": (
+        Scope.OUT_OF_SCOPE,
+        "CBIND-117, owner decision 2026-09-18: the Content Pipeline is a build-time tool, not part "
+        "of the runtime a game links. `cna_c_api` does not link `cna_content_pipeline`, so its "
+        "declarations cannot be missing *runtime* C bindings",
+    ),
+    "phone": (
+        Scope.OUT_OF_SCOPE,
+        "CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the "
+        "Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in "
+        "the repository links `cna_phone`, and no plan row promises it C parity",
+    ),
+}
+
+# One recorded decision covering a whole family of modules, for the case where naming each would be
+# 23 copies of the same sentence and a new sibling would be the same answer again. A prefix is only
+# legitimate where the policy is genuinely about the family rather than about each member: renderer
+# implementations are hidden behind `IGraphicsRenderer` by project policy -- a C caller selects a
+# renderer by identity, which `scripts/check_renderer_identities.py` gates, and never names an
+# implementation. Every one of the 23 families publishes only `Internal/` headers today, so this
+# changes nothing measured; it makes the classification total rather than absent.
+OUT_OF_SCOPE_MODULE_PREFIXES: dict[str, str] = {
+    "renderers/": (
+        "renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C "
+        "caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an "
+        "implementation"
+    ),
+}
+
+
+def module_scope(module: str) -> tuple[str, str] | None:
+    """How this module is classified, or None when nothing classifies it."""
+    if module in MODULE_SCOPE:
+        return MODULE_SCOPE[module]
+    for prefix, reason in OUT_OF_SCOPE_MODULE_PREFIXES.items():
+        if module.startswith(prefix):
+            return (Scope.OUT_OF_SCOPE, reason)
+    return None
+
+# Out-of-scope surface that lives *inside* an in-scope module, and so cannot be excluded by module
+# name. CBIND-117: `modules/content` is linked into the C ABI and its loader surface is bound, but
+# the `CNA/Content/Pipeline/` and `CNA/Content/Import/` subtrees under it are the same build-time
+# content pipeline as `modules/content-pipeline` -- compilers, build configuration and importers
+# that run before a game ships. They are out of runtime scope for the identical reason.
+#
+# Matched as a path prefix relative to the module's `include/` root.
+OUT_OF_SCOPE_SUBTREES: dict[str, str] = {
+    "content/CNA/Content/Pipeline": (
+        "CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration"
+    ),
+    "content/CNA/Content/Import": (
+        "CBIND-117, owner decision 2026-09-18: build-time asset importers"
+    ),
+}
 STABLE_ID_PATTERN = re.compile(r"CPP-[0-9A-F]{12}")
 COMPOUND_KINDS = {"class", "struct", "union"}
 # Doxygen moves namespace-level declarations into a group compound when a public header wraps them
@@ -138,18 +244,109 @@ def xml_text(element: ET.Element | None) -> str:
 
 
 def path_is_explicitly_internal(relative_to_include: Path) -> bool:
-    return any(segment in EXCLUDED_PATH_SEGMENTS for segment in relative_to_include.parts)
+    return any(segment.lower() in EXCLUDED_PATH_SEGMENTS for segment in relative_to_include.parts)
+
+
+def split_header(header: Path) -> tuple[str, Path]:
+    """A discovered header's module name and its path relative to that module's `include/`.
+
+    The module is everything between `modules/` and `include/`, not the first path segment: renderer
+    families are `modules/renderers/<family>/include/...`, so reading `parts[1]` reports them all as
+    one module called `renderers`, which no classification names.
+    """
+    parts = header.parts
+    index = parts.index("include")
+    return "/".join(parts[1:index]), Path(*parts[index + 1:])
+
+
+def out_of_scope_subtree(module: str, relative_to_include: Path) -> str | None:
+    """The `OUT_OF_SCOPE_SUBTREES` key covering this header, or None when it is in scope."""
+    candidate = f"{module}/{relative_to_include.as_posix()}"
+    for prefix in OUT_OF_SCOPE_SUBTREES:
+        if candidate == prefix or candidate.startswith(prefix + "/"):
+            return prefix
+    return None
+
+
+def publishing_modules(root: Path) -> list[str]:
+    """Every module that publishes an `include/` tree, named relative to `modules/`.
+
+    Searched at any depth, not just one level down. Renderer families live at
+    `modules/renderers/<family>/include` and `modules/renderers/common/<name>/include`, so a
+    one-level walk left 22 include trees that `MODULE_SCOPE` could not see and
+    `validate_module_scope` could not fail on -- the same shape as the incident this model exists to
+    prevent, one directory deeper.
+    """
+    modules_root = root / "modules"
+    found: set[str] = set()
+    for include_root in modules_root.rglob("include"):
+        if include_root.is_dir():
+            found.add(include_root.parent.relative_to(modules_root).as_posix())
+    return sorted(found)
+
+
+def validate_module_scope(root: Path) -> None:
+    """Fail unless every publishing module is classified, and every classification is live.
+
+    This is the gate the Content Pipeline incident needed. `MODULE_SCOPE` is a *total* function over
+    the modules that exist, so a module that is added, renamed or removed cannot quietly inherit a
+    default -- the only two outcomes are the right answer and a stopped gate.
+    """
+    present = set(publishing_modules(root))
+    declared = set(MODULE_SCOPE)
+    problems: list[str] = []
+    for module in sorted(present):
+        if module_scope(module) is None:
+            problems.append(
+                f"  modules/{module}/include exists but nothing classifies it. Decide whether the "
+                "runtime C API covers it and say so in MODULE_SCOPE; it must not fall through."
+            )
+    for prefix in sorted(OUT_OF_SCOPE_MODULE_PREFIXES):
+        if not any(module.startswith(prefix) for module in present):
+            problems.append(
+                f"  OUT_OF_SCOPE_MODULE_PREFIXES names '{prefix}', which covers no module. "
+                "Remove the stale entry."
+            )
+    for module in sorted(declared - present):
+        problems.append(
+            f"  MODULE_SCOPE classifies '{module}', which publishes no modules/{module}/include "
+            "tree. Remove the stale entry."
+        )
+    for module in sorted(present):
+        if "/" in module and (module_scope(module) or (None,))[0] == Scope.RUNTIME:
+            problems.append(
+                f"  modules/{module} is classified as runtime scope, but this scanner reads "
+                "`<module>/include/{Microsoft,CNA}` and reports a header's module as the first "
+                "path segment, so a nested module's symbols would be attributed to its parent."
+            )
+    for module in sorted(present):
+        classified = module_scope(module)
+        if classified is not None and classified[0] == Scope.OUT_OF_SCOPE and not classified[1]:
+            problems.append(f"  modules/{module} is excluded without a recorded reason.")
+    for prefix in sorted(OUT_OF_SCOPE_SUBTREES):
+        module = prefix.split("/", 1)[0]
+        if (module_scope(module) or (None,))[0] != Scope.RUNTIME:
+            problems.append(
+                f"  OUT_OF_SCOPE_SUBTREES names '{prefix}', but module '{module}' is not a runtime "
+                "module, so the subtree rule is dead."
+            )
+        elif not (root / "modules" / module / "include" / Path(prefix).relative_to(module)).is_dir():
+            problems.append(f"  OUT_OF_SCOPE_SUBTREES names '{prefix}', which does not exist.")
+    if problems:
+        raise RuntimeError(
+            "The runtime C API scope model does not describe this tree:\n" + "\n".join(problems)
+        )
 
 
 def discover_headers(root: Path) -> tuple[list[Path], list[Path]]:
+    validate_module_scope(root)
     included: list[Path] = []
     excluded: list[Path] = []
     modules_root = root / "modules"
-    for module in sorted(path for path in modules_root.iterdir() if path.is_dir()):
+    for name in publishing_modules(root):
+        module = modules_root / name
         include_root = module / "include"
-        if not include_root.is_dir():
-            continue
-        if module.name in EXCLUDED_MODULES:
+        if module_scope(name)[0] != Scope.RUNTIME:
             for header in sorted((include_root).rglob("*.hpp")):
                 excluded.append(header.relative_to(root))
             continue
@@ -159,7 +356,9 @@ def discover_headers(root: Path) -> tuple[list[Path], list[Path]]:
                 continue
             for header in sorted(candidate_root.rglob("*.hpp")):
                 relative_to_include = header.relative_to(include_root)
-                if path_is_explicitly_internal(relative_to_include):
+                if path_is_explicitly_internal(relative_to_include) or out_of_scope_subtree(
+                    name, relative_to_include
+                ):
                     excluded.append(header.relative_to(root))
                 else:
                     included.append(header.relative_to(root))
@@ -486,6 +685,8 @@ def approve_rule_symbols(
     path: Path,
     usage: dict[str, list[str]],
     only: list[str] | None = None,
+    *,
+    grow: bool = False,
 ) -> int:
     """Record the symbols each explicit rule is reviewed against.
 
@@ -493,12 +694,45 @@ def approve_rule_symbols(
     inventory must not be able to extend a rule's authority, because a broad rule asserts that a
     *reviewed* set of declarations is bound and tested.  Running this says the newly matched
     symbols have been looked at and the rule's mapping and test evidence genuinely cover them.
+
+    CBIND-126: until the ambiguity repair, this command aborted on the first pair of overlapping
+    rule patterns, and on this rule set that meant it aborted unconditionally -- so the hazard below
+    was unreachable by accident rather than by design.  Now that it completes, the hazard is real
+    and measured: an unfiltered run grows 49 rules by 95 declarations nobody reviewed, and the
+    clearest single case is ``texture3d-and-texturecube-complete-contract`` -- a ``.*`` rule over two
+    headers whose own mapping text says *"the typed cube and volume overloads beside them remain
+    unbound"*, which would silently adopt exactly those 29 as implemented and tested.
+
+    So *growing* an approved set now requires saying so.  Shrinking never does: a rule that no longer
+    reaches a declaration has lost it, and recording that is only bookkeeping.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     selected = set(only or ())
     known = {raw["id"] for raw in payload.get("rules", [])}
     if unknown := sorted(selected - known):
         raise RuntimeError("No such coverage rule: " + ", ".join(unknown))
+
+    additions: dict[str, list[str]] = {}
+    for raw in payload.get("rules", []):
+        if selected and raw["id"] not in selected:
+            continue
+        added = set(usage.get(raw["id"], ())) - set(raw.get("approved_symbols") or [])
+        if added:
+            additions[raw["id"]] = sorted(added)
+    if additions and not grow:
+        total = sum(len(ids) for ids in additions.values())
+        detail = "\n".join(
+            f"  {rule_id}: +{len(ids)} ({', '.join(ids[:6])}{', …' if len(ids) > 6 else ''})"
+            for rule_id, ids in sorted(additions.items())
+        )
+        raise RuntimeError(
+            f"{total} declaration(s) would newly inherit a rule's status and test evidence across "
+            f"{len(additions)} rule(s). A rule's approved set is the reviewed carve line under a "
+            "broad pattern, and widening it asserts somebody read those declarations and the rule's "
+            "C routes genuinely cover them. Name the rule with --rule <id>, and add "
+            "--grow-approved-symbols once that is true:\n" + detail
+        )
+
     changed: list[str] = []
     for raw in payload.get("rules", []):
         rule_id = raw["id"]
@@ -818,16 +1052,53 @@ B12_SLICE_OWNERS: dict[str, str] = {
 }
 
 
+# CBIND-126, 2026-09-18. `owner_task()` used to end in `return "CBIND-044"`. A default that names a
+# real task is not a default -- it is a silent, wrong answer, and it stayed wrong for a fortnight:
+# 2,554 `content-pipeline` and 57 `phone` declarations were reported as missing C bindings owned by
+# a task the plan records as closed since 2026-08-16.
+#
+# `owner_task()` is consulted for exactly one kind of row: a runtime-public declaration that no
+# mapping rule claims -- that is, unfinished work. So the answer of last resort must be a task that
+# is *unfinished*, and it is named once, here, rather than left to whichever branch falls through.
+# `validate_planned_row_owners` still fails if this task is ever recorded complete while rows remain,
+# and `validate_module_scope` stops the gate before a new module can quietly arrive in this bucket.
+#
+# The slice tables above remain the historical record of which phase bound what. They are consulted
+# first and only ever answer for planned rows, so an entry naming a finished task is either dead or
+# stale; when the gate reports one, the fix is to repoint that entry here, not to widen this net.
+UNMAPPED_RUNTIME_SURFACE_TASK = "CBIND-127"
+
+# Header slices whose owning task finished while declarations in them stayed unbound -- almost all
+# of them added to that header afterwards. The slice tables below are the record of which phase bound
+# what, and rewriting them would erase that; this set is the separate, current answer to "who owns
+# the work that is still open here", which is the only question `owner_task()` is asked.
+#
+# Keyed the same way the slice tables are, `<module>/<header stem>`. A key here whose slice has no
+# planned row left is dead weight and `validate_reopened_slices` says so, so the set shrinks as the
+# backlog is bound rather than accumulating.
+REOPENED_SLICES: frozenset[str] = frozenset({
+    "content/CnbSoundEffectCodec",   # was CBIND-110
+    "content/CnbTextureCodec",       # was CBIND-108
+    "content/ContentManager",        # was CBIND-105
+    "content/ReflectiveTypeReader",  # was CBIND-114
+    "graphics-ext/ComputeShader",    # was CBIND-084
+    "graphics-ext/StorageBuffer",    # was CBIND-084
+    "graphics/GraphicsDevice",       # was CBIND-093
+    "graphics/ShaderEffect",         # was CBIND-093
+    "graphics/TextureCube",          # was CBIND-080
+    "graphics/VertexBuffer",         # was CBIND-104
+    "input/TouchPanel",              # was CBIND-083
+})
+
+
 def owner_task(symbol: Symbol) -> str:
     override = SYMBOL_OWNER_OVERRIDES.get(symbol.qualified_name)
     if override is not None:
         return override
     header = Path(symbol.header)
     key = f"{header.parts[1]}/{header.stem}"
-    if header.parts[1] == "content" and (
-        "Pipeline" in header.parts or "Import" in header.parts
-    ):
-        return "CBIND-117"
+    if key in REOPENED_SLICES:
+        return UNMAPPED_RUNTIME_SURFACE_TASK
     b12_owner = B12_SLICE_OWNERS.get(key)
     if b12_owner is not None:
         return b12_owner
@@ -840,30 +1111,12 @@ def owner_task(symbol: Symbol) -> str:
     slice_owner = CNAEXT_SLICE_OWNERS.get(key)
     if slice_owner is not None:
         return slice_owner
-    module = header.parts[1]
-    if module == "graphics":
-        if re.search(
-            r"(RenderTarget|SpriteFont|BlendState|SamplerState|DepthStencilState|RasterizerState|"
-            r"PresentationParameters|DisplayMode|GraphicsAdapter)",
-            symbol.qualified_name,
-        ):
-            return "CBIND-034"
-        return "CBIND-035"
-    if module in {"math", "graphics-ext"}:
-        return "CBIND-035"
-    if module in {"storage", "net", "content"}:
-        return "CBIND-036"
-    if module in {
-        "runtime",
-        "devices",
-        "devices-ext",
-        "input",
-        "audio",
-        "media",
-        "gamer-services",
-    }:
-        return "CBIND-037"
-    return "CBIND-044"
+    # The graphics module used to split here between CBIND-034 and CBIND-035 by matching the type
+    # name. Both tasks closed, so the split answered "which phase would have bound this" -- history,
+    # not ownership -- for 74 declarations that nothing binds today. It is removed rather than
+    # repointed: the phases it named are in the plan, and the live owner is the same one every other
+    # module's unbound surface has.
+    return UNMAPPED_RUNTIME_SURFACE_TASK
 
 
 def planned_mapping(symbol: Symbol, task: str) -> str:
@@ -894,6 +1147,40 @@ def planned_mapping(symbol: Symbol, task: str) -> str:
     return f"Planned {representation} ({task})"
 
 
+# CBIND-126, 2026-09-18. Overlapping rule *patterns* are normal and intended: a baseline rule says
+# "this header's whole contract is bound", and a later task carves specific members out of it onto
+# its own evidence. `--approve-rule-symbols` nevertheless ran with `ignore_approval=True` and raised
+# on any two patterns reaching one symbol -- discarding `approved_symbols`, the very field that
+# records which rule owns it. Measured across the rule set that rejected 34 rule pairs and 296
+# symbols, of which **none** was approved by two rules: the data was already a clean partition and
+# only the patterns overlapped.
+#
+# Ownership is therefore resolved per symbol, not per pattern. Precedence is never positional: a
+# rule's place in the file means nothing, and a symbol no rule has claimed is still a hard error
+# naming the candidates, because that is the case a human has to settle.
+def resolve_rules(symbol: Symbol, rules: list[Rule], *, ignore_approval: bool) -> list[Rule]:
+    candidates = [rule for rule in rules if rule.matches_pattern(symbol)]
+    approved = [rule for rule in candidates if symbol.stable_id in rule.approved_symbols]
+    if len(approved) > 1:
+        raise RuntimeError(
+            f"{symbol.identity} is approved by more than one coverage rule: "
+            + ", ".join(rule.rule_id for rule in approved)
+            + ". Two rules claim the same declaration; remove it from whichever does not own it."
+        )
+    if not ignore_approval:
+        return approved
+    if approved:
+        return approved
+    if len(candidates) > 1:
+        raise RuntimeError(
+            f"Ambiguous explicit mappings for {symbol.identity}: "
+            + ", ".join(rule.rule_id for rule in candidates)
+            + ". No rule has approved it, so nothing records which one owns it. Narrow the "
+            "patterns until exactly one can claim it, then approve it there."
+        )
+    return candidates
+
+
 def map_symbols(
     symbols: list[Symbol],
     rules: list[Rule],
@@ -914,14 +1201,7 @@ def map_symbols(
                 rule_id=None,
             )
             continue
-        matches = [
-            rule for rule in rules if rule.matches(symbol, ignore_approval=ignore_approval)
-        ]
-        if len(matches) > 1:
-            raise RuntimeError(
-                f"Ambiguous explicit mappings for {symbol.identity}: "
-                + ", ".join(rule.rule_id for rule in matches)
-            )
+        matches = resolve_rules(symbol, rules, ignore_approval=ignore_approval)
         if matches:
             rule = matches[0]
             usage[rule.rule_id] += 1
@@ -951,7 +1231,31 @@ def map_symbols(
     # declarations it was reviewed against are gone -- so the C routes it names are now orphaned.
     unused = [rule.rule_id for rule in rules if usage[rule.rule_id] == 0]
     if unused:
-        raise RuntimeError("Explicit coverage rules matched no symbols: " + ", ".join(unused))
+        # Distinguish the two ways a rule can speak for nothing, because the fix differs. A rule
+        # whose pattern reaches declarations another rule has already approved is not dead -- it is
+        # a carve-out that cannot take ownership, and approval is sticky to whoever approved first,
+        # so the transfer has to be made in the JSON rather than by re-running approval.
+        blocked: dict[str, set[str]] = {}
+        for rule in rules:
+            if usage[rule.rule_id]:
+                continue
+            for symbol in symbols:
+                if not rule.matches_pattern(symbol):
+                    continue
+                owner = result[symbol.identity].rule_id
+                if owner is not None and owner != rule.rule_id:
+                    blocked.setdefault(rule.rule_id, set()).add(owner)
+        lines = []
+        for rule_id in unused:
+            if rule_id in blocked:
+                lines.append(
+                    f"  {rule_id}: its pattern matches only declarations already approved by "
+                    + ", ".join(sorted(blocked[rule_id]))
+                    + " -- move them there rather than re-running approval"
+                )
+            else:
+                lines.append(f"  {rule_id}: no declaration in the tree matches its pattern")
+        raise RuntimeError("Explicit coverage rules speak for no symbol:\n" + "\n".join(lines))
     return result
 
 
@@ -989,12 +1293,18 @@ def render_full_markdown(
         "",
         "This file is the complete reviewed CBIND-033 inventory of CNA's public C++ declaration",
         "surface. It is generated from every `modules/*/include/Microsoft/**/*.hpp` and",
-        "`modules/*/include/CNA/**/*.hpp` header. Paths containing the explicit implementation",
-        "segments `Internal` or `Detail`, the whole `modules/platform` module, and the C API's own",
-        "`.h` headers, are excluded. The platform module is excluded as a **substrate**: the C ABI is",
-        "built on it and a C caller reaches platform behaviour through the routes that use it, never",
-        "through `IPlatform` -- an owner decision of 2026-08-16, recorded as `CBIND-047`. A",
-        "header remains listed even when it declares no public/protected symbol.",
+        "`modules/*/include/CNA/**/*.hpp` header. Paths whose segments are `Internal` or `Detail` in",
+        "any capitalization are excluded as implementation detail, and every module is classified as",
+        "runtime C API scope or out of it by `MODULE_SCOPE`, with `OUT_OF_SCOPE_SUBTREES` doing the",
+        "same for build-time surface inside a module the ABI does link. That classification is a",
+        "total function over the modules that exist, so a new or renamed module stops this gate",
+        "rather than inheriting a default. The exclusions in force, each with the decision behind it:",
+        "",
+        "| Module or subtree | Headers | Why |",
+        "|---|---:|---|",
+        *_render_scope_exclusions(excluded),
+        "",
+        "A header remains listed even when it declares no public/protected symbol.",
         "",
         "Every symbol below has a stable content-derived `CPP-*` ID, a C-native mapping, required",
         "test evidence and a status. `implemented` means an explicit rule names existing C API",
@@ -1089,6 +1399,51 @@ def render_full_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_scope_exclusions(excluded: list[Path]) -> list[str]:
+    """One row per declared exclusion, with the header count it actually removes.
+
+    Counted from the discovered headers rather than restated, so a reason that stops matching any
+    header shows as 0 instead of quietly remaining plausible prose.
+    """
+    rows: list[tuple[str, int, str]] = []
+    subtree_counts: Counter[str] = Counter()
+    module_counts: Counter[str] = Counter()
+    for header in excluded:
+        module, relative = split_header(header)
+        prefix = out_of_scope_subtree(module, relative)
+        if prefix is not None:
+            subtree_counts[prefix] += 1
+        else:
+            module_counts[module] += 1
+
+    # Iterate the *declaration*, not the headers it happened to match. A module excluded for a
+    # recorded reason must appear even when it contributes no `.hpp` at all -- `modules/c-api`
+    # publishes 61 `.h` headers and no `.hpp`, so driving this loop from the match counts dropped
+    # its row entirely and the reason went unpublished, which is the opposite of what declaring it
+    # was for.
+    for module, (scope, reason) in sorted(MODULE_SCOPE.items()):
+        if scope == Scope.OUT_OF_SCOPE:
+            rows.append((f"`modules/{module}`", module_counts.get(module, 0), reason))
+    for prefix, reason in sorted(OUT_OF_SCOPE_MODULE_PREFIXES.items()):
+        rows.append((
+            f"`modules/{prefix}**`",
+            sum(n for module, n in module_counts.items() if module.startswith(prefix)),
+            reason,
+        ))
+    for module in sorted(module_counts):
+        if module_scope(module)[0] == Scope.RUNTIME:
+            rows.append(
+                (
+                    f"`modules/{module}` internal/detail paths",
+                    module_counts[module],
+                    "implementation detail: a path segment is `Internal` or `Detail`",
+                )
+            )
+    for prefix in sorted(OUT_OF_SCOPE_SUBTREES):
+        rows.append((f"`modules/{prefix}`", subtree_counts[prefix], OUT_OF_SCOPE_SUBTREES[prefix]))
+    return [f"| {name} | {count} | {reason} |" for name, count, reason in rows]
+
+
 def render_summary_markdown(
     headers: list[Path],
     excluded: list[Path],
@@ -1117,14 +1472,25 @@ def render_summary_markdown(
         "",
         "The mandatory coverage gate derives the complete public C++ declaration inventory from",
         "`modules/*/include/{Microsoft,CNA}/**/*.hpp` and maps every symbol through",
-        "`tools/c-api/coverage_mappings.json`. Paths containing `Internal` or `Detail`, the whole",
-        "`modules/platform` substrate, and the C API's own headers are excluded by declared rules.",
+        "`tools/c-api/coverage_mappings.json`. Every module is classified as runtime C API scope or",
+        "out of it by `MODULE_SCOPE`, which is a total function over the modules that exist: a new",
+        "or renamed module stops this gate rather than inheriting a default. Paths whose segments",
+        "are `Internal` or `Detail` in any capitalization are excluded as implementation detail.",
         "No symbol counts as implemented merely because a related C operation exists.",
         "",
         f"Snapshot: **{len(headers)} headers**, **{len(symbols)} symbols**, "
         f"**{status_counts['implemented']} implemented**, **{status_counts['partial']} partial**, "
         f"**{status_counts['planned']} planned**, **{status_counts['not-applicable']} not applicable**. "
-        f"Explicitly excluded internal/detail headers: **{len(excluded)}**.",
+        f"Explicitly excluded headers: **{len(excluded)}**.",
+        "",
+        "## Out of runtime C API scope",
+        "",
+        "Real public C++ surface the runtime C ABI deliberately does not expose. These headers are",
+        "not counted above, and their declarations are not missing C bindings.",
+        "",
+        "| Module or subtree | Headers | Why |",
+        "|---|---:|---|",
+        *_render_scope_exclusions(excluded),
         "",
         f"Full inventory SHA-256: `{full_inventory_sha256}`.",
         "",
@@ -1236,6 +1602,32 @@ def validate_planned_row_owners(root: Path, mappings: dict[str, Mapping]) -> Non
         )
 
 
+def validate_reopened_slices(symbols: list[Symbol], mappings: dict[str, Mapping]) -> None:
+    """Fail when a reopened slice has nothing left to reopen.
+
+    `REOPENED_SLICES` moves a finished phase's leftover rows to the live backlog. Once those rows
+    are bound the key is a claim about the tree that is no longer true, and a stale one would quietly
+    divert a *future* unbound declaration in that header away from the slice tables. Keeping the set
+    honest is cheap here and impossible to remember later.
+    """
+    live: set[str] = set()
+    for symbol in symbols:
+        mapping = mappings[symbol.identity]
+        # Only rows this set is actually responsible for count. `owner_task` consults
+        # SYMBOL_OWNER_OVERRIDES before REOPENED_SLICES, so a slice whose remaining planned rows all
+        # carry an override is already dead -- counting those would report it healthy forever.
+        if mapping.status != "planned" or mapping.task != UNMAPPED_RUNTIME_SURFACE_TASK:
+            continue
+        header = Path(symbol.header)
+        live.add(f"{header.parts[1]}/{header.stem}")
+    if stale := sorted(REOPENED_SLICES - live):
+        raise RuntimeError(
+            "REOPENED_SLICES names slices that have no unbound declaration left. Remove them; the "
+            "slice tables are the record of who bound what:\n"
+            + "\n".join(f"  {key}" for key in stale)
+        )
+
+
 def validate_inventory(
     headers: list[Path],
     excluded: list[Path],
@@ -1272,6 +1664,7 @@ def build_inventory(
     mappings = map_symbols(symbols, rules, ignore_approval=ignore_approval, usage_out=usage)
     if not ignore_approval:
         validate_inventory(headers, excluded, symbols, mappings)
+        validate_reopened_slices(symbols, mappings)
         validate_planned_row_owners(root, mappings)
     return headers, excluded, symbols, mappings, usage
 
@@ -1313,9 +1706,20 @@ def parse_arguments() -> argparse.Namespace:
             "binds one family must not approve the rest along with it"
         ),
     )
+    parser.add_argument(
+        "--grow-approved-symbols",
+        action="store_true",
+        help=(
+            "with --approve-rule-symbols, allow declarations to be ADDED to a rule's approved set. "
+            "Without it, a run that would widen any rule fails and names what it would adopt: "
+            "widening asserts a human read those declarations and the rule's C routes cover them"
+        ),
+    )
     arguments = parser.parse_args()
     if arguments.rule and not arguments.approve_rule_symbols:
         parser.error("--rule is only meaningful with --approve-rule-symbols")
+    if arguments.grow_approved_symbols and not arguments.approve_rule_symbols:
+        parser.error("--grow-approved-symbols is only meaningful with --approve-rule-symbols")
     return arguments
 
 
@@ -1342,7 +1746,9 @@ def main() -> int:
         root, ignore_approval=arguments.approve_rule_symbols
     )
     if arguments.approve_rule_symbols:
-        return approve_rule_symbols(rules_path, usage, arguments.rule)
+        return approve_rule_symbols(
+            rules_path, usage, arguments.rule, grow=arguments.grow_approved_symbols
+        )
     full_rendered = render_full_markdown(headers, excluded, symbols, mappings)
     full_sha256 = hashlib.sha256(full_rendered.encode("utf-8")).hexdigest()
     rendered = render_summary_markdown(
