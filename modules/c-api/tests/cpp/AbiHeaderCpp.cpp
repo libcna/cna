@@ -8,7 +8,9 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 27, 0));
+// The version value is gated by generate_abi_baseline.py (CApiAbiHeaderBaseline); this wall checks
+// the encoding, which nothing else does. See AbiHeaderC.c for why the literal was removed.
+static_assert(CNA_ABI_VERSION_ENCODE(1, 2, 3) == UINT32_C(0x00010203));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));

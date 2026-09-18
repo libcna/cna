@@ -122,6 +122,19 @@ option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d
 option(CNA_CNAEXT "Enable CNA CNAEXT extended graphics layer (beyond XNA 4.0)" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
+# The C API adapts the whole canonical aggregate, GamerServices included: it links CNA_GamerServices
+# unconditionally and modules/c-api/src/CnaCApiDetail.hpp includes a GamerServices header, so with
+# networking off every C API translation unit fails on a missing include rather than on anything a
+# reader would connect to this option. Refuse the combination by name instead, and say which option
+# to change -- nothing is silently substituted, and no part of the published C surface is dropped to
+# make a configuration build.
+if(CNA_BUILD_C_API AND NOT CNA_ENABLE_NET)
+    message(FATAL_ERROR
+        "CNA: CNA_BUILD_C_API=ON requires CNA_ENABLE_NET=ON.\n"
+        "  The C API exports the GamerServices routes (cna_gamer_*, cna_achievement_*, ...) and "
+        "links CNA_GamerServices, which modules/CMakeLists.txt builds only under CNA_ENABLE_NET.\n"
+        "  Set -DCNA_ENABLE_NET=ON, or build without the C API.")
+endif()
 set(CNA_ENABLE_VIDEO "AUTO" CACHE STRING
     "Enable FFmpeg video playback (OFF, AUTO, or ON)")
 set_property(CACHE CNA_ENABLE_VIDEO PROPERTY STRINGS OFF AUTO ON)

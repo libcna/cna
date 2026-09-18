@@ -1687,8 +1687,12 @@ CNA_Result cna_effect_annotation_collection_get_at(
                 CNA_ERROR_CATEGORY_RANGE,
                 "The EffectAnnotationCollection index is outside the collection.");
         }
+        // The index overloads of the effect collections return a pointer and answer null for an
+        // index they do not hold, which is XNA's own semantics. The range check above is what makes
+        // this one non-null, so the dereference is safe and the C caller still gets the specific
+        // CNA_ERROR_CATEGORY_RANGE failure rather than a generic one.
         return CreateAnnotationHandle(
-            (*collection->value)[static_cast<int>(index)], outAnnotation);
+            *(*collection->value)[static_cast<int>(index)], outAnnotation);
     });
 }
 
@@ -2627,7 +2631,8 @@ CNA_Result cna_effect_parameter_collection_add_create(
         }
         collection->state->value->Add(std::move(*parameter));
         const int index = collection->state->value->getCountProperty() - 1;
-        EffectParameter* const added = &(*collection->state->value)[index];
+        // Non-null by construction: Add() above left the collection holding at least this element.
+        EffectParameter* const added = (*collection->state->value)[index];
         return CreateCollectionElementHandle(collection->state, added, outParameter);
     });
 }
@@ -2655,7 +2660,7 @@ CNA_Result cna_effect_parameter_collection_get_at(
                 "The EffectParameterCollection index is outside the collection.");
         }
         EffectParameter* const parameter =
-            &(*collection->state->value)[static_cast<int>(index)];
+            (*collection->state->value)[static_cast<int>(index)];
         return CreateCollectionElementHandle(
             collection->state, parameter, outParameter);
     });
@@ -2959,7 +2964,8 @@ CNA_Result cna_effect_pass_collection_add_create(
         }
         collection->state->value->Add(
             EffectPass(collection->state->owner, std::move(copiedName), techniqueIdentity));
-        EffectPass* const pass = &(*collection->state->value)[
+        // Non-null by construction: Add() above left the collection holding at least this element.
+        EffectPass* const pass = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
         return CreatePassHandle(
             std::shared_ptr<EffectPass>(collection->state->value, pass),
@@ -2989,7 +2995,7 @@ CNA_Result cna_effect_pass_collection_get_at(
                 CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
                 "The EffectPassCollection index is outside the collection.");
         }
-        EffectPass* const pass = &(*collection->state->value)[static_cast<int>(index)];
+        EffectPass* const pass = (*collection->state->value)[static_cast<int>(index)];
         return CreatePassHandle(
             std::shared_ptr<EffectPass>(collection->state->value, pass),
             collection->state->effectOwnership,
@@ -3298,7 +3304,8 @@ CNA_Result cna_effect_technique_collection_add_default(
             return result;
         }
         collection->state->value->Add(EffectTechnique());
-        EffectTechnique* const technique = &(*collection->state->value)[
+        // Non-null by construction: Add() above left the collection holding at least this element.
+        EffectTechnique* const technique = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
         return CreateTechniqueElementHandle(
             collection->state, technique, outTechnique);
@@ -3328,7 +3335,8 @@ CNA_Result cna_effect_technique_collection_add_named(
         }
         collection->state->value->Add(
             EffectTechnique(nullptr, std::move(copiedName)));
-        EffectTechnique* const technique = &(*collection->state->value)[
+        // Non-null by construction: Add() above left the collection holding at least this element.
+        EffectTechnique* const technique = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
         return CreateTechniqueElementHandle(
             collection->state, technique, outTechnique);
@@ -3357,7 +3365,7 @@ CNA_Result cna_effect_technique_collection_get_at(
                 "The EffectTechniqueCollection index is outside the collection.");
         }
         EffectTechnique* const technique =
-            &(*collection->state->value)[static_cast<int>(index)];
+            (*collection->state->value)[static_cast<int>(index)];
         return CreateTechniqueElementHandle(
             collection->state, technique, outTechnique);
     });
