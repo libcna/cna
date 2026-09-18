@@ -7,10 +7,9 @@ byte, reacts to SIGWINCH, and must restore the caller's terminal before it exits
 
 It requires a renderer whose `GraphicsRendererDescriptor` sets `needsSurfacePresenter`, because
 every byte sequence asserted below is emitted by `TerminalSurfacePresenter` and nothing else.
-No renderer in the tree sets it since BLEND2D was retired, so the CTest registration is currently
-DISABLED -- see `modules/graphics/examples/CMakeLists.txt` and
-`plans/plan_renderer_cleanup.md` RRC-010. The runner is kept intact and unmodified so that
-connecting a CPU renderer to `IPlatformSurfacePresenter` re-enables real coverage in one step.
+SOFTWARE sets it and presents its finished CPU framebuffer through the platform contract
+(`plans/plan_terminal_capi_repair.md` TCR-2), so this runs for real; between BLEND2D's retirement
+and that repair no renderer did, and the CTest registration was DISABLED rather than left failing.
 """
 
 import argparse

@@ -2545,21 +2545,24 @@
       ]
     },
     {
-      "id": "spritebatch-begin-partial",
+      "id": "spritebatch-begin",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Begin$",
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_sprite_batch_begin` for the parameterless and sort-mode forms, `cna_sprite_batch_begin_with_states` for the state overloads, and `cna_sprite_batch_begin_with_effect` for the two that take a custom effect: a null transform is the identity the effect-only overload uses and `CNA_INVALID_HANDLE` selects the default sprite effect, which is what a null `Effect*` means to the canonical call",
-      "tests": "all sort modes and defaults in `LifecycleSmoke.c`; every state overload plus both effect overloads, the non-finite-transform refusal, the undefined sort mode and a handle of the wrong family in `GraphicsSurfaceSmoke.c`, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "mapping": "`cna_sprite_batch_begin` for the parameterless and sort-mode forms, `cna_sprite_batch_begin_with_states` for the state overloads, and `cna_sprite_batch_begin_with_effect` for every shape that carries a custom effect or a transform. The effect route takes all four state descriptors, the effect handle and the transform as nullable arguments, and the canonical overloads differ from one another only in which trailing arguments they carry -- so a null argument means exactly what the shorter overload means, a null transform is the identity, and `CNA_INVALID_HANDLE` selects the default sprite effect. The by-value and by-pointer state overloads reach the same route: the C side passes a descriptor or null either way, so neither shape needs a route of its own.",
+      "tests": "all sort modes and defaults in `LifecycleSmoke.c`; every state overload, both effect overloads, the explicit-state shapes, the non-finite-transform refusal, the undefined sort mode and a handle of the wrong family in `GraphicsSurfaceSmoke.c`, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-044A",
       "approved_symbols": [
-        "CPP-04874A5CE816",
-        "CPP-24ECFDE03C38",
-        "CPP-2933C0B048B0",
+        "CPP-2B4BDE35756B",
         "CPP-3108C8C31055",
-        "CPP-3736BF23F96C"
+        "CPP-3736BF23F96C",
+        "CPP-6CD8C5D12B66",
+        "CPP-9DBEFFDEC631",
+        "CPP-A6992E48CB91",
+        "CPP-AAD207B7D58B",
+        "CPP-BA5AB774FDC0"
       ]
     },
     {
@@ -14968,22 +14971,6 @@
       "task": "CBIND-080",
       "approved_symbols": [
         "CPP-4FC5B092D7C0"
-      ]
-    },
-    {
-      "id": "sprite-batch-begin-explicit-state",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Begin$",
-      "kinds": [
-        "method"
-      ],
-      "mapping": "`cna_sprite_batch_begin` for the sort-mode-only shape and `cna_sprite_batch_begin_with_effect` for every explicit-state shape. The route `CBIND-044A` added already takes all four state objects, the effect and the transform as nullable arguments, and the canonical overloads differ from one another only in which trailing arguments they carry -- so the three overloads the merge added need no new route: a null argument means exactly what the shorter overload means. Verified by reading the declaration rather than assumed.",
-      "tests": "`GraphicsSurfaceSmoke.c`, which drives `cna_sprite_batch_begin_with_effect` with explicit state",
-      "status": "implemented",
-      "task": "CBIND-080",
-      "approved_symbols": [
-        "CPP-53DF8299BFBD",
-        "CPP-64D952D77844",
-        "CPP-D80647AB123B"
       ]
     },
     {

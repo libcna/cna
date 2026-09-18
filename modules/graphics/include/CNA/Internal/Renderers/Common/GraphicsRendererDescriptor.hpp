@@ -262,25 +262,25 @@ namespace CNA::Internal::Renderers
          * question moves here, where it is answered per family.
          *
          * True for a CPU-raster family that presents through the platform rather than owning a
-         * swap chain. **No renderer in the tree sets it today**: the two that did, SKIA and
-         * BLEND2D, were retired in 2026-08 and on 2026-09-17.
+         * swap chain. `SOFTWARE` sets it (`plans/plan_terminal_capi_repair.md` `TCR-2`); the two
+         * that set it before, SKIA and BLEND2D, were retired in 2026-08 and on 2026-09-17, and
+         * between those two dates nothing did -- which is what `RRC-010` audited and kept the field
+         * for, rather than deleting a switch a working output path was waiting on.
          *
-         * **Audited and deliberately kept** (`plans/plan_renderer_cleanup.md` `RRC-010`), unlike
-         * the 2D mesh entry point that `RRC-009` audited the same way and deleted. The difference
-         * is which side of the seam is missing: that one had no *implementation* anywhere, so the
-         * call could only ever throw, while this flag's consumer is complete and tested and only
-         * its producer is absent. `GraphicsDevice::createRenderer()` reads it to build an
-         * `IPlatformSurfacePresenter`; that interface is pure-virtual on `IPlatform`, implemented by
-         * five retained backends, and `TerminalSurfacePresenter` turns the RGBA8 frame into ANSI
-         * under 36 passing pseudo-TTY tests. `cmake/RendererSelection.cmake` still reserves
-         * `TERMINAL` for `SOFTWARE`, `PORTABLEGL`, `HEADLESS` and `STUB`.
+         * **It is a statement about the renderer, not a demand on the host.** It says this family
+         * reaches a screen only through `IPlatformSurfacePresenter`; whether one is built is the
+         * platform's answer, given in `GraphicsDevice::createOrAttachWindow()`. A CPU family gets a
+         * window and a presenter where the platform reports `surfacePresentation` and no
+         * `nativeWindowHandle` -- the presenter is then the only route to the screen, which is
+         * `TERMINAL` on a TTY. On a windowing platform, where a native handle exists and GPU
+         * renderers use it, and wherever presentation is unavailable at all, the family stays
+         * off-screen exactly as it did before, and `needsWindow` stays false.
          *
-         * So this is the one switch a working, retained output path is waiting on, not dead state:
-         * deleting it would force a later session to reintroduce the identical field. What it needs
-         * is a renderer that sets it -- which is feature work, and `RRC-010` records that BLEND2D's
-         * combination of `needsWindow = true`, `windowKind = Plain` and this flag is the shape that
-         * worked. Until then `TERMINAL` has no renderer feeding it, and its demo integration test is
-         * registered `DISABLED` rather than left failing.
+         * `TerminalSurfacePresenter` turns the RGBA8 frame into ANSI under 36 pseudo-TTY tests,
+         * `SoftwarePresentationTests` pins the producer's side of the handover, and
+         * `TerminalSoftwareDemoIntegration` drives the whole path through a real pty.
+         * `cmake/RendererSelection.cmake` reserves `TERMINAL` for `SOFTWARE`, `PORTABLEGL`,
+         * `HEADLESS` and `STUB`.
          */
         bool needsSurfacePresenter = false;
 

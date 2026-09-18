@@ -8,8 +8,16 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 27, 0),
-               "CNA C ABI version encoding must remain stable");
+// The ABI version *value* is gated by tools/c-api/generate_abi_baseline.py, which measures
+// CNA_ABI_VERSION_{MAJOR,MINOR,PATCH} straight from these headers and holds them against the
+// recorded baseline -- as the CApiAbiHeaderBaseline test, which needs no C API build at all.
+// A literal version repeated here duplicated that check badly: this wall compiles only under
+// CNA_BUILD_C_API=ON, so the literal went two bumps stale (0.27.0 against a header declaring
+// 0.29.0) with nothing to notice, and then broke the build the moment the C API was built again.
+// What only this wall can check is the *encoding*, so that is what it checks -- with a version it
+// does not have to track.
+_Static_assert(CNA_ABI_VERSION_ENCODE(1, 2, 3) == UINT32_C(0x00010203),
+               "CNA C ABI version encoding must remain stable: major<<16 | minor<<8 | patch");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
 _Static_assert(sizeof(CNA_Handle) == sizeof(uint64_t),

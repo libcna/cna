@@ -121,21 +121,20 @@ endif()
 # A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
 # receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.
 #
-# Registered but DISABLED, and the reason is a missing renderer rather than a broken test
-# (plans/plan_renderer_cleanup.md RRC-010).  Every piece of evidence the runner waits for --
-# the alternate screen, the SIGWINCH-observed grid, the `dropped_frames=`/`kitty_keyboard=`
-# diagnostics -- is emitted only by TerminalSurfacePresenter, which GraphicsDevice creates only
-# for a renderer whose descriptor sets `needsSurfacePresenter`.  BLEND2D was the only renderer that
-# did, and it was retired with the 25-identity curation; SOFTWARE does not, so the runner times out
-# on its first gate.  This is left registered rather than deleted so the gap stays visible: connect
-# a CPU renderer to IPlatformSurfacePresenter and remove the DISABLED property in the same change.
+# Enabled again (plans/plan_terminal_capi_repair.md TCR-3).  It was registered DISABLED by
+# RRC-010 because no renderer set `needsSurfacePresenter` once BLEND2D was retired, so every piece
+# of evidence the runner waits for -- the alternate screen, the SIGWINCH-observed grid, the
+# `dropped_frames=`/`kitty_keyboard=` diagnostics -- was emitted by a TerminalSurfacePresenter that
+# GraphicsDevice never built.  SOFTWARE now requests one and feeds it finished frames, so the
+# runner's assertions describe behaviour that exists and the property is gone in the same change
+# that made it true, exactly as the DISABLED note asked for.
 if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_PLATFORM STREQUAL "TERMINAL"
    AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE" AND TARGET Python3::Interpreter)
     add_test(NAME TerminalSoftwareDemoIntegration
         COMMAND Python3::Interpreter
             "${CMAKE_SOURCE_DIR}/tools/platform/terminal_demo_integration_test.py"
             "$<TARGET_FILE:cna_demo_2d>")
-    set_tests_properties(TerminalSoftwareDemoIntegration PROPERTIES TIMEOUT 25 DISABLED TRUE)
+    set_tests_properties(TerminalSoftwareDemoIntegration PROPERTIES TIMEOUT 25)
 endif()
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"

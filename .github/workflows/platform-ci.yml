@@ -195,11 +195,12 @@ jobs:
         working-directory: build
         run: env -u DISPLAY -u WAYLAND_DISPLAY ./cna_demo_2d --smoke 6
 
-      # Currently reports "Not Run (Disabled)" and passes: the integration test needs a renderer
-      # whose descriptor sets needsSurfacePresenter, and none does since BLEND2D was retired
-      # (plans/plan_renderer_cleanup.md RRC-010). The step stays so the leg re-arms by itself the
-      # moment that property is removed. The TERMINAL platform's own 134 unit tests, including the
-      # 36 pseudo-TTY presenter tests, run in the CnaPlatformTests step above and are unaffected.
+      # A real end-to-end leg again (plans/plan_terminal_capi_repair.md TCR-3): SOFTWARE requests a
+      # surface presenter and feeds it finished CPU frames, so the runner's alternate-screen,
+      # SIGWINCH-grid and diagnostics assertions all describe behaviour that happens. It reported
+      # "Not Run (Disabled)" between BLEND2D's retirement and that repair, when no renderer set
+      # needsSurfacePresenter. The TERMINAL platform's own unit tests, including the 36 pseudo-TTY
+      # presenter tests, run in the CnaPlatformTests step above and cover the consumer half.
       - name: Run terminal 2D demo integration through a pseudo-TTY
         if: matrix.platform == 'TERMINAL'
         run: ctest --test-dir build -R '^TerminalSoftwareDemoIntegration$' --output-on-failure

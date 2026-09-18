@@ -314,4 +314,14 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # The same convention generate_coverage_inventory.py already follows, and for a concrete
+    # reason: check_release_gate.py reports a tool's FIRST output line as the criterion's
+    # measurement, so an uncaught exception published "Traceback (most recent call last):" as the
+    # reason the limitations matrix was not current -- which says nothing, and is why
+    # RELEASE_GATE.md could not be regenerated without baking a traceback into it. The failure
+    # itself is unchanged and still exits non-zero; only its presentation is.
+    try:
+        sys.exit(main())
+    except (OSError, RuntimeError, json.JSONDecodeError) as error:
+        print(f"limitations error: {error}".splitlines()[0], file=sys.stderr)
+        sys.exit(2)

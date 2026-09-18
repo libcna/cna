@@ -7068,6 +7068,9 @@ namespace CNA::Internal::Renderers
             args.virtualWidth, args.virtualHeight,
             args.depthStencilFormat != 0, args.depthStencilFormat == 3);
         renderer->ApplyMultiSampleCount(args.multiSampleCount);
+        // Null on every configuration where nothing can display a CPU frame, which is most of them;
+        // GraphicsDevice fills this in only where the platform can actually present one.
+        renderer->AttachSurfacePresenter(args.surfacePresenter);
         return renderer;
     }
 #endif

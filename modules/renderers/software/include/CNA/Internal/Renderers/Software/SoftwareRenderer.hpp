@@ -1817,7 +1817,31 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] SoftwareFramebuffer& BackbufferFramebuffer() { return backbuffer_; }
         [[nodiscard]] const SoftwareFramebuffer& BackbufferFramebuffer() const { return backbuffer_; }
 
+    public:
+        /**
+         * @brief Binds the platform presenter that Present() hands each finished frame to.
+         *
+         * The presenter is the whole of this renderer's route to a screen: it owns no swap chain,
+         * and this rasterizer knows nothing about what is on the far side of the contract — a
+         * terminal, an X11 window, anything else that accepts RGBA8.
+         *
+         * Called once by this family's factory with GraphicsRendererCreateArgs::surfacePresenter,
+         * which GraphicsDevice populates only where the platform can actually present. A null
+         * pointer is the normal case and leaves Present() the no-op it has always been.
+         *
+         * @param presenter The presenter to display through, or nullptr for no presentation.
+         *                  Non-owning: GraphicsDevice keeps it alive until after this renderer is
+         *                  destroyed.
+         */
+        void AttachSurfacePresenter(CNA::Platform::IPlatformSurfacePresenter* presenter)
+        {
+            surfacePresenter_ = presenter;
+        }
+
     private:
+        /// Non-owning; see AttachSurfacePresenter. Null whenever nothing can display this frame.
+        CNA::Platform::IPlatformSurfacePresenter* surfacePresenter_ = nullptr;
+
         friend class SoftwareSpriteBatchRenderer;
         friend class SoftwareOcclusionQueryRenderer;
 

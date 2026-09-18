@@ -37,6 +37,14 @@ namespace CNA::Internal::Renderers::Software
             .windowKind               = RendererWindowKind::None,
             .needsWindow              = false,
             .needsVideoSubsystem      = false,
+            // This family owns no swap chain, so a finished frame reaches a screen only through
+            // IPlatformSurfacePresenter. Setting this is a statement about the renderer, not a
+            // demand on the host: GraphicsDevice::createOrAttachWindow() builds a window and a
+            // presenter only where the platform says the presenter is the ONLY route to the screen
+            // (TERMINAL on a TTY). On a windowing platform, and with no presentation at all, this
+            // family stays exactly as off-screen as it has always been -- `needsWindow` is still
+            // false and nothing else in the descriptor changed.
+            .needsSurfacePresenter    = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };
