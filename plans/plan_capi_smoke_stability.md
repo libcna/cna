@@ -13,9 +13,9 @@ redesign, not a renderer change, and explicitly not the limitations-generator ba
 | CSS-1 | Baseline: reproduce and classify every red `^CApi` test at the starting SHA | ✅ |
 | CSS-2 | Root-cause the process-exit crash under a debugger and under ASan/UBSan | ✅ |
 | CSS-3 | Fix the lifetime defect at its root | ✅ |
-| CSS-4 | Repair the stale smoke expectations, each against demonstrated canonical behaviour | |
-| CSS-5 | Lifetime and shutdown regression tests, plus repeated-subprocess stress | |
-| CSS-6 | Full validation: ABI, release gate, renderer invariants, TERMINAL, corpus | |
+| CSS-4 | Repair the stale smoke expectations, each against demonstrated canonical behaviour | ✅ |
+| CSS-5 | Lifetime and shutdown regression tests, plus repeated-subprocess stress | ✅ |
+| CSS-6 | Full validation: ABI, release gate, renderer invariants, TERMINAL, corpus | ✅ |
 
 ## CSS-1 — the measured baseline
 
@@ -281,3 +281,92 @@ side of the change, the unmapped total is **3 007 planned rows over 14 tasks —
 pre-existing generator failures are untouched, and `docs/c-api/COVERAGE.md` cannot be regenerated on
 this branch for the same pre-existing reason (`--write` hits the planned-row-owner error), having
 already been stale by roughly 3 200 symbols at the branch point.
+
+## CSS-6 — validation
+
+### C API smoke
+
+`ctest -R '^CApi'` in `cmake-build-debug`: **111 tests, 108 pass, 3 fail** — and the three are the
+generator gates this branch is instructed not to touch (`CApiCoverageMatrix`, `CApiLimitations`,
+`CApiReleaseGate`), all failing on the one pre-existing unmapped-symbol backlog. Every smoke test
+is green, including the seven new teardown modes. Baseline was 104 tests with 16 failures.
+
+No test was disabled, skipped or renamed to reach that.
+
+### Lifetime
+
+| Check | Result |
+|---|---|
+| Explicit destruction (`explicit` mode, plus every other smoke test) | correct, and a second destroy is still `CNA_RESULT_INVALID_HANDLE` |
+| Process-exit fallback (5 modes) | no crash, no sanitizer diagnostic |
+| Repeated subprocess stress | 1 400 processes (200 × 7 modes) + 2 000 (500 × 4 fallback modes) = **3 400, zero failures** |
+| ASan + UBSan, `detect_leaks=1` | clean on all 13 repaired smokes and all 7 teardown modes |
+
+### Sanitizers
+
+The whole `^CApi` suite under `-fsanitize=address,undefined` with leak detection: **111 tests,
+5 fail** — the same 3 generator gates, plus `CApi_MediaPlayerSmoke` (passes on its own; parallel
+load) and `CApi_AudioUnavailableSmoke`. That last one is a property of the sanitizer tree's
+configuration, not of this branch: `build-asan` is `CNA_AUDIO_PLATFORM=ALSA` with
+`CNA_ENABLE_SDL=OFF`, so CNA's own mixer exists and playback *is* available, while the test asserts
+it is not. Rebuilt with `ab75e340e`'s sources it fails identically — and additionally reproduces the
+heap-use-after-free, which is the clearest single demonstration that CSS-3 is what removed it.
+
+One UBSan diagnostic exists in the tree and is not ours: an invalid-vptr read during **namespace
+scope** static initialization in `BufferDataBindingContractTests.cpp:102`. It fires at `CnaTests`
+startup before any test runs, in a translation unit this branch never touches, and nothing here can
+reach it — every holder CSS-3 changed is a *function-local* static, which takes no part in
+namespace-scope initialization order.
+
+### ABI and tooling
+
+| Gate | Result |
+|---|---|
+| ABI version | **0.29.0**, unchanged (`ENCODE(0,29,0) == 0x1D00`) |
+| Canonical exports, measured against the real `libcna_c_api.so` | **4 055** |
+| Canonical structs | **221** |
+| `generate_abi_baseline.py --check --library …` | passes |
+| `check_release_gate.py --write` | regenerates `docs/c-api/RELEASE_GATE.md` **byte-identically**, no traceback |
+| `check_release_gate.py --check` | one criterion disagrees: `limitations-matrix`, the pre-existing failure |
+| Limitations/coverage unmapped total | **3 007 planned rows over 14 tasks, before and after** |
+| `DrawMeshEXT` / `CNA_SpriteMeshEXT` | still absent from the headers and the baseline |
+
+No C signature, symbol, struct or constant changed, so nothing required a bump.
+
+### Renderer and platform invariants
+
+`scripts/check_renderer_identities.py`: *25 public renderer identities … over 21 implementation
+families; every documented count agrees; 26 retired identities stay retired with their C ABI values
+reserved (next free value 52)*. The five platform boundary gates — `sdl_inventory`, `sdl_classify`,
+`renderer_sdl_audit`, `sdl_ratchet`, `hot_path_lint` — all pass; `modules/platform` was edited, so
+they matter here.
+
+### TERMINAL + SOFTWARE
+
+`build-probe/cfg-TERMINAL-SOFTWARE`, rebuilt on this branch: **328/328**, the same number the
+previous branch recorded, including `TerminalSoftwareDemoIntegration`. The end-to-end terminal path
+is unregressed.
+
+### Full corpus
+
+`cmake-build-debug`, `ctest -j8`: **9 933 tests, 21 failed**, against a 9 926-test baseline with the
+same standing set. Classified, with none left over:
+
+| Count | Failures | Verdict |
+|---|---|---|
+| 5 | `XnaPipelineGenuineRuntimeBuiltFamilies`, `CnaInputTests`, `CnaXnbModelCorpusSweep`, `CNAEXT_NoPosixSetenv`, `Headless_Smoke` | the standing set `plans/plan_terminal_capi_repair.md` already records |
+| 3 | `CApiCoverageMatrix`, `CApiLimitations`, `CApiReleaseGate` | the pre-existing backlog, out of scope by instruction |
+| 7 | 3 × `ENetDiscoveryServiceTest`, `ENetBackendTest`, `SoundBankTest`, `WaveBankTest`, 1 × `CueTest` | pass when re-run serially; `-j8` load sensitivity |
+| 5 | 2 × `CnbTextureContentManagerTest`, `CnbTextureCubeProducerTest`, `CnjCapabilityMatrixTest`, `CnjTexture3DTest` | reproduced with `ab75e340e`'s sources: pre-existing |
+| 1 | `CueTest.PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes` | 12/12 serially on **both** this branch's and the baseline's sources; load-sensitive audio timing |
+
+### Remaining known defects, unfixed and deliberately so
+
+The C API coverage/limitations/release-gate trio stays red on ~3 000 unmapped public symbols owned
+by tasks recorded complete (`CBIND-044` ≈ 2 611, `CBIND-035` ≈ 198, and smaller groups). Two further
+pre-existing generator faults surfaced while measuring it and are **not** repaired here, because
+they belong to that backlog: `coverage_mappings.json` has an ambiguous pair of rules for
+`CNA::Graphics::PbrMaterial` (`graphics-ext-settings-values` vs `pbr-material-value`) which makes
+`--approve-rule-symbols` unusable, and `docs/c-api/COVERAGE.md` records 9 499 symbols where the
+scanner now measures 12 733, with no way to regenerate it while `--write` hits the planned-row error
+first.
