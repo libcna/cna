@@ -3552,7 +3552,28 @@ namespace Microsoft::Xna::Framework::Graphics
         // first and only touches the window if that yields nothing, and
         // applyPresentationParametersToWindow() already early-returns without one, so
         // neither needs its own guard.
-        if (!descriptor.needsWindow)
+        // A CPU-raster family owns no swap chain, so its finished frame reaches a screen only
+        // through IPlatformSurfacePresenter -- and a presenter is created against a window. Whether
+        // such a family gets one is therefore the PLATFORM's answer, not the renderer's, which is
+        // what keeps this decision generic rather than terminal-specific.
+        //
+        // `surfacePresentation && !nativeWindowHandle` reads as "this platform can put pixels on a
+        // screen, and the presenter is the only route there". That is true of TERMINAL attached to
+        // a TTY, where the window IS the terminal viewport and no native handle exists at all. It
+        // is false of every windowing platform -- SDL3, X11, Wayland and Win32 all offer a native
+        // handle, so a CPU renderer stays exactly as off-screen on them as it has always been,
+        // deliberately: giving one a window there is a feature decision, not this repair. HEADLESS,
+        // SDL2, and a TERMINAL whose stdout is a pipe report no presentation and take the early
+        // return below unchanged.
+        const bool presenterIsTheOnlyDisplay = [&]
+        {
+            if (!descriptor.needsSurfacePresenter || platform_ == nullptr)
+                return false;
+            const auto capabilities = platform_->GetCapabilities();
+            return capabilities.surfacePresentation && !capabilities.nativeWindowHandle;
+        }();
+
+        if (!descriptor.needsWindow && !presenterIsTheOnlyDisplay)
         {
             platformWindow_.reset();
             ownsWindow_ = false;
@@ -3573,9 +3594,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // A window needs the video subsystem, so state that here rather than relying on the caller
         // having done it. Idempotent: resolveRenderer() has already asked for the same reference
-        // for this candidate (the two conditions coincide -- no descriptor sets needsWindow
-        // without needsVideoSubsystem), and this device holds one reference either way.
-        setVideoSubsystemAcquired(true);
+        // for this candidate (the two conditions coincide -- no descriptor that sets needsWindow
+        // leaves needsVideoSubsystem false), and this device holds one reference either way.
+        //
+        // The presenter-only path above is the one arrival here that does NOT come with
+        // needsWindow, and a CPU family declares needsVideoSubsystem false precisely because it has
+        // no video subsystem to raise. Asking the descriptor rather than assuming keeps every
+        // windowed renderer's behaviour identical and stops that path taking a reference nothing
+        // asked for.
+        if (descriptor.needsVideoSubsystem)
+            setVideoSubsystemAcquired(true);
 
         const auto requestedHandle = presentationParameters_.getDeviceWindowHandleProperty();
         if (requestedHandle != 0)

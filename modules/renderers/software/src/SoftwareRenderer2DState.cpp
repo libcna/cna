@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
@@ -55,7 +56,41 @@ namespace CNA::Internal::Renderers::Software
             [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
     }
 
-    void SoftwareRenderer::Present() {}
+    void SoftwareRenderer::Present()
+    {
+        // No presenter is the ordinary case -- every off-screen use of this renderer, and every
+        // platform that cannot display a CPU frame -- and it keeps Present() the no-op it was.
+        if (surfacePresenter_ == nullptr)
+            return;
+
+        // Deliberately the backbuffer rather than CurrentFramebuffer(): a render target left bound
+        // when the frame ends must not be what gets displayed.
+        SoftwareFramebuffer& framebuffer = backbuffer_;
+        if (framebuffer.width <= 0 || framebuffer.height <= 0)
+            return;
+
+        // Collapses the 4x multisample storage into `color` when MSAA is on, and is a no-op when it
+        // is not. Without it a multisampled frame would present whatever the resolved cache last
+        // held. ReadBackbuffer() resolves for the same reason.
+        framebuffer.ResolveColor();
+        if (framebuffer.color.size() <
+            static_cast<std::size_t>(framebuffer.width) *
+                static_cast<std::size_t>(framebuffer.height) * 4u)
+        {
+            return;
+        }
+
+        // No conversion and no copy: SoftwareFramebuffer::color is already what SurfaceFrame
+        // documents -- RGBA8, four bytes per pixel, row-major, top row first, rows tightly packed
+        // at width*4 bytes, which is what strideBytes == 0 means. The presenter validates the frame
+        // and owns everything past this point, including scaling to whatever it is displaying on.
+        CNA::Platform::SurfaceFrame frame;
+        frame.pixels = framebuffer.color.data();
+        frame.width = framebuffer.width;
+        frame.height = framebuffer.height;
+        frame.strideBytes = 0;
+        surfacePresenter_->Present(frame);
+    }
 
     void SoftwareRenderer::GetViewportSize(int& width, int& height)
     {

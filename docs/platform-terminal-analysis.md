@@ -71,19 +71,27 @@ The single most important design conclusion:
 renderers that used `SDL_Renderer` only to get finished pixels onto the window. Its
 contract is "present this RGBA buffer to this window, with scaling and vsync". A terminal is
 simply another device that can accept that buffer — it just quantises instead of blitting.
-`BLEND2D` (retired 2026-09-17) was the only renderer that presented CPU frames through
-`IPlatformSurfacePresenter`, and no renderer in the tree requests a presenter today.
+`SOFTWARE` is the renderer that presents CPU frames through it
+(`plans/plan_terminal_capi_repair.md` `TCR-2`); `BLEND2D`, retired 2026-09-17, was the one before
+it, and between those two points no renderer in the tree requested a presenter at all.
 
-**What that costs, precisely** (`plans/plan_renderer_cleanup.md` `RRC-010`). The terminal platform
-itself is unaffected: it is compiled into every POSIX build, and its 134 unit tests — including the
-36 pseudo-TTY tests that drive `TerminalSurfacePresenter` directly — run and pass in
-`CnaPlatformTests`. What cannot happen today is a *game* reaching the terminal, because
+**What that gap cost while it lasted** (`plans/plan_renderer_cleanup.md` `RRC-010`). The terminal
+platform itself was never affected: it is compiled into every POSIX build, and its unit tests —
+including the 36 pseudo-TTY tests that drive `TerminalSurfacePresenter` directly — ran and passed
+in `CnaPlatformTests` throughout. What could not happen was a *game* reaching the terminal, because
 `GraphicsDevice` builds a presenter only for a renderer whose descriptor sets
-`needsSurfacePresenter`. The end-to-end demo test `TerminalSoftwareDemoIntegration` is therefore
-registered `DISABLED` rather than left failing, and re-enabling it is one property removal once a CPU
-renderer requests a presenter. `SOFTWARE` needs more than the flag to become that renderer:
-`SoftwareRenderer::Present()` is currently empty and the descriptor sets `needsWindow = false`, which
-makes `GraphicsDevice` drop the window the presenter is created against.
+`needsSurfacePresenter`. The end-to-end demo test `TerminalSoftwareDemoIntegration` was registered
+`DISABLED` rather than left failing, and is enabled again now that the path exists.
+
+Closing it took exactly three things, none of them a new abstraction: `SOFTWARE`'s descriptor sets
+`needsSurfacePresenter`; `SoftwareRenderer::Present()`, which was empty, hands its resolved RGBA8
+backbuffer to the presenter as a `SurfaceFrame` (the two layouts are already byte-identical, so
+there is no conversion and no copy); and `GraphicsDevice::createOrAttachWindow()` builds a window
+for a CPU family when — and only when — the platform reports `surfacePresentation` without
+`nativeWindowHandle`, i.e. when the presenter is the sole route to the screen. That last condition
+is what keeps the change generic: it is a capability question, with no terminal-specific code in
+either the renderer or the device, and every windowing platform answers it the old way, so a CPU
+renderer stays off-screen there exactly as before.
 
 ```text
 Game
