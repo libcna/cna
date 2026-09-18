@@ -50,7 +50,9 @@ mkdir -p "$WORK" || die "cannot create $WORK"
 
 sync_one() {
   local name="$1" local_root="$2" guest_dir="$3"
-  [ -d "$local_root/.git" ] || die "$local_root is not a git repository"
+  # Asked of git rather than tested as a directory: in a linked worktree `.git` is a file.
+  git -C "$local_root" rev-parse --git-dir >/dev/null 2>&1 \
+    || die "$local_root is not a git repository"
 
   local head branch dirty
   head="$(git -C "$local_root" rev-parse HEAD)"

@@ -279,8 +279,8 @@ secure-random services:
 
 | Target | Implementation | Current validation |
 |---|---|---|
-| Linux/POSIX desktop | POSIX sockets | Built, unit/integration tested, benchmarked on Linux x86-64 |
-| Windows desktop | Winsock 2 plus system RNG, `ws2_32`/`bcrypt` private links | MinGW-w64 cross-build gate |
+| Linux/POSIX desktop | POSIX sockets | Built, unit/integration tested, benchmarked, and run end to end with a game and Chrome on Linux x86-64 |
+| Windows desktop | Winsock 2 plus system RNG, `ws2_32`/`bcrypt` private links | Native MSVC 19.44 build; Diagnostics and Inspector suites and an end-to-end game/bridge/HTTP run on Windows 10 22H2; MinGW-w64 cross-build gate |
 | macOS desktop | POSIX sockets with `SO_NOSIGPIPE` | Implemented; native runtime validation remains pending |
 | Web/Emscripten | Not built | Unsupported: no separate local process/socket model |
 | Android/iOS | Not built | Unsupported: app sandbox/lifecycle and device transport need a separate design |

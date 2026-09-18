@@ -8,6 +8,7 @@
 #include "InternalSocket.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <iomanip>
