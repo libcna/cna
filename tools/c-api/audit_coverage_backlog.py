@@ -20,6 +20,15 @@ Categories, and the evidence each rests on:
   H6  unowned scope          in the inventory by accident; no task claims it
   H7  unknown                evidence genuinely insufficient
 
+**How wrong the export probe is, measured.** CBIND-126 verified all 83 of the rows this tool put in
+H1 against the public C headers and the route implementations: **41 were genuinely bound and 42 were
+not** -- 38 had no route at all and 4 were C++ move constructors. The probe matches a name token
+inside the type's own route family and never checks whether the route carries the arguments the
+overload is *about*, so a typed transfer whose C route takes only ``CNA_Color*`` reads as answered
+by the route that shares its name. Treat H1 as *candidates to verify*, never as a count of rows that
+need no work; H2 is correspondingly a lower bound. The verdicts themselves now live in
+``tools/c-api/coverage_mappings.json``, which is evidence rather than inference.
+
 The export probe is a heuristic and is documented as one. It was calibrated against a case the
 plan already recorded an answer for -- ``CBIND-080``, which ``plans/plan_binding.md`` records as
 "it needed no new C code" -- and it independently returns zero genuinely-missing rows for that
@@ -151,9 +160,17 @@ class ExportProbe:
         if bare == "operator=":
             return H3_VALUE, "C++ assignment operator; the C ABI has no assignment form"
         if symbol.kind == "constructor" and short and re.search(
-            rf"const\s+{re.escape(short)}\s*&", symbol.signature
+            rf"const\s+{re.escape(short)}\s*&(?!&)", symbol.signature
         ):
             return H3_VALUE, "C++ copy constructor; C copies through explicit routes"
+        # CBIND-126: the move constructor was missed, because only the `const T&` spelling was
+        # tested. It went to the lifetime branch instead, where a create/destroy route exists for
+        # the type and so it read as already bound -- four rows of pure C++ value semantics counted
+        # as C coverage.
+        if symbol.kind == "constructor" and short and re.search(
+            rf"{re.escape(short)}\s*&&", symbol.signature
+        ):
+            return H3_VALUE, "C++ move constructor; a C handle moves by assignment"
         if not short:
             return H7, "free declaration with no enclosing type"
 

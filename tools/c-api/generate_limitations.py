@@ -61,9 +61,18 @@ def read_rows() -> tuple[list[dict], dict[str, int]]:
 
 
 def open_tasks() -> set[str]:
-    """Task ids the plan still records as unfinished."""
-    text = PLAN_PATH.read_text(encoding="utf-8")
-    return set(re.findall(r"\|\s*(CBIND-[0-9A-Za-z]+)\s*\|[^|]*\|\s*⬜", text))
+    """Task ids the plan still records as unfinished.
+
+    CBIND-126: this used to match `| CBIND-nnn | <one cell> | ⬜` directly, which assumed the status
+    is always the second cell after the id. Every backlog phase from B7 onward adds a row-count
+    column between them, and 🟨 was never matched at all -- so the set came back **empty**, and the
+    two checks below, both of which exist to catch a deferral whose owner is finished, silently
+    passed for every input. The coverage generator already solved this by finding the one cell that
+    is a status mark rather than counting columns; use that parser rather than a second one that can
+    drift from it again.
+    """
+    statuses = coverage_inventory.parse_plan_task_status(REPO_ROOT)
+    return {task for task, status in statuses.items() if status != "complete"}
 
 
 def classify(mapping: str, themes: list[dict]) -> str | None:
