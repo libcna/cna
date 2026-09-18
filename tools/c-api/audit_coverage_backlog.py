@@ -168,7 +168,7 @@ class ExportProbe:
         # the type and so it read as already bound -- four rows of pure C++ value semantics counted
         # as C coverage.
         if symbol.kind == "constructor" and short and re.search(
-            rf"{re.escape(short)}\s*&&", symbol.signature
+            rf"(?<![A-Za-z0-9_]){re.escape(short)}\s*&&", symbol.signature
         ):
             return H3_VALUE, "C++ move constructor; a C handle moves by assignment"
         if not short:

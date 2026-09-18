@@ -75,6 +75,21 @@ def open_tasks() -> set[str]:
     return {task for task, status in statuses.items() if status != "complete"}
 
 
+def plan_task_status(task: str) -> str | None:
+    """The plan's recorded status for a task, or None when the plan has no readable row for it.
+
+    `parse_plan_task_status` skips a `| CBIND-… |` row that does not carry exactly one status mark,
+    so absence means "the parser could not read it", which is not the same claim as "finished".
+    Reporting the first as the second is how a diagnostic sends somebody to look at the wrong thing.
+    """
+    return coverage_inventory.parse_plan_task_status(REPO_ROOT).get(task)
+
+
+def unowned_reason(task: str) -> str:
+    return ("which the plan records as finished" if plan_task_status(task) == "complete"
+            else "which has no readable row in the plan")
+
+
 def classify(mapping: str, themes: list[dict]) -> str | None:
     for theme in themes:
         for needle in theme["match"]:
@@ -132,7 +147,7 @@ def analyze() -> dict:
         for task in sorted(set(re.findall(r"CBIND-[0-9A-Za-z]+", entry["mapping"]))):
             if task not in live:
                 problems.append(
-                    f"a partial mapping still defers to {task}, which the plan records as finished: "
+                    f"a partial mapping still defers to {task}, {unowned_reason(task)}: "
                     f"{entry['mapping'][:90]}")
 
     # The same rule one level up: an open decision whose owner is a finished task is nobody's.
@@ -142,7 +157,7 @@ def analyze() -> dict:
         if re.fullmatch(r"CBIND-[0-9A-Za-z]+", owner) and owner not in live:
             problems.append(
                 f"the limitation \"{entry['subject']}\" is owned by {owner}, "
-                "which the plan records as finished")
+                + unowned_reason(owner))
 
     # CBIND-044: no unspecified omission. A partial mapping without a recorded disposition -- what
     # kind of limitation it is, and which route reports it to a caller -- is exactly the "we will

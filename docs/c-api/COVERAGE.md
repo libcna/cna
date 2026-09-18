@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **556 headers**, **9355 symbols**, **8363 implemented**, **15 partial**, **468 planned**, **509 not applicable**. Explicitly excluded headers: **287**.
+Snapshot: **556 headers**, **9355 symbols**, **8363 implemented**, **15 partial**, **468 planned**, **509 not applicable**. Explicitly excluded headers: **425**.
 
 ## Out of runtime C API scope
 
@@ -21,9 +21,13 @@ not counted above, and their declarations are not missing C bindings.
 
 | Module or subtree | Headers | Why |
 |---|---:|---|
+| `modules/c-api` | 0 | the C ABI itself; a binding cannot be a binding target |
+| `modules/content-pipeline` | 107 | CBIND-117, owner decision 2026-09-18: the Content Pipeline is a build-time tool, not part of the runtime a game links. `cna_c_api` does not link `cna_content_pipeline`, so its declarations cannot be missing *runtime* C bindings |
+| `modules/phone` | 9 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
+| `modules/platform` | 27 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
+| `modules/renderers/**` | 138 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 43 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/content-pipeline` | 107 | CBIND-117, owner decision 2026-09-18: the Content Pipeline is a build-time tool, not part of the runtime a game links. `cna_c_api` does not link `cna_content_pipeline`, so its declarations cannot be missing *runtime* C bindings |
 | `modules/core` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -33,12 +37,10 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/net` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/phone` | 9 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
-| `modules/platform` | 27 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `fb7d5748d11d356aa492a9dfb3dd225f76451cde6984a3c8544c38e039182974`.
+Full inventory SHA-256: `25a23672c19e7543ef3d152ebb482a360de7b80c961d95e64290d249427d7027`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
