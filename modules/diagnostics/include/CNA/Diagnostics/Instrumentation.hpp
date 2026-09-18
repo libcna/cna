@@ -11,6 +11,11 @@
 #define CNA_DIAGNOSTICS_DETAIL_UNIQUE_ID __LINE__
 #endif
 
+// The arguments stay unevaluated, so instrumentation still costs nothing here, but `sizeof`
+// keeps them compiled and type-checked. Discarding them outright would let a broken call site
+// pass the default OFF build and only fail for whoever enables STATS or FULL.
+#define CNA_DIAGNOSTICS_DETAIL_CHECK(...) do { (void) sizeof((__VA_ARGS__)); } while (false)
+
 #if CNA_DIAGNOSTICS_LEVEL >= 1
 #define CNA_DIAGNOSTICS_DETAIL_COUNTER_ADD(name, delta, identifier)                   \
     do                                                                                \
@@ -54,10 +59,11 @@
         CNA_DIAGNOSTICS_DETAIL_JOIN(                                                  \
             cnaDiagnosticsFrameScope_, CNA_DIAGNOSTICS_DETAIL_UNIQUE_ID)
 #else
-#define CNA_DIAGNOSTICS_COUNTER_ADD(name, delta) do { } while (false)
-#define CNA_DIAGNOSTICS_GAUGE_SET(name, value) do { } while (false)
-#define CNA_DIAGNOSTICS_GAUGE_ADD(name, delta) do { } while (false)
-#define CNA_DIAGNOSTICS_FRAME_COUNTER_ADD(name, delta) do { } while (false)
+#define CNA_DIAGNOSTICS_COUNTER_ADD(name, delta) CNA_DIAGNOSTICS_DETAIL_CHECK(name, delta)
+#define CNA_DIAGNOSTICS_GAUGE_SET(name, value) CNA_DIAGNOSTICS_DETAIL_CHECK(name, value)
+#define CNA_DIAGNOSTICS_GAUGE_ADD(name, delta) CNA_DIAGNOSTICS_DETAIL_CHECK(name, delta)
+#define CNA_DIAGNOSTICS_FRAME_COUNTER_ADD(name, delta) \
+    CNA_DIAGNOSTICS_DETAIL_CHECK(name, delta)
 #define CNA_DIAGNOSTICS_FRAME_SCOPE() do { } while (false)
 #endif
 
@@ -86,8 +92,9 @@
 #define CNA_DIAGNOSTICS_EVENT(name)                                                   \
     CNA_DIAGNOSTICS_EVENT_CATEGORY(name, ::CNA::Diagnostics::Category::Application)
 #else
-#define CNA_PROFILE_SCOPE_CATEGORY(name, category) do { } while (false)
-#define CNA_PROFILE_SCOPE(name) do { } while (false)
-#define CNA_DIAGNOSTICS_EVENT_CATEGORY(name, category) do { } while (false)
-#define CNA_DIAGNOSTICS_EVENT(name) do { } while (false)
+#define CNA_PROFILE_SCOPE_CATEGORY(name, category) CNA_DIAGNOSTICS_DETAIL_CHECK(name, category)
+#define CNA_PROFILE_SCOPE(name) CNA_DIAGNOSTICS_DETAIL_CHECK(name)
+#define CNA_DIAGNOSTICS_EVENT_CATEGORY(name, category) \
+    CNA_DIAGNOSTICS_DETAIL_CHECK(name, category)
+#define CNA_DIAGNOSTICS_EVENT(name) CNA_DIAGNOSTICS_DETAIL_CHECK(name)
 #endif

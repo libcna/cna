@@ -19,7 +19,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/select.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -57,17 +57,58 @@ namespace CNA::Inspector::Detail
                   std::uint32_t timeoutMilliseconds,
                   std::string& error)
         {
+#if defined(_WIN32)
+            // Winsock's fd_set is a counted handle array rather than a bitmap indexed by the
+            // handle value, so a single socket is always representable. select() ignores its
+            // first argument here.
             fd_set descriptors;
             FD_ZERO(&descriptors);
             FD_SET(socket, &descriptors);
             timeval timeout{};
             timeout.tv_sec = static_cast<long>(timeoutMilliseconds / 1000U);
             timeout.tv_usec = static_cast<long>((timeoutMilliseconds % 1000U) * 1000U);
-            const auto result = select(static_cast<int>(socket + 1),
+            const auto result = select(0,
                                        writable ? nullptr : &descriptors,
                                        writable ? &descriptors : nullptr,
                                        nullptr,
                                        &timeout);
+            constexpr const char* WaitOperation = "select";
+#else
+            // poll() addresses the descriptor by value. A POSIX fd_set is a bitmap indexed by
+            // descriptor number, so FD_SET writes past the end of the structure as soon as a
+            // descriptor reaches FD_SETSIZE. A host process that already holds a thousand
+            // descriptors reaches that with ordinary files, and the agent runs inside such a
+            // process, so the bitmap form is not usable here.
+            constexpr const char* WaitOperation = "poll";
+            constexpr std::uint32_t MaximumWaitMilliseconds =
+                static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+            pollfd descriptor{};
+            descriptor.fd = socket;
+            descriptor.events = static_cast<short>(writable ? POLLOUT : POLLIN);
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::milliseconds(std::min(timeoutMilliseconds,
+                                                     MaximumWaitMilliseconds));
+            int result = 0;
+            for (;;)
+            {
+                const auto now = std::chrono::steady_clock::now();
+                const auto remaining = now >= deadline
+                    ? std::chrono::milliseconds::zero()
+                    : std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+                descriptor.revents = 0;
+                result = poll(&descriptor, 1, static_cast<int>(remaining.count()));
+                if (result >= 0 || errno != EINTR)
+                {
+                    break;
+                }
+                // A signal must not shorten the caller's timeout: resume on what is left of it.
+                if (std::chrono::steady_clock::now() >= deadline)
+                {
+                    result = 0;
+                    break;
+                }
+            }
+#endif
             if (result > 0)
             {
                 return true;
@@ -83,7 +124,7 @@ namespace CNA::Inspector::Detail
             }
             else
             {
-                error = LastSocketError("select");
+                error = LastSocketError(WaitOperation);
             }
             return false;
         }

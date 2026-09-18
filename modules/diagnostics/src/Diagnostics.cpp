@@ -818,11 +818,23 @@ namespace CNA::Diagnostics
                 const std::size_t newestIndex =
                     (state.historyWriteIndex + EventHistoryCapacity - 1) % EventHistoryCapacity;
                 batch.newestAvailableSequence = state.history[newestIndex].sequence;
-                if (afterSequence != 0 && afterSequence + 1 < batch.oldestAvailableSequence)
+                if (afterSequence != 0
+                    && afterSequence != std::numeric_limits<std::uint64_t>::max()
+                    && afterSequence + 1 < batch.oldestAvailableSequence)
                     batch.eventsDroppedBeforeStart =
                         batch.oldestAvailableSequence - (afterSequence + 1);
-                batch.events.reserve(std::min(maximumEvents, state.historyCount));
-                for (std::size_t offset = 0;
+                if (afterSequence >= batch.newestAvailableSequence)
+                    return batch;
+                // Sequences are consecutive within the ring, so an incremental poll can start at
+                // its first unseen event. Scanning from the oldest entry instead would walk the
+                // whole history on every poll while holding the lock that frame completion needs.
+                std::size_t startOffset = 0;
+                if (afterSequence >= batch.oldestAvailableSequence)
+                    startOffset =
+                        static_cast<std::size_t>(afterSequence - batch.oldestAvailableSequence) + 1;
+                batch.events.reserve(
+                    std::min(maximumEvents, state.historyCount - startOffset));
+                for (std::size_t offset = startOffset;
                      offset < state.historyCount && batch.events.size() < maximumEvents;
                      ++offset)
                 {

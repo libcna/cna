@@ -2,6 +2,10 @@
 
 Status: complete (DIAG-0001, 2026-09-17)
 
+Follow-up fixes from the production-readiness audit are recorded in
+[`plan_diagnostics_inspector_audit.md`](plan_diagnostics_inspector_audit.md)
+(`AUD-DIAG-INSP-0001`, `AUD-DIAG-INSP-0002`).
+
 ## Boundary
 
 This plan owns CNA's renderer-independent profiler and diagnostics foundation. It does not own an

@@ -732,6 +732,53 @@ namespace
         EXPECT_LE(retained.events.size(), EventHistoryCapacity);
     }
 
+    TEST(DiagnosticsEventsTest, IncrementalCursorReturnsExactlyTheUnseenEvents)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        const NameHandle marker("Tests/Events/Cursor");
+        std::uint64_t cursor = NewestSequence();
+
+        for (std::int64_t value = 0; value < 8; ++value)
+            MarkEvent(marker, Category::Application, value);
+
+        const EventBatch first = GetProvider().ReadEvents(cursor, EventHistoryCapacity);
+        ASSERT_GE(first.events.size(), 8U);
+        EXPECT_EQ(first.eventsDroppedBeforeStart, 0U);
+        for (const EventRecord& event : first.events)
+            EXPECT_GT(event.sequence, cursor);
+
+        cursor = first.newestAvailableSequence;
+        const EventBatch empty = GetProvider().ReadEvents(cursor, EventHistoryCapacity);
+        EXPECT_TRUE(empty.events.empty());
+        EXPECT_EQ(empty.eventsDroppedBeforeStart, 0U);
+        EXPECT_EQ(empty.newestAvailableSequence, cursor);
+
+        for (std::int64_t value = 0; value < 3; ++value)
+            MarkEvent(marker, Category::Application, value);
+        const EventBatch second = GetProvider().ReadEvents(cursor, EventHistoryCapacity);
+        ASSERT_GE(second.events.size(), 3U);
+        EXPECT_EQ(second.events.front().sequence, cursor + 1);
+        for (std::size_t index = 1; index < second.events.size(); ++index)
+            EXPECT_EQ(second.events[index].sequence, second.events[index - 1].sequence + 1);
+    }
+
+    TEST(DiagnosticsEventsTest, ACursorBeyondTheHistoryReportsNoPhantomDiscontinuity)
+    {
+        RuntimeModeGuard mode(Mode::Full);
+        const NameHandle marker("Tests/Events/CursorBounds");
+        MarkEvent(marker, Category::Application, 1);
+
+        const EventBatch saturated = GetProvider().ReadEvents(
+            std::numeric_limits<std::uint64_t>::max(), EventHistoryCapacity);
+        EXPECT_TRUE(saturated.events.empty());
+        EXPECT_EQ(saturated.eventsDroppedBeforeStart, 0U);
+
+        const EventBatch ahead = GetProvider().ReadEvents(
+            saturated.newestAvailableSequence + 1000, EventHistoryCapacity);
+        EXPECT_TRUE(ahead.events.empty());
+        EXPECT_EQ(ahead.eventsDroppedBeforeStart, 0U);
+    }
+
     TEST(DiagnosticsRecordingTest, RecordingIsBoundedAndDropsTheOldestExcessEvents)
     {
         RuntimeModeGuard mode(Mode::Full);

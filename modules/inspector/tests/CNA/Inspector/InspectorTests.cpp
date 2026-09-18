@@ -14,6 +14,13 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <vector>
+
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <sys/select.h>
+#include <unistd.h>
+#endif
 
 namespace CNA::Inspector
 {
@@ -645,6 +652,54 @@ namespace CNA::Inspector
         EXPECT_TRUE(client.IsConnected());
         EXPECT_TRUE(client.Ping(error)) << error;
     }
+
+#if !defined(_WIN32)
+    // A POSIX fd_set is a bitmap indexed by descriptor number, so waiting on a socket through
+    // one writes out of bounds as soon as a descriptor reaches FD_SETSIZE. The agent runs inside
+    // the host game, which can easily hold that many descriptors, so it must keep working there.
+    class DescriptorBallast
+    {
+    public:
+        ~DescriptorBallast()
+        {
+            for (const int descriptor : held_) ::close(descriptor);
+        }
+
+        void FillTo(std::size_t count)
+        {
+            while (held_.size() < count)
+            {
+                const int descriptor = ::open("/dev/null", O_RDONLY);
+                if (descriptor < 0) return;
+                held_.push_back(descriptor);
+            }
+        }
+
+        [[nodiscard]] int Highest() const { return held_.empty() ? -1 : held_.back(); }
+
+    private:
+        std::vector<int> held_;
+    };
+
+    TEST(InspectorAgentTests, ServesClientsWhenSocketsExceedTheDescriptorSetLimit)
+    {
+        DescriptorBallast ballast;
+        ballast.FillTo(static_cast<std::size_t>(FD_SETSIZE) + 64U);
+        if (ballast.Highest() < FD_SETSIZE)
+            GTEST_SKIP() << "the descriptor limit here does not reach FD_SETSIZE";
+
+        FakeProvider provider;
+        provider.snapshot = MakeSnapshot();
+        auto agent = StartAgent(provider, MakeAgentConfiguration());
+        ASSERT_NE(agent, nullptr);
+        Client client;
+        std::string error;
+        ASSERT_TRUE(client.Connect(MakeClientConfiguration(*agent), error)) << error;
+        SnapshotResponse response;
+        EXPECT_TRUE(client.CaptureSnapshot(SnapshotRequest{}, response, error)) << error;
+        EXPECT_GT(provider.snapshotCalls, 0);
+    }
+#endif
 
     TEST(InspectorAgentTests, NonLoopbackBindingRequiresExplicitAuthorization)
     {

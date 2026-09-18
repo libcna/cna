@@ -2,6 +2,9 @@
 
 Status: complete (`AUD-DIAG-INSP-0001`, started and completed 2026-09-17)
 
+Follow-up: `AUD-DIAG-INSP-0002` (2026-09-18) closes the socket and HTTP hypotheses this pass
+recorded as **NOT TESTED IN THIS AUDIT PASS**. See *Follow-up fixes* below.
+
 ## Evidence vocabulary
 
 - **PROVEN**: established directly from source/object inspection or a deterministic proof.
@@ -289,6 +292,96 @@ Five Release runs per Diagnostics mode; values are median net overhead in ns/op:
 - **TESTED**: x86-64 MinGW-w64 Release cross-build of the changed Diagnostics library and the
   Inspector library with `CNA_PLATFORM=WIN32`, Diagnostics FULL, and Inspector ON.
 - **NOT TESTED**: execution on native Windows or macOS.
+
+## Follow-up fixes (`AUD-DIAG-INSP-0002`, 2026-09-18)
+
+The network hypotheses this audit deferred were exercised on a host where `bind`/`listen` are
+permitted. Two of them were real defects and are fixed; the remainder are recorded as tested.
+
+### Descriptor-set overflow in the socket wait (critical)
+
+- Severity: critical. An out-of-bounds write inside the host game's own process.
+- **PROVEN** root cause: `Wait()` published the socket through `FD_SET`. A POSIX `fd_set` is a
+  bitmap indexed by descriptor number, so a descriptor at or above `FD_SETSIZE` (1024) wrote past
+  the end of the 128-byte stack object. The agent runs inside the game, which reaches that
+  descriptor count with ordinary files.
+- **MEASURED** reproduction: `cna-inspector` launched with inherited descriptors so its listener
+  landed above the limit. Bisection: top descriptor 503 served normally, 903 served normally,
+  1103 accepted nothing and the process hung with no diagnostic. AddressSanitizer on the same
+  input reported `stack-buffer-overflow ... in Wait` at `InternalSocket.cpp`.
+- **PROVEN** fix: POSIX waits use `poll()`, which addresses the descriptor by value. Windows keeps
+  `select()`, whose `fd_set` is a counted handle array and is unaffected; its ignored first
+  argument is now passed as `0`. An `EINTR` wait now resumes on the remaining timeout instead of
+  failing, which was a second hypothesis recorded in this ledger.
+- **TESTED**: `InspectorAgentTests.ServesClientsWhenSocketsExceedTheDescriptorSetLimit` fills the
+  descriptor table past `FD_SETSIZE` and completes a real authenticated snapshot round trip; it
+  skips where the descriptor limit cannot reach that far. Against the previous implementation the
+  same test does not complete and is killed by its timeout. Top descriptor 2203 now serves
+  normally, and AddressSanitizer reports nothing with 1,100 descriptors held.
+
+### Serial browser bridge (high)
+
+- Severity: high for ordinary use, not only under abuse.
+- **PROVEN** root cause: `WebBridge::Run()` ran one connection to completion before accepting the
+  next, and the request-header read waited the full five-second response timeout. Browsers open
+  speculative connections and keep idle ones for reuse, so each idle socket delayed every later
+  request.
+- **MEASURED** before: 1 idle socket 5.5 s, 3 idle sockets 14.7 s, growing linearly and without
+  bound.
+- **PROVEN** fix: connections are served concurrently, bounded at 32, with excess connections
+  refused rather than queued; the request-header wait is one second; the single agent link is
+  serialized by its own mutex, so static assets stay fully concurrent while API requests keep the
+  agent's one-request-at-a-time contract. Connection threads are joined before the bridge is
+  destroyed.
+- **MEASURED** after: 0.00 s with 1, 3 and 8 idle sockets, and six parallel asset requests in
+  0.00 s.
+- **TESTED**: Host, UI-token, traversal and normal-page gates re-verified live after the change;
+  a 40-connection flood is refused and recovers; the process returns to one thread and four
+  descriptors afterwards.
+
+### Event cursor scan and bound (medium)
+
+- **PROVEN** root cause: `ReadEvents` scanned the whole 32,768-entry history on every poll while
+  holding `historyMutex`, which frame completion also needs on the game thread. `afterSequence + 1`
+  also wrapped at `UINT64_MAX`, which a client can send through the bridge's unvalidated `after=`
+  query, producing a fabricated discontinuity count.
+- **PROVEN** fix: sequences are consecutive within the ring, so a poll starts at its first unseen
+  event; `UINT64_MAX` and cursors past the newest sequence return empty without a phantom
+  discontinuity.
+- **TESTED**: `DiagnosticsEventsTest.IncrementalCursorReturnsExactlyTheUnseenEvents` and
+  `DiagnosticsEventsTest.ACursorBeyondTheHistoryReportsNoPhantomDiscontinuity`.
+
+### Unchecked instrumentation arguments at OFF (medium)
+
+- **PROVEN** root cause: the OFF macros expanded to `do { } while (false)` and discarded their
+  arguments, so instrumentation call sites were never compiled. `CNA_DIAGNOSTICS=OFF` is the
+  default, so a broken call site passed an ordinary build and failed only for whoever enabled
+  STATS or FULL.
+- **MEASURED**: a file with three deliberately broken instrumentation calls produced 0 errors at
+  OFF and 4 at FULL.
+- **PROVEN** fix: the OFF macros keep the arguments inside `sizeof`, which type-checks them
+  without evaluating them, so instrumentation still costs nothing.
+- **TESTED**: broken call sites now produce errors at levels 0, 1 and 2; valid call sites compile
+  clean with `-Wall -Wextra` at all three. Seven of the eight instrumented translation units
+  compile clean at all three levels; `Backend/Sdl3Mixer/MixerEngine.cpp` is **NOT TESTED** because
+  no configured build tree selects it, and its four call sites are the same literal forms as the
+  CnaMixer ones that were tested.
+
+### Verification after the follow-up
+
+| Configuration | Result |
+|---|---|
+| Release FULL HEADLESS/NULL, Inspector ON | Diagnostics 36/36, Inspector 25/25, Graphics 2,325 passed, Runtime 174 passed |
+| Release STATS / OFF | 14/14 and 2/2 |
+| Debug FULL ASan+UBSan | 36/36 + 25/25, no report |
+| Debug FULL TSan, Inspector ON | 36/36 + 25/25, no race report — TSan covered the Inspector for the first time |
+| Debug FULL `-Wall -Wextra -Wpedantic -Werror` | 36/36 + 25/25 |
+| MinGW-w64 x86-64 cross-build | `cna_diagnostics` and `cna_inspector` compile and link, Winsock branch included |
+
+Still **NOT TESTED**: fuzzing and offensive parser corpora, invalid-UTF-8 JSON escaping in the
+Chrome trace and bridge writers, and execution on native Windows or macOS. Duplicate and
+conflicting `Content-Length` headers were tested live and are inert, because the bridge closes the
+connection after one request and never reads a body.
 
 ## Remaining limitations
 

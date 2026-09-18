@@ -129,6 +129,12 @@ and optionally manually requested images. Treat that information as sensitive.
 - The agent handles one authenticated client and one request at a time, caps requests at 64 per
   second by default, caps the listen backlog at four, and has no unbounded application queue.
   Packet payloads are limited to 8 MiB and socket operations time out.
+- The browser bridge serves connections concurrently, up to 32 at once; further connections are
+  refused rather than queued. A connection that sends no request header is dropped after one
+  second. Requests that reach the agent still serialize on the single agent link, because the
+  agent itself serves one request at a time. Static assets need no agent and stay concurrent.
+- Agent and bridge sockets are waited on with `poll()` on POSIX rather than a `select()` descriptor
+  bitmap, so a host process holding more than `FD_SETSIZE` descriptors is served normally.
 
 Authentication is protection against accidental or untrusted local access, not a replacement for
 operating-system account isolation. Do not print the token to shared logs.

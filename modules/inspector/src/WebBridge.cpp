@@ -10,11 +10,14 @@
 #include <charconv>
 #include <cctype>
 #include <cmath>
+#include <condition_variable>
 #include <iomanip>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <thread>
 
 namespace CNA::Inspector::Detail
 {
@@ -23,6 +26,15 @@ namespace CNA::Inspector::Detail
         constexpr std::size_t MaximumHttpRequestBytes = 16U * 1024U;
         constexpr std::size_t MaximumHttpResponseBytes = 12U * 1024U * 1024U;
         constexpr std::uint32_t HttpTimeoutMilliseconds = 5000;
+        // A connected client that sends nothing must not hold a connection slot for the full
+        // response timeout. Browsers write the request immediately after connecting, and this
+        // is a loopback-only endpoint, so a short header wait costs a conforming client nothing.
+        constexpr std::uint32_t HttpHeaderTimeoutMilliseconds = 1000;
+        // Browsers open several connections per page and keep idle ones for reuse, so the bridge
+        // serves connections concurrently. The bound keeps a flood from creating threads without
+        // limit; excess connections are refused rather than queued, because queueing would only
+        // move the stall rather than remove it.
+        constexpr std::size_t MaximumConcurrentConnections = 32;
 
         class JsonWriter
         {
@@ -536,6 +548,12 @@ namespace CNA::Inspector::Detail
 
         ~Impl()
         {
+            // Connection threads are detached and reference this object, so they must all be
+            // finished before any member is destroyed.
+            {
+                std::unique_lock lock(connectionMutex_);
+                connectionIdle_.wait(lock, [this] { return activeConnections_ == 0; });
+            }
             CloseSocket(listener_);
         }
 
@@ -552,21 +570,65 @@ namespace CNA::Inspector::Detail
                 std::string error;
                 const auto socket = AcceptTcp(listener_, 1000, error);
                 if (socket == InvalidSocket) continue;
-                Handle(socket);
-                ShutdownSocket(socket);
-                CloseSocket(socket);
+                bool refused = false;
+                {
+                    std::lock_guard lock(connectionMutex_);
+                    refused = activeConnections_ >= MaximumConcurrentConnections;
+                    if (!refused) ++activeConnections_;
+                }
+                if (refused)
+                {
+                    // Deliberately outside the lock: writing to a stuck peer can take as long as
+                    // the send timeout, which must not hold up accounting or the accept loop.
+                    SendHttp(socket, 503, "application/json",
+                             ErrorJson("Inspector bridge connection limit reached"));
+                    ShutdownSocket(socket);
+                    CloseSocket(socket);
+                    continue;
+                }
+                try
+                {
+                    std::thread(&Impl::ServeConnection, this, socket).detach();
+                }
+                catch (const std::exception&)
+                {
+                    ReleaseConnection(socket);
+                }
             }
         }
 
         [[nodiscard]] std::uint16_t GetHttpPort() const noexcept { return httpPort_; }
 
     private:
+        void ServeConnection(SocketHandle socket) noexcept
+        {
+            try
+            {
+                Handle(socket);
+            }
+            catch (...)
+            {
+            }
+            ReleaseConnection(socket);
+        }
+
+        void ReleaseConnection(SocketHandle socket) noexcept
+        {
+            ShutdownSocket(socket);
+            CloseSocket(socket);
+            {
+                std::lock_guard lock(connectionMutex_);
+                --activeConnections_;
+            }
+            connectionIdle_.notify_all();
+        }
+
         void Handle(SocketHandle socket)
         {
             std::vector<std::uint8_t> bytes;
             std::string error;
             if (!ReceiveUntil(socket, bytes, "\r\n\r\n", MaximumHttpRequestBytes,
-                              HttpTimeoutMilliseconds, error))
+                              HttpHeaderTimeoutMilliseconds, error))
             {
                 SendHttp(socket, 400, "application/json", ErrorJson(error));
                 return;
@@ -609,6 +671,7 @@ namespace CNA::Inspector::Detail
                 SendHttp(socket, 404, "application/json", ErrorJson("not found"));
                 return;
             }
+            const std::lock_guard clientLock(clientMutex_);
             if (!EnsureConnected(error))
             {
                 SendHttp(socket, 503, "application/json", ErrorJson(error));
@@ -739,9 +802,16 @@ namespace CNA::Inspector::Detail
 
         WebBridgeConfiguration configuration_;
         std::string uiToken_;
+        // The agent link carries one request at a time, so concurrent API requests serialize
+        // here. Static assets need no agent and stay fully concurrent, which is what a browser
+        // needs to load the page.
+        std::mutex clientMutex_;
         Client client_;
         SocketHandle listener_ = InvalidSocket;
         std::uint16_t httpPort_ = 0;
+        std::mutex connectionMutex_;
+        std::condition_variable connectionIdle_;
+        std::size_t activeConnections_ = 0;
     };
 
     WebBridge::WebBridge(WebBridgeConfiguration configuration)
