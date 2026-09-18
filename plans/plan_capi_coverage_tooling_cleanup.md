@@ -289,16 +289,34 @@ The release gate is green **without hiding anything**. Its `coverage-closed` cri
 planned rows and is recorded "not met"; it still measures "not met", and that agreement is what the
 gate checks. 468 genuine limitations remain visible and counted.
 
-## CTC-9 — regression tests
+## CTC-9 — regression tests, and what an independent review of them found
 
-`tools/c-api/test_coverage_scope.py`, 21 fixture tests, registered as the CTest gate
+`tools/c-api/test_coverage_scope.py`, **29** fixture tests, registered as the CTest gate
 `CApiCoverageScopeModel`. No Doxygen, well under a second. One test per defect that shipped: a new
 module stops the gate; a removed one does too; an exclusion without a reason is refused; no
 out-of-scope header reaches the inventory; `detail` matches in every capitalization but only as a
-whole segment; the last-resort owner is not a completed task; an unrecognised module lands on the
-live backlog; a completed task owning a planned row fails; overlapping rules resolve by approval,
-double approval is refused, an unapproved overlap is refused by name, and rule order changes
-nothing.
+whole segment; the last-resort owner is not a completed task; a completed task owning a planned row
+fails; overlapping rules resolve by approval, double approval is refused, an unapproved overlap is
+refused by name, and rule order changes nothing.
+
+A read-only review of this branch's own diff then found seven defects, **two of them introduced
+here**, and they are fixed rather than noted:
+
+| # | Defect | Why it mattered |
+|---|---|---|
+| 1 | `--approve-rule-symbols` could silently grant coverage | It used to abort on the first overlapping pair — unconditionally, on this rule set — so the hazard was unreachable *by accident*. Once it completed, an unfiltered run grew 20 rules by 95 unreviewed declarations. Now behind `--grow-approved-symbols`, and the refusal names every declaration it would adopt. |
+| 2 | An exclusion with no `.hpp` was invisible in `COVERAGE.md` | `modules/c-api` (61 `.h`, zero `.hpp`) got no row, so its recorded reason went unpublished — contradicting the comment promising that declaring a module makes its exclusion visible. The full matrix's contract paragraph was also still describing the pre-change model. |
+| 3 | Scope was total over `modules/*` only | Renderer families are two levels down, so 22 include trees were invisible to `validate_module_scope` — the same shape as the incident, one directory deeper. Discovery now finds them at any depth; `split_header()` derives a module from the path between `modules/` and `include/`. |
+| 4 | `validate_reopened_slices` could pass on a dead key | `owner_task` consults overrides first, so a slice whose remaining rows all carry one was reported healthy forever. |
+| 5 | "matched no symbols" was wrong for a blocked carve-out | A new narrow rule whose declarations another rule already approved tripped the unused-rule guard with a message denying its pattern matched anything. |
+| 6 | `open_tasks()` read a dropped plan row as a finished task | Absence from the parser is not the same claim as completion. |
+| 7 | The audit's move-constructor pattern had no left boundary | `Effect(SoundEffect&&)` would classify as `Effect`'s own move constructor. |
+
+Two tests were passing vacuously and are replaced: one asserted the fallback constant against
+itself and stayed green with the entire scope model deleted; the other could not fail, because the
+only lowercase `detail/` directories sit inside a module excluded before the path check runs. The
+three findings above that had no coverage now have it, which is why they were found by reading
+rather than by running.
 
 ## CTC-10 — validation
 
@@ -308,14 +326,14 @@ nothing.
 | `generate_coverage_inventory.py --check` | **exit 0** |
 | `generate_limitations.py --check` | **exit 0** |
 | `check_release_gate.py --check` | **exit 0** (recorded "not ready", correctly) |
-| `--approve-rule-symbols` | **exit 0** (output reviewer-gated, not committed) |
+| `--approve-rule-symbols` | runs; **refuses** to widen 20 rules by 95 unreviewed declarations and writes nothing, naming each. `--grow-approved-symbols` is the deliberate override |
 | `generate_abi_baseline.py --check --library` | 221 structs, **4,055 exports** |
 | `check_declared_exports.py --library` | declared and exported agree exactly: 4,055 |
 | `check_doc_export_counts.py` | 6 prose counts agree with 4,055 |
 | `check_renderer_identities.py` | 25 identities / 21 families / 26 retired / next free 52 |
 | `ctest -R '^CApi'` | **111/111** |
 | `ctest -R 'Terminal\|Software'` | **157/157** |
-| `CApiCoverageScopeModel` | **21/21** |
+| `CApiCoverageScopeModel` | **29/29** |
 | full corpus, `ctest -j8` | 9,931 of 9,934 reported before a 50-minute cap; 9,408 passed, 507 skipped, **16 failed** |
 
 ### The 16 corpus failures are pre-existing, and none is in this branch's reach
