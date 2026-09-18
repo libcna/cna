@@ -100,8 +100,15 @@ git -C \$d reset --quiet --hard $head
 # .sdl-prebuilt-* is the persistent prefix the SDL sub-build installs into; wiping it on
 # every sync would mean rebuilding SDL from source each time, which is minutes, not seconds.
 git -C \$d clean -qfdx -e 'cmake-build-*' -e '.cna-keep' -e 'vendor' -e 'third_party' -e '.sdl-prebuilt-*'
+# A payload shipped from a submodule checkout carried its gitlink file, which points nowhere in
+# the guest and makes every git command in the checkout fail. Payloads no longer ship one; this
+# removes any left by an earlier sync, before git is asked about the tree.
+foreach (\$p in '$PAYLOADS'.Split(' ')) { Remove-Item -Force -Recurse \"\$d/\$p/.git\" -ErrorAction SilentlyContinue }
 \"HEAD  = \$(git -C \$d rev-parse HEAD)\"
-\"clean = \$(( git -C \$d status --porcelain | Measure-Object ).Count -eq 0)\"
+# Counting the lines of a failed status would report a tree git could not even read as clean.
+\$porcelain = @(git -C \$d status --porcelain)
+if (\$LASTEXITCODE -ne 0) { throw \"git status failed with exit \$LASTEXITCODE; the checkout cannot be verified clean\" }
+\"clean = \$(\$porcelain.Count -eq 0)\"
 " || die "guest-side checkout of $name failed"
 }
 
@@ -118,7 +125,10 @@ git -C \$d clean -qfdx -e 'cmake-build-*' -e '.cna-keep' -e 'vendor' -e 'third_p
 PAYLOADS="${CNA_WIN_PAYLOADS:-vendor/googletest}"
 
 payload_stamp() {
-  ( cd "$CNA_ROOT/$1" && find . -type f -printf '%P %s\n' 2>/dev/null | LC_ALL=C sort | sha1sum | cut -c1-40 )
+  # .git is excluded here as in the archive: a submodule checkout (a linked worktree has one) holds
+  # a gitlink file there that means nothing in the guest.
+  ( cd "$CNA_ROOT/$1" && find . -name .git -prune -o -type f -printf '%P %s\n' 2>/dev/null \
+      | LC_ALL=C sort | sha1sum | cut -c1-40 )
 }
 
 push_payload() {
@@ -132,7 +142,7 @@ push_payload() {
     return 0
   fi
   say "payload $rel: shipping ($(du -sh "$CNA_ROOT/$rel" | cut -f1))"
-  tar -C "$CNA_ROOT" -czf "$WORK/payload.tgz" "$rel" || die "could not archive $rel"
+  tar --exclude=.git -C "$CNA_ROOT" -czf "$WORK/payload.tgz" "$rel" || die "could not archive $rel"
   win_exec "New-Item -ItemType Directory -Force -Path C:/cna/payloads | Out-Null" >/dev/null
   "$EXEC" --push "$WORK/payload.tgz" "C:/cna/payloads/payload.tgz" >/dev/null || die "scp of $rel failed"
   win_exec "
