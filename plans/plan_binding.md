@@ -1489,7 +1489,7 @@ mislabelled not-applicable, or attributed to already completed binding phases.
 
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
-| CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 654 | ⬜ | Decide whether C consumers need a build-time pipeline/Model-v2 CPU API and, if so, design C-native orchestration, schema-carrier and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. |
+| CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 134 | 🟨 | Decide whether C consumers need a build-time pipeline/Model-v2 CPU API and, if so, design C-native orchestration, schema-carrier and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. **Half decided 2026-09-18 (`CBIND-126`): the build-time pipeline is out of runtime C API scope.** `cna_c_api` does not link `cna_content_pipeline`, so `modules/content-pipeline` and the `CNA/Content/{Pipeline,Import}` subtrees of `modules/content` cannot be missing *runtime* C bindings; `MODULE_SCOPE` and `OUT_OF_SCOPE_SUBTREES` now say so by name and `COVERAGE.md` reports them as excluded with that reason. That removed 3,428 rows this task had been carrying, 2,554 of which were being attributed to the completed `CBIND-044`. **The other half is still open and still owns 134 rows**: whether a C consumer gets a Model-v2 CPU API. `CNA/Content/Cnb` stays in scope deliberately — `DecodeModelV2FromCnb` and the CNB source importers are a runtime-adjacent question the pipeline decision does not answer. |
 
 ## Phase B13 — the model an XNA game actually loads
 
@@ -1586,6 +1586,23 @@ and assigning them to the completed whole-header owner made the mandatory covera
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
 | CBIND-125 | Design or disposition inheritance-aware reflective-reader customization | 5 | ⬜ | Decide whether C callers need to declare an abstract stored type, register a concrete stored type, and compose a derived reader from a base reader. If bound, design a C-native descriptor/callback contract without exposing templates, RTTI or C++ ownership and add strict-C dispatch, malformed-type, inheritance and lifetime evidence; otherwise record an owner-approved disposition. Remove the five exact `SYMBOL_OWNER_OVERRIDES` entries when resolved. This intermediate qualification records the live backlog only and adds no export or ABI bump. |
+
+## Phase B20 — measurement the campaign can be held to
+
+The coverage matrix stopped describing the tree. Three separate defects compounded: `owner_task()`
+ended in `return "CBIND-044"`, so any module the function did not name became the property of a
+task closed on 2026-08-16; the Content Pipeline became its own module on 2026-09-03 and `phone` was
+created on 2026-09-07, so 2,611 declarations took exactly that route; and the internal-path
+exclusion matched `Detail` but not `detail`. The result was a 3,895-row backlog of which 3,007 rows
+were owned by finished tasks, and three red gates that stayed red for reasons nobody could act on.
+
+The repair is measurement only. **No C route is added, removed or changed in `CBIND-126`**, and the
+ABI stays `0.29.0` / 4,055 exports / 221 structs.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-126 | Make the coverage, limitations and ownership tooling describe the current tree | 40 | ✅ | **Done 2026-09-18.** Scope is now a declared, *total* function over the modules that exist (`MODULE_SCOPE`, plus `OUT_OF_SCOPE_SUBTREES` for build-time surface inside a linked module), so an unclassified module stops the gate instead of inheriting a default; `COVERAGE.md` renders every exclusion with its reason and measured header count. `owner_task()` has no fallthrough left — an unowned runtime module raises by name. `EXCLUDED_PATH_SEGMENTS` is matched case-insensitively. Rule ownership is resolved per symbol against `approved_symbols` rather than per pattern, which is what `--approve-rule-symbols` had been discarding: 34 ambiguous rule pairs over 296 symbols, none of them approved twice, so the data was already a clean partition. Three carve-out rules whose patterns reached declarations they did not own were narrowed by signature. Thirty-one declarations with no C form — the state PODs' copy/assign and `Dispose`, resource move semantics, five friendship declarations and the `*Internal` template-dispatch helpers — carry recorded not-applicable dispositions here. Scanner 12,733 → 9,355 symbols; planned 3,895 → the live backlog below. |
+| CBIND-127 | Bind the runtime C++ surface that grew after the CBIND campaign closed | 320 | ⬜ | The genuinely missing runtime C bindings, separated from the bookkeeping that used to hide them. These are declarations in modules the C ABI links, with no exported route that answers them: predominantly the CNAEXT engine layer and the 3D graphics resources that arrived after their slices closed — `StorageTexture2D`, `Texture2DArray`, `Texture3D`, `ShaderPackageEXT`, `ShaderCodeEXT` and their device entry points. Design C-native routes with strict-C behaviour, lifetime and ABI evidence, or record owner-approved dispositions, one family at a time. This row exists so that unfinished work names an unfinished task: it is the *current* owner of these rows, and the historical slice tasks in Phases B7–B19 remain the record of what was finished when. No route is added by opening it. |
 
 ## Mandatory test layers
 
