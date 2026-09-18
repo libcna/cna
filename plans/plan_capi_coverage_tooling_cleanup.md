@@ -316,6 +316,32 @@ nothing.
 | `ctest -R '^CApi'` | **111/111** |
 | `ctest -R 'Terminal\|Software'` | **157/157** |
 | `CApiCoverageScopeModel` | **21/21** |
+| full corpus, `ctest -j8` | 9,931 of 9,934 reported before a 50-minute cap; 9,408 passed, 507 skipped, **16 failed** |
+
+### The 16 corpus failures are pre-existing, and none is in this branch's reach
+
+Two were flaky and passed on a re-run (`SoundBankTest.IsInUseFalseSoonAfterFireAndForgetCue…`,
+`TwoProcessLoopbackTest.HostMigration…`). The other fourteen reproduce, and all of them are C++
+runtime behaviour:
+
+| Failure | What it is |
+|---|---|
+| `CnbTextureContentManagerTest` ×2, `CnbTextureCubeProducerTest`, `CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile`, `CnjTexture3DTest.LoadsRealCnjFixture` | `TextureCube::SetData: this graphics renderer did not store the complete requested cube face region` — the HEADLESS renderer's cube/volume face support |
+| `CNAEXT_NoPosixSetenv` | a lint gate over `modules/platform/src/Wayland/` and its tests using POSIX `setenv`/`unsetenv`, which MinGW-w64 lacks |
+| `Headless_Smoke` | `SDL_INIT_VIDEO was never initialized under the Headless renderer`; 9 of its 10 sub-checks pass |
+| `CueTest` ×2, `WaveBankTest` | audio playback timing |
+| `ENetDiscoveryServiceTest`, `NetworkSessionTest.FindReturnsEmptyCollection` | networking |
+| `XnaPipelineGenuineRuntimeBuiltFamilies`, `CnaXnbModelCorpusSweep` | content pipeline runtime |
+
+Two facts settle the attribution. `git diff 9ff1c6ec3..HEAD -- '*.cpp' '*.hpp' '*.h' '*.c'` is
+**empty** — this branch changes Python, JSON, Markdown and one `add_test` line and nothing else —
+and the test binaries were compiled before the first edit and never rebuilt, so what failed is the
+pre-existing tree. Per the branch's scope they are left alone, not fixed and not suppressed.
+
+The cube-face failures are worth noting for a different reason: they are the same capability gap
+the binding verification found independently — `cna_texturecube_set_data` takes `const CNA_Color*`
+only, and 23 of `CBIND-127`'s rows are the typed cube transfers that have no C route. The C++ side
+has a matching renderer gap.
 
 ABI `0.29.0`, 4,055 exports, 221 structs — unchanged. `git diff` over `modules/c-api/` and
 `tools/c-api/abi_baseline.json` is empty, so no C ABI or API expansion occurred.
