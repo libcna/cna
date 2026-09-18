@@ -692,6 +692,25 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CApi_GameSecondaryGraphicsDeviceContext PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # One binary, one mode per process, because what it asserts happens after main returns.
+    add_executable(cna_c_api_teardown_lifetime_smoke
+        tests/pure_c/TeardownLifetimeSmoke.c
+    )
+    set_target_properties(cna_c_api_teardown_lifetime_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_teardown_lifetime_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_teardown_lifetime_smoke)
+    foreach(_cna_teardown_mode
+            explicit game-alive game-alive-no-frame children-alive partial cycles device-alive)
+        add_test(NAME CApi_TeardownLifetime_${_cna_teardown_mode}
+            COMMAND cna_c_api_teardown_lifetime_smoke ${_cna_teardown_mode})
+        set_tests_properties(CApi_TeardownLifetime_${_cna_teardown_mode} PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endforeach()
+
     add_executable(cna_c_api_render_target_lifetime_smoke
         tests/pure_c/RenderTargetLifetimeSmoke.c
     )

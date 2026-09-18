@@ -185,3 +185,29 @@ reproducer under ASan+UBSan with `detect_leaks=1` reports nothing at all.
 `XnaPipelineGenuineRuntimeBuiltFamilies` (in the standing pre-existing set
 `plans/plan_terminal_capi_repair.md` records) and `CApi_GameSecondaryGraphicsDeviceContext`
 (a CSS-4 stale expectation).
+
+## CSS-5 — the regression test the suite did not have
+
+`modules/c-api/tests/pure_c/TeardownLifetimeSmoke.c`, one binary with a mode per process because
+what it asserts happens *after* `main` returns: the exit status is the assertion, and a mode that
+passes its own checks and then dies in teardown fails.
+
+Nothing covered this before. Every other smoke test destroys what it creates, and the eight that
+crashed reached the fallback path only by bailing out early on an unrelated stale expectation — so
+repairing those expectations alone would have turned the suite green with the defect still in place.
+
+| Mode | Shape | Without CSS-3 |
+|---|---|---|
+| `explicit` | game + children created, all destroyed in order, double-destroy still refused | pass |
+| `game-alive` | one frame run, game left alive | **SEGFAULT** |
+| `game-alive-no-frame` | no frame, so no GraphicsDevice, game left alive | **SEGFAULT** |
+| `children-alive` | game and two textures left alive | **SEGFAULT** |
+| `partial` | one child destroyed, one left; game destroy correctly refused | **SEGFAULT** |
+| `cycles` | three clean create/destroy rounds, then a fourth left alive | **SEGFAULT** |
+| `device-alive` | standalone device, no game, left alive | pass |
+
+The two that pass without the fix are the two that should: explicit teardown was never broken, and
+a standalone device owns no `Game`, so it never reaches `UninstallPlatform`. Measured by rebuilding
+this test against `ab75e340e`'s `Game.cpp` and `CurrentPlatform.cpp` and re-running it.
+
+**Stress:** 200 subprocess iterations of each of the seven modes — 1 400 processes, 0 failures.
