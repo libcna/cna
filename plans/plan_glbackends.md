@@ -468,6 +468,57 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   is retired, and no `easy-glrvc` reference remains in the build. The `easy-glrvc` worktree's
   disposal is the owner's normal sibling-repo cleanup, outside this repository.
 
+### Phase G — per-draw state overhead under `WEBGL2`
+
+> **Origin (2026-09-19):** `cna-car-simulator`'s `WEBGL2` build ran unplayably slowly while the
+> `RacingGame` sample ran smoothly on the same engine, the same Asyncify main loop and the same
+> forced WebGL 2 context. Counting WebGL calls per frame through a CDP-injected wrapper showed the
+> difference is per-draw state traffic, not the loop: at 1,156 draws per frame the simulator made
+> 390,922 WebGL calls (65% of them `samplerParameter*`/`bindSampler`), 2,215 `getParameter` and
+> 1,155 `getExtension`; `RacingGame` in a race made 79,855 calls at 281 draws and 38 `getParameter`.
+> Call counts are independent of the GPU, so they transfer to a real browser even though the
+> sandbox's headless Chrome rasterizes with SwiftShader.
+
+- ✅ **GLB-41** — **Done 2026-09-19.** Four renderer-local records in `EasyGLRenderer`, each tied
+  to the objects or context it describes and dropped on context loss:
+  1. `samplerShadows_`: `GraphicsDevice::applySamplerStatesToRenderer` re-applies all sixteen pixel
+     samplers before every draw, about 11 parameter writes and 3 binds each. Every write still
+     happens logically -- REMED-GFX-174 and FX-092 require the object's full state to follow each
+     application -- but the GL call is skipped when the object already holds that exact value
+     (bitwise for floats). EasyGL is the only writer and binder of `samplers_`; the record resets
+     when an object is recreated.
+  2. `CurrentContextAnisotropyLimits()`: `GL_MAX_TEXTURE_MAX_ANISOTROPY` was read with
+     `glGetFloatv` on every anisotropic application, in both the sampler-object path and the ES 2.0
+     texture path. Under WebGL that is a synchronous `getParameter` -- 1,060 per frame in the
+     simulator, which samples almost everything with `AnisotropicWrap`. Now read once per meta-gl
+     context generation.
+  3. `glViewportShadow_`: `BindDrawParams` read `GL_VIEWPORT` back for every 3D draw (the
+     pixel-centre correction), as did each sprite flush. Every `glViewport` in this context goes
+     through the renderer, so it now records what it set and reads GL only once per context.
+  4. `appliedNativeWireframe_`: the rasterizer state is re-applied before every draw, and under
+     WebGL each application re-fetched `WEBGL_polygon_mode` and re-sent the mode (on desktop it
+     re-resolved `glPolygonMode`). Now sent only when the fill mode changes.
+
+  **Measured** (same simulator scene, same method): 390,922 → 135,646 WebGL calls per frame,
+  `getParameter` 2,215 → 0, `getExtension` 1,155 → 0, sampler calls 256,124 → 0. **Tests:**
+  `EasyGLRedundantStateTests.cpp` (5 tests, real context): the sampler object holds every
+  application across A→B→A and mip-clamp sequences; anisotropy is clamped to the context limit and
+  reset by other filters; an unchanged state is really not re-sent; a context loss forgets the
+  record; the polygon mode follows every fill-mode change, including across a context loss. Run
+  in `cmake-build-multi` (`OPENGL33`, Mesa, Xvfb `:99`): the 5 new tests and all 22 other EasyGL
+  renderer tests pass; `CnaGraphicsTests` 2,741 pass, 69 skipped, 3 fail. The 3 failures
+  (`IndexedDrawDeferredTest.*TriangleStrip*`) are unrelated and pre-existing in this build
+  directory: they assert the active renderer is `VulkanRenderer` whenever Vulkan is compiled in,
+  and this multi-renderer build defaults to `OPENGL33`. The `WEBGL2` simulator build links and
+  renders the same scene with no console errors.
+- ⬜ **GLB-42** — **Open.** What remains per draw after GLB-41, in the same measurement: the
+  stock-program semantic remap re-specifies the vertex buffer's VAO before each draw and restores
+  the buffer's own layout after it (`ConfigureDeclarationForStockProgramEXT` /
+  `RestoreDeclarationLayoutEXT`), about 23,000 `disableVertexAttribArray` and 23,000
+  `vertexAttribDivisor` per frame plus the matching enable/pointer/VAO binds; uniforms account for
+  roughly 43,000 more. Caching the remapped layout needs every path that relies on the restored
+  layout (custom and compiled effects) audited first, which is why it was not folded into GLB-41.
+
 ## 4. Open questions for the project owner — resolved 2026-07-19
 
 - `GLB-14` (rename `examples/easygl_*.cpp` → `opengles_*.cpp`?): **Decided: keep `easygl_` —

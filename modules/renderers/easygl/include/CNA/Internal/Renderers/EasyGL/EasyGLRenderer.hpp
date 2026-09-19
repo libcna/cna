@@ -985,6 +985,10 @@ namespace CNA::Internal::Renderers::EasyGL
         bool begun = false;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
         EasyGLRenderer* graphicsRenderer_ = nullptr;
+        // GLB-41: viewport writes and reads go through the owning renderer's record, so the
+        // record sees every glViewport this context receives. Without an owner, straight to GL.
+        void SetGlViewport(int x, int y, int width, int height);
+        void GetGlViewport(int& x, int& y, int& width, int& height);
 
         // Batching state: quads are accumulated between Begin()/End() and
         // flushed in one draw call. A flush also occurs when the texture changes.
@@ -1271,6 +1275,24 @@ namespace CNA::Internal::Renderers::EasyGL
         bool viewportIsDefault_ = true;
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
+
+        // GLB-41: the GL viewport as last programmed through SetGlViewport(). Every glViewport this
+        // context receives goes through it, so the per-draw pixel-centre correction and the sprite
+        // flush read the record instead of glGetIntegerv(GL_VIEWPORT) -- which under WebGL is a
+        // getParameter call per draw. Tied to the context generation: a new or restored context
+        // reads the real value once.
+        struct GlViewportShadow
+        {
+            std::uint64_t generation = 0;
+            bool known = false;
+            int x = 0;
+            int y = 0;
+            int width = 0;
+            int height = 0;
+        };
+        GlViewportShadow glViewportShadow_;
+        void SetGlViewport(int x, int y, int width, int height);
+        void GetGlViewport(int& x, int& y, int& width, int& height);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         friend class EasyGLCompiledEffect;
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
@@ -1354,6 +1376,41 @@ namespace CNA::Internal::Renderers::EasyGL
         // MOJOSHADER_XNA4_VERTEX_TEXTURES.
         static constexpr int kMaxSamplerSlots = 20;
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
+
+        // GLB-41: what this renderer last wrote into each samplers_[slot]. GraphicsDevice re-applies
+        // all sixteen pixel samplers before every draw, and each application still makes the
+        // object's complete state a function of its own arguments (REMED-GFX-174, FX-092) -- but a
+        // write is issued only when the object does not already hold that exact value. The
+        // renderer is the only writer and the only binder of these objects, so the record cannot
+        // go stale; it is dropped whenever the object is recreated or the context is lost.
+        enum class SamplerShadowField : std::size_t
+        {
+            MinFilter,
+            MagFilter,
+            MaxAnisotropy,
+            WrapS,
+            WrapT,
+            WrapR,
+            MinLod,
+            MaxLod,
+            LodBias,
+            CompareMode,
+            Count
+        };
+        struct SamplerSlotShadow
+        {
+            std::array<bool, static_cast<std::size_t>(SamplerShadowField::Count)> known{};
+            std::array<std::uint32_t, static_cast<std::size_t>(SamplerShadowField::Count)> bits{};
+            bool bound = false;
+        };
+        std::array<SamplerSlotShadow, kMaxSamplerSlots> samplerShadows_{};
+        ::easygl::Sampler& AcquireSampler(int slot);
+        void WriteSamplerParameter(int slot, SamplerShadowField field,
+                                   ::easygl::SamplerParameter pname, int value);
+        void WriteSamplerParameter(int slot, SamplerShadowField field,
+                                   ::easygl::SamplerParameter pname, float value);
+        void BindSamplerToOwnUnit(int slot);
+
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
         /// plans/plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
@@ -1614,6 +1671,10 @@ namespace CNA::Internal::Renderers::EasyGL
         };
         NativeWireframeApi nativeWireframeApi_ = NativeWireframeApi::None;
         bool fillModeWireframe_ = false;
+        // GLB-41: the polygon mode last sent to the context. The rasterizer state is re-applied
+        // before every draw, and the mode itself almost never changes; empty means "not known for
+        // this context", so DetectNativeWireframeApi() clears it and the next application writes.
+        std::optional<bool> appliedNativeWireframe_;
 
         // A compensated negative base can require an attribute address before buffer start on
         // GLES/WebGL and is driver-sensitive even where a native desktop entry point exists.

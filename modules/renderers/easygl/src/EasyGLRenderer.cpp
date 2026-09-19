@@ -51,6 +51,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -1554,6 +1555,49 @@ if (ProfileIsEs2ApiGeneration())
                 glTexParameterfFn(static_cast<unsigned int>(target), kGlTextureMaxAnisotropyExt, value);
         }
 
+        struct AnisotropyLimits
+        {
+            bool supported = false;
+            float maxAnisotropy = 1.0f;
+        };
+
+        /// GLB-41: whether GL_EXT_texture_filter_anisotropic is advertised, and its
+        /// GL_MAX_TEXTURE_MAX_ANISOTROPY, are constants of the context -- read once per context
+        /// generation, the same lifetime meta-gl gives the extension list HasExtension() scans.
+        /// Both sampler paths used to query them on every application; under WebGL that
+        /// glGetFloatv is a synchronous getParameter round trip, issued once per anisotropic draw.
+        const AnisotropyLimits& CurrentContextAnisotropyLimits()
+        {
+            static AnisotropyLimits limits;
+            static std::uint64_t generation = 0;
+            static bool known = false;
+            const std::uint64_t current = metagl::GetContextGeneration();
+            if (!known || generation != current)
+            {
+                limits = {};
+                limits.supported = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
+                if (limits.supported)
+                {
+                    GLfloat cap = 1.0f;
+                    metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &cap);
+                    limits.maxAnisotropy = cap;
+                }
+                generation = current;
+                known = true;
+            }
+            return limits;
+        }
+
+        /// XNA converts the signed MaxAnisotropy property to UInt32 before applying the device cap.
+        float ClampedMaxAnisotropy(int maxAnisotropy, const AnisotropyLimits& limits)
+        {
+            const float requested = static_cast<float>(static_cast<std::uint32_t>(maxAnisotropy));
+            float clamped = (limits.maxAnisotropy > 0.0f && requested > limits.maxAnisotropy)
+                ? limits.maxAnisotropy : requested;
+            if (clamped < 1.0f) clamped = 1.0f;
+            return clamped;
+        }
+
         /// Writes @p desc onto whatever texture object(s) are bound to @p unit right now.
         ///
         /// Keeps the SAME ordinal -> min/mag/mip decomposition table as ApplySamplerState's
@@ -1633,18 +1677,11 @@ if (ProfileIsEs2ApiGeneration())
                 }
             };
 
-            const bool hasAniso = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
+            const AnisotropyLimits& aniso = CurrentContextAnisotropyLimits();
+            const bool hasAniso = aniso.supported;
             float anisoValue = 1.0f;
             if (hasAniso && desc.filter == 2)
-            {
-                GLfloat maxAnisoCap = 1.0f;
-                metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-                // XNA converts the signed property to UInt32 before applying the device cap.
-                const float requested = static_cast<float>(
-                    static_cast<std::uint32_t>(desc.maxAnisotropy));
-                anisoValue = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
-                if (anisoValue < 1.0f) anisoValue = 1.0f;
-            }
+                anisoValue = ClampedMaxAnisotropy(desc.maxAnisotropy, aniso);
 
             ::metagl::glActiveTexture(ToTextureUnit(unit));
 
@@ -5584,6 +5621,22 @@ if (ProfileUsesGlslEs100())
         begun = false;
     }
 
+    void EasyGLSpriteBatchRenderer::SetGlViewport(int x, int y, int width, int height)
+    {
+        if (graphicsRenderer_)
+            graphicsRenderer_->SetGlViewport(x, y, width, height);
+        else
+            device_.set_viewport(x, y, width, height);
+    }
+
+    void EasyGLSpriteBatchRenderer::GetGlViewport(int& x, int& y, int& width, int& height)
+    {
+        if (graphicsRenderer_)
+            graphicsRenderer_->GetGlViewport(x, y, width, height);
+        else
+            device_.get_viewport(x, y, width, height);
+    }
+
     void EasyGLSpriteBatchRenderer::FlushBatch()
     {
         if (pending_vertices_.empty()) return;
@@ -5632,7 +5685,7 @@ if (ProfileUsesGlslEs100())
         // ortho from the full target/logical size, so a custom Viewport was ignored for sprites. The
         // default full-target viewport keeps the exact prior behavior (reset + full-target/logical ortho).
         int curVx = 0, curVy = 0, curVw = 0, curVh = 0;
-        device_.get_viewport(curVx, curVy, curVw, curVh);
+        GetGlViewport(curVx, curVy, curVw, curVh);
         int fullW = 0, fullH = 0;
         if (haveRt) { fullW = rtW; fullH = rtH; }
         else if (graphicsRenderer_) graphicsRenderer_->getPhysicalSize(fullW, fullH);
@@ -5689,7 +5742,7 @@ if (ProfileUsesGlslEs100())
         }
         else if (haveRt)
         {
-            device_.set_viewport(0, 0, rtW, rtH);
+            SetGlViewport(0, 0, rtW, rtH);
             logW = rtW;
             logH = rtH;
         }
@@ -5699,13 +5752,13 @@ if (ProfileUsesGlslEs100())
             // that both keeps the letterbox bars (resetting to the full drawable is what discarded
             // them) and repairs a rectangle the last resize left stale.
             if (defW > 0 && defH > 0)
-                device_.set_viewport(defX, defGlY, defW, defH);
+                SetGlViewport(defX, defGlY, defW, defH);
             graphicsRenderer_->getLogicalSize(logW, logH);
         }
         if (logW <= 0 || logH <= 0)
         {
             int vx, vy, vw, vh;
-            device_.get_viewport(vx, vy, vw, vh);
+            GetGlViewport(vx, vy, vw, vh);
             logW = vw;
             logH = vh;
         }
@@ -5716,7 +5769,7 @@ if (ProfileUsesGlslEs100())
         if (std::getenv("CNA_EASYGL_SPRITE_VIEWPORT_DEBUG") != nullptr)
         {
             int gx = 0, gy = 0, gw = 0, gh = 0;
-            device_.get_viewport(gx, gy, gw, gh);
+            GetGlViewport(gx, gy, gw, gh);
             std::fprintf(stderr,
                 "[spritevp] entry=(%d,%d,%dx%d) def=(%d,%d,%dx%d) defGlY=%d custom=%d "
                 "full=(%dx%d) log=(%dx%d) atDraw=(%d,%d,%dx%d) haveRt=%d\n",
@@ -5905,7 +5958,7 @@ if (ProfileUsesGlslEs100())
         int rtW = 0, rtH = 0;
         if (graphicsRenderer_->GetCurrentRenderTarget2DSize(rtW, rtH) && rtW > 0 && rtH > 0)
         {
-            device_.set_viewport(0, 0, rtW, rtH);
+            SetGlViewport(0, 0, rtW, rtH);
             logicalWidth = rtW;
             logicalHeight = rtH;
         }
@@ -5913,7 +5966,7 @@ if (ProfileUsesGlslEs100())
         {
             int physW = 0, physH = 0;
             graphicsRenderer_->getPhysicalSize(physW, physH);
-            if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
+            if (physW > 0 && physH > 0) SetGlViewport(0, 0, physW, physH);
             graphicsRenderer_->getLogicalSize(logicalWidth, logicalHeight);
         }
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
@@ -6280,10 +6333,9 @@ if (ProfileUsesGlslEs100())
                         : capabilities.is_opengl() && capabilities.is_at_least(3, 0))
                 && metagl::IsFunctionAvailable("glColorMaski");
             }
-            const bool hasAniso = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
-            GLfloat maxAnisoCap = 1.0f;
-            if (hasAniso)
-                metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
+            const AnisotropyLimits& anisoLimits = CurrentContextAnisotropyLimits();
+            const bool hasAniso = anisoLimits.supported;
+            const float maxAnisoCap = anisoLimits.maxAnisotropy;
             // A startup diagnostic belongs on stderr, through the logger that honours log levels
             // -- stdout is the program's own output channel, and a library writing to it corrupts
             // anything that pipes a game's output. GraphicsDeviceRendererTest::
@@ -6563,6 +6615,10 @@ if (ProfileUsesGlslEs100())
         default_flat_normal_texture_ready_ = false;
         for (auto& sampler : samplers_)
             sampler.reset_handle_no_gl();
+        // The records describe the lost context's objects and state (GLB-41).
+        samplerShadows_.fill({});
+        glViewportShadow_ = {};
+        appliedNativeWireframe_.reset();
 
         msaaFbo_.reset_handle_no_gl();
         msaaColorRbo_.reset_handle_no_gl();
@@ -8373,6 +8429,7 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::DetectNativeWireframeApi()
     {
         nativeWireframeApi_ = NativeWireframeApi::None;
+        appliedNativeWireframe_.reset();
         if (ProfileIsDesktopCore())
         {
             if (LoadEasyGlProcAddress("glPolygonMode") != nullptr)
@@ -8400,12 +8457,15 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (nativeWireframeApi_ == NativeWireframeApi::None || metagl::IsContextLost())
             return;
+        if (appliedNativeWireframe_ == wireframe)
+            return;
 
         if (nativeWireframeApi_ == NativeWireframeApi::WebGlPolygonMode)
         {
 #if defined(__EMSCRIPTEN__)
             CNA_SetWebGLPolygonMode(wireframe ? 1 : 0);
 #endif
+            appliedNativeWireframe_ = wireframe;
             return;
         }
 
@@ -8421,6 +8481,7 @@ if (!ProfileIsEs2ApiGeneration())
         constexpr unsigned int kGlLine = 0x1B01;
         constexpr unsigned int kGlFill = 0x1B02;
         polygonMode(kGlFrontAndBack, wireframe ? kGlLine : kGlFill);
+        appliedNativeWireframe_ = wireframe;
     }
 
     void EasyGLRenderer::RequireSupportedFillModeEXT(PrimitiveType primitive) const
@@ -8511,6 +8572,29 @@ if (!ProfileIsEs2ApiGeneration())
         }
     }
 
+    void EasyGLRenderer::SetGlViewport(int x, int y, int width, int height)
+    {
+        device.set_viewport(x, y, width, height);
+        glViewportShadow_ = {metagl::GetContextGeneration(), true, x, y, width, height};
+    }
+
+    void EasyGLRenderer::GetGlViewport(int& x, int& y, int& width, int& height)
+    {
+        const std::uint64_t generation = metagl::GetContextGeneration();
+        if (!glViewportShadow_.known || glViewportShadow_.generation != generation)
+        {
+            // Nothing has been programmed through SetGlViewport() in this context yet: GL still
+            // holds the viewport it was created with. Read it once.
+            int vx = 0, vy = 0, vw = 0, vh = 0;
+            device.get_viewport(vx, vy, vw, vh);
+            glViewportShadow_ = {generation, true, vx, vy, vw, vh};
+        }
+        x = glViewportShadow_.x;
+        y = glViewportShadow_.y;
+        width = glViewportShadow_.width;
+        height = glViewportShadow_.height;
+    }
+
     void EasyGLRenderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         if (metagl::IsContextLost()) return;
@@ -8528,7 +8612,7 @@ if (!ProfileIsEs2ApiGeneration())
             int physW;
             getPhysicalSize(physW, fbH);
         }
-        device.set_viewport(x, fbH - y - h, w, h);
+        SetGlViewport(x, fbH - y - h, w, h);
         device.set_depth_range(minDepth, maxDepth);
         // Record whether this is the default viewport while the presentation rectangle is still
         // the one this call was derived from.
@@ -8569,9 +8653,7 @@ if (ProfileIsEs2ApiGeneration())
 }
 else
 {
-        ::easygl::Sampler& s = samplers_[slot];
-        if (!s.is_created())
-            s.create();
+        ::easygl::Sampler& s = AcquireSampler(slot);
 
         // TextureFilter → min/mag filter
         // XNA: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3,
@@ -8629,8 +8711,12 @@ else
             magF = ::easygl::TextureMagFilter::Linear;
             break;
         }
-        s.set_parameter(::easygl::SamplerParameter::MinFilter, static_cast<int>(minF));
-        s.set_parameter(::easygl::SamplerParameter::MagFilter, static_cast<int>(magF));
+        // Every write below goes through WriteSamplerParameter (GLB-41): the value is always
+        // enforced, and the GL call is skipped only when the object already holds exactly it.
+        WriteSamplerParameter(slot, SamplerShadowField::MinFilter,
+                              ::easygl::SamplerParameter::MinFilter, static_cast<int>(minF));
+        WriteSamplerParameter(slot, SamplerShadowField::MagFilter,
+                              ::easygl::SamplerParameter::MagFilter, static_cast<int>(magF));
 
         // Task 918: real anisotropic filtering via GL_EXT_texture_filter_anisotropic, gated on
         // the extension genuinely being available; falls back to the plain trilinear filter set
@@ -8647,20 +8733,12 @@ else
         // ordinals and no Point draw could ever return a stored texel again. Vulkan cannot have
         // this defect because it builds a fresh VkSamplerCreateInfo per sampler; the mutable
         // shared object is what makes the unconditional write necessary here.
-        if (metagl::HasExtension("GL_EXT_texture_filter_anisotropic"))
+        const AnisotropyLimits& aniso = CurrentContextAnisotropyLimits();
+        if (aniso.supported)
         {
-            float clamped = 1.0f;
-            if (filter == 2)
-            {
-                GLfloat maxAnisoCap = 1.0f;
-                metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-                // XNA converts the signed property to UInt32 before applying the device cap.
-                const float requested = static_cast<float>(
-                    static_cast<std::uint32_t>(maxAnisotropy));
-                clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
-                if (clamped < 1.0f) clamped = 1.0f;
-            }
-            s.set_parameter(::easygl::SamplerParameter::MaxAnisotropy, clamped);
+            const float clamped = filter == 2 ? ClampedMaxAnisotropy(maxAnisotropy, aniso) : 1.0f;
+            WriteSamplerParameter(slot, SamplerShadowField::MaxAnisotropy,
+                                  ::easygl::SamplerParameter::MaxAnisotropy, clamped);
         }
 
         // TextureAddressMode → GL wrap: Wrap=0→Repeat, Clamp=1→ClampToEdge, Mirror=2→MirroredRepeat
@@ -8671,8 +8749,10 @@ else
             default: return static_cast<int>(::easygl::TextureWrapMode::Repeat);
             }
         };
-        s.set_parameter(::easygl::SamplerParameter::WrapS, toWrap(addressU));
-        s.set_parameter(::easygl::SamplerParameter::WrapT, toWrap(addressV));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapS,
+                              ::easygl::SamplerParameter::WrapS, toWrap(addressU));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapT,
+                              ::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
         // plans/plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
         // reused for every later application on that slot -- the same shape that made REMED-GFX-174
@@ -8692,25 +8772,30 @@ else
         // The W axis follows addressU because every XNA 4.0 SamplerState preset (PointClamp,
         // LinearWrap, AnisotropicClamp, ...) sets all three axes to the same mode, and a
         // SpriteBatch's sampler state is always one of those shapes.
-        s.set_parameter(::easygl::SamplerParameter::WrapR, toWrap(addressU));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapR,
+                              ::easygl::SamplerParameter::WrapR, toWrap(addressU));
         // MaxMipLevel's default of 0 under ApplySamplerMipState's own mapping, and GL's default
         // upper bound. Both written unconditionally so a previous MinLod cannot survive here.
-        s.set_parameter(::easygl::SamplerParameter::MinLod, 0.0f);
-        s.set_parameter(::easygl::SamplerParameter::MaxLod, 1000.0f);
+        WriteSamplerParameter(slot, SamplerShadowField::MinLod,
+                              ::easygl::SamplerParameter::MinLod, 0.0f);
+        WriteSamplerParameter(slot, SamplerShadowField::MaxLod,
+                              ::easygl::SamplerParameter::MaxLod, 1000.0f);
         if (ProfileIsDesktopCore())
         {
             // Spelled numerically for the same reason ApplySamplerMipState spells it that way:
             // GL_TEXTURE_LOD_BIAS does not exist in OpenGL ES, and one translation unit serves
             // both profiles.
             constexpr unsigned int kGlTextureLodBias = 0x8501u;
-            s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), 0.0f);
+            WriteSamplerParameter(slot, SamplerShadowField::LodBias,
+                                  static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), 0.0f);
         }
         // XNA 4.0 has no shadow-comparison sampler at all, so nothing in CNA ever enables one --
         // but the property is mutable on this shared object, and "nothing writes it today" is
         // exactly the assumption the mip states were built on. GL_NONE, written every time.
-        s.set_parameter(::easygl::SamplerParameter::CompareMode, 0);
+        WriteSamplerParameter(slot, SamplerShadowField::CompareMode,
+                              ::easygl::SamplerParameter::CompareMode, 0);
 
-        s.bind(static_cast<unsigned int>(slot));
+        BindSamplerToOwnUnit(slot);
 
         if (SamplerTraceEnabled())
         {
@@ -8749,8 +8834,7 @@ if (ProfileIsEs2ApiGeneration())
 }
 else
 {
-        ::easygl::Sampler& s = samplers_[slot];
-        if (!s.is_created()) s.create();
+        AcquireSampler(slot);
         // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
         // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
         // driver makes with min_lod. Microsoft writes the signed property through D3D9's DWORD
@@ -8761,9 +8845,9 @@ else
         // uint32_t(-1) after its lossy conversion to a roughly 4.29-billion float.
         constexpr std::uint32_t kGlDefaultMaxLod = 1000u;
         const std::uint32_t requested = static_cast<std::uint32_t>(maxMipLevel);
-        s.set_parameter(
-            ::easygl::SamplerParameter::MinLod,
-            static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
+        WriteSamplerParameter(slot, SamplerShadowField::MinLod,
+                              ::easygl::SamplerParameter::MinLod,
+                              static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
         if (ProfileIsDesktopCore())
         {
             // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which
@@ -8771,9 +8855,10 @@ else
             // is spelled as its numeric token because the ES headers an ES-profile build compiles
             // against do not declare the name, and this one translation unit serves both.
             constexpr unsigned int kGlTextureLodBias = 0x8501u;
-            s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
+            WriteSamplerParameter(slot, SamplerShadowField::LodBias,
+                                  static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
         }
-        s.bind(static_cast<unsigned int>(slot));
+        BindSamplerToOwnUnit(slot);
 }
     }
 
@@ -8959,15 +9044,63 @@ if (ProfileIsEs2ApiGeneration())
 }
 else
 {
-        ::easygl::Sampler& s = samplers_[slot];
-        if (!s.is_created()) s.create();
+        AcquireSampler(slot);
         // Same TextureAddressMode -> GL wrap table ApplySamplerState uses for S and T.
         int wrap = static_cast<int>(::easygl::TextureWrapMode::Repeat);
         if (addressW == 1) wrap = static_cast<int>(::easygl::TextureWrapMode::ClampToEdge);
         else if (addressW == 2) wrap = static_cast<int>(::easygl::TextureWrapMode::MirroredRepeat);
-        s.set_parameter(::easygl::SamplerParameter::WrapR, wrap);
-        s.bind(static_cast<unsigned int>(slot));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapR,
+                              ::easygl::SamplerParameter::WrapR, wrap);
+        BindSamplerToOwnUnit(slot);
 }
+    }
+
+    ::easygl::Sampler& EasyGLRenderer::AcquireSampler(int slot)
+    {
+        ::easygl::Sampler& s = samplers_[slot];
+        if (!s.is_created())
+        {
+            s.create();
+            // A new object holds GL's defaults, not whatever the previous one was left with.
+            samplerShadows_[static_cast<std::size_t>(slot)] = {};
+        }
+        return s;
+    }
+
+    void EasyGLRenderer::WriteSamplerParameter(int slot, SamplerShadowField field,
+                                               ::easygl::SamplerParameter pname, int value)
+    {
+        SamplerSlotShadow& shadow = samplerShadows_[static_cast<std::size_t>(slot)];
+        const auto index = static_cast<std::size_t>(field);
+        const auto bits = static_cast<std::uint32_t>(value);
+        if (shadow.known[index] && shadow.bits[index] == bits)
+            return;
+        samplers_[slot].set_parameter(pname, value);
+        shadow.known[index] = true;
+        shadow.bits[index] = bits;
+    }
+
+    void EasyGLRenderer::WriteSamplerParameter(int slot, SamplerShadowField field,
+                                               ::easygl::SamplerParameter pname, float value)
+    {
+        // Compared bit for bit: "the object already holds exactly this value", nothing looser.
+        SamplerSlotShadow& shadow = samplerShadows_[static_cast<std::size_t>(slot)];
+        const auto index = static_cast<std::size_t>(field);
+        const auto bits = std::bit_cast<std::uint32_t>(value);
+        if (shadow.known[index] && shadow.bits[index] == bits)
+            return;
+        samplers_[slot].set_parameter(pname, value);
+        shadow.known[index] = true;
+        shadow.bits[index] = bits;
+    }
+
+    void EasyGLRenderer::BindSamplerToOwnUnit(int slot)
+    {
+        SamplerSlotShadow& shadow = samplerShadows_[static_cast<std::size_t>(slot)];
+        if (shadow.bound)
+            return;
+        samplers_[slot].bind(static_cast<unsigned int>(slot));
+        shadow.bound = true;
     }
 
     // -------------------------------------------------------------------------
@@ -12089,7 +12222,7 @@ CNA_GL_PUNCTUAL_DECL
         // pixel displacement Wine/MonoGame use: 63/128 of a window pixel. Post-multiplying a
         // row-vector WVP by this clip-space translation produces clip.xy += offset * clip.w.
         int viewportX = 0, viewportY = 0, viewportWidth = 0, viewportHeight = 0;
-        device.get_viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        GetGlViewport(viewportX, viewportY, viewportWidth, viewportHeight);
         // REMED-GFX-235: not while the destination is multisampled.
         //
         // The correction above is a GEOMETRY translation, and that is only equivalent to what it
