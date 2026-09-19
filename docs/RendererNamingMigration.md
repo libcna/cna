@@ -56,7 +56,8 @@ Unchanged on purpose (not CNA graphics-renderer terminology):
   `sg_query_backend`/`SG_BACKEND_*`, bgfx (retired 2026-09-17) `bgfx::RendererType::*`
   (including its `OpenGLES` value and name string);
 - historical evidence: `audit/`, `modularization/` campaign records, plan
-  ledgers (`plan_*.md`, `NEXT*.md` task histories), spike directories, and the
+  ledgers (`plan_*.md`, `NEXT*.md` task histories), surviving spike directories
+  (with retired probes available in Git history), and the
   historical `BackendLibraries.cmake` references that describe the pre-Phase-3
   build.
 

@@ -159,8 +159,9 @@ Tier D entries are cheap in *concept* and expensive in *toolchain*, and the argu
 supported them no longer holds. They were listed because the repository then carried a legacy
 renderer series (`DIRECTX1`…`DIRECTX10`, `GLIDE`) that treated historical accuracy as a goal in
 itself. **That entire series was retired on 2026-09-17**, so a Tier D proposal can no longer point
-at a precedent inside CNA — it has to make the case from nothing. The spike directories
-(`spikes/dx1-spike/` …) remain as the record of what those investigations cost.
+at a precedent inside CNA — it has to make the case from nothing. The retired renderers' findings
+remain in their historical plans and `docs/removed-renderers.md`; the probe sources are available
+through Git history rather than retained under `spikes/`.
 
 ## 4. Explicitly **not** new identities
 
@@ -201,8 +202,9 @@ admission test, not paperwork:
 8. Registered in **both** registries so `scripts/check_renderer_identities.py` recounts cleanly.
 
 Recommended additional gate for everything in §3: an **existence-gate spike** first, in a repo-root
-`<name>-spike/` directory (per `CLAUDE.md`), proving the underlying API can clear a screen and draw
-one textured quad before any renderer code is written. The `dx9-spike/` precedent applies verbatim.
+`spikes/<name>-spike/` directory (per `CLAUDE.md`), proving the underlying API can clear a screen
+and draw one textured quad before any renderer code is written. The `spikes/dx9-spike/` precedent
+applies while the renderer remains in the supported or candidate set.
 
 ## 6. Sequencing — withdrawn
 

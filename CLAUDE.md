@@ -437,16 +437,18 @@ directory and is shared by all multi-renderer work.
 
 ---
 
-## Existence-Gate Spikes — Persistent Directories Too
+## Existence-Gate Spikes
 
 Standalone existence-gate spike programs (throwaway-looking probes proving a new renderer's
 underlying API works before any renderer code is written — see `DX1-0`, `DX2-0`, `D9-0`) follow
 the same build-location rule as CMake builds (see *Build locations & caching* above): write and
 compile them in a `spikes/<name>-spike/` directory (see `spikes/dx9-spike/README.md` for the
-precedent), never in the session scratchpad. Once a spike's finding is settled, keep its `.cpp`
-source and a short `README.md` of what it proved committed there; gitignore only the built
-binaries (`*.exe`, `*.o`) inside that directory. `ccache` works for MinGW cross-compiles too
-(`ccache x86_64-w64-mingw32-g++ …`), same as the native launcher.
+precedent), never in the session scratchpad. While the renderer remains a candidate or a supported
+implementation, commit the probe source and a short `README.md` of what it proved; gitignore only
+the built binaries (`*.exe`, `*.o`). When the renderer is retired or the proposal is rejected,
+remove its spike directory and obsolete ignore rules from the current tree. Record the conclusion
+in the plan or retired-renderer register; Git history retains the probe source. `ccache` works for
+MinGW cross-compiles too (`ccache x86_64-w64-mingw32-g++ …`), same as the native launcher.
 
 ---
 

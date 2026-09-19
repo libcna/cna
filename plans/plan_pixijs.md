@@ -2,6 +2,9 @@
 
 > **Retired renderer — historical record.** The `PIXIJS` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 49 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
 
+> **Runner cleanup.** The browser runner named below was removed with the renderer on 2026-09-17;
+> its paths and commands are historical. Git history retains the source.
+
 > **Status legend** (this project's own convention): ✅ implemented *and verified against its stated
 > acceptance criteria*; 🟨 code or documentation exists but has not met those criteria; ⬜ not
 > implemented.

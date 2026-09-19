@@ -2,6 +2,8 @@
 
 > **Retired renderer — historical record.** The `DIRECTX7` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 28 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
 
+> **Probe cleanup (2026-09-19).** The retired renderer spike directories were removed from the current tree under RRC-011. References to probe files below describe historical evidence; the sources remain in Git history.
+
 > **Status (2026-07-21): `DX7-0` spike AND implementation phases S1-S8 all complete and verified.**
 > 20/20 `DX7`-labeled CTests pass (19 ported + the renamed `Dx7_Stencil`), on the second attempt: the
 > `DX7-0` spike didn't exercise texture BLENDING, and Wine's `IDirect3DDevice7::SetRenderState`

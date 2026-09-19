@@ -2,6 +2,8 @@
 
 > **Retired renderer — historical record.** The `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`, `DIRECTX10` renderer identities were retired on 2026-09-17; their implementations were removed from the tree and their C ABI values are permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
 
+> **Probe cleanup (2026-09-19).** The retired renderer spike directories were removed from the current tree under RRC-011. References to probe files below describe historical evidence; the sources remain in Git history.
+
 > Short, English-language index for the whole "legacy DirectX" backend line, per the project
 > owner's direct instruction (2026-07-20). This file stays short on purpose — each version gets
 > its own full `plan_dxN.md` (this repo's standing convention, see `plan_freedirect.md`/`plan_dx9.md`)

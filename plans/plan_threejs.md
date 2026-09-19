@@ -1,5 +1,10 @@
 # Three.js Graphics Renderer — Feasibility Analysis and Implementation Plan
 
+> **Rejected candidate — historical analysis.** No `THREEJS` renderer was implemented. The owner
+> removed its standalone probe from the current tree on 2026-09-19 along with retired renderer
+> probes (`plans/plan_renderer_cleanup.md`, RRC-011). The measurements below record the 2026-09-04
+> investigation; the probe source is available in Git history.
+
 > **Status legend** (this project's own convention): ✅ implemented *and verified against its stated
 > acceptance criteria*; 🟨 code or documentation exists but has not met those criteria; ⬜ not
 > implemented.
@@ -13,15 +18,15 @@ here may be implemented because this file exists. `THREEJS` needs a **fresh expl
 instruction** before a single line of renderer code is written.
 
 One thing *has* been done, because it is what makes the rest of this document evidence rather than
-opinion: the **existence-gate spike** (`spikes/threejs-spike/`, `THREEJS-0`), which answers in a
+opinion: the **existence-gate spike** (`THREEJS-0`, now in Git history), which answered in a
 real browser against the real library what a `THREEJS` renderer could and could not do.
 
 | Evidence | Result |
 |---|---|
-| `spikes/threejs-spike/spike.html` — can the renderer exist at all? | **22/22 checks pass** |
-| `spikes/threejs-spike/spike-batch.html` — what could it honestly claim? | **11/11 checks pass** |
+| Historical `spike.html` — can the renderer exist at all? | **22/22 checks pass** |
+| Historical `spike-batch.html` — what could it honestly claim? | **11/11 checks pass** |
 | three.js revision exercised | r185 (`0.185.1`), MIT |
-| Browser | headless Chromium on SwiftShader, via `scripts/run_pixijs_browser_tests.mjs` |
+| Browser | headless Chromium on SwiftShader, via the historical PixiJS browser runner |
 | Emscripten link path (`THREEJS-0b`) | **NOT verified — no emsdk in the session that wrote this** |
 
 **Every technical premise this plan depends on is measured and holds.** The renderer is buildable.
@@ -156,8 +161,8 @@ claim. Three alternatives that cost less and deliver more are listed in §9.
 ## 2. Capability boundary, from measurement
 
 What `THREEJS` would report from `SupportsCapability()`. Rows marked **measured** are proven in
-`spikes/threejs-spike/`; rows marked *unmeasured* are capabilities the plan must measure in its own
-phase before claiming, and which report `false` until then. No capability is claimed on the
+the historical `THREEJS-0` probe; rows marked *unmeasured* are capabilities the plan must measure
+in its own phase before claiming, and which report `false` until then. No capability is claimed on the
 strength of "three.js probably supports it".
 
 | `GraphicsCapability` | Verdict | Evidence |
@@ -307,7 +312,7 @@ applies to that revision).
 
 | ID | Task | Status |
 |---|---|---|
-| THREEJS-0 | Browser existence-gate spike: 33 checks across `spike.html` + `spike-batch.html`, proving DD2–DD11. `spikes/threejs-spike/` | ✅ |
+| THREEJS-0 | Browser existence-gate spike: 33 checks across `spike.html` + `spike-batch.html`, proving DD2–DD11. Source retained in Git history. | ✅ |
 | THREEJS-0b | **Emscripten existence gate.** Prove `--extern-pre-js` + `addRunDependency` holds `main()` until the dynamic `import()` resolves, and that CMake can emit both ESM files beside the bundle so the module loader finds them. **Blocking: no phase below may start until this passes.** Needs an emsdk. | ⬜ |
 
 ### Phase 1 — Identity registration (14)
@@ -478,7 +483,7 @@ All are `RawShaderMaterial` + CNA's own GLSL ES 3.00, DD4.
 | ID | Task |
 |---|---|
 | THREEJS-107 | `modules/renderers/threejs/tests/` — browser-independent contracts as native GTest, the `cna_test_pixijs_host` pattern (`CNA_BUILD_THREEJS_HOST_TESTS=ON`) |
-| THREEJS-108 | Browser pixel suite driven by `scripts/run_pixijs_browser_tests.mjs`; every capability claimed in §2 has a check |
+| THREEJS-108 | Browser pixel suite; every capability claimed in §2 has a check |
 | THREEJS-109 | `cna_demo_2d` and a 3D demo render and **display** under `THREEJS` in a real browser — `WICKED` was removed partly for shipping zero examples |
 | THREEJS-110 | Multi-renderer set (`THREEJS;WEBGL2;CANVAS`) configures and links; `THREEJS` non-default still reaches the link line |
 | THREEJS-111 | `docs/threejs-renderer.md` capability boundary; five platform gates + `hot_path_lint.py` pass |
@@ -538,15 +543,10 @@ Three readings of the request, each cheaper and each delivering more:
 
 ---
 
-## 10. Reproduce the evidence
+## 10. Historical evidence
 
-```bash
-./spikes/threejs-spike/fetch.sh
-node scripts/run_pixijs_browser_tests.mjs spikes/threejs-spike spike.html spike-batch.html
-```
-
-Expected: `spike.html: PASS (22/22)`, `spike-batch.html: PASS (11/11)`.
-
-See `spikes/threejs-spike/README.md` for what each check proves and for the two findings (y-down
-winding; the `readRenderTargetPixels` attachment argument) that would otherwise each have cost a
-session.
+The 2026-09-04 run recorded `spike.html: PASS (22/22)` and
+`spike-batch.html: PASS (11/11)`. The probe and its browser runner were removed from the current
+tree during renderer cleanup. Git history retains the source and the probe README, including the
+two findings about y-down winding and the `readRenderTargetPixels` attachment argument. The
+commands that once reproduced this run no longer apply to a current checkout.

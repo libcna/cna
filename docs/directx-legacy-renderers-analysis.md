@@ -209,8 +209,9 @@ Two things worth calling out from the matrix:
   execute-buffer estimate was analysis-level and did not hold up empirically.** `plans/plan_dx2.md`'s
   `DX2-0` existence-gate spike found the literal execute-buffer Direct3D (`IDirect3D`/
   `IDirect3DDevice::Execute`) genuinely non-functional in this environment's Wine — 14 variants
-  tried, every one produced black output despite every API call succeeding (`dx2-spike/README.md`
-  has the full record). The *next* interface revision, `IDirect3DDevice2`'s `DrawPrimitive`/
+  tried, every one produced black output despite every API call succeeding (`plans/plan_dx2.md`
+  records the finding; the original probe is in Git history). The *next* interface revision,
+  `IDirect3DDevice2`'s `DrawPrimitive`/
   `DrawIndexedPrimitive` (added in the DIRECTX3 SDK, not the DIRECTX2 SDK), works correctly and is what the
   shipping `DIRECTX2` renderer is actually built on (owner-confirmed scope decision). Measured result:
   real geometry, real order-independent depth-test occlusion, real one-texture sampling, and real

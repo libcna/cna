@@ -26,6 +26,12 @@ renderer count is not a goal.
 | RRC-008 | Build matrix, negative configure matrix, full test corpus, closing report | ✅ |
 | RRC-009 | Final pass: remove `DrawMeshEXT`, the dead API the curation left with no implementer | ✅ |
 | RRC-010 | Final pass: audit `needsSurfacePresenter` and `TERMINAL` — decide, do not assume | ✅ |
+| RRC-011 | Remove retired renderer spikes and the rejected Three.js probe; repair current-tree references and retention policy | ✅ |
+
+**2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
+candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
+decision recorded below describes what happened in `RRC-001`–`RRC-008`; `RRC-011` supersedes it.
+The historical plans keep the measurements, and Git history retains the deleted probe sources.
 
 `RRC-009` and `RRC-010` are the **final cleanup pass** before integration, opened to close the two
 rows this plan left under *"Findings outside scope"* as needing an owner decision. They are
@@ -137,7 +143,7 @@ mention at least one retired identity. By area:
 | `cmake/` (35), `CMakeLists.txt`, `scripts/` (29), `tools/` (8), `.github/` (6) | build, gates, CI | edit or delete (RRC-002/003/004) |
 | `docs/` (≈100) | live product documentation | rewrite; renderer-specific pages deleted and tombstoned (RRC-005) |
 | `plans/` (≈70), `NEXT*.md`, `handoff_*.md` | task logs and ledgers | kept as history; per-renderer ones get a retired banner (RRC-005) |
-| `audit/` (321), `modularization/` (102), `integration/` (33), `remediation/` (8), `spikes/` | dated evidence snapshots of earlier trees | kept verbatim as history; spikes of retired renderers get a retired banner (RRC-005) |
+| `audit/` (321), `modularization/` (102), `integration/` (33), `remediation/` (8), `spikes/` | dated evidence snapshots of earlier trees | originally kept as history and bannered (RRC-005); retired renderer probes later removed in RRC-011 |
 
 ### Shared code that must stay
 
@@ -184,9 +190,10 @@ Shared code whose only consumer is a retired family, and therefore goes with it:
    retired identity list lives in one CMake file read before SDL availability is decided, and every
    route (`CNA_GRAPHICS_RENDERER`, `CNA_GRAPHICS_RENDERERS`, `CNA_RENDERER_<X>=ON`) fails the configure
    naming the identity, its retired C ABI value and `docs/removed-renderers.md`.
-4. **Documentation.** Live pages describing a retired renderer (`docs/<x>-renderer.md`, parity reports)
-   are deleted and replaced by tombstone entries; plans, ledgers, audits and spikes are history and
-   stay, with a retired banner on the per-renderer ones so they cannot be read as current support.
+4. **Documentation (RRC-001 decision, superseded for probes by RRC-011).** Live pages describing a
+   retired renderer (`docs/<x>-renderer.md`, parity reports) are deleted and replaced by tombstone
+   entries; plans, ledgers, audits and spikes were initially kept as history, with a retired banner
+   on the per-renderer ones so they could not be read as current support.
 5. **Commits.** One commit per task RRC-002 … RRC-008 (RRC-001 is the plan). Each leaves the
    configure working; the identity-count tripwires move in RRC-002 with the registry.
 
@@ -331,7 +338,7 @@ currently supports?*
 | **(a) Active claim** | A renderer list, a build/run instruction, a capability sentence in the present tense | **Fixed.** Includes the two glTF PBR refusal *runtime messages*, which named six retired renderers as alternatives for a user to switch to — the worst kind, because a user would follow the advice and hit a configure refusal. The real lists were derived from the guards' actual call sites, not guessed. Also the C ABI and XNA header docs naming `SKIA` as a device-reset renderer, `GraphicsCapability`'s 2D-only and volume-storage prose, `SpriteBatch::DrawMeshEXT`'s "implemented only by the Skia renderer", and `needsSurfacePresenter`'s "(SKIA, BLEND2D)" |
 | **(b) Legitimate historical** | 376 comment sites in `modules/*/tests/` and `modules/*/examples/` | **Kept, tagged.** These are dated task records (`REMED-GFX-###`, `Task ###`, `SKIA-###`) and defect analyses that explain *why a shared test exists* — `rendertarget_first_use_test.cpp` carries a 40-line reading of a bgfx-local defect, quoting bgfx's own source. Deleting them would destroy the reason the test is there while changing nothing about the tree. The first mention in a block gets `(retired 2026-09-17)` |
 | **(c) Retired-ID documentation** | `CNA/C/graphics.h`'s reserved-value comment, `cmake/RendererIdentities.cmake`, `scripts/check_renderer_identities.py`, `docs/removed-renderers.md`, `docs/renderer-registry.md`, `docs/c-api/ABI_VERSIONING.md`, `CLAUDE.md`/`AGENTS.md` | **Required to exist.** These *are* the record that a value is reserved. Removing them is how a value gets reused |
-| **(d) Frozen archives** | `audit/` (321 files), `remediation/`, `modularization/`, `integration/lanes/`, `spikes/`, per-renderer `plans/plan_*.md`, `NEXT*.md`, `handoff_*.md` | **Kept verbatim, bannered.** One banner per archive index rather than edits to ~300 files: they record audits that really ran against the tree of their own date, and rewriting them would destroy that. The banner says the archive predates the curation and names what no longer exists |
+| **(d) Frozen archives** | `audit/` (321 files), `remediation/`, `modularization/`, `integration/lanes/`, `spikes/`, per-renderer `plans/plan_*.md`, `NEXT*.md`, `handoff_*.md` | **Originally kept verbatim, bannered.** One banner per archive index rather than edits to ~300 files: they record audits that really ran against the tree of their own date. RRC-011 later removed the retired and rejected renderer probes from `spikes/`; Git history retains those sources. |
 
 Two judgement calls worth stating plainly. `docs/runtime-renderer-selection.md` keeps an `LLGL`
 fallback transcript and an `LLGL` binary-size row: both are *measurements that really happened*,
@@ -763,3 +770,32 @@ than adding an exemption for the file — an exemption would have opened the who
 the name it exists to keep out. The only allowances are the gate's own source, the files whose
 subject *is* the removal (`CHANGELOG.md`, the ABI release notes, the dated `0.9.0` handoff note), the
 separately-checked ABI baseline, and one explanatory comment in the re-instrumented sort-mode test.
+
+---
+
+## RRC-011 — Remove obsolete renderer probes
+
+**Owner decision, 2026-09-19.** A retired renderer's standalone existence-gate probe no longer
+belongs in the current tree. Delete its probe directory when the renderer is retired; keep the
+conclusion in the historical plan or tombstone and rely on Git history for the original source.
+The same rule applies to a rejected candidate such as Three.js.
+
+This pass removed 41 tracked files from eleven directories: `dx2`, `dx3`, `dx5`, `dx6`, `dx7`,
+`dx8`, `dx10`, `nanovg`, `openvg`, `tinygl` and `threejs` under `spikes/`, each with the `-spike`
+suffix. The first ten belong to the 25 retired identities; Three.js never became an identity and
+its feasibility analysis recommends against building it. The other 26 spike directories remain.
+Obsolete ignore rules were removed from `.gitignore`. `CLAUDE.md` and the candidate guidance now
+require probe removal when a renderer is retired or rejected. Current documentation points to the
+recorded findings rather than missing directories; historical plans have a notice explaining their
+old probe references. The Three.js reproduction recipe was removed because the PixiJS browser
+runner it invoked had already been deleted with that renderer.
+
+**Verification.** A directory inventory confirms all eleven named directories are absent and the
+other 26 remain. No current-tree reference to their paths remains outside historical plans and the
+dated integration record. `scripts/check_renderer_identities.py` passes, preserving 25 live and 26
+retired identities; all 34 `CnaRendererRetired` CTests pass. Incremental builds of
+`cna_renderer_headless` and `cna_c_api` pass with `CCACHE_DISABLE=1`. The whole
+`cmake-build-debug` configuration is still blocked by the unrelated
+`EasyGLRedundantStateTests.cpp` missing `metagl/metagl.hpp`; its first attempt also encountered a
+read-only `/rv/cnaccache` and was rerun with ccache disabled. No CMake or runtime source was
+changed in RRC-011.

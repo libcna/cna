@@ -13,6 +13,10 @@ as history, marked retired. What git does *not* preserve is the third-party proj
 wrapped, so every entry records the exact dependency it was pinned to. That pairing — CNA's code in
 git history, the dependency's coordinates here — is the archive.
 
+Standalone probes for retired renderers were also removed from the current `spikes/` tree. Their
+measured conclusions remain in the historical plans and entries below; Git history retains their
+source if a past result needs to be inspected.
+
 **A revert is a reference, not a patch.** `IGraphicsRenderer` changes often. Beyond a few months a
 removal commit is a specification to port forward, not a patch to apply. Expect to read it, not
 `git revert` it.
@@ -137,9 +141,10 @@ requests a surface presenter, so the `TERMINAL` platform's CI leg now builds `SO
 
 **What they proved.** The real COM interface of each DirectX generation, one step at a time
 (`plans/plan_dxold.md` and `plans/plan_dx1.md`…`plans/plan_dx8.md`): DirectDraw v1 2D; Direct3D
-`DrawPrimitive` once the execute-buffer model was shown non-functional under Wine (`spikes/dx2-spike`);
-DirectDraw v2 and v4; FVF submission; real stencil in DirectX 6; the flattened DirectX 7 device; and
-Direct3D 8's merged device with a DXVK delivery route. `DIRECTX3` here is the *real* DirectX 3 renderer;
+`DrawPrimitive` once the execute-buffer model was shown non-functional under Wine (recorded in
+`plans/plan_dx2.md`); DirectDraw v2 and v4; FVF submission; real stencil in DirectX 6; the
+flattened DirectX 7 device; and Direct3D 8's merged device with a DXVK delivery route. `DIRECTX3`
+here is the *real* DirectX 3 renderer;
 the `../free-direct`-backed renderer that once held that name is `FREEDIRECT` and stays.
 
 ### DIRECTX10
@@ -254,7 +259,7 @@ contract, and that its Vulkan module was not a safe fallback at that pin (`plans
 | Build was | `-DCNA_GRAPHICS_RENDERER=OPENVG` |
 
 **What it proved.** Real Khronos OpenVG 1.1 calls on a CNA-owned GL context, and an end-to-end audit
-of 2D presentation, scissor and blend math against a vector API (`spikes/openvg-spike`).
+of 2D presentation, scissor and blend math against a vector API (recorded in Git history).
 
 ### TINYGL
 
@@ -266,7 +271,7 @@ of 2D presentation, scissor and blend math against a vector API (`spikes/openvg-
 | Build was | `-DCNA_GRAPHICS_RENDERER=TINYGL` |
 
 **What it proved.** The fixed-function CPU counterpart to `PORTABLEGL`, with a 1-bit colour-key
-transparency model and cross-platform CI (`plans/plan_tinygl.md`, `spikes/tinygl-spike`).
+transparency model and cross-platform CI (`plans/plan_tinygl.md`).
 
 ### IGL
 

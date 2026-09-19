@@ -848,6 +848,9 @@ lines and a final `=== n/m PASS ===`) and what "Playwright is available" means -
 through the script's own `--check-playwright` mode, which the CMake gate calls so a gate and a run
 cannot disagree. The script's header records both callers.
 
+**Historical runner note (2026-09-19).** The named script was removed with the PixiJS renderer on
+2026-09-17. The paragraph above records how `CABI-39` ran at the time; it is not a current command.
+
     --- browser_probe.html ---
     [ok] the ES module factory instantiates in a browser
     [ok] cna_get_abi_version answers: 0.9.0

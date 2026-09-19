@@ -2,6 +2,8 @@
 
 > **Retired renderer — historical record.** The `DIRECTX10` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 30 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
 
+> **Probe cleanup (2026-09-19).** The retired renderer spike directories were removed from the current tree under RRC-011. References to probe files below describe historical evidence; the sources remain in Git history.
+
 > **Status (2026-07-21): DONE.** `DX10-0` existence-gate spike complete; implementation phases
 > T1-T8 all complete, built, and verified: 10/10 `D3D10`-labeled CTests pass, no new cross-backend
 > regressions (`GraphicsDeviceCapabilityTest` shows only 2 pre-existing-style "out of this v1's

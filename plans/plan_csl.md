@@ -1162,7 +1162,7 @@ the WebGPU renderer builds and runs on this machine with a real GPU.
 | CSL-1301 | The existing `webgpu_shaders.hpp` WGSL is compared against generated equivalents | ⬜ | Two of the renderer's own shaders re-expressed in CSL; the generated and hand-written WGSL compared for behaviour (identical readback) and for size. The numbers inform Phase 41. |
 | CSL-1302 | Optional `naga`/`tint` oracle | ⬜ | SKIPs when absent, named. When present, every corpus artifact is validated. |
 | CSL-1303 | wgpu-native's own validation is used as the always-available oracle | ⬜ | Because the WebGPU renderer *is* here, `wgpuDeviceCreateShaderModule` validates every emitted WGSL with real error messages — a stronger, always-present check than any of the optional tools. Every corpus case passes it, and that count is the row's evidence. |
-| CSL-1304 | Emscripten path: the same WGSL runs in a browser | ⬜ | Through the existing `scripts/run_pixijs_browser_tests.mjs`-style harness adapted for WebGPU, or ⛔ with the reason if the browser WebGPU path is not yet available in this environment. |
+| CSL-1304 | Emscripten path: the same WGSL runs in a browser | ⬜ | Through a browser harness adapted for WebGPU, or ⛔ with the reason if the browser WebGPU path is not yet available in this environment. |
 
 ---
 

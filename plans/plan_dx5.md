@@ -2,6 +2,8 @@
 
 > **Retired renderer — historical record.** The `DIRECTX5` renderer identity was retired on 2026-09-17; its implementation was removed from the tree and its C ABI value 26 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/` no longer exist. See `plans/plan_renderer_cleanup.md` and `docs/removed-renderers.md`.
 
+> **Probe cleanup (2026-09-19).** The retired renderer spike directories were removed from the current tree under RRC-011. References to probe files below describe historical evidence; the sources remain in Git history.
+
 > **Status (2026-07-21): all phases complete and verified.** 19/19 `DX5`-labeled CTests pass, all
 > green on the first run after the port. See §2 for the spike result, the phase tables below for
 > the implementation, and `docs/dx5-backend.md` for the full write-up.

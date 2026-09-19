@@ -77,7 +77,9 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 These renderers no longer exist in CNA (`docs/removed-renderers.md`). Their plans are kept as the
 record of the work; each carries a retired banner, and none of them describes current support.
-(Skia's own plan was deleted with that renderer in 2026-08; the tombstone is the record.)
+Their standalone probes were removed from the current `spikes/` tree under
+`plan_renderer_cleanup.md` RRC-011; probe paths inside historical plans refer to Git history.
+Skia's own plan was deleted with that renderer in 2026-08; the tombstone is the record.
 
 - [`plan_ascii.md`](plan_ascii.md) — the former ASCII renderer identity, replaced by a
   renderer-neutral post-process effect.
