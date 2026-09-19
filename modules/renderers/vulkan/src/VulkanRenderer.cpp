@@ -2569,6 +2569,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             buffer_, memory_, &mappedPtr_);
         allocatedBytes_ = size;
+        hostBytes_.resize(static_cast<std::size_t>(size));
     }
 
     void VulkanVertexBufferRenderer::EnsureByteCapacity(VkDeviceSize needed)
@@ -2590,16 +2591,16 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             grownBuffer, grownMemory, &grownMapped);
 
-        // Carry the bytes already uploaded across. A grow is triggered by an upload that is about
-        // to overwrite them, but SetData is not the only reader of this mapping and a partially
-        // filled buffer must not become garbage because it grew.
-        if (mappedPtr_ && allocatedBytes_ > 0)
-            std::memcpy(grownMapped, mappedPtr_, static_cast<std::size_t>(allocatedBytes_));
+        // Carry already uploaded bytes across from the cached CPU shadow. Reading the old Vulkan
+        // mapping here can be very slow on discrete and integrated GPU memory alike.
+        if (allocatedBytes_ > 0)
+            std::memcpy(grownMapped, hostBytes_.data(), static_cast<std::size_t>(allocatedBytes_));
 
         buffer_         = grownBuffer;
         memory_         = grownMemory;
         mappedPtr_      = grownMapped;
         allocatedBytes_ = needed;
+        hostBytes_.resize(static_cast<std::size_t>(needed));
 
         // Safe without a fence: nothing outside this object holds the handle (see the header).
         if (oldBuffer != VK_NULL_HANDLE) vkDestroyBuffer(dev, oldBuffer, nullptr);
@@ -2643,7 +2644,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vertex_count <= 0 || stride_in_bytes == 0) return;
 
         // VULKAN-130: reserve the WHOLE logical capacity at this stride, not just the bytes this
-        // call writes. Every draw route copies out of this mapping at the caller's own
+        // call writes. Every draw route copies out of the matching CPU shadow at the caller's own
         // vertexStart/vertexCount, which the shared layer bounds by the buffer's capacity rather
         // than by the last upload -- so a mapping sized to one short upload would still be read
         // past its end by a legal draw.
@@ -2651,8 +2652,9 @@ namespace CNA::Internal::Renderers::Vulkan
             std::max(vertex_count, capacity_)) * static_cast<VkDeviceSize>(stride_in_bytes);
         EnsureByteCapacity(span);
 
-        std::memcpy(mappedPtr_, data,
-                    static_cast<std::size_t>(vertex_count) * stride_in_bytes);
+        const std::size_t bytes = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
+        std::memcpy(hostBytes_.data(), data, bytes);
+        std::memcpy(mappedPtr_, data, bytes);
     }
 
     // =========================================================================
@@ -2673,6 +2675,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             buffer_, memory_, &mappedPtr_);
         allocatedBytes_ = size;
+        hostBytes_.resize(static_cast<std::size_t>(size));
     }
 
     void VulkanIndexBufferRenderer::RequireByteCapacity(VkDeviceSize needed, const char* what) const
@@ -2713,7 +2716,9 @@ namespace CNA::Internal::Renderers::Vulkan
         RequireByteCapacity(
             static_cast<VkDeviceSize>(index_count) * sizeof(uint16_t), "a 16-bit index upload");
         indexCount_ = index_count;
-        std::memcpy(mappedPtr_, data, static_cast<size_t>(index_count) * sizeof(uint16_t));
+        const std::size_t bytes = static_cast<std::size_t>(index_count) * sizeof(uint16_t);
+        std::memcpy(hostBytes_.data(), data, bytes);
+        std::memcpy(mappedPtr_, data, bytes);
     }
 
     void VulkanIndexBufferRenderer::SetData32(const void* data, int index_count)
@@ -2722,7 +2727,9 @@ namespace CNA::Internal::Renderers::Vulkan
         RequireByteCapacity(
             static_cast<VkDeviceSize>(index_count) * sizeof(uint32_t), "a 32-bit index upload");
         indexCount_ = index_count;
-        std::memcpy(mappedPtr_, data, static_cast<size_t>(index_count) * sizeof(uint32_t));
+        const std::size_t bytes = static_cast<std::size_t>(index_count) * sizeof(uint32_t);
+        std::memcpy(hostBytes_.data(), data, bytes);
+        std::memcpy(mappedPtr_, data, bytes);
     }
 
     // =========================================================================

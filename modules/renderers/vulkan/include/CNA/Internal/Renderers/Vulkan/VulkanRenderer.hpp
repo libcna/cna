@@ -1400,7 +1400,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkBuffer    GetBuffer()    const { return buffer_; }
         int         GetCapacity()  const { return capacity_; }
-        const void* GetMappedPtr() const { return mappedPtr_; }
+        // Deferred draws copy from ordinary cached RAM, not a CPU-slow GPU mapping.
+        const void* GetMappedPtr() const { return hostBytes_.data(); }
         std::size_t GetStride()    const { return stride_; }
         /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
         const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
@@ -1425,8 +1426,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// 80, so the guess is genuinely too small for layouts this renderer draws.
         ///
         /// Discarding the old handles needs no fence and no device wait: this VkBuffer is a
-        /// host-visible CPU-side store that no command buffer ever binds. Every draw route copies
-        /// the bytes out of `mappedPtr_` into its own deferred record (`Pending3DDraw::vbData`),
+        /// host-visible upload store that no command buffer ever binds. Every draw route copies
+        /// from the cached-RAM shadow into its own deferred record (`Pending3DDraw::vbData`),
         /// so nothing but this object can name the handle. Keep that true, or this needs the
         /// retirement queue.
         void EnsureByteCapacity(VkDeviceSize needed);
@@ -1438,6 +1439,7 @@ namespace CNA::Internal::Renderers::Vulkan
         int                     vertexCount_ = 0;
         std::size_t             stride_      = 0;
         VkDeviceSize            allocatedBytes_ = 0;
+        std::vector<std::uint8_t> hostBytes_;
         VulkanRenderer*  owner_       = nullptr;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
@@ -1459,7 +1461,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         VkBuffer    GetBuffer()    const { return buffer_; }
-        const void* GetMappedPtr() const { return mappedPtr_; }
+        const void* GetMappedPtr() const { return hostBytes_.data(); }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -1486,6 +1488,7 @@ namespace CNA::Internal::Renderers::Vulkan
         int                     indexCount_    = 0;
         bool                    thirtyTwoBit_  = false;
         VkDeviceSize            allocatedBytes_ = 0;
+        std::vector<std::uint8_t> hostBytes_;
         VulkanRenderer*  owner_         = nullptr;
     };
 
