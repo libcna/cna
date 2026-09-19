@@ -7,6 +7,20 @@
 > output alias, verified by native OPENGLES3 and browser WEBGL2 Evolved gameplay. This changes
 > no class-completion status below.
 
+> **Inspector extension note (2026-09-17, `INSP-0001`):** the optional
+> `CNA::Inspector` module and separate `cna-inspector` browser bridge are outside the XNA API
+> surface and outside the default `CNA` link umbrella. They consume the unchanged diagnostics
+> provider version 1 through bounded authenticated requests; no XNA declaration, diagnostics-core
+> contract, renderer behavior, or C ABI declaration was added. See `plans/plan_inspector.md` and
+> `docs/inspector.md` for the verified boundary.
+
+> **Diagnostics extension note (2026-09-17, `DIAG-0001`):** the new standard-library-only
+> `CNA::Diagnostics` module is outside the XNA API surface. Engine integration preserves XNA/FNA
+> behavior and is confined to common runtime, graphics-resource/device, and mixer seams; the one
+> protected hook inside `Microsoft::Xna::Framework::Graphics::GraphicsResource` is explicitly
+> marked `CNAEXT` and is absent from OFF builds. No C ABI declaration was added. See
+> `plans/plan_diagnostics.md` and `docs/diagnostics.md` for the verified boundary.
+
 > **Renderer capability note (2026-08-22, `MOD-2203`):** the non-XNA renderer discovery surface
 > now has an additive detailed profile beside the unchanged legacy `GraphicsCapability` summary:
 > 30 append-only atomic features, four-state answers, 10 known/unknown limits, per-format

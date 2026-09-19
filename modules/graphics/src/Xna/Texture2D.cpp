@@ -17,6 +17,9 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -351,6 +354,11 @@ namespace Microsoft::Xna::Framework::Graphics
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
+            format_, "Texture2D"));
+#endif
     }
 
     Texture2D::Texture2D(const std::string& assetName)
@@ -360,6 +368,11 @@ namespace Microsoft::Xna::Framework::Graphics
         height   = data.height;
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         // No GraphicsDevice — renderer stays null until attached.
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
+            format_, "Texture2D"));
+#endif
     }
 
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
@@ -375,6 +388,11 @@ namespace Microsoft::Xna::Framework::Graphics
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
+            format_, "Texture2D"));
+#endif
     }
 
     static int CalculateMipLevels(int w, int h)
@@ -420,6 +438,11 @@ namespace Microsoft::Xna::Framework::Graphics
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
+            format_, "Texture2D"));
+#endif
     }
 
     Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
@@ -441,6 +464,11 @@ namespace Microsoft::Xna::Framework::Graphics
         format_     = fmt;
         levelCount_ = lvlCount;
         gpuOnlyContent_ = true;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
+            format_, "Texture2D"));
+#endif
     }
 
     Texture2D::~Texture2D()

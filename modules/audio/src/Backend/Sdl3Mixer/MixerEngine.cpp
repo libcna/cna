@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#include "CNA/Diagnostics/Instrumentation.hpp"
 
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
@@ -166,6 +167,7 @@ namespace CNA::Internal::Audio
             TrackContext* deferredNext = nullptr;
             std::atomic<bool> stoppedCallbackActive{false};
             std::atomic<bool> destructionDeferred{false};
+            std::atomic<bool> diagnosticAlive{true};
         };
 
         struct PostMixContext
@@ -323,6 +325,7 @@ namespace CNA::Internal::Audio
         // empty here and contains no pointers into the mixer that just disappeared.
         g_deferredTrackDestruction.store(nullptr, std::memory_order_release);
         g_mixerShuttingDown.store(false, std::memory_order_release);
+        CNA_DIAGNOSTICS_GAUGE_SET("Audio/AllocatedVoices", 0);
     }
 
     MixerLock::MixerLock()
@@ -443,6 +446,8 @@ namespace CNA::Internal::Audio
             return nullptr;
         }
         context->nativeTrack = track;
+        CNA_DIAGNOSTICS_GAUGE_ADD("Audio/AllocatedVoices", 1);
+        CNA_DIAGNOSTICS_COUNTER_ADD("Audio/VoiceCreations", 1);
         return reinterpret_cast<MixerTrack*>(track);
     }
 
@@ -450,6 +455,8 @@ namespace CNA::Internal::Audio
     {
         if (!track) return;
         TrackContext* context = GetTrackContext(Native(track));
+        if (context && context->diagnosticAlive.exchange(false, std::memory_order_relaxed))
+            CNA_DIAGNOSTICS_GAUGE_ADD("Audio/AllocatedVoices", -1);
         if (context && context->stoppedCallbackActive.load(std::memory_order_acquire))
         {
             // Destroying from SDL_mixer's stopped callback would free the stream whose lock the

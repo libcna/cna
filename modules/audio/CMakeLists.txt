@@ -31,7 +31,7 @@ if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
 endif()
 cna_add_module(cna_audio Audio ${CNA_AUDIO_SOURCES})
 target_include_directories(cna_audio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(cna_audio PUBLIC cna_core cna_math)
+target_link_libraries(cna_audio PUBLIC cna_core cna_diagnostics cna_math)
 # XACT title-content bytes are read through the selected platform filesystem so packaged Android
 # assets and ordinary desktop paths share one loader without introducing a runtime -> audio cycle.
 target_link_libraries(cna_audio PRIVATE cna_platform)

@@ -5,6 +5,9 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "System/IO/Stream.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -173,6 +176,11 @@ namespace Microsoft::Xna::Framework::Graphics
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
         renderer_ = device.GetRenderer().CreateTextureCube(size, mipMap, static_cast<int>(format));
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::TextureCube, size_, size_, 1, levelCount_, 6,
+            format_, "TextureCube"));
+#endif
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
@@ -218,6 +226,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         format_     = format;
         levelCount_ = levelCount;
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::TextureCube, size_, size_, 1, levelCount_, 6,
+            format_, "TextureCube"));
+#endif
     }
 
     void TextureCube::Dispose(bool disposing)

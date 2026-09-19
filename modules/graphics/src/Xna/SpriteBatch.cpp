@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "CNA/Diagnostics/Instrumentation.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -487,6 +488,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "SpriteBatch.Draw: the texture belongs to a different GraphicsDevice than this "
                 "SpriteBatch. A resource may only be drawn by the device that created it.");
         }
+        CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/SpriteSubmissions", 1);
         SpriteInfo info;
         info.texture    = std::move(textureRenderer);
         info.destX      = destX;

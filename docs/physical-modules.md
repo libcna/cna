@@ -18,6 +18,8 @@ umbrella targets and the physical source-partition validator.
 | Module root | Kind | CMake target (alias) | Direct CNA deps (PUBLIC unless noted) | SharpRuntime components |
 |---|---|---|---|---|
 | modules/core | base | `cna_core` (`CNA::Core`); `cna_core_headers` (`CNA::CoreHeaders`, header-only surface) | — (SDL3 private) | Core.Base |
+| modules/diagnostics | optional observation foundation (`CNA_DIAGNOSTICS`) | `cna_diagnostics` (`CNA::Diagnostics`) | — | — |
+| modules/inspector | optional development tool (`CNA_BUILD_INSPECTOR`) | `cna_inspector` (`CNA::Inspector`), `cna-inspector` executable; deliberately outside `CNA` umbrella | diagnostics, core-headers; private: OS sockets/threads | — |
 | modules/math | base | `cna_math` (`CNA::Math`) | core-headers (headers-only: CNAEXT marker) | Core.Base |
 | modules/design | opt-in tooling | `cna_design` (`CNA::Design`) | math | ComponentModel (and its public closure) |
 | modules/runtime | base | `cna_runtime` (`CNA::Runtime`) | graphics, input, content, audio, media, core, math | Core.Base, IO |

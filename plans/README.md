@@ -17,6 +17,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
 - [`plan_sdl3free.md`](plan_sdl3free.md) — SDL3-independent build paths.
 - [`plan_modern.md`](plan_modern.md) — the `CNA::Graphics` modern engine layer.
+- [`plan_diagnostics.md`](plan_diagnostics.md) — renderer-independent diagnostics, profiling,
+  bounded recording, and the Inspector provider boundary.
+- [`plan_inspector.md`](plan_inspector.md) — optional authenticated agent, compact protocol,
+  separate bridge/browser UI, security, tests, and performance validation.
 - [`cna-samples/plan.md`](../../cna-samples/plan.md) — authoritative sample coverage,
   cross-repository gap fixes and native/web verification work.
 

@@ -3,6 +3,9 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -140,6 +143,11 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->SetData32(cpuShadow_.data(), indexCount_);
         else
             renderer_->SetData16(cpuShadow_.data(), indexCount_);
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeBufferDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::IndexBuffer,
+            static_cast<std::uint64_t>(capacity), "IndexBuffer"));
+#endif
     }
 
     IndexBuffer::~IndexBuffer()

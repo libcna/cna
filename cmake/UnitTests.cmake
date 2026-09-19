@@ -59,6 +59,12 @@ if(CNA_BUILD_TESTS)
     # probes above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
 
+    # Inspector support is a separately linked development tool. Its tests exercise the real
+    # socket agent and protocol library, so they are absent with the default compiled-out mode.
+    if(NOT CNA_BUILD_INSPECTOR)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/inspector/tests/.*\\.cpp$")
+    endif()
+
     # plans/plan_dx.md DX-250/DX-269: XmlSerializationEXTTests includes the optional
     # SharpRuntime::Xml.Serialization component directly. Windows intentionally omits that
     # component while its Diagnostics dependency still includes POSIX-only <poll.h> outside its
@@ -360,6 +366,7 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_content_pipeline cna_content_pipeline cna_content_compiler)
     set(CNA_TEST_GROUP_DEPENDENCY_core cna_core)
     set(CNA_TEST_GROUP_DEPENDENCY_design cna_design)
+    set(CNA_TEST_GROUP_DEPENDENCY_diagnostics cna_diagnostics)
     set(CNA_TEST_GROUP_DEPENDENCY_devices cna_devices)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_gamer_services CNA_GamerServices)
@@ -373,6 +380,9 @@ if(CNA_BUILD_TESTS)
         set(CNA_TEST_GROUP_DEPENDENCY_input cna_input SharpRuntime::Xml.Serialization)
     else()
         set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
+    endif()
+    if(CNA_BUILD_INSPECTOR)
+        set(CNA_TEST_GROUP_DEPENDENCY_inspector cna_inspector)
     endif()
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
@@ -402,12 +412,14 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_FOCUSED_TARGET_content_pipeline CnaContentPipelineTests)
     set(CNA_TEST_FOCUSED_TARGET_core CnaCoreTests)
     set(CNA_TEST_FOCUSED_TARGET_design CnaDesignTests)
+    set(CNA_TEST_FOCUSED_TARGET_diagnostics CnaDiagnosticsTests)
     set(CNA_TEST_FOCUSED_TARGET_devices CnaDevicesTests)
     set(CNA_TEST_FOCUSED_TARGET_devices_ext CnaDevicesExtTests)
     set(CNA_TEST_FOCUSED_TARGET_gamer_services CnaGamerServicesTests)
     set(CNA_TEST_FOCUSED_TARGET_graphics CnaGraphicsTests)
     set(CNA_TEST_FOCUSED_TARGET_graphics_ext CnaGraphicsExtTests)
     set(CNA_TEST_FOCUSED_TARGET_input CnaInputModuleTests)
+    set(CNA_TEST_FOCUSED_TARGET_inspector CnaInspectorTests)
     set(CNA_TEST_FOCUSED_TARGET_integration CnaIntegrationTests)
     set(CNA_TEST_FOCUSED_TARGET_math CnaMathTests)
     set(CNA_TEST_FOCUSED_TARGET_media CnaMediaTests)
@@ -545,6 +557,9 @@ if(CNA_BUILD_TESTS)
     endif()
     if(TARGET cna_content_compiler)
         target_link_libraries(CnaTests PRIVATE cna_content_compiler)
+    endif()
+    if(TARGET cna_inspector)
+        target_link_libraries(CnaTests PRIVATE cna_inspector)
     endif()
 
     # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which

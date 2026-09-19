@@ -4,6 +4,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -174,6 +177,11 @@ namespace Microsoft::Xna::Framework::Graphics
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height, depth) : 1;
         renderer_ = device.GetRenderer().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::Texture3D, width_, height_, depth_, levelCount_, 1,
+            format_, "Texture3D"));
+#endif
     }
 
     void Texture3D::Dispose(bool disposing)

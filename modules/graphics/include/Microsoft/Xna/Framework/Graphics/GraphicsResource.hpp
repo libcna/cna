@@ -5,6 +5,9 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
+#if defined(CNA_DIAGNOSTICS_LEVEL) && CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Diagnostics/Diagnostics.hpp"
+#endif
 
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -104,6 +107,15 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         virtual void Dispose(bool disposing);
 
+#if defined(CNA_DIAGNOSTICS_LEVEL) && CNA_DIAGNOSTICS_LEVEL >= 1
+        /**
+         * @brief Updates this resource's diagnostics-only metadata.
+         * @param descriptor New metadata copied by the diagnostics registry.
+         */
+        CNAEXT void UpdateDiagnosticResourceEXT(
+            const CNA::Diagnostics::ResourceDescriptor& descriptor) noexcept;
+#endif
+
     private:
         struct SharedIdentity;
 
@@ -119,6 +131,9 @@ namespace Microsoft::Xna::Framework::Graphics
         std::string name_;
         System::Object* tag_ = nullptr;
         bool isDisposed_ = false;
+#if defined(CNA_DIAGNOSTICS_LEVEL) && CNA_DIAGNOSTICS_LEVEL >= 1
+        CNA::Diagnostics::ResourceHandle diagnosticResource_;
+#endif
 
     private:
         mutable std::shared_ptr<SharedIdentity> sharedIdentity_;

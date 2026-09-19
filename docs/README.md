@@ -1,6 +1,6 @@
 # docs/ index
 
-217 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+229 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -12,6 +12,13 @@ on it) rather than assuming either way.
 - **`../NEXT.md`** (repo root) — the single most reliable, actively-maintained document in the
   repository. §5 is the current known-bugs-and-limitations list; treat it as the source of truth for
   "is X still broken" over any dated snapshot below.
+- **[`diagnostics.md`](diagnostics.md)** — CNA's OFF/STATS/FULL profiler architecture, public API,
+  renderer-independent engine metrics, bounded event/trace formats, resource accuracy rules, and
+  Inspector provider boundary. Performance methodology and measured cost are in
+  [`diagnostics-benchmark.md`](diagnostics-benchmark.md).
+- **[`inspector.md`](inspector.md)** — the optional authenticated out-of-process CNA Inspector,
+  compact protocol, local browser UI, activation/security model, capabilities, and limitations.
+  Inspector overhead measurements are in [`inspector-benchmark.md`](inspector-benchmark.md).
 - **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
   (SDL_Renderer/EasyGL/Vulkan/DirectX). Start here for "does renderer X support feature Y."
 - **[`renderer-capability-profiles.md`](renderer-capability-profiles.md)** — the additive detailed

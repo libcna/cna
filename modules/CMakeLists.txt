@@ -240,6 +240,7 @@ target_compile_definitions(cna_build_config INTERFACE
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_VIDEO_AVAILABLE>
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
+        CNA_DIAGNOSTICS_LEVEL=${CNA_DIAGNOSTICS_LEVEL}
 )
 
 if(EMSCRIPTEN)
@@ -331,6 +332,8 @@ set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
 # --- Module composition. Order is readability-only: target_link_libraries resolves
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
+add_subdirectory(diagnostics)
+add_subdirectory(inspector)
 add_subdirectory(math)
 add_subdirectory(design)
 # The platform contract (plans/plan_platform.md): composed before the subsystems that will consume
@@ -389,6 +392,7 @@ target_link_libraries(CNA INTERFACE
         cna_audio
         cna_input
         cna_graphics_core
+        cna_diagnostics
         cna_core
         cna_math
         cna_platform
@@ -409,11 +413,12 @@ endif()
 # directory outside the declared set, fails the configure. The one documented
 # target-membership exception is GDI compiling eight software-module 2D TUs
 # (modules/renderers/gdi/CMakeLists.txt) -- physical ownership stays with software.
-# examples/ joined src/ and tests/ as a declared owned area when the tracked examples
+# examples/ and benchmarks/ joined src/ and tests/ as declared owned areas when the tracked examples
 # moved into their owning modules (module-examples campaign): a module may own
-# modules/<name>/examples/, and example TUs outside every declared module still fail.
+# modules/<name>/examples/ or modules/<name>/benchmarks/, and TUs outside every declared
+# module still fail.
 set(_cna_framework_modules
-    c-api core math design platform runtime graphics input audio media video-ffmpeg content
+    c-api core diagnostics inspector math design platform runtime graphics input audio media video-ffmpeg content
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
@@ -425,11 +430,11 @@ string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     CONFIGURE_DEPENDS "*.cpp" "*.mm")
 foreach(_cna_tu IN LISTS _cna_all_module_tus)
-    if(NOT _cna_tu MATCHES "^(${_cna_framework_module_pattern})/(src|tests|examples)/"
+    if(NOT _cna_tu MATCHES "^(${_cna_framework_module_pattern})/(src|tests|examples|benchmarks)/"
             AND NOT _cna_tu MATCHES
-                "^renderers/(${_cna_renderer_module_pattern})/(src|tests|examples)/")
+                "^renderers/(${_cna_renderer_module_pattern})/(src|tests|examples|benchmarks)/")
         message(FATAL_ERROR
-            "CNA: translation unit outside every declared physical module src/tests/examples "
+            "CNA: translation unit outside every declared physical module src/tests/examples/benchmarks "
             "tree: modules/${_cna_tu} -- add it to a module (modules/<name>/src) or extend "
             "the declared module set here deliberately.")
     endif()

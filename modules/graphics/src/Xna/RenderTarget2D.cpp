@@ -3,6 +3,9 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+#include "CNA/Internal/Graphics/DiagnosticResource.hpp"
+#endif
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -158,6 +161,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // MultiSampleCount reflects the renderer's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
         if (rtRenderer_) multiSampleCount_ = rtRenderer_->GetMultiSampleCount();
+#if CNA_DIAGNOSTICS_LEVEL >= 1
+        UpdateDiagnosticResourceEXT(CNA::Internal::Graphics::MakeTextureDiagnosticDescriptor(
+            CNA::Diagnostics::ResourceKind::RenderTarget2D, getWidthProperty(),
+            getHeightProperty(), 1, getLevelCountProperty(), 1, getFormatProperty(),
+            "RenderTarget2D"));
+#endif
     }
 
     RenderTarget2D::RenderTarget2D(RenderTarget2D&& other) noexcept
