@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -210,6 +211,22 @@ protected:
                     sa + da * (1.0f - sa),
                     "AlphaBlend (premultiplied convention)");
 
+        // A deferred batch applies its state at End(), after the backend's Begin() callback.
+        // A transparent atlas texel must preserve the destination even when a 3D draw left the
+        // device in Opaque; otherwise each glyph quad erases the scene behind the letter.
+        {
+            Texture2D transparent = Texture2D::CreateFromPixels(
+                device, 1, 1, std::vector<std::uint8_t>{0, 0, 0, 0});
+            device.SetRenderTarget(target_.get());
+            device.Clear(kDestination);
+            device.setBlendStateProperty(BlendState::Opaque);
+            DrawSprite(device, Rectangle(8, 8, 48, 48), Color::White,
+                       BlendState::AlphaBlend, &transparent);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            CheckLinear(At(ReadTarget(), 32, 32), dr, dg, db, da,
+                        "Deferred AlphaBlend after Opaque keeps transparent atlas texels transparent");
+        }
+
         CheckLinear(RenderSingle(device, BlendState::NonPremultiplied),
                     sr * sa + dr * (1.0f - sa),
                     sg * sa + dg * (1.0f - sa),
@@ -339,8 +356,8 @@ protected:
                         before, after);
         }
 
-        // Capture happens at Begin(), not at End()/render time. Mutating both the caller's source
-        // BlendState object and GraphicsDevice.BlendFactor after Begin must not alter this batch.
+        // The batch retains its own BlendState value at Begin(). Mutating both the caller's source
+        // object and GraphicsDevice.BlendFactor afterwards must not alter the deferred draw.
         {
             BlendState captured;
             captured.setColorSourceBlendProperty(Blend::BlendFactor);
@@ -529,6 +546,7 @@ public:
     WebGpuSpriteBatchBlendStateTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(128);
         graphics_->setPreferredBackBufferHeightProperty(96);
     }

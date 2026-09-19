@@ -3325,10 +3325,8 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (begun_)
             throw std::logic_error("CNA WebGPU SpriteBatch.Begin called twice without End");
-        // REMED-GFX-102: SpriteBatch::Begin has already atomically applied its by-value
-        // BlendState (including BlendFactor) to GraphicsDevice. Capture that complete normalized
-        // state now, before Deferred sorting postpones the renderer Draw calls until End().
-        blendSnapshot_ = owner_->CaptureSpriteBlendSnapshot();
+        // Deferred SpriteBatch applies its BlendState at End(), just before forwarding Draw calls.
+        // Capturing here would retain the preceding 3D draw's state (often Opaque) instead.
         begun_ = true;
     }
 
@@ -3432,9 +3430,10 @@ namespace CNA::Internal::Renderers::WebGPU
         const auto* samplable = dynamic_cast<const IWebGPUSamplable*>(&texture);
         if (samplable == nullptr)
             throw std::invalid_argument("CNA WebGPU: SpriteBatch received a texture from another graphics renderer");
+        const WebGPUSpriteBlendSnapshot blendSnapshot = owner_->CaptureSpriteBlendSnapshot();
         owner_->QueueSprite(texture, *samplable, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
-                            addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, blendSnapshot_);
+                            addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, blendSnapshot);
     }
 
     WebGPURenderer::WebGPURenderer(const GraphicsRendererCreateArgs& args)

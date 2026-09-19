@@ -1104,9 +1104,6 @@ namespace CNA::Internal::Renderers::WebGPU
         int maxAnisotropy_ = 4;
         int maxMipLevel_ = 0;
         float lodBias_ = 0.0f;
-        // REMED-GFX-102: captured once in Begin(), before any Draw calls are deferred/sorted.
-        // Every resulting SpriteCommand receives this complete value snapshot.
-        WebGPUSpriteBlendSnapshot blendSnapshot_{};
     };
 
     class WebGPURenderer final : public IGraphicsRenderer
