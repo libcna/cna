@@ -2,8 +2,9 @@
 // WEBGPU-12/59: every per-draw vertex/uniform buffer used to be created fresh and released every
 // draw, every frame (churn); now they are acquired from a bounded transient pool and recycled after
 // submit, and the SpriteBatch dynamic vertex buffer is a 3-slot ring. This stress test renders a
-// fixed scene (several colour 3D quads + several sprites) for many frames and proves the pool is
-// bounded and reused.
+// fixed scene (hundreds of indexed colour 3D quads + several sprites) for many frames and proves
+// the pool is bounded and reused. The indexed draw count exceeds the old 128-buffer per-class
+// limit so it also guards deferred index-buffer recycling under a busy scene.
 //
 // Check A -- after a warm-up, the transient-buffer CREATE count stops climbing entirely across the
 //   remaining frames: a repeating scene allocates nothing new (the whole point of the pool).
@@ -24,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -34,6 +36,7 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <cstdio>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,8 +57,8 @@ class WebGpuBufferPoolStressTest : public Game
     int result_ = 1;
 
     static constexpr int kWarmupFrame = 6;    ///< By here every pipeline/buffer class has been seen.
-    static constexpr int kTotalFrames = 40;
-    static constexpr int kQuadsPerFrame = 8;
+    static constexpr int kTotalFrames = 16;
+    static constexpr int kQuadsPerFrame = 320;
     static constexpr int kSpritesPerFrame = 6;
 
     void check(bool ok, const std::string& label)
@@ -67,15 +70,15 @@ class WebGpuBufferPoolStressTest : public Game
     void DrawColorQuad(GraphicsDevice& dev, float cx, const Color& c)
     {
         const float x0 = cx - 0.1f, x1 = cx + 0.1f;
-        const VertexPositionColor verts[6] = {
+        const VertexPositionColor verts[4] = {
             { Vector3(x0,  0.4f, 0.3f), c }, { Vector3(x0, -0.4f, 0.3f), c },
-            { Vector3(x1, -0.4f, 0.3f), c }, { Vector3(x0,  0.4f, 0.3f), c },
             { Vector3(x1, -0.4f, 0.3f), c }, { Vector3(x1,  0.4f, 0.3f), c },
         };
+        const std::uint16_t indices[6] = {0, 1, 2, 0, 2, 3};
         fx_->VertexColorEnabled = true;
         fx_->setLightingEnabledProperty(false);
         fx_->Apply();
-        dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+        dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, verts, 0, 4, indices, 0, 2);
     }
 
 protected:
@@ -96,7 +99,7 @@ protected:
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.Clear(Color::Black);
 
-        // A fixed set of colour 3D quads (each draw pools a vertex + uniform buffer).
+        // A fixed set of indexed quads (each draw pools an index, vertex and uniform buffer).
         for (int q = 0; q < kQuadsPerFrame; ++q)
         {
             const float cx = -0.8f + 0.2f * static_cast<float>(q);
@@ -157,6 +160,7 @@ public:
     WebGpuBufferPoolStressTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(48);
     }

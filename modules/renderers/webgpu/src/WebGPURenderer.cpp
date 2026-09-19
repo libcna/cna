@@ -147,52 +147,6 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        [[nodiscard]] WGPUBuffer CreateAndBindDeferredIndexBuffer(
-            WGPUDevice device,
-            WGPUQueue queue,
-            WGPURenderPassEncoder pass,
-            const char* label,
-            const std::vector<std::uint8_t>& logicalData,
-            bool index32)
-        {
-            const std::uint64_t logicalBytes =
-                static_cast<std::uint64_t>(logicalData.size());
-            if (logicalBytes > std::numeric_limits<std::uint64_t>::max() - 3u)
-                throw std::out_of_range(
-                    "CNA WebGPU: deferred index-buffer byte count overflow");
-            const std::uint64_t nativeBytes = Align4(logicalBytes);
-
-            WGPUBufferDescriptor descriptor{};
-            descriptor.label = StringView(label);
-            descriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
-            descriptor.size = nativeBytes;
-            WGPUBuffer buffer = wgpuDeviceCreateBuffer(device, &descriptor);
-
-            if (nativeBytes == logicalBytes)
-            {
-                wgpuQueueWriteBuffer(
-                    queue, buffer, 0, logicalData.data(), logicalData.size());
-            }
-            else
-            {
-                // wgpuQueueWriteBuffer requires a four-byte copy size. Preserve the command's
-                // exact logical index snapshot and binding range, padding only this native write.
-                // The initialized zero tail is never included in DrawIndexed's logical count.
-                std::vector<std::uint8_t> nativeData(logicalData);
-                nativeData.resize(static_cast<std::size_t>(nativeBytes), 0);
-                wgpuQueueWriteBuffer(
-                    queue, buffer, 0, nativeData.data(), nativeData.size());
-            }
-
-            wgpuRenderPassEncoderSetIndexBuffer(
-                pass,
-                buffer,
-                index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
-                0,
-                logicalBytes);
-            return buffer;
-        }
-
         // REMED-GFX-105: WebGPU enables primitive restart for indexed strip pipelines through
         // WGPUPrimitiveState::stripIndexFormat. It must match the format passed to
         // SetIndexBuffer for indexed line/triangle strips, and must remain Undefined for
@@ -3518,6 +3472,34 @@ namespace CNA::Internal::Renderers::WebGPU
         return created;
     }
 
+    WGPUBuffer WebGPURenderer::CreateAndBindDeferredIndexBuffer(
+        WGPURenderPassEncoder pass, const std::vector<std::uint8_t>& logicalData, bool index32)
+    {
+        const std::uint64_t logicalBytes = static_cast<std::uint64_t>(logicalData.size());
+        if (logicalBytes > std::numeric_limits<std::uint64_t>::max() - 3u)
+            throw std::out_of_range("CNA WebGPU: deferred index-buffer byte count overflow");
+        const std::uint64_t nativeBytes = Align4(logicalBytes);
+        WGPUBuffer buffer = AcquireTransientBuffer(
+            WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst, nativeBytes);
+
+        if (nativeBytes == logicalBytes)
+        {
+            wgpuQueueWriteBuffer(queue_, buffer, 0, logicalData.data(), logicalData.size());
+        }
+        else
+        {
+            // Keep the command's exact logical snapshot and binding range, padding only the
+            // four-byte-aligned native write. Pooling changes no deferred draw semantics.
+            std::vector<std::uint8_t> nativeData(logicalData);
+            nativeData.resize(static_cast<std::size_t>(nativeBytes), 0);
+            wgpuQueueWriteBuffer(queue_, buffer, 0, nativeData.data(), nativeData.size());
+        }
+
+        wgpuRenderPassEncoderSetIndexBuffer(pass, buffer,
+            index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16, 0, logicalBytes);
+        return buffer;
+    }
+
     void WebGPURenderer::RecycleTransientBuffer(WGPUBuffer buffer)
     {
         if (buffer == nullptr)
@@ -3536,7 +3518,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // The buffer was created at its size class, so GetSize/GetUsage rebuild the exact acquire key.
         const std::uint64_t key = TransientPoolKeyEXT(wgpuBufferGetUsage(buffer), size);
         std::vector<WGPUBuffer>& freeList = transientBufferPool_[key];
-        if (freeList.size() < kTransientPoolPerClassCap)
+        // A busy scene can need hundreds of tiny per-draw uniform/vertex buffers before the
+        // submission returns them to this pool. Keeping only 128 per class forced those buffers
+        // to be created and destroyed again on every frame. Allow up to 1 MiB of small buffers
+        // per class (at most 2048 entries), retaining the original cap for larger allocations.
+        const std::size_t cap = size <= 8192
+            ? std::clamp<std::size_t>((1u << 20) / size, kTransientPoolPerClassCap, 2048)
+            : kTransientPoolPerClassCap;
+        if (freeList.size() < cap)
             freeList.push_back(buffer);  // keep for reuse
         else
             wgpuBufferRelease(buffer);   // bound the pool: past the cap, let it go
@@ -6263,8 +6252,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU EnvMap3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -6464,8 +6452,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU Instanced3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, command.instanceCount,
                 command.firstIndex, command.baseVertex, 0);
@@ -8305,8 +8292,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU ShaderEffect IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1, command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
@@ -9043,8 +9029,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU compiled Effect IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
                                              command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
@@ -11665,8 +11650,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU Colored3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -11771,8 +11755,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU Textured3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -11888,8 +11871,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU LitTextured3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -12087,8 +12069,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU AlphaTest3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -12307,8 +12288,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU DualTexture3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -13071,8 +13051,7 @@ namespace
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU Pbr3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -13634,8 +13613,7 @@ namespace
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU Skinned3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);
@@ -14079,8 +14057,7 @@ namespace
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                device_, queue_, pass, "CNA WebGPU SkinnedPbr3D IndexBuffer",
-                command.indexData, command.index32);
+                pass, command.indexData, command.index32);
             wgpuRenderPassEncoderDrawIndexed(
                 pass, command.indexCount, 1,
                 command.firstIndex, command.baseVertex, 0);

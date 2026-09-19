@@ -3591,11 +3591,14 @@ namespace CNA::Internal::Renderers::WebGPU
         std::unordered_map<std::uint64_t, std::vector<WGPUBuffer>> transientBufferPool_;
         std::size_t transientBuffersCreatedEXT_ = 0;   ///< Lifetime count of real wgpuDeviceCreateBuffer calls.
         std::size_t transientBuffersReusedEXT_ = 0;     ///< Lifetime count of pool hits (reuses).
-        static constexpr std::size_t kTransientPoolPerClassCap = 128;  ///< Free buffers kept per size class.
+        static constexpr std::size_t kTransientPoolPerClassCap = 128;  ///< Base cap; small classes may keep up to 1 MiB / 2048 entries.
         /// Round @p size up to this pool's power-of-two size class (min 256 covers 128/160B UBOs).
         [[nodiscard]] static std::uint64_t TransientSizeClassEXT(std::uint64_t size);
         /// Acquire a pooled buffer of at least @p size with exactly @p usage (reused or freshly made).
         [[nodiscard]] WGPUBuffer AcquireTransientBuffer(WGPUBufferUsage usage, std::uint64_t size);
+        /// Upload an indexed draw's captured bytes to a pooled transient buffer and bind it.
+        [[nodiscard]] WGPUBuffer CreateAndBindDeferredIndexBuffer(
+            WGPURenderPassEncoder pass, const std::vector<std::uint8_t>& logicalData, bool index32);
         /// Return @p buffer to the pool for reuse (or release it if the class cap is reached).
         void RecycleTransientBuffer(WGPUBuffer buffer);
         /// Release every pooled buffer (teardown).
