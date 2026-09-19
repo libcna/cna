@@ -18,13 +18,18 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
@@ -89,4 +94,20 @@ TEST_F(ContentManagerSpriteFontXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
     // happened: a real, non-empty glyph set was recovered and can actually be used.
     EXPECT_GT(font.getCharactersProperty().size(), 0u);
     EXPECT_GT(font.MeasureString(std::string("Hello")).X, 0.0f);
+}
+
+TEST_F(ContentManagerSpriteFontXnbTest, ReachLoadsAnAuthoredNpotDxtSpriteFontAtlas)
+{
+    ASSERT_EQ(gd.getGraphicsProfileProperty(), GraphicsProfile::Reach);
+    EXPECT_THROW((void)Texture2D(gd, 128, 132, false, SurfaceFormat::Dxt3),
+                 System::NotSupportedException);
+
+    ContentManager cm(nullptr, "tests/assets/xnb/xna40/platformer_hud");
+    cm.setGraphicsDevice(gd);
+    const SpriteFont font = cm.Load<SpriteFont>("Hud");
+
+    EXPECT_EQ(font.getTextureEXT().getWidthProperty(), 128);
+    EXPECT_EQ(font.getTextureEXT().getHeightProperty(), 132);
+    EXPECT_EQ(font.getTextureEXT().getFormatProperty(), SurfaceFormat::Color);
+    EXPECT_GT(font.MeasureString("TIME: 01:59").X, 0.0f);
 }

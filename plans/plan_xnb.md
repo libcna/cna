@@ -1,5 +1,13 @@
 # XNB binary content pipeline: task plan
 
+> **Authored Reach DXT atlas correction (2026-09-19, `SAMPLE-013`):** The genuine XNA 4.0
+> Platformer `Fonts/Hud.xnb` contains a Dxt3 SpriteFont atlas of 128×132 pixels and loads under
+> Reach. CNA's public `Texture2D` constructor correctly rejects Reach NPOT DXT resources, but
+> retaining this authored XNB as compressed data made the runtime content path reject it too.
+> `Texture2DContentTypeReader` now uses its existing DXT-to-Color path for Reach NPOT content;
+> the public constructor restriction remains intact. A regression loads the exact official atlas
+> and checks both sides of that distinction. Historical task rows below are unchanged.
+
 > **Texture2D/TextureCube conformance correction (2026-09-10, `SOFTWARE-275`):** the original
 > Color/normalized/DXT-only 2D and Color/DXT-only cube closures were not XNA-complete. FNA retains
 > every serialized uncompressed format and uses a backend-dependent fallback only for DXT. CNA now

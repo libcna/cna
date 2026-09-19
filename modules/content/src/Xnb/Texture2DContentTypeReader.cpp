@@ -2,6 +2,7 @@
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
@@ -11,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -18,6 +20,7 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Content::ContentLoadException;
     using Microsoft::Xna::Framework::Content::ContentReader;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -76,7 +79,15 @@ namespace CNA::Internal::Xnb
         // LoadsCompressedContentNativelyEXT() AND transfers this format as blocks; otherwise
         // CPU-decompress DXT to Color exactly as before (the historical default for every other
         // renderer).
-        const bool keepCompressed = IsCompressed(surfaceFormat)
+        // XNA's content loader accepts authored DXT atlases with block-aligned NPOT dimensions
+        // under Reach (the Platformer Hud font is Dxt3, 128x132), although the public Reach
+        // Texture2D constructor refuses that shape. Use the existing lossless DXT-to-Color
+        // content path for such assets; do not weaken the public construction contract.
+        const bool reachNpotCompressed =
+            device->getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+            (!std::has_single_bit(static_cast<unsigned int>(width)) ||
+             !std::has_single_bit(static_cast<unsigned int>(height)));
+        const bool keepCompressed = IsCompressed(surfaceFormat) && !reachNpotCompressed
             && device->GetRenderer().LoadsCompressedContentNativelyEXT()
             && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(surfaceFormat));
         const SurfaceFormat uploadFormat =
