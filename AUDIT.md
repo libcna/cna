@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **SAMPLE-014 correction (2026-09-19):** `RenderTarget2D` now accepts Reach-profile NPOT
+> mipmapped dimensions as FNA does; `Texture2D` keeps its separate profile restriction. The
+> sample's XML enum metadata is an explicitly marked CNA extension, not an XNA API addition.
+> A pinned MojoShader GLSL patch also makes legacy vertex-color clamping follow the centroid
+> output alias, verified by native OPENGLES3 and browser WEBGL2 Evolved gameplay. This changes
+> no class-completion status below.
+
 > **Renderer capability note (2026-08-22, `MOD-2203`):** the non-XNA renderer discovery surface
 > now has an additive detailed profile beside the unchanged legacy `GraphicsCapability` summary:
 > 30 append-only atomic features, four-state answers, 10 known/unknown limits, per-format

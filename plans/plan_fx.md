@@ -1,5 +1,13 @@
 # Compiled XNA Effect Bytecode Support Plan
 
+> **SAMPLE-014 regression repair (2026-09-19):** the original Spacewar Evolved `ship.fx`
+> passed FNA/Reach but failed to link in Chrome WEBGL2. The generated vertex shader paired a
+> centroid `COLOR0` pixel input with `cna_centroid_10_0`, while an earlier ES vertex-color
+> clamp still wrote the ordinary `io_10_0` identifier. The general pinned MojoShader patch
+> `glsl-centroid-color-clamp` emits the clamp through the `vs_oD0` register alias (for any
+> output index), so the pair's centroid choice resolves consistently. The original Evolved
+> gameplay now renders in both WEBGL2 and native OPENGLES3; no sample shader was changed.
+
 - Status: **Seven backends supported and gated: FNA3D, SDL_GPU, the EasyGL/OpenGL family, Vulkan,
   DirectX 9, DirectX 11 and DirectX 12. The FNA3D vertical slice was declared usable (`FX-057`) on 2026-08-15; a repair pass on
   2026-08-17 (`FX-080`–`FX-090`) closed the silent-fallback and coverage gaps the first rollout left

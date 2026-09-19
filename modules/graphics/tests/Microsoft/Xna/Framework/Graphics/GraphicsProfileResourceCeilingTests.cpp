@@ -272,7 +272,7 @@ TEST(GraphicsProfileResourceCeilingTest, CubePowerOfTwoAndDxtAlignmentFollowXnaP
                  System::ArgumentException);
 }
 
-TEST(GraphicsProfileResourceCeilingTest, RenderTargetsReuseTextureProfileShapeLimits)
+TEST(GraphicsProfileResourceCeilingTest, RenderTargetsKeepSizeLimitsButAllowNpotMipmaps)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     PresentationParameters parameters;
@@ -280,9 +280,8 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTargetsReuseTextureProfileShapeLi
         GraphicsDevice reach(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
         EXPECT_NO_THROW((void)RenderTarget2D(reach, 3, 5));
-        EXPECT_THROW(
-            (void)RenderTarget2D(reach, 3, 5, true, SurfaceFormat::Color, DepthFormat::None),
-            System::NotSupportedException);
+        EXPECT_NO_THROW(
+            (void)RenderTarget2D(reach, 3, 5, true, SurfaceFormat::Color, DepthFormat::None));
         EXPECT_THROW((void)RenderTarget2D(reach, 2049, 2), System::NotSupportedException);
         EXPECT_THROW(
             (void)RenderTargetCube(

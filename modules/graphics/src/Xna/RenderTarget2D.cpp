@@ -8,7 +8,6 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
-#include <bit>
 #include <cstdint>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -84,14 +83,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 "RenderTarget2D's aspect ratio exceeds the active graphics profile limit of "
                 "2048:1.");
         }
-        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach && mipMap &&
-            (!std::has_single_bit(static_cast<unsigned int>(width)) ||
-             !std::has_single_bit(static_cast<unsigned int>(height))))
-        {
-            throw System::NotSupportedException(
-                "Mipmapped non-power-of-two RenderTarget2D resources are not supported by the "
-                "Reach graphics profile.");
-        }
+        // FNA's RenderTarget2D constructor passes NPOT mipmapped targets through to the
+        // renderer even under Reach; Texture2D's profile restriction does not apply here.
         // plans/plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
         // A renderer that answers Defer accepts the framework's rule, which is what every renderer
         // except SKIA did when this was an #ifdef block.

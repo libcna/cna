@@ -1,5 +1,22 @@
 # NEXT.md
 
+## SAMPLE-014 Spacewar framework repair (2026-09-19)
+
+The original `Settings` document now travels through SharpRuntime's generic stream
+`XmlSerializer<T>` with CNA's opt-in metadata for all 160 XNA `Keys` values. CNA removed a
+Reach-only non-power-of-two mipmapped `RenderTarget2D` rejection absent from FNA. A compiled
+Effect regression surfaced only when the original Evolved shader ran under WEBGL2: the
+MojoShader vertex-color clamp wrote `io_10_0` after a centroid pairing had renamed that output.
+The new pinned MojoShader patch clamps through the vertex output register alias, valid for
+ordinary and centroid variants. No sample-specific shader or XML path was added.
+
+Focused input tests pass 507/507 under Xvfb; the changed graphics target builds, while its
+renderer-dependent NPOT test skips in the configured HEADLESS test tree. Actual native Release
+OPENGLES3 and Chrome WEBGL2 Spacewar runs exercise the NPOT render target and the original
+compiled Evolved effect; title, Retro, Evolved and original XACT banks work, and the native
+Evolved run exits with the original Start/Back controls. The owner requested at most four
+compiler jobs. See `../cna-samples/samples/Spacewar/missing.md` for exact products and evidence.
+
 > **Reading this file after 2026-09-17.** Twenty-five renderer identities were retired that day
 > (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`), leaving **25 public identities
 > over 21 implementation families**. Every entry below dated before then is a historical handoff and

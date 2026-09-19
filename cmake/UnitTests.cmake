@@ -67,6 +67,8 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
             ".*/modules/math/tests/Microsoft/Xna/Framework/XmlSerializationEXTTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/input/tests/Microsoft/Xna/Framework/Input/XmlSerializationEXTTests\\.cpp$")
     endif()
 
     # plans/plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
@@ -367,7 +369,11 @@ if(CNA_BUILD_TESTS)
     # renderer registry as well as the graphics-ext implementation; cna_graphics_ext alone cannot
     # construct a device because renderer families deliberately sit outside its dependency edge.
     set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext CNA)
-    set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
+    if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+        set(CNA_TEST_GROUP_DEPENDENCY_input cna_input SharpRuntime::Xml.Serialization)
+    else()
+        set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
+    endif()
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
     # System::Xml::Serialization, so the group that tests it links that component too --
