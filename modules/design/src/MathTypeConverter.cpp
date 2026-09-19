@@ -16,9 +16,8 @@ bool MathTypeConverter::CanConvertFrom(System::ComponentModel::ITypeDescriptorCo
 
 bool MathTypeConverter::CanConvertTo(System::ComponentModel::ITypeDescriptorContext* context,
                                      const System::Type& destinationType) const {
-    return destinationType == System::Type::From<
-               System::ComponentModel::Design::Serialization::InstanceDescriptor>() ||
-           System::ComponentModel::TypeConverter::CanConvertTo(context, destinationType);
+    if (supportStringConvert_ && destinationType == System::Type::From<std::string>()) return true;
+    return System::ComponentModel::TypeConverter::CanConvertTo(context, destinationType);
 }
 
 bool MathTypeConverter::GetCreateInstanceSupported(

@@ -134,7 +134,9 @@ TEST(MathTypeConverterTests, ImplementsTheExpandableXnaBaseContract) {
     const MathTypeConverter converter;
     static_assert(std::is_base_of_v<System::ComponentModel::ExpandableObjectConverter, MathTypeConverter>);
     EXPECT_TRUE(converter.CanConvertFrom(System::Type::From<std::string>()));
-    EXPECT_TRUE(converter.CanConvertTo(System::Type::From<InstanceDescriptor>()));
+    EXPECT_FALSE(converter.CanConvertTo(System::Type::From<InstanceDescriptor>()));
+    EXPECT_THROW((void)converter.ConvertTo(std::any(1), System::Type::From<InstanceDescriptor>()),
+                 System::NotSupportedException);
     EXPECT_TRUE(converter.GetCreateInstanceSupported());
     EXPECT_TRUE(converter.GetPropertiesSupported());
     EXPECT_EQ(converter.GetProperties(std::any(1)).getCountProperty(), 0);
