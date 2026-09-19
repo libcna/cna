@@ -8755,18 +8755,68 @@ namespace CNA::Internal::Renderers::Vulkan
             CreateBuffer(kFrame3DVBSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 frame3DVB_[i], frame3DVBMem_[i], &frame3DVBPtr_[i]);
+            frame3DVBCapacity_[i] = kFrame3DVBSize;
             CreateBuffer(kFrame3DIBSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 frame3DIB_[i], frame3DIBMem_[i], &frame3DIBPtr_[i]);
+            frame3DIBCapacity_[i] = kFrame3DIBSize;
         }
     }
 
-    void VulkanRenderer::EnsureFrame3DBuffers()
+    void VulkanRenderer::GrowFrame3DArenaEXT(VkDeviceSize requiredBytes, VkDeviceSize& capacity,
+                                              VkBuffer& buffer, VkDeviceMemory& memory, void*& mapped,
+                                              VkBufferUsageFlags usage)
+    {
+        if (requiredBytes <= capacity) return;
+        VkDeviceSize grown = std::max<VkDeviceSize>(capacity, 1);
+        while (grown < requiredBytes) {
+            if (grown > std::numeric_limits<VkDeviceSize>::max() / 2) {
+                grown = requiredBytes;
+                break;
+            }
+            grown *= 2;
+        }
+        VkBuffer newBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory newMemory = VK_NULL_HANDLE;
+        void* newMapped = nullptr;
+        try {
+            CreateBuffer(grown, usage,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                newBuffer, newMemory, &newMapped);
+        } catch (...) {
+            if (newBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device_, newBuffer, nullptr);
+            if (newMemory != VK_NULL_HANDLE) vkFreeMemory(device_, newMemory, nullptr);
+            throw;
+        }
+        // RecordCommandBuffer runs only after the current slot's fence has signalled. A readback
+        // flush also waits for its own submission, so neither path still uses the old allocation.
+        if (buffer != VK_NULL_HANDLE) vkDestroyBuffer(device_, buffer, nullptr);
+        if (memory != VK_NULL_HANDLE) {
+            if (mapped != nullptr) vkUnmapMemory(device_, memory);
+            vkFreeMemory(device_, memory, nullptr);
+        }
+        buffer = newBuffer;
+        memory = newMemory;
+        mapped = newMapped;
+        capacity = grown;
+        VkLifetimeTraceEXT("arena.grow       frame=%u required=%llu capacity=%llu",
+                           currentFrame_, static_cast<unsigned long long>(requiredBytes),
+                           static_cast<unsigned long long>(capacity));
+    }
+
+    void VulkanRenderer::EnsureFrame3DBuffers(VkDeviceSize requiredVertexBytes,
+                                               VkDeviceSize requiredIndexBytes)
     {
         if (!frame3DBuffersAllocated_) {
             CreateFrame3DBuffers();
             frame3DBuffersAllocated_ = true;
         }
+        GrowFrame3DArenaEXT(requiredVertexBytes, frame3DVBCapacity_[currentFrame_],
+                            frame3DVB_[currentFrame_], frame3DVBMem_[currentFrame_],
+                            frame3DVBPtr_[currentFrame_], VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        GrowFrame3DArenaEXT(requiredIndexBytes, frame3DIBCapacity_[currentFrame_],
+                            frame3DIB_[currentFrame_], frame3DIBMem_[currentFrame_],
+                            frame3DIBPtr_[currentFrame_], VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
     }
 
     void VulkanRenderer::CreateFrame3DInstBuffers()
@@ -8775,15 +8825,19 @@ namespace CNA::Internal::Renderers::Vulkan
             CreateBuffer(kFrame3DInstVBSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 frame3DInstVB_[i], frame3DInstVBMem_[i], &frame3DInstVBPtr_[i]);
+            frame3DInstVBCapacity_[i] = kFrame3DInstVBSize;
         }
     }
 
-    void VulkanRenderer::EnsureFrame3DInstBuffers()
+    void VulkanRenderer::EnsureFrame3DInstBuffers(VkDeviceSize requiredBytes)
     {
         if (!frame3DInstBuffersAllocated_) {
             CreateFrame3DInstBuffers();
             frame3DInstBuffersAllocated_ = true;
         }
+        GrowFrame3DArenaEXT(requiredBytes, frame3DInstVBCapacity_[currentFrame_],
+                            frame3DInstVB_[currentFrame_], frame3DInstVBMem_[currentFrame_],
+                            frame3DInstVBPtr_[currentFrame_], VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     }
 
     // =========================================================================
@@ -13615,6 +13669,34 @@ namespace CNA::Internal::Renderers::Vulkan
                        timestampOrdersForFlush.begin(), timestampOrdersForFlush.end(),
                        event.order) != timestampOrdersForFlush.end();
         };
+        // All draws are already queued at this point. Size the current frame slot before any
+        // command records a reference to its buffers; an overfull arena must never drop later
+        // draws (large scenes otherwise lose buildings, vehicles and vegetation in draw order).
+        VkDeviceSize requiredVB = 0, requiredIB = 0, requiredInstVB = 0;
+        std::size_t requiredLitDraws = 0;
+        const auto addArenaBytes = [](VkDeviceSize& used, VkDeviceSize bytes) {
+            if (bytes > std::numeric_limits<VkDeviceSize>::max() - used)
+                throw std::overflow_error("CNA Vulkan: per-frame 3D geometry size overflow");
+            used += bytes;
+        };
+        for (const auto& draw : pending3D_) {
+            if (rtOnly && !recordedByFlush(draw.rt.get(), draw.segment)) continue;
+            if (draw.vbData.empty()) continue;
+            addArenaBytes(requiredVB, static_cast<VkDeviceSize>(draw.vbData.size()));
+            if (!draw.ibData.empty()) {
+                const VkDeviceSize alignment = draw.indexType == VK_INDEX_TYPE_UINT32 ? 4 : 2;
+                addArenaBytes(requiredIB, (alignment - requiredIB % alignment) % alignment);
+                addArenaBytes(requiredIB, static_cast<VkDeviceSize>(draw.ibData.size()));
+            }
+            if (draw.useInstanced)
+                addArenaBytes(requiredInstVB, static_cast<VkDeviceSize>(draw.instVbData.size()));
+            if (draw.useLitTextured && draw.litTexturedDescSet != VK_NULL_HANDLE)
+                ++requiredLitDraws;
+        }
+        if (requiredLitDraws > kLitTexturedUBOMaxDraws)
+            throw std::runtime_error("CNA Vulkan: lit 3D draw count exceeds the per-frame uniform ring");
+        if (requiredVB != 0) EnsureFrame3DBuffers(requiredVB, requiredIB);
+        if (requiredInstVB != 0) EnsureFrame3DInstBuffers(requiredInstVB);
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
@@ -14001,7 +14083,6 @@ namespace CNA::Internal::Renderers::Vulkan
                              uint64_t afterOrder, uint64_t beforeOrder)
         {
             if (pending3D_.empty()) return;
-            EnsureFrame3DBuffers();
             VkPipeline lastPipe   = VK_NULL_HANDLE;
             // See drawSpritesFor's cursor comment: one arena, many passes, one record.
             VkDeviceSize& vbOff     = frame3DVbCursor;
@@ -14036,10 +14117,15 @@ namespace CNA::Internal::Renderers::Vulkan
                     nativeIbOff =
                         (ibOff + indexAlignment - 1) & ~(indexAlignment - 1);
                 }
-                if (vbOff + draw.vbData.size() > kFrame3DVBSize) continue;
-                if (!draw.ibData.empty()
-                    && nativeIbOff + draw.ibData.size() > kFrame3DIBSize) continue;
-                if (draw.useInstanced && instVbOff + draw.instVbData.size() > kFrame3DInstVBSize) continue;
+                if (vbOff > frame3DVBCapacity_[currentFrame_] ||
+                    draw.vbData.size() > frame3DVBCapacity_[currentFrame_] - vbOff ||
+                    (!draw.ibData.empty() &&
+                     (nativeIbOff > frame3DIBCapacity_[currentFrame_] ||
+                      draw.ibData.size() > frame3DIBCapacity_[currentFrame_] - nativeIbOff)) ||
+                    (draw.useInstanced &&
+                     (instVbOff > frame3DInstVBCapacity_[currentFrame_] ||
+                      draw.instVbData.size() > frame3DInstVBCapacity_[currentFrame_] - instVbOff)))
+                    throw std::runtime_error("CNA Vulkan: pre-sized 3D geometry arena exhausted");
 
                 // Task 447/854: this draw is definitely about to be recorded -- open/close real
                 // vkCmdBeginQuery/vkCmdEndQuery pairs around contiguous runs of draws sharing the

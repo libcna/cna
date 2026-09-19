@@ -4738,9 +4738,10 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesLitTextured3DVertexLit_;
         std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        litTexturedDescSets_;
-        // Per-frame UBO ring buffer for light1/light2/emissive (5×vec4 = 80 bytes used, padded to 256)
+        // Per-frame UBO ring buffer for light1/light2/emissive (5×vec4 = 80 bytes used, padded to 256).
+        // Dense scenes can submit more than 512 lit batches in one frame.
         static constexpr uint32_t kLitTexturedUBOStride   = 256;
-        static constexpr uint32_t kLitTexturedUBOMaxDraws = 512;
+        static constexpr uint32_t kLitTexturedUBOMaxDraws = 2048;
         std::array<VkBuffer,       MaxFramesInFlight> litTexturedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> litTexturedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> litTexturedUBOPtr_ = {};
@@ -4961,8 +4962,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // --- Per-frame 3D dynamic geometry buffers ---
         // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
-        static constexpr VkDeviceSize kFrame3DVBSize    = 4 * 1024 * 1024;  // 4 MB per-vertex
-        static constexpr VkDeviceSize kFrame3DIBSize    = 1 * 1024 * 1024;  // 1 MB index
+        // These are initial capacities; each frame slot grows to fit its queued draws.
+        static constexpr VkDeviceSize kFrame3DVBSize    = 4 * 1024 * 1024;
+        static constexpr VkDeviceSize kFrame3DIBSize    = 1 * 1024 * 1024;
         static constexpr VkDeviceSize kFrame3DInstVBSize = 1 * 1024 * 1024; // 1 MB per-instance
         std::array<VkBuffer,       MaxFramesInFlight> frame3DVB_       = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> frame3DVBMem_    = {};
@@ -4973,6 +4975,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> frame3DInstVB_   = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> frame3DInstVBMem_= {};
         std::array<void*,          MaxFramesInFlight> frame3DInstVBPtr_= {};
+        std::array<VkDeviceSize,    MaxFramesInFlight> frame3DVBCapacity_ = {};
+        std::array<VkDeviceSize,    MaxFramesInFlight> frame3DIBCapacity_ = {};
+        std::array<VkDeviceSize,    MaxFramesInFlight> frame3DInstVBCapacity_ = {};
         bool frame3DInstBuffersAllocated_ = false;
 
         // --- Per-frame accumulated draw data (cleared in RecordCommandBuffer) ---
@@ -5999,7 +6004,7 @@ namespace CNA::Internal::Renderers::Vulkan
         void FillInstancedPushConst(float (&pc)[32], const Matrix& world, const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();
-        void EnsureFrame3DInstBuffers();
+        void EnsureFrame3DInstBuffers(VkDeviceSize requiredBytes = 0);
 
         void CreateMsaaColorResources();
         void CleanupMsaaColorResources();
@@ -6013,7 +6018,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
-        void EnsureFrame3DBuffers();
+        void EnsureFrame3DBuffers(VkDeviceSize requiredVertexBytes, VkDeviceSize requiredIndexBytes);
+        void GrowFrame3DArenaEXT(VkDeviceSize requiredBytes, VkDeviceSize& capacity,
+                                 VkBuffer& buffer, VkDeviceMemory& memory, void*& mapped,
+                                 VkBufferUsageFlags usage);
         VkRenderPass GetOrCreateMRTRenderPass(const std::vector<VkFormat>& colorFormats,
                                               VkSampleCountFlagBits sampleCount,
                                               VkFormat depthFormat);
