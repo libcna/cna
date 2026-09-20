@@ -112,6 +112,12 @@ namespace Microsoft::Xna::Framework
     {
     }
 
+    bool Vector4::Equals(const std::any& obj) const
+    {
+        const Vector4* other = std::any_cast<Vector4>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Vector4::Equals(const Vector4& other) const
     {
         return X == other.X && Y == other.Y && Z == other.Z && W == other.W;

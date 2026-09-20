@@ -170,6 +170,12 @@ namespace Microsoft::Xna::Framework
         result.D = plane.D;
     }
 
+    bool Plane::Equals(const std::any& obj) const
+    {
+        const Plane* other = std::any_cast<Plane>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Plane::Equals(Plane other) const
     {
         return Normal == other.Normal && D == other.D;

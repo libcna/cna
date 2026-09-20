@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/IEquatable.hpp"
 
+#include <any>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -192,6 +193,17 @@ namespace Microsoft::Xna::Framework
          * @param result Output that receives the plane intersection type.
          */
         void Intersects(const Plane& plane, PlaneIntersectionType& result) const;
+
+        /**
+         * @brief Compares this BoundingBox with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal BoundingBox; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this box with another box.

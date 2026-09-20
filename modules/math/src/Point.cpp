@@ -25,6 +25,12 @@ namespace Microsoft::Xna::Framework
         return Zero;
     }
 
+    bool Point::Equals(const std::any& obj) const
+    {
+        const Point* other = std::any_cast<Point>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Point::Equals(const Point& other) const
     {
         return X == other.X && Y == other.Y;

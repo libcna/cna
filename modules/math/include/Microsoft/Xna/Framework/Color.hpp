@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
 
+#include <any>
 #include <string>
 
 namespace Microsoft::Xna::Framework
@@ -464,6 +465,17 @@ namespace Microsoft::Xna::Framework
         // ------------------------------------------------------------------
         // Public instance methods
         // ------------------------------------------------------------------
+
+        /**
+         * @brief Compares this Color with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Color; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares whether current instance is equal to specified Color.

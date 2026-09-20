@@ -332,6 +332,12 @@ namespace Microsoft::Xna::Framework
         result.Z = (v1.Z + v2.Z + v3.Z) / f;
     }
 
+    bool BoundingFrustum::Equals(const std::any& obj) const
+    {
+        const BoundingFrustum* other = std::any_cast<BoundingFrustum>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool BoundingFrustum::Equals(const BoundingFrustum& other) const
     {
         return *this == other;

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <string>
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -55,6 +56,17 @@ namespace Microsoft::Xna::Framework
 
         /** @brief Negates the vector part of this quaternion in place. */
         void Conjugate();
+
+        /**
+         * @brief Compares this Quaternion with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Quaternion; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this quaternion with another quaternion.

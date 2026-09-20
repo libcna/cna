@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <string>
 
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -39,6 +40,17 @@ namespace Microsoft::Xna::Framework
          * @return A point with X = 0 and Y = 0.
          */
         [[nodiscard]] static Point getZeroProperty();
+
+        /**
+         * @brief Compares this Point with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Point; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Returns true when both coordinates match another point.

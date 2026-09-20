@@ -98,6 +98,12 @@ namespace Microsoft::Xna::Framework
     {
     }
 
+    bool Vector2::Equals(const std::any& obj) const
+    {
+        const Vector2* other = std::any_cast<Vector2>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Vector2::Equals(const Vector2& other) const { return X == other.X && Y == other.Y; }
     int Vector2::GetHashCode() const
     {

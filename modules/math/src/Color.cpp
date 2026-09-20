@@ -370,6 +370,12 @@ namespace Microsoft::Xna::Framework
     // Public instance methods
     // ------------------------------------------------------------------
 
+    bool Color::Equals(const std::any& obj) const
+    {
+        const Color* other = std::any_cast<Color>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Color::Equals(const Color& other) const
     {
         return packedValue == other.packedValue;

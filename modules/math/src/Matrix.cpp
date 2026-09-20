@@ -242,6 +242,12 @@ namespace Microsoft::Xna::Framework
             (M14 * (((M21 * num16) - (M22 * num14)) + (M23 * num13)));
     }
 
+    bool Matrix::Equals(const std::any& obj) const
+    {
+        const Matrix* other = std::any_cast<Matrix>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Matrix::Equals(const Matrix& other) const
     {
         return M11 == other.M11 && M12 == other.M12 && M13 == other.M13 && M14 == other.M14 &&

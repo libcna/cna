@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -232,6 +233,17 @@ namespace Microsoft::Xna::Framework
          * @param result Output that receives the intersection distance or empty.
          */
         void Intersects(const Ray& ray, std::optional<float>& result) const;
+
+        /**
+         * @brief Compares this BoundingFrustum with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal BoundingFrustum; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this frustum with another frustum.

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <string>
 
 #include "Microsoft/Xna/Framework/Point.hpp"
@@ -168,6 +169,17 @@ namespace Microsoft::Xna::Framework
          * @param verticalValue Amount to expand vertically on each side.
          */
         void Inflate(intcs horizontalValue, intcs verticalValue);
+
+        /**
+         * @brief Compares this Rectangle with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Rectangle; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Returns true when all fields match another rectangle.

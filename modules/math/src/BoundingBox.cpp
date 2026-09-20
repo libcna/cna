@@ -448,6 +448,12 @@ namespace Microsoft::Xna::Framework
         result = PlaneIntersectionType::Intersecting;
     }
 
+    bool BoundingBox::Equals(const std::any& obj) const
+    {
+        const BoundingBox* other = std::any_cast<BoundingBox>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool BoundingBox::Equals(const BoundingBox& other) const
     {
         return Min.X == other.Min.X &&

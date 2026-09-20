@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -33,6 +34,17 @@ namespace Microsoft::Xna::Framework
          * @param direction The direction of the ray.
          */
         Ray(Vector3 position, Vector3 direction);
+
+        /**
+         * @brief Compares this Ray with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Ray; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Returns true when both the position and direction match another ray.

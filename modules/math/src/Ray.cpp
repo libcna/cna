@@ -21,6 +21,12 @@ namespace Microsoft::Xna::Framework
     {
     }
 
+    bool Ray::Equals(const std::any& obj) const
+    {
+        const Ray* other = std::any_cast<Ray>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Ray::Equals(Ray other) const
     {
         return Position.Equals(other.Position) && Direction.Equals(other.Direction);

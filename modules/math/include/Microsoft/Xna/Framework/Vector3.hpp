@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,17 @@ namespace Microsoft::Xna::Framework
          * @param z The Z component.
          */
         Vector3(Vector2 value, float z);
+
+        /**
+         * @brief Compares this Vector3 with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Vector3; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this vector with another for equality.

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <any>
 #include <cstddef>
 
 #include "System/IEquatable.hpp"
@@ -107,6 +108,17 @@ namespace Microsoft::Xna::Framework
          * @return Negative, zero, or positive based on position comparison.
          */
         [[nodiscard]] int CompareTo(const CurveKey& other) const override;
+
+        /**
+         * @brief Compares this CurveKey with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal CurveKey; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this key with another key for equality.

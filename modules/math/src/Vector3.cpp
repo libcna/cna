@@ -102,6 +102,12 @@ namespace Microsoft::Xna::Framework
     {
     }
 
+    bool Vector3::Equals(const std::any& obj) const
+    {
+        const Vector3* other = std::any_cast<Vector3>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Vector3::Equals(const Vector3& other) const { return X == other.X && Y == other.Y && Z == other.Z; }
     int Vector3::GetHashCode() const { return FloatHash(X) + FloatHash(Y) + FloatHash(Z); }
     float Vector3::Length() const { return std::sqrt((X * X) + (Y * Y) + (Z * Z)); }

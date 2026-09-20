@@ -44,6 +44,12 @@ namespace Microsoft::Xna::Framework
         Z = -Z;
     }
 
+    bool Quaternion::Equals(const std::any& obj) const
+    {
+        const Quaternion* other = std::any_cast<Quaternion>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Quaternion::Equals(const Quaternion& other) const
     {
         return X == other.X &&

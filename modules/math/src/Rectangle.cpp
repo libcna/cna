@@ -122,6 +122,12 @@ namespace Microsoft::Xna::Framework
         Height += verticalValue * 2;
     }
 
+    bool Rectangle::Equals(const std::any& obj) const
+    {
+        const Rectangle* other = std::any_cast<Rectangle>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool Rectangle::Equals(const Rectangle& other) const
     {
         return *this == other;

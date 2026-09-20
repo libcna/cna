@@ -169,6 +169,12 @@ namespace Microsoft::Xna::Framework
         return ContainmentType::Intersects;
     }
 
+    bool BoundingSphere::Equals(const std::any& obj) const
+    {
+        const BoundingSphere* other = std::any_cast<BoundingSphere>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool BoundingSphere::Equals(const BoundingSphere& other) const
     {
         return Center == other.Center && Radius == other.Radius;

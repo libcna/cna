@@ -102,6 +102,12 @@ namespace Microsoft::Xna::Framework
         return 0;
     }
 
+    bool CurveKey::Equals(const std::any& obj) const
+    {
+        const CurveKey* other = std::any_cast<CurveKey>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool CurveKey::Equals(const CurveKey& other) const
     {
         return *this == other;
