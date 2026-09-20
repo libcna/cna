@@ -87,6 +87,12 @@ namespace Microsoft::Xna::Framework::Input
         return b;
     }
 
+    bool GamePadState::Equals(const std::any& obj) const
+    {
+        const GamePadState* other = std::any_cast<GamePadState>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool GamePadState::Equals(const GamePadState& other) const
     {
         return isConnected_ == other.isConnected_ &&

@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+#include <any>
 #include <initializer_list>
 #include <string>
 
@@ -105,6 +106,17 @@ namespace Microsoft::Xna::Framework::Input
          * @return True if all specified buttons are up; false otherwise.
          */
         [[nodiscard]] bool IsButtonUp(Buttons button) const;
+
+        /**
+         * @brief Compares this GamePadState with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal GamePadState; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this instance with another for equality.

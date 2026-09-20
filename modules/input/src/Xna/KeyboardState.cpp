@@ -82,6 +82,12 @@ namespace Microsoft::Xna::Framework::Input
         return getItem(key);
     }
 
+    bool KeyboardState::Equals(const std::any& obj) const
+    {
+        const KeyboardState* other = std::any_cast<KeyboardState>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool KeyboardState::Equals(const KeyboardState& other) const
     {
         return pressedKeys_ == other.pressedKeys_;

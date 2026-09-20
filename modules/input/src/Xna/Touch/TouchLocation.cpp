@@ -76,6 +76,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
         return prevState_ != TouchLocationState::Invalid;
     }
 
+    bool TouchLocation::Equals(const std::any& obj) const
+    {
+        const TouchLocation* other = std::any_cast<TouchLocation>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool TouchLocation::Equals(const TouchLocation& other) const
     {
         return id_           == other.id_           &&

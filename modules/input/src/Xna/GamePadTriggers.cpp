@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
+
+#include <sstream>
+#include <string>
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "System/Single.hpp"
@@ -40,6 +43,19 @@ namespace Microsoft::Xna::Framework::Input
 
     float GamePadTriggers::getLeftProperty()  const { return left_; }
     float GamePadTriggers::getRightProperty() const { return right_; }
+
+    std::string GamePadTriggers::ToString() const
+    {
+        std::ostringstream text;
+        text << "{Left:" << getLeftProperty() << " Right:" << getRightProperty() << "}";
+        return text.str();
+    }
+
+    bool GamePadTriggers::Equals(const std::any& obj) const
+    {
+        const GamePadTriggers* other = std::any_cast<GamePadTriggers>(&obj);
+        return other != nullptr && Equals(*other);
+    }
 
     bool GamePadTriggers::Equals(const GamePadTriggers& other) const
     {

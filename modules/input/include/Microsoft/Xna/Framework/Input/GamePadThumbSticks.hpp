@@ -5,6 +5,9 @@
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+#include <any>
+#include <string>
+
 namespace Microsoft::Xna::Framework::Input
 {
     class GamePad;
@@ -36,6 +39,24 @@ namespace Microsoft::Xna::Framework::Input
          */
         GamePadThumbSticks(const Microsoft::Xna::Framework::Vector2& leftPosition,
                            const Microsoft::Xna::Framework::Vector2& rightPosition);
+
+        /**
+         * @brief Compares this GamePadThumbSticks with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal GamePadThumbSticks; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
+
+        /**
+         * @brief Returns a string representation of this GamePadThumbSticks.
+         *
+         * @return `{Left:<left> Right:<right>}`, each stick in Vector2's own string form.
+         */
+        [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares this instance with another for equality.

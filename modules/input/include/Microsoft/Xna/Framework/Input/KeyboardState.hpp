@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <any>
 #include <initializer_list>
 #include <string>
 #include <unordered_set>
@@ -65,6 +66,17 @@ namespace Microsoft::Xna::Framework::Input
          * @return A vector of keys that are currently pressed.
          */
         [[nodiscard]] std::vector<Keys> GetPressedKeys() const;
+
+        /**
+         * @brief Compares this KeyboardState with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal KeyboardState; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this instance with another for equality.

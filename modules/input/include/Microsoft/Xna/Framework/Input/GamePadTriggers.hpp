@@ -4,6 +4,9 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 
+#include <any>
+#include <string>
+
 namespace Microsoft::Xna::Framework::Input
 {
     class GamePad;
@@ -34,6 +37,24 @@ namespace Microsoft::Xna::Framework::Input
          * @param rightTrigger The right trigger value, clamped to [0, 1].
          */
         GamePadTriggers(float leftTrigger, float rightTrigger);
+
+        /**
+         * @brief Compares this GamePadTriggers with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal GamePadTriggers; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
+
+        /**
+         * @brief Returns a string representation of this GamePadTriggers.
+         *
+         * @return `{Left:<left> Right:<right>}`, each trigger as its float value.
+         */
+        [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares this instance with another for equality.

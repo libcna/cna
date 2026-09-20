@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
 
+#include <string>
+#include <utility>
+
 namespace Microsoft::Xna::Framework::Input
 {
     namespace
@@ -45,6 +48,41 @@ namespace Microsoft::Xna::Framework::Input
             flagToState(mask, Buttons::DPadLeft),
             flagToState(mask, Buttons::DPadRight)
         );
+    }
+
+    std::string GamePadDPad::ToString() const
+    {
+        // Same shape as GamePadButtons, in the documented order Up, Down, Left, Right.
+        std::string pressed;
+        const std::pair<ButtonState, const char*> order[] = {
+            {getUpProperty(), "Up"},
+            {getDownProperty(), "Down"},
+            {getLeftProperty(), "Left"},
+            {getRightProperty(), "Right"},
+        };
+        for (const auto& [state, label] : order)
+        {
+            if (state != ButtonState::Pressed)
+            {
+                continue;
+            }
+            if (!pressed.empty())
+            {
+                pressed += ' ';
+            }
+            pressed += label;
+        }
+        if (pressed.empty())
+        {
+            pressed = "None";
+        }
+        return "{DPad:" + pressed + "}";
+    }
+
+    bool GamePadDPad::Equals(const std::any& obj) const
+    {
+        const GamePadDPad* other = std::any_cast<GamePadDPad>(&obj);
+        return other != nullptr && Equals(*other);
     }
 
     bool GamePadDPad::Equals(const GamePadDPad& other) const

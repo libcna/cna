@@ -5,7 +5,9 @@
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "CNA/CNAHelper.hpp"
 
+#include <any>
 #include <initializer_list>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -97,6 +99,25 @@ namespace Microsoft::Xna::Framework::Input
          * @return The resulting GamePadButtons.
          */
         CNAEXT static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns);
+
+        /**
+         * @brief Compares this GamePadButtons with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal GamePadButtons; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
+
+        /**
+         * @brief Returns a string representation of this GamePadButtons.
+         *
+         * @return `{Buttons:<names>}`, the pressed button names separated by single spaces in
+         *         the documented order, or `{Buttons:None}` when nothing is pressed.
+         */
+        [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares this instance with another for equality.

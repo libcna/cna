@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
 
+#include <string>
+#include <utility>
+
 namespace Microsoft::Xna::Framework::Input
 {
     GamePadButtons::GamePadButtons()
@@ -37,6 +40,50 @@ namespace Microsoft::Xna::Framework::Input
     ButtonState GamePadButtons::getRightShoulderProperty() const { return ButtonStateFromFlag(Buttons::RightShoulder); }
     ButtonState GamePadButtons::getRightStickProperty() const    { return ButtonStateFromFlag(Buttons::RightStick); }
     ButtonState GamePadButtons::getBigButtonProperty() const     { return ButtonStateFromFlag(Buttons::BigButton); }
+
+    std::string GamePadButtons::ToString() const
+    {
+        // Microsoft appends each pressed button's name in this order, separating with a single
+        // space, and substitutes "None" for an empty list.
+        static constexpr std::pair<Buttons, const char*> order[] = {
+            {Buttons::A, "A"},
+            {Buttons::B, "B"},
+            {Buttons::X, "X"},
+            {Buttons::Y, "Y"},
+            {Buttons::LeftShoulder, "LeftShoulder"},
+            {Buttons::RightShoulder, "RightShoulder"},
+            {Buttons::LeftStick, "LeftStick"},
+            {Buttons::RightStick, "RightStick"},
+            {Buttons::Start, "Start"},
+            {Buttons::Back, "Back"},
+            {Buttons::BigButton, "BigButton"},
+        };
+
+        std::string pressed;
+        for (const auto& [flag, label] : order)
+        {
+            if (ButtonStateFromFlag(flag) != ButtonState::Pressed)
+            {
+                continue;
+            }
+            if (!pressed.empty())
+            {
+                pressed += ' ';
+            }
+            pressed += label;
+        }
+        if (pressed.empty())
+        {
+            pressed = "None";
+        }
+        return "{Buttons:" + pressed + "}";
+    }
+
+    bool GamePadButtons::Equals(const std::any& obj) const
+    {
+        const GamePadButtons* other = std::any_cast<GamePadButtons>(&obj);
+        return other != nullptr && Equals(*other);
+    }
 
     bool GamePadButtons::Equals(const GamePadButtons& other) const
     {

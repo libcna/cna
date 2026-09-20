@@ -5,7 +5,9 @@
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 
+#include <any>
 #include <initializer_list>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -59,6 +61,25 @@ namespace Microsoft::Xna::Framework::Input
          * @return The resulting GamePadDPad.
          */
         CNAEXT static GamePadDPad FromButtonArray(std::initializer_list<Buttons> buttons);
+
+        /**
+         * @brief Compares this GamePadDPad with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal GamePadDPad; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
+
+        /**
+         * @brief Returns a string representation of this GamePadDPad.
+         *
+         * @return `{DPad:<names>}`, the pressed direction names separated by single spaces in
+         *         the order Up, Down, Left, Right, or `{DPad:None}` when nothing is pressed.
+         */
+        [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares this instance with another for equality.

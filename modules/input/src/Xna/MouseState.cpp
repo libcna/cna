@@ -56,6 +56,12 @@ namespace Microsoft::Xna::Framework::Input
     int         MouseState::getScrollWheelValueProperty() const { return scrollWheelValue_; }
     int         MouseState::getHorizontalScrollWheelValueEXTProperty() const { return horizontalScrollWheelValue_; }
 
+    bool MouseState::Equals(const std::any& obj) const
+    {
+        const MouseState* other = std::any_cast<MouseState>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
     bool MouseState::Equals(const MouseState& other) const
     {
         return x_               == other.x_               &&

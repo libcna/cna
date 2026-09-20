@@ -4,6 +4,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 
+#include <any>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Input
@@ -111,6 +112,17 @@ namespace Microsoft::Xna::Framework::Input
                          ButtonState rightButton,
                          ButtonState xButton1, ButtonState xButton2,
                          int horizontalScrollWheel);
+
+        /**
+         * @brief Compares this MouseState with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal MouseState; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this instance with another for equality.

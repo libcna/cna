@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp"
+
+#include <string>
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
@@ -74,6 +76,17 @@ namespace Microsoft::Xna::Framework::Input
             return Vector2::Zero;
         float newLength = (originalLength - deadZone) / (1.0f - deadZone);
         return value * (newLength / originalLength);
+    }
+
+    std::string GamePadThumbSticks::ToString() const
+    {
+        return "{Left:" + getLeftProperty().ToString() + " Right:" + getRightProperty().ToString() + "}";
+    }
+
+    bool GamePadThumbSticks::Equals(const std::any& obj) const
+    {
+        const GamePadThumbSticks* other = std::any_cast<GamePadThumbSticks>(&obj);
+        return other != nullptr && Equals(*other);
     }
 
     bool GamePadThumbSticks::Equals(const GamePadThumbSticks& other) const

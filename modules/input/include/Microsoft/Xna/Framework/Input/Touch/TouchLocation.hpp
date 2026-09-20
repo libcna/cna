@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+#include <any>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Input::Touch
@@ -102,6 +103,17 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @return True if the previous location is valid; false otherwise.
          */
         bool TryGetPreviousLocation(TouchLocation& previousLocation) const;
+
+        /**
+         * @brief Compares this TouchLocation with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one above.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal TouchLocation; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
          * @brief Compares this instance with another for equality.
