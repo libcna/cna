@@ -247,13 +247,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     protected:
         /**
+         * @brief Constructs a AlphaTestEffect that is a clone of @p cloneSource.
+         *
+         * XNA's `protected AlphaTestEffect(AlphaTestEffect cloneSource)`: the constructor `Clone()`
+         * uses, and the one a subclass needs to clone itself. It is the shape of
+         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
+         * device constructor builds it, then every public effect setting and every resource
+         * reference is carried across. Resource references are shared, not duplicated: XNA's
+         * clone points at the same textures, and no renderer handle is copied.
+         *
+         * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
+         * games never copy one, but subclasses and `Clone()` must be able to.
+         *
+         * @param cloneSource The effect to clone.
+         */
+        AlphaTestEffect(const AlphaTestEffect& cloneSource);
+
+        /**
          * @brief Applies shader parameters to the graphics device before drawing.
          */
         void OnApply() override;
 
     private:
-        explicit AlphaTestEffect(const AlphaTestEffect& cloneSource);
-
         void CacheEffectParameters();
 
         Texture2D*       texture_            = nullptr;

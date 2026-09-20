@@ -348,13 +348,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     protected:
         /**
+         * @brief Constructs a EnvironmentMapEffect that is a clone of @p cloneSource.
+         *
+         * XNA's `protected EnvironmentMapEffect(EnvironmentMapEffect cloneSource)`: the constructor `Clone()`
+         * uses, and the one a subclass needs to clone itself. It is the shape of
+         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
+         * device constructor builds it, then every public effect setting and every resource
+         * reference is carried across. Resource references are shared, not duplicated: XNA's
+         * clone points at the same textures, and no renderer handle is copied.
+         *
+         * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
+         * games never copy one, but subclasses and `Clone()` must be able to.
+         *
+         * @param cloneSource The effect to clone.
+         */
+        EnvironmentMapEffect(const EnvironmentMapEffect& cloneSource);
+
+        /**
          * @brief Applies shader parameters to the graphics device before drawing.
          */
         void OnApply() override;
 
     private:
-        explicit EnvironmentMapEffect(const EnvironmentMapEffect& cloneSource);
-
         void CacheEffectParameters();
 
         // Textures stored directly (Texture2D/TextureCube do not inherit from Texture)

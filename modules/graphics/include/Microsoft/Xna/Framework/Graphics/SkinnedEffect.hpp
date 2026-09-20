@@ -374,6 +374,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
     protected:
         /**
+         * @brief Constructs a SkinnedEffect that is a clone of @p cloneSource.
+         *
+         * XNA's `protected SkinnedEffect(SkinnedEffect cloneSource)`: the constructor `Clone()`
+         * uses, and the one a subclass needs to clone itself. It is the shape of
+         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
+         * device constructor builds it, then every public effect setting and every resource
+         * reference is carried across. Resource references are shared, not duplicated: XNA's
+         * clone points at the same textures, and no renderer handle is copied.
+         *
+         * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
+         * games never copy one, but subclasses and `Clone()` must be able to.
+         *
+         * @param cloneSource The effect to clone.
+         */
+        SkinnedEffect(const SkinnedEffect& cloneSource);
+
+        /**
          * @brief Applies shader parameters to the graphics device before drawing.
          */
         void OnApply() override;
@@ -412,7 +429,6 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] const PunctualLightEXT& getPunctualLightEXT() const override;
 
     private:
-
         // CNAEXT shadow reception (MOD-820). Inert by default.
         Texture2D* shadowMapEXT_ = nullptr;
         Matrix lightViewProjectionEXT_{};
@@ -421,7 +437,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
         ShadowCascadeStateEXT shadowCascadesEXT_{};
         PunctualLightEXT punctualLightEXT_{};
-        explicit SkinnedEffect(const SkinnedEffect& cloneSource);
 
         void CacheEffectParameters();
 

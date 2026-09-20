@@ -372,6 +372,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
     protected:
         /**
+         * @brief Constructs a BasicEffect that is a clone of @p cloneSource.
+         *
+         * XNA's `protected BasicEffect(BasicEffect cloneSource)`: the constructor `Clone()`
+         * uses, and the one a subclass needs to clone itself. It is the shape of
+         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
+         * device constructor builds it, then every public effect setting and every resource
+         * reference is carried across. Resource references are shared, not duplicated: XNA's
+         * clone points at the same textures, and no renderer handle is copied.
+         *
+         * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
+         * games never copy one, but subclasses and `Clone()` must be able to.
+         *
+         * @param cloneSource The effect to clone.
+         */
+        BasicEffect(const BasicEffect& cloneSource);
+
+        /**
          * @brief Applies shader parameters to the graphics device before drawing.
          */
         void OnApply() override;
@@ -410,7 +427,6 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] const PunctualLightEXT& getPunctualLightEXT() const override;
 
     private:
-
         void CacheEffectParameters();
 
         EffectParameter* textureParam_ = nullptr;
@@ -444,7 +460,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
         ShadowCascadeStateEXT shadowCascadesEXT_{};
         PunctualLightEXT punctualLightEXT_{};
-        explicit BasicEffect(const BasicEffect& cloneSource);
 
         Vector3 diffuseColor_           = Vector3{1.0f, 1.0f, 1.0f};
         Vector3 emissiveColor_          = Vector3::Zero;
