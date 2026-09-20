@@ -8,24 +8,24 @@ Runtime public types: **331 / 331** (100.00%)
 
 | Member kind | Represented | Documented | Coverage |
 | --- | ---: | ---: | ---: |
-| Constructors | 236 | 253 | 93.28% |
-| Methods | 1487 | 1518 | 97.96% |
+| Constructors | 239 | 253 | 94.47% |
+| Methods | 1503 | 1518 | 99.01% |
 | Properties | 1038 | 1040 | 99.81% |
-| Fields | 751 | 753 | 99.73% |
-| Events | 62 | 63 | 98.41% |
+| Fields | 753 | 753 | 100.00% |
+| Events | 63 | 63 | 100.00% |
 | Operators (subset) | 145 | 145 | 100.00% |
 | Indexers (subset) | 29 | 29 | 100.00% |
 | Enum Values (subset) | 661 | 661 | 100.00% |
 
-Strict documented members: **3574 / 3627** (98.54%)
-C++-applicable members: **3574 / 3627** (98.54%)
+Strict documented members: **3596 / 3627** (99.15%)
+C++-applicable members: **3596 / 3627** (99.15%)
 
 ## Classifications
 
-- EXACT_EQUIVALENT: 1724
-- SEMANTIC_EQUIVALENT: 1792
+- EXACT_EQUIVALENT: 1732
+- SEMANTIC_EQUIVALENT: 1806
 - HOST_LANGUAGE_SUBSTITUTION: 58
-- MISSING: 53
+- MISSING: 31
 - NOT_APPLICABLE: 0
 - NEEDS_REVIEW: 0
 
@@ -37,7 +37,7 @@ Only `NOT_APPLICABLE` is removed from the C++-applicable denominator.
 
 Before production fixes: **3463 / 3627** (95.48%) represented; 164 missing.
 See [the frozen per-member baseline](xna-4-runtime-member-coverage-baseline.md).
-Newly represented entries: **111**.
+Newly represented entries: **133**.
 
 - `Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)`
 - `Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)`
@@ -54,6 +54,13 @@ Newly represented entries: **111**.
 - `Microsoft.Xna.Framework.Vector2.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Vector3.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Vector4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)`
+- `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)`
+- `Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
+- `Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
+- `Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions`
+- `Microsoft.Xna.Framework.Design.MathTypeConverter.supportStringConvert`
+- `Microsoft.Xna.Framework.Design.RayConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
 - `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)`
 - `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode`
@@ -140,35 +147,41 @@ Newly represented entries: **111**.
 - `Microsoft.Xna.Framework.Input.GamePadType.BigButtonPad`
 - `Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Media.Song.FromUri(System.String,System.Uri)`
+- `Microsoft.Xna.Framework.GamerServices.AvatarDescription.Changed`
 - `Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)`
 - `Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode`
+- `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})`
+- `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})`
+- `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})`
 - `Microsoft.Xna.Framework.Graphics.BlendFunction.Max`
 - `Microsoft.Xna.Framework.Graphics.BlendFunction.Min`
+- `Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)`
+- `Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)`
+- `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)`
+- `Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)`
 - `Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Audio.AudioCategory.ToString`
+- `Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)`
+- `Microsoft.Xna.Framework.Audio.RendererDetail.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Audio.SoundBank.Dispose(System.Boolean)`
+- `Microsoft.Xna.Framework.Audio.WaveBank.Dispose(System.Boolean)`
 
 ## Gap review
 
-Tier A gaps remaining: **0**; Tier B: **46**; Tier C: **7**.
+Tier A gaps remaining: **0**; Tier B: **24**; Tier C: **7**.
 Tier B needs type-specific implementation and behavior tests. Tier C requires CLR
 serialization/resources, historical device selection, or presentation architecture.
 All remaining `MISSING` entries are real absent native contracts under the stated
 normalization. Matcher false negatives were corrected before production changes.
 
 ## Remaining missing members
-
-### Audio: `Microsoft.Xna.Framework.Audio.SoundEffectInstance`
-
-- `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)` — Tier B: Array-based spatialization needs multi-listener behavior and validation.
-- `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)` — Tier B: Protected disposal hook must preserve the existing resource lifetime contract.
-
-### Avatar: `Microsoft.Xna.Framework.GamerServices.AvatarDescription`
-
-- `Microsoft.Xna.Framework.GamerServices.AvatarDescription.Changed` — Tier B: Avatar change notification needs event ownership and delivery semantics.
 
 ### Content: `Microsoft.Xna.Framework.Content.ContentLoadException`
 
@@ -199,29 +212,6 @@ normalization. Matcher false negatives were corrected before production changes.
 
 - `Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)` — Tier C: Requires System.Resources.ResourceManager support in Sharp Runtime.
 
-### Design: `Microsoft.Xna.Framework.Design.BoundingBoxConverter`
-
-- `Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)` — Tier B: Type-converter contract needs context and culture behavior.
-
-### Design: `Microsoft.Xna.Framework.Design.BoundingSphereConverter`
-
-- `Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)` — Tier B: Type-converter contract needs context and culture behavior.
-
-### Design: `Microsoft.Xna.Framework.Design.MathTypeConverter`
-
-- `Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions` — Tier B: Type-converter contract needs context and culture behavior.
-- `Microsoft.Xna.Framework.Design.MathTypeConverter.supportStringConvert` — Tier B: Type-converter contract needs context and culture behavior.
-
-### Design: `Microsoft.Xna.Framework.Design.RayConverter`
-
-- `Microsoft.Xna.Framework.Design.RayConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)` — Tier B: Type-converter contract needs context and culture behavior.
-
-### GamerServices: `Microsoft.Xna.Framework.GamerServices.PropertyDictionary`
-
-- `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})` — Tier B: Event or collection contract needs subscription or key-value semantics.
-- `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})` — Tier B: Event or collection contract needs subscription or key-value semantics.
-- `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})` — Tier B: Event or collection contract needs subscription or key-value semantics.
-
 ### Graphics: `Microsoft.Xna.Framework.Graphics.AlphaTestEffect`
 
 - `Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
@@ -229,14 +219,6 @@ normalization. Matcher false negatives were corrected before production changes.
 ### Graphics: `Microsoft.Xna.Framework.Graphics.BasicEffect`
 
 - `Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.DeviceLostException`
-
-- `Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.DeviceNotResetException`
-
-- `Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
 
 ### Graphics: `Microsoft.Xna.Framework.Graphics.DualTextureEffect`
 
@@ -261,7 +243,6 @@ normalization. Matcher false negatives were corrected before production changes.
 
 ### Graphics: `Microsoft.Xna.Framework.Graphics.GraphicsDevice`
 
-- `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)` — Tier B: Protected disposal hook must preserve the existing resource lifetime contract.
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
@@ -274,10 +255,6 @@ normalization. Matcher false negatives were corrected before production changes.
 
 - `Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
 
-### Graphics: `Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException`
-
-- `Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
 ### Graphics: `Microsoft.Xna.Framework.Graphics.SkinnedEffect`
 
 - `Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
@@ -286,10 +263,6 @@ normalization. Matcher false negatives were corrected before production changes.
 
 - `Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
 
-### Media: `Microsoft.Xna.Framework.Media.Song`
-
-- `Microsoft.Xna.Framework.Media.Song.FromUri(System.String,System.Uri)` — Tier B: URI song construction needs file and metadata behavior.
-
 ### Net: `Microsoft.Xna.Framework.Net.NetworkSessionJoinException`
 
 - `Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure.
@@ -297,27 +270,6 @@ normalization. Matcher false negatives were corrected before production changes.
 ### Storage: `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException`
 
 - `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure and exception state restoration.
-
-### XACT: `Microsoft.Xna.Framework.Audio.AudioCategory`
-
-- `Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-- `Microsoft.Xna.Framework.Audio.AudioCategory.ToString` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### XACT: `Microsoft.Xna.Framework.Audio.AudioEngine`
-
-- `Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)` — Tier B: Protected disposal hook must preserve the existing resource lifetime contract.
-
-### XACT: `Microsoft.Xna.Framework.Audio.RendererDetail`
-
-- `Microsoft.Xna.Framework.Audio.RendererDetail.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### XACT: `Microsoft.Xna.Framework.Audio.SoundBank`
-
-- `Microsoft.Xna.Framework.Audio.SoundBank.Dispose(System.Boolean)` — Tier B: Protected disposal hook must preserve the existing resource lifetime contract.
-
-### XACT: `Microsoft.Xna.Framework.Audio.WaveBank`
-
-- `Microsoft.Xna.Framework.Audio.WaveBank.Dispose(System.Boolean)` — Tier B: Protected disposal hook must preserve the existing resource lifetime contract.
 
 ## Entries needing review
 

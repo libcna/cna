@@ -57,7 +57,7 @@ as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before t
 | --- | --- | ---: | ---: | ---: | --- |
 | Baseline | — | 3,467 / 3,627 | 95.59% | 160 | measured at `9f4d2575d` |
 | 1 — value surface | 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | 53 | **DONE** |
-| 2 — local subsystems | 015, 019, 018, 016, 017, 007, 009 | | | | TODO |
+| 2 — local subsystems | 015, 019, 018, 016, 017, 007, 009 | 3,596 / 3,627 | 99.15% | 31 | **DONE** |
 | 3 — Graphics/Content Tier B | 005, 006, 008, 012 | | | | TODO |
 | 4 — shared prerequisites, Tier C | 013, 014, 010, 011 | | | | TODO |
 
@@ -68,7 +68,20 @@ as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before t
 | XNA-MISSING-003 Input / Touch | **DONE** | 12 | `abc1bcab4` | The four GamePad `ToString()` bodies are each different; button/DPad name order is the documented one, not the accessor declaration order. |
 | XNA-MISSING-004 Graphics vertex | **DONE** | 5 | `1e97ae2e4` | Declaration-only change beside the existing typed `Equals`. |
 | XNA-MISSING-020 GraphicsDeviceInformation | **DONE** | 2 | `1a5d93ffd` | Compares the adapter, the profile and exactly the ten presentation fields XNA compares; `GetHashCode` XORs the same set. |
-| XNA-MISSING-005 … 019 | TODO | | | See §5. |
+| XNA-MISSING-015 Design | **DONE** | 5 | `7ea8096c2` | The two protected fields are renamed to XNA's spelling, not aliased, so there is one state source. The three `ConvertFrom` overrides forward to the base, as Microsoft's own bodies do. |
+| XNA-MISSING-019 Media | **DONE** | 1 | `3fa04f9e8` | `cna_media` links SharpRuntime `Uri` PUBLIC. The typed overload passes `OriginalString`, not `AbsoluteUri`, which is what keeps a relative URI usable. |
+| XNA-MISSING-018 GamerServices / Avatar | **DONE** | 4 | `6a3ba555e` | `Changed` is now per-instance, which changed `cna_avatar_description_subscribe_changed_ext` to take a description handle (exported symbol set unchanged). Microsoft's shipped Windows `PropertyDictionary` throws from *every* member; CNA's local dictionary contract is the established behaviour and the pair operations follow it. |
+| XNA-MISSING-016 Audio | **DONE** | 2 | `484359479` | The collection overload refuses an empty collection itself: an empty `std::vector`'s `data()` is null, which the pointer overload rightly reads as a null array. |
+| XNA-MISSING-017 XACT | **DONE** | 6 | `484359479` | `RendererDetail`'s typed equality compared the id alone, as FNA does; XNA compares name and id, so it had to change for `Equals(object)` to agree with it. Recorded in `plans/plan_bindings_upstream.md`. |
+| XNA-MISSING-007 graphics exceptions | **DONE** | 3 | `b0fa4b002` | Re-based on `System::Exception` -- XNA's hierarchy and the base every other XNA exception in CNA uses -- rather than adding an ad hoc inner-cause field to `std::runtime_error`. |
+| XNA-MISSING-009 GraphicsDevice disposal | **DONE** | 1 | `a1e47f004` | Lifecycle order unchanged; the flag adds XNA's guard that `Disposing` is raised only for an explicit disposal. |
+| XNA-MISSING-005, 006, 008, 010–014 | TODO | | | See §5. |
+
+Phase 2 evidence: 22 records closed, 0 regressed, 0 `NEEDS_REVIEW`. Closed by audit subsystem:
+Design 5, XACT 6, GamerServices 3, Graphics 4, Audio 2, Avatar 1, Media 1. Two behavioural
+corrections fell out of the work and are recorded where they were made: `RendererDetail`'s identity
+(`plans/plan_bindings_upstream.md`) and the `PropertyDictionary` doc comment that described the
+reference assembly wrongly.
 
 Phase 1 evidence: 107 records closed, 0 regressed, 0 `NEEDS_REVIEW`, and no represented record
 moved back to `MISSING`. Closed by audit subsystem: Core / Math 15, Graphics 78, Input 11,
@@ -258,6 +271,7 @@ The `Present` overload is the only Tier C item likely to require renderer contra
 | Current | 3,467 / 3,627 | 95.59% | Fresh audit |
 | **Measured** after 001 | **3,541 / 3,627** | **97.63%** | Exactly 74 closed, as predicted |
 | **Measured** after 001, 002, 003, 004, 020 | **3,574 / 3,627** | **98.54%** | Exactly 107 closed, as predicted |
+| **Measured** after phase 2 (015, 019, 018, 016, 017, 007, 009) | **3,596 / 3,627** | **99.15%** | Exactly 22 closed, as predicted |
 | After 001 PackedVector | 3,541 / 3,627 | 97.63% | Exactly 74 records close |
 | After 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | Those packages close 107 disjoint records |
 | After **all Tier B** | 3,620 / 3,627 | 99.81% | All 153 Tier B close; seven Tier C remain |
@@ -304,14 +318,14 @@ PY
 
 #### Microsoft.Xna.Framework.Audio.SoundEffectInstance
 
-- [ ] Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)
-- [ ] Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)
+- [x] Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)
+- [x] Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)
 
 ### Avatar
 
 #### Microsoft.Xna.Framework.GamerServices.AvatarDescription
 
-- [ ] Microsoft.Xna.Framework.GamerServices.AvatarDescription.Changed
+- [x] Microsoft.Xna.Framework.GamerServices.AvatarDescription.Changed
 
 ### Content
 
@@ -410,28 +424,28 @@ PY
 
 #### Microsoft.Xna.Framework.Design.BoundingBoxConverter
 
-- [ ] Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)
+- [x] Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)
 
 #### Microsoft.Xna.Framework.Design.BoundingSphereConverter
 
-- [ ] Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)
+- [x] Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)
 
 #### Microsoft.Xna.Framework.Design.MathTypeConverter
 
-- [ ] Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions
-- [ ] Microsoft.Xna.Framework.Design.MathTypeConverter.supportStringConvert
+- [x] Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions
+- [x] Microsoft.Xna.Framework.Design.MathTypeConverter.supportStringConvert
 
 #### Microsoft.Xna.Framework.Design.RayConverter
 
-- [ ] Microsoft.Xna.Framework.Design.RayConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)
+- [x] Microsoft.Xna.Framework.Design.RayConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)
 
 ### GamerServices
 
 #### Microsoft.Xna.Framework.GamerServices.PropertyDictionary
 
-- [ ] Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})
-- [ ] Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})
-- [ ] Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})
+- [x] Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})
+- [x] Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})
+- [x] Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})
 
 ### Graphics
 
@@ -445,11 +459,11 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.DeviceLostException
 
-- [ ] Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)
+- [x] Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)
 
 #### Microsoft.Xna.Framework.Graphics.DeviceNotResetException
 
-- [ ] Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)
+- [x] Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)
 
 #### Microsoft.Xna.Framework.Graphics.DualTextureEffect
 
@@ -474,7 +488,7 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.GraphicsDevice
 
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)
 - [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32)
 - [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
 - [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32)
@@ -489,7 +503,7 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException
 
-- [ ] Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)
+- [x] Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8
 
@@ -681,7 +695,7 @@ PY
 
 #### Microsoft.Xna.Framework.Media.Song
 
-- [ ] Microsoft.Xna.Framework.Media.Song.FromUri(System.String,System.Uri)
+- [x] Microsoft.Xna.Framework.Media.Song.FromUri(System.String,System.Uri)
 
 ### Net
 
@@ -712,21 +726,21 @@ PY
 
 #### Microsoft.Xna.Framework.Audio.AudioCategory
 
-- [ ] Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Audio.AudioCategory.ToString
+- [x] Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Audio.AudioCategory.ToString
 
 #### Microsoft.Xna.Framework.Audio.AudioEngine
 
-- [ ] Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)
+- [x] Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)
 
 #### Microsoft.Xna.Framework.Audio.RendererDetail
 
-- [ ] Microsoft.Xna.Framework.Audio.RendererDetail.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Audio.RendererDetail.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Audio.SoundBank
 
-- [ ] Microsoft.Xna.Framework.Audio.SoundBank.Dispose(System.Boolean)
+- [x] Microsoft.Xna.Framework.Audio.SoundBank.Dispose(System.Boolean)
 
 #### Microsoft.Xna.Framework.Audio.WaveBank
 
-- [ ] Microsoft.Xna.Framework.Audio.WaveBank.Dispose(System.Boolean)
+- [x] Microsoft.Xna.Framework.Audio.WaveBank.Dispose(System.Boolean)

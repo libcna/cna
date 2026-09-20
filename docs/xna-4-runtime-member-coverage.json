@@ -2382,7 +2382,7 @@
       "Microsoft.Xna.Framework.Xact.dll"
     ],
     "documented": 3627,
-    "represented": 3574,
+    "represented": 3596,
     "metadata_dll_sha256": {
       "Microsoft.Xna.Framework.dll": "38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130",
       "Microsoft.Xna.Framework.Avatar.dll": "b3c70bbe469000b9e11507cc63b88d54a4e0bc5c27afc826d66e0aee51640871",
@@ -2395,36 +2395,36 @@
       "Microsoft.Xna.Framework.Video.dll": "17538b1ca9d48a993e2cd88c96b436df08e7abb4aec5d4758eb21feb580d6e06",
       "Microsoft.Xna.Framework.Xact.dll": "a14d5364dca7cf49fb90639e87ba04d52b59a700dc9198efa5707ce8eae28f0a"
     },
-    "strict_coverage_percent": 98.54,
+    "strict_coverage_percent": 99.15,
     "cpp_applicable_denominator": 3627,
-    "cpp_applicable_coverage_percent": 98.54,
+    "cpp_applicable_coverage_percent": 99.15,
     "classifications": {
-      "EXACT_EQUIVALENT": 1724,
-      "SEMANTIC_EQUIVALENT": 1792,
+      "EXACT_EQUIVALENT": 1732,
+      "SEMANTIC_EQUIVALENT": 1806,
       "HOST_LANGUAGE_SUBSTITUTION": 58,
-      "MISSING": 53,
+      "MISSING": 31,
       "NOT_APPLICABLE": 0,
       "NEEDS_REVIEW": 0
     },
     "categories": {
       "constructor": {
         "documented": 253,
-        "represented": 236,
+        "represented": 239,
         "classifications": {
           "EXACT_EQUIVALENT": 159,
-          "SEMANTIC_EQUIVALENT": 76,
-          "MISSING": 17,
+          "SEMANTIC_EQUIVALENT": 79,
+          "MISSING": 14,
           "HOST_LANGUAGE_SUBSTITUTION": 1
         }
       },
       "method": {
         "documented": 1518,
-        "represented": 1487,
+        "represented": 1503,
         "classifications": {
-          "EXACT_EQUIVALENT": 818,
-          "SEMANTIC_EQUIVALENT": 613,
+          "EXACT_EQUIVALENT": 824,
+          "SEMANTIC_EQUIVALENT": 623,
           "HOST_LANGUAGE_SUBSTITUTION": 56,
-          "MISSING": 31
+          "MISSING": 15
         }
       },
       "property": {
@@ -2438,19 +2438,17 @@
       },
       "field": {
         "documented": 753,
-        "represented": 751,
+        "represented": 753,
         "classifications": {
-          "EXACT_EQUIVALENT": 747,
-          "MISSING": 2,
+          "EXACT_EQUIVALENT": 749,
           "SEMANTIC_EQUIVALENT": 4
         }
       },
       "event": {
         "documented": 63,
-        "represented": 62,
+        "represented": 63,
         "classifications": {
-          "SEMANTIC_EQUIVALENT": 62,
-          "MISSING": 1
+          "SEMANTIC_EQUIVALENT": 63
         }
       }
     },
@@ -38119,7 +38117,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.SoundEffectInstance",
         "name": "Apply3D",
@@ -38132,8 +38130,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Apply3D(const AudioListener &, const AudioEmitter &) -> void",
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp::Apply3D(const std::vector<AudioListener> &, const AudioEmitter &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Void",
@@ -38156,9 +38154,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp",
-        "subsystem": "Audio",
-        "gap_tier": "B",
-        "gap_reason": "Array-based spatialization needs multi-listener behavior and validation."
+        "subsystem": "Audio"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose",
@@ -38196,7 +38192,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.SoundEffectInstance",
         "name": "Dispose",
@@ -38208,7 +38204,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp::Dispose(bool)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -38230,9 +38226,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp",
-        "subsystem": "Audio",
-        "gap_tier": "B",
-        "gap_reason": "Protected disposal hook must preserve the existing resource lifetime contract."
+        "subsystem": "Audio"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.SoundEffectInstance.Finalize",
@@ -41031,7 +41025,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Design.BoundingBoxConverter",
         "name": "ConvertFrom",
@@ -41045,7 +41039,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/design/include/Microsoft/Xna/Framework/Design/BoundingBoxConverter.hpp::ConvertFrom(System::ComponentModel::ITypeDescriptorContext *, const System::Globalization::CultureInfo *, const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -41068,12 +41062,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/design/include/Microsoft/Xna/Framework/Design/BoundingBoxConverter.hpp",
-        "subsystem": "Design",
-        "gap_tier": "B",
-        "gap_reason": "Type-converter contract needs context and culture behavior."
+        "subsystem": "Design"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertTo(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object,System.Type)",
@@ -41201,7 +41193,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Design.BoundingSphereConverter",
         "name": "ConvertFrom",
@@ -41215,7 +41207,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/design/include/Microsoft/Xna/Framework/Design/BoundingSphereConverter.hpp::ConvertFrom(System::ComponentModel::ITypeDescriptorContext *, const System::Globalization::CultureInfo *, const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -41238,12 +41230,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/design/include/Microsoft/Xna/Framework/Design/BoundingSphereConverter.hpp",
-        "subsystem": "Design",
-        "gap_tier": "B",
-        "gap_reason": "Type-converter contract needs context and culture behavior."
+        "subsystem": "Design"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertTo(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object,System.Type)",
@@ -41746,7 +41736,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions",
         "category": "field",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Design.MathTypeConverter",
         "name": "propertyDescriptions",
@@ -41756,7 +41746,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions",
-        "cna_symbol": null,
+        "cna_symbol": "modules/design/include/Microsoft/Xna/Framework/Design/MathTypeConverter.hpp::propertyDescriptions",
         "notes": "",
         "metadata": {
           "kind": "field",
@@ -41771,17 +41761,15 @@
           "field_semantics": "mutable",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/design/include/Microsoft/Xna/Framework/Design/MathTypeConverter.hpp",
-        "subsystem": "Design",
-        "gap_tier": "B",
-        "gap_reason": "Type-converter contract needs context and culture behavior."
+        "subsystem": "Design"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Design.MathTypeConverter.supportStringConvert",
         "category": "field",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Design.MathTypeConverter",
         "name": "supportStringConvert",
@@ -41791,7 +41779,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Design.MathTypeConverter.supportStringConvert",
-        "cna_symbol": null,
+        "cna_symbol": "modules/design/include/Microsoft/Xna/Framework/Design/MathTypeConverter.hpp::supportStringConvert",
         "notes": "",
         "metadata": {
           "kind": "field",
@@ -41806,12 +41794,10 @@
           "field_semantics": "mutable",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/design/include/Microsoft/Xna/Framework/Design/MathTypeConverter.hpp",
-        "subsystem": "Design",
-        "gap_tier": "B",
-        "gap_reason": "Type-converter contract needs context and culture behavior."
+        "subsystem": "Design"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Design.MatrixConverter.#ctor",
@@ -42431,7 +42417,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Design.RayConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Design.RayConverter",
         "name": "ConvertFrom",
@@ -42445,7 +42431,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Design.RayConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/design/include/Microsoft/Xna/Framework/Design/RayConverter.hpp::ConvertFrom(System::ComponentModel::ITypeDescriptorContext *, const System::Globalization::CultureInfo *, const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -42468,12 +42454,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/design/include/Microsoft/Xna/Framework/Design/RayConverter.hpp",
-        "subsystem": "Design",
-        "gap_tier": "B",
-        "gap_reason": "Type-converter contract needs context and culture behavior."
+        "subsystem": "Design"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Design.RayConverter.ConvertTo(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object,System.Type)",
@@ -67222,7 +67206,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Media.Song.FromUri(System.String,System.Uri)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Media.Song",
         "name": "FromUri",
@@ -67235,8 +67219,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Media.Song.FromUri(System.String,System.Uri)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: FromUri(const std::string &, const std::string &) -> Song *",
+        "cna_symbol": "modules/media/include/Microsoft/Xna/Framework/Media/Song.hpp::FromUri(const std::string &, const System::Uri &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "Microsoft.Xna.Framework.Media.Song",
@@ -67259,9 +67243,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/media/include/Microsoft/Xna/Framework/Media/Song.hpp",
-        "subsystem": "Media",
-        "gap_tier": "B",
-        "gap_reason": "URI song construction needs file and metadata behavior."
+        "subsystem": "Media"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Media.Song.Genre",
@@ -71355,7 +71337,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.AvatarDescription.Changed",
         "category": "event",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Avatar.xml",
         "declaring_type": "Microsoft.Xna.Framework.GamerServices.AvatarDescription",
         "name": "Changed",
@@ -71365,8 +71347,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Avatar",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.AvatarDescription.Changed",
-        "cna_symbol": null,
-        "notes": "No event with the documented delegate type and ownership.",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp::Changed",
+        "notes": "CNA event/delegate field; subscription semantics are a separate behavior check.",
         "metadata": {
           "kind": "event",
           "value_type": "System.EventHandler{System.EventArgs}",
@@ -71383,9 +71365,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp",
-        "subsystem": "Avatar",
-        "gap_tier": "B",
-        "gap_reason": "Avatar change notification needs event ownership and delivery semantics."
+        "subsystem": "Avatar"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.AvatarDescription.CreateRandom",
@@ -89975,7 +89955,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.GamerServices.xml",
         "declaring_type": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary",
         "name": "System#Collections#Generic#ICollection{T}#Add",
@@ -89987,8 +89967,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.GamerServices",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})",
-        "cna_symbol": null,
-        "notes": "Microsoft XML explicit-interface name normalized to CLR metadata.",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp::Add(const System::Collections::Generic::KeyValuePair<std::string, std::any> &)",
+        "notes": "Explicit CLR interface implementation mapped to public CNA member. Microsoft XML explicit-interface name normalized to CLR metadata.",
         "metadata": {
           "kind": "method",
           "value_type": "System.Void",
@@ -90009,9 +89989,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp",
-        "subsystem": "GamerServices",
-        "gap_tier": "B",
-        "gap_reason": "Event or collection contract needs subscription or key-value semantics."
+        "subsystem": "GamerServices"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Clear",
@@ -90049,7 +90027,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.GamerServices.xml",
         "declaring_type": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary",
         "name": "System#Collections#Generic#ICollection{T}#Contains",
@@ -90061,8 +90039,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.GamerServices",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})",
-        "cna_symbol": null,
-        "notes": "Microsoft XML explicit-interface name normalized to CLR metadata.",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp::Contains(const System::Collections::Generic::KeyValuePair<std::string, std::any> &)",
+        "notes": "Explicit CLR interface implementation mapped to public CNA member. Microsoft XML explicit-interface name normalized to CLR metadata.",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -90080,12 +90058,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp",
-        "subsystem": "GamerServices",
-        "gap_tier": "B",
-        "gap_reason": "Event or collection contract needs subscription or key-value semantics."
+        "subsystem": "GamerServices"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#CopyTo(System.Collections.Generic.KeyValuePair{System.String,System.Object}[],System.Int32)",
@@ -90165,7 +90141,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.GamerServices.xml",
         "declaring_type": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary",
         "name": "System#Collections#Generic#ICollection{T}#Remove",
@@ -90177,8 +90153,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.GamerServices",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Remove(const std::string &) -> bool Microsoft XML explicit-interface name normalized to CLR metadata.",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp::Remove(const System::Collections::Generic::KeyValuePair<std::string, std::any> &)",
+        "notes": "Explicit CLR interface implementation mapped to public CNA member. Microsoft XML explicit-interface name normalized to CLR metadata.",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -90199,9 +90175,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp",
-        "subsystem": "GamerServices",
-        "gap_tier": "B",
-        "gap_reason": "Event or collection contract needs subscription or key-value semantics."
+        "subsystem": "GamerServices"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#IEnumerable#GetEnumerator",
@@ -95676,7 +95650,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.DeviceLostException",
         "name": "#ctor",
@@ -95689,7 +95663,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp::DeviceLostException(const std::string &, std::exception_ptr)",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -95713,9 +95687,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor",
@@ -95792,7 +95764,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.DeviceNotResetException",
         "name": "#ctor",
@@ -95805,7 +95777,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DeviceNotResetException.hpp::DeviceNotResetException(const std::string &, std::exception_ptr)",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -95829,9 +95801,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DeviceNotResetException.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DirectionalLight.#ctor(Microsoft.Xna.Framework.Graphics.EffectParameter,Microsoft.Xna.Framework.Graphics.EffectParameter,Microsoft.Xna.Framework.Graphics.EffectParameter,Microsoft.Xna.Framework.Graphics.DirectionalLight)",
@@ -103639,7 +103609,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "Dispose",
@@ -103651,7 +103621,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::Dispose(bool)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -103673,9 +103643,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Protected disposal hook must preserve the existing resource lifetime contract."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.Disposing",
@@ -109048,7 +109016,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException",
         "name": "#ctor",
@@ -109061,7 +109029,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp::NoSuitableGraphicsDeviceException(const std::string &, std::exception_ptr)",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -109085,9 +109053,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.OcclusionQuery.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice)",
@@ -132284,7 +132250,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Xact.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.AudioCategory",
         "name": "Equals",
@@ -132296,8 +132262,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Xact",
         "xna_signature": "Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const AudioCategory &) -> bool",
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/AudioCategory.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -132318,9 +132284,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/AudioCategory.hpp",
-        "subsystem": "XACT",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "XACT"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.AudioCategory.GetHashCode",
@@ -132619,7 +132583,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.AudioCategory.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Xact.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.AudioCategory",
         "name": "ToString",
@@ -132629,7 +132593,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Xact",
         "xna_signature": "Microsoft.Xna.Framework.Audio.AudioCategory.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/AudioCategory.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -132644,12 +132608,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/AudioCategory.hpp",
-        "subsystem": "XACT",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "XACT"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.AudioEngine.#ctor(System.String)",
@@ -132804,7 +132766,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Xact.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.AudioEngine",
         "name": "Dispose",
@@ -132816,7 +132778,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Xact",
         "xna_signature": "Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/AudioEngine.hpp::Dispose(bool)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -132838,9 +132800,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/AudioEngine.hpp",
-        "subsystem": "XACT",
-        "gap_tier": "B",
-        "gap_reason": "Protected disposal hook must preserve the existing resource lifetime contract."
+        "subsystem": "XACT"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.AudioEngine.Disposing",
@@ -133820,7 +133780,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.RendererDetail.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Xact.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.RendererDetail",
         "name": "Equals",
@@ -133832,8 +133792,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Xact",
         "xna_signature": "Microsoft.Xna.Framework.Audio.RendererDetail.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const RendererDetail &) -> bool",
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/RendererDetail.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -133854,9 +133814,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/RendererDetail.hpp",
-        "subsystem": "XACT",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "XACT"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.RendererDetail.FriendlyName",
@@ -134152,7 +134110,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.SoundBank.Dispose(System.Boolean)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Xact.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.SoundBank",
         "name": "Dispose",
@@ -134164,7 +134122,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Xact",
         "xna_signature": "Microsoft.Xna.Framework.Audio.SoundBank.Dispose(System.Boolean)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundBank.hpp::Dispose(bool)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -134186,9 +134144,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundBank.hpp",
-        "subsystem": "XACT",
-        "gap_tier": "B",
-        "gap_reason": "Protected disposal hook must preserve the existing resource lifetime contract."
+        "subsystem": "XACT"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.SoundBank.Disposing",
@@ -134571,7 +134527,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.WaveBank.Dispose(System.Boolean)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Xact.xml",
         "declaring_type": "Microsoft.Xna.Framework.Audio.WaveBank",
         "name": "Dispose",
@@ -134583,7 +134539,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Xact",
         "xna_signature": "Microsoft.Xna.Framework.Audio.WaveBank.Dispose(System.Boolean)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/WaveBank.hpp::Dispose(bool)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -134605,9 +134561,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/audio/include/Microsoft/Xna/Framework/Audio/WaveBank.hpp",
-        "subsystem": "XACT",
-        "gap_tier": "B",
-        "gap_reason": "Protected disposal hook must preserve the existing resource lifetime contract."
+        "subsystem": "XACT"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Audio.WaveBank.Disposing",
