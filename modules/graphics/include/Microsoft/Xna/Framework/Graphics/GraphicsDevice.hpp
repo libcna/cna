@@ -301,6 +301,43 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Presents the rendered frame to the display. */
         void Present();
 
+        /**
+         * @brief Presents part of the backbuffer, optionally to another window.
+         *
+         * The documented three-argument Present. A null source rectangle presents the whole
+         * backbuffer and a null destination rectangle fills the whole client area, each clipped to
+         * that surface when it is larger, and a zero @p overrideWindowHandle means the device's own
+         * window -- which is what makes `Present(std::nullopt, std::nullopt, 0)` identical to
+         * `Present()`, and CNA takes exactly that path for it.
+         *
+         * Anything else is a request CNA's renderers do not all have an equivalent for. XNA's maps
+         * onto Direct3D 9's `Present`, which takes a source rectangle, a destination rectangle and a
+         * window handle natively; CNA's renderers present through their own swap chains or through a
+         * platform surface presenter, and neither contract carries a destination rectangle or a
+         * foreign window. So the request is passed to the renderer, which honours what it can and
+         * otherwise refuses -- and the refusal is explicit rather than the request being dropped,
+         * because a present that silently ignored its rectangles would show the whole frame while
+         * reporting that it had shown part of it.
+         *
+         * What is honoured today: HEADLESS accepts any request, because it presents nothing at all
+         * and so has nothing to get wrong; SOFTWARE honours a source rectangle, presenting that
+         * sub-rectangle of its backbuffer without copying it. No renderer honours a destination
+         * rectangle or a foreign window.
+         *
+         * @param sourceRectangle The part of the backbuffer to present, or nullopt for all of it.
+         * @param destinationRectangle Where in the window's client area to present it, in client
+         *        pixels, or nullopt for the whole client area.
+         * @param overrideWindowHandle The window to present to, or 0 for the device's own window.
+         * @throws System::ObjectDisposedException if the device has been disposed.
+         * @throws System::InvalidOperationException if render targets are bound.
+         * @throws System::ArgumentException if a supplied rectangle has a non-positive extent, or
+         *         lies entirely outside the surface it applies to, so that clipping leaves nothing.
+         * @throws System::NotSupportedException if the active renderer cannot honour the request.
+         */
+        void Present(const std::optional<Rectangle>& sourceRectangle,
+                     const std::optional<Rectangle>& destinationRectangle,
+                     std::uintptr_t overrideWindowHandle);
+
         /** @brief Resets the device using the current presentation parameters. */
         void Reset();
         /**

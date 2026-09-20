@@ -530,6 +530,35 @@ namespace CNA::Internal::Renderers::Headless
         state_->RecordTrace("Present", "frameIndex=" + std::to_string(state_->frameIndex));
     }
 
+    bool HeadlessRenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        std::string detail = "frameIndex=" + std::to_string(state_->frameIndex + 1);
+        if (region.hasSourceRectangle)
+        {
+            detail += " source=" + std::to_string(region.sourceX) + "," +
+                      std::to_string(region.sourceY) + "," + std::to_string(region.sourceWidth) +
+                      "x" + std::to_string(region.sourceHeight);
+        }
+        if (region.hasDestinationRectangle)
+        {
+            detail += " destination=" + std::to_string(region.destinationX) + "," +
+                      std::to_string(region.destinationY) + "," +
+                      std::to_string(region.destinationWidth) + "x" +
+                      std::to_string(region.destinationHeight);
+        }
+        if (region.overrideWindowHandle != 0)
+        {
+            detail += " overrideWindow=" + std::to_string(region.overrideWindowHandle);
+        }
+
+        // Counts as a present, because it is one: the same nothing reaches the same nowhere.
+        state_->stats.presentCount++;
+        state_->statsAtLastPresent = state_->stats;
+        state_->frameIndex++;
+        state_->RecordTrace("PresentRegion", detail);
+        return true;
+    }
+
     void HeadlessRenderer::GetViewportSize(int& width, int& height)
     {
         // Target zero, not "the" target: with several bound, XNA requires them all to share a

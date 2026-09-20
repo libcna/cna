@@ -828,6 +828,136 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    namespace
+    {
+        /// Clips @p rectangle to a surface @p width by @p height, in that surface's own pixels, and
+        /// reports whether anything is left. XNA's documentation is explicit that an oversized
+        /// rectangle is clipped to the surface rather than refused, which is what Direct3D 9 does
+        /// with the RECT it is handed.
+        [[nodiscard]] bool ClipPresentRectangle(const Rectangle& rectangle, int width, int height,
+                                                int& outX, int& outY, int& outWidth, int& outHeight)
+        {
+            const int left = std::max(rectangle.X, 0);
+            const int top = std::max(rectangle.Y, 0);
+            const int right = std::min(rectangle.X + rectangle.Width, width);
+            const int bottom = std::min(rectangle.Y + rectangle.Height, height);
+            if (right <= left || bottom <= top)
+            {
+                return false;
+            }
+            outX = left;
+            outY = top;
+            outWidth = right - left;
+            outHeight = bottom - top;
+            return true;
+        }
+    }
+
+    void GraphicsDevice::Present(const std::optional<Rectangle>& sourceRectangle,
+                                 const std::optional<Rectangle>& destinationRectangle,
+                                 const std::uintptr_t overrideWindowHandle)
+    {
+        // XNA's own equivalence, and the reason the ordinary present path is untouched: with nothing
+        // specified this *is* Present(), which XNA spells as Present(null, null, null).
+        if (!sourceRectangle.has_value() && !destinationRectangle.has_value() &&
+            overrideWindowHandle == 0)
+        {
+            Present();
+            return;
+        }
+
+        ThrowIfDisposed();
+        if (renderTargetBound_)
+            throw System::InvalidOperationException("Cannot present while render targets are bound");
+
+        CNA::Internal::Renderers::IGraphicsRenderer::RendererPresentRegionEXT region;
+        region.overrideWindowHandle = overrideWindowHandle;
+
+        if (sourceRectangle.has_value())
+        {
+            if (sourceRectangle->Width <= 0 || sourceRectangle->Height <= 0)
+            {
+                throw System::ArgumentException(
+                    "The source rectangle has a non-positive extent, so it names no pixels.",
+                    "sourceRectangle");
+            }
+            const int width = presentationParameters_.getBackBufferWidthProperty();
+            const int height = presentationParameters_.getBackBufferHeightProperty();
+            if (!ClipPresentRectangle(*sourceRectangle, width, height, region.sourceX,
+                                      region.sourceY, region.sourceWidth, region.sourceHeight))
+            {
+                throw System::ArgumentException(
+                    "The source rectangle lies entirely outside the " + std::to_string(width) + "x" +
+                        std::to_string(height) + " backbuffer, so clipping it leaves nothing to "
+                        "present.",
+                    "sourceRectangle");
+            }
+            region.hasSourceRectangle = true;
+        }
+
+        if (destinationRectangle.has_value())
+        {
+            if (destinationRectangle->Width <= 0 || destinationRectangle->Height <= 0)
+            {
+                throw System::ArgumentException(
+                    "The destination rectangle has a non-positive extent, so it names no pixels.",
+                    "destinationRectangle");
+            }
+            // The client area, which for a windowless device is the backbuffer it renders into.
+            int width = presentationParameters_.getBackBufferWidthProperty();
+            int height = presentationParameters_.getBackBufferHeightProperty();
+            if (platformWindow_ != nullptr)
+            {
+                const auto size = platformWindow_->GetPixelSize();
+                width = size.width;
+                height = size.height;
+            }
+            if (!ClipPresentRectangle(*destinationRectangle, width, height, region.destinationX,
+                                      region.destinationY, region.destinationWidth,
+                                      region.destinationHeight))
+            {
+                throw System::ArgumentException(
+                    "The destination rectangle lies entirely outside the " + std::to_string(width) +
+                        "x" + std::to_string(height) + " client area, so clipping it leaves nowhere "
+                        "to present to.",
+                    "destinationRectangle");
+            }
+            region.hasDestinationRectangle = true;
+        }
+
+        if (renderer_ == nullptr)
+        {
+            return;
+        }
+
+        auto contextLease = AcquireRendererThreadContextLease();
+        if (!renderer_->PresentRegionEXT(region))
+        {
+            // Refusing rather than presenting the whole frame: a caller that asked for part of it,
+            // or for another window, would otherwise be told it got what it asked for.
+            std::string requested;
+            if (region.hasSourceRectangle)
+            {
+                requested += "a source rectangle";
+            }
+            if (region.hasDestinationRectangle)
+            {
+                requested += requested.empty() ? "a destination rectangle"
+                                               : ", a destination rectangle";
+            }
+            if (region.overrideWindowHandle != 0)
+            {
+                requested += requested.empty() ? "an override window" : ", an override window";
+            }
+            throw System::NotSupportedException(
+                "The " + std::string(CNA::getGraphicsRendererName(GetGraphicsRendererType())) +
+                " renderer cannot present with " + requested +
+                ". Present() with no arguments presents the whole backbuffer to the device's own "
+                "window, which every renderer supports.");
+        }
+        UpdateViewportFromWindow();
+    }
+
     std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
     GraphicsDevice::AcquireRendererThreadContextLease()
     {

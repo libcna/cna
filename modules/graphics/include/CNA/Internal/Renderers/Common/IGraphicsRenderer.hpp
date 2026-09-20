@@ -2421,6 +2421,66 @@ namespace CNA::Internal::Renderers
         }
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
+
+        /**
+         * @brief What `GraphicsDevice::Present(sourceRectangle, destinationRectangle,
+         *        overrideWindowHandle)` asks a renderer to do.
+         *
+         * XNA's three-argument Present maps onto Direct3D 9's own `Present(source, destination,
+         * hWnd, ...)`, which takes all three natively. CNA's renderers present through their own swap
+         * chains or through a platform surface presenter, and none of those contracts carries a
+         * destination rectangle or a foreign window, so this describes the request and each renderer
+         * answers for what it can actually honour.
+         *
+         * Rectangles arrive already clipped, in backbuffer pixels for the source and window client
+         * pixels for the destination, and only when the caller supplied them.
+         */
+        struct RendererPresentRegionEXT
+        {
+            /** @brief Whether a source rectangle was supplied. */
+            bool hasSourceRectangle = false;
+            /** @brief Source rectangle in backbuffer pixels, clipped to the backbuffer. */
+            int sourceX = 0;
+            /** @brief See sourceX. */
+            int sourceY = 0;
+            /** @brief See sourceX. Always positive when hasSourceRectangle is true. */
+            int sourceWidth = 0;
+            /** @brief See sourceX. Always positive when hasSourceRectangle is true. */
+            int sourceHeight = 0;
+
+            /** @brief Whether a destination rectangle was supplied. */
+            bool hasDestinationRectangle = false;
+            /** @brief Destination rectangle in window client pixels, clipped to the client area. */
+            int destinationX = 0;
+            /** @brief See destinationX. */
+            int destinationY = 0;
+            /** @brief See destinationX. Always positive when hasDestinationRectangle is true. */
+            int destinationWidth = 0;
+            /** @brief See destinationX. Always positive when hasDestinationRectangle is true. */
+            int destinationHeight = 0;
+
+            /** @brief The window to present to, or 0 for the device's own window. */
+            std::uintptr_t overrideWindowHandle = 0;
+        };
+
+        /**
+         * @brief Presents part of the backbuffer, or to another window, if this renderer can.
+         *
+         * Additive and defaulted: a renderer that says nothing cannot do any of it, and
+         * `Present()` -- which every renderer implements and which this does not replace -- is
+         * untouched. `GraphicsDevice` never calls this for the all-defaults request; that is
+         * `Present()` by definition, so the ordinary present path is unchanged for every renderer.
+         *
+         * @param region What was asked for. Rectangles are already clipped.
+         * @return @c true if the request was honoured in full; @c false if this renderer cannot
+         *         honour it, which GraphicsDevice turns into an explicit refusal naming the renderer.
+         *         A renderer must not return @c true having ignored part of the request.
+         */
+        virtual bool PresentRegionEXT(const RendererPresentRegionEXT& region)
+        {
+            (void)region;
+            return false;
+        }
         virtual void GetViewportSize(int& width, int& height) = 0;
         /// Refreshes the platform-owned presentation surface snapshot after a resize or density
         /// change. The default is inert for renderers whose native swap chain handles this itself.

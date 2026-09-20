@@ -92,6 +92,67 @@ namespace CNA::Internal::Renderers::Software
         surfacePresenter_->Present(frame);
     }
 
+    bool SoftwareRenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        // Neither has an equivalent in IPlatformSurfacePresenter's contract, so neither is claimed.
+        if (region.hasDestinationRectangle || region.overrideWindowHandle != 0)
+        {
+            return false;
+        }
+        if (!region.hasSourceRectangle)
+        {
+            // Nothing asked for beyond an ordinary present; GraphicsDevice does not route that here,
+            // but answering it correctly costs nothing.
+            Present();
+            return true;
+        }
+
+        if (surfacePresenter_ == nullptr)
+        {
+            // The same ordinary case Present() has: no presenter, so presenting is a no-op -- and a
+            // no-op that honours the request in full, since the request was to display pixels and
+            // nothing displays them.
+            return true;
+        }
+
+        SoftwareFramebuffer& framebuffer = backbuffer_;
+        if (framebuffer.width <= 0 || framebuffer.height <= 0)
+        {
+            return true;
+        }
+        framebuffer.ResolveColor();
+        const std::size_t required = static_cast<std::size_t>(framebuffer.width) *
+                                     static_cast<std::size_t>(framebuffer.height) * 4u;
+        if (framebuffer.color.size() < required)
+        {
+            return true;
+        }
+
+        // GraphicsDevice clipped the rectangle to the backbuffer it was told about; clip again to the
+        // framebuffer actually allocated, because a resize between the two would otherwise let an
+        // in-range rectangle read past the end of it.
+        const int x = std::min(region.sourceX, framebuffer.width);
+        const int y = std::min(region.sourceY, framebuffer.height);
+        const int width = std::min(region.sourceWidth, framebuffer.width - x);
+        const int height = std::min(region.sourceHeight, framebuffer.height - y);
+        if (width <= 0 || height <= 0)
+        {
+            return true;
+        }
+
+        // No copy: the stride keeps the rows of the larger buffer, and the pointer selects the
+        // rectangle's first pixel. This is exactly what SurfaceFrame::strideBytes documents.
+        CNA::Platform::SurfaceFrame frame;
+        frame.pixels = framebuffer.color.data() +
+                       (static_cast<std::size_t>(y) * static_cast<std::size_t>(framebuffer.width) +
+                        static_cast<std::size_t>(x)) * 4u;
+        frame.width = width;
+        frame.height = height;
+        frame.strideBytes = framebuffer.width * 4;
+        surfacePresenter_->Present(frame);
+        return true;
+    }
+
     void SoftwareRenderer::GetViewportSize(int& width, int& height)
     {
         const SoftwareFramebuffer& fb = CurrentFramebuffer();

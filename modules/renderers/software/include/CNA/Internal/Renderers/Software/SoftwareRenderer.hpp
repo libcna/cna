@@ -1440,6 +1440,24 @@ namespace CNA::Internal::Renderers::Software
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
+
+        /**
+         * @brief Presents a sub-rectangle of the backbuffer, when that is all that was asked for.
+         *
+         * A CPU rasteriser can honour a source rectangle exactly and without copying: SurfaceFrame
+         * already carries a row stride, so presenting part of a larger buffer is a matter of offsetting
+         * the pixel pointer and keeping the full row stride. That is what this does.
+         *
+         * A destination rectangle and a foreign window are refused. `IPlatformSurfacePresenter`
+         * presents a frame to the whole client area of the one window it was created for; it carries
+         * no destination and names no other window, and honouring either would mean changing that
+         * platform contract rather than this renderer.
+         *
+         * @param region What was asked for, already clipped.
+         * @return @c true when only a source rectangle was asked for and it was presented; @c false
+         *         for a destination rectangle or an override window.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;

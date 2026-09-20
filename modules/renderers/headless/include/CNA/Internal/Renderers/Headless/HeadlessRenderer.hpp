@@ -571,6 +571,20 @@ namespace CNA::Internal::Renderers::Headless
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
+
+        /**
+         * @brief Accepts any presentation request, because this renderer presents nothing.
+         *
+         * HEADLESS draws and displays nothing at all, so a source rectangle, a destination rectangle
+         * and a foreign window are all equally inert here -- there is no frame to show part of and no
+         * window to show it in. Accepting is therefore honest rather than generous: nothing about the
+         * request could be got wrong. The request is recorded in the trace, so a test can see what
+         * GraphicsDevice resolved and clipped it to.
+         *
+         * @param region What was asked for, already clipped.
+         * @return Always @c true.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
