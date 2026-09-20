@@ -9,6 +9,7 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -383,6 +384,22 @@ namespace Microsoft::Xna::Framework::Audio
         void Apply3D(const AudioListener* listeners, int listenerCount, const AudioEmitter& emitter);
 
         /**
+         * @brief Applies 3D spatial audio properties for several listeners.
+         *
+         * The documented XNA overload, which takes the listeners as one collection rather than a
+         * pointer and a count. Order and count are preserved and the work is the pointer/count
+         * overload's, so the dominant-listener approximation described there applies unchanged.
+         *
+         * @param listeners Positions of each listener; must not be empty.
+         * @param emitter   Position and orientation of the sound emitter.
+         * @throws System::ArgumentOutOfRangeException if @p listeners is empty, naming
+         *         @c listeners, for the same reason the pointer/count overload refuses a zero
+         *         count.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
+         */
+        void Apply3D(const std::vector<AudioListener>& listeners, const AudioEmitter& emitter);
+
+        /**
          * @brief Gets whether this instance has been disposed.
          *
          * @return true if disposed; otherwise false.
@@ -468,5 +485,27 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] virtual SoundState getStateProperty() const;
 
         GetTypeNameHPP()
+
+    protected:
+        /**
+         * @brief Releases this instance's resources, optionally only the native ones.
+         *
+         * The documented protected disposal hook: `Dispose()` routes here, and a derived class
+         * overrides this rather than the public method, so one path releases the instance however
+         * it is reached. Idempotent.
+         *
+         * C++ has no separate finalizer, so the destructor is the only other caller and it passes
+         * @c true: every member is still alive in a destructor body, which is exactly the
+         * condition the flag exists to distinguish. Native resources are released either way, as
+         * for `GraphicsResource::Dispose(bool)`.
+         *
+         *
+         * A derived class that overrides this must also write
+         * `using SoundEffectInstance::Dispose;`, because declaring the name hides the public
+         * `Dispose()` from its own callers -- a C++ name-lookup consequence with no C# counterpart.
+         * @param disposing True when called from Dispose() or the destructor; false when only
+         *        native resources may be touched.
+         */
+        virtual void Dispose(bool disposing);
     };
 }

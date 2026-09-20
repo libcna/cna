@@ -197,9 +197,18 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundBank::Dispose()
     {
+        Dispose(true);
+    }
+
+    void SoundBank::Dispose(bool disposing)
+    {
         if (!isDisposed_)
         {
-            Disposing.Raise(this, System::EventArgs::Empty);
+            // XNA raises Disposing only for an explicit disposal, never from the finalizer.
+            if (disposing)
+            {
+                Disposing.Raise(this, System::EventArgs::Empty);
+            }
             if (engine_) engine_->UnregisterSoundBank(this); // XA-8
             fireAndForget_.clear(); // stops any still-playing fire-and-forget cues; each one's
                                      // destructor also unregisters itself from activeCues_.

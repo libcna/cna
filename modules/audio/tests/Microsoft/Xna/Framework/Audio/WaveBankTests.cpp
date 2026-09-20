@@ -1600,3 +1600,82 @@ TEST(WaveBankTest, GetSoundEffectEntriesSeparatedByPaddingHaveExactLengthsNotLea
                         "could not construct WaveBank/AudioEngine";
     }
 }
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-017: the protected WaveBank.Dispose(Boolean) hook.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    class WaveBankDisposeProbe final : public WaveBank
+    {
+    public:
+        using WaveBank::Dispose;
+
+        WaveBankDisposeProbe(AudioEngine* engine, const std::string& filename)
+            : WaveBank(engine, filename) {}
+
+        int hookCalls = 0;
+        bool lastDisposing = false;
+        bool disposedWhenHookRan = false;
+
+        void DisposeWithoutNotifying() { WaveBank::Dispose(false); }
+
+    protected:
+        void Dispose(bool disposing) override
+        {
+            ++hookCalls;
+            lastDisposing = disposing;
+            disposedWhenHookRan = getIsDisposedProperty();
+            WaveBank::Dispose(disposing);
+        }
+    };
+}
+
+TEST(WaveBankTest, PublicDisposeRoutesThroughTheProtectedHook)
+{
+    WaveBankDisposeProbe probe(&SharedEngine(), XwbFixturePath());
+    ASSERT_FALSE(probe.getIsDisposedProperty());
+
+    probe.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.lastDisposing);
+    EXPECT_FALSE(probe.disposedWhenHookRan);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+
+    probe.Dispose();
+    EXPECT_EQ(probe.hookCalls, 2);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(WaveBankTest, DisposalThroughTheDisposableInterfaceReachesTheOverride)
+{
+    WaveBankDisposeProbe probe(&SharedEngine(), XwbFixturePath());
+    System::IDisposable& asDisposable = probe;
+    asDisposable.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(WaveBankTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
+{
+    {
+        WaveBank bank(&SharedEngine(), XwbFixturePath());
+        int notifications = 0;
+        bank.Disposing += [&notifications](System::Object*, const System::EventArgs&) {
+            ++notifications;
+        };
+        bank.Dispose();
+        EXPECT_EQ(notifications, 1);
+    }
+    {
+        WaveBankDisposeProbe probe(&SharedEngine(), XwbFixturePath());
+        int notifications = 0;
+        probe.Disposing += [&notifications](System::Object*, const System::EventArgs&) {
+            ++notifications;
+        };
+        probe.DisposeWithoutNotifying();
+        EXPECT_EQ(notifications, 0);
+        EXPECT_TRUE(probe.getIsDisposedProperty());
+    }
+}

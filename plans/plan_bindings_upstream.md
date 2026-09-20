@@ -25,7 +25,7 @@ binding findings were exactly that, and they were recorded here as **decisions f
 project owner rather than defects**, because `CLAUDE.md` then made FNA the authoritative
 behavioural reference and CNA matched FNA faithfully in each case.
 
-**All four are now closed, in CNA's favour of XNA.** The owner made XNA the tie-break on
+**All five are now closed, in CNA's favour of XNA.** The owner made XNA the tie-break on
 2026-09-04 and restated it on 2026-09-09 — *CNA should follow XNA faithfully, and FNA only
 after it*. This section is kept because the reasoning is worth having, not because anything
 here is open.
@@ -36,6 +36,7 @@ here is open.
 | `Microphone::setBufferDurationProperty()` | read `getMillisecondsProperty()`, the sub-second component, exactly as `FNA/src/Audio/Microphone.cs:57-60` does. That made the documented `> 1000` branch unreachable and refused 1000 ms — the value the property itself *reports* on an unconfigured microphone, so `mic.BufferDuration = mic.BufferDuration` threw, while 1100, 1500 and 2500 ms were accepted. XNA's IL reads `get_TotalMilliseconds` | `fb62662c9`, 2026-09-04 (`BINDFIX-032`) |
 | `SoundEffectInstance::Apply3D` | refused any listener count but one, as FNA does. XNA copies every listener into a native array and hands XACT the whole thing; there is no count restriction in `UnsafeApply3D` | `0345f2471`, 2026-08-26 (`CABI-6`) |
 | `Microphone::All` / `Default` | carried a synthetic `"Default Device"` entry that FNA prepends (`SDL3_FNAPlatform.cs:1699,1707`) and XNA does not have, so `Default` was not a real device and `All` was one longer than the machine's device list | `30bd6cf60`, 2026-09-09 |
+| `RendererDetail` identity | compared `RendererId` alone — `Equals`, `GetHashCode` and both operators, exactly as `FNA/src/Audio/RendererDetail.cs:47-75` does. XNA's `operator==` is `if (left._name == right._name) { return left._id == right._id; } return false;` and its `GetHashCode` XORs the hashes of both fields, substituting 0 for an empty one, so the friendly name is part of the identity. Two renderers with the same id and different names were equal to CNA and are not to XNA | `XNA-MISSING-017`, 2026-09-20 |
 
 The fourth was found by the sample campaign rather than by a binding, and is the only one
 backed by a side-by-side capture of both runtimes on this machine rather than by reading

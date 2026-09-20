@@ -385,9 +385,18 @@ namespace Microsoft::Xna::Framework::Audio
 
     void WaveBank::Dispose()
     {
+        Dispose(true);
+    }
+
+    void WaveBank::Dispose(bool disposing)
+    {
         if (!isDisposed_)
         {
-            Disposing.Raise(this, System::EventArgs::Empty);
+            // XNA raises Disposing only for an explicit disposal, never from the finalizer.
+            if (disposing)
+            {
+                Disposing.Raise(this, System::EventArgs::Empty);
+            }
             if (engine_) engine_->UnregisterWaveBank(this);
 
             // P12-BANK-001: force-stop every cue still using this wave bank instead of merely

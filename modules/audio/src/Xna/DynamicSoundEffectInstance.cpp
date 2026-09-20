@@ -62,7 +62,10 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!getIsDisposedProperty())
         {
-            Dispose();
+            // Names the hook rather than Dispose(): inside a destructor the dynamic type is this
+            // one, so the call is the same, and saying so keeps it independent of which of the two
+            // entry points the base happens to route through.
+            DynamicSoundEffectInstance::Dispose(true);
         }
     }
 
@@ -322,7 +325,7 @@ namespace Microsoft::Xna::Framework::Audio
     // inherited SoundEffectInstance::Pause()/Resume() now operate on the correct, shared `track_`
     // and need no dynamic-specific override.
 
-    void DynamicSoundEffectInstance::Dispose()
+    void DynamicSoundEffectInstance::Dispose(bool disposing)
     {
         if (getIsDisposedProperty())
         {
@@ -333,7 +336,7 @@ namespace Microsoft::Xna::Framework::Audio
         // track_ is already null by the time this runs (Stop() above nulled it via
         // StopInternal()), so DestroyTrackSafe(track_) is a no-op here; this call's only real
         // effect is marking the instance disposed.
-        SoundEffectInstance::Dispose();
+        SoundEffectInstance::Dispose(disposing);
     }
 
     // --- buffer submission ---

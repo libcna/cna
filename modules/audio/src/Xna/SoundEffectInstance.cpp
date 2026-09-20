@@ -473,6 +473,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Dispose()
     {
+        Dispose(true);
+    }
+
+    void SoundEffectInstance::Dispose(bool disposing)
+    {
+        (void)disposing;
         if (!isDisposed_)
         {
 #ifdef SOUND_ENABLED
@@ -1103,6 +1109,27 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
         INTERNAL_applyComposedTrackProperties();
 #endif
+    }
+
+    void SoundEffectInstance::Apply3D(const std::vector<AudioListener>& listeners,
+                                      const AudioEmitter& emitter)
+    {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+        if (listeners.empty())
+        {
+            // Refused here rather than by forwarding: an empty vector's data() is null, which the
+            // pointer overload rightly reads as a null array, while an empty collection is not a
+            // null one. The refusal itself is the same case as a zero count -- XNA would reach
+            // XACT with zero listeners and surface whatever it returns, an outcome not established
+            // here -- and it names the documented parameter.
+            throw System::ArgumentOutOfRangeException(
+                "listeners", "At least one AudioListener is required.");
+        }
+        // Otherwise the collection is only a count the caller does not have to pass separately.
+        Apply3D(listeners.data(), static_cast<int>(listeners.size()), emitter);
     }
 
     void SoundEffectInstance::Apply3D(const AudioListener* listeners, int listenerCount,

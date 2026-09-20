@@ -65,8 +65,11 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Attempting to set IsLooped on a dynamic instance has no effect (move overload). */
         CNAEXT void setIsLoopedProperty(bool&& looped) override;
 
-        /** @brief Stops playback, releases the dynamic audio stream, and disposes the instance. */
-        void Dispose() override;
+        /// Declaring the protected hook below would otherwise hide the public Dispose() every
+        /// caller uses, since C++ name lookup stops at the first class that declares the name. The
+        /// hook's own declaration further down supersedes this one for its signature, so it keeps
+        /// the protected access its own section gives it.
+        using SoundEffectInstance::Dispose;
 
         /**
          * @brief Converts a byte count to playback duration for this instance's format.
@@ -173,6 +176,18 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] SoundState getStateProperty() const override;
 
         GetTypeNameHPP()
+
+    protected:
+        /**
+         * @brief Stops playback, releases the dynamic audio stream, and disposes the instance.
+         *
+         * Overrides the protected hook rather than the public `Dispose()`, so the dynamic stream is
+         * released however disposal is reached -- through `Dispose()`, through a base-class
+         * reference, or through the destructor.
+         *
+         * @param disposing Passed through to the base implementation.
+         */
+        void Dispose(bool disposing) override;
 
     private:
         SharpRuntime::intcs sampleRate_;

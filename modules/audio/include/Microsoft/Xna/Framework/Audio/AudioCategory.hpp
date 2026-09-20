@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <any>
 #include <string>
 
 #include "System/IEquatable.hpp"
@@ -45,6 +46,25 @@ namespace Microsoft::Xna::Framework::Audio
          * @param options Whether to stop immediately or let release phases finish.
          */
         void Stop(AudioStopOptions options);
+
+        /**
+         * @brief Compares this AudioCategory with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one below.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal AudioCategory; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
+
+        /**
+         * @brief Returns this category's name.
+         *
+         * @return The category name, or an empty string for a default-constructed category, which
+         *         is what XNA returns for its own null name.
+         */
+        [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns whether this category has the same name as another.

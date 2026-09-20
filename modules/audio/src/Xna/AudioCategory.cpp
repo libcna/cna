@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
+
+#include <any>
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 
 #include <functional>
@@ -36,6 +38,19 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (parent_ && !parent_->getIsDisposedProperty())
             parent_->StopCategoryInternal(index_, options == AudioStopOptions::Immediate);
+    }
+
+    bool AudioCategory::Equals(const std::any& obj) const
+    {
+        const AudioCategory* other = std::any_cast<AudioCategory>(&obj);
+        return other != nullptr && Equals(*other);
+    }
+
+    std::string AudioCategory::ToString() const
+    {
+        // XNA returns the category name, substituting an empty string for a null one; a
+        // default-constructed AudioCategory carries an empty name, which is that same case.
+        return name_;
     }
 
     bool AudioCategory::Equals(const AudioCategory& other) const

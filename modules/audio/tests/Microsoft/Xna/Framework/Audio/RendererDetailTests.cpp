@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+
+#include <any>
+#include <string>
 #include "AudioTestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/RendererDetail.hpp"
@@ -102,18 +105,33 @@ TEST(RendererDetailTest, PropertiesRoundTrip)
     EXPECT_EQ(rd.getRendererIdProperty(), "sdl3_mixer");
 }
 
-TEST(RendererDetailTest, GetHashCodeConsistentForEqualRendererId)
+// The friendly name is part of the identity, not decoration. FNA compares RendererId alone
+// (FNA/src/Audio/RendererDetail.cs: Equals, GetHashCode and both operators all read only
+// RendererId), and CNA followed it until XNA-MISSING-017. Microsoft's operator== is
+// `if (left._name == right._name) { return left._id == right._id; } return false;` and its
+// GetHashCode XORs the hashes of both fields, substituting 0 for an empty one
+// (xna4-decomp/.../Microsoft.Xna.Framework.Xact/Microsoft.Xna.Framework.Audio/RendererDetail.cs).
+// XNA is the tie-break, so these three cases assert XNA's comparison; the previous expectations
+// are recorded in plans/plan_bindings_upstream.md.
+TEST(RendererDetailTest, GetHashCodeCombinesBothFields)
 {
     const RendererDetail a = Make("Name A", "same-id");
-    const RendererDetail b = Make("Name B", "same-id");
-    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+    const RendererDetail sameAsA = Make("Name A", "same-id");
+    const RendererDetail differentName = Make("Name B", "same-id");
+
+    EXPECT_EQ(a.GetHashCode(), sameAsA.GetHashCode());
+    EXPECT_NE(a.GetHashCode(), differentName.GetHashCode());
+
+    // An empty field contributes 0, so a detail with only a name hashes to that name's hash.
+    EXPECT_EQ(Make("Name A", "").GetHashCode(), Make("", "Name A").GetHashCode());
 }
 
-TEST(RendererDetailTest, EqualsTrueForSameRendererIdRegardlessOfFriendlyName)
+TEST(RendererDetailTest, EqualsFalseForSameRendererIdButDifferentFriendlyName)
 {
     const RendererDetail a = Make("Name A", "same-id");
     const RendererDetail b = Make("Name B", "same-id");
-    EXPECT_TRUE(a.Equals(b));
+    EXPECT_FALSE(a.Equals(b));
+    EXPECT_TRUE(a.Equals(Make("Name A", "same-id")));
 }
 
 TEST(RendererDetailTest, EqualsFalseForDifferentRendererId)
@@ -126,19 +144,23 @@ TEST(RendererDetailTest, EqualsFalseForDifferentRendererId)
 TEST(RendererDetailTest, EqualityOperatorMatchesEquals)
 {
     const RendererDetail a = Make("Name A", "same-id");
-    const RendererDetail b = Make("Name B", "same-id");
+    const RendererDetail b = Make("Name A", "same-id");
     const RendererDetail c = Make("Name A", "id-c");
+    const RendererDetail d = Make("Name B", "same-id");
     EXPECT_TRUE(a == b);
     EXPECT_FALSE(a == c);
+    EXPECT_FALSE(a == d);
 }
 
 TEST(RendererDetailTest, InequalityOperatorMatchesNegatedEquals)
 {
     const RendererDetail a = Make("Name A", "same-id");
-    const RendererDetail b = Make("Name B", "same-id");
+    const RendererDetail b = Make("Name A", "same-id");
     const RendererDetail c = Make("Name A", "id-c");
+    const RendererDetail d = Make("Name B", "same-id");
     EXPECT_FALSE(a != b);
     EXPECT_TRUE(a != c);
+    EXPECT_TRUE(a != d);
 }
 
 TEST(RendererDetailTest, ObtainedFromAudioEngineRendererDetails)
@@ -155,4 +177,38 @@ TEST(RendererDetailTest, ObtainedFromAudioEngineRendererDetails)
     EXPECT_EQ(rd.getFriendlyNameProperty(), "SDL3_mixer");
     EXPECT_EQ(rd.getRendererIdProperty(), "SDL3_mixer");
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-017: RendererDetail.Equals(System.Object).
+//
+// Microsoft rejects null and any object whose runtime type differs, then compares through
+// operator== -- friendly name and renderer id together
+// (xna4-decomp/.../Microsoft.Xna.Framework.Xact/Microsoft.Xna.Framework.Audio/RendererDetail.cs).
+// ---------------------------------------------------------------------------
+
+TEST(RendererDetailTest, ObjectEqualityMatchesTheTypedComparison)
+{
+    const RendererDetail first = RendererDetailTestAccess::Make("Speakers", "id-1");
+    const RendererDetail same = RendererDetailTestAccess::Make("Speakers", "id-1");
+    const RendererDetail otherId = RendererDetailTestAccess::Make("Speakers", "id-2");
+    const RendererDetail otherName = RendererDetailTestAccess::Make("Headphones", "id-1");
+
+    ASSERT_TRUE(first.Equals(same));
+    EXPECT_TRUE(first.Equals(std::any(same)));
+    EXPECT_EQ(first.GetHashCode(), same.GetHashCode());
+
+    // Both halves are compared: a differing id and a differing name each break equality.
+    ASSERT_FALSE(first.Equals(otherId));
+    EXPECT_FALSE(first.Equals(std::any(otherId)));
+    ASSERT_FALSE(first.Equals(otherName));
+    EXPECT_FALSE(first.Equals(std::any(otherName)));
+}
+
+TEST(RendererDetailTest, ObjectEqualityRejectsNullAndOtherTypes)
+{
+    const RendererDetail detail = RendererDetailTestAccess::Make("Speakers", "id-1");
+    EXPECT_FALSE(detail.Equals(std::any()));
+    EXPECT_FALSE(detail.Equals(std::any(0)));
+    EXPECT_FALSE(detail.Equals(std::any(std::string("Speakers"))));
 }

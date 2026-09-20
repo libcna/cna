@@ -2265,3 +2265,145 @@ TEST_F(SoundEffectInstanceTest, StressCreatePlayDisposeThousandsOfShortLivedInst
     finalInstance.Play();
     EXPECT_EQ(finalInstance.getStateProperty(), SoundState::Playing);
 }
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-016: Apply3D(AudioListener[], AudioEmitter) and the protected Dispose(bool) hook.
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectInstanceTest, Apply3DCollectionOverloadMatchesThePointerOverload)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+
+    AudioEmitter emitter;
+    emitter.setPositionProperty({0.0f, 0.0f, 0.0f});
+    AudioListener far;
+    far.setPositionProperty({100.0f, 0.0f, 0.0f});
+    AudioListener near;
+    near.setPositionProperty({-10.0f, 0.0f, 0.0f});
+
+    // One listener, then two, then the same two in the other order: the documented overload has to
+    // produce exactly what the pointer/count one does, including the nearest-listener rule.
+    const std::vector<AudioListener> both = {far, near};
+    const std::vector<AudioListener> reversed = {near, far};
+    const AudioListener pointerForm[2] = {far, near};
+
+    inst.Apply3D(pointerForm, 2, emitter);
+    inst.Play();
+    const float viaPointer = SoundEffectInstanceTestAccess::GetPanState(inst);
+
+    inst.Apply3D(both, emitter);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), viaPointer, 1e-5f);
+
+    inst.Apply3D(reversed, emitter);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), viaPointer, 1e-5f);
+
+    // The discriminator: the far listener alone gives the opposite pan, so the value above is not
+    // simply whatever the first element produced.
+    inst.Apply3D(std::vector<AudioListener>{far}, emitter);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), -1.0f, 1e-5f);
+    inst.Apply3D(std::vector<AudioListener>{near}, emitter);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 1.0f, 1e-5f);
+}
+
+TEST_F(SoundEffectInstanceTest, Apply3DCollectionOverloadRefusesAnEmptyCollection)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    AudioEmitter emitter;
+
+    // An empty collection reaches the pointer/count overload's zero-count refusal, which is the
+    // same exception a zero count gives.
+    EXPECT_THROW(inst.Apply3D(std::vector<AudioListener>{}, emitter),
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST_F(SoundEffectInstanceTest, Apply3DCollectionOverloadRefusesADisposedInstance)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    AudioEmitter emitter;
+    inst.Dispose();
+    EXPECT_THROW(inst.Apply3D(std::vector<AudioListener>{AudioListener{}}, emitter),
+                 System::ObjectDisposedException);
+}
+
+TEST_F(SoundEffectInstanceTest, Apply3DCollectionOverloadAcceptsManyListeners)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    AudioEmitter emitter;
+
+    // XNA places no count restriction on the array overload, so neither does this one.
+    std::vector<AudioListener> many(16);
+    for (std::size_t index = 0; index < many.size(); ++index)
+    {
+        many[index].setPositionProperty({static_cast<float>(index) * 5.0f, 0.0f, 0.0f});
+    }
+    EXPECT_NO_THROW(inst.Apply3D(many, emitter));
+}
+
+namespace
+{
+    /// A derived instance whose only job is to observe the protected disposal hook: whether it is
+    /// reached, with which flag, and in what order relative to the base implementation.
+    class DisposeProbeInstance final : public SoundEffectInstance
+    {
+    public:
+        /// Overriding the hook below hides the base's public Dispose(); this brings it back, which
+        /// is exactly what the hook's documentation tells a subclass author to write.
+        using SoundEffectInstance::Dispose;
+
+        int hookCalls = 0;
+        bool lastDisposing = false;
+        bool disposedWhenHookRan = false;
+
+    protected:
+        void Dispose(bool disposing) override
+        {
+            ++hookCalls;
+            lastDisposing = disposing;
+            // The base has not run yet, so the instance is still live here -- that ordering is what
+            // lets a subclass release its own resources before the base releases the track.
+            disposedWhenHookRan = getIsDisposedProperty();
+            SoundEffectInstance::Dispose(disposing);
+        }
+    };
+}
+
+TEST(SoundEffectInstanceDisposalHookTest, PublicDisposeRoutesThroughTheProtectedHook)
+{
+    DisposeProbeInstance probe;
+    ASSERT_EQ(probe.hookCalls, 0);
+
+    probe.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.lastDisposing);
+    EXPECT_FALSE(probe.disposedWhenHookRan);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(SoundEffectInstanceDisposalHookTest, DisposalIsIdempotentThroughTheHook)
+{
+    DisposeProbeInstance probe;
+    probe.Dispose();
+    probe.Dispose();
+    probe.Dispose();
+
+    // Every call reaches the hook -- the public method is a plain forwarder -- but only the first
+    // changes anything, which is what the base's own guard provides.
+    EXPECT_EQ(probe.hookCalls, 3);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(SoundEffectInstanceDisposalHookTest, DisposalThroughABaseReferenceReachesTheOverride)
+{
+    DisposeProbeInstance probe;
+    System::IDisposable& asDisposable = probe;
+
+    // A caller holding only the interface still runs the subclass's hook, which is the reason the
+    // hook exists rather than a second public override.
+    asDisposable.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}

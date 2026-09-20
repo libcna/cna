@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <any>
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
@@ -32,25 +33,37 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] std::string ToString() const;
 
         /**
-         * @brief Returns a hash code based on the renderer ID.
+         * @brief Returns a hash code combining the friendly name and the renderer ID.
          *
-         * @return Hash code consistent with Equals and operator==.
+         * @return The XOR of the two fields' hashes, with an empty field contributing 0, as XNA
+         *         combines them. Consistent with Equals and operator==.
          */
         [[nodiscard]] int GetHashCode() const;
 
         /**
-         * @brief Returns whether this renderer detail has the same renderer ID as another.
+         * @brief Compares this RendererDetail with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one below.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal RendererDetail; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const;
+
+        /**
+         * @brief Returns whether this renderer detail describes the same renderer as another.
          *
          * @param other The renderer detail to compare against.
-         * @return true if both have the same RendererId; otherwise false.
+         * @return true if both the FriendlyName and the RendererId match; otherwise false.
          */
         [[nodiscard]] bool Equals(const RendererDetail& other) const;
 
         /**
-         * @brief Returns whether two renderer details have the same renderer ID.
+         * @brief Returns whether two renderer details describe the same renderer.
          *
          * @param other The renderer detail to compare against.
-         * @return true if both have the same RendererId; otherwise false.
+         * @return true if both the FriendlyName and the RendererId match; otherwise false.
          */
         bool operator==(const RendererDetail& other) const;
 

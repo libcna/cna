@@ -127,6 +127,29 @@ namespace Microsoft::Xna::Framework::Audio
             uint16_t fadeInMS;
         };
 
+    protected:
+        /**
+         * @brief Releases this engine's resources, optionally only the native ones.
+         *
+         * The documented protected disposal hook: `Dispose()` routes here, and a derived class
+         * overrides this rather than the public method, so one path releases the engine however it
+         * is reached. Idempotent, and it preserves the dependency order the public disposer
+         * established.
+         *
+         * XNA raises `Disposing` only when @p disposing is true, and so does this. C++ has no
+         * separate finalizer, so the destructor is the only other caller and it passes @c true:
+         * every member is still alive in a destructor body, which is the condition the flag exists
+         * to distinguish.
+         *
+         *
+         * A derived class that overrides this must also write
+         * `using AudioEngine::Dispose;`, because declaring the name hides the public
+         * `Dispose()` from its own callers -- a C++ name-lookup consequence with no C# counterpart.
+         * @param disposing True when called from Dispose() or the destructor; false when only
+         *        native resources may be touched, in which case Disposing is not raised.
+         */
+        virtual void Dispose(bool disposing);
+
     private:
         friend struct AudioCategory;
         friend class WaveBank;

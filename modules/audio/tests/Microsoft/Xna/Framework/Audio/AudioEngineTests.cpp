@@ -1188,3 +1188,103 @@ TEST(AudioEngineTest, GetTypeNameIsDottedXnaName)
     AudioEngine engine(XgsFixturePath());
     EXPECT_EQ(engine.GetTypeName(), "Microsoft.Xna.Framework.Audio.AudioEngine");
 }
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-017: the protected AudioEngine.Dispose(Boolean) hook.
+//
+// XNA raises Disposing only when disposing is true and never from the finalizer
+// (xna4-decomp/.../Microsoft.Xna.Framework.Xact/Microsoft.Xna.Framework.Audio/AudioEngine.cs).
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    /// Observes the hook: whether it is reached, with which flag, and before the base runs.
+    class AudioEngineDisposeProbe final : public AudioEngine
+    {
+    public:
+        using AudioEngine::Dispose;
+
+        explicit AudioEngineDisposeProbe(const std::string& settingsFile)
+            : AudioEngine(settingsFile) {}
+
+        int hookCalls = 0;
+        bool lastDisposing = false;
+        bool disposedWhenHookRan = false;
+
+    protected:
+        void Dispose(bool disposing) override
+        {
+            ++hookCalls;
+            lastDisposing = disposing;
+            disposedWhenHookRan = getIsDisposedProperty();
+            AudioEngine::Dispose(disposing);
+        }
+    };
+}
+
+TEST(AudioEngineTest, PublicDisposeRoutesThroughTheProtectedHook)
+{
+    AudioEngineDisposeProbe probe(XgsFixturePath());
+    ASSERT_EQ(probe.hookCalls, 0);
+    ASSERT_FALSE(probe.getIsDisposedProperty());
+
+    probe.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.lastDisposing);
+    EXPECT_FALSE(probe.disposedWhenHookRan);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(AudioEngineTest, DisposalThroughTheHookIsIdempotent)
+{
+    AudioEngineDisposeProbe probe(XgsFixturePath());
+    probe.Dispose();
+    probe.Dispose();
+
+    EXPECT_EQ(probe.hookCalls, 2);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(AudioEngineTest, DisposalThroughTheDisposableInterfaceReachesTheOverride)
+{
+    AudioEngineDisposeProbe probe(XgsFixturePath());
+    System::IDisposable& asDisposable = probe;
+    asDisposable.Dispose();
+
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(AudioEngineTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
+{
+    // XNA guards the Disposing notification with the flag, so a finalizer-style call releases the
+    // engine without telling subscribers.
+    {
+        AudioEngine engine(XgsFixturePath());
+        int notifications = 0;
+        engine.Disposing += [&notifications](System::Object*, const System::EventArgs&) {
+            ++notifications;
+        };
+        engine.Dispose();
+        EXPECT_EQ(notifications, 1);
+    }
+    {
+        class SilentDisposeProbe final : public AudioEngine
+        {
+        public:
+            using AudioEngine::Dispose;
+            explicit SilentDisposeProbe(const std::string& settingsFile)
+                : AudioEngine(settingsFile) {}
+            void DisposeWithoutNotifying() { AudioEngine::Dispose(false); }
+        };
+
+        SilentDisposeProbe probe(XgsFixturePath());
+        int notifications = 0;
+        probe.Disposing += [&notifications](System::Object*, const System::EventArgs&) {
+            ++notifications;
+        };
+        probe.DisposeWithoutNotifying();
+        EXPECT_EQ(notifications, 0);
+        EXPECT_TRUE(probe.getIsDisposedProperty());
+    }
+}

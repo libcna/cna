@@ -792,3 +792,83 @@ TEST(SoundBankTest, GetTypeNameIsDottedXnaName)
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     EXPECT_EQ(bank.GetTypeName(), "Microsoft.Xna.Framework.Audio.SoundBank");
 }
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-017: the protected SoundBank.Dispose(Boolean) hook.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    class SoundBankDisposeProbe final : public SoundBank
+    {
+    public:
+        using SoundBank::Dispose;
+
+        SoundBankDisposeProbe(AudioEngine* engine, const std::string& filename)
+            : SoundBank(engine, filename) {}
+
+        int hookCalls = 0;
+        bool lastDisposing = false;
+        bool disposedWhenHookRan = false;
+
+        void DisposeWithoutNotifying() { SoundBank::Dispose(false); }
+
+    protected:
+        void Dispose(bool disposing) override
+        {
+            ++hookCalls;
+            lastDisposing = disposing;
+            disposedWhenHookRan = getIsDisposedProperty();
+            SoundBank::Dispose(disposing);
+        }
+    };
+}
+
+TEST(SoundBankTest, PublicDisposeRoutesThroughTheProtectedHook)
+{
+    SoundBankDisposeProbe probe(&SharedEngine(), XsbFixturePath());
+    ASSERT_FALSE(probe.getIsDisposedProperty());
+
+    probe.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.lastDisposing);
+    EXPECT_FALSE(probe.disposedWhenHookRan);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+
+    // Idempotent, and reachable through the interface a caller may hold instead.
+    probe.Dispose();
+    EXPECT_EQ(probe.hookCalls, 2);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(SoundBankTest, DisposalThroughTheDisposableInterfaceReachesTheOverride)
+{
+    SoundBankDisposeProbe probe(&SharedEngine(), XsbFixturePath());
+    System::IDisposable& asDisposable = probe;
+    asDisposable.Dispose();
+    EXPECT_EQ(probe.hookCalls, 1);
+    EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+TEST(SoundBankTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
+{
+    {
+        SoundBank bank(&SharedEngine(), XsbFixturePath());
+        int notifications = 0;
+        bank.Disposing += [&notifications](System::Object*, const System::EventArgs&) {
+            ++notifications;
+        };
+        bank.Dispose();
+        EXPECT_EQ(notifications, 1);
+    }
+    {
+        SoundBankDisposeProbe probe(&SharedEngine(), XsbFixturePath());
+        int notifications = 0;
+        probe.Disposing += [&notifications](System::Object*, const System::EventArgs&) {
+            ++notifications;
+        };
+        probe.DisposeWithoutNotifying();
+        EXPECT_EQ(notifications, 0);
+        EXPECT_TRUE(probe.getIsDisposedProperty());
+    }
+}

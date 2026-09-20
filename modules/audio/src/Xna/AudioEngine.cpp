@@ -259,9 +259,18 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioEngine::Dispose()
     {
+        Dispose(true);
+    }
+
+    void AudioEngine::Dispose(bool disposing)
+    {
         if (!isDisposed_)
         {
-            Disposing.Raise(this, System::EventArgs::Empty);
+            // XNA raises Disposing only for an explicit disposal, never from the finalizer.
+            if (disposing)
+            {
+                Disposing.Raise(this, System::EventArgs::Empty);
+            }
 
             // XA-8: cascade disposal to every WaveBank/SoundBank/Cue this engine created,
             // matching FNA's native OnXACTNotification(WAVEBANKDESTROYED/SOUNDBANKDESTROYED/

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+
+#include <any>
 #include "AudioTestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
@@ -1699,4 +1701,53 @@ TEST(AudioCategoryTest, SetVolumeOnParentCategoryCascadesToChildCategory)
     EXPECT_NEAR(childVolAfter, 1.9977355869281581f * childVolBefore, 1e-4f);
 
     parent.SetVolume(1.0f); // restore a known baseline for any other test sharing this engine
+}
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-017: AudioCategory.Equals(System.Object) and AudioCategory.ToString().
+//
+// Microsoft's ToString returns the category name, substituting an empty string for a null one, and
+// Equals(object) is the `obj is AudioCategory` shape over the typed comparison
+// (xna4-decomp/.../Microsoft.Xna.Framework.Xact/Microsoft.Xna.Framework.Audio/AudioCategory.cs).
+// ---------------------------------------------------------------------------
+
+TEST(AudioCategoryTest, ToStringReturnsTheCategoryName)
+{
+    AudioCategory cat = SharedEngine().GetCategory("Default");
+    EXPECT_EQ(cat.ToString(), "Default");
+    EXPECT_EQ(cat.ToString(), cat.getNameProperty());
+}
+
+TEST(AudioCategoryTest, ToStringDistinguishesCategories)
+{
+    // XNA substitutes string.Empty for a null name; CNA's AudioCategory has no default constructor
+    // (only the engine creates one, always with a name), so that branch is unreachable here and
+    // what remains to assert is that the name is what comes back for each distinct category.
+    EXPECT_EQ(SharedEngine().GetCategory("Default").ToString(), "Default");
+    EXPECT_EQ(SharedEngine().GetCategory("Combat").ToString(), "Combat");
+    EXPECT_NE(SharedEngine().GetCategory("Default").ToString(),
+              SharedEngine().GetCategory("Combat").ToString());
+}
+
+TEST(AudioCategoryTest, ObjectEqualityMatchesTheTypedComparison)
+{
+    AudioCategory defaultCategory = SharedEngine().GetCategory("Default");
+    AudioCategory sameCategory = SharedEngine().GetCategory("Default");
+    AudioCategory otherCategory = SharedEngine().GetCategory("Combat");
+
+    ASSERT_TRUE(defaultCategory.Equals(sameCategory));
+    EXPECT_TRUE(defaultCategory.Equals(std::any(sameCategory)));
+
+    ASSERT_FALSE(defaultCategory.Equals(otherCategory));
+    EXPECT_FALSE(defaultCategory.Equals(std::any(otherCategory)));
+
+    EXPECT_EQ(defaultCategory.GetHashCode(), sameCategory.GetHashCode());
+}
+
+TEST(AudioCategoryTest, ObjectEqualityRejectsNullAndOtherTypes)
+{
+    AudioCategory cat = SharedEngine().GetCategory("Default");
+    EXPECT_FALSE(cat.Equals(std::any()));
+    EXPECT_FALSE(cat.Equals(std::any(0)));
+    EXPECT_FALSE(cat.Equals(std::any(std::string("Default"))));
 }
