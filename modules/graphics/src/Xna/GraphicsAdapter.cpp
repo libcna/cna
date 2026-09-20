@@ -144,8 +144,6 @@ namespace Microsoft::Xna::Framework::Graphics
           supportedDisplayModes_(std::move(modes)),
           description_(std::move(description)),
           deviceName_(std::move(name)),
-          useNullDevice_(false),
-          useReferenceDevice_(false),
           vendorId_(vendorId),
           deviceId_(deviceId)
     {
@@ -276,24 +274,67 @@ namespace Microsoft::Xna::Framework::Graphics
         return 0;
     }
 
-    bool GraphicsAdapter::getUseNullDeviceProperty() const
+    namespace
     {
-        return useNullDevice_;
+        /// Process-wide, as XNA's are: it holds them in two static fields on GraphicsAdapter, not
+        /// per adapter. Plain bools rather than atomics, because every call must happen before the
+        /// graphics thread starts, exactly as CNA::GraphicsRendererSelection requires of itself.
+        bool& UseNullDeviceFlag()
+        {
+            static bool flag = false;
+            return flag;
+        }
+
+        bool& UseReferenceDeviceFlag()
+        {
+            static bool flag = false;
+            return flag;
+        }
+    }
+
+    bool GraphicsAdapter::getUseNullDeviceProperty()
+    {
+        return UseNullDeviceFlag();
     }
 
     void GraphicsAdapter::setUseNullDeviceProperty(bool value)
     {
-        useNullDevice_ = value;
+        UseNullDeviceFlag() = value;
     }
 
-    bool GraphicsAdapter::getUseReferenceDeviceProperty() const
+    bool GraphicsAdapter::getUseReferenceDeviceProperty()
     {
-        return useReferenceDevice_;
+        return UseReferenceDeviceFlag();
     }
 
     void GraphicsAdapter::setUseReferenceDeviceProperty(bool value)
     {
-        useReferenceDevice_ = value;
+        UseReferenceDeviceFlag() = value;
+    }
+
+    GraphicsDeviceTypeEXT GraphicsAdapter::GetCurrentDeviceTypeEXT()
+    {
+        // XNA's CurrentDeviceType, precedence included: NULL wins, then REFERENCE, otherwise HAL.
+        if (UseNullDeviceFlag())
+        {
+            return GraphicsDeviceTypeEXT::Null;
+        }
+        return UseReferenceDeviceFlag() ? GraphicsDeviceTypeEXT::Reference
+                                        : GraphicsDeviceTypeEXT::Hardware;
+    }
+
+    std::optional<CNA::GraphicsRendererType> GraphicsAdapter::GetRequiredRendererEXT()
+    {
+        switch (GetCurrentDeviceTypeEXT())
+        {
+            case GraphicsDeviceTypeEXT::Null:
+                return CNA::GraphicsRendererType::Headless;
+            case GraphicsDeviceTypeEXT::Reference:
+                return CNA::GraphicsRendererType::Software;
+            case GraphicsDeviceTypeEXT::Hardware:
+            default:
+                return std::nullopt;
+        }
     }
 
     SharpRuntime::intcs GraphicsAdapter::getVendorIdProperty() const

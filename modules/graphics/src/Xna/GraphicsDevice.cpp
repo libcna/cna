@@ -2,6 +2,8 @@
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
+
 #include "CNA/Internal/DefaultWindowTitle.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -355,10 +357,54 @@ namespace Microsoft::Xna::Framework::Graphics
         /// plans/plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
         /// compiled-in set. The generated registry translation unit publishes that set into the
         /// selection layer before main() runs, so by the time anything here asks, the answer is real.
+        /// The renderer GraphicsAdapter's UseNullDevice/UseReferenceDevice requires of a device being
+        /// created, or nullopt when neither flag is set -- which is the default and leaves renderer
+        /// selection exactly as it was.
+        ///
+        /// XNA's flags choose a Direct3D 9 device type at device creation, which CNA has no
+        /// equivalent of: a renderer is what decides how a device behaves. So a set flag requires the
+        /// renderer whose job is the same (see GraphicsAdapter::GetRequiredRendererEXT), and a device
+        /// that cannot have it is refused. Refusing is the honest answer: silently ignoring the flag
+        /// would report a null or software device while running on the GPU.
+        [[nodiscard]] std::optional<CNA::GraphicsRendererType> RequiredRendererForNewDevice()
+        {
+            const std::optional<CNA::GraphicsRendererType> required =
+                GraphicsAdapter::GetRequiredRendererEXT();
+            if (!required.has_value())
+            {
+                return std::nullopt;
+            }
+
+            const std::string flagName = GraphicsAdapter::getUseNullDeviceProperty()
+                                             ? "UseNullDevice"
+                                             : "UseReferenceDevice";
+            if (!CNA::GraphicsRendererSelection::IsAvailable(*required))
+            {
+                throw NoSuitableGraphicsDeviceException(
+                    "GraphicsAdapter." + flagName + " requires the " +
+                    std::string(CNA::getGraphicsRendererName(*required)) +
+                    " renderer, which is not compiled into this build.");
+            }
+            if (CNA::GraphicsRendererSelection::GetSelected() != *required)
+            {
+                if (CNA::GraphicsRendererSelection::IsLatched())
+                {
+                    throw NoSuitableGraphicsDeviceException(
+                        "GraphicsAdapter." + flagName + " requires the " +
+                        std::string(CNA::getGraphicsRendererName(*required)) +
+                        " renderer, but the renderer selection is already latched to " +
+                        std::string(CNA::getGraphicsRendererName(
+                            CNA::GraphicsRendererSelection::GetSelected())) +
+                        ". Set the flag before the first GraphicsDevice is created.");
+                }
+                CNA::GraphicsRendererSelection::SetPreferred(*required);
+            }
+            return required;
+        }
+
         [[nodiscard]] const CNA::Internal::Renderers::GraphicsRendererDescriptor& selectedDescriptor()
         {
             namespace Renderers = CNA::Internal::Renderers;
-
 
             const CNA::GraphicsRendererType selected = CNA::GraphicsRendererSelection::GetSelected();
             const auto* descriptor = Renderers::GraphicsRendererRegistry::Find(selected);
@@ -3962,6 +4008,13 @@ namespace Microsoft::Xna::Framework::Graphics
         using CNA::GraphicsRendererFallbackReason;
         using CNA::GraphicsRendererFallbackRecord;
 
+        // XNA-MISSING-010: GraphicsAdapter's UseNullDevice/UseReferenceDevice choose the device type
+        // at creation. Resolved before the attempt order is read, because a set flag may change what
+        // the selection is -- and because a flag that cannot be honoured must refuse the device here,
+        // not be quietly dropped by a fallback chain.
+        const std::optional<CNA::GraphicsRendererType> requiredRenderer =
+            RequiredRendererForNewDevice();
+
         const auto attemptOrder = CNA::GraphicsRendererSelectionAccessEXT::GetAttemptOrder();
 
         // Design decision 6: with fallback disabled this loop runs exactly once and any failure
@@ -3986,6 +4039,23 @@ namespace Microsoft::Xna::Framework::Graphics
                     GraphicsRendererFallbackRecord{
                         candidateType, GraphicsRendererFallbackReason::NotCompiledIn,
                         "not compiled into this build"});
+                continue;
+            }
+
+            // A fallback chain must not satisfy a device-type flag with a renderer that does not
+            // provide that device type: the caller asked for a null or software device, and any other
+            // renderer would be a different device reported as the one requested.
+            if (requiredRenderer.has_value() && candidateType != *requiredRenderer)
+            {
+                CNA::GraphicsRendererSelectionAccessEXT::RecordFallback(
+                    GraphicsRendererFallbackRecord{
+                        candidateType, GraphicsRendererFallbackReason::ProbeUnavailable,
+                        std::string("GraphicsAdapter.") +
+                            (GraphicsAdapter::getUseNullDeviceProperty() ? "UseNullDevice"
+                                                                        : "UseReferenceDevice") +
+                            " requires the " +
+                            std::string(CNA::getGraphicsRendererName(*requiredRenderer)) +
+                            " renderer"});
                 continue;
             }
 
