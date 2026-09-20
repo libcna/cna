@@ -2382,7 +2382,7 @@
       "Microsoft.Xna.Framework.Xact.dll"
     ],
     "documented": 3627,
-    "represented": 3596,
+    "represented": 3620,
     "metadata_dll_sha256": {
       "Microsoft.Xna.Framework.dll": "38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130",
       "Microsoft.Xna.Framework.Avatar.dll": "b3c70bbe469000b9e11507cc63b88d54a4e0bc5c27afc826d66e0aee51640871",
@@ -2395,36 +2395,36 @@
       "Microsoft.Xna.Framework.Video.dll": "17538b1ca9d48a993e2cd88c96b436df08e7abb4aec5d4758eb21feb580d6e06",
       "Microsoft.Xna.Framework.Xact.dll": "a14d5364dca7cf49fb90639e87ba04d52b59a700dc9198efa5707ce8eae28f0a"
     },
-    "strict_coverage_percent": 99.15,
+    "strict_coverage_percent": 99.81,
     "cpp_applicable_denominator": 3627,
-    "cpp_applicable_coverage_percent": 99.15,
+    "cpp_applicable_coverage_percent": 99.81,
     "classifications": {
-      "EXACT_EQUIVALENT": 1732,
-      "SEMANTIC_EQUIVALENT": 1806,
+      "EXACT_EQUIVALENT": 1743,
+      "SEMANTIC_EQUIVALENT": 1819,
       "HOST_LANGUAGE_SUBSTITUTION": 58,
-      "MISSING": 31,
+      "MISSING": 7,
       "NOT_APPLICABLE": 0,
       "NEEDS_REVIEW": 0
     },
     "categories": {
       "constructor": {
         "documented": 253,
-        "represented": 239,
+        "represented": 250,
         "classifications": {
-          "EXACT_EQUIVALENT": 159,
-          "SEMANTIC_EQUIVALENT": 79,
-          "MISSING": 14,
+          "EXACT_EQUIVALENT": 166,
+          "SEMANTIC_EQUIVALENT": 83,
+          "MISSING": 3,
           "HOST_LANGUAGE_SUBSTITUTION": 1
         }
       },
       "method": {
         "documented": 1518,
-        "represented": 1503,
+        "represented": 1516,
         "classifications": {
-          "EXACT_EQUIVALENT": 824,
-          "SEMANTIC_EQUIVALENT": 623,
+          "EXACT_EQUIVALENT": 828,
+          "SEMANTIC_EQUIVALENT": 632,
           "HOST_LANGUAGE_SUBSTITUTION": 56,
-          "MISSING": 15
+          "MISSING": 2
         }
       },
       "property": {
@@ -38732,7 +38732,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentLoadException",
         "name": "#ctor",
@@ -38742,7 +38742,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp::ContentLoadException()",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -38760,9 +38760,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
@@ -39006,7 +39004,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentManager",
         "name": "Dispose",
@@ -39018,7 +39016,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentManager.hpp::Dispose(bool)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -39040,9 +39038,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentManager.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Protected disposal hook must preserve the existing resource lifetime contract."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentManager.Load``1(System.String)",
@@ -39086,7 +39082,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentManager",
         "name": "OpenStream",
@@ -39098,7 +39094,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentManager.hpp::OpenStream(const std::string &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -39117,17 +39113,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentManager.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable})",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentManager",
         "name": "ReadAsset``1",
@@ -39140,7 +39134,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable})",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentManager.hpp::ReadAsset(const std::string &, std::function<void (std::shared_ptr<System::IDisposable>)>)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -39161,12 +39155,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentManager.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentManager.RootDirectory",
@@ -39654,7 +39646,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentReader",
         "name": "ReadRawObject``1",
@@ -39664,7 +39656,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentReader.hpp::ReadRawObject()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -39682,9 +39674,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentReader.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(Microsoft.Xna.Framework.Content.ContentTypeReader)",
@@ -39770,7 +39760,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(``0)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentReader",
         "name": "ReadRawObject``1",
@@ -39782,8 +39772,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(``0)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: ReadRawObject(ContentTypeReaderBase &) -> T",
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentReader.hpp::ReadRawObject(T)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "``0",
@@ -39804,9 +39794,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentReader.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentReader.ReadSharedResource``1(System.Action{``0})",
@@ -40747,7 +40735,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentTypeReader`1",
         "name": "#ctor",
@@ -40757,7 +40745,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReader.hpp::ContentTypeReader<T>()",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -40775,14 +40763,12 @@
         "cna_member_name_present": false,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReader.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentTypeReader`1",
         "name": "Read",
@@ -40795,8 +40781,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Read(ContentReader &, std::optional<T>) -> T",
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReader.hpp::Read(ContentReader &, std::any)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Object",
@@ -40819,9 +40805,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReader.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,`0)",
@@ -40868,7 +40852,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentTypeReaderManager",
         "name": "GetTypeReader",
@@ -40880,7 +40864,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp::GetTypeReader(const System::Type &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -40899,12 +40883,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp",
-        "subsystem": "Content",
-        "gap_tier": "B",
-        "gap_reason": "Content reader, manager, or exception contract needs implementation and validation."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)",
@@ -91182,7 +91164,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.AlphaTestEffect",
         "name": "#ctor",
@@ -91194,8 +91176,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: AlphaTestEffect(GraphicsDevice &) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp::AlphaTestEffect(const AlphaTestEffect &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -91216,9 +91198,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice)",
@@ -91757,7 +91737,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.BasicEffect",
         "name": "#ctor",
@@ -91769,8 +91749,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: BasicEffect(GraphicsDevice &) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/BasicEffect.hpp::BasicEffect(const BasicEffect &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -91791,9 +91771,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/BasicEffect.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice)",
@@ -96289,7 +96267,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.DualTextureEffect)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.DualTextureEffect",
         "name": "#ctor",
@@ -96301,8 +96279,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.DualTextureEffect)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: DualTextureEffect(GraphicsDevice &) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp::DualTextureEffect(const DualTextureEffect &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -96323,9 +96301,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice)",
@@ -96879,7 +96855,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer",
         "name": "#ctor",
@@ -96894,8 +96870,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: DynamicIndexBuffer(GraphicsDevice &, IndexElementSize, int, BufferUsage) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp::DynamicIndexBuffer(GraphicsDevice &, const System::Type &, int, BufferUsage)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -96922,9 +96898,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.ContentLost",
@@ -97142,7 +97116,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer",
         "name": "#ctor",
@@ -97157,8 +97131,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: DynamicVertexBuffer(GraphicsDevice &, const VertexDeclaration &, int, BufferUsage) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp::DynamicVertexBuffer(GraphicsDevice &, const System::Type &, int, BufferUsage)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -97185,9 +97159,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.ContentLost",
@@ -101575,7 +101547,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect",
         "name": "#ctor",
@@ -101587,8 +101559,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: EnvironmentMapEffect(GraphicsDevice &) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp::EnvironmentMapEffect(const EnvironmentMapEffect &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -101609,9 +101581,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice)",
@@ -103837,7 +103807,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "DrawUserIndexedPrimitives``1",
@@ -103855,7 +103825,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::DrawUserIndexedPrimitives(PrimitiveType, const std::vector<TVertex> &, int, int, const std::vector<std::int16_t> &, int, int)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -103889,14 +103859,12 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Generic array draw contract needs typed vertex and index validation and forwarding."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "DrawUserIndexedPrimitives``1",
@@ -103915,7 +103883,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::DrawUserIndexedPrimitives(PrimitiveType, const std::vector<TVertex> &, int, int, const std::vector<std::int16_t> &, int, int, const VertexDeclaration &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -103951,14 +103919,12 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Generic array draw contract needs typed vertex and index validation and forwarding."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "DrawUserIndexedPrimitives``1",
@@ -103976,7 +103942,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::DrawUserIndexedPrimitives(PrimitiveType, const std::vector<TVertex> &, int, int, const std::vector<std::int32_t> &, int, int)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -104010,14 +103976,12 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Generic array draw contract needs typed vertex and index validation and forwarding."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "DrawUserIndexedPrimitives``1",
@@ -104036,7 +104000,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::DrawUserIndexedPrimitives(PrimitiveType, const std::vector<TVertex> &, int, int, const std::vector<std::int32_t> &, int, int, const VertexDeclaration &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -104072,14 +104036,12 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Generic array draw contract needs typed vertex and index validation and forwarding."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "DrawUserPrimitives``1",
@@ -104094,7 +104056,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::DrawUserPrimitives(PrimitiveType, const std::vector<TVertex> &, int, int)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -104122,14 +104084,12 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Generic array draw contract needs typed vertex and index validation and forwarding."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "DrawUserPrimitives``1",
@@ -104145,7 +104105,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::DrawUserPrimitives(PrimitiveType, const std::vector<TVertex> &, int, int, const VertexDeclaration &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -104175,9 +104135,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Generic array draw contract needs typed vertex and index validation and forwarding."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.Finalize",
@@ -106485,7 +106443,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.IndexBuffer",
         "name": "#ctor",
@@ -106500,8 +106458,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: IndexBuffer(GraphicsDevice &, IndexElementSize, int, BufferUsage) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp::IndexBuffer(GraphicsDevice &, const System::Type &, int, BufferUsage)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -106528,9 +106486,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.IndexBuffer.BufferUsage",
@@ -111950,7 +111906,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.SkinnedEffect",
         "name": "#ctor",
@@ -111962,8 +111918,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: SkinnedEffect(GraphicsDevice &) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp::SkinnedEffect(const SkinnedEffect &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -111984,9 +111940,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.SkinnedEffect.Alpha",
@@ -117346,7 +117300,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.VertexBuffer",
         "name": "#ctor",
@@ -117361,8 +117315,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: VertexBuffer(GraphicsDevice &, const VertexDeclaration &, int, BufferUsage) -> void",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp::VertexBuffer(GraphicsDevice &, const System::Type &, int, BufferUsage)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -117389,9 +117343,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Graphics constructor needs resource, copy, or inner-exception semantics."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexBuffer.BufferUsage",

@@ -58,7 +58,7 @@ as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before t
 | Baseline | — | 3,467 / 3,627 | 95.59% | 160 | measured at `9f4d2575d` |
 | 1 — value surface | 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | 53 | **DONE** |
 | 2 — local subsystems | 015, 019, 018, 016, 017, 007, 009 | 3,596 / 3,627 | 99.15% | 31 | **DONE** |
-| 3 — Graphics/Content Tier B | 005, 006, 008, 012 | | | | TODO |
+| 3 — Graphics/Content Tier B | 005, 006, 008, 012 | 3,620 / 3,627 | 99.81% | 7 | **DONE** |
 | 4 — shared prerequisites, Tier C | 013, 014, 010, 011 | | | | TODO |
 
 | Package | Status | Closed | Commit | Note |
@@ -75,7 +75,20 @@ as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before t
 | XNA-MISSING-017 XACT | **DONE** | 6 | `484359479` | `RendererDetail`'s typed equality compared the id alone, as FNA does; XNA compares name and id, so it had to change for `Equals(object)` to agree with it. Recorded in `plans/plan_bindings_upstream.md`. |
 | XNA-MISSING-007 graphics exceptions | **DONE** | 3 | `b0fa4b002` | Re-based on `System::Exception` -- XNA's hierarchy and the base every other XNA exception in CNA uses -- rather than adding an ad hoc inner-cause field to `std::runtime_error`. |
 | XNA-MISSING-009 GraphicsDevice disposal | **DONE** | 1 | `a1e47f004` | Lifecycle order unchanged; the flag adds XNA's guard that `Disposing` is raised only for an explicit disposal. |
-| XNA-MISSING-005, 006, 008, 010–014 | TODO | | | See §5. |
+| XNA-MISSING-005 stock effect clones | **DONE** | 5 | `9738dac51` | Visibility only: each constructor already existed, private, with a correct body. |
+| XNA-MISSING-006 buffer Type constructors | **DONE** | 4 | `2df2e8e0e` | `CNA::Graphics::VertexTypeRegistryEXT` is the C++ stand-in for XNA's reflective `VertexDeclaration.FromType`. XNA's stride-vs-`Marshal.SizeOf` check is deliberately absent: an `IVertexType` structure carries a vtable pointer, so `sizeof` is not the stride. |
+| XNA-MISSING-008 generic draw arrays | **DONE** | 6 | `aa263fcf7` | Dispatch decided at compile time by what CNA can do with the type; a polymorphic `IVertexType` that is not one of the four built-ins is refused rather than drawn from its bytes. |
+| XNA-MISSING-012 Content contracts | **DONE** | 9 | `4a0775aaa` | Includes one audit matcher fix, with regression tests first: clang names a class-template constructor `ContentTypeReader<T>`. `Load<T>`'s `.xnb` tier is deliberately unchanged -- the packaged-asset route has no existence-only query. |
+| XNA-MISSING-010, 011, 013, 014 | TODO | | | Tier C; see §5 and §6. |
+
+Phase 3 evidence: 24 records closed, 0 regressed, 0 `NEEDS_REVIEW`. Every Tier B entry is now
+closed, so the 7 remaining `MISSING` records are exactly the 7 Tier C ones listed in §6. One audit
+matcher false negative was found and fixed on the way, with its regression tests written first and
+failing: `tools/xna_runtime_members.py` expected a constructor named `ContentTypeReader` where clang
+names a class-template constructor `ContentTypeReader<T>`. `ContentTypeReader`1.#ctor` is the only
+documented constructor on a generic type, so that was the whole scope; the audit's own census,
+denominator and every other classification are unchanged, which the record-level diff confirms
+(exactly two records moved).
 
 Phase 2 evidence: 22 records closed, 0 regressed, 0 `NEEDS_REVIEW`. Closed by audit subsystem:
 Design 5, XACT 6, GamerServices 3, Graphics 4, Audio 2, Avatar 1, Media 1. Two behavioural
@@ -272,6 +285,7 @@ The `Present` overload is the only Tier C item likely to require renderer contra
 | **Measured** after 001 | **3,541 / 3,627** | **97.63%** | Exactly 74 closed, as predicted |
 | **Measured** after 001, 002, 003, 004, 020 | **3,574 / 3,627** | **98.54%** | Exactly 107 closed, as predicted |
 | **Measured** after phase 2 (015, 019, 018, 016, 017, 007, 009) | **3,596 / 3,627** | **99.15%** | Exactly 22 closed, as predicted |
+| **Measured** after phase 3 (005, 006, 008, 012) | **3,620 / 3,627** | **99.81%** | Exactly 24 closed; all Tier B done, 7 Tier C remain |
 | After 001 PackedVector | 3,541 / 3,627 | 97.63% | Exactly 74 records close |
 | After 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | Those packages close 107 disjoint records |
 | After **all Tier B** | 3,620 / 3,627 | 99.81% | All 153 Tier B close; seven Tier C remain |
@@ -331,28 +345,28 @@ PY
 
 #### Microsoft.Xna.Framework.Content.ContentLoadException
 
-- [ ] Microsoft.Xna.Framework.Content.ContentLoadException.#ctor
+- [x] Microsoft.Xna.Framework.Content.ContentLoadException.#ctor
 - [ ] Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
 
 #### Microsoft.Xna.Framework.Content.ContentManager
 
-- [ ] Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)
-- [ ] Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)
-- [ ] Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable})
+- [x] Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)
+- [x] Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)
+- [x] Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable})
 
 #### Microsoft.Xna.Framework.Content.ContentReader
 
-- [ ] Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1
-- [ ] Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(``0)
+- [x] Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1
+- [x] Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(``0)
 
 #### Microsoft.Xna.Framework.Content.ContentTypeReaderManager
 
-- [ ] Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)
+- [x] Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)
 
 #### Microsoft.Xna.Framework.Content.ContentTypeReader`1
 
-- [ ] Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor
-- [ ] Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object)
+- [x] Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor
+- [x] Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object)
 
 #### Microsoft.Xna.Framework.Content.ResourceContentManager
 
@@ -451,11 +465,11 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.AlphaTestEffect
 
-- [ ] Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)
+- [x] Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)
 
 #### Microsoft.Xna.Framework.Graphics.BasicEffect
 
-- [ ] Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)
+- [x] Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)
 
 #### Microsoft.Xna.Framework.Graphics.DeviceLostException
 
@@ -467,19 +481,19 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.DualTextureEffect
 
-- [ ] Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.DualTextureEffect)
+- [x] Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.DualTextureEffect)
 
 #### Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer
 
-- [ ] Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
+- [x] Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
 
 #### Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer
 
-- [ ] Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
+- [x] Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
 
 #### Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect
 
-- [ ] Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)
+- [x] Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)
 
 #### Microsoft.Xna.Framework.Graphics.GraphicsAdapter
 
@@ -489,17 +503,17 @@ PY
 #### Microsoft.Xna.Framework.Graphics.GraphicsDevice
 
 - [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
 - [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)
 
 #### Microsoft.Xna.Framework.Graphics.IndexBuffer
 
-- [ ] Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
+- [x] Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
 
 #### Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException
 
@@ -631,11 +645,11 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.SkinnedEffect
 
-- [ ] Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)
+- [x] Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)
 
 #### Microsoft.Xna.Framework.Graphics.VertexBuffer
 
-- [ ] Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
+- [x] Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)
 
 #### Microsoft.Xna.Framework.Graphics.VertexElement
 

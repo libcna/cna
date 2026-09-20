@@ -8,8 +8,8 @@ Runtime public types: **331 / 331** (100.00%)
 
 | Member kind | Represented | Documented | Coverage |
 | --- | ---: | ---: | ---: |
-| Constructors | 239 | 253 | 94.47% |
-| Methods | 1503 | 1518 | 99.01% |
+| Constructors | 250 | 253 | 98.81% |
+| Methods | 1516 | 1518 | 99.87% |
 | Properties | 1038 | 1040 | 99.81% |
 | Fields | 753 | 753 | 100.00% |
 | Events | 63 | 63 | 100.00% |
@@ -17,15 +17,15 @@ Runtime public types: **331 / 331** (100.00%)
 | Indexers (subset) | 29 | 29 | 100.00% |
 | Enum Values (subset) | 661 | 661 | 100.00% |
 
-Strict documented members: **3596 / 3627** (99.15%)
-C++-applicable members: **3596 / 3627** (99.15%)
+Strict documented members: **3620 / 3627** (99.81%)
+C++-applicable members: **3620 / 3627** (99.81%)
 
 ## Classifications
 
-- EXACT_EQUIVALENT: 1732
-- SEMANTIC_EQUIVALENT: 1806
+- EXACT_EQUIVALENT: 1743
+- SEMANTIC_EQUIVALENT: 1819
 - HOST_LANGUAGE_SUBSTITUTION: 58
-- MISSING: 31
+- MISSING: 7
 - NOT_APPLICABLE: 0
 - NEEDS_REVIEW: 0
 
@@ -37,7 +37,7 @@ Only `NOT_APPLICABLE` is removed from the C++-applicable denominator.
 
 Before production fixes: **3463 / 3627** (95.48%) represented; 164 missing.
 See [the frozen per-member baseline](xna-4-runtime-member-coverage-baseline.md).
-Newly represented entries: **133**.
+Newly represented entries: **157**.
 
 - `Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)`
 - `Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)`
@@ -56,6 +56,15 @@ Newly represented entries: **133**.
 - `Microsoft.Xna.Framework.Vector4.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)`
 - `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)`
+- `Microsoft.Xna.Framework.Content.ContentLoadException.#ctor`
+- `Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)`
+- `Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)`
+- ``` Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable}) ```
+- ``` Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1 ```
+- ``` Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(``0) ```
+- `` Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor ``
+- `` Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object) ``
+- `Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)`
 - `Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
 - `Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
 - `Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions`
@@ -154,12 +163,27 @@ Newly represented entries: **133**.
 - `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Add(System.Collections.Generic.KeyValuePair{System.String,System.Object})`
 - `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Contains(System.Collections.Generic.KeyValuePair{System.String,System.Object})`
 - `Microsoft.Xna.Framework.GamerServices.PropertyDictionary.System#Collections#Generic#ICollection{T}#Remove(System.Collections.Generic.KeyValuePair{System.String,System.Object})`
+- `Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)`
+- `Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)`
 - `Microsoft.Xna.Framework.Graphics.BlendFunction.Max`
 - `Microsoft.Xna.Framework.Graphics.BlendFunction.Min`
 - `Microsoft.Xna.Framework.Graphics.DeviceLostException.#ctor(System.String,System.Exception)`
 - `Microsoft.Xna.Framework.Graphics.DeviceNotResetException.#ctor(System.String,System.Exception)`
+- `Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.DualTextureEffect)`
+- `Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
+- `Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
+- `Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)`
 - `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)`
+- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32) ```
+- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ```
+- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32) ```
+- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ```
+- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32) ```
+- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ```
+- `Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
 - `Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)`
+- `Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)`
+- `Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
 - `Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)`
@@ -175,7 +199,7 @@ Newly represented entries: **133**.
 
 ## Gap review
 
-Tier A gaps remaining: **0**; Tier B: **24**; Tier C: **7**.
+Tier A gaps remaining: **0**; Tier B: **0**; Tier C: **7**.
 Tier B needs type-specific implementation and behavior tests. Tier C requires CLR
 serialization/resources, historical device selection, or presentation architecture.
 All remaining `MISSING` entries are real absent native contracts under the stated
@@ -185,56 +209,11 @@ normalization. Matcher false negatives were corrected before production changes.
 
 ### Content: `Microsoft.Xna.Framework.Content.ContentLoadException`
 
-- `Microsoft.Xna.Framework.Content.ContentLoadException.#ctor` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
 - `Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure and exception state restoration.
-
-### Content: `Microsoft.Xna.Framework.Content.ContentManager`
-
-- `Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)` — Tier B: Protected disposal hook must preserve the existing resource lifetime contract.
-- `Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
-- ``` Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable}) ``` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
-
-### Content: `Microsoft.Xna.Framework.Content.ContentReader`
-
-- ``` Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1 ``` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
-- ``` Microsoft.Xna.Framework.Content.ContentReader.ReadRawObject``1(``0) ``` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
-
-### Content: `Microsoft.Xna.Framework.Content.ContentTypeReaderManager`
-
-- `Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
-
-### Content: `` Microsoft.Xna.Framework.Content.ContentTypeReader`1 ``
-
-- `` Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor `` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
-- `` Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object) `` — Tier B: Content reader, manager, or exception contract needs implementation and validation.
 
 ### Content: `Microsoft.Xna.Framework.Content.ResourceContentManager`
 
 - `Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)` — Tier C: Requires System.Resources.ResourceManager support in Sharp Runtime.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.AlphaTestEffect`
-
-- `Microsoft.Xna.Framework.Graphics.AlphaTestEffect.#ctor(Microsoft.Xna.Framework.Graphics.AlphaTestEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.BasicEffect`
-
-- `Microsoft.Xna.Framework.Graphics.BasicEffect.#ctor(Microsoft.Xna.Framework.Graphics.BasicEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.DualTextureEffect`
-
-- `Microsoft.Xna.Framework.Graphics.DualTextureEffect.#ctor(Microsoft.Xna.Framework.Graphics.DualTextureEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer`
-
-- `Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer`
-
-- `Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect`
-
-- `Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
 
 ### Graphics: `Microsoft.Xna.Framework.Graphics.GraphicsAdapter`
 
@@ -243,25 +222,7 @@ normalization. Matcher false negatives were corrected before production changes.
 
 ### Graphics: `Microsoft.Xna.Framework.Graphics.GraphicsDevice`
 
-- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
-- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
-- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
-- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
-- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
-- ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ``` — Tier B: Generic array draw contract needs typed vertex and index validation and forwarding.
 - `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)` — Tier C: Requires a native window-handle and presentation contract across renderers.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.IndexBuffer`
-
-- `Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.SkinnedEffect`
-
-- `Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.VertexBuffer`
-
-- `Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
 
 ### Net: `Microsoft.Xna.Framework.Net.NetworkSessionJoinException`
 
