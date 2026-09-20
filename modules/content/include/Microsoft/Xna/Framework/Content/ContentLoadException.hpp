@@ -15,6 +15,15 @@ namespace Microsoft::Xna::Framework::Content
          *
          * @param message Description of the load failure.
          */
+        /**
+         * @brief Creates a ContentLoadException with the default message.
+         *
+         * The documented parameterless constructor. XNA leaves the message to
+         * `System.Exception`'s parameterless constructor, which produces .NET's fallback text
+         * naming the exception's own type, so that is the message here.
+         */
+        ContentLoadException();
+
         explicit ContentLoadException(const std::string& message);
 
         /**

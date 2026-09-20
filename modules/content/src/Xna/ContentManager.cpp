@@ -152,11 +152,93 @@ namespace Microsoft::Xna::Framework::Content
 
     void ContentManager::Dispose()
     {
+        Dispose(true);
+    }
+
+    void ContentManager::Dispose(const bool disposing)
+    {
         if (!disposed_)
         {
-            Unload();
+            // XNA unloads the cached assets only for an explicit disposal, and drops both tables
+            // either way; Unload() is what clears them here.
+            if (disposing)
+            {
+                Unload();
+            }
+            loadedAssets_.clear();
             disposed_ = true;
         }
+    }
+
+    std::vector<std::uint8_t> ContentManager::ReadStreamToEnd(System::IO::Stream& stream,
+                                                              const std::string& assetName)
+    {
+        try
+        {
+            std::vector<std::uint8_t> bytes;
+            std::array<std::uint8_t, 64 * 1024> buffer{};
+            for (;;)
+            {
+                const auto read = stream.Read(buffer.data(), 0,
+                                              static_cast<SharpRuntime::intcs>(buffer.size()));
+                if (read <= 0)
+                {
+                    break;
+                }
+                bytes.insert(bytes.end(), buffer.begin(),
+                             buffer.begin() + static_cast<std::ptrdiff_t>(read));
+            }
+            return bytes;
+        }
+        catch (const ContentLoadException&)
+        {
+            throw;
+        }
+        catch (const std::exception& error)
+        {
+            throw ContentLoadException(
+                "ContentManager: could not read asset '" + assetName + "'.", error);
+        }
+    }
+
+    std::unique_ptr<System::IO::Stream> ContentManager::OpenStream(const std::string& assetName)
+    {
+        const std::string path = ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
+        std::vector<std::uint8_t> bytes;
+        try
+        {
+            // TryReadAssetBytes, not a plain file open: it is the resolution the rest of this
+            // manager uses, and it covers the platform's packaged assets and their case-insensitive
+            // matching as well as the filesystem. An asset served from a package is as much an
+            // asset as one on disk, and a subclass overriding this method inherits neither concern.
+            if (!TryReadAssetBytes(path, bytes))
+            {
+                throw ContentLoadException(
+                    "ContentManager: could not find asset '" + assetName + "' at '" + path + "'.");
+            }
+        }
+        catch (const ContentLoadException&)
+        {
+            throw;
+        }
+        catch (const std::exception& error)
+        {
+            // XNA reports a missing file and any other open failure the same way: a
+            // ContentLoadException naming the asset, carrying the original error as its cause.
+            throw ContentLoadException(
+                "ContentManager: could not open asset '" + assetName + "' at '" + path + "'.",
+                error);
+        }
+
+        // MemoryStream copies the range it is given, so the stream owns its bytes outright and the
+        // local buffer can go: the caller owns the stream and nothing else holds the data.
+        if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+        {
+            throw ContentLoadException(
+                "ContentManager: asset '" + assetName + "' is too large to open.");
+        }
+        return std::make_unique<System::IO::MemoryStream>(
+            bytes.data(), static_cast<SharpRuntime::intcs>(bytes.size()), false);
     }
 
     void ContentManager::Unload()

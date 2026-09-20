@@ -3,6 +3,12 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
+    ContentLoadException::ContentLoadException()
+        : std::runtime_error(
+              "Exception of type 'Microsoft.Xna.Framework.Content.ContentLoadException' was thrown.")
+    {
+    }
+
     ContentLoadException::ContentLoadException(const std::string& message)
         : std::runtime_error(message)
     {

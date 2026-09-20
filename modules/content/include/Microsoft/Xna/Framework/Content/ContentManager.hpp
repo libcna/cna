@@ -30,7 +30,10 @@
 #include "Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp"
 #include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/IDisposable.hpp"
+#include "System/IO/Stream.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -109,6 +112,12 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& path, std::vector<std::uint8_t>& bytes) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
+        /// Reads a stream OpenStream() produced to its end. A ContentManager asset is read whole --
+        /// LoadXnbAsset() needs the complete container to parse its header and payload -- so the
+        /// stream shape an override may provide is turned into bytes once, here.
+        [[nodiscard]] static std::vector<std::uint8_t> ReadStreamToEnd(System::IO::Stream& stream,
+                                                                      const std::string& assetName);
+
         friend class ContentReader;
         [[nodiscard]] std::any LoadUntypedXnbReference(const std::string& assetName);
         [[nodiscard]] std::any LoadXnbAssetUntyped(
@@ -143,6 +152,87 @@ namespace Microsoft::Xna::Framework::Content
 
         /** @brief Releases all resources used by this content manager. */
         void Dispose() override;
+
+    protected:
+        /**
+         * @brief Releases this manager's assets, optionally only the unmanaged ones.
+         *
+         * The documented protected disposal hook: `Dispose()` routes here, and a derived manager
+         * overrides this rather than the public method. XNA unloads the cached assets only when
+         * @p disposing is true, and clears both tables either way; this does the same.
+         *
+         * A derived class that overrides this must also write `using ContentManager::Dispose;`,
+         * because declaring the name hides the public `Dispose()` from its own callers -- a C++
+         * name-lookup consequence with no C# counterpart.
+         *
+         * @param disposing True when called from Dispose(); false when only unmanaged state may be
+         *        touched.
+         */
+        virtual void Dispose(bool disposing);
+
+        /**
+         * @brief Opens the stream an asset's compiled data is read from.
+         *
+         * The documented protected virtual seam. Override it to serve assets from a pack file, an
+         * archive, or embedded resources; every `.xnb` load goes through it, so an override changes
+         * where compiled content comes from without touching anything else.
+         *
+         * The base implementation opens `<RootDirectory>/<assetName>.xnb` for reading and reports a
+         * failure as a ContentLoadException naming the asset, with the underlying error as its
+         * cause -- which is what XNA does, including for a missing file.
+         *
+         * @param assetName The name of the asset being read, without an extension.
+         * @return An open stream positioned at the start of the asset's data. Never null.
+         * @throws ContentLoadException if the asset cannot be opened.
+         */
+        [[nodiscard]] virtual std::unique_ptr<System::IO::Stream> OpenStream(
+            const std::string& assetName);
+
+        /**
+         * @brief Reads an asset through OpenStream() and a ContentReader.
+         *
+         * The documented protected generic read seam: `Load<T>()` caches, `ReadAsset<T>()` reads.
+         * An override of OpenStream() is honoured here, and @p recordDisposableObject receives every
+         * IDisposable the asset owns, so a derived manager can take over their lifetime instead of
+         * leaving them to this manager.
+         *
+         * @tparam T Asset type.
+         * @param assetName The name of the asset to read, without an extension.
+         * @param recordDisposableObject Called for each disposable the asset owns; when empty, this
+         *        manager records them itself, as `Load<T>()` does.
+         * @return The asset, freshly read; this method does not consult or populate the cache.
+         * @throws System::ObjectDisposedException if this manager has been disposed.
+         * @throws System::ArgumentNullException if @p assetName is empty.
+         * @throws ContentLoadException if the asset cannot be opened or read.
+         */
+        template <typename T>
+        [[nodiscard]] T ReadAsset(
+            const std::string& assetName,
+            std::function<void(std::shared_ptr<System::IDisposable>)> recordDisposableObject)
+        {
+            if (disposed_)
+            {
+                throw System::ObjectDisposedException("ContentManager");
+            }
+            if (assetName.empty())
+            {
+                throw System::ArgumentNullException("assetName");
+            }
+
+            // The stream is this method's to own and close: XNA reads it inside a `using`, and the
+            // override that produced it keeps no reference.
+            const std::unique_ptr<System::IO::Stream> stream = OpenStream(assetName);
+            if (!stream)
+            {
+                throw ContentLoadException(
+                    "ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
+            }
+
+            std::vector<std::uint8_t> bytes = ReadStreamToEnd(*stream, assetName);
+            return LoadXnbAsset<T>(bytes, assetName, assetName, std::move(recordDisposableObject));
+        }
+
+    public:
 
         /**
          * @brief Gets the service provider associated with this content manager.
@@ -408,6 +498,14 @@ namespace Microsoft::Xna::Framework::Content
             // loose-file path, .xnb dispatch needs no per-T reader registered on ContentManager
             // at all -- root-object dispatch is entirely driven by the file's own type-reader
             // table via the process-wide ContentTypeReaderManager registry (plans/plan_xnb.md XNB-17B).
+            //
+            // Resolving the tier and reading the bytes is one step, because the only way to ask
+            // whether a compiled asset is available is to try to read it: TryReadAssetBytes covers
+            // the platform's packaged assets as well as the filesystem, and the packaged route has
+            // no existence-only query. ReadAsset<T>()/OpenStream() -- XNA's documented protected
+            // seams, which CNA's tier ladder sits above -- read the same way and are the route for
+            // a manager whose assets are not in the content root at all; ResourceContentManager is
+            // one, and reads through them.
             const std::string xnbCandidate =
                 ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
             std::vector<std::uint8_t> xnbBytes;
@@ -607,9 +705,11 @@ namespace Microsoft::Xna::Framework::Content
          *         an unregistered/version-mismatched reader.
          */
         template <typename T>
-        [[nodiscard]] T LoadXnbAsset(const std::vector<std::uint8_t>& bytes,
-                                     const std::string& xnbPath,
-                                     const std::string& assetName)
+        [[nodiscard]] T LoadXnbAsset(
+            const std::vector<std::uint8_t>& bytes,
+            const std::string& xnbPath,
+            const std::string& assetName,
+            std::function<void(std::shared_ptr<System::IDisposable>)> recordDisposableObject = {})
         {
             if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
             {
@@ -649,7 +749,8 @@ namespace Microsoft::Xna::Framework::Content
                     System::IO::MemoryStream bodyStream(
                         bytes.data() + 10,
                         static_cast<int32_t>(bytes.size()) - 10);
-                    ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
+                    ContentReader contentReader(this, &bodyStream, assetName, header.version,
+                                                header.platform, recordDisposableObject);
                     return contentReader.ReadAsset<T>();
                 }
                 case CNA::Internal::Xnb::XnbCompression::Lzx:
@@ -665,7 +766,8 @@ namespace Microsoft::Xna::Framework::Content
                         compressedSize, decompressedSize, xnbPath);
 
                     System::IO::MemoryStream bodyStream(decompressed.data(), static_cast<int32_t>(decompressed.size()));
-                    ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
+                    ContentReader contentReader(this, &bodyStream, assetName, header.version,
+                                                header.platform, recordDisposableObject);
                     return contentReader.ReadAsset<T>();
                 }
                 case CNA::Internal::Xnb::XnbCompression::Lz4:
@@ -682,7 +784,8 @@ namespace Microsoft::Xna::Framework::Content
                     System::IO::MemoryStream bodyStream(
                         decompressed.data(), static_cast<int32_t>(decompressed.size()));
                     ContentReader contentReader(
-                        this, &bodyStream, assetName, header.version, header.platform);
+                        this, &bodyStream, assetName, header.version, header.platform,
+                        recordDisposableObject);
                     return contentReader.ReadAsset<T>();
                 }
                 case CNA::Internal::Xnb::XnbCompression::Unknown:

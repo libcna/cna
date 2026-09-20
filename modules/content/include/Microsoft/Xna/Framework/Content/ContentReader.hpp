@@ -13,6 +13,8 @@
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/Type.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "System/IDisposable.hpp"
 #include "System/IO/BinaryReader.hpp"
@@ -238,6 +240,43 @@ namespace Microsoft::Xna::Framework::Content
             return result;
         }
 
+        /**
+         * @brief XNA's `T ReadRawObject<T>()`: reads T with the reader registered for T, no
+         *        dispatch index consumed.
+         *
+         * XNA resolves the reader with `ContentTypeReaderManager.GetTypeReader(typeof(T), this)`.
+         * CNA resolves it the same way, through
+         * ContentTypeReaderManager::GetTypeReader(System::Type): a `ContentTypeReader<T>` records
+         * its canonical name against `typeid(T)` when it is constructed, which is what makes the
+         * lookup possible without reflection. A type no reader has ever been constructed for
+         * therefore cannot be resolved, and that is a ContentLoadException rather than a silent
+         * mis-read.
+         *
+         * @tparam T The type to read.
+         * @return The object read.
+         * @throws ContentLoadException if no reader is registered for T.
+         */
+        template <typename T>
+        T ReadRawObject()
+        {
+            return ReadRawObject<T>(*ResolveRawObjectReader<T>());
+        }
+
+        /**
+         * @brief XNA's `T ReadRawObject<T>(T existingInstance)`: as ReadRawObject<T>(), reading
+         *        into @p existingInstance.
+         *
+         * @tparam T The type to read.
+         * @param existingInstance An existing object to read into.
+         * @return The object read.
+         * @throws ContentLoadException if no reader is registered for T.
+         */
+        template <typename T>
+        T ReadRawObject(T existingInstance)
+        {
+            return ReadRawObject<T>(*ResolveRawObjectReader<T>(), std::move(existingInstance));
+        }
+
         /** @brief FNA's `T ReadRawObject<T>(ContentTypeReader typeReader)`: invokes @p typeReader directly, no dispatch/index consumed. */
         template <typename T>
         T ReadRawObject(ContentTypeReaderBase& typeReader)
@@ -389,6 +428,26 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT [[nodiscard]] std::vector<uint8_t> ReadBytesExactOrThrow(int32_t count, const std::string& readerName);
 
     private:
+        /// The reader ContentTypeReaderManager has for T, kept alive for the duration of the read.
+        /// XNA's manager hands back a cached reader instance; CNA's factory creates a fresh one per
+        /// call, so the caller owns it -- which is why this returns the owning pointer rather than a
+        /// reference, and why ReadRawObject<T>() dereferences it inside the same expression.
+        template <typename T>
+        [[nodiscard]] std::unique_ptr<ContentTypeReaderBase> ResolveRawObjectReader()
+        {
+            std::unique_ptr<ContentTypeReaderBase> reader =
+                ContentTypeReaderManager::CreateReaderForTargetTypeEXT(System::Type::From<T>());
+            if (!reader)
+            {
+                throw ContentLoadException(
+                    "ContentReader::ReadRawObject<T>(): no content type reader is registered for "
+                    "the requested type. A reader becomes resolvable by type once a "
+                    "ContentTypeReader<T> for it has been constructed, which is what associates "
+                    "the type with its canonical XNB name.");
+            }
+            return reader;
+        }
+
         /** @cond */
         friend class CNA::Internal::Xnb::XnbCanonicalReaderAccess;
         /** @endcond */

@@ -9,12 +9,30 @@
 #include <type_traits>
 #include <utility>
 
+#include "System/Object.hpp"
+#include "System/Type.hpp"
 #include "CNA/CNAHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
     class ContentReader; // forward declaration -- see ContentReader.hpp (plans/plan_xnb.md XNB-15/16)
     class ContentTypeReaderManager;
+
+    namespace detail
+    {
+        /**
+         * @brief Records a reader's target type against its canonical XNB name.
+         *
+         * Declared here and defined in ContentTypeReaderManager.cpp so `ContentTypeReader<T>`'s
+         * constructors can make the association without including the manager's header, which
+         * includes this one.
+         *
+         * @param targetType    The C++ type the reader handles.
+         * @param canonicalName The reader's canonical XNB name; an empty name is ignored.
+         */
+        void AssociateReaderTargetType(const System::Type& targetType,
+                                       const std::string& canonicalName);
+    }
 
     /**
      * @brief CNAEXT non-generic base for ContentTypeReader<T>.
@@ -106,9 +124,35 @@ namespace Microsoft::Xna::Framework::Content
     class ContentTypeReader : public ContentTypeReaderBase
     {
     protected:
-        /** @brief FNA's `protected ContentTypeReader() : base(typeof(T))`. */
+        /**
+         * @brief XNA's `protected ContentTypeReader() : base(typeof(T))`.
+         *
+         * The documented parameterless constructor. XNA passes `typeof(T)` to the base, which C++
+         * cannot do: a reader's target type is a canonical XNA *name* here, and `typeid(T)` carries
+         * no such name. Where CNA can derive one it does -- a `T` that is a `System::Object` and is
+         * default-constructible reports its own name through `GetTypeName()`, which is exactly the
+         * canonical form. For any other `T` the name is left empty, which means the reader is not
+         * addressable by name: it still reads, through an explicit `ReadObject<T>(reader)` or
+         * `ReadRawObject<T>(reader)` call, but no `.xnb` type-reader table will select it. A reader
+         * that must be selectable passes its name to the constructor below.
+         */
+        ContentTypeReader()
+            : ContentTypeReaderBase(DeriveTargetTypeName())
+        {
+            detail::AssociateReaderTargetType(System::Type::From<T>(),
+                                              this->getTargetTypeNameProperty());
+        }
+
+        /** @brief XNA's `protected ContentTypeReader(Type targetType)`, with the canonical name. */
         explicit ContentTypeReader(std::string targetTypeName)
-            : ContentTypeReaderBase(std::move(targetTypeName)) {}
+            : ContentTypeReaderBase(std::move(targetTypeName))
+        {
+            // Records the name against typeid(T) so ContentTypeReaderManager::GetTypeReader(Type)
+            // can answer for this type: this is the only place both are known at once, which is
+            // what XNA gets for free from ContentTypeReader.TargetType.
+            detail::AssociateReaderTargetType(System::Type::From<T>(),
+                                              this->getTargetTypeNameProperty());
+        }
 
         /**
          * @brief FNA's `protected internal abstract T Read(ContentReader input, T
@@ -124,6 +168,23 @@ namespace Microsoft::Xna::Framework::Content
          * exactly as a real FNA reader does for `existingInstance == null`.
          */
         virtual T Read(ContentReader& input, std::optional<T> existingInstance) = 0;
+
+    private:
+        /// The canonical XNA name of T, where CNA can derive one. A System::Object reports its own
+        /// through GetTypeName(); nothing else can be asked, so the name is left empty there.
+        [[nodiscard]] static std::string DeriveTargetTypeName()
+        {
+            if constexpr (std::is_base_of_v<System::Object, T> && std::is_default_constructible_v<T>)
+            {
+                return T{}.GetTypeName();
+            }
+            else
+            {
+                return {};
+            }
+        }
+
+    protected:
 
     public:
         /**
@@ -141,6 +202,26 @@ namespace Microsoft::Xna::Framework::Content
          * @throws std::bad_any_cast if @p existingInstance is non-empty but does not hold the
          *         expected boxed representation of `T`.
          */
+        /**
+         * @brief XNA's `protected internal override object Read(ContentReader, object)`.
+         *
+         * The documented spelling of the unboxing bridge. One implementation, two names: this
+         * forwards to ReadUntyped(), which is the virtual ContentReader dispatches through and the
+         * one a reader overrides. Nothing is duplicated, and either name gives the same behaviour.
+         *
+         * A derived class that declares its own `Read` hides this one from its own callers, as C++
+         * name lookup does for any overload set; reach it through a `ContentTypeReader<T>` reference
+         * or call ReadUntyped().
+         *
+         * @param input The ContentReader used to read the object.
+         * @param existingInstance The object receiving the data, or an empty object for a new one.
+         * @return The object read, boxed.
+         */
+        std::any Read(ContentReader& input, std::any existingInstance)
+        {
+            return ReadUntyped(input, std::move(existingInstance));
+        }
+
         std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
         {
             if constexpr (std::is_abstract_v<T>)

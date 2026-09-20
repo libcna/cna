@@ -730,7 +730,19 @@ def classify(entry: dict, reference: dict, meta: dict | None, declarations: list
             result["notes"] = "Property accessor signature, type, or mutability differs. CNA: " + "; ".join(candidates)
         return result
     name = reference["declaring_type"].split(".")[-1].split("`")[0] if kind == "constructor" else _candidate_name(reference)
-    options = [d for d in declarations if d["kind"] == kind and d["name"] == name and
+    # Clang names a constructor of a class template with its template argument list --
+    # `ContentTypeReader<T>` for `template <typename T> class ContentTypeReader` -- while the
+    # documented CLR name is the type's, whose ``1 arity marker is already stripped above. The
+    # two name the same constructor, so the argument list is accepted after the expected name and
+    # nothing else is. Pinned by
+    # test_class_template_constructor_matches_the_generic_types_ctor.
+    def named(declaration: dict) -> bool:
+        if declaration["name"] == name:
+            return True
+        return (kind == "constructor" and declaration["name"].startswith(name + "<") and
+                declaration["name"].endswith(">"))
+
+    options = [d for d in declarations if d["kind"] == kind and named(d) and
                d.get("min_parameter_count", len(d["parameter_types"])) <= len(reference["parameter_types"]) <= len(d["parameter_types"]) and
                d["static"] == meta["static"] and d["generic_arity"] == meta["generic_arity"]]
     if not options:

@@ -328,6 +328,49 @@ class RuntimeSurfaceAuditTests(unittest.TestCase):
         self.assertTrue(substitute)
         self.assertFalse(exact)
 
+    def test_class_template_constructor_matches_the_generic_types_ctor(self):
+        # Clang names a constructor of a class template with its template argument list --
+        # `ContentTypeReader<T>`, not `ContentTypeReader` -- while the documented CLR name is
+        # `ContentTypeReader`1.#ctor`, whose arity marker the matcher strips from the TYPE name.
+        # Microsoft's metadata for that record is an instance, protected, parameterless constructor
+        # with no generic arity of its own, and CNA declares exactly that inside
+        # `template <typename T> class ContentTypeReader`. Matching the two is the matcher's job;
+        # this pins it so the template-argument spelling cannot silently reopen the gap.
+        signature = "Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor"
+        entry = self._entry("constructor", signature)
+        known = {"Microsoft.Xna.Framework.Content.ContentTypeReader`1"}
+        parsed = members.reference_signature(entry, known)
+        metadata = self._meta("constructor")
+        declarations = [self._decl("constructor", "ContentTypeReader<T>")]
+        classified = members.classify(entry, parsed, metadata, declarations, known, None, "")
+        self.assertEqual(classified["classification"], "EXACT_EQUIVALENT")
+
+        # A differently named constructor is still not a match, so the rule is the template
+        # argument list and nothing wider.
+        unrelated = [self._decl("constructor", "ContentTypeReaderBase<T>")]
+        self.assertEqual(
+            members.classify(entry, parsed, metadata, unrelated, known, None, "")["classification"],
+            "MISSING")
+
+    def test_real_content_type_reader_constructor_is_represented(self):
+        header = "modules/content/include/Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+        finding = {"reference_name": "Microsoft.Xna.Framework.Content.ContentTypeReader`1",
+                   "cpp_name": "Microsoft::Xna::Framework::Content::ContentTypeReader",
+                   "header": header}
+        native, errors = members.cna_members([finding])
+        self.assertFalse(errors)
+        constructors = [item for item in native[finding["reference_name"]]
+                        if item["kind"] == "constructor"]
+        self.assertTrue(any(not item["parameter_types"] for item in constructors),
+                        "ContentTypeReader<T> must declare the documented parameterless constructor")
+        entry = self._entry("constructor",
+                            "Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor")
+        known = {finding["reference_name"]}
+        classified = members.classify(entry, members.reference_signature(entry, known),
+                                      self._meta("constructor"),
+                                      native[finding["reference_name"]], known, None, "")
+        self.assertEqual(classified["classification"], "EXACT_EQUIVALENT")
+
     def test_incomplete_reference_corpus_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):

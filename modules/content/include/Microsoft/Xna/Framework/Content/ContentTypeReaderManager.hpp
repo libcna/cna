@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include "System/Type.hpp"
+#include <typeindex>
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
@@ -83,7 +85,60 @@ namespace Microsoft::Xna::Framework::Content
          */
         CNAEXT [[nodiscard]] static bool IsRegistered(const std::string& canonicalName);
 
+        /**
+         * @brief Looks up a reader for the specified target type.
+         *
+         * XNA's `public ContentTypeReader GetTypeReader(Type targetType)` -- an *instance* method
+         * on the manager a reader's Initialize() is handed, which is why this one is too, even
+         * though CNA's registry is process-wide and the instance carries no state of its own.
+         * CreateReaderForTargetTypeEXT() below is the same lookup without an instance.
+         *
+         * XNA's manager keeps a target-type-to-reader table alongside the name-to-reader one,
+         * filled in as readers are created, because every reader knows its own `TargetType`. CNA's
+         * readers know their target type as a canonical XNA *name* -- a `System::Type` is RTTI here
+         * and carries no XNA name -- so the bridge between the two is recorded where both are still
+         * known: `ContentTypeReader<T>`'s constructors call AssociateTargetType() with `typeid(T)`
+         * and the name they were given. This resolves the type to that name and creates a reader
+         * from the registered factory, which is what the name-based route does.
+         *
+         * @param targetType The type the reader will handle.
+         * @return A freshly created reader for @p targetType, or nullptr when no reader has ever
+         *         been constructed for it and so nothing associated a name with it.
+         */
+        [[nodiscard]] std::unique_ptr<ContentTypeReaderBase> GetTypeReader(
+            const System::Type& targetType) const;
+
+        /**
+         * @brief CNAEXT: the same lookup as GetTypeReader(), without needing a manager instance.
+         *
+         * CNA's registry is process-wide, so the lookup needs no manager; this is what
+         * ContentReader's ReadRawObject<T>() uses, and what GetTypeReader() forwards to.
+         *
+         * @param targetType The type the reader will handle.
+         * @return A freshly created reader, or nullptr when the type has no associated reader.
+         */
+        CNAEXT [[nodiscard]] static std::unique_ptr<ContentTypeReaderBase>
+        CreateReaderForTargetTypeEXT(const System::Type& targetType);
+
+        /**
+         * @brief Records that @p targetType is the type a reader named @p canonicalName handles.
+         *
+         * CNAEXT: the association XNA gets for free from `ContentTypeReader.TargetType`. Called by
+         * `ContentTypeReader<T>`'s constructors, which are the only place where the C++ type and the
+         * canonical name are both known. A repeat call for the same type replaces the name, so the
+         * most recently constructed reader for a type is the one GetTypeReader() resolves to.
+         *
+         * @param targetType    The C++ type the reader handles.
+         * @param canonicalName The reader's canonical XNB name; an empty name is ignored.
+         */
+        CNAEXT static void AssociateTargetType(const System::Type& targetType,
+                                               const std::string& canonicalName);
+
+        /** @brief CNAEXT: forgets every target-type association -- for test isolation. */
+        CNAEXT static void ClearTargetTypeAssociationsEXT();
+
     private:
         static std::unordered_map<std::string, ReaderFactory>& TypeCreators();
+        static std::unordered_map<std::type_index, std::string>& TargetTypeNames();
     };
 }

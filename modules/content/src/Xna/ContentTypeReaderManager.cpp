@@ -45,4 +45,58 @@ namespace Microsoft::Xna::Framework::Content
         const auto& creators = TypeCreators();
         return creators.find(canonicalName) != creators.end();
     }
+
+    std::unordered_map<std::type_index, std::string>& ContentTypeReaderManager::TargetTypeNames()
+    {
+        static std::unordered_map<std::type_index, std::string> names;
+        return names;
+    }
+
+    void ContentTypeReaderManager::AssociateTargetType(const System::Type& targetType,
+                                                       const std::string& canonicalName)
+    {
+        const std::type_info* info = targetType.getTypeInfo();
+        if (info == nullptr || canonicalName.empty())
+        {
+            return;
+        }
+        TargetTypeNames()[std::type_index(*info)] = canonicalName;
+    }
+
+    void ContentTypeReaderManager::ClearTargetTypeAssociationsEXT()
+    {
+        TargetTypeNames().clear();
+    }
+
+    namespace detail
+    {
+        void AssociateReaderTargetType(const System::Type& targetType,
+                                       const std::string& canonicalName)
+        {
+            ContentTypeReaderManager::AssociateTargetType(targetType, canonicalName);
+        }
+    }
+
+    std::unique_ptr<ContentTypeReaderBase> ContentTypeReaderManager::GetTypeReader(
+        const System::Type& targetType) const
+    {
+        return CreateReaderForTargetTypeEXT(targetType);
+    }
+
+    std::unique_ptr<ContentTypeReaderBase> ContentTypeReaderManager::CreateReaderForTargetTypeEXT(
+        const System::Type& targetType)
+    {
+        const std::type_info* info = targetType.getTypeInfo();
+        if (info == nullptr)
+        {
+            return nullptr;
+        }
+        const auto& names = TargetTypeNames();
+        const auto found = names.find(std::type_index(*info));
+        if (found == names.end())
+        {
+            return nullptr;
+        }
+        return CreateReader(found->second);
+    }
 }
