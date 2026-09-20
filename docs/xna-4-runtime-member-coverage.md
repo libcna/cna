@@ -9,7 +9,7 @@ Runtime public types: **331 / 331** (100.00%)
 | Member kind | Represented | Documented | Coverage |
 | --- | ---: | ---: | ---: |
 | Constructors | 236 | 253 | 93.28% |
-| Methods | 1380 | 1518 | 90.91% |
+| Methods | 1487 | 1518 | 97.96% |
 | Properties | 1038 | 1040 | 99.81% |
 | Fields | 751 | 753 | 99.73% |
 | Events | 62 | 63 | 98.41% |
@@ -17,15 +17,15 @@ Runtime public types: **331 / 331** (100.00%)
 | Indexers (subset) | 29 | 29 | 100.00% |
 | Enum Values (subset) | 661 | 661 | 100.00% |
 
-Strict documented members: **3467 / 3627** (95.59%)
-C++-applicable members: **3467 / 3627** (95.59%)
+Strict documented members: **3574 / 3627** (98.54%)
+C++-applicable members: **3574 / 3627** (98.54%)
 
 ## Classifications
 
-- EXACT_EQUIVALENT: 1662
-- SEMANTIC_EQUIVALENT: 1747
+- EXACT_EQUIVALENT: 1724
+- SEMANTIC_EQUIVALENT: 1792
 - HOST_LANGUAGE_SUBSTITUTION: 58
-- MISSING: 160
+- MISSING: 53
 - NOT_APPLICABLE: 0
 - NEEDS_REVIEW: 0
 
@@ -37,16 +37,123 @@ Only `NOT_APPLICABLE` is removed from the C++-applicable denominator.
 
 Before production fixes: **3463 / 3627** (95.48%) represented; 164 missing.
 See [the frozen per-member baseline](xna-4-runtime-member-coverage-baseline.md).
-Newly represented entries: **4**.
+Newly represented entries: **111**.
 
+- `Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)`
+- `Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)`
+- `Microsoft.Xna.Framework.BoundingSphere.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Color.Equals(System.Object)`
+- `Microsoft.Xna.Framework.CurveKey.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Matrix.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Matrix.op_Multiply(System.Single,Microsoft.Xna.Framework.Matrix)`
+- `Microsoft.Xna.Framework.Plane.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Point.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Quaternion.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Ray.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Rectangle.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Vector2.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Vector3.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Vector4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToVector3`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector.ToVector4`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToVector2`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToVector2`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rg32)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToVector2`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short2)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToString`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToVector2`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short4)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.GetHashCode`
+- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToString`
+- `Microsoft.Xna.Framework.Input.GamePadButtons.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.GamePadButtons.ToString`
+- `Microsoft.Xna.Framework.Input.GamePadDPad.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.GamePadDPad.ToString`
+- `Microsoft.Xna.Framework.Input.GamePadState.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.GamePadThumbSticks.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.GamePadThumbSticks.ToString`
+- `Microsoft.Xna.Framework.Input.GamePadTriggers.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.GamePadTriggers.ToString`
 - `Microsoft.Xna.Framework.Input.GamePadType.BigButtonPad`
+- `Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)`
+- `Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)`
+- `Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode`
 - `Microsoft.Xna.Framework.Graphics.BlendFunction.Max`
 - `Microsoft.Xna.Framework.Graphics.BlendFunction.Min`
+- `Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)`
 
 ## Gap review
 
-Tier A gaps remaining: **0**; Tier B: **153**; Tier C: **7**.
+Tier A gaps remaining: **0**; Tier B: **46**; Tier C: **7**.
 Tier B needs type-specific implementation and behavior tests. Tier C requires CLR
 serialization/resources, historical device selection, or presentation architecture.
 All remaining `MISSING` entries are real absent native contracts under the stated
@@ -91,66 +198,6 @@ normalization. Matcher false negatives were corrected before production changes.
 ### Content: `Microsoft.Xna.Framework.Content.ResourceContentManager`
 
 - `Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)` — Tier C: Requires System.Resources.ResourceManager support in Sharp Runtime.
-
-### Core / Math: `Microsoft.Xna.Framework.BoundingBox`
-
-- `Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.BoundingFrustum`
-
-- `Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.BoundingSphere`
-
-- `Microsoft.Xna.Framework.BoundingSphere.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Color`
-
-- `Microsoft.Xna.Framework.Color.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.CurveKey`
-
-- `Microsoft.Xna.Framework.CurveKey.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector.ToVector4` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Matrix`
-
-- `Microsoft.Xna.Framework.Matrix.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Plane`
-
-- `Microsoft.Xna.Framework.Plane.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Point`
-
-- `Microsoft.Xna.Framework.Point.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Quaternion`
-
-- `Microsoft.Xna.Framework.Quaternion.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Ray`
-
-- `Microsoft.Xna.Framework.Ray.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Rectangle`
-
-- `Microsoft.Xna.Framework.Rectangle.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Vector2`
-
-- `Microsoft.Xna.Framework.Vector2.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Vector3`
-
-- `Microsoft.Xna.Framework.Vector3.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Core / Math: `Microsoft.Xna.Framework.Vector4`
-
-- `Microsoft.Xna.Framework.Vector4.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
 
 ### Design: `Microsoft.Xna.Framework.Design.BoundingBoxConverter`
 
@@ -231,130 +278,6 @@ normalization. Matcher false negatives were corrected before production changes.
 
 - `Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
 
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToVector3` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToVector2` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToVector2` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rg32)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToVector2` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Short2`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short2)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToVector2` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.PackedVector.Short4`
-
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short4)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(System.Object)` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.GetHashCode` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-- `Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToString` — Tier B: Packed value conversion and object-contract methods need per-format semantics and tests.
-
 ### Graphics: `Microsoft.Xna.Framework.Graphics.SkinnedEffect`
 
 - `Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
@@ -362,58 +285,6 @@ normalization. Matcher false negatives were corrected before production changes.
 ### Graphics: `Microsoft.Xna.Framework.Graphics.VertexBuffer`
 
 - `Microsoft.Xna.Framework.Graphics.VertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)` — Tier B: Graphics constructor needs resource, copy, or inner-exception semantics.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.VertexElement`
-
-- `Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.VertexPositionColor`
-
-- `Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture`
-
-- `Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture`
-
-- `Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.VertexPositionTexture`
-
-- `Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.GamePadButtons`
-
-- `Microsoft.Xna.Framework.Input.GamePadButtons.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-- `Microsoft.Xna.Framework.Input.GamePadButtons.ToString` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.GamePadDPad`
-
-- `Microsoft.Xna.Framework.Input.GamePadDPad.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-- `Microsoft.Xna.Framework.Input.GamePadDPad.ToString` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.GamePadState`
-
-- `Microsoft.Xna.Framework.Input.GamePadState.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.GamePadThumbSticks`
-
-- `Microsoft.Xna.Framework.Input.GamePadThumbSticks.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-- `Microsoft.Xna.Framework.Input.GamePadThumbSticks.ToString` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.GamePadTriggers`
-
-- `Microsoft.Xna.Framework.Input.GamePadTriggers.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-- `Microsoft.Xna.Framework.Input.GamePadTriggers.ToString` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.KeyboardState`
-
-- `Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
-### Input: `Microsoft.Xna.Framework.Input.MouseState`
-
-- `Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
 
 ### Media: `Microsoft.Xna.Framework.Media.Song`
 
@@ -423,18 +294,9 @@ normalization. Matcher false negatives were corrected before production changes.
 
 - `Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure.
 
-### Runtime: `Microsoft.Xna.Framework.GraphicsDeviceInformation`
-
-- `Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-- `Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
-
 ### Storage: `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException`
 
 - `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure and exception state restoration.
-
-### Touch: `Microsoft.Xna.Framework.Input.Touch.TouchLocation`
-
-- `Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)` — Tier B: Object-contract overload or formatting requires type-specific behavior and tests.
 
 ### XACT: `Microsoft.Xna.Framework.Audio.AudioCategory`
 

@@ -2382,7 +2382,7 @@
       "Microsoft.Xna.Framework.Xact.dll"
     ],
     "documented": 3627,
-    "represented": 3467,
+    "represented": 3574,
     "metadata_dll_sha256": {
       "Microsoft.Xna.Framework.dll": "38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130",
       "Microsoft.Xna.Framework.Avatar.dll": "b3c70bbe469000b9e11507cc63b88d54a4e0bc5c27afc826d66e0aee51640871",
@@ -2395,14 +2395,14 @@
       "Microsoft.Xna.Framework.Video.dll": "17538b1ca9d48a993e2cd88c96b436df08e7abb4aec5d4758eb21feb580d6e06",
       "Microsoft.Xna.Framework.Xact.dll": "a14d5364dca7cf49fb90639e87ba04d52b59a700dc9198efa5707ce8eae28f0a"
     },
-    "strict_coverage_percent": 95.59,
+    "strict_coverage_percent": 98.54,
     "cpp_applicable_denominator": 3627,
-    "cpp_applicable_coverage_percent": 95.59,
+    "cpp_applicable_coverage_percent": 98.54,
     "classifications": {
-      "EXACT_EQUIVALENT": 1662,
-      "SEMANTIC_EQUIVALENT": 1747,
+      "EXACT_EQUIVALENT": 1724,
+      "SEMANTIC_EQUIVALENT": 1792,
       "HOST_LANGUAGE_SUBSTITUTION": 58,
-      "MISSING": 160,
+      "MISSING": 53,
       "NOT_APPLICABLE": 0,
       "NEEDS_REVIEW": 0
     },
@@ -2419,12 +2419,12 @@
       },
       "method": {
         "documented": 1518,
-        "represented": 1380,
+        "represented": 1487,
         "classifications": {
-          "EXACT_EQUIVALENT": 756,
-          "SEMANTIC_EQUIVALENT": 568,
-          "MISSING": 138,
-          "HOST_LANGUAGE_SUBSTITUTION": 56
+          "EXACT_EQUIVALENT": 818,
+          "SEMANTIC_EQUIVALENT": 613,
+          "HOST_LANGUAGE_SUBSTITUTION": 56,
+          "MISSING": 31
         }
       },
       "property": {
@@ -3076,7 +3076,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.BoundingBox",
         "name": "Equals",
@@ -3088,8 +3088,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const BoundingBox &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/BoundingBox.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -3110,9 +3110,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/BoundingBox.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.BoundingBox.GetCorners",
@@ -4194,7 +4192,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.BoundingFrustum",
         "name": "Equals",
@@ -4206,8 +4204,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const BoundingFrustum &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/BoundingFrustum.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -4228,9 +4226,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/BoundingFrustum.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.BoundingFrustum.Far",
@@ -5660,7 +5656,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.BoundingSphere.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.BoundingSphere",
         "name": "Equals",
@@ -5672,8 +5668,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.BoundingSphere.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const BoundingSphere &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/BoundingSphere.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -5694,9 +5690,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/BoundingSphere.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.BoundingSphere.GetHashCode",
@@ -8083,7 +8077,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Color.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Color",
         "name": "Equals",
@@ -8095,8 +8089,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Color.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Color &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Color.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -8117,9 +8111,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Color.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Color.Firebrick",
@@ -12816,7 +12808,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.CurveKey.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.CurveKey",
         "name": "Equals",
@@ -12828,8 +12820,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.CurveKey.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const CurveKey &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/CurveKey.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -12850,9 +12842,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/CurveKey.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.CurveKey.GetHashCode",
@@ -17342,7 +17332,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Matrix.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Matrix",
         "name": "Equals",
@@ -17354,8 +17344,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Matrix.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Matrix &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Matrix.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -17376,9 +17366,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Matrix.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Matrix.Forward",
@@ -19765,7 +19753,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Plane.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Plane",
         "name": "Equals",
@@ -19777,8 +19765,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Plane.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(Plane) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Plane.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -19799,9 +19787,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Plane.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Plane.GetHashCode",
@@ -20790,7 +20776,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Point.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Point",
         "name": "Equals",
@@ -20802,8 +20788,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Point.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Point &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Point.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -20824,9 +20810,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Point.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Point.GetHashCode",
@@ -21932,7 +21916,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Quaternion.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Quaternion",
         "name": "Equals",
@@ -21944,8 +21928,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Quaternion.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Quaternion &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Quaternion.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -21966,9 +21950,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Quaternion.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Quaternion.GetHashCode",
@@ -23440,7 +23422,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Ray.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Ray",
         "name": "Equals",
@@ -23452,8 +23434,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Ray.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(Ray) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Ray.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -23474,9 +23456,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Ray.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Ray.GetHashCode",
@@ -24336,7 +24316,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Rectangle.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Rectangle",
         "name": "Equals",
@@ -24348,8 +24328,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Rectangle.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Rectangle &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Rectangle.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -24370,9 +24350,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Rectangle.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Rectangle.GetHashCode",
@@ -26186,7 +26164,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Vector2.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Vector2",
         "name": "Equals",
@@ -26198,8 +26176,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Vector2.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Vector2 &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Vector2.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -26220,9 +26198,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Vector2.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Vector2.GetHashCode",
@@ -29683,7 +29659,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Vector3.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Vector3",
         "name": "Equals",
@@ -29695,8 +29671,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Vector3.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Vector3 &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Vector3.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -29717,9 +29693,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Vector3.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Vector3.Forward",
@@ -33273,7 +33247,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Vector4.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Vector4",
         "name": "Equals",
@@ -33285,8 +33259,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Vector4.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const Vector4 &) -> bool",
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Vector4.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -33307,9 +33281,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Vector4.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Vector4.GetHashCode",
@@ -43262,7 +43234,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8",
         "name": "Equals",
@@ -43274,7 +43246,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp::Equals(const Alpha8 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43293,17 +43265,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8",
         "name": "Equals",
@@ -43315,7 +43285,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43334,17 +43304,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8",
         "name": "GetHashCode",
@@ -43354,7 +43322,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43369,12 +43337,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -43601,7 +43567,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8",
         "name": "ToString",
@@ -43611,7 +43577,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43626,12 +43592,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.#ctor(Microsoft.Xna.Framework.Vector3)",
@@ -43720,7 +43684,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565",
         "name": "Equals",
@@ -43732,7 +43696,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp::Equals(const Bgr565 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43751,17 +43715,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565",
         "name": "Equals",
@@ -43773,7 +43735,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43792,17 +43754,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565",
         "name": "GetHashCode",
@@ -43812,7 +43772,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -43827,12 +43787,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -44026,7 +43984,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565",
         "name": "ToString",
@@ -44036,7 +43994,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44051,17 +44009,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToVector3",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565",
         "name": "ToVector3",
@@ -44071,7 +44027,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToVector3",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp::ToVector3()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44086,12 +44042,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.#ctor(Microsoft.Xna.Framework.Vector4)",
@@ -44183,7 +44137,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444",
         "name": "Equals",
@@ -44195,7 +44149,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp::Equals(const Bgra4444 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44214,17 +44168,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444",
         "name": "Equals",
@@ -44236,7 +44188,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44255,17 +44207,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444",
         "name": "GetHashCode",
@@ -44275,7 +44225,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44290,12 +44240,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -44456,7 +44404,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444",
         "name": "ToString",
@@ -44466,7 +44414,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44481,12 +44429,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToVector4",
@@ -44611,7 +44557,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551",
         "name": "Equals",
@@ -44623,7 +44569,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp::Equals(const Bgra5551 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44642,17 +44588,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551",
         "name": "Equals",
@@ -44664,7 +44608,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44683,17 +44627,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551",
         "name": "GetHashCode",
@@ -44703,7 +44645,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44718,12 +44660,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -44884,7 +44824,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551",
         "name": "ToString",
@@ -44894,7 +44834,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -44909,12 +44849,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToVector4",
@@ -45039,7 +44977,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4",
         "name": "Equals",
@@ -45051,7 +44989,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp::Equals(const Byte4 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45070,17 +45008,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4",
         "name": "Equals",
@@ -45092,7 +45028,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45111,17 +45047,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4",
         "name": "GetHashCode",
@@ -45131,7 +45065,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45146,12 +45080,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -45312,7 +45244,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4",
         "name": "ToString",
@@ -45322,7 +45254,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45337,12 +45269,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToVector4",
@@ -45419,7 +45349,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle",
         "name": "Equals",
@@ -45431,7 +45361,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp::Equals(const HalfSingle &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45450,17 +45380,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle",
         "name": "Equals",
@@ -45472,7 +45400,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45491,17 +45419,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle",
         "name": "GetHashCode",
@@ -45511,7 +45437,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45526,12 +45452,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -45758,7 +45682,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle",
         "name": "ToString",
@@ -45768,7 +45692,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45783,12 +45707,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.#ctor(Microsoft.Xna.Framework.Vector2)",
@@ -45874,7 +45796,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2",
         "name": "Equals",
@@ -45886,7 +45808,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp::Equals(const HalfVector2 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45905,17 +45827,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2",
         "name": "Equals",
@@ -45927,7 +45847,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45946,17 +45866,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2",
         "name": "GetHashCode",
@@ -45966,7 +45884,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -45981,12 +45899,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -46180,7 +46096,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2",
         "name": "ToString",
@@ -46190,7 +46106,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46205,12 +46121,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToVector2",
@@ -46335,7 +46249,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4",
         "name": "Equals",
@@ -46347,7 +46261,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp::Equals(const HalfVector4 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46366,17 +46280,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4",
         "name": "Equals",
@@ -46388,7 +46300,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46407,17 +46319,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4",
         "name": "GetHashCode",
@@ -46427,7 +46337,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46442,12 +46352,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -46608,7 +46516,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4",
         "name": "ToString",
@@ -46618,7 +46526,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46633,12 +46541,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToVector4",
@@ -46715,7 +46621,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector.ToVector4",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector",
         "name": "ToVector4",
@@ -46725,7 +46631,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector.ToVector4",
-        "cna_symbol": null,
+        "cna_symbol": "modules/math/include/Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp::ToVector4()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46740,12 +46646,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/math/include/Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp",
-        "subsystem": "Core / Math",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Core / Math"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector`1.PackedValue",
@@ -46864,7 +46768,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2",
         "name": "Equals",
@@ -46876,7 +46780,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp::Equals(const NormalizedByte2 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46895,17 +46799,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2",
         "name": "Equals",
@@ -46917,7 +46819,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46936,17 +46838,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2",
         "name": "GetHashCode",
@@ -46956,7 +46856,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -46971,12 +46871,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -47170,7 +47068,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2",
         "name": "ToString",
@@ -47180,7 +47078,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47195,17 +47093,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToVector2",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2",
         "name": "ToVector2",
@@ -47215,7 +47111,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToVector2",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp::ToVector2()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47230,12 +47126,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.#ctor(Microsoft.Xna.Framework.Vector4)",
@@ -47327,7 +47221,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4",
         "name": "Equals",
@@ -47339,7 +47233,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp::Equals(const NormalizedByte4 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47358,17 +47252,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4",
         "name": "Equals",
@@ -47380,7 +47272,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47399,17 +47291,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4",
         "name": "GetHashCode",
@@ -47419,7 +47309,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47434,12 +47324,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -47600,7 +47488,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4",
         "name": "ToString",
@@ -47610,7 +47498,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47625,12 +47513,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToVector4",
@@ -47749,7 +47635,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2",
         "name": "Equals",
@@ -47761,7 +47647,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp::Equals(const NormalizedShort2 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47780,17 +47666,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2",
         "name": "Equals",
@@ -47802,7 +47686,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47821,17 +47705,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2",
         "name": "GetHashCode",
@@ -47841,7 +47723,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -47856,12 +47738,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -48055,7 +47935,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2",
         "name": "ToString",
@@ -48065,7 +47945,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48080,17 +47960,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToVector2",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2",
         "name": "ToVector2",
@@ -48100,7 +47978,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToVector2",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp::ToVector2()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48115,12 +47993,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.#ctor(Microsoft.Xna.Framework.Vector4)",
@@ -48212,7 +48088,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4",
         "name": "Equals",
@@ -48224,7 +48100,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp::Equals(const NormalizedShort4 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48243,17 +48119,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4",
         "name": "Equals",
@@ -48265,7 +48139,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48284,17 +48158,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4",
         "name": "GetHashCode",
@@ -48304,7 +48176,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48319,12 +48191,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -48485,7 +48355,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4",
         "name": "ToString",
@@ -48495,7 +48365,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48510,12 +48380,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToVector4",
@@ -48634,7 +48502,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rg32)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32",
         "name": "Equals",
@@ -48646,7 +48514,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rg32)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp::Equals(const Rg32 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48665,17 +48533,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32",
         "name": "Equals",
@@ -48687,7 +48553,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48706,17 +48572,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32",
         "name": "GetHashCode",
@@ -48726,7 +48590,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48741,12 +48605,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -48940,7 +48802,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32",
         "name": "ToString",
@@ -48950,7 +48812,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -48965,17 +48827,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToVector2",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32",
         "name": "ToVector2",
@@ -48985,7 +48845,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToVector2",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp::ToVector2()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49000,12 +48860,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.#ctor(Microsoft.Xna.Framework.Vector4)",
@@ -49097,7 +48955,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102",
         "name": "Equals",
@@ -49109,7 +48967,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp::Equals(const Rgba1010102 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49128,17 +48986,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102",
         "name": "Equals",
@@ -49150,7 +49006,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49169,17 +49025,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102",
         "name": "GetHashCode",
@@ -49189,7 +49043,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49204,12 +49058,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -49370,7 +49222,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102",
         "name": "ToString",
@@ -49380,7 +49232,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49395,12 +49247,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToVector4",
@@ -49525,7 +49375,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64",
         "name": "Equals",
@@ -49537,7 +49387,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp::Equals(const Rgba64 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49556,17 +49406,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64",
         "name": "Equals",
@@ -49578,7 +49426,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49597,17 +49445,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64",
         "name": "GetHashCode",
@@ -49617,7 +49463,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49632,12 +49478,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -49798,7 +49642,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64",
         "name": "ToString",
@@ -49808,7 +49652,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49823,12 +49667,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToVector4",
@@ -49947,7 +49789,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short2)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2",
         "name": "Equals",
@@ -49959,7 +49801,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short2)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp::Equals(const Short2 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -49978,17 +49820,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2",
         "name": "Equals",
@@ -50000,7 +49840,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50019,17 +49859,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2",
         "name": "GetHashCode",
@@ -50039,7 +49877,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50054,12 +49892,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -50253,7 +50089,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2",
         "name": "ToString",
@@ -50263,7 +50099,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50278,17 +50114,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToVector2",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2",
         "name": "ToVector2",
@@ -50298,7 +50132,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToVector2",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp::ToVector2()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50313,12 +50147,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.#ctor(Microsoft.Xna.Framework.Vector4)",
@@ -50410,7 +50242,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short4)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4",
         "name": "Equals",
@@ -50422,7 +50254,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short4)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp::Equals(const Short4 &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50441,17 +50273,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4",
         "name": "Equals",
@@ -50463,7 +50293,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp::Equals(const std::any &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50482,17 +50312,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4",
         "name": "GetHashCode",
@@ -50502,7 +50330,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50517,12 +50345,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Microsoft#Xna#Framework#Graphics#PackedVector#IPackedVector#PackFromVector4(Microsoft.Xna.Framework.Vector4)",
@@ -50683,7 +50509,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4",
         "name": "ToString",
@@ -50693,7 +50519,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -50708,12 +50534,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Packed value conversion and object-contract methods need per-format semantics and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToVector4",
@@ -51978,7 +51802,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadButtons.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadButtons",
         "name": "Equals",
@@ -51990,8 +51814,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadButtons.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const GamePadButtons &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -52012,9 +51836,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadButtons.GetHashCode",
@@ -52301,7 +52123,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadButtons.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadButtons",
         "name": "ToString",
@@ -52311,7 +52133,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadButtons.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -52326,12 +52148,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadButtons.X",
@@ -53440,7 +53260,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadDPad.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadDPad",
         "name": "Equals",
@@ -53452,8 +53272,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadDPad.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const GamePadDPad &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -53474,9 +53294,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadDPad.GetHashCode",
@@ -53664,7 +53482,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadDPad.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadDPad",
         "name": "ToString",
@@ -53674,7 +53492,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadDPad.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -53689,12 +53507,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadDPad.Up",
@@ -53897,7 +53713,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadState.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadState",
         "name": "Equals",
@@ -53909,8 +53725,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadState.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const GamePadState &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadState.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -53931,9 +53747,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadState.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadState.GetHashCode",
@@ -54340,7 +54154,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadThumbSticks.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadThumbSticks",
         "name": "Equals",
@@ -54352,8 +54166,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadThumbSticks.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const GamePadThumbSticks &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -54374,9 +54188,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadThumbSticks.GetHashCode",
@@ -54564,7 +54376,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadThumbSticks.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadThumbSticks",
         "name": "ToString",
@@ -54574,7 +54386,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadThumbSticks.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -54589,12 +54401,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadTriggers.#ctor(System.Single,System.Single)",
@@ -54641,7 +54451,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadTriggers.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadTriggers",
         "name": "Equals",
@@ -54653,8 +54463,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadTriggers.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const GamePadTriggers &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -54675,9 +54485,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadTriggers.GetHashCode",
@@ -54865,7 +54673,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadTriggers.ToString",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.GamePadTriggers",
         "name": "ToString",
@@ -54875,7 +54683,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.GamePadTriggers.ToString",
-        "cna_symbol": null,
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp::ToString()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -54890,12 +54698,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.GamePadType.AlternateGuitar",
@@ -55341,7 +55147,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.KeyboardState",
         "name": "Equals",
@@ -55353,8 +55159,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const KeyboardState &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/KeyboardState.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -55375,9 +55181,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/KeyboardState.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.KeyboardState.GetHashCode",
@@ -61163,7 +60967,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.MouseState",
         "name": "Equals",
@@ -61175,8 +60979,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const MouseState &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/MouseState.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -61197,9 +61001,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/MouseState.hpp",
-        "subsystem": "Input",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Input"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.MouseState.GetHashCode",
@@ -77561,7 +77363,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Game.xml",
         "declaring_type": "Microsoft.Xna.Framework.GraphicsDeviceInformation",
         "name": "Equals",
@@ -77573,7 +77375,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Game",
         "xna_signature": "Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/runtime/include/Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp::Equals(const System::Object *)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -77592,17 +77394,15 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/runtime/include/Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp",
-        "subsystem": "Runtime",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Runtime"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Game.xml",
         "declaring_type": "Microsoft.Xna.Framework.GraphicsDeviceInformation",
         "name": "GetHashCode",
@@ -77612,7 +77412,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Game",
         "xna_signature": "Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode",
-        "cna_symbol": null,
+        "cna_symbol": "modules/runtime/include/Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp::GetHashCode()",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -77627,12 +77427,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/runtime/include/Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp",
-        "subsystem": "Runtime",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Runtime"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.GraphicsDeviceInformation.GraphicsProfile",
@@ -118499,7 +118297,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.VertexElement",
         "name": "Equals",
@@ -118511,8 +118309,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const VertexElement &) -> bool",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexElement.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -118533,9 +118331,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexElement.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexElement.GetHashCode",
@@ -119722,7 +119518,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.VertexPositionColor",
         "name": "Equals",
@@ -119734,8 +119530,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const VertexPositionColor &) -> bool",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -119756,9 +119552,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionColor.GetHashCode",
@@ -120090,7 +119884,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture",
         "name": "Equals",
@@ -120102,8 +119896,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const VertexPositionColorTexture &) -> bool",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -120124,9 +119918,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.GetHashCode",
@@ -120458,7 +120250,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture",
         "name": "Equals",
@@ -120470,8 +120262,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const VertexPositionNormalTexture &) -> bool",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -120492,9 +120284,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.GetHashCode",
@@ -120856,7 +120646,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.VertexPositionTexture",
         "name": "Equals",
@@ -120868,8 +120658,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const VertexPositionTexture &) -> bool",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -120890,9 +120680,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.VertexPositionTexture.GetHashCode",
@@ -123150,7 +122938,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Input.Touch.xml",
         "declaring_type": "Microsoft.Xna.Framework.Input.Touch.TouchLocation",
         "name": "Equals",
@@ -123162,8 +122950,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Input.Touch",
         "xna_signature": "Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: Equals(const TouchLocation &) -> bool",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp::Equals(const std::any &)",
+        "notes": "",
         "metadata": {
           "kind": "method",
           "value_type": "System.Boolean",
@@ -123184,9 +122972,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp",
-        "subsystem": "Touch",
-        "gap_tier": "B",
-        "gap_reason": "Object-contract overload or formatting requires type-specific behavior and tests."
+        "subsystem": "Touch"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Input.Touch.TouchLocation.GetHashCode",

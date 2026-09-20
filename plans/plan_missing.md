@@ -48,6 +48,42 @@ Operators, indexers, and enum values are **subsets**, not extra denominator rows
 
 The 160 gaps are **153 Tier B, 7 Tier C, 0 Tier A**. Every one has a unique XML signature in Appendix A. The machine-readable record also gives assembly, declaring type, metadata visibility, return/type shape, CNA header, and tier. In particular, the three `PropertyDictionary` entries are documented explicit-interface members whose CLR metadata visibility is `nonpublic`; their documented interface contract is intentional inventory, not an audit leak.
 
+## 2a. Implementation progress
+
+This section is the live record; §2's tables remain the **2026-09-20 baseline** they were measured
+as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before trusting any row.
+
+| Phase | Packages | Represented / documented | Strict coverage | `MISSING` | Status |
+| --- | --- | ---: | ---: | ---: | --- |
+| Baseline | — | 3,467 / 3,627 | 95.59% | 160 | measured at `9f4d2575d` |
+| 1 — value surface | 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | 53 | **DONE** |
+| 2 — local subsystems | 015, 019, 018, 016, 017, 007, 009 | | | | TODO |
+| 3 — Graphics/Content Tier B | 005, 006, 008, 012 | | | | TODO |
+| 4 — shared prerequisites, Tier C | 013, 014, 010, 011 | | | | TODO |
+
+| Package | Status | Closed | Commit | Note |
+| --- | --- | ---: | --- | --- |
+| XNA-MISSING-001 PackedVector | **DONE** | 74 | `b6f127b15` | `std::any` settled as the boxed-object representation for 001–004/020. Shared `CNA::Internal::UnpackSNorm`/`UnpackUNorm` added; the SNORM minimum code now expands to exactly -1, as `PackUtils.UnpackSNorm` does. `ToVector4` is now an `IPackedVector` member, so `Color` overrides it too. |
+| XNA-MISSING-002 Core / Math | **DONE** | 14 | `37f42e2e7` | Object overloads delegate to the existing typed `Equals`; no comparison duplicated, no layout or vptr change. |
+| XNA-MISSING-003 Input / Touch | **DONE** | 12 | `abc1bcab4` | The four GamePad `ToString()` bodies are each different; button/DPad name order is the documented one, not the accessor declaration order. |
+| XNA-MISSING-004 Graphics vertex | **DONE** | 5 | `1e97ae2e4` | Declaration-only change beside the existing typed `Equals`. |
+| XNA-MISSING-020 GraphicsDeviceInformation | **DONE** | 2 | `1a5d93ffd` | Compares the adapter, the profile and exactly the ten presentation fields XNA compares; `GetHashCode` XORs the same set. |
+| XNA-MISSING-005 … 019 | TODO | | | See §5. |
+
+Phase 1 evidence: 107 records closed, 0 regressed, 0 `NEEDS_REVIEW`, and no represented record
+moved back to `MISSING`. Closed by audit subsystem: Core / Math 15, Graphics 78, Input 11,
+Runtime 2, Touch 1. Per package that is 001 = 74 (73 Graphics + the `IPackedVector` record the
+audit attributes to Core / Math, since `IPackedVector.hpp` lives in `modules/math`), 002 = 14,
+003 = 12, 004 = 5, 020 = 2.
+
+**Audit hygiene learned here:** do not run the audit while editing headers. The audit's Clang pass
+walks 331 types over several minutes, so an edit landing mid-run is picked up for some types and
+not others. The first post-001 run reported +81 instead of +74 for exactly that reason; a
+record-level diff of the JSON against the previous run identified the seven contaminated entries.
+Attribute a delta by diffing `xna_signature` classifications between runs, not by the summary
+counters.
+
+
 ## 3. Definition of done and implementation rules
 
 The API milestone is 331/331 runtime public types, zero unexplained `MISSING`, zero `NEEDS_REVIEW`, and ideally 3,627/3,627 strict documented member representation. If a member truly has no meaningful C++ shape, document its reason individually and show strict versus C++-applicable totals; do not use `NOT_APPLICABLE` to erase work. Behavior, service availability, and renderer parity remain separate measures.
@@ -80,7 +116,7 @@ PackedVector-related work spans two audit subsystems: **73 Graphics records + 1 
 
 ## 5. Detailed work packages
 
-Every package has status **TODO** at this snapshot. Counts are the expected audit delta, not a promise of behavior parity. Unless stated otherwise, its Microsoft signatures are the exact Appendix A entries for the named types.
+Every package had status **TODO** when this snapshot was taken; §2a carries the live status and the commit that closed each one. Counts are the expected audit delta, not a promise of behavior parity. Unless stated otherwise, its Microsoft signatures are the exact Appendix A entries for the named types.
 
 ### XNA-MISSING-001 — PackedVector value and interface parity
 
@@ -220,6 +256,8 @@ The `Present` overload is the only Tier C item likely to require renderer contra
 | Checkpoint | Represented / documented | Strict coverage | Assumption |
 | --- | ---: | ---: | --- |
 | Current | 3,467 / 3,627 | 95.59% | Fresh audit |
+| **Measured** after 001 | **3,541 / 3,627** | **97.63%** | Exactly 74 closed, as predicted |
+| **Measured** after 001, 002, 003, 004, 020 | **3,574 / 3,627** | **98.54%** | Exactly 107 closed, as predicted |
 | After 001 PackedVector | 3,541 / 3,627 | 97.63% | Exactly 74 records close |
 | After 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | Those packages close 107 disjoint records |
 | After **all Tier B** | 3,620 / 3,627 | 99.81% | All 153 Tier B close; seven Tier C remain |
@@ -239,7 +277,7 @@ Even 3,627/3,627 would mean only that the documented runtime **member surface** 
 
 ## Appendix A — complete missing-member checklist
 
-**Expected unchecked entries at this snapshot: 160.** Each line below is one `MISSING` `xna_signature` from the fresh JSON, grouped by audit subsystem and declaring type. Change `- [ ]` to `- [x]` only after a member is implemented, tested, and the audit no longer reports it. A future agent should regenerate `/tmp/xna_runtime_missing_plan_audit.json` before trusting the checklist.
+**Expected unchecked entries at this snapshot: 160; after phase 1: 53.** The verifier below compares unchecked entries against the current audit, so it is the authority, not this number. Each line below is one `MISSING` `xna_signature` from the fresh JSON, grouped by audit subsystem and declaring type. Change `- [ ]` to `- [x]` only after a member is implemented, tested, and the audit no longer reports it. A future agent should regenerate `/tmp/xna_runtime_missing_plan_audit.json` before trusting the checklist.
 
 The verification command compares the **signature multiset**, not just the line count; it also recomputes the subsystem and tier totals. It intentionally compares only unchecked entries, so checked work is allowed to disappear from the current audit:
 
@@ -310,63 +348,63 @@ PY
 
 #### Microsoft.Xna.Framework.BoundingBox
 
-- [ ] Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.BoundingFrustum
 
-- [ ] Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.BoundingSphere
 
-- [ ] Microsoft.Xna.Framework.BoundingSphere.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.BoundingSphere.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Color
 
-- [ ] Microsoft.Xna.Framework.Color.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Color.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.CurveKey
 
-- [ ] Microsoft.Xna.Framework.CurveKey.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.CurveKey.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector.ToVector4
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.IPackedVector.ToVector4
 
 #### Microsoft.Xna.Framework.Matrix
 
-- [ ] Microsoft.Xna.Framework.Matrix.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Matrix.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Plane
 
-- [ ] Microsoft.Xna.Framework.Plane.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Plane.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Point
 
-- [ ] Microsoft.Xna.Framework.Point.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Point.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Quaternion
 
-- [ ] Microsoft.Xna.Framework.Quaternion.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Quaternion.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Ray
 
-- [ ] Microsoft.Xna.Framework.Ray.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Ray.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Rectangle
 
-- [ ] Microsoft.Xna.Framework.Rectangle.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Rectangle.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Vector2
 
-- [ ] Microsoft.Xna.Framework.Vector2.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Vector2.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Vector3
 
-- [ ] Microsoft.Xna.Framework.Vector3.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Vector3.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Vector4
 
-- [ ] Microsoft.Xna.Framework.Vector4.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Vector4.Equals(System.Object)
 
 ### Design
 
@@ -455,127 +493,127 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToString
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToVector3
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgr565.ToVector3
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra4444.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Bgra5551.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Byte4
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Byte4.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToString
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToVector2
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2.ToVector2
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToString
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToVector2
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2.ToVector2
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Rg32
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rg32)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToString
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToVector2
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rg32)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rg32.ToVector2
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba1010102.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64.ToString
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Short2
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short2)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToString
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToVector2
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short2)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short2.ToVector2
 
 #### Microsoft.Xna.Framework.Graphics.PackedVector.Short4
 
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short4)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.GetHashCode
-- [ ] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToString
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(Microsoft.Xna.Framework.Graphics.PackedVector.Short4)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.GetHashCode
+- [x] Microsoft.Xna.Framework.Graphics.PackedVector.Short4.ToString
 
 #### Microsoft.Xna.Framework.Graphics.SkinnedEffect
 
@@ -587,57 +625,57 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.VertexElement
 
-- [ ] Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.VertexElement.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Graphics.VertexPositionColor
 
-- [ ] Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.VertexPositionColor.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture
 
-- [ ] Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture
 
-- [ ] Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Graphics.VertexPositionTexture
 
-- [ ] Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)
 
 ### Input
 
 #### Microsoft.Xna.Framework.Input.GamePadButtons
 
-- [ ] Microsoft.Xna.Framework.Input.GamePadButtons.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Input.GamePadButtons.ToString
+- [x] Microsoft.Xna.Framework.Input.GamePadButtons.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.GamePadButtons.ToString
 
 #### Microsoft.Xna.Framework.Input.GamePadDPad
 
-- [ ] Microsoft.Xna.Framework.Input.GamePadDPad.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Input.GamePadDPad.ToString
+- [x] Microsoft.Xna.Framework.Input.GamePadDPad.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.GamePadDPad.ToString
 
 #### Microsoft.Xna.Framework.Input.GamePadState
 
-- [ ] Microsoft.Xna.Framework.Input.GamePadState.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.GamePadState.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Input.GamePadThumbSticks
 
-- [ ] Microsoft.Xna.Framework.Input.GamePadThumbSticks.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Input.GamePadThumbSticks.ToString
+- [x] Microsoft.Xna.Framework.Input.GamePadThumbSticks.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.GamePadThumbSticks.ToString
 
 #### Microsoft.Xna.Framework.Input.GamePadTriggers
 
-- [ ] Microsoft.Xna.Framework.Input.GamePadTriggers.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.Input.GamePadTriggers.ToString
+- [x] Microsoft.Xna.Framework.Input.GamePadTriggers.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.GamePadTriggers.ToString
 
 #### Microsoft.Xna.Framework.Input.KeyboardState
 
-- [ ] Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.KeyboardState.Equals(System.Object)
 
 #### Microsoft.Xna.Framework.Input.MouseState
 
-- [ ] Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.MouseState.Equals(System.Object)
 
 ### Media
 
@@ -655,8 +693,8 @@ PY
 
 #### Microsoft.Xna.Framework.GraphicsDeviceInformation
 
-- [ ] Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)
-- [ ] Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode
+- [x] Microsoft.Xna.Framework.GraphicsDeviceInformation.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.GraphicsDeviceInformation.GetHashCode
 
 ### Storage
 
@@ -668,7 +706,7 @@ PY
 
 #### Microsoft.Xna.Framework.Input.Touch.TouchLocation
 
-- [ ] Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)
+- [x] Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)
 
 ### XACT
 
