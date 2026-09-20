@@ -252,7 +252,7 @@ import json, re
 
 audit = json.loads(Path('/tmp/xna_runtime_missing_plan_audit.json').read_text())
 missing = [r for r in audit['member_coverage']['findings'] if r['classification'] == 'MISSING']
-appendix = Path('plan_missing.md').read_text().split('## Appendix A — complete missing-member checklist', 1)[1]
+appendix = Path('plans/plan_missing.md').read_text().split('## Appendix A — complete missing-member checklist', 1)[1]
 unchecked = re.findall(r'^- \[ \] (.+)$', appendix, re.MULTILINE)
 assert Counter(unchecked) == Counter(r['xna_signature'] for r in missing)
 assert len(unchecked) == len(missing)
