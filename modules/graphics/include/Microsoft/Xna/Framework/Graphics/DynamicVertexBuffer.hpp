@@ -37,6 +37,27 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
+         * @brief Creates a dynamic vertex buffer whose layout comes from a vertex structure type.
+         *
+         * The documented `(GraphicsDevice, Type, Int32, BufferUsage)` constructor. The type is
+         * resolved exactly as `VertexBuffer`'s own Type constructor resolves it -- see that
+         * constructor for the registry and the refusals -- and the buffer is created dynamic.
+         *
+         * @param device      The graphics device.
+         * @param vertexType  The vertex structure type.
+         * @param vertexCount Capacity in vertices.
+         * @param bufferUsage Usage hint for the buffer.
+         * @throws System::ArgumentException if @p vertexType is not a registered vertex structure.
+         * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
+         * @throws System::NotSupportedException if the declaration or buffer size exceeds the
+         *         active profile.
+         */
+        DynamicVertexBuffer(GraphicsDevice& device,
+                            const System::Type& vertexType,
+                            int vertexCount,
+                            BufferUsage bufferUsage);
+
+        /**
          * @brief Whether this buffer's contents were lost to a device reset.
          *
          * True from the moment a renderer reports a real device reset until the buffer is written

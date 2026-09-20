@@ -14,6 +14,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 
@@ -113,11 +114,54 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
+
+    namespace
+    {
+        /// XNA's `Marshal.SizeOf(indexType)` followed by its `size != 2 ? ThirtyTwoBits
+        /// : SixteenBits` rule, restricted to the index value types an index buffer can have. C++
+        /// cannot ask an arbitrary `System::Type` for its size, and a type outside this set is one
+        /// XNA would also fail on -- either inside Marshal.SizeOf or at buffer creation.
+        IndexElementSize IndexElementSizeFromType(const System::Type& indexType)
+        {
+            if (indexType == System::Type::From<std::int16_t>() ||
+                indexType == System::Type::From<std::uint16_t>())
+            {
+                return IndexElementSize::SixteenBits;
+            }
+            if (indexType == System::Type::From<std::int32_t>() ||
+                indexType == System::Type::From<std::uint32_t>())
+            {
+                return IndexElementSize::ThirtyTwoBits;
+            }
+            throw System::ArgumentException(
+                "The index type '" + indexType.getNameProperty() +
+                "' is not a 16- or 32-bit integer type. An index buffer element is two or four "
+                "bytes wide; pass Int16, UInt16, Int32 or UInt32.",
+                "indexType");
+        }
+    }
+
     IndexBuffer::IndexBuffer(GraphicsDevice& device,
                              IndexElementSize indexElementSize,
                              int indexCount,
                              BufferUsage bufferUsage)
         : IndexBuffer(device, indexElementSize, indexCount, bufferUsage, false)
+    {
+    }
+
+    IndexBuffer::IndexBuffer(GraphicsDevice& device,
+                             const System::Type& indexType,
+                             int indexCount,
+                             BufferUsage bufferUsage)
+        : IndexBuffer(device, IndexElementSizeFromType(indexType), indexCount, bufferUsage, false)
+    {
+    }
+
+    DynamicIndexBuffer::DynamicIndexBuffer(GraphicsDevice& device,
+                                           const System::Type& indexType,
+                                           int indexCount,
+                                           BufferUsage bufferUsage)
+        : IndexBuffer(device, IndexElementSizeFromType(indexType), indexCount, bufferUsage, true)
     {
     }
 

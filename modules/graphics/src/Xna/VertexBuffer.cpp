@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+
+#include "CNA/Graphics/VertexTypeRegistryEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -133,6 +135,24 @@ namespace Microsoft::Xna::Framework::Graphics
                                int vertexCount,
                                BufferUsage bufferUsage)
         : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage, false)
+    {
+    }
+
+    VertexBuffer::VertexBuffer(GraphicsDevice& device,
+                               const System::Type& vertexType,
+                               int vertexCount,
+                               BufferUsage bufferUsage)
+        : VertexBuffer(device, CNA::Graphics::VertexTypeRegistryEXT::Resolve(vertexType),
+                       vertexCount, bufferUsage, false)
+    {
+    }
+
+    DynamicVertexBuffer::DynamicVertexBuffer(GraphicsDevice& device,
+                                             const System::Type& vertexType,
+                                             int vertexCount,
+                                             BufferUsage bufferUsage)
+        : VertexBuffer(device, CNA::Graphics::VertexTypeRegistryEXT::Resolve(vertexType),
+                       vertexCount, bufferUsage, true)
     {
     }
 

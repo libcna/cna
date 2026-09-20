@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
+#include "System/Type.hpp"
 
 namespace CNA::Internal::Renderers
 {
@@ -49,6 +50,31 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         IndexBuffer(GraphicsDevice& device,
                     IndexElementSize indexElementSize,
+                    int indexCount,
+                    BufferUsage bufferUsage);
+
+        /**
+         * @brief Creates an index buffer whose element size comes from an index value type.
+         *
+         * The documented `(GraphicsDevice, Type, Int32, BufferUsage)` constructor. XNA derives the
+         * element width from `Marshal.SizeOf(indexType)` and then reports `SixteenBits` only for a
+         * two-byte element, everything else being `ThirtyTwoBits`. CNA accepts the index value
+         * types an index buffer can actually have -- `Int16`/`UInt16` for two bytes and
+         * `Int32`/`UInt32` for four -- and refuses any other type by name, where XNA would either
+         * fail inside `Marshal.SizeOf` or hand the graphics API a width it cannot use.
+         *
+         * @param device     The graphics device.
+         * @param indexType  The index value type, as `System::Type::From<std::uint16_t>()` and
+         *        friends produce it.
+         * @param indexCount Number of indices the buffer can hold.
+         * @param bufferUsage Usage hint for the buffer.
+         * @throws System::ArgumentException if @p indexType is not a 16- or 32-bit integer type.
+         * @throws System::ArgumentOutOfRangeException if @p indexCount is not positive.
+         * @throws System::NotSupportedException if the element width or buffer size exceeds the
+         *         active profile.
+         */
+        IndexBuffer(GraphicsDevice& device,
+                    const System::Type& indexType,
                     int indexCount,
                     BufferUsage bufferUsage);
 

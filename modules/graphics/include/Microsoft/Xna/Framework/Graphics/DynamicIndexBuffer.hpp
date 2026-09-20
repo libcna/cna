@@ -35,6 +35,27 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
+         * @brief Creates a dynamic index buffer whose element size comes from an index value type.
+         *
+         * The documented `(GraphicsDevice, Type, Int32, BufferUsage)` constructor. The type is
+         * resolved exactly as `IndexBuffer`'s own Type constructor resolves it -- see that
+         * constructor for the rule and the refusal -- and the buffer is created dynamic.
+         *
+         * @param device      The graphics device.
+         * @param indexType   The index value type; Int16, UInt16, Int32 or UInt32.
+         * @param indexCount  Number of indices the buffer can hold.
+         * @param bufferUsage Usage hint for the buffer.
+         * @throws System::ArgumentException if @p indexType is not a 16- or 32-bit integer type.
+         * @throws System::ArgumentOutOfRangeException if @p indexCount is not positive.
+         * @throws System::NotSupportedException if the element width or buffer size exceeds the
+         *         active profile.
+         */
+        DynamicIndexBuffer(GraphicsDevice& device,
+                           const System::Type& indexType,
+                           int indexCount,
+                           BufferUsage bufferUsage);
+
+        /**
          * @brief Whether this buffer's contents were lost to a device reset.
          *
          * True from the moment a renderer reports a real device reset until the buffer is written

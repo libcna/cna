@@ -1,6 +1,10 @@
 file(GLOB_RECURSE CNA_GRAPHICS_CORE_SOURCES CONFIGURE_DEPENDS
     "src/Xna/*.cpp"
     "src/Internal/*.cpp"
+    # CLAUDE.md's src/ area convention: CNAEXT extension surfaces live in src/CnaExt/. The graphics
+    # core had none until XNA-MISSING-006 needed VertexTypeRegistryEXT, which is a public CNA
+    # facility rather than an internal one, so it is not src/Internal/.
+    "src/CnaExt/*.cpp"
 )
 # plans/plan_runtimerenderer.md design decision 3: the generated renderer registry compiles into the
 # graphics core, which is where GraphicsDevice consumes it. It lives in the build tree, not

@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "System/Type.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
@@ -66,6 +67,32 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         VertexBuffer(GraphicsDevice& device,
                      const VertexDeclaration& vertexDeclaration,
+                     int vertexCount,
+                     BufferUsage bufferUsage);
+
+        /**
+         * @brief Creates a vertex buffer whose layout comes from a vertex structure type.
+         *
+         * The documented `(GraphicsDevice, Type, Int32, BufferUsage)` constructor. XNA resolves the
+         * layout with its internal `VertexDeclaration.FromType`, which instantiates the type by
+         * reflection and reads the `IVertexType.VertexDeclaration` it reports. C++ has no
+         * reflection, so the same three steps happen at registration time:
+         * `CNA::Graphics::VertexTypeRegistryEXT` holds the declaration each `IVertexType`
+         * structure reports. CNA's own vertex structures are registered automatically; a game's own
+         * structure registers itself once.
+         *
+         * @param device      The graphics device.
+         * @param vertexType  The vertex structure type, as
+         *        `System::Type::From<VertexPositionColor>()` produces it.
+         * @param vertexCount Capacity in vertices.
+         * @param bufferUsage Usage hint for the buffer.
+         * @throws System::ArgumentException if @p vertexType is not a registered vertex structure.
+         * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
+         * @throws System::NotSupportedException if the declaration or buffer size exceeds the
+         *         active profile.
+         */
+        VertexBuffer(GraphicsDevice& device,
+                     const System::Type& vertexType,
                      int vertexCount,
                      BufferUsage bufferUsage);
 
