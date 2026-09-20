@@ -3,8 +3,8 @@
 
 The source corpus is Microsoft's XNA 4.0 XML documentation, not FNA. The
 Content.Pipeline assembly is a build-time tool and is excluded. All runtime
-T: entries are counted, including nested and generic types. The two
-unavoidable C++ arity substitutions are explicit below.
+T: entries are counted, including nested and generic types. Member shapes
+come from matching Microsoft DLL metadata and CNA public Clang ASTs.
 """
 
 from __future__ import annotations
@@ -185,6 +185,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference-xml-dir", type=Path, default=DEFAULT_XML)
     parser.add_argument("--json", action="store_true", help="emit machine-readable inventory")
+    parser.add_argument("--types-only", action="store_true", help="skip the full member audit")
+    parser.add_argument("--write-reports", action="store_true", help="write Markdown and JSON member reports under docs/")
+    parser.add_argument("--baseline", action="store_true", help="label written reports as the pre-fix baseline")
     args = parser.parse_args()
 
     types, members = reference_members(args.reference_xml_dir)
@@ -207,7 +210,7 @@ def main() -> int:
             "runtime_xml_files": RUNTIME_XML_FILES,
             "arity_substitutions": ARITY_SUBSTITUTIONS,
             "nested_types_counted_separately": True,
-            "member_classification": "unreviewed; no member-level coverage claim",
+            "member_classification": "Microsoft XML / Microsoft DLL / CNA Clang AST audit" if not args.types_only else "not run",
         },
         "types_total": len(types),
         "types_represented": represented,
@@ -220,8 +223,18 @@ def main() -> int:
                                for entry in findings),
         },
         "documented_member_counts": dict(sorted(member_counts.items())),
-        "member_findings": members,
     }
+    if not args.types_only:
+        import xna_runtime_members
+        member_report = xna_runtime_members.audit(args.reference_xml_dir, findings, members)
+        report["member_coverage"] = member_report
+        if args.write_reports:
+            stem = "xna-4-runtime-member-coverage-baseline" if args.baseline else "xna-4-runtime-member-coverage"
+            output = REPO / "docs"
+            (output / (stem + ".json")).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+            (output / (stem + ".md")).write_text(
+                xna_runtime_members.markdown(member_report, len(types), represented, args.baseline),
+                encoding="utf-8")
     if args.json:
         print(json.dumps(report, indent=2))
     else:
@@ -236,6 +249,14 @@ def main() -> int:
         print("Documented members (classification pending):")
         for category, count in sorted(member_counts.items()):
             print(f"  {category}: {count}")
+        if not args.types_only:
+            print("Member representation:")
+            for category, value in member_report["categories"].items():
+                print(f"  {category}: {value['represented']}/{value['documented']}")
+            print(f"Strict documented-member coverage: {member_report['represented']}/{member_report['documented']} ({member_report['strict_coverage_percent']:.2f}%)")
+            print(f"C++-applicable coverage: {member_report['represented']}/{member_report['cpp_applicable_denominator']} ({member_report['cpp_applicable_coverage_percent']:.2f}%)")
+            for classification, count in member_report["classifications"].items():
+                print(f"  {classification}: {count}")
     return 1 if missing else 0
 
 
