@@ -183,6 +183,17 @@ namespace Microsoft::Xna::Framework::Media
         }
     }
 
+    Song* Song::FromUri(const std::string& name, const System::Uri& uri)
+    {
+        // XNA hands the Uri object to the native media stack; FNA reduces it to Uri.LocalPath and
+        // rejects anything that is not a local file. The string overload below already performs
+        // exactly that reduction -- scheme check, query/fragment removal, percent-decoding -- so
+        // the typed overload contributes the documented parameter type and nothing else. Passing
+        // OriginalString rather than AbsoluteUri keeps a relative URI usable, which is the one
+        // case AbsoluteUri refuses to produce.
+        return FromUri(name, uri.getOriginalStringProperty());
+    }
+
     Song* Song::FromUri(const std::string& name, const std::string& uri)
     {
         // FNA resolves the URI via Uri.LocalPath and rejects anything that is not a local file

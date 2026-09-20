@@ -4,6 +4,7 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
+#include "System/Uri.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
@@ -207,13 +208,28 @@ namespace Microsoft::Xna::Framework::Media
         CNAEXT [[nodiscard]] const std::string& getHandle() const;
 
         /**
+         * @brief Constructs a song from the specified URI.
+         *
+         * Only local file URIs are supported; any other scheme is refused. A relative URI is
+         * taken as a path. The song's file must exist, as for every other Song factory.
+         *
+         * @param name Display name for the song.
+         * @param uri  Uri object that represents the URI.
+         * @return Pointer to the newly created Song.
+         */
+        static Song* FromUri(const std::string& name, const System::Uri& uri);
+
+        /**
          * @brief Constructs a song from a local URI/path string.
+         *
+         * CNA extension: the same factory taking the URI as text, which is what callers holding a
+         * plain path or a URI string already have. It carries the resolution both overloads use.
          *
          * @param name Display name for the song.
          * @param uri  File URI or local path.
          * @return Pointer to the newly created Song.
          */
-        static Song* FromUri(const std::string& name, const std::string& uri);
+        CNAEXT static Song* FromUri(const std::string& name, const std::string& uri);
 
         /** @brief Returns the fully-qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

@@ -12,7 +12,9 @@ endif()
 
 cna_add_module(cna_media Media ${CNA_MEDIA_SOURCES})
 target_link_libraries(cna_media PUBLIC cna_audio cna_graphics_core)
-cna_link_sharp_runtime(cna_media PUBLIC Core.Base IO)
+# Song::FromUri(string, System::Uri) is part of the documented XNA surface, so System/Uri.hpp is
+# included by a public header and the component is PUBLIC.
+cna_link_sharp_runtime(cna_media PUBLIC Core.Base IO Uri)
 # MediaPlayer.cpp compiles FrameworkDispatcher.hpp (the accepted audio<->media pump cycle),
 # whose declarations reach into TouchPanel -- an input-module include the global root used
 # to satisfy silently. The input archive was already in every media link closure through

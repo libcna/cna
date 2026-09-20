@@ -374,3 +374,83 @@ TEST(SongTest, FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters)
 
     std::filesystem::remove(tricky);
 }
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-019: the documented static Song.FromUri(String, System.Uri).
+//
+// XNA's signature takes a System.Uri; CNA's string overload is kept as an extension and carries
+// the resolution both share, so these cases assert that the typed overload reaches exactly that
+// route -- the same successes, the same refusals -- rather than a second implementation.
+// ---------------------------------------------------------------------------
+
+TEST(SongTest, FromUriTypedOverloadAcceptsAFileUri)
+{
+    Song* song = nullptr;
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", System::Uri(MakeFileUri(kRealFixture))));
+    ASSERT_NE(song, nullptr);
+    EXPECT_EQ(song->getNameProperty(), "Sunrise");
+    delete song;
+}
+
+TEST(SongTest, FromUriTypedOverloadMatchesTheStringOverload)
+{
+    const std::string uriText = MakeFileUri(kRealFixture);
+
+    Song* fromText = nullptr;
+    Song* fromUri = nullptr;
+    ASSERT_NO_THROW(fromText = Song::FromUri("Sunrise", uriText));
+    ASSERT_NO_THROW(fromUri = Song::FromUri("Sunrise", System::Uri(uriText)));
+    ASSERT_NE(fromText, nullptr);
+    ASSERT_NE(fromUri, nullptr);
+
+    EXPECT_EQ(fromUri->getHandle(), fromText->getHandle());
+    EXPECT_EQ(fromUri->getNameProperty(), fromText->getNameProperty());
+    delete fromText;
+    delete fromUri;
+}
+
+TEST(SongTest, FromUriTypedOverloadPercentDecodesLikeTheStringOverload)
+{
+    // The fixture path contains spaces, so its URI form is percent-escaped; the typed overload
+    // must decode them through the same path rather than stat-ing the escaped text.
+    std::string escaped = MakeFileUri(kRealFixture);
+    const std::string::size_type space = escaped.find(' ');
+    ASSERT_NE(space, std::string::npos);
+    while (escaped.find(' ') != std::string::npos)
+    {
+        escaped.replace(escaped.find(' '), 1, "%20");
+    }
+
+    Song* song = nullptr;
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", System::Uri(escaped)));
+    ASSERT_NE(song, nullptr);
+    delete song;
+}
+
+TEST(SongTest, FromUriTypedOverloadRejectsNonFileSchemes)
+{
+    EXPECT_THROW((void)Song::FromUri("Remote", System::Uri("http://example.com/song.mp3")),
+                 System::InvalidOperationException);
+    EXPECT_THROW((void)Song::FromUri("Remote", System::Uri("https://example.com/song.mp3")),
+                 System::InvalidOperationException);
+}
+
+TEST(SongTest, FromUriTypedOverloadReportsAMissingFile)
+{
+    const std::string missing =
+        MakeFileUri("tests/assets/media/music/definitely-not-here.ogg");
+    EXPECT_THROW((void)Song::FromUri("Missing", System::Uri(missing)),
+                 System::IO::FileNotFoundException);
+}
+
+TEST(SongTest, FromUriTypedOverloadAcceptsARelativeUri)
+{
+    // OriginalString rather than AbsoluteUri is what makes this work: a relative URI has no
+    // absolute form, and CNA's resolution treats a scheme-less URI as a path.
+    Song* song = nullptr;
+    ASSERT_NO_THROW(song = Song::FromUri(
+                        "Sunrise", System::Uri(kRealFixture, System::UriKind::Relative)));
+    ASSERT_NE(song, nullptr);
+    EXPECT_EQ(song->getHandle(), kRealFixture);
+    delete song;
+}
