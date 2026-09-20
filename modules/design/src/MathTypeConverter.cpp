@@ -8,7 +8,7 @@ MathTypeConverter::MathTypeConverter() = default;
 
 bool MathTypeConverter::CanConvertFrom(System::ComponentModel::ITypeDescriptorContext* context,
                                        const System::Type& sourceType) const {
-    if (supportStringConvert_ && System::ComponentModel::detail::ObjectText::IsStringType(sourceType)) {
+    if (supportStringConvert && System::ComponentModel::detail::ObjectText::IsStringType(sourceType)) {
         return true;
     }
     return System::ComponentModel::TypeConverter::CanConvertFrom(context, sourceType);
@@ -16,7 +16,7 @@ bool MathTypeConverter::CanConvertFrom(System::ComponentModel::ITypeDescriptorCo
 
 bool MathTypeConverter::CanConvertTo(System::ComponentModel::ITypeDescriptorContext* context,
                                      const System::Type& destinationType) const {
-    if (supportStringConvert_ && destinationType == System::Type::From<std::string>()) return true;
+    if (supportStringConvert && destinationType == System::Type::From<std::string>()) return true;
     return System::ComponentModel::TypeConverter::CanConvertTo(context, destinationType);
 }
 
@@ -33,7 +33,7 @@ System::ComponentModel::PropertyDescriptorCollection MathTypeConverter::GetPrope
     (void)context;
     (void)value;
     (void)attributes;
-    return propertyDescriptions_;
+    return propertyDescriptions;
 }
 
 bool MathTypeConverter::GetPropertiesSupported(

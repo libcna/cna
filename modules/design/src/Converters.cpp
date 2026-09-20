@@ -58,7 +58,7 @@ void requireDestinationType(const System::Type& destinationType) {
 } // namespace
 
 PointConverter::PointConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Point>("X", &Point::X), MakeFieldProperty<Point>("Y", &Point::Y),
     }).Sort(std::vector<std::string>{"X", "Y"});
 }
@@ -98,13 +98,13 @@ std::any PointConverter::CreateInstance(System::ComponentModel::ITypeDescriptorC
 }
 
 RectangleConverter::RectangleConverter() {
-    propertyDescriptions_ = {
+    propertyDescriptions = {
         MakeFieldProperty<Rectangle>("X", &Rectangle::X),
         MakeFieldProperty<Rectangle>("Y", &Rectangle::Y),
         MakeFieldProperty<Rectangle>("Width", &Rectangle::Width),
         MakeFieldProperty<Rectangle>("Height", &Rectangle::Height),
     };
-    supportStringConvert_ = false;
+    supportStringConvert = false;
 }
 
 std::any RectangleConverter::ConvertTo(System::ComponentModel::ITypeDescriptorContext* context,
@@ -131,7 +131,7 @@ std::any RectangleConverter::CreateInstance(System::ComponentModel::ITypeDescrip
 }
 
 Vector2Converter::Vector2Converter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Vector2>("X", &Vector2::X), MakeFieldProperty<Vector2>("Y", &Vector2::Y),
     }).Sort(std::vector<std::string>{"X", "Y"});
 }
@@ -166,7 +166,7 @@ std::any Vector2Converter::CreateInstance(System::ComponentModel::ITypeDescripto
 }
 
 Vector3Converter::Vector3Converter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Vector3>("X", &Vector3::X), MakeFieldProperty<Vector3>("Y", &Vector3::Y),
         MakeFieldProperty<Vector3>("Z", &Vector3::Z),
     }).Sort(std::vector<std::string>{"X", "Y", "Z"});
@@ -203,7 +203,7 @@ std::any Vector3Converter::CreateInstance(System::ComponentModel::ITypeDescripto
 }
 
 Vector4Converter::Vector4Converter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Vector4>("X", &Vector4::X), MakeFieldProperty<Vector4>("Y", &Vector4::Y),
         MakeFieldProperty<Vector4>("Z", &Vector4::Z), MakeFieldProperty<Vector4>("W", &Vector4::W),
     }).Sort(std::vector<std::string>{"X", "Y", "Z", "W"});
@@ -240,7 +240,7 @@ std::any Vector4Converter::CreateInstance(System::ComponentModel::ITypeDescripto
 }
 
 QuaternionConverter::QuaternionConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Quaternion>("X", &Quaternion::X), MakeFieldProperty<Quaternion>("Y", &Quaternion::Y),
         MakeFieldProperty<Quaternion>("Z", &Quaternion::Z), MakeFieldProperty<Quaternion>("W", &Quaternion::W),
     }).Sort(std::vector<std::string>{"X", "Y", "Z", "W"});
@@ -277,7 +277,7 @@ std::any QuaternionConverter::CreateInstance(System::ComponentModel::ITypeDescri
 }
 
 MatrixConverter::MatrixConverter() {
-    propertyDescriptions_ = {
+    propertyDescriptions = {
         MakeAccessorProperty<Matrix, Vector3>(
             "Translation", &Matrix::getTranslationProperty, &Matrix::setTranslationProperty),
         MakeFieldProperty<Matrix>("M11", &Matrix::M11), MakeFieldProperty<Matrix>("M12", &Matrix::M12),
@@ -289,7 +289,7 @@ MatrixConverter::MatrixConverter() {
         MakeFieldProperty<Matrix>("M41", &Matrix::M41), MakeFieldProperty<Matrix>("M42", &Matrix::M42),
         MakeFieldProperty<Matrix>("M43", &Matrix::M43), MakeFieldProperty<Matrix>("M44", &Matrix::M44),
     };
-    supportStringConvert_ = false;
+    supportStringConvert = false;
 }
 
 std::any MatrixConverter::ConvertTo(System::ComponentModel::ITypeDescriptorContext* context,
@@ -319,10 +319,10 @@ std::any MatrixConverter::CreateInstance(System::ComponentModel::ITypeDescriptor
 }
 
 BoundingBoxConverter::BoundingBoxConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<BoundingBox>("Min", &BoundingBox::Min), MakeFieldProperty<BoundingBox>("Max", &BoundingBox::Max),
     }).Sort(std::vector<std::string>{"Min", "Max"});
-    supportStringConvert_ = false;
+    supportStringConvert = false;
 }
 
 std::any BoundingBoxConverter::ConvertTo(System::ComponentModel::ITypeDescriptorContext* context, const System::Globalization::CultureInfo* culture, const std::any& value, const System::Type& destinationType) const {
@@ -340,10 +340,10 @@ std::any BoundingBoxConverter::CreateInstance(System::ComponentModel::ITypeDescr
 }
 
 BoundingSphereConverter::BoundingSphereConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<BoundingSphere>("Center", &BoundingSphere::Center), MakeFieldProperty<BoundingSphere>("Radius", &BoundingSphere::Radius),
     }).Sort(std::vector<std::string>{"Center", "Radius"});
-    supportStringConvert_ = false;
+    supportStringConvert = false;
 }
 
 std::any BoundingSphereConverter::ConvertTo(System::ComponentModel::ITypeDescriptorContext* context, const System::Globalization::CultureInfo* culture, const std::any& value, const System::Type& destinationType) const {
@@ -361,10 +361,10 @@ std::any BoundingSphereConverter::CreateInstance(System::ComponentModel::ITypeDe
 }
 
 PlaneConverter::PlaneConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Plane>("Normal", &Plane::Normal), MakeFieldProperty<Plane>("D", &Plane::D),
     }).Sort(std::vector<std::string>{"Normal", "D"});
-    supportStringConvert_ = false;
+    supportStringConvert = false;
 }
 
 std::any PlaneConverter::ConvertTo(System::ComponentModel::ITypeDescriptorContext* context, const System::Globalization::CultureInfo* culture, const std::any& value, const System::Type& destinationType) const {
@@ -382,10 +382,10 @@ std::any PlaneConverter::CreateInstance(System::ComponentModel::ITypeDescriptorC
 }
 
 RayConverter::RayConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeFieldProperty<Ray>("Position", &Ray::Position), MakeFieldProperty<Ray>("Direction", &Ray::Direction),
     }).Sort(std::vector<std::string>{"Position", "Direction"});
-    supportStringConvert_ = false;
+    supportStringConvert = false;
 }
 
 std::any RayConverter::ConvertTo(System::ComponentModel::ITypeDescriptorContext* context, const System::Globalization::CultureInfo* culture, const std::any& value, const System::Type& destinationType) const {
@@ -403,7 +403,7 @@ std::any RayConverter::CreateInstance(System::ComponentModel::ITypeDescriptorCon
 }
 
 ColorConverter::ColorConverter() {
-    propertyDescriptions_ = System::ComponentModel::PropertyDescriptorCollection({
+    propertyDescriptions = System::ComponentModel::PropertyDescriptorCollection({
         MakeAccessorProperty<Color, SharpRuntime::bytecs>("R", &Color::getRProperty, &Color::setRProperty),
         MakeAccessorProperty<Color, SharpRuntime::bytecs>("G", &Color::getGProperty, &Color::setGProperty),
         MakeAccessorProperty<Color, SharpRuntime::bytecs>("B", &Color::getBProperty, &Color::setBProperty),

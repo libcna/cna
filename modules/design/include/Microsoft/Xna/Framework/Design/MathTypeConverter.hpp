@@ -85,8 +85,22 @@ public:
         System::ComponentModel::ITypeDescriptorContext* context) const override;
 
 protected:
-    System::ComponentModel::PropertyDescriptorCollection propertyDescriptions_;
-    bool supportStringConvert_ = true;
+    /**
+     * @brief The ordered component descriptors the concrete converter exposes.
+     *
+     * Documented XNA protected field, spelled as XNA spells it, because a subclass outside CNA
+     * populates it in its own constructor. There is one copy of this state, not an alias pair.
+     */
+    System::ComponentModel::PropertyDescriptorCollection propertyDescriptions;
+
+    /**
+     * @brief Whether this converter converts to and from a string form.
+     *
+     * Documented XNA protected field. BoundingBox, BoundingSphere and Ray clear it, because those
+     * three have no string form; the vector, matrix, colour, point and rectangle converters leave
+     * it set.
+     */
+    bool supportStringConvert = true;
 
     template<class TValue>
     [[nodiscard]] static std::optional<std::vector<TValue>> ConvertToValues(
