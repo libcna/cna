@@ -24,7 +24,9 @@
 #include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
@@ -47,6 +49,7 @@ namespace
     using CNA::Internal::Renderers::CompiledEffectPassStateChanges;
     using CNA::Internal::Renderers::ICompiledEffectRuntime;
     using CNA::Internal::Renderers::EasyGL::EasyGLRenderer;
+    using CNA::Internal::Renderers::EasyGL::EasyGLRenderTargetRenderer;
 
     /// Reads a committed fixture. They live with the FNA3D renderer, which owns their provenance.
     std::vector<std::uint8_t> LoadEffect(const std::string& name)
@@ -4699,6 +4702,70 @@ TEST(EasyGLCompiledEffectDrawTest, SharedRenderTargetSourceContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, FlippedSourceRetainsFormatAndFullFloatPrecision)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr)
+        GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (!device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single))
+        GTEST_SKIP() << "this context cannot render to SurfaceFormat.Single";
+
+    RenderTarget2D source(device, 2, 2, false, SurfaceFormat::Single,
+                          DepthFormat::None);
+    ASSERT_EQ(source.getFormatProperty(), SurfaceFormat::Single);
+    const float values[4]{0.12345f, 0.12345f, 0.12345f, 0.12345f};
+    source.SetData(values, 4);
+    auto* nativeSource = dynamic_cast<EasyGLRenderTargetRenderer*>(&source.GetRenderer());
+    ASSERT_NE(nativeSource, nullptr);
+    const ::easygl::Texture& corrected =
+        renderer->AcquireCompiledEffectFlippedSourceEXT(1, *nativeSource);
+
+    GLint previousReadFramebuffer = 0;
+    ::metagl::glGetIntegerv(::metagl::GetParameter::ReadFramebufferBinding,
+                            &previousReadFramebuffer);
+    ::easygl::Framebuffer readFramebuffer;
+    readFramebuffer.create();
+    readFramebuffer.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+    readFramebuffer.attach_texture_2d(
+        ::easygl::FramebufferTarget::ReadFramebuffer,
+        ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+        ::easygl::TextureTarget::Texture2D, corrected, 0);
+    float actual = -1.0f;
+    ::metagl::glReadPixels(0, 0, 1, 1, ::metagl::PixelFormat::Red,
+                           ::metagl::PixelType::Float, &actual);
+    ::metagl::glBindFramebuffer(
+        ::metagl::FramebufferTarget::ReadFramebuffer,
+        ::metagl::FramebufferId{static_cast<unsigned int>(previousReadFramebuffer)});
+    EXPECT_NEAR(actual, values[0], 0.000001f);
+
+    RenderTarget2D colorSource(device, 2, 2, false, SurfaceFormat::Color,
+                               DepthFormat::None);
+    const Color colorValues[4]{Color(17, 91, 207, 255), Color(17, 91, 207, 255),
+                               Color(17, 91, 207, 255), Color(17, 91, 207, 255)};
+    colorSource.SetData(colorValues, 4);
+    auto* nativeColor = dynamic_cast<EasyGLRenderTargetRenderer*>(&colorSource.GetRenderer());
+    ASSERT_NE(nativeColor, nullptr);
+    const ::easygl::Texture& correctedColor =
+        renderer->AcquireCompiledEffectFlippedSourceEXT(1, *nativeColor);
+    readFramebuffer.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+    readFramebuffer.attach_texture_2d(
+        ::easygl::FramebufferTarget::ReadFramebuffer,
+        ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+        ::easygl::TextureTarget::Texture2D, correctedColor, 0);
+    std::uint8_t actualColor[4]{};
+    ::metagl::glReadPixels(0, 0, 1, 1, ::metagl::PixelFormat::Rgba,
+                           ::metagl::PixelType::UnsignedByte, actualColor);
+    ::metagl::glBindFramebuffer(
+        ::metagl::FramebufferTarget::ReadFramebuffer,
+        ::metagl::FramebufferId{static_cast<unsigned int>(previousReadFramebuffer)});
+    EXPECT_EQ(actualColor[0], 17);
+    EXPECT_EQ(actualColor[1], 91);
+    EXPECT_EQ(actualColor[2], 207);
+    EXPECT_EQ(actualColor[3], 255);
 }
 
 TEST(EasyGLCompiledEffectDrawTest, MultipleRenderTargetSamplersKeepTheirOwnTextureUnits)

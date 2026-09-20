@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/ProjectGraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -13,6 +14,28 @@
 #include "RuntimePlatformTestSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
+
+TEST(GraphicsDeviceManagerTest, ProjectProfileSuppliesDefaultWithoutOverridingExplicitChoice)
+{
+    const auto previous = CNA::GetProjectGraphicsProfileEXT();
+    struct RestoreProfile
+    {
+        Graphics::GraphicsProfile value;
+        ~RestoreProfile() { CNA::SetProjectGraphicsProfileEXT(value); }
+    } restore{previous};
+
+    CNA::SetProjectGraphicsProfileEXT(Graphics::GraphicsProfile::Reach);
+    EXPECT_EQ(GraphicsDeviceManager().getGraphicsProfileProperty(),
+              Graphics::GraphicsProfile::Reach);
+
+    const CNA::ProjectGraphicsProfileEXT projectProfile{Graphics::GraphicsProfile::HiDef};
+    EXPECT_EQ(CNA::GetProjectGraphicsProfileEXT(), Graphics::GraphicsProfile::HiDef);
+
+    GraphicsDeviceManager manager;
+    EXPECT_EQ(manager.getGraphicsProfileProperty(), Graphics::GraphicsProfile::HiDef);
+    manager.setGraphicsProfileProperty(Graphics::GraphicsProfile::Reach);
+    EXPECT_EQ(manager.getGraphicsProfileProperty(), Graphics::GraphicsProfile::Reach);
+}
 
 namespace
 {

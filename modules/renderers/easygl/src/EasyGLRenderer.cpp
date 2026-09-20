@@ -8912,10 +8912,21 @@ else
         const int width = source.GetWidth();
         const int height = source.GetHeight();
         const int levelCount = std::max(1, source.levelCount_);
+        const int surfaceFormat = source.GetSurfaceFormatEXT();
+        // A float shadow map can contain depth differences far below 1/255. Copying it through
+        // RGBA8 turns those into self-shadow stripes even though the source target is R32F.
+        RenderTargetColorStorage colorStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat, colorStorage))
+        {
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect cannot copy a render target with an "
+                "unsupported SurfaceFormat.");
+        }
         CompiledEffectFlippedSourceEXT& copy =
             compiledFlippedSources_[static_cast<std::size_t>(slot)];
         if (copy.created &&
-            (copy.width != width || copy.height != height || copy.levelCount != levelCount))
+            (copy.width != width || copy.height != height || copy.levelCount != levelCount ||
+             copy.surfaceFormat != surfaceFormat))
         {
             copy.framebuffer.destroy();
             copy.texture.destroy();
@@ -8936,9 +8947,9 @@ else
             for (int level = 0; level < levelCount; ++level)
             {
                 copy.texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                          RgbaTexImageInternalFormat(), levelW, levelH,
-                                          ::metagl::PixelFormat::Rgba,
-                                          ::metagl::PixelType::UnsignedByte, nullptr);
+                                          colorStorage.internalFormat, levelW, levelH,
+                                          colorStorage.pixelFormat,
+                                          colorStorage.pixelType, nullptr);
                 levelW = std::max(1, levelW / 2);
                 levelH = std::max(1, levelH / 2);
             }
@@ -8957,6 +8968,7 @@ else
             copy.width = width;
             copy.height = height;
             copy.levelCount = levelCount;
+            copy.surfaceFormat = surfaceFormat;
             copy.created = true;
         }
         if (!compiledFlipReadFboCreated_)
@@ -9023,6 +9035,7 @@ else
             copy.width = 0;
             copy.height = 0;
             copy.levelCount = 1;
+            copy.surfaceFormat = -1;
             copy.created = false;
         }
         compiledFlipReadFbo_.reset_handle_no_gl();

@@ -7,8 +7,7 @@
 //
 //   * Direct3D 9's texture format expansion gives a shader `(R, 1, 1, 1)` for a one-channel
 //     format and `(R, G, 1, 1)` for a two-channel one. That is why XNA's ShadowMapping sample can
-//     draw its `SurfaceFormat.Single` shadow map straight to the screen with SpriteBatch and see
-//     a white-to-black depth image.
+//     draw its `SurfaceFormat.Single` shadow map straight to the screen and see cyan at low depth.
 //   * OpenGL expands the same storage to `(R, 0, 0, 1)` and `(R, G, 0, 1)`. The identical draw
 //     produces a RED image, which is what CNA rendered before this fix and what FNA renders
 //     today -- FNA3D maps SurfaceFormat.Single to GL_R32F/GL_RED (FNA3D_Driver_OpenGL.c:378) and
@@ -43,6 +42,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -101,9 +101,14 @@ TEST_F(SingleChannelExpansionTest, SingleFormatSamplesWithGreenBlueAndAlphaAtOne
 
     // EasyGL offers SurfaceFormat.Single as a render-target format, not as an ordinary
     // Texture2D one -- which is exactly how ShadowMappingSample_4_0 obtains its shadow map.
-    // Clearing to white leaves R = 1, the value the sample's own cleared map holds.
+    // A HiDef device is essential: Reach silently falls back to a Color target here, and the
+    // all-white test used to pass even while never exercising SurfaceFormat.Single at all.
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (!device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single))
+        GTEST_SKIP() << "renderer cannot render to SurfaceFormat.Single";
     RenderTarget2D single(device, kSize, kSize, false, SurfaceFormat::Single,
                           DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    ASSERT_EQ(single.getFormatProperty(), SurfaceFormat::Single);
     device.SetRenderTarget(&single);
     device.Clear(Color::White);
     device.SetRenderTarget(nullptr);
@@ -111,6 +116,26 @@ TEST_F(SingleChannelExpansionTest, SingleFormatSamplesWithGreenBlueAndAlphaAtOne
     const Color pixel = DrawThroughSpriteBatch(single);
     // Unexpanded this is (255, 0, 0): GL's own (R, 0, 0, 1).
     EXPECT_NEAR(pixel.getRProperty(), 255, 2);
+    EXPECT_NEAR(pixel.getGProperty(), 255, 2);
+    EXPECT_NEAR(pixel.getBProperty(), 255, 2);
+}
+
+TEST_F(SingleChannelExpansionTest, SingleFormatLowDepthIsCyanRatherThanRedOrBlack)
+{
+    if (!SpriteBatchRasterizes()) GTEST_SKIP() << "renderer does not rasterize this route";
+
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (!device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single))
+        GTEST_SKIP() << "renderer cannot render to SurfaceFormat.Single";
+    RenderTarget2D single(device, kSize, kSize, false, SurfaceFormat::Single,
+                          DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    ASSERT_EQ(single.getFormatProperty(), SurfaceFormat::Single);
+    device.SetRenderTarget(&single);
+    device.Clear(Color(8, 8, 8, 255));
+    device.SetRenderTarget(nullptr);
+
+    const Color pixel = DrawThroughSpriteBatch(single);
+    EXPECT_NEAR(pixel.getRProperty(), 8, 2);
     EXPECT_NEAR(pixel.getGProperty(), 255, 2);
     EXPECT_NEAR(pixel.getBProperty(), 255, 2);
 }

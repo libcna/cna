@@ -1329,6 +1329,8 @@ namespace CNA::Internal::Renderers::EasyGL
             int height = 0;
             /** @brief Mip levels the copy was last allocated with. */
             int levelCount = 1;
+            /** @brief Source SurfaceFormat; a same-sized source may use different storage. */
+            int surfaceFormat = -1;
             /** @brief Whether the GL objects above exist. */
             bool created = false;
         };

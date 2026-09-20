@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
+#include "CNA/ProjectGraphicsProfile.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -48,7 +49,7 @@ namespace Microsoft::Xna::Framework
           useResizedBackBuffer_(false),
           resizedBackBufferWidth_(0),
           resizedBackBufferHeight_(0),
-          graphicsProfile_(Graphics::GraphicsProfile::Reach),
+          graphicsProfile_(CNA::GetProjectGraphicsProfileEXT()),
           isFullScreen_(false),
           preferMultiSampling_(false),
           preferredBackBufferFormat_(Graphics::SurfaceFormat::Color),
