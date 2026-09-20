@@ -75,6 +75,27 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] GraphicsDeviceInformation Clone() const;
 
         /**
+         * @brief Determines whether another object describes the same device settings.
+         *
+         * Compares the adapter, the requested profile, and the ten presentation-parameter
+         * fields XNA compares -- back-buffer width, height and format, depth-stencil format,
+         * multisample count, display orientation, presentation interval, render-target usage,
+         * device window handle, and full-screen state. Other presentation parameters are
+         * deliberately not part of the comparison, as in XNA.
+         *
+         * @param obj The object to compare with; may be @c nullptr.
+         * @return @c true if @p obj is a GraphicsDeviceInformation with the same settings.
+         */
+        [[nodiscard]] bool Equals(const System::Object* obj) const override;
+
+        /**
+         * @brief Returns a hash code over the same state Equals() compares.
+         * @return The XOR of the hash codes of the compared adapter, profile and
+         *         presentation-parameter fields, as XNA combines them.
+         */
+        [[nodiscard]] int GetHashCode() const override;
+
+        /**
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
