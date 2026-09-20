@@ -730,15 +730,15 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         // XNA BlendFunction enum -> WGPUBlendOperation: Add=0, Subtract=1, ReverseSubtract=2,
-        // Max=3, Min=4.
+        // Min=3, Max=4.
         [[nodiscard]] WGPUBlendOperation ToWGPUBlendOperation(int xnaBlendFunc)
         {
             switch (xnaBlendFunc)
             {
                 case 1: return WGPUBlendOperation_Subtract;
                 case 2: return WGPUBlendOperation_ReverseSubtract;
-                case 3: return WGPUBlendOperation_Max;
-                case 4: return WGPUBlendOperation_Min;
+                case 3: return WGPUBlendOperation_Min;
+                case 4: return WGPUBlendOperation_Max;
                 default: return WGPUBlendOperation_Add; // BlendFunction::Add = 0
             }
         }

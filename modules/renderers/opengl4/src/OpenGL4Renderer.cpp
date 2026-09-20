@@ -1214,15 +1214,15 @@ void main()
         }
 
         // XNA BlendFunction enum -> GL blend equation token. Add=0, Subtract=1,
-        // ReverseSubtract=2, Max=3, Min=4.
+        // ReverseSubtract=2, Min=3, Max=4.
         GLenum ToGLBlendEquation(int xnaBlendFunc)
         {
             switch (xnaBlendFunc)
             {
             case 1: return GL_FUNC_SUBTRACT;
             case 2: return GL_FUNC_REVERSE_SUBTRACT;
-            case 3: return GL_MAX;
-            case 4: return GL_MIN;
+            case 3: return GL_MIN;
+            case 4: return GL_MAX;
             default: return GL_FUNC_ADD; // BlendFunction::Add = 0
             }
         }

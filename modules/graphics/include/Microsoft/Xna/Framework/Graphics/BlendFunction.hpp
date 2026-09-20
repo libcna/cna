@@ -12,9 +12,10 @@ namespace Microsoft::Xna::Framework::Graphics
         Subtract,
         /** @brief Subtracts source from destination: (destColor * destBlend) - (srcColor * srcBlend). */
         ReverseSubtract,
-        /** @brief Returns the maximum of source and destination: max((srcColor * srcBlend), (destColor * destBlend)). */
-        Max,
         /** @brief Returns the minimum of source and destination: min((srcColor * srcBlend), (destColor * destBlend)). */
-        Min,
+        // Microsoft runtime ordinals put Min before Max; FNA orders these two values oppositely.
+        Min = 3,
+        /** @brief Returns the maximum of source and destination: max((srcColor * srcBlend), (destColor * destBlend)). */
+        Max = 4,
     };
 }

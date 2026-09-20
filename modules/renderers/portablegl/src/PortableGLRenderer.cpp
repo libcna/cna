@@ -168,8 +168,8 @@ namespace CNA::Internal::Renderers::PortableGL
             case 0: return GL_FUNC_ADD;
             case 1: return GL_FUNC_SUBTRACT;
             case 2: return GL_FUNC_REVERSE_SUBTRACT;
-            case 3: return GL_MAX;
-            case 4: return GL_MIN;
+            case 3: return GL_MIN;
+            case 4: return GL_MAX;
             default:
                 Unsupported("unsupported BlendFunction ordinal " +
                             std::to_string(blendFunctionOrdinal));

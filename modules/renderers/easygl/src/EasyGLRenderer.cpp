@@ -8057,15 +8057,15 @@ if (!ProfileIsEs2ApiGeneration())
         }
 
         // XNA BlendFunction enum → easygl BlendEquation
-        // BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+        // BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Min=3, Max=4
         ::easygl::BlendEquation ToEasyGLBlendEquation(int xnaBlendFunc)
         {
             switch (xnaBlendFunc)
             {
             case 1: return ::easygl::BlendEquation::FuncSubtract;
             case 2: return ::easygl::BlendEquation::FuncReverseSubtract;
-            case 3: return ::easygl::BlendEquation::Max;
-            case 4: return ::easygl::BlendEquation::Min;
+            case 3: return ::easygl::BlendEquation::Min;
+            case 4: return ::easygl::BlendEquation::Max;
             default: return ::easygl::BlendEquation::FuncAdd;  // BlendFunction::Add = 0
             }
         }

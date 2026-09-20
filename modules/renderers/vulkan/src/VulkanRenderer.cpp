@@ -7522,14 +7522,14 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // Task 868: XNA BlendFunction enum -> VkBlendOp (mirrors EasyGL's ToEasyGLBlendEquation
-    // exactly): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4
+    // exactly): Add=0, Subtract=1, ReverseSubtract=2, Min=3, Max=4
     static VkBlendOp ToVkBlendOp(int xnaBlendFunc)
     {
         switch (xnaBlendFunc) {
         case 1: return VK_BLEND_OP_SUBTRACT;
         case 2: return VK_BLEND_OP_REVERSE_SUBTRACT;
-        case 3: return VK_BLEND_OP_MAX;
-        case 4: return VK_BLEND_OP_MIN;
+        case 3: return VK_BLEND_OP_MIN;
+        case 4: return VK_BLEND_OP_MAX;
         default: return VK_BLEND_OP_ADD; // BlendFunction::Add = 0
         }
     }

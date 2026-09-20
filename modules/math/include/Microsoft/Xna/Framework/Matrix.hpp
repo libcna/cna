@@ -947,6 +947,15 @@ namespace Microsoft::Xna::Framework
         friend Matrix operator*(Matrix matrix, float scaleFactor);
 
         /**
+         * @brief Multiplies all matrix elements by a scalar.
+         *
+         * @param scaleFactor Scalar multiplier.
+         * @param matrix Source matrix.
+         * @return The scaled matrix.
+         */
+        friend Matrix operator*(float scaleFactor, Matrix matrix);
+
+        /**
          * @brief Multiplies this matrix by another in place.
          *
          * C# derives `m *= other` from its `operator*` automatically; C++ does not, so the

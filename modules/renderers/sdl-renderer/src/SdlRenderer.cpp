@@ -708,8 +708,9 @@ namespace CNA::Internal::Renderers::SdlRenderer
             case 0:  return SDL_BLENDOPERATION_ADD;          // BlendFunction::Add
             case 1:  return SDL_BLENDOPERATION_SUBTRACT;     // BlendFunction::Subtract
             case 2:  return SDL_BLENDOPERATION_REV_SUBTRACT; // BlendFunction::ReverseSubtract
-            case 3:  return SDL_BLENDOPERATION_MAXIMUM;      // BlendFunction::Max
-            default: return SDL_BLENDOPERATION_MINIMUM;      // BlendFunction::Min
+            case 3:  return SDL_BLENDOPERATION_MINIMUM;      // BlendFunction::Min
+            case 4:  return SDL_BLENDOPERATION_MAXIMUM;      // BlendFunction::Max
+            default: return SDL_BLENDOPERATION_MINIMUM;
         }
     }
 

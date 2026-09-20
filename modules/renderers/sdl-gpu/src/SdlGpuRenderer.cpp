@@ -833,15 +833,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         // SDLGPU-18: XNA BlendFunction ordinals -> SDL_GPUBlendOp: Add=0, Subtract=1,
-        // ReverseSubtract=2, Max=3, Min=4.
+        // ReverseSubtract=2, Min=3, Max=4.
         [[nodiscard]] SDL_GPUBlendOp ToBlendOp(int xnaBlendFunc)
         {
             switch (xnaBlendFunc)
             {
                 case 1: return SDL_GPU_BLENDOP_SUBTRACT;
                 case 2: return SDL_GPU_BLENDOP_REVERSE_SUBTRACT;
-                case 3: return SDL_GPU_BLENDOP_MAX;
-                case 4: return SDL_GPU_BLENDOP_MIN;
+                case 3: return SDL_GPU_BLENDOP_MIN;
+                case 4: return SDL_GPU_BLENDOP_MAX;
                 default: return SDL_GPU_BLENDOP_ADD;
             }
         }

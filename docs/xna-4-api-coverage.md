@@ -3,13 +3,15 @@
 ## Current runtime type-surface result
 
 The reproducible Microsoft XNA 4.0 runtime XML audit reports **331/331 documented
-public types represented in CNA (100.00%)**. Run
-`python3 tools/audit_xna_runtime_surface.py`. The earlier FNA-based type
+public types represented in CNA (100.00%)** and **3,467/3,627 documented
+non-type members represented (95.59%)**. Run
+`python3 tools/audit_xna_runtime_surface.py --write-reports`. The earlier FNA-based type
 estimates in this document are historical and do not measure the current type
 surface. The audit counts the CLR generic and non-generic `ContentTypeReader`
 and `IPackedVector` types separately, explaining why the denominator is 331
-rather than 329. Member-level and behavioral coverage are not claimed to be
-complete. See `docs/xna-4-enumerator-reference.md`.
+rather than 329. The [member report](xna-4-runtime-member-coverage.md) lists
+all 160 gaps. Behavioral coverage is measured separately, and the runtime
+denominator excludes the Content Pipeline. See `docs/xna-4-enumerator-reference.md`.
 
 **Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199; updated 2026-07-03 — Input/Touch
 sections, `feature/input` Phases I1–I6; updated 2026-07-04 — final Input status, `feature/input`
@@ -965,7 +967,9 @@ behavior or a genuinely unimplemented feature).
 ### What remains missing or incomplete
 
 - Documented runtime public type existence has no remaining gaps in the
-  current Microsoft XML corpus; member-level and behavioral audits remain.
+  current Microsoft XML corpus. The separate member audit finds 160 missing
+  declarations or value contracts; see [the exhaustive list](xna-4-runtime-member-coverage.md).
+  Behavioral parity remains a separate question.
 - **Updated 2026-07-09 (Task 481):** the 2 items previously listed here are
   now DONE — see Phases 71–73 in `plans/plan_graphics.md` and `docs/graphics-renderer-feature-matrix.md`.
   Current real Graphics gaps, all individually tracked (not silently missing). **Updated

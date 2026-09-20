@@ -66,6 +66,21 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     return value <= CNA_BLEND_FUNCTION_MIN;
 }
 
+[[nodiscard]] BlendFunction ToXnaBlendFunction(const CNA_BlendFunction value) noexcept
+{
+    // The C ABI retains its published Max=3, Min=4 values; Microsoft XNA uses Min=3, Max=4.
+    if (value == CNA_BLEND_FUNCTION_MAX) return BlendFunction::Max;
+    if (value == CNA_BLEND_FUNCTION_MIN) return BlendFunction::Min;
+    return static_cast<BlendFunction>(value);
+}
+
+[[nodiscard]] CNA_BlendFunction ToCBlendFunction(const BlendFunction value) noexcept
+{
+    if (value == BlendFunction::Max) return CNA_BLEND_FUNCTION_MAX;
+    if (value == BlendFunction::Min) return CNA_BLEND_FUNCTION_MIN;
+    return static_cast<CNA_BlendFunction>(value);
+}
+
 [[nodiscard]] bool IsColorWriteChannels(const CNA_ColorWriteChannels value) noexcept
 {
     return (value & ~CNA_COLOR_WRITE_ALL) == 0U;
@@ -146,10 +161,10 @@ CNA_Result ToNativeBlendState(
     }
 
     BlendState result;
-    result.setAlphaBlendFunctionProperty(static_cast<BlendFunction>(source->alpha_blend_function));
+    result.setAlphaBlendFunctionProperty(ToXnaBlendFunction(source->alpha_blend_function));
     result.setAlphaDestinationBlendProperty(static_cast<Blend>(source->alpha_destination_blend));
     result.setAlphaSourceBlendProperty(static_cast<Blend>(source->alpha_source_blend));
-    result.setColorBlendFunctionProperty(static_cast<BlendFunction>(source->color_blend_function));
+    result.setColorBlendFunctionProperty(ToXnaBlendFunction(source->color_blend_function));
     result.setColorDestinationBlendProperty(static_cast<Blend>(source->color_destination_blend));
     result.setColorSourceBlendProperty(static_cast<Blend>(source->color_source_blend));
     result.setColorWriteChannelsProperty(
@@ -276,13 +291,11 @@ void ToCBlendState(const BlendState& source, CNA_BlendState* const destination) 
     *destination = CNA_BlendState{
         .struct_size = sizeof(CNA_BlendState),
         .struct_version = StructureVersion,
-        .alpha_blend_function = static_cast<CNA_BlendFunction>(
-            source.getAlphaBlendFunctionProperty()),
+        .alpha_blend_function = ToCBlendFunction(source.getAlphaBlendFunctionProperty()),
         .alpha_destination_blend = static_cast<CNA_Blend>(
             source.getAlphaDestinationBlendProperty()),
         .alpha_source_blend = static_cast<CNA_Blend>(source.getAlphaSourceBlendProperty()),
-        .color_blend_function = static_cast<CNA_BlendFunction>(
-            source.getColorBlendFunctionProperty()),
+        .color_blend_function = ToCBlendFunction(source.getColorBlendFunctionProperty()),
         .color_destination_blend = static_cast<CNA_Blend>(
             source.getColorDestinationBlendProperty()),
         .color_source_blend = static_cast<CNA_Blend>(source.getColorSourceBlendProperty()),

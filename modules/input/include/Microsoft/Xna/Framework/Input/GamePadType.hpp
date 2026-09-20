@@ -27,6 +27,7 @@ namespace Microsoft::Xna::Framework::Input
         /** @brief Drum kit controller. */
         DrumKit,
         /** @brief Big button pad controller. */
-        BigButtonPad,
+        // Microsoft runtime metadata assigns 768; FNA's sequential ordinal differs.
+        BigButtonPad = 768,
     };
 }

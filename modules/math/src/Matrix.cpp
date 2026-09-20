@@ -1241,6 +1241,8 @@ namespace Microsoft::Xna::Framework
     bool operator!=(Matrix matrix1, Matrix matrix2) { return !matrix1.Equals(matrix2); }
     Matrix operator*(Matrix matrix1, Matrix matrix2) { return Matrix::Multiply(matrix1, matrix2); }
     Matrix operator*(Matrix matrix, float scaleFactor) { return Matrix::Multiply(matrix, scaleFactor); }
+    // The Microsoft runtime also exposes scalar-left multiplication; FNA omits this overload.
+    Matrix operator*(float scaleFactor, Matrix matrix) { return Matrix::Multiply(matrix, scaleFactor); }
 
     Matrix& Matrix::operator*=(const Matrix& matrix)
     {

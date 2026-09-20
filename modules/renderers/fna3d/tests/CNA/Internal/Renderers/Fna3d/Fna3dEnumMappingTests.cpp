@@ -3,9 +3,8 @@
 // plans/plan_fna3d.md FNA3D-17: GTest coverage for the XNA-ordinal to FNA3D-enumerator bridge and for
 // the stride-keyed vertex layout table.
 //
-// FNA3D's header states its enumerations "should match XNA 4.0", and CNA's are ports of the same
-// specification, so every mapping is numerically the identity. The production code pins that with
-// static_asserts; these tests pin the other half -- that an ordinal outside the contract is
+// Most FNA3D ordinals match Microsoft XNA. BlendFunction::Min and Max are reversed in FNA3D,
+// so the bridge translates those two values. These tests also pin that an ordinal outside the contract is
 // REJECTED rather than cast into an undefined enumerator, and that the layout table a
 // declaration-less internal route falls back on describes the bytes CNA actually stages.
 #include <gtest/gtest.h>
@@ -34,6 +33,14 @@ TEST(Fna3dEnumMappingTests, BlendOrdinalsMapOntoTheMatchingFna3dValues)
               FNA3D_BLEND_INVERSESOURCEALPHA);
     EXPECT_EQ(ToFna3dBlend(static_cast<int>(Xna::Blend::SourceAlphaSaturation)),
               FNA3D_BLEND_SOURCEALPHASATURATION);
+}
+
+TEST(Fna3dEnumMappingTests, MicrosoftMinAndMaxOrdinalsMapToFna3dOperations)
+{
+    EXPECT_EQ(ToFna3dBlendFunction(static_cast<int>(Xna::BlendFunction::Min)),
+              FNA3D_BLENDFUNCTION_MIN);
+    EXPECT_EQ(ToFna3dBlendFunction(static_cast<int>(Xna::BlendFunction::Max)),
+              FNA3D_BLENDFUNCTION_MAX);
 }
 
 TEST(Fna3dEnumMappingTests, OutOfRangeOrdinalsAreRejectedWithADiagnostic)

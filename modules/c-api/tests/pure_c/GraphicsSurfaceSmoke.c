@@ -70,16 +70,27 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
         return CNA_RESULT_INVALID_STATE;
     }
 
-    if (cna_graphics_device_set_blend_state(graphics_device, &blend) != CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_INVALID_STATE;
-    }
-    CNA_BlendState blend_copy = {0};
-    blend_copy.struct_size = sizeof(CNA_BlendState);
-    blend_copy.struct_version = UINT32_C(1);
-    if (cna_graphics_device_get_blend_state(graphics_device, &blend_copy) != CNA_RESULT_SUCCESS ||
-        blend_copy.color_source_blend != blend.color_source_blend ||
-        blend_copy.color_destination_blend != blend.color_destination_blend) {
-        return CNA_RESULT_INVALID_STATE;
+    blend.alpha_source_blend = CNA_BLEND_ONE;
+    blend.alpha_destination_blend = CNA_BLEND_ONE;
+    blend.color_source_blend = CNA_BLEND_ONE;
+    blend.color_destination_blend = CNA_BLEND_ONE;
+    const CNA_BlendFunction extrema[] = {CNA_BLEND_FUNCTION_MIN, CNA_BLEND_FUNCTION_MAX};
+    for (size_t index = 0U; index < sizeof(extrema) / sizeof(extrema[0]); ++index) {
+        blend.alpha_blend_function = extrema[index];
+        blend.color_blend_function = extrema[index];
+        if (cna_graphics_device_set_blend_state(graphics_device, &blend) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        CNA_BlendState blend_copy = {0};
+        blend_copy.struct_size = sizeof(CNA_BlendState);
+        blend_copy.struct_version = UINT32_C(1);
+        if (cna_graphics_device_get_blend_state(graphics_device, &blend_copy) != CNA_RESULT_SUCCESS ||
+            blend_copy.color_source_blend != blend.color_source_blend ||
+            blend_copy.color_destination_blend != blend.color_destination_blend ||
+            blend_copy.alpha_blend_function != extrema[index] ||
+            blend_copy.color_blend_function != extrema[index]) {
+            return CNA_RESULT_INVALID_STATE;
+        }
     }
 
     CNA_Result depth_result = cna_graphics_device_set_depth_stencil_state(graphics_device, &depth);

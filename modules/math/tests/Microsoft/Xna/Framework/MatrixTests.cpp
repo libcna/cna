@@ -137,6 +137,18 @@ TEST(MatrixTest, MultiplyIdentityByMatrixPreservesMatrix)
     EXPECT_NEAR(result.M23, 7.0f, kEps);
 }
 
+TEST(MatrixTest, ScalarLeftMultiplyScalesEveryElement)
+{
+    const Matrix matrix(
+        1,2,3,4, 5,6,7,8,
+        9,10,11,12, 13,14,15,16);
+    const Matrix result = 2.5f * matrix;
+    EXPECT_FLOAT_EQ(result.M11, 2.5f);
+    EXPECT_FLOAT_EQ(result.M23, 17.5f);
+    EXPECT_FLOAT_EQ(result.M44, 40.0f);
+    EXPECT_EQ(result, matrix * 2.5f);
+}
+
 TEST(MatrixTest, MultiplyTwoTranslationsAddsThem)
 {
     Matrix t1 = Matrix::CreateTranslation(1.0f, 0.0f, 0.0f);

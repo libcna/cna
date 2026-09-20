@@ -25,13 +25,9 @@
  * @file
  * @brief XNA-ordinal to FNA3D-enumerator bridge for the FNA3D graphics renderer.
  *
- * FNA3D's header states that its enumerations "should match XNA 4.0", and CNA's own enums are
- * ports of the same XNA 4.0 specification, so every one of the mappings below is numerically the
- * identity. That is a fact worth *proving* rather than assuming: each converter is guarded by
- * static_asserts pinning the endpoints (and, where the enum is small enough to matter, every
- * value), so a future divergence on either side becomes a compile error instead of a silently
- * wrong blend mode or vertex format. The runtime range check then catches an out-of-contract
- * ordinal from the shared graphics layer rather than casting it into an undefined enumerator.
+ * Most FNA3D enumerations match Microsoft XNA numerically. The two BlendFunction Min/Max
+ * ordinals differ, so their converter maps them explicitly. Static assertions pin the known
+ * identities and the differing values; runtime checks reject out-of-contract ordinals.
  */
 namespace CNA::Internal::Renderers::Fna3d
 {
@@ -81,10 +77,13 @@ namespace CNA::Internal::Renderers::Fna3d
         static_assert(static_cast<int>(Xna::Subtract) == FNA3D_BLENDFUNCTION_SUBTRACT);
         static_assert(static_cast<int>(Xna::ReverseSubtract) ==
                       FNA3D_BLENDFUNCTION_REVERSESUBTRACT);
-        static_assert(static_cast<int>(Xna::Max) == FNA3D_BLENDFUNCTION_MAX);
-        static_assert(static_cast<int>(Xna::Min) == FNA3D_BLENDFUNCTION_MIN);
-        if (ordinal < FNA3D_BLENDFUNCTION_ADD || ordinal > FNA3D_BLENDFUNCTION_MIN)
+        static_assert(static_cast<int>(Xna::Min) == 3);
+        static_assert(static_cast<int>(Xna::Max) == 4);
+        if (ordinal < static_cast<int>(Xna::Add) || ordinal > static_cast<int>(Xna::Max))
             RejectOrdinal("BlendFunction", ordinal);
+        // FNA3D follows FNA's reversed Max/Min ordinals; Microsoft XNA puts Min first.
+        if (ordinal == static_cast<int>(Xna::Min)) return FNA3D_BLENDFUNCTION_MIN;
+        if (ordinal == static_cast<int>(Xna::Max)) return FNA3D_BLENDFUNCTION_MAX;
         return static_cast<FNA3D_BlendFunction>(ordinal);
     }
 

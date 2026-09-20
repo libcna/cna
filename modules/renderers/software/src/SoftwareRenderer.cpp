@@ -150,8 +150,8 @@ namespace CNA::Internal::Renderers::Software
                 case 0: return sourceTerm + destinationTerm;                 // Add
                 case 1: return sourceTerm - destinationTerm;                 // Subtract
                 case 2: return destinationTerm - sourceTerm;                 // ReverseSubtract
-                case 3: return std::max(sourceTerm, destinationTerm);        // Max
-                case 4: return std::min(sourceTerm, destinationTerm);        // Min
+                case 3: return std::min(sourceTerm, destinationTerm);        // Min
+                case 4: return std::max(sourceTerm, destinationTerm);        // Max
                 default:
                     throw std::runtime_error(
                         "SoftwareRenderer: unsupported BlendFunction ordinal");

@@ -2,9 +2,11 @@
 
 This 2026-06 analysis is not a current API census. The reproducible
 Microsoft XML audit now reports **331/331 documented runtime public types
-represented (100.00%)**: run `python3 tools/audit_xna_runtime_surface.py`.
-Member-level and behavioral compatibility remain separate, unfinished
-measures. See `docs/xna-4-enumerator-reference.md` for normalization and
+represented (100.00%)** and **3,467/3,627 documented non-type runtime members
+represented (95.59%)**: run `python3 tools/audit_xna_runtime_surface.py --write-reports`.
+The [current member report](xna-4-runtime-member-coverage.md) lists every gap;
+behavioral compatibility remains separately measured. See
+`docs/xna-4-enumerator-reference.md` for type normalization and
 `docs/xna-content-pipeline-final-audit.md` for current XNB status.
 
 **Date:** 2026-06-21 (Net/GamerServices rows corrected 2026-07-17, `plans/plan_net.md` Task 9.5 - see
@@ -22,7 +24,7 @@ XNA 4.0 documentation and plans/plan_graphics.md. Build was not run during analy
 
 | Dimension | Estimate |
 |---|---|
-| API surface (headers + signatures present) | Historical estimate; superseded by the Microsoft XML type audit above. |
+| API surface (headers + signatures present) | Historical estimate; superseded by the Microsoft XML type and member audit above. |
 | Functional gameplay code — EasyGL / Vulkan | **~70 %** |
 | Functional gameplay code — Bgfx (retired 2026-09-17) | **~63 %** |
 

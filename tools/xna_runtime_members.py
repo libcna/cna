@@ -901,8 +901,24 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
                         if item["classification"] == "MISSING")
     lines += ["", "`EXACT_EQUIVALENT`, `SEMANTIC_EQUIVALENT`, and `HOST_LANGUAGE_SUBSTITUTION` count as represented.",
               "Only `NOT_APPLICABLE` is removed from the C++-applicable denominator.",
-              "`NEEDS_REVIEW` is excluded from both numerators. Every exception requires a per-entry reason.", "",
-              "## Gap review", "",
+              "`NEEDS_REVIEW` is excluded from both numerators. Every exception requires a per-entry reason.", ""]
+    if not baseline:
+        baseline_path = types_audit.REPO / "docs/xna-4-runtime-member-coverage-baseline.json"
+        if baseline_path.is_file():
+            previous = json.loads(baseline_path.read_text(encoding="utf-8"))["member_coverage"]
+            old = {item["reference_name"]: item for item in previous["findings"]}
+            newly_represented = [item for item in report["findings"] if
+                                 old.get(item["reference_name"], {}).get("classification") == "MISSING" and
+                                 item["classification"] in REPRESENTED]
+            lines += ["## Pre-fix baseline", "",
+                      f"Before production fixes: **{previous['represented']} / {previous['documented']}** "
+                      f"({previous['strict_coverage_percent']:.2f}%) represented; "
+                      f"{previous['classifications']['MISSING']} missing.",
+                      "See [the frozen per-member baseline](xna-4-runtime-member-coverage-baseline.md).",
+                      f"Newly represented entries: **{len(newly_represented)}**.", ""]
+            lines += [f"- {code(item['xna_signature'])}" for item in newly_represented]
+            lines.append("")
+    lines += ["## Gap review", "",
               f"Tier A gaps remaining: **{gap_tiers['A']}**; Tier B: **{gap_tiers['B']}**; Tier C: **{gap_tiers['C']}**.",
               "Tier B needs type-specific implementation and behavior tests. Tier C requires CLR",
               "serialization/resources, historical device selection, or presentation architecture.",

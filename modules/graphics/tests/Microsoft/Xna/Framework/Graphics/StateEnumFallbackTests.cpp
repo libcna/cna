@@ -148,6 +148,15 @@ TEST(StateEnumFallbackTest, RendererSeamUsesRecoveredMicrosoftFallbackOrdinals)
         EXPECT_EQ(NormalizeXnaTextureFilterOrdinal(value), value);
 }
 
+TEST(StateEnumFallbackTest, BlendFunctionValuesMatchMicrosoftRuntime)
+{
+    EXPECT_EQ(static_cast<int>(BlendFunction::Add), 0);
+    EXPECT_EQ(static_cast<int>(BlendFunction::Subtract), 1);
+    EXPECT_EQ(static_cast<int>(BlendFunction::ReverseSubtract), 2);
+    EXPECT_EQ(static_cast<int>(BlendFunction::Min), 3);
+    EXPECT_EQ(static_cast<int>(BlendFunction::Max), 4);
+}
+
 TEST(StateEnumFallbackTest, InvalidBlendValuesRenderAsZeroAndAddWhileRemainingObservable)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
