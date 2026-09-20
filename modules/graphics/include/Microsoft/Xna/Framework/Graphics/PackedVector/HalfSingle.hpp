@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <any>
 #include <cstdint>
+#include <string>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
@@ -49,13 +51,54 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
          * @brief Expands the packed value to a Vector4 with X = value, Y = 0, Z = 0, W = 1.
          * @return The unpacked Vector4.
          */
-        [[nodiscard]] Vector4 ToVector4() const { return {ToSingle(), 0.0f, 0.0f, 1.0f}; }
+        [[nodiscard]] Vector4 ToVector4() const override { return {ToSingle(), 0.0f, 0.0f, 1.0f}; }
 
         /**
          * @brief Converts the packed half-precision value back to a 32-bit float.
          * @return The 32-bit float.
          */
         [[nodiscard]] float ToSingle() const { return HalfTypeHelper::Convert(packedValue_); }
+
+        /**
+         * @brief Returns a string representation of this value.
+         * @return A string holding the expanded single-precision value, formatted the way CNA formats a float.
+         */
+        [[nodiscard]] std::string ToString() const;
+
+        /**
+         * @brief Returns a hash code for this value.
+         * @return A hash code derived from the packed value: the packed value itself, which is
+         *         what `System.UInt16.GetHashCode()` returns.
+         */
+        [[nodiscard]] int GetHashCode() const
+        {
+            return static_cast<int>(packedValue_);
+        }
+
+        /**
+         * @brief Compares this value with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the two packed values are compared.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal HalfSingle; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const
+        {
+            const HalfSingle* other = std::any_cast<HalfSingle>(&obj);
+            return other != nullptr && Equals(*other);
+        }
+
+        /**
+         * @brief Compares this value with another HalfSingle for equality.
+         * @param other The HalfSingle to compare against.
+         * @return @c true if both packed values are equal; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const HalfSingle& other) const
+        {
+            return packedValue_ == other.packedValue_;
+        }
 
         /**
          * @brief Returns true if both HalfSingle values are equal.

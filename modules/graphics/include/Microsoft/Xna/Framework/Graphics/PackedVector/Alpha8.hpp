@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <any>
 #include <cstdint>
+#include <string>
 #include <algorithm>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
@@ -44,13 +46,54 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
          * @brief Expands the packed value to a Vector4 with components {0, 0, 0, alpha}.
          * @return The unpacked Vector4.
          */
-        [[nodiscard]] Vector4 ToVector4() const { return {0.0f, 0.0f, 0.0f, packedValue_ / 255.0f}; }
+        [[nodiscard]] Vector4 ToVector4() const override { return {0.0f, 0.0f, 0.0f, packedValue_ / 255.0f}; }
 
         /**
          * @brief Returns the alpha as a normalized float in [0, 1].
          * @return The alpha component.
          */
         [[nodiscard]] float ToAlpha() const { return packedValue_ / 255.0f; }
+
+        /**
+         * @brief Returns a string representation of this value.
+         * @return A string holding the packed value as 2 uppercase hexadecimal digits.
+         */
+        [[nodiscard]] std::string ToString() const;
+
+        /**
+         * @brief Returns a hash code for this value.
+         * @return A hash code derived from the packed value: the packed byte itself, which is
+         *         what `System.Byte.GetHashCode()` returns.
+         */
+        [[nodiscard]] int GetHashCode() const
+        {
+            return static_cast<int>(packedValue_);
+        }
+
+        /**
+         * @brief Compares this value with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the two packed values are compared.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal Alpha8; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const
+        {
+            const Alpha8* other = std::any_cast<Alpha8>(&obj);
+            return other != nullptr && Equals(*other);
+        }
+
+        /**
+         * @brief Compares this value with another Alpha8 for equality.
+         * @param other The Alpha8 to compare against.
+         * @return @c true if both packed values are equal; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const Alpha8& other) const
+        {
+            return packedValue_ == other.packedValue_;
+        }
 
         /**
          * @brief Returns true if both Alpha8 values are equal.

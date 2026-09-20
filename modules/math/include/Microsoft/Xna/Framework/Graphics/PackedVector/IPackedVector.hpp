@@ -35,6 +35,12 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
          */
         virtual void PackFromVector4(const Microsoft::Xna::Framework::Vector4& vector) = 0;
 
+        /**
+         * @brief Expands the packed representation into a Vector4.
+         * @return Normalized [0,1] RGBA components, or the packed type's own channel range.
+         */
+        [[nodiscard]] virtual Microsoft::Xna::Framework::Vector4 ToVector4() const = 0;
+
         /** @brief Virtual destructor. */
         CNAEXT virtual ~IPackedVector() = default;
     };

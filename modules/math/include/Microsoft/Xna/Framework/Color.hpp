@@ -485,7 +485,7 @@ namespace Microsoft::Xna::Framework
          *
          * @return A Vector4 representation for this object.
          */
-        [[nodiscard]] Vector4 ToVector4() const;
+        [[nodiscard]] Vector4 ToVector4() const override;
 
         /**
          * @brief Gets the hash code of this Color.

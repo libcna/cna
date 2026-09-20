@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <any>
 #include <cstdint>
+#include <string>
 #include <algorithm>
 #include <cmath>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -54,14 +56,56 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
          * @brief Expands the packed value to a normalized Vector4.
          * @return The unpacked Vector4.
          */
-        [[nodiscard]] Vector4 ToVector4() const
+        [[nodiscard]] Vector4 ToVector4() const override
         {
             return {
-                static_cast<int16_t>( packedValue_        & 0xFFFF) / 32767.0f,
-                static_cast<int16_t>((packedValue_ >> 16) & 0xFFFF) / 32767.0f,
-                static_cast<int16_t>((packedValue_ >> 32) & 0xFFFF) / 32767.0f,
-                static_cast<int16_t>((packedValue_ >> 48) & 0xFFFF) / 32767.0f
+                CNA::Internal::UnpackSNorm(0xFFFF, static_cast<std::uint32_t>(packedValue_)),
+                CNA::Internal::UnpackSNorm(0xFFFF, static_cast<std::uint32_t>(packedValue_ >> 16)),
+                CNA::Internal::UnpackSNorm(0xFFFF, static_cast<std::uint32_t>(packedValue_ >> 32)),
+                CNA::Internal::UnpackSNorm(0xFFFF, static_cast<std::uint32_t>(packedValue_ >> 48))
             };
+        }
+
+        /**
+         * @brief Returns a string representation of this value.
+         * @return A string holding the packed value as 16 uppercase hexadecimal digits.
+         */
+        [[nodiscard]] std::string ToString() const;
+
+        /**
+         * @brief Returns a hash code for this value.
+         * @return A hash code derived from the packed value: the packed value's low half XORed with its high half, which is what
+         * `System.UInt64.GetHashCode()` returns.
+         */
+        [[nodiscard]] int GetHashCode() const
+        {
+            return static_cast<int>(static_cast<std::int32_t>(static_cast<std::uint32_t>(packedValue_)
+                                            ^ static_cast<std::uint32_t>(packedValue_ >> 32)));
+        }
+
+        /**
+         * @brief Compares this value with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the two packed values are compared.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal NormalizedShort4; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const
+        {
+            const NormalizedShort4* other = std::any_cast<NormalizedShort4>(&obj);
+            return other != nullptr && Equals(*other);
+        }
+
+        /**
+         * @brief Compares this value with another NormalizedShort4 for equality.
+         * @param other The NormalizedShort4 to compare against.
+         * @return @c true if both packed values are equal; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const NormalizedShort4& other) const
+        {
+            return packedValue_ == other.packedValue_;
         }
 
         /**
