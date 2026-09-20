@@ -1,4 +1,11 @@
-# CNA — XNA 4.0 Coverage Report
+# CNA — historical XNA 4.0 coverage snapshot
+
+This 2026-06 analysis is not a current API census. The reproducible
+Microsoft XML audit now reports **331/331 documented runtime public types
+represented (100.00%)**: run `python3 tools/audit_xna_runtime_surface.py`.
+Member-level and behavioral compatibility remain separate, unfinished
+measures. See `docs/xna-4-enumerator-reference.md` for normalization and
+`docs/xna-content-pipeline-final-audit.md` for current XNB status.
 
 **Date:** 2026-06-21 (Net/GamerServices rows corrected 2026-07-17, `plans/plan_net.md` Task 9.5 - see
 `docs/xna-4-api-coverage.md` §9 for the current, continuously-maintained per-feature status; this
@@ -15,7 +22,7 @@ XNA 4.0 documentation and plans/plan_graphics.md. Build was not run during analy
 
 | Dimension | Estimate |
 |---|---|
-| API surface (headers + signatures present) | **~85 %** |
+| API surface (headers + signatures present) | Historical estimate; superseded by the Microsoft XML type audit above. |
 | Functional gameplay code — EasyGL / Vulkan | **~70 %** |
 | Functional gameplay code — Bgfx (retired 2026-09-17) | **~63 %** |
 
@@ -26,7 +33,7 @@ and `Microphone` capture — see `plans/plan_audio.md` for the full file-by-file
 updated 2026-07-04 (Fáze 9 `P9-DOCS-003`; the XACT/Microphone stub status this figure used to
 describe predates that branch's work by roughly two weeks). Media playback (Song/Video via
 SDL3_mixer + FFmpeg) is ~55 %. Content is ~60 % for the custom JSON/PNG/OGG descriptor
-format; the XNA binary `.xnb` format is entirely absent. Framework.Net was 0 % and GamerServices
+format; the XNA binary `.xnb` format was absent at this snapshot date. Framework.Net was 0 % and GamerServices
 was ~5 % **as of this report's original 2026-06-21 analysis — both are now stale: `feature/net`
 (decision 1a, `plans/plan_net.md`) implemented real GamerServices (Achievements, Avatar, Friends,
 Presence, Leaderboards, Privileges, Profile, SignedInGamer) and a real ENet-backed Net transport
@@ -37,8 +44,9 @@ one-time dated snapshot, not continuously updated.**
 Weighted by how commonly each namespace is used in real XNA 4.0 games (Graphics + Input
 dominate; Net appears in fewer than 10 % of XNA titles; GamerServices only in Xbox Live
 games), a game using only Graphics / Input / Audio / Content and no networking can run
-at roughly **80–88 % fidelity**. A game depending on `.xnb` content loading will break
-immediately (the XACT audio runtime itself no longer breaks — see the Audio row below).
+at roughly **80–88 % fidelity** in this historical estimate. CNA now has
+XNB readers; see `docs/xna-content-pipeline-final-audit.md` for their
+current limitations.
 **A multiplayer game will now compile and run (see the Net/GamerServices correction above) —
 this row's original "will not compile at all" claim is stale.**
 
@@ -53,7 +61,7 @@ this row's original "will not compile at all" claim is stale.**
 | **Framework.Input** | ~20 | 26 | ~100 % | ~90 % | Keyboard, Mouse, GamePad, Touch wired to SDL3; rumble/vibration untested |
 | **Framework.Audio** | ~15 | 20 | ~100 % | ~90 % | SoundEffect/Instance real (SDL3_mixer, real filters, instance-tracking cascade); AudioEngine/Cue/WaveBank/SoundBank real (hand-written XACT parser, category/lifecycle/3D all functional); Microphone real (SDL3 capture). Remaining gaps are documented accepted deviations (no HRTF/elevation, `instanceLimit`/fade parsed not enforced), not stubs — updated 2026-07-04, see `plans/plan_audio.md` |
 | **Framework.Media** | ~25 | 24 | ~100 % | ~55 % | MediaPlayer and VideoPlayer real (FFmpeg); Song/Album/Artist/Genre/Picture/MediaLibrary = pure stubs |
-| **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | ContentManager works with custom JSON/PNG/OGG descriptors; **no .xnb binary support** |
+| **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | Historical 2026-06 row; current Content/XNB status is in `docs/xna-content-pipeline-final-audit.md`. |
 | **Framework.Storage** | ~5 | 3 | ~100 % | ~75 % | StorageDevice/Container with filesystem; async patterns simplified |
 | **Framework.GamerServices** | ~15 | 54 | **~85 %** | **~85 %** | **Stale row (2026-06-21) — corrected `feature/net`:** Gamer/SignedInGamer/Achievement/Leaderboard/Friends/Presence/Privileges/Avatar all real now, not absent. See `docs/xna-4-api-coverage.md` §9. |
 | **Framework.Net** | ~20 | 23 | **~90 %** | **~80 %** | **Stale row (2026-06-21) — corrected `feature/net`:** NetworkSession/NetworkGamer/PacketReader/PacketWriter/LocalNetworkGamer all real (ENet-backed `SystemLink`, host migration, simulated latency/packet-loss), not absent. `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking renderer exists). See `docs/xna-4-api-coverage.md` §9. |
@@ -145,7 +153,7 @@ this row's original "will not compile at all" claim is stale.**
 
 | Gap | Severity | Notes |
 |---|---|---|
-| **Content pipeline (.xnb) — 0 %** | Blocking for most existing XNA games | XNA binary asset format not supported; ContentManager requires CNA custom JSON/PNG/OGG descriptors |
+| **Content pipeline (.xnb) — historical 0 %** | Resolved in later work | See `docs/xna-content-pipeline-final-audit.md` for current reader coverage and limitations. |
 | ~~**Framework.Net — 0 %**~~ / ~~**GamerServices — ~5 %**~~ | **Stale (2026-06-21) — corrected `feature/net`** | Both rows described these as blocking gaps with entirely-absent headers; both are now real, tested implementations (`SystemLink`/host-migration/simulated-conditions for Net; Achievements/Leaderboards/Friends/Presence/Privileges/Avatar for GamerServices). See `docs/xna-4-api-coverage.md` §9 for current per-feature status; `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking renderer exists), not a namespace-wide gap. |
 | **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plans/plan_audio.md` |
 | **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |

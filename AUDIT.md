@@ -407,12 +407,12 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | IVertexType | ✅ | Complete |
 | Model | ✅ | XNA surface complete, plus a CNAEXT `CamerasEXT` property — see the glTF note below the table. API complete. The non-default constructor used to auto-default `Root` to `bones[0]` with no way to specify a different root bone index (FNA's real `Model` constructor never sets `Root` at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex`) — **fixed, Task 916** (2026-07-09): an additive optional `rootBoneIndex` parameter (default `0`, matching prior behavior) was added, so a hand-built CNA model whose true root isn't the first bone in `bones` can now be represented correctly. |
 | ModelBone | ✅ | API complete |
-| ModelBoneCollection | ✅ | API complete |
-| ModelEffectCollection | ✅ | API complete |
+| ModelBoneCollection | ✅ | API complete, including tested public nested `Enumerator` (XNA-ENUM-001). |
+| ModelEffectCollection | ✅ | API complete, including tested list-backed nested `Enumerator` and mutation detection (XNA-ENUM-001). |
 | ModelMesh | ✅ | API complete |
-| ModelMeshCollection | ✅ | API complete |
+| ModelMeshCollection | ✅ | API complete, including tested public nested `Enumerator` (XNA-ENUM-001). |
 | ModelMeshPart | ✅ | XNA surface complete, plus a CNAEXT `PrimitiveTypeEXT` property and a widened `PrimitiveCount` **meaning** — see the glTF note below the table. API complete |
-| ModelMeshPartCollection | ✅ | API complete |
+| ModelMeshPartCollection | ✅ | API complete, including tested public nested `Enumerator` (XNA-ENUM-001). |
 | NoSuitableGraphicsDeviceException | ✅ | Complete |
 | OcclusionQuery | ✅ | API complete; full cross-backend correctness audit done (Tasks 441-450, `docs/occlusionquery-support.md`). EasyGL: fully correct, pixel-verified both directions. **Vulkan: fixed, Task 447/854** (2026-07-10) — a real `VulkanOcclusionQueryBackend` now correlates each query's Begin/End span with its draw calls via `Pending3DDraw::occlusionQuery` tagging plus `vkCmdBeginQuery`/`vkCmdEndQuery` recording, verified both visible/occluded directions plus a multi-draw-span case. SDL_Renderer correctly throws (2D-only, no occlusion queries in FNA's own 2D path either). |
 | PresentationParameters | ✅ | API complete |
@@ -1687,7 +1687,7 @@ never reached `GestureDetector`) to real and gesture-tested (`plans/plan_input.m
 |---|---|---|---|
 | GestureSample | ✅ | Real | Constructed by `GestureDetector` from real touch input; both constructors (public 6-arg, internal 8-arg with finger ids) tested. |
 | GestureType (enum) | ✅ | N/A | Complete; pure value enum |
-| TouchCollection | ✅ | Real | Reflects real touch state via `InputManager`; settable indexer + `begin`/`end` iteration tested (task 718, 722). |
+| TouchCollection | ✅ | Real | Reflects real touch state via `InputManager`; settable indexer, `begin`/`end`, and value-snapshot nested `Enumerator` tested (tasks 718, 722, XNA-ENUM-001). |
 | TouchLocation | ✅ | Real | `ToString`/`GetHashCode` FNA-faithful (task 715); `SetFinger`'s Moved/Released branches carry real previous-state/position so `TryGetPreviousLocation` succeeds (task 713). |
 | TouchLocationState (enum) | ✅ | N/A | Complete; pure value enum |
 | TouchPanel | ✅ | Real | `SDL_EVENT_FINGER_*` now feed `INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back buffer size), which is what makes `GestureDetector`'s Tap/DoubleTap/Hold/Drag/Flick/Pinch/PinchComplete recognition work end-to-end (tasks 710–712). Known deviation: `GetState()` falls back to `InputManager`'s event-driven touch snapshot rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714). Known minor bug (not yet fixed): `GetCapabilities()` passes `MAX_TOUCHES` unconditionally in both branches instead of `0` when disconnected like FNA (noted, not fixed, in task 721). |

@@ -50,11 +50,10 @@ on it) rather than assuming either way.
 - **[`html-dom-renderer.md`](html-dom-renderer.md)** — current status for the Emscripten-only HTML DOM
   renderer, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
   rasterizing into a canvas; detailed task breakdown is in `../plans/plan_html_dom.md`.
-- **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
-  per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
+- **[`xna-4-api-coverage.md`](xna-4-api-coverage.md)** — per-class Graphics notes and historical
+  estimates; the current Microsoft runtime type census is `tools/audit_xna_runtime_surface.py`.
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
-  game to CNA; the two gaps that block most real ports (`.xnb`, compiled `.fx` bytecode) are at
-  the top.
+  game to CNA; consult the current content and effect documentation for format support.
 - **[`content-pipeline.md`](content-pipeline.md)** — the CNA-native build-time
   Importer -> Processor -> Content Type Writer system above frozen CNB: `cna-content`, built-in
   source routes, dependency/XREF semantics, incremental manifests, determinism, atomic publication,

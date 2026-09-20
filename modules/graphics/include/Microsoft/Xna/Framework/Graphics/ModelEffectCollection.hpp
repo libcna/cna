@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "System/Collections/Generic/IEnumerator.hpp"
+#include "System/IDisposable.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -15,6 +17,52 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelEffectCollection
     {
     public:
+        /** @brief Iterates over the effects in a ModelEffectCollection. */
+        struct Enumerator final : public System::Collections::Generic::IEnumerator<Effect*>,
+                                  public System::IDisposable
+        {
+            /** @brief Constructs the default value of the enumerator struct. */
+            Enumerator() = default;
+
+            /**
+             * @brief Gets the current effect.
+             * @return The current Effect pointer.
+             */
+            [[nodiscard]] Effect* const& Current() const override;
+
+            /**
+             * @brief Advances to the next effect.
+             * @return True if an element is available.
+             */
+            bool MoveNext() override;
+
+            /** @brief Returns to the position before the first element. */
+            void Reset() override;
+
+            /** @brief Releases enumerator resources. */
+            void Dispose() override;
+
+            /**
+             * @brief Gets the current element through the non-generic interface.
+             * @return The current Effect pointer boxed as an object.
+             */
+            [[nodiscard]] std::any getCurrentProperty() const override;
+
+        private:
+            friend class ModelEffectCollection;
+            explicit Enumerator(const ModelEffectCollection& collection);
+            const ModelEffectCollection* collection_ = nullptr;
+            int position_ = 0;
+            Effect* current_ = nullptr;
+            bool hasCurrent_ = false;
+            std::size_t version_ = 0;
+        };
+
+        /**
+         * @brief Creates an enumerator positioned before the first effect.
+         * @return An independent value-type enumerator.
+         */
+        [[nodiscard]] Enumerator GetEnumerator() const;
         /**
          * @brief Retrieves an Effect by index.
          * @param index The zero-based index of the effect to retrieve.
@@ -62,6 +110,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         std::vector<Effect*> effects_;
+        std::size_t version_ = 0;
         friend class ModelMesh;
     };
 }

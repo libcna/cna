@@ -69,10 +69,11 @@ both renderers (Tasks 424–429 mirroring 690–694).
 
 ## 5. Content-loading model and testing convention
 
-CNA has **no XNB content pipeline**. FNA's `SpriteFont` constructor is `internal`, invoked only by
-the content pipeline's `SpriteFontReader`; CNA exposes the equivalent constructor publicly with
-`CNAEXT`, since there is no reader to invoke it on the caller's behalf. Any application (or a future
-content-reader implementation) must build the glyph/cropping/kerning tables itself.
+CNA now has an XNB content pipeline and a `SpriteFontReader`. FNA's `SpriteFont`
+constructor is `internal`, invoked by the reader; CNA also exposes the
+constructor publicly with `CNAEXT` for callers that build glyph/cropping/kerning
+tables directly. The tests below use that direct construction path because
+they predate the XNB reader.
 
 Every SpriteFont test in this project — from the original SDL_Renderer pass (Tasks 690–694) through
 this phase's EasyGL pass (Tasks 424–429) — follows the same established convention: **hand-build a

@@ -3,6 +3,8 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
+#include "System/Collections/Generic/IEnumerator.hpp"
+#include "System/IDisposable.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -14,6 +16,44 @@ namespace Microsoft::Xna::Framework::Input::Touch
      */
     struct TouchCollection
     {
+        /** @brief Iterates over a value snapshot of a TouchCollection. */
+        struct Enumerator final : public System::Collections::Generic::IEnumerator<TouchLocation>,
+                                  public System::IDisposable
+        {
+            /** @brief Constructs the default value of the enumerator struct. */
+            Enumerator() = default;
+
+            /**
+             * @brief Gets the current touch location.
+             * @return The current location value.
+             */
+            [[nodiscard]] const TouchLocation& Current() const override;
+
+            /**
+             * @brief Advances to the next touch location.
+             * @return True if an element is available.
+             */
+            bool MoveNext() override;
+
+            /** @brief Returns to the position before the first element. */
+            void Reset() override;
+
+            /** @brief Releases enumerator resources. */
+            void Dispose() override;
+
+        private:
+            friend struct TouchCollection;
+            explicit Enumerator(const TouchCollection& collection);
+            std::vector<TouchLocation> touches_;
+            int position_ = 0;
+        };
+
+        /**
+         * @brief Creates an enumerator over this collection's touch snapshot.
+         * @return An independent value-type enumerator.
+         */
+        [[nodiscard]] Enumerator GetEnumerator() const;
+
         /**
          * @brief Gets the number of touch locations in this collection.
          * @return The touch location count.

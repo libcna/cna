@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if (!isDisposed_)
         {
-            collection_.clear();
+            Clear();
             isDisposed_ = true;
         }
     }

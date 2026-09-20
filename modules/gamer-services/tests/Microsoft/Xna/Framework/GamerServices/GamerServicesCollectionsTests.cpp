@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <any>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp"
@@ -12,6 +16,8 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/DateTime.hpp"
 #include "System/IndexOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using namespace Microsoft::Xna::Framework;
@@ -391,111 +397,127 @@ TEST(SignedInGamerCollectionTest, CopyToThrowsForNegativeIndex) {
     EXPECT_THROW(col.CopyTo(dest, -1), System::ArgumentOutOfRangeException);
 }
 
-// --- GamerCollection<T>::GamerCollectionEnumerator (Task 7.8) ---
-//
-// Raw std::vector::operator[] on an unvalidated position was real undefined behavior for
-// position == -1 (the pre-MoveNext() starting value, casting to a huge std::size_t) or past the
-// end of the collection. FNA's own equivalent (`collection[position]`, via
-// ReadOnlyCollection<T>'s indexer -> List<T>'s own indexer) throws a catchable
-// ArgumentOutOfRangeException in both cases instead. Exercised through SignedInGamerCollection,
-// a concrete GamerCollection<T> subclass.
+// --- GamerCollection<T>::GamerCollectionEnumerator (XNA-ENUM-001) ---
 
-TEST(GamerCollectionEnumeratorTest, GetCurrentBeforeFirstMoveNextThrows) {
+TEST(GamerCollectionEnumeratorTest, EmptyAndOneElementStates)
+{
+    using Enumerator = GamerCollection<SignedInGamer>::GamerCollectionEnumerator;
+    static_assert(std::is_copy_constructible_v<Enumerator>);
+    static_assert(std::is_default_constructible_v<Enumerator>);
+    static_assert(std::is_same_v<
+        decltype(std::declval<const GamerCollection<SignedInGamer>&>().GetEnumerator()),
+        Enumerator>);
+    static_assert(std::is_base_of_v<System::Collections::Generic::IEnumerator<SignedInGamer*>,
+                                    Enumerator>);
+    static_assert(std::is_base_of_v<System::IDisposable, Enumerator>);
+
+    Enumerator defaultValue;
+    EXPECT_EQ(defaultValue.Current(), nullptr);
+    EXPECT_THROW((void)defaultValue.MoveNext(), System::NullReferenceException);
+    EXPECT_THROW(defaultValue.Reset(), System::NullReferenceException);
+    defaultValue.Dispose();
+
+    auto empty = SignedInGamerCollection::CreateInternal({});
+    auto emptyCursor = empty.GetEnumerator();
+    EXPECT_EQ(emptyCursor.Current(), nullptr);
+    EXPECT_THROW((void)emptyCursor.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_FALSE(emptyCursor.MoveNext());
+    EXPECT_FALSE(emptyCursor.MoveNext());
+    EXPECT_EQ(emptyCursor.Current(), nullptr);
+    emptyCursor.Reset();
+    EXPECT_FALSE(emptyCursor.MoveNext());
+
     auto gamer = SignedInGamer::CreateInternal("tag1");
-    auto col = SignedInGamerCollection::CreateInternal({&gamer});
-    auto it = col.GetEnumerator();
-    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
+    auto one = SignedInGamerCollection::CreateInternal({&gamer});
+    auto cursor = one.GetEnumerator();
+    EXPECT_EQ(cursor.Current(), nullptr);
+    EXPECT_THROW((void)cursor.getCurrentProperty(), System::InvalidOperationException);
+    ASSERT_TRUE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), &gamer);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(cursor.getCurrentProperty()), &gamer);
+    EXPECT_FALSE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), nullptr);
+    EXPECT_THROW((void)cursor.getCurrentProperty(), System::InvalidOperationException);
+    cursor.Reset();
+    ASSERT_TRUE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), &gamer);
+    cursor.Dispose();
+    EXPECT_EQ(cursor.Current(), &gamer);
+    EXPECT_FALSE(cursor.MoveNext());
+    auto polymorphicCursor = one.GetEnumerator();
+    System::Collections::IEnumerator& erased = polymorphicCursor;
+    EXPECT_THROW((void)erased.getCurrentProperty(), System::InvalidOperationException);
+    ASSERT_TRUE(erased.MoveNext());
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(erased.getCurrentProperty()), &gamer);
+    erased.Reset();
+    EXPECT_THROW((void)erased.getCurrentProperty(), System::InvalidOperationException);
 }
 
-TEST(GamerCollectionEnumeratorTest, GetCurrentPastTheEndThrows) {
-    auto gamer = SignedInGamer::CreateInternal("tag1");
-    auto col = SignedInGamerCollection::CreateInternal({&gamer});
-    auto it = col.GetEnumerator();
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&gamer, it.getCurrent());
-    EXPECT_FALSE(it.MoveNext()); // advances past the single element
-    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
+TEST(GamerCollectionEnumeratorTest, MultipleIndependentCopyResetAndCppIteration)
+{
+    auto first = SignedInGamer::CreateInternal("first");
+    auto second = SignedInGamer::CreateInternal("second");
+    auto collection = SignedInGamerCollection::CreateInternal({&first, &second});
+    auto a = collection.GetEnumerator();
+    auto b = collection.GetEnumerator();
+    ASSERT_TRUE(a.MoveNext());
+    auto copied = a;
+    ASSERT_TRUE(a.MoveNext());
+    EXPECT_EQ(a.Current(), &second);
+    EXPECT_EQ(copied.Current(), &first);
+    ASSERT_TRUE(copied.MoveNext());
+    EXPECT_EQ(copied.Current(), &second);
+    ASSERT_TRUE(b.MoveNext());
+    EXPECT_EQ(b.Current(), &first);
+    ASSERT_TRUE(b.MoveNext());
+    EXPECT_EQ(b.Current(), &second);
+    EXPECT_FALSE(a.MoveNext());
+    EXPECT_FALSE(a.MoveNext());
+    a.Reset();
+    ASSERT_TRUE(a.MoveNext());
+    EXPECT_EQ(a.Current(), &first);
+
+    EXPECT_EQ(*collection.begin(), &first);
+    EXPECT_EQ(*(collection.end() - 1), &second);
+    std::vector<SignedInGamer*> viaRange;
+    for (SignedInGamer* gamer : collection)
+    {
+        viaRange.push_back(gamer);
+    }
+    EXPECT_EQ(viaRange, (std::vector<SignedInGamer*>{&first, &second}));
 }
 
-TEST(GamerCollectionEnumeratorTest, GetCurrentAfterDisposeThrows) {
-    auto gamer = SignedInGamer::CreateInternal("tag1");
-    auto col = SignedInGamerCollection::CreateInternal({&gamer});
-    auto it = col.GetEnumerator();
-    ASSERT_TRUE(it.MoveNext());
-    it.Dispose();
-    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
+TEST(GamerCollectionEnumeratorTest, MutationInvalidatesMoveNextAndReset)
+{
+    auto first = SignedInGamer::CreateInternal("first");
+    auto second = SignedInGamer::CreateInternal("second");
+    auto collection = SignedInGamerCollection::CreateInternal({&first});
+    auto cursor = collection.GetEnumerator();
+    ASSERT_TRUE(cursor.MoveNext());
+    collection.Add(&second);
+    EXPECT_THROW((void)cursor.MoveNext(), System::InvalidOperationException);
+    EXPECT_THROW(cursor.Reset(), System::InvalidOperationException);
+    EXPECT_EQ(cursor.Current(), &first);
+    auto fresh = collection.GetEnumerator();
+    ASSERT_TRUE(fresh.MoveNext());
+    ASSERT_TRUE(fresh.MoveNext());
+    EXPECT_EQ(fresh.Current(), &second);
 }
 
-// audit_net.md Medium finding: MoveNext() previously dereferenced collection_ (via
-// collection_->size()) unconditionally, with no guard matching getCurrent()'s own - Dispose()
-// sets collection_ to nullptr, so it.Dispose(); it.MoveNext(); was an immediate null-pointer
-// dereference. Confirms MoveNext() now throws the same catchable exception getCurrent() already
-// did in this situation, both before and after any prior MoveNext() call.
-TEST(GamerCollectionEnumeratorTest, MoveNextAfterDisposeThrowsInsteadOfDereferencingNull) {
-    auto gamer = SignedInGamer::CreateInternal("tag1");
-    auto col = SignedInGamerCollection::CreateInternal({&gamer});
-    auto it = col.GetEnumerator();
-    it.Dispose();
-    EXPECT_THROW((void) it.MoveNext(), System::ArgumentOutOfRangeException);
-}
-
-TEST(GamerCollectionEnumeratorTest, MoveNextAfterMoveNextThenDisposeThrows) {
-    auto gamer = SignedInGamer::CreateInternal("tag1");
-    auto col = SignedInGamerCollection::CreateInternal({&gamer});
-    auto it = col.GetEnumerator();
-    ASSERT_TRUE(it.MoveNext());
-    it.Dispose();
-    EXPECT_THROW((void) it.MoveNext(), System::ArgumentOutOfRangeException);
-}
-
-TEST(GamerCollectionEnumeratorTest, MoveNextAndGetCurrentEnumerateInOrder) {
-    auto gamerA = SignedInGamer::CreateInternal("a");
-    auto gamerB = SignedInGamer::CreateInternal("b");
-    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
-    auto it = col.GetEnumerator();
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&gamerA, it.getCurrent());
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&gamerB, it.getCurrent());
-    EXPECT_FALSE(it.MoveNext());
-}
-
-// Task 9.3: Reset() had zero test coverage - confirms enumeration genuinely restarts from before
-// the first element, not just that Reset() compiles.
-TEST(GamerCollectionEnumeratorTest, ResetRestartsEnumeration) {
-    auto gamerA = SignedInGamer::CreateInternal("a");
-    auto gamerB = SignedInGamer::CreateInternal("b");
-    auto col = SignedInGamerCollection::CreateInternal({&gamerA, &gamerB});
-    auto it = col.GetEnumerator();
-    ASSERT_TRUE(it.MoveNext());
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&gamerB, it.getCurrent());
-    EXPECT_FALSE(it.MoveNext()); // now past the end
-
-    it.Reset();
-    EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException); // back to pre-MoveNext()
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&gamerA, it.getCurrent()); // enumeration genuinely restarted, not just position_ + 1
-}
-
-// Task 9.3: the same enumerator behavior (GetEnumerator/MoveNext/getCurrent/Reset/Dispose) was
-// only ever exercised through SignedInGamerCollection - confirms it works identically through
-// FriendCollection, GamerCollection<T>'s other concrete subclass, with 2+ elements (not just 0 or
-// 1, which the pre-existing FriendCollectionTest cases were limited to).
-TEST(GamerCollectionEnumeratorTest, WorksThroughFriendCollectionToo) {
-    auto fgA = FriendGamer::CreateInternal("a", "A", false, false, false, false, false, false);
-    auto fgB = FriendGamer::CreateInternal("b", "B", false, false, false, false, false, false);
-    auto col = FriendCollection::CreateInternal({&fgA, &fgB});
-    auto it = col.GetEnumerator();
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&fgA, it.getCurrent());
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&fgB, it.getCurrent());
-    EXPECT_FALSE(it.MoveNext());
-
-    it.Reset();
-    ASSERT_TRUE(it.MoveNext());
-    EXPECT_EQ(&fgA, it.getCurrent());
+TEST(GamerCollectionEnumeratorTest, FriendCollectionUsesTheSameGenericShape)
+{
+    auto first = FriendGamer::CreateInternal("a", "A", false, false, false, false, false, false);
+    auto second = FriendGamer::CreateInternal("b", "B", false, false, false, false, false, false);
+    auto collection = FriendCollection::CreateInternal({&first, &second});
+    auto cursor = collection.GetEnumerator();
+    ASSERT_TRUE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), &first);
+    ASSERT_TRUE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), &second);
+    EXPECT_FALSE(cursor.MoveNext());
+    cursor.Reset();
+    ASSERT_TRUE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), &first);
 }
 
 // Task 9.3: GamerCollection<T>::Add/Remove (CNAEXT mutators) had zero test coverage across every

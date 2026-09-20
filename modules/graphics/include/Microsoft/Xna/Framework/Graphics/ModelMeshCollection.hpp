@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "System/Collections/Generic/IEnumerator.hpp"
+#include "System/IDisposable.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -16,6 +18,44 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelMeshCollection
     {
     public:
+        /** @brief Iterates over the meshes in a ModelMeshCollection. */
+        struct Enumerator final : public System::Collections::Generic::IEnumerator<ModelMesh*>,
+                                  public System::IDisposable
+        {
+            /** @brief Constructs the default value of the enumerator struct. */
+            Enumerator() = default;
+
+            /**
+             * @brief Gets the current mesh.
+             * @return The current ModelMesh pointer.
+             */
+            [[nodiscard]] ModelMesh* const& Current() const override;
+
+            /**
+             * @brief Advances to the next mesh.
+             * @return True if an element is available.
+             */
+            bool MoveNext() override;
+
+            /** @brief Returns to the position before the first element. */
+            void Reset() override;
+
+            /** @brief Releases enumerator resources. */
+            void Dispose() override;
+
+        private:
+            friend class ModelMeshCollection;
+            explicit Enumerator(const ModelMeshCollection& collection);
+            const ModelMeshCollection* collection_ = nullptr;
+            int position_ = 0;
+            int count_ = 0;
+        };
+
+        /**
+         * @brief Creates an enumerator positioned before the first mesh.
+         * @return An independent value-type enumerator.
+         */
+        [[nodiscard]] Enumerator GetEnumerator() const;
         /**
          * @brief Retrieves a ModelMesh by index.
          * @param index The zero-based index of the mesh to retrieve.

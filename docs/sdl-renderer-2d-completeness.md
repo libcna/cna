@@ -66,7 +66,7 @@ FNA-comparison detail, discriminating-power proof, and exact fix code where appl
 
 All of Tasks 690–693 are first-of-their-kind tests (their nominal EasyGL counterparts, Tasks
 424–427, were themselves not yet implemented at the time), built on a hand-built minimal
-glyph/cropping/kerning fixture since CNA has no XNB content pipeline.
+glyph/cropping/kerning fixture; this test predates CNA's XNB content pipeline.
 
 | Feature | Status | Rationale |
 |---|---|---|

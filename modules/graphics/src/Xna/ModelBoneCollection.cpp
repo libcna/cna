@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "System/IndexOutOfRangeException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -7,6 +9,55 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    ModelBoneCollection::Enumerator::Enumerator(const ModelBoneCollection& collection)
+        : collection_(&collection), position_(-1),
+          count_(static_cast<int>(collection.bones_.size()))
+    {
+    }
+
+    ModelBone* const& ModelBoneCollection::Enumerator::Current() const
+    {
+        if (collection_ == nullptr)
+        {
+            throw System::NullReferenceException();
+        }
+        if (position_ < 0 || position_ >= count_ ||
+            position_ >= static_cast<int>(collection_->bones_.size()))
+        {
+            throw System::IndexOutOfRangeException();
+        }
+        return collection_->bones_[static_cast<std::size_t>(position_)];
+    }
+
+    bool ModelBoneCollection::Enumerator::MoveNext()
+    {
+        if (collection_ == nullptr)
+        {
+            throw System::NullReferenceException();
+        }
+        ++position_;
+        if (position_ >= count_)
+        {
+            position_ = count_;
+            return false;
+        }
+        return true;
+    }
+
+    void ModelBoneCollection::Enumerator::Reset()
+    {
+        position_ = -1;
+    }
+
+    void ModelBoneCollection::Enumerator::Dispose()
+    {
+    }
+
+    ModelBoneCollection::Enumerator ModelBoneCollection::GetEnumerator() const
+    {
+        return Enumerator(*this);
+    }
+
     ModelBone* ModelBoneCollection::operator[](int index) const
     {
         System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");

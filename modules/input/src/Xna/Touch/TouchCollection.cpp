@@ -1,11 +1,52 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Input::Touch
 {
+    TouchCollection::Enumerator::Enumerator(const TouchCollection& collection)
+        : touches_(collection.touches_), position_(-1)
+    {
+    }
+
+    const TouchLocation& TouchCollection::Enumerator::Current() const
+    {
+        if (position_ < 0 || position_ >= static_cast<int>(touches_.size()))
+        {
+            throw System::ArgumentOutOfRangeException("index");
+        }
+        return touches_[static_cast<std::size_t>(position_)];
+    }
+
+    bool TouchCollection::Enumerator::MoveNext()
+    {
+        ++position_;
+        const int count = static_cast<int>(touches_.size());
+        if (position_ >= count)
+        {
+            position_ = count;
+            return false;
+        }
+        return true;
+    }
+
+    void TouchCollection::Enumerator::Reset()
+    {
+        position_ = -1;
+    }
+
+    void TouchCollection::Enumerator::Dispose()
+    {
+    }
+
+    TouchCollection::Enumerator TouchCollection::GetEnumerator() const
+    {
+        return Enumerator(*this);
+    }
+
     TouchCollection::TouchCollection() = default;
 
     TouchCollection::TouchCollection(const std::vector<TouchLocation>& touches)

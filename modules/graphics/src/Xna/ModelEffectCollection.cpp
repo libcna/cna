@@ -4,9 +4,77 @@
 #include <algorithm>
 
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    ModelEffectCollection::Enumerator::Enumerator(const ModelEffectCollection& collection)
+        : collection_(&collection), position_(-1), version_(collection.version_)
+    {
+    }
+
+    Effect* const& ModelEffectCollection::Enumerator::Current() const
+    {
+        return current_;
+    }
+
+    std::any ModelEffectCollection::Enumerator::getCurrentProperty() const
+    {
+        if (!hasCurrent_)
+        {
+            throw System::InvalidOperationException("Enumeration has not started or has finished.");
+        }
+        return std::any(current_);
+    }
+
+    bool ModelEffectCollection::Enumerator::MoveNext()
+    {
+        if (collection_ == nullptr)
+        {
+            throw System::NullReferenceException();
+        }
+        if (version_ != collection_->version_)
+        {
+            throw System::InvalidOperationException("Collection was modified during enumeration.");
+        }
+        ++position_;
+        if (position_ >= static_cast<int>(collection_->effects_.size()))
+        {
+            position_ = static_cast<int>(collection_->effects_.size());
+            current_ = nullptr;
+            hasCurrent_ = false;
+            return false;
+        }
+        current_ = collection_->effects_[static_cast<std::size_t>(position_)];
+        hasCurrent_ = true;
+        return true;
+    }
+
+    void ModelEffectCollection::Enumerator::Reset()
+    {
+        if (collection_ == nullptr)
+        {
+            throw System::NullReferenceException();
+        }
+        if (version_ != collection_->version_)
+        {
+            throw System::InvalidOperationException("Collection was modified during enumeration.");
+        }
+        position_ = -1;
+        current_ = nullptr;
+        hasCurrent_ = false;
+    }
+
+    void ModelEffectCollection::Enumerator::Dispose()
+    {
+    }
+
+    ModelEffectCollection::Enumerator ModelEffectCollection::GetEnumerator() const
+    {
+        return Enumerator(*this);
+    }
+
     Effect* ModelEffectCollection::operator[](int index) const
     {
         System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
@@ -29,13 +97,17 @@ namespace Microsoft::Xna::Framework::Graphics
     void ModelEffectCollection::Add(Effect* effect)
     {
         effects_.push_back(effect);
+        ++version_;
     }
 
     void ModelEffectCollection::Remove(const Effect* effect)
     {
         auto it = std::find(effects_.begin(), effects_.end(), effect);
         if (it != effects_.end())
+        {
             effects_.erase(it);
+            ++version_;
+        }
     }
 
     ModelEffectCollection::iterator ModelEffectCollection::begin() { return effects_.begin(); }

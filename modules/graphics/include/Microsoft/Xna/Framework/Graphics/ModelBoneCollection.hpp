@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "System/Collections/Generic/IEnumerator.hpp"
+#include "System/IDisposable.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -16,6 +18,44 @@ namespace Microsoft::Xna::Framework::Graphics
     class ModelBoneCollection
     {
     public:
+        /** @brief Iterates over the bones in a ModelBoneCollection. */
+        struct Enumerator final : public System::Collections::Generic::IEnumerator<ModelBone*>,
+                                  public System::IDisposable
+        {
+            /** @brief Constructs the default value of the enumerator struct. */
+            Enumerator() = default;
+
+            /**
+             * @brief Gets the current bone.
+             * @return The current ModelBone pointer.
+             */
+            [[nodiscard]] ModelBone* const& Current() const override;
+
+            /**
+             * @brief Advances to the next bone.
+             * @return True if an element is available.
+             */
+            bool MoveNext() override;
+
+            /** @brief Returns to the position before the first element. */
+            void Reset() override;
+
+            /** @brief Releases enumerator resources. */
+            void Dispose() override;
+
+        private:
+            friend class ModelBoneCollection;
+            explicit Enumerator(const ModelBoneCollection& collection);
+            const ModelBoneCollection* collection_ = nullptr;
+            int position_ = 0;
+            int count_ = 0;
+        };
+
+        /**
+         * @brief Creates an enumerator positioned before the first bone.
+         * @return An independent value-type enumerator.
+         */
+        [[nodiscard]] Enumerator GetEnumerator() const;
         /** @brief Constructs an empty bone collection. */
         ModelBoneCollection() = default;
 

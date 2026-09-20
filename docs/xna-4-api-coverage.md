@@ -1,5 +1,16 @@
 # XNA 4.0 API Coverage Audit
 
+## Current runtime type-surface result
+
+The reproducible Microsoft XNA 4.0 runtime XML audit reports **331/331 documented
+public types represented in CNA (100.00%)**. Run
+`python3 tools/audit_xna_runtime_surface.py`. The earlier FNA-based type
+estimates in this document are historical and do not measure the current type
+surface. The audit counts the CLR generic and non-generic `ContentTypeReader`
+and `IPackedVector` types separately, explaining why the denominator is 331
+rather than 329. Member-level and behavioral coverage are not claimed to be
+complete. See `docs/xna-4-enumerator-reference.md`.
+
 **Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199; updated 2026-07-03 — Input/Touch
 sections, `feature/input` Phases I1–I6; updated 2026-07-04 — final Input status, `feature/input`
 Phase I9, `plans/plan_input.md` tasks 700–840, coverage split by category; updated 2026-07-09 — Task 481,
@@ -54,7 +65,7 @@ orthogonal axes instead of a single blended number:
 
 | Axis | Question it answers | Example of a "no" |
 |------|---------------------|---------------------|
-| **Present** | Does a C++ declaration exist with the FNA/XNA 4.0 name (class/method/property/enum/constant)? | `ContentReader`/`ContentTypeReaderManager`/`LzxDecoder` — no header exists in CNA at all (excluded by CNA's non-XNB content-pipeline design, see §6). |
+| **Present** | Does a C++ declaration exist with the XNA 4.0 name (class/method/property/enum/constant)? | A missing documented declaration would fail the relevant surface audit; type existence is measured by `tools/audit_xna_runtime_surface.py`. |
 | **Implemented** | Does that declaration have a real `.cpp` body that does the actual thing, not a stub/no-op/throw? | `ResourceContentManager::OpenStream` — header and class exist, but the body unconditionally throws `std::runtime_error` (`// CNA_STUB:`, not implemented). `INTERNAL_applyReverb` is a second example — present, but a documented no-op (no aux-send bus in SDL3_mixer). |
 | **Tested** | Does at least one automated test (`tests/`) or example (`examples/`) exercise this specific member, such that a regression would be caught? | Several `Microphone`/`BufferReady` real-hardware-capture-exceeds-threshold paths — implemented, but only the below-threshold case is tested (`NEXT.md`'s own documented gap). |
 | **FNA-compatible** | Has the implemented behavior been directly checked against FNA's own source or real running output — not just "looks reasonable," but verified value-by-value or line-by-line? | `IndexElementSize`'s numeric values — implemented, tested (the test itself was what was wrong), but at the time NOT FNA-compatible: CNA used `16`/`32`, real FNA uses `0`/`1` (found by literally running FNA and diffing the output, Task 479; **fixed, Task 921, 2026-07-09** — CNA now uses `0`/`1` too). |
@@ -271,18 +282,22 @@ none are trivial engineering either.
 
 ---
 
-## 3. FNA Public API Found but Missing in CNA
+## 3. Historical FNA gap list
+
+The table below is a 2026-06 snapshot. Its content-reader entries were
+implemented later; use the current type audit above for runtime type presence
+and `docs/xna-content-pipeline-final-audit.md` for XNB behavior.
 
 ### `Microsoft::Xna::Framework::Content`
 
 | Missing class | Notes |
 |---------------|-------|
-| `ResourceContentManager` | Loads content from .NET assembly resources. CNA equivalent would load from embedded binary. **Should be stubbed.** |
-| `ContentReader` | XNB binary stream reader used by stock ContentTypeReaders. CNA uses a file-extension reader approach, not XNB. **Intentionally deferred** – see §6. |
-| `ContentTypeReaderManager` | Internal registry used by ContentReader. Not needed without XNB support. **Intentionally deferred.** |
+| `ResourceContentManager` | Implemented after this historical snapshot; see the current Content module. |
+| `ContentReader` | Implemented after this historical snapshot; see the current Content module. |
+| `ContentTypeReaderManager` | Implemented after this historical snapshot; see the current Content module. |
 | `ContentExtensions` | Adds `GetLoadedAssets()` extension to ContentManager. FNA-internal convenience; not core XNA 4.0 public API. **Intentionally excluded.** |
-| `ContentSerializerAttribute` and siblings | Design-time attributes for the Content Pipeline build tool. Not a runtime concern. **Intentionally excluded** – see §6. |
-| `LzxDecoder` | XNB LZX decompressor. FNA internal. **Deferred, low priority** – see `xnb.md`. |
+| `ContentSerializerAttribute` and siblings | Runtime-facing attributes are represented in the Content module. |
+| `LzxDecoder` | Internal decompressor, outside the documented runtime public type denominator. |
 
 ### `Microsoft::Xna::Framework::GamerServices`
 
@@ -728,21 +743,11 @@ designer dependency was introduced. See `docs/framework-design.md`.
 
 ### `Microsoft::Xna::Framework::Content` — XNB pipeline classes
 
-CNA's `ContentManager` is not XNB-based. It uses file-extension readers instead of the XNB binary format.
-**Not permanently excluded** — a real binary `.xnb` loader is a plausible future addition, but low
-priority (no current CNA task is blocked on it) and a substantial undertaking (LZX decompression
-port, a reflection-free type-reader dispatch table, ~40 per-type readers). See `xnb.md` (repo root)
-for a from-source analysis of what it would actually require, written as planning material only —
-no implementation exists or is scheduled.
-
-**Deferred (not implemented, low priority — see `xnb.md`):**
-- `ContentReader` (reads from an XNB stream)
-- `ContentTypeReaderManager` (manages XNB type reader registrations)
-- `ContentSerializerAttribute` and siblings (content pipeline build-tool attributes)
-- `LzxDecoder` (XNB LZX compression)
-
-**Deferred:**
-- `ResourceContentManager` — loads from C++ embedded resources; no XNB needed. Should be stubbed as a subclass of `ContentManager` with a `// CNA_STUB:` comment.
+CNA now has `ContentReader`, `ContentTypeReaderManager`, the documented
+runtime serializer attributes, `ResourceContentManager`, and XNB reading
+paths. Their behavior and remaining format limitations are tracked in
+`docs/xna-content-pipeline-final-audit.md`. `LzxDecoder` is an internal
+implementation type and does not enter the documented runtime type count.
 
 ### FNA-Internal Classes (excluded as non-XNA-4.0 API)
 
@@ -855,7 +860,7 @@ maturity levels.
 | `SpriteFont` / `Model` | ~80 % | Functional for typical use; some edge-case APIs stubs |
 | `SoundEffect / SoundEffectInstance` | ~95 % | SDL3_mixer backend; real filters, instance-tracking cascade; 3D is pan+attenuation+Doppler (no HRTF/elevation, documented) |
 | `MediaPlayer / VideoPlayer` | ~95 % | Optional FFmpeg video (`OFF/AUTO/ON`) with a link-complete no-decoder fallback; CNA audio facade; local Album/Artist/Genre/Picture/Playlist library implemented |
-| `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
+| `ContentManager` | Historical estimate superseded | XNB and runtime content readers were implemented after this estimate; see `docs/xna-content-pipeline-final-audit.md` for current evidence. |
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
 | `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 renderer; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |
 | `TextInputEXT` / `Mouse`+`GamePad` EXT / `Keyboard` scancode EXT | ~95 % behavior | FNA extensions, all implemented and FNA-faithful (`feature/input` Phases I1, I3–I5, I9): `TextInputEXT` is `char16_t`/UTF-16 with Unicode/IME tests; relative mouse, `ClickedEXT`, rumble, `GetGUIDEXT` (format fixed, task 816), gyro/accel. Untested slice is hardware/IME-gated. |
@@ -864,7 +869,7 @@ maturity levels.
 | `GamerServices` | ~85 % | **Updated (`feature/net`):** real implementation across Achievements/Avatar/Friends/Presence/Leaderboards/Privileges/Profile/SignedInGamer; see §9 for the per-feature breakdown. `Guide` itself remains a minimal stub (no system UI exists to show). |
 | `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~97 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D/instance-limit+fade (both category- and cue-level)/continuous RPC volume+pitch all real, including the built-in `AttackTime`/`ReleaseTime` envelope variables (`P10-RPC-002/003/004`); gaps are documented accepted deviations (no HRTF/elevation, no DSP-preset RPC destination), not missing implementation |
 | `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; `PlayerMatch`/`Ranked`/invites remain documented stubs (no matchmaking renderer to implement them against). See §9 for the per-feature breakdown. |
-| **Overall (EasyGL renderer, 2D+3D game)** | **~85 %** | Main gap now: XNB content pipeline (GamerServices/Net no longer main gaps — see updated rows above). (Touch and XACT were main gaps as of this table's original estimate; Touch closed by `feature/input` Phase I2, XACT closed by `feature/audio` — see the `Input::Touch` and Audio rows above.) **Note (2026-07-09, Task 739; GamerServices/Net rows updated `feature/net`):** this is an old, informal, blended (2D+3D+GamerServices+content-pipeline) estimate, not re-derived from a checklist — per this file's own stated policy, informal percentages are "color commentary," not a gate. For the Graphics-only subsystem specifically, `docs/graphics-compatibility-report.md`'s Task 500 milestone (a real, test-execution-verified ~90%, not estimated) supersedes this row for that scope; this ~85% figure has not been recomputed and should not be read as still-current without redoing the underlying count. |
+| **Overall (EasyGL renderer, 2D+3D game)** | Historical estimate superseded | This old blended behavior estimate was never derived from a reproducible checklist and predates the current XNB implementation. Use the Microsoft XML audit above for runtime type existence and the renderer/content reports for their respective behavior. |
 
 ---
 
@@ -959,8 +964,8 @@ behavior or a genuinely unimplemented feature).
 
 ### What remains missing or incomplete
 
-- `ContentReader` XNB-based class (deferred; CNA uses non-XNB approach)
-- `ContentSerializerAttribute` family (intentionally excluded)
+- Documented runtime public type existence has no remaining gaps in the
+  current Microsoft XML corpus; member-level and behavioral audits remain.
 - **Updated 2026-07-09 (Task 481):** the 2 items previously listed here are
   now DONE — see Phases 71–73 in `plans/plan_graphics.md` and `docs/graphics-renderer-feature-matrix.md`.
   Current real Graphics gaps, all individually tracked (not silently missing). **Updated
@@ -988,7 +993,6 @@ behavior or a genuinely unimplemented feature).
 
 ### What is intentionally excluded
 
-- `ContentReader` and XNB pipeline — CNA uses file-extension approach, not XNB
 - All FNA-internal implementation classes
 
 **No longer excluded (decision 1a, `feature/net`):** GamerServices and Avatar API (Xbox 360

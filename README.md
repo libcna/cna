@@ -31,7 +31,7 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
 ### Project Status
 
 - **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested. **As of 2026-07-11, all 5 confirmed bugs behind the original 2026-07-09 milestone declaration are fixed** (Vulkan `BlendState`, EasyGL anisotropic filtering, `IndexElementSize`'s numeric values, `Model`'s root-bone override, `SpriteBatch::Draw`'s optional source rectangle), and Vulkan `OcclusionQuery` (previously architecturally blocked) is fixed too. `docs/graphics-compatibility-report.md` is a dated snapshot from that declaration, kept for its methodology, not current status — see `NEXT.md` §5 for the actively-maintained bug list. What's left to 100% is a smaller set of individually-tracked issues plus a handful of project-owner architecture decisions (e.g. SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, `Texture3D`/`TextureCube` sampler-bind architecture) — none silent or undocumented.
-- **Overall XNA 4.0 API surface:** 227 of 245 public FNA types are present in CNA (**92.7%**, computed 2026-07-11 by diffing FNA's public type list against CNA's headers) — 100% for `Graphics`/`Audio`/`Input`(+`Touch`)/`Storage`; the real gap is `.Content` (4/12 — no `.xnb` reader, by design) and `.Media` (25/25 present, but 14 are shells). See `docs/xna-4-api-coverage.md`. **Note this is a different metric from the Graphics bullet above** — this one counts whether a type/class exists at all across every XNA namespace (a raw presence count), while the Graphics "~90%" figure is a narrower, bug-weighted quality gate scoped to just the ~26 major Graphics classes (it also counts behavioral correctness, not just presence — Graphics itself is 91/91 = 100% present). The two numbers measuring different things is expected, not a typo or a contradiction.
+- **Documented XNA 4.0 runtime public types:** 331 of 331 represented in CNA (100.00%) in the Microsoft reference XML corpus, including nested collection enumerators. This is a type-existence measure; member and behavioral compatibility have separate, unfinished audits. Run `python3 tools/audit_xna_runtime_surface.py` and see `docs/xna-4-enumerator-reference.md` for the corpus and normalization rules.
 - **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
   execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally and on SDL_GPU,
   EasyGL/OpenGL, Vulkan, and DirectX 11 behind their renderer-specific build options. The shared
@@ -673,7 +673,7 @@ int main()
   additional renderer remains gated off until it passes the shared reflection, state, lifecycle,
   3D, and SpriteBatch conformance contract; fixed-function/2D-only renderers stay explicitly
   unsupported.
-- Consider a real `.xnb` content-pipeline reader (currently a deliberate design choice, not a bug — CNA loads raw assets + JSON descriptors instead).
+- Continue testing the existing `.xnb` content readers against Microsoft reference assets.
 - Close the remaining named architecture-decision gaps (SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, SDL_Renderer `Texture3D`/`TextureCube` construction, EasyGL non-`Color` `SurfaceFormat` GPU forwarding, `Texture3D`/`TextureCube` sampler-bind architecture) — see `NEXT.md` §5 and `docs/graphics-renderer-feature-matrix.md`.
 - Strengthen cross-platform execution targets and validation coverage.
 

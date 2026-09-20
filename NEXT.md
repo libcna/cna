@@ -1,5 +1,18 @@
 # NEXT.md
 
+## XNA-ENUM-001 runtime type-surface closure (2026-09-20)
+
+The Microsoft XNA 4.0 runtime XML census now reports 331/331 documented
+public types represented. Four graphics collection enumerators and the
+touch enumerator were added; the already nested gamer enumerator was
+corrected to the Microsoft interface and cursor behavior. Existing C++
+iteration remains available. The denominator differs from the former 329
+estimate because the CLR has distinct generic and non-generic
+`ContentTypeReader` and `IPackedVector` types. This is type-surface
+coverage only; member and behavioral parity remain separate work. Run
+`python3 tools/audit_xna_runtime_surface.py`; see
+`plans/plan_xna_runtime_surface.md` for the validation boundary.
+
 ## SAMPLE-014 Spacewar framework repair (2026-09-19)
 
 The original `Settings` document now travels through SharpRuntime's generic stream

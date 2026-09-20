@@ -6,7 +6,7 @@ target_link_libraries(cna_input PUBLIC cna_graphics_core cna_math cna_core cna_p
 # renderer family adds a third archive (cna_renderer_d3dcommon) that reaches back into
 # cna_graphics_core.
 set_target_properties(cna_input PROPERTIES LINK_INTERFACE_MULTIPLICITY 3)
-cna_link_sharp_runtime(cna_input PUBLIC Core.Base)
+cna_link_sharp_runtime(cna_input PUBLIC Core.Base Collections.Core)
 
 # Module-owned examples (module-examples campaign): demo/example registration is
 # module-local; the conditions historically applied by cmake/Examples.cmake live

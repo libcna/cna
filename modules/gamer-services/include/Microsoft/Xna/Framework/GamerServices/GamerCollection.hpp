@@ -3,6 +3,10 @@
 #include "CNA/CNAHelper.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Collections/Generic/IEnumerator.hpp"
+#include "System/IDisposable.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 #include <algorithm>
 #include <vector>
 #include <stdexcept>
@@ -53,72 +57,108 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief A forward iterator over the collection.
          */
-        struct GamerCollectionEnumerator
+        struct GamerCollectionEnumerator final
+            : public System::Collections::Generic::IEnumerator<T*>, public System::IDisposable
         {
+            /** @brief Constructs the default value of the enumerator struct. */
+            GamerCollectionEnumerator() = default;
+
             /**
-             * @brief Gets the element at the current position.
-             *
-             * @return Pointer to the current element.
-             * @throws System::ArgumentOutOfRangeException if called before the first MoveNext(),
-             * after enumeration has run past the end, or after Dispose().
+             * @brief Gets the current gamer through the typed interface.
+             * @return The current gamer pointer, or null outside a valid position.
              */
-            [[nodiscard]] T* getCurrent() const
+            [[nodiscard]] T* const& Current() const override
             {
-                // Task 7.8: raw std::vector::operator[] on an unvalidated position_ was real
-                // undefined behavior for position_ == -1 (the pre-MoveNext() starting value,
-                // casting to a huge std::size_t) or past the end - FNA's own equivalent
-                // (`collection[position]`, via ReadOnlyCollection<T>'s indexer -> List<T>'s own
-                // indexer) throws a catchable ArgumentOutOfRangeException in both cases instead.
-                // Also guards the post-Dispose() case (collection_ set to nullptr), which would
-                // otherwise be a null-pointer dereference.
-                if (collection_ == nullptr
-                    || position_ < 0
-                    || position_ >= static_cast<int>(collection_->size()))
-                {
-                    throw System::ArgumentOutOfRangeException("position");
-                }
-                return (*collection_)[static_cast<std::size_t>(position_)];
+                return current_;
             }
 
             /**
-             * @brief Advances the enumerator to the next element.
-             *
-             * @return true if there is a next element; otherwise false.
-             * @throws System::ArgumentOutOfRangeException if called after Dispose().
+             * @brief Gets the current gamer through the non-generic interface.
+             * @return The current gamer pointer boxed as an object.
              */
-            bool MoveNext()
+            [[nodiscard]] std::any getCurrentProperty() const override
             {
-                // Unlike getCurrent(), this previously dereferenced collection_ unconditionally,
-                // so it.Dispose(); it.MoveNext(); was an immediate null-pointer dereference for
-                // every GamerCollection specialization - Dispose() sets collection_ to nullptr,
-                // and nothing here checked for it. Same guard/exception as getCurrent() above,
-                // for a consistent post-Dispose() contract across both methods.
-                if (collection_ == nullptr)
+                if (!hasCurrent_)
                 {
-                    throw System::ArgumentOutOfRangeException("position");
+                    throw System::InvalidOperationException(
+                        "Enumeration has not started or has finished.");
+                }
+                return std::any(current_);
+            }
+
+            /**
+             * @brief Advances to the next gamer.
+             * @return True if an element is available.
+             */
+            bool MoveNext() override
+            {
+                if (owner_ == nullptr)
+                {
+                    throw System::NullReferenceException();
+                }
+                if (version_ != owner_->version_)
+                {
+                    throw System::InvalidOperationException(
+                        "Collection was modified during enumeration.");
                 }
                 ++position_;
-                return position_ < static_cast<int>(collection_->size());
+                if (position_ >= static_cast<int>(collection_->size()))
+                {
+                    position_ = static_cast<int>(collection_->size());
+                    current_ = nullptr;
+                    hasCurrent_ = false;
+                    return false;
+                }
+                current_ = (*collection_)[static_cast<std::size_t>(position_)];
+                hasCurrent_ = true;
+                return true;
             }
 
-            /** @brief Resets the enumerator to before the first element. */
-            void Reset() { position_ = -1; }
+            /** @brief Returns to the position before the first element. */
+            void Reset() override
+            {
+                if (owner_ == nullptr)
+                {
+                    throw System::NullReferenceException();
+                }
+                if (version_ != owner_->version_)
+                {
+                    throw System::InvalidOperationException(
+                        "Collection was modified during enumeration.");
+                }
+                position_ = -1;
+                current_ = nullptr;
+                hasCurrent_ = false;
+            }
 
             /** @brief Releases enumerator resources. */
-            void Dispose() { collection_ = nullptr; }
+            void Dispose() override
+            {
+            }
 
             /**
-             * @brief Constructs an enumerator over coll, positioned at pos.
-             *
-             * @param coll The collection to enumerate.
-             * @param pos The zero-based starting position (typically -1, before the first element).
+             * @brief Gets the current gamer using the prior CNA spelling.
+             * @return The current gamer pointer.
              */
-            CNAEXT GamerCollectionEnumerator(const std::vector<T*>* coll, int pos)
-                : collection_(coll), position_(pos) {}
+            CNAEXT [[nodiscard]] T* getCurrent() const
+            {
+                return Current();
+            }
 
         private:
-            const std::vector<T*>* collection_;
-            int position_;
+            friend class GamerCollection<T>;
+            explicit GamerCollectionEnumerator(const GamerCollection<T>& owner)
+                : owner_(&owner), collection_(&owner.collection_), version_(owner.version_),
+                  position_(-1)
+            {
+            }
+
+            const GamerCollection<T>* owner_ = nullptr;
+            const std::vector<T*>* collection_ = nullptr;
+            std::size_t version_ = 0;
+            int position_ = 0;
+            T* current_ = nullptr;
+            bool hasCurrent_ = false;
         };
 
         /**
@@ -217,7 +257,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         [[nodiscard]] GamerCollectionEnumerator GetEnumerator() const
         {
-            return GamerCollectionEnumerator(&collection_, -1);
+            return GamerCollectionEnumerator(*this);
         }
 
         /** @brief Returns a C++ iterator to the beginning (for range-for). */
@@ -255,6 +295,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT void Add(T* item)
         {
             collection_.push_back(item);
+            ++version_;
         }
 
         /**
@@ -267,7 +308,12 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         CNAEXT void Remove(T* item)
         {
+            const auto oldSize = collection_.size();
             collection_.erase(std::remove(collection_.begin(), collection_.end(), item), collection_.end());
+            if (collection_.size() != oldSize)
+            {
+                ++version_;
+            }
         }
 
         /**
@@ -281,6 +327,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT void Clear()
         {
             collection_.clear();
+            ++version_;
         }
 
     protected:
@@ -290,5 +337,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
 
         std::vector<T*> collection_;
+        std::size_t version_ = 0;
     };
 }
