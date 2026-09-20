@@ -749,6 +749,82 @@ namespace Microsoft::Xna::Framework::Graphics
                                 const VertexPositionNormalTexture* vertexData, int vertexOffset, int primitiveCount);
 
         /**
+         * @brief Draws non-indexed primitives from a user-supplied vertex array.
+         *
+         * The documented `DrawUserPrimitives<T>(PrimitiveType, T[], Int32, Int32)`. The array
+         * carries its own length, so no separate count is passed, and the vertex type is retained
+         * rather than erased to bytes -- which is what lets the layout come from the type.
+         *
+         * XNA constrains `T` to `struct, IVertexType` and reads the layout from
+         * `VertexDeclarationCache<T>`; the static assertion below is that constraint, and the
+         * layout comes from the type's own declaration the same way.
+         *
+         * @tparam TVertex The vertex structure type; must derive from IVertexType.
+         * @param primitiveType  The type of primitive to draw.
+         * @param vertexData     The vertex array.
+         * @param vertexOffset   Starting vertex index.
+         * @param primitiveCount Number of primitives to draw.
+         * @throws System::ArgumentOutOfRangeException if the requested range is outside
+         *         @p vertexData.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p TVertex is an IVertexType structure CNA
+         *         cannot convert from its object form into a GPU stream -- the four built-in vertex
+         *         structures are the ones it can, and a structure of its own should be a plain one
+         *         drawn through the VertexDeclaration overload.
+         */
+        template <typename TVertex>
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const std::vector<TVertex>& vertexData,
+                                int vertexOffset, int primitiveCount)
+        {
+            static_assert(std::is_base_of_v<IVertexType, TVertex>,
+                          "XNA constrains this overload to a vertex structure implementing "
+                          "IVertexType, because the layout comes from the type; pass a "
+                          "VertexDeclaration explicitly for any other vertex type");
+            CheckUserVertexArrayRange(vertexData.size(), vertexOffset, primitiveType,
+                                      primitiveCount);
+            DrawUserVertexArray<TVertex>(primitiveType, vertexData.data(), vertexOffset,
+                                         primitiveCount, nullptr);
+        }
+
+        /**
+         * @brief Draws non-indexed primitives from a user-supplied vertex array with an explicit
+         *        VertexDeclaration.
+         *
+         * The documented
+         * `DrawUserPrimitives<T>(PrimitiveType, T[], Int32, Int32, VertexDeclaration)`.
+         *
+         * A built-in vertex structure is converted from its object form into the stream
+         * @p vertexDeclaration describes, exactly as the matching pointer overload does. A plain
+         * vertex structure of the caller's own -- one that is not polymorphic, and so carries no
+         * vtable pointer -- already *is* that stream, and its array is used directly.
+         *
+         * @tparam TVertex The vertex structure type.
+         * @param primitiveType     The type of primitive to draw.
+         * @param vertexData        The vertex array.
+         * @param vertexOffset      Starting vertex index.
+         * @param primitiveCount    Number of primitives to draw.
+         * @param vertexDeclaration Describes the layout and stride of each vertex.
+         * @throws System::ArgumentOutOfRangeException if the requested range is outside
+         *         @p vertexData.
+         * @throws System::ArgumentException if @p vertexDeclaration does not describe a stream.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p TVertex is a polymorphic type CNA cannot
+         *         convert, whose raw bytes are therefore not a vertex stream.
+         */
+        template <typename TVertex>
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const std::vector<TVertex>& vertexData,
+                                int vertexOffset, int primitiveCount,
+                                const VertexDeclaration& vertexDeclaration)
+        {
+            CheckUserVertexArrayRange(vertexData.size(), vertexOffset, primitiveType,
+                                      primitiveCount);
+            DrawUserVertexArray<TVertex>(primitiveType, vertexData.data(), vertexOffset,
+                                         primitiveCount, &vertexDeclaration);
+        }
+
+        /**
          * @brief Draws indexed primitives from user-supplied raw vertex and index data.
          * @param primitiveType  The type of primitive to draw.
          * @param vertexData     Pointer to the raw vertex array.
@@ -1089,6 +1165,170 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const std::uint32_t* indexData, int indexOffset,
                                        int primitiveCount,
                                        const VertexDeclaration& vertexDeclaration);
+
+        /**
+         * @brief Draws indexed primitives from user-supplied vertex and 16-bit index arrays.
+         *
+         * The documented
+         * `DrawUserIndexedPrimitives<T>(PrimitiveType, T[], Int32, Int32, Int16[], Int32, Int32)`.
+         * Both arrays carry their own length, and the vertex type is retained, so the layout comes
+         * from the type exactly as XNA's `VertexDeclarationCache<T>` provides it.
+         *
+         * @tparam TVertex The vertex structure type; must derive from IVertexType.
+         * @param primitiveType  The type of primitive to draw.
+         * @param vertexData     The vertex array.
+         * @param vertexOffset   Starting vertex index; indices are relative to it.
+         * @param numVertices    Number of vertices the indices may address.
+         * @param indexData      The 16-bit index array.
+         * @param indexOffset    Starting index.
+         * @param primitiveCount Number of primitives to draw.
+         * @throws System::ArgumentOutOfRangeException if either requested range is outside its
+         *         array.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p TVertex is an IVertexType structure CNA
+         *         cannot convert from its object form into a GPU stream.
+         */
+        template <typename TVertex>
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const std::vector<TVertex>& vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::vector<std::int16_t>& indexData,
+                                       int indexOffset, int primitiveCount)
+        {
+            static_assert(std::is_base_of_v<IVertexType, TVertex>,
+                          "XNA constrains this overload to a vertex structure implementing "
+                          "IVertexType, because the layout comes from the type; pass a "
+                          "VertexDeclaration explicitly for any other vertex type");
+            CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
+                                        indexData.size(), indexOffset, primitiveType,
+                                        primitiveCount);
+            DrawUserIndexedVertexArray<TVertex, std::int16_t>(
+                primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
+                indexOffset, primitiveCount, nullptr);
+        }
+
+        /**
+         * @brief Draws indexed primitives from user-supplied vertex and 16-bit index arrays with
+         *        an explicit VertexDeclaration.
+         *
+         * The documented `DrawUserIndexedPrimitives<T>(PrimitiveType, T[], Int32, Int32, Int16[],
+         * Int32, Int32, VertexDeclaration)`. A built-in vertex structure is converted into the
+         * stream @p vertexDeclaration describes; a plain structure of the caller's own already is
+         * that stream.
+         *
+         * @tparam TVertex The vertex structure type.
+         * @param primitiveType     The type of primitive to draw.
+         * @param vertexData        The vertex array.
+         * @param vertexOffset      Starting vertex index; indices are relative to it.
+         * @param numVertices       Number of vertices the indices may address.
+         * @param indexData         The 16-bit index array.
+         * @param indexOffset       Starting index.
+         * @param primitiveCount    Number of primitives to draw.
+         * @param vertexDeclaration Describes the layout and stride of each vertex.
+         * @throws System::ArgumentOutOfRangeException if either requested range is outside its
+         *         array.
+         * @throws System::ArgumentException if @p vertexDeclaration does not describe a stream.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p TVertex is a polymorphic type CNA cannot
+         *         convert, whose raw bytes are therefore not a vertex stream.
+         */
+        template <typename TVertex>
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const std::vector<TVertex>& vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::vector<std::int16_t>& indexData,
+                                       int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration)
+        {
+            CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
+                                        indexData.size(), indexOffset, primitiveType,
+                                        primitiveCount);
+            DrawUserIndexedVertexArray<TVertex, std::int16_t>(
+                primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
+                indexOffset, primitiveCount, &vertexDeclaration);
+        }
+
+        /**
+         * @brief Draws indexed primitives from user-supplied vertex and 32-bit index arrays.
+         *
+         * The documented
+         * `DrawUserIndexedPrimitives<T>(PrimitiveType, T[], Int32, Int32, Int32[], Int32, Int32)`.
+         * Both arrays carry their own length, and the vertex type is retained, so the layout comes
+         * from the type exactly as XNA's `VertexDeclarationCache<T>` provides it.
+         *
+         * @tparam TVertex The vertex structure type; must derive from IVertexType.
+         * @param primitiveType  The type of primitive to draw.
+         * @param vertexData     The vertex array.
+         * @param vertexOffset   Starting vertex index; indices are relative to it.
+         * @param numVertices    Number of vertices the indices may address.
+         * @param indexData      The 32-bit index array.
+         * @param indexOffset    Starting index.
+         * @param primitiveCount Number of primitives to draw.
+         * @throws System::ArgumentOutOfRangeException if either requested range is outside its
+         *         array.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p TVertex is an IVertexType structure CNA
+         *         cannot convert from its object form into a GPU stream.
+         */
+        template <typename TVertex>
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const std::vector<TVertex>& vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::vector<std::int32_t>& indexData,
+                                       int indexOffset, int primitiveCount)
+        {
+            static_assert(std::is_base_of_v<IVertexType, TVertex>,
+                          "XNA constrains this overload to a vertex structure implementing "
+                          "IVertexType, because the layout comes from the type; pass a "
+                          "VertexDeclaration explicitly for any other vertex type");
+            CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
+                                        indexData.size(), indexOffset, primitiveType,
+                                        primitiveCount);
+            DrawUserIndexedVertexArray<TVertex, std::int32_t>(
+                primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
+                indexOffset, primitiveCount, nullptr);
+        }
+
+        /**
+         * @brief Draws indexed primitives from user-supplied vertex and 32-bit index arrays with
+         *        an explicit VertexDeclaration.
+         *
+         * The documented `DrawUserIndexedPrimitives<T>(PrimitiveType, T[], Int32, Int32, Int32[],
+         * Int32, Int32, VertexDeclaration)`. A built-in vertex structure is converted into the
+         * stream @p vertexDeclaration describes; a plain structure of the caller's own already is
+         * that stream.
+         *
+         * @tparam TVertex The vertex structure type.
+         * @param primitiveType     The type of primitive to draw.
+         * @param vertexData        The vertex array.
+         * @param vertexOffset      Starting vertex index; indices are relative to it.
+         * @param numVertices       Number of vertices the indices may address.
+         * @param indexData         The 32-bit index array.
+         * @param indexOffset       Starting index.
+         * @param primitiveCount    Number of primitives to draw.
+         * @param vertexDeclaration Describes the layout and stride of each vertex.
+         * @throws System::ArgumentOutOfRangeException if either requested range is outside its
+         *         array.
+         * @throws System::ArgumentException if @p vertexDeclaration does not describe a stream.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p TVertex is a polymorphic type CNA cannot
+         *         convert, whose raw bytes are therefore not a vertex stream.
+         */
+        template <typename TVertex>
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const std::vector<TVertex>& vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::vector<std::int32_t>& indexData,
+                                       int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration)
+        {
+            CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
+                                        indexData.size(), indexOffset, primitiveType,
+                                        primitiveCount);
+            DrawUserIndexedVertexArray<TVertex, std::int32_t>(
+                primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
+                indexOffset, primitiveCount, &vertexDeclaration);
+        }
 
         // --- CNAEXT helpers (not in XNA 4.0) ---
 
@@ -1741,6 +1981,118 @@ namespace Microsoft::Xna::Framework::Graphics
             PrimitiveType primitiveType, const VertexT* vertexData, int vertexOffset,
             int numVertices, const IndexT* indexData, int indexOffset, int primitiveCount,
             const VertexDeclaration& vertexDeclaration);
+
+        // The documented generic array draw overloads' shared range check and dispatch. The range
+        // check is here rather than in each overload because an array's own length is the one thing
+        // the pointer overloads cannot see, so it is the one check they cannot make; everything
+        // after it is theirs.
+        void CheckUserVertexArrayRange(std::size_t available, int vertexOffset,
+                                       PrimitiveType primitiveType, int primitiveCount) const;
+        void CheckUserIndexedArrayRanges(std::size_t verticesAvailable, int vertexOffset,
+                                         int numVertices, std::size_t indicesAvailable,
+                                         int indexOffset, PrimitiveType primitiveType,
+                                         int primitiveCount) const;
+
+        /// Whether CNA can convert TVertex from its object form into the GPU stream its
+        /// VertexDeclaration describes. True for the four built-in vertex structures, which have a
+        /// packing function; a caller's own vertex structure has none, because C++ cannot derive one
+        /// from the declaration without reflection.
+        template <typename TVertex>
+        static constexpr bool IsConvertibleVertex =
+            std::is_same_v<TVertex, VertexPositionColor> ||
+            std::is_same_v<TVertex, VertexPositionTexture> ||
+            std::is_same_v<TVertex, VertexPositionColorTexture> ||
+            std::is_same_v<TVertex, VertexPositionNormalTexture>;
+
+        template <typename TVertex>
+        void DrawUserVertexArray(PrimitiveType primitiveType, const TVertex* vertexData,
+                                 int vertexOffset, int primitiveCount,
+                                 const VertexDeclaration* vertexDeclaration)
+        {
+            if constexpr (IsConvertibleVertex<TVertex>)
+            {
+                // Straight into the pointer overload that already converts and validates.
+                if (vertexDeclaration != nullptr)
+                {
+                    DrawUserPrimitives(primitiveType, vertexData, vertexOffset, primitiveCount,
+                                       *vertexDeclaration);
+                }
+                else
+                {
+                    DrawUserPrimitives(primitiveType, vertexData, vertexOffset, primitiveCount);
+                }
+            }
+            else if constexpr (!std::is_polymorphic_v<TVertex>)
+            {
+                // A plain vertex structure's array is already the GPU stream, so the raw overload
+                // consumes it directly at the declared stride.
+                ThrowUnsupportedUserVertexType(vertexDeclaration != nullptr);
+                DrawUserPrimitives(primitiveType, static_cast<const void*>(vertexData),
+                                   vertexOffset, primitiveCount, *vertexDeclaration);
+            }
+            else
+            {
+                // A polymorphic structure carries a vtable pointer, so its bytes are not a stream
+                // and there is no conversion for it.
+                (void)vertexData;
+                (void)vertexOffset;
+                (void)primitiveCount;
+                (void)vertexDeclaration;
+                ThrowUnconvertibleUserVertexType();
+            }
+        }
+
+        template <typename TVertex, typename TIndex>
+        void DrawUserIndexedVertexArray(PrimitiveType primitiveType, const TVertex* vertexData,
+                                        int vertexOffset, int numVertices, const TIndex* indexData,
+                                        int indexOffset, int primitiveCount,
+                                        const VertexDeclaration* vertexDeclaration)
+        {
+            // XNA's index arrays are Int16[]/Int32[]; CNA's pointer overloads take the unsigned
+            // variants of the same types, which is the same object representation read through the
+            // accompanying signed/unsigned type.
+            using TUnsigned = std::make_unsigned_t<TIndex>;
+            const auto* indices = reinterpret_cast<const TUnsigned*>(indexData);
+
+            if constexpr (IsConvertibleVertex<TVertex>)
+            {
+                if (vertexDeclaration != nullptr)
+                {
+                    DrawUserIndexedPrimitives(primitiveType, vertexData, vertexOffset, numVertices,
+                                              indices, indexOffset, primitiveCount,
+                                              *vertexDeclaration);
+                }
+                else
+                {
+                    DrawUserIndexedPrimitives(primitiveType, vertexData, vertexOffset, numVertices,
+                                              indices, indexOffset, primitiveCount);
+                }
+            }
+            else if constexpr (!std::is_polymorphic_v<TVertex>)
+            {
+                ThrowUnsupportedUserVertexType(vertexDeclaration != nullptr);
+                DrawUserIndexedPrimitives(primitiveType, static_cast<const void*>(vertexData),
+                                          vertexOffset, numVertices, indices, indexOffset,
+                                          primitiveCount, *vertexDeclaration);
+            }
+            else
+            {
+                (void)vertexData;
+                (void)vertexOffset;
+                (void)numVertices;
+                (void)indices;
+                (void)indexOffset;
+                (void)primitiveCount;
+                ThrowUnconvertibleUserVertexType();
+            }
+        }
+
+        /// Refuses a plain vertex structure drawn without a declaration: nothing describes its
+        /// layout, because it implements no IVertexType.
+        void ThrowUnsupportedUserVertexType(bool haveDeclaration) const;
+
+        /// Refuses a polymorphic vertex structure that is not one of the built-in ones.
+        [[noreturn]] void ThrowUnconvertibleUserVertexType() const;
 
         [[nodiscard]] std::uintptr_t GetWindowHandleInternal() const;
         [[nodiscard]] CNA::Platform::IPlatformWindow* GetPlatformWindowInternal() const;

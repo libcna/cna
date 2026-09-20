@@ -2191,6 +2191,99 @@ namespace Microsoft::Xna::Framework::Graphics
         return CheckedPrimitiveElementCount(type, primitiveCount);
     }
 
+    // -----------------------------------------------------------------------
+    // The documented generic array draw overloads' shared checks
+    // -----------------------------------------------------------------------
+
+    void GraphicsDevice::CheckUserVertexArrayRange(const std::size_t available,
+                                                  const int vertexOffset,
+                                                  const PrimitiveType primitiveType,
+                                                  const int primitiveCount) const
+    {
+        if (vertexOffset < 0)
+        {
+            throw System::ArgumentOutOfRangeException("vertexOffset",
+                                                      "The vertex offset cannot be negative.");
+        }
+        // CheckedPrimitiveElementCount refuses a non-positive primitive count and an unknown
+        // primitive type, so the vertex count it returns is already a usable one.
+        const std::int64_t required = static_cast<std::int64_t>(vertexOffset) +
+                                      CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+        if (required > static_cast<std::int64_t>(available))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount",
+                "The vertex array holds " + std::to_string(available) + " vertices, and drawing " +
+                    std::to_string(primitiveCount) + " primitives from offset " +
+                    std::to_string(vertexOffset) + " needs " + std::to_string(required) + ".");
+        }
+    }
+
+    void GraphicsDevice::CheckUserIndexedArrayRanges(const std::size_t verticesAvailable,
+                                                     const int vertexOffset, const int numVertices,
+                                                     const std::size_t indicesAvailable,
+                                                     const int indexOffset,
+                                                     const PrimitiveType primitiveType,
+                                                     const int primitiveCount) const
+    {
+        if (vertexOffset < 0)
+        {
+            throw System::ArgumentOutOfRangeException("vertexOffset",
+                                                      "The vertex offset cannot be negative.");
+        }
+        if (numVertices <= 0)
+        {
+            throw System::ArgumentOutOfRangeException("numVertices",
+                                                      "The vertex count must be positive.");
+        }
+        if (indexOffset < 0)
+        {
+            throw System::ArgumentOutOfRangeException("indexOffset",
+                                                      "The index offset cannot be negative.");
+        }
+        if (static_cast<std::int64_t>(vertexOffset) + numVertices >
+            static_cast<std::int64_t>(verticesAvailable))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "numVertices",
+                "The vertex array holds " + std::to_string(verticesAvailable) +
+                    " vertices, and " + std::to_string(numVertices) + " from offset " +
+                    std::to_string(vertexOffset) + " reaches past it.");
+        }
+        const std::int64_t requiredIndices =
+            static_cast<std::int64_t>(indexOffset) +
+            CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+        if (requiredIndices > static_cast<std::int64_t>(indicesAvailable))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount",
+                "The index array holds " + std::to_string(indicesAvailable) + " indices, and " +
+                    std::to_string(primitiveCount) + " primitives from offset " +
+                    std::to_string(indexOffset) + " need " + std::to_string(requiredIndices) + ".");
+        }
+    }
+
+    void GraphicsDevice::ThrowUnsupportedUserVertexType(const bool haveDeclaration) const
+    {
+        if (haveDeclaration)
+        {
+            return;
+        }
+        throw System::NotSupportedException(
+            "This vertex type implements no IVertexType, so nothing describes its layout. Pass a "
+            "VertexDeclaration to the overload that takes one.");
+    }
+
+    void GraphicsDevice::ThrowUnconvertibleUserVertexType() const
+    {
+        throw System::NotSupportedException(
+            "This vertex type derives from IVertexType but is not one of the four built-in vertex "
+            "structures, so CNA has no conversion from its object form into a GPU stream -- C++ "
+            "cannot derive one from a VertexDeclaration without reflection, and the structure's own "
+            "bytes are not a stream because it carries a vtable pointer. Define the vertex "
+            "structure as a plain one and pass its VertexDeclaration explicitly.");
+    }
+
     namespace
     {
         // The GPU vertex streams of the built-in types, shared with their VertexDeclarations and
