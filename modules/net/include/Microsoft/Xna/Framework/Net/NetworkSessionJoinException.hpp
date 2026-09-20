@@ -2,6 +2,7 @@
 #pragma once
 #include "Microsoft/Xna/Framework/GamerServices/NetworkException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinError.hpp"
+#include "CNA/Internal/ExceptionSerialization.hpp"
 #include "System/Runtime/Serialization/SerializationInfo.hpp"
 #include "System/Runtime/Serialization/StreamingContext.hpp"
 #include <exception>
@@ -66,6 +67,22 @@ namespace Microsoft::Xna::Framework::Net
             System::Runtime::Serialization::SerializationInfo& info,
             System::Runtime::Serialization::StreamingContext& context
         );
+
+    public:
+        /**
+         * @brief Writes this exception's state into @p info.
+         *
+         * The documented `public override void GetObjectData(SerializationInfo, StreamingContext)`.
+         * XNA writes the base state first and then adds the join error under the name `joinError`,
+         * which is exactly the name the serialization constructor reads back; this does the same,
+         * so the two halves cannot drift apart.
+         *
+         * @param info The store to write into; the base state is written before the join error.
+         * @param context The serialization context, passed through to the base.
+         */
+        void GetObjectData(
+            System::Runtime::Serialization::SerializationInfo& info,
+            const System::Runtime::Serialization::StreamingContext& context) const override;
 
     private:
         NetworkSessionJoinError joinError_{NetworkSessionJoinError::SessionNotFound};

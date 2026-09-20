@@ -39,6 +39,10 @@
 #include "System/IO/MemoryStream.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/Runtime/Serialization/SerializationInfo.hpp"
+#include "System/Runtime/Serialization/StreamingContext.hpp"
+#include <exception>
+#include <stdexcept>
 #include "System/Type.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -549,4 +553,100 @@ TEST_F(ContentRuntimeContractTest, ReadRawObjectRefusesAnUnresolvableType)
 
     EXPECT_THROW((void)reader.ReadRawObject<UnknownValue>(), ContentLoadException);
     EXPECT_THROW((void)reader.ReadRawObject<UnknownValue>(UnknownValue{}), ContentLoadException);
+}
+
+// =============================================================================
+// XNA-MISSING-014: ContentLoadException's serialization constructor
+// =============================================================================
+
+namespace
+{
+    /// The constructor is protected, as .NET's ISerializable pattern has it, so a derived type is
+    /// the only way to reach it.
+    struct TestableContentLoadException : ContentLoadException
+    {
+        TestableContentLoadException(
+            const System::Runtime::Serialization::SerializationInfo& info,
+            const System::Runtime::Serialization::StreamingContext& context)
+            : ContentLoadException(info, context)
+        {
+        }
+    };
+}
+
+TEST(ContentLoadExceptionSerializationTest, TheMessageSurvivesARoundTrip)
+{
+    const ContentLoadException original("the asset was truncated");
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    original.GetObjectData(info, context);
+
+    const TestableContentLoadException restored(info, context);
+    EXPECT_EQ(std::string(restored.what()), "the asset was truncated");
+    EXPECT_EQ(restored.getInnerExceptionProperty(), nullptr);
+}
+
+TEST(ContentLoadExceptionSerializationTest, TheInnerCauseTravelsWithIt)
+{
+    // The inner cause is stored separately from the message, which is what lets it rethrow as the
+    // type it was rather than surviving only as text.
+    std::exception_ptr cause;
+    try
+    {
+        throw std::runtime_error("the file could not be opened");
+    }
+    catch (...)
+    {
+        cause = std::current_exception();
+    }
+
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    info.AddValue("Message", std::string("load failed"));
+    info.AddValue("InnerException", cause);
+
+    const TestableContentLoadException restored(info, context);
+    EXPECT_EQ(std::string(restored.what()), "load failed");
+    ASSERT_NE(restored.getInnerExceptionProperty(), nullptr);
+    try
+    {
+        std::rethrow_exception(restored.getInnerExceptionProperty());
+        FAIL() << "the restored cause must rethrow";
+    }
+    catch (const std::runtime_error& inner)
+    {
+        EXPECT_EQ(std::string(inner.what()), "the file could not be opened");
+    }
+}
+
+TEST(ContentLoadExceptionSerializationTest, AnEmptyStoreStillConstructs)
+{
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    const TestableContentLoadException restored(info, context);
+    EXPECT_TRUE(std::string(restored.what()).empty());
+    EXPECT_EQ(restored.getInnerExceptionProperty(), nullptr);
+}
+
+TEST(ContentLoadExceptionSerializationTest, TheRestoredExceptionIsStillCatchableAsBefore)
+{
+    // The base is still std::runtime_error, which is what the 221 catch sites around content loads
+    // depend on -- a round trip must not change that.
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    ContentLoadException("typed").GetObjectData(info, context);
+
+    const TestableContentLoadException restored(info, context);
+    EXPECT_THROW({ throw restored; }, ContentLoadException);
+    EXPECT_THROW({ throw restored; }, std::runtime_error);
+}
+
+TEST(ContentLoadExceptionSerializationTest, GetObjectDataWritesBothBaseStateNames)
+{
+    const ContentLoadException original("named");
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    original.GetObjectData(info, context);
+
+    EXPECT_EQ(info.GetNames(), (std::vector<std::string>{"Message", "InnerException"}));
 }

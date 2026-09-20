@@ -26,10 +26,19 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     NetworkException::NetworkException(
-        System::Runtime::Serialization::SerializationInfo& /*info*/,
+        System::Runtime::Serialization::SerializationInfo& info,
         System::Runtime::Serialization::StreamingContext& /*context*/
     )
-        : System::Exception()
+        : System::Exception(CNA::Internal::ExceptionSerialization::ReadMessage(info),
+                            CNA::Internal::ExceptionSerialization::ReadInnerException(info))
     {
+    }
+
+    void NetworkException::GetObjectData(
+        System::Runtime::Serialization::SerializationInfo& info,
+        const System::Runtime::Serialization::StreamingContext& /*context*/) const
+    {
+        CNA::Internal::ExceptionSerialization::WriteBaseState(
+            info, getMessageProperty(), getInnerExceptionProperty());
     }
 }

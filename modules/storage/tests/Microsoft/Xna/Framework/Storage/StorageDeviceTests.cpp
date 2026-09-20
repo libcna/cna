@@ -6,6 +6,12 @@
 // coverage existed for DeleteContainer at all.
 
 #include <gtest/gtest.h>
+#include <string>
+#include <stdexcept>
+#include <exception>
+#include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+#include "System/Runtime/Serialization/StreamingContext.hpp"
+#include "System/Runtime/Serialization/SerializationInfo.hpp"
 #include <filesystem>
 #include <fstream>
 
@@ -185,4 +191,99 @@ TEST_F(StorageDeviceDeleteContainerTest, ContainerAllowsNormalizedPathsThatRemai
     auto stream = container->CreateFile("profiles/../save.bin");
     stream.reset();
     EXPECT_TRUE(container->FileExists("save.bin"));
+}
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-014: StorageDeviceNotConnectedException's serialization constructor.
+//
+// XNA's body is `base(info, context)` and nothing else -- the type adds no state of its own -- so
+// what has to survive the round trip is the exception base state
+// (xna4-decomp/.../Microsoft.Xna.Framework.Storage/StorageDeviceNotConnectedException.cs).
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    /// The constructor is protected, as .NET's ISerializable pattern has it, so a derived type is
+    /// the only way to reach it -- which is also the accessibility this asserts.
+    struct TestableStorageDeviceNotConnectedException
+        : Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException
+    {
+        TestableStorageDeviceNotConnectedException(
+            const System::Runtime::Serialization::SerializationInfo& info,
+            const System::Runtime::Serialization::StreamingContext& context)
+            : StorageDeviceNotConnectedException(info, context)
+        {
+        }
+    };
+}
+
+TEST(StorageDeviceNotConnectedExceptionSerializationTest, TheBaseStateSurvivesARoundTrip)
+{
+    using Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException;
+
+    const StorageDeviceNotConnectedException original("the card was removed");
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    original.GetObjectData(info, context);
+
+    const TestableStorageDeviceNotConnectedException restored(info, context);
+    EXPECT_EQ(restored.getMessageProperty(), "the card was removed");
+    EXPECT_EQ(restored.getInnerExceptionProperty(), nullptr);
+}
+
+TEST(StorageDeviceNotConnectedExceptionSerializationTest, TheInnerCauseTravelsWithIt)
+{
+    using Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException;
+
+    std::exception_ptr cause;
+    try
+    {
+        throw std::runtime_error("the mount point vanished");
+    }
+    catch (...)
+    {
+        cause = std::current_exception();
+    }
+
+    const StorageDeviceNotConnectedException original("device lost", cause);
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    original.GetObjectData(info, context);
+
+    const TestableStorageDeviceNotConnectedException restored(info, context);
+    EXPECT_EQ(restored.getMessageProperty(), "device lost");
+    ASSERT_NE(restored.getInnerExceptionProperty(), nullptr);
+    try
+    {
+        std::rethrow_exception(restored.getInnerExceptionProperty());
+        FAIL() << "the restored cause must rethrow";
+    }
+    catch (const std::runtime_error& inner)
+    {
+        EXPECT_EQ(std::string(inner.what()), "the mount point vanished");
+    }
+}
+
+TEST(StorageDeviceNotConnectedExceptionSerializationTest, AnEmptyStoreStillConstructs)
+{
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    const TestableStorageDeviceNotConnectedException restored(info, context);
+    EXPECT_TRUE(restored.getMessageProperty().empty());
+    EXPECT_EQ(restored.getInnerExceptionProperty(), nullptr);
+}
+
+TEST(StorageDeviceNotConnectedExceptionSerializationTest, TheRestoredExceptionIsStillItsOwnType)
+{
+    using Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException;
+
+    System::Runtime::Serialization::SerializationInfo info;
+    const System::Runtime::Serialization::StreamingContext context;
+    StorageDeviceNotConnectedException("typed").GetObjectData(info, context);
+
+    const TestableStorageDeviceNotConnectedException restored(info, context);
+    EXPECT_NE(dynamic_cast<const StorageDeviceNotConnectedException*>(&restored), nullptr);
+    EXPECT_NE(dynamic_cast<const System::Runtime::InteropServices::ExternalException*>(&restored),
+              nullptr);
+    EXPECT_THROW({ throw restored; }, StorageDeviceNotConnectedException);
 }
