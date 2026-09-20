@@ -1272,11 +1272,12 @@ namespace CNA::Internal::Renderers::EasyGL
         MOJOSHADER_glProgramViewportInfo(targetW, targetH, targetW, targetH,
                                          /*renderTargetBound=*/0);
 
-        // XNA's D3D9 rasterizer uses integer pixel centres. The stock EasyGL path expresses that
-        // through the same clip-space translation before rasterization; compiled Effects must not
-        // silently retain OpenGL's half-integer centre convention. As with stock shaders, the
-        // single-sample correction is suppressed for a multisampled destination because applying
-        // a geometry translation to independent sample locations changes edge coverage.
+        // Ordinary compiled geometry needs the same D3D9 pixel-centre correction as stock
+        // geometry. SpriteBatch's compiled route does not: its fullscreen quads already sample
+        // the XNA texel centres without that translation. Applying it there shifts every
+        // postprocess lookup by almost half a pixel, accumulating across render-target hops.
+        // The SpriteBatch-only slot-zero override identifies that route without naming a game.
+        // Multisampled destinations still suppress the ordinary-draw correction too.
         int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
         device.get_viewport(viewportX, viewportY, viewportW, viewportH);
         bool multisampledDestination = false;
@@ -1294,10 +1295,12 @@ namespace CNA::Internal::Renderers::EasyGL
                     multisampledDestination = true;
             }
         }
-        const float pixelCenterX = viewportW > 0 && !multisampledDestination
+        const bool correctPixelCenter = !multisampledDestination &&
+                                        spriteBatchSlotZeroTexture == nullptr;
+        const float pixelCenterX = viewportW > 0 && correctPixelCenter
             ? xnaPixelCenterScale_ / static_cast<float>(viewportW)
             : 0.0f;
-        const float pixelCenterY = viewportH > 0 && !multisampledDestination
+        const float pixelCenterY = viewportH > 0 && correctPixelCenter
             ? -xnaPixelCenterScale_ / static_cast<float>(viewportH)
             : 0.0f;
         MOJOSHADER_glProgramPixelCenterInfo(pixelCenterX, pixelCenterY);

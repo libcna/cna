@@ -4815,6 +4815,56 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchRenderTargetSourceContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SpriteBatchCompiledPassKeepsTexelCenters)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    constexpr int size = 4;
+    Texture2D source(device, size, size);
+    std::vector<Color> sourcePixels;
+    for (int y = 0; y < size; ++y)
+        for (int x = 0; x < size; ++x)
+            sourcePixels.emplace_back(20 + x * 60, 30 + y * 55, 40, 255);
+    source.SetData(sourcePixels.data(), static_cast<int>(sourcePixels.size()));
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+        {Fx::SampMagFilter, Fx::FilterLinear},
+        {Fx::SampMinFilter, Fx::FilterLinear},
+        {Fx::SampMipFilter, Fx::FilterLinear},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+    }));
+    auto& parameters = effect.getParametersProperty();
+    parameters["Tint"]->SetValue(Microsoft::Xna::Framework::Vector4::One);
+    parameters["FxTexture"]->SetValue(&source);
+    parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+        0.0f, static_cast<float>(size), static_cast<float>(size), 0.0f, -1.0f, 1.0f));
+
+    RenderTarget2D result(device, size, size);
+    device.SetRenderTarget(&result);
+    device.Clear(Color::Black);
+    SpriteBatch batch(device);
+    SamplerState linearClamp = SamplerState::LinearClamp;
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &linearClamp,
+                nullptr, nullptr, &effect);
+    batch.Draw(source, Rectangle(0, 0, size, size), Color::White);
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    std::vector<Color> actual(sourcePixels.size());
+    result.GetData(actual.data(), static_cast<int>(actual.size()));
+    for (std::size_t i = 0; i < actual.size(); ++i)
+    {
+        SCOPED_TRACE("pixel " + std::to_string(i % size) + "," + std::to_string(i / size));
+        EXPECT_NEAR(actual[i].getRProperty(), sourcePixels[i].getRProperty(), 3);
+        EXPECT_NEAR(actual[i].getGProperty(), sourcePixels[i].getGProperty(), 3);
+        EXPECT_NEAR(actual[i].getBProperty(), sourcePixels[i].getBProperty(), 3);
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
 {
     GraphicsDevice device;
