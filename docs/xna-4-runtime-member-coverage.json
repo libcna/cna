@@ -2382,7 +2382,7 @@
       "Microsoft.Xna.Framework.Xact.dll"
     ],
     "documented": 3627,
-    "represented": 3620,
+    "represented": 3627,
     "metadata_dll_sha256": {
       "Microsoft.Xna.Framework.dll": "38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130",
       "Microsoft.Xna.Framework.Avatar.dll": "b3c70bbe469000b9e11507cc63b88d54a4e0bc5c27afc826d66e0aee51640871",
@@ -2395,45 +2395,42 @@
       "Microsoft.Xna.Framework.Video.dll": "17538b1ca9d48a993e2cd88c96b436df08e7abb4aec5d4758eb21feb580d6e06",
       "Microsoft.Xna.Framework.Xact.dll": "a14d5364dca7cf49fb90639e87ba04d52b59a700dc9198efa5707ce8eae28f0a"
     },
-    "strict_coverage_percent": 99.81,
+    "strict_coverage_percent": 100.0,
     "cpp_applicable_denominator": 3627,
-    "cpp_applicable_coverage_percent": 99.81,
+    "cpp_applicable_coverage_percent": 100.0,
     "classifications": {
-      "EXACT_EQUIVALENT": 1743,
-      "SEMANTIC_EQUIVALENT": 1819,
+      "EXACT_EQUIVALENT": 1746,
+      "SEMANTIC_EQUIVALENT": 1823,
       "HOST_LANGUAGE_SUBSTITUTION": 58,
-      "MISSING": 7,
+      "MISSING": 0,
       "NOT_APPLICABLE": 0,
       "NEEDS_REVIEW": 0
     },
     "categories": {
       "constructor": {
         "documented": 253,
-        "represented": 250,
+        "represented": 253,
         "classifications": {
-          "EXACT_EQUIVALENT": 166,
-          "SEMANTIC_EQUIVALENT": 83,
-          "MISSING": 3,
+          "EXACT_EQUIVALENT": 168,
+          "SEMANTIC_EQUIVALENT": 84,
           "HOST_LANGUAGE_SUBSTITUTION": 1
         }
       },
       "method": {
         "documented": 1518,
-        "represented": 1516,
+        "represented": 1518,
         "classifications": {
-          "EXACT_EQUIVALENT": 828,
-          "SEMANTIC_EQUIVALENT": 632,
-          "HOST_LANGUAGE_SUBSTITUTION": 56,
-          "MISSING": 2
+          "EXACT_EQUIVALENT": 829,
+          "SEMANTIC_EQUIVALENT": 633,
+          "HOST_LANGUAGE_SUBSTITUTION": 56
         }
       },
       "property": {
         "documented": 1040,
-        "represented": 1038,
+        "represented": 1040,
         "classifications": {
-          "SEMANTIC_EQUIVALENT": 1037,
-          "HOST_LANGUAGE_SUBSTITUTION": 1,
-          "MISSING": 2
+          "SEMANTIC_EQUIVALENT": 1039,
+          "HOST_LANGUAGE_SUBSTITUTION": 1
         }
       },
       "field": {
@@ -38765,7 +38762,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ContentLoadException",
         "name": "#ctor",
@@ -38778,8 +38775,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: ContentLoadException(const std::string &, const std::exception &) -> void",
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp::ContentLoadException(const System::Runtime::Serialization::SerializationInfo &, const System::Runtime::Serialization::StreamingContext &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -38802,9 +38799,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp",
-        "subsystem": "Content",
-        "gap_tier": "C",
-        "gap_reason": "Requires CLR serialization infrastructure and exception state restoration."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.String)",
@@ -40891,7 +40886,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.xml",
         "declaring_type": "Microsoft.Xna.Framework.Content.ResourceContentManager",
         "name": "#ctor",
@@ -40904,7 +40899,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ResourceContentManager.hpp::ResourceContentManager(System::IServiceProvider *, System::Resources::ResourceManager *)",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -40928,9 +40923,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/content/include/Microsoft/Xna/Framework/Content/ResourceContentManager.hpp",
-        "subsystem": "Content",
-        "gap_tier": "C",
-        "gap_reason": "Requires System.Resources.ResourceManager support in Sharp Runtime."
+        "subsystem": "Content"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Content.ResourceContentManager.OpenStream(System.String)",
@@ -102999,7 +102992,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseNullDevice",
         "category": "property",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter",
         "name": "UseNullDevice",
@@ -103009,8 +103002,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseNullDevice",
-        "cna_symbol": null,
-        "notes": "",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp::getUseNullDeviceProperty()/setUseNullDeviceProperty(bool)",
+        "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",
           "value_type": "System.Boolean",
@@ -103027,14 +103020,12 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "C",
-        "gap_reason": "Controls the historical Microsoft graphics device selection path."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseReferenceDevice",
         "category": "property",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter",
         "name": "UseReferenceDevice",
@@ -103044,8 +103035,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseReferenceDevice",
-        "cna_symbol": null,
-        "notes": "",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp::getUseReferenceDeviceProperty()/setUseReferenceDeviceProperty(bool)",
+        "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",
           "value_type": "System.Boolean",
@@ -103062,9 +103053,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "C",
-        "gap_reason": "Controls the historical Microsoft reference-device selection path."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsAdapter.VendorId",
@@ -104569,7 +104558,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Graphics.xml",
         "declaring_type": "Microsoft.Xna.Framework.Graphics.GraphicsDevice",
         "name": "Present",
@@ -104583,7 +104572,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp::Present(const std::optional<Rectangle> &, const std::optional<Rectangle> &, std::uintptr_t)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -104609,9 +104598,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp",
-        "subsystem": "Graphics",
-        "gap_tier": "C",
-        "gap_reason": "Requires a native window-handle and presentation contract across renderers."
+        "subsystem": "Graphics"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Graphics.GraphicsDevice.PresentationParameters",
@@ -127977,7 +127964,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
         "category": "method",
-        "classification": "MISSING",
+        "classification": "SEMANTIC_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Net.xml",
         "declaring_type": "Microsoft.Xna.Framework.Net.NetworkSessionJoinException",
         "name": "GetObjectData",
@@ -127990,7 +127977,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Net",
         "xna_signature": "Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
-        "cna_symbol": null,
+        "cna_symbol": "modules/net/include/Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp::GetObjectData(System::Runtime::Serialization::SerializationInfo &, const System::Runtime::Serialization::StreamingContext &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -128011,12 +127998,10 @@
           "field_semantics": "",
           "enum_value": ""
         },
-        "cna_member_name_present": false,
+        "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/net/include/Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp",
-        "subsystem": "Net",
-        "gap_tier": "C",
-        "gap_reason": "Requires CLR serialization infrastructure."
+        "subsystem": "Net"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Net.NetworkSessionJoinException.JoinError",
@@ -131306,7 +131291,7 @@
       {
         "reference_name": "Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
         "category": "constructor",
-        "classification": "MISSING",
+        "classification": "EXACT_EQUIVALENT",
         "assembly_xml": "Microsoft.Xna.Framework.Storage.xml",
         "declaring_type": "Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException",
         "name": "#ctor",
@@ -131319,8 +131304,8 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Storage",
         "xna_signature": "Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)",
-        "cna_symbol": null,
-        "notes": "No accepted representation for this signature. CNA candidates: StorageDeviceNotConnectedException(const std::string &, std::exception_ptr) -> void",
+        "cna_symbol": "modules/storage/include/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp::StorageDeviceNotConnectedException(const System::Runtime::Serialization::SerializationInfo &, const System::Runtime::Serialization::StreamingContext &)",
+        "notes": "",
         "metadata": {
           "kind": "constructor",
           "value_type": "System.Void",
@@ -131343,9 +131328,7 @@
         "cna_member_name_present": true,
         "behavior_assessed": false,
         "cna_type_header": "modules/storage/include/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp",
-        "subsystem": "Storage",
-        "gap_tier": "C",
-        "gap_reason": "Requires CLR serialization infrastructure and exception state restoration."
+        "subsystem": "Storage"
       },
       {
         "reference_name": "Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.String)",

@@ -8,24 +8,24 @@ Runtime public types: **331 / 331** (100.00%)
 
 | Member kind | Represented | Documented | Coverage |
 | --- | ---: | ---: | ---: |
-| Constructors | 250 | 253 | 98.81% |
-| Methods | 1516 | 1518 | 99.87% |
-| Properties | 1038 | 1040 | 99.81% |
+| Constructors | 253 | 253 | 100.00% |
+| Methods | 1518 | 1518 | 100.00% |
+| Properties | 1040 | 1040 | 100.00% |
 | Fields | 753 | 753 | 100.00% |
 | Events | 63 | 63 | 100.00% |
 | Operators (subset) | 145 | 145 | 100.00% |
 | Indexers (subset) | 29 | 29 | 100.00% |
 | Enum Values (subset) | 661 | 661 | 100.00% |
 
-Strict documented members: **3620 / 3627** (99.81%)
-C++-applicable members: **3620 / 3627** (99.81%)
+Strict documented members: **3627 / 3627** (100.00%)
+C++-applicable members: **3627 / 3627** (100.00%)
 
 ## Classifications
 
-- EXACT_EQUIVALENT: 1743
-- SEMANTIC_EQUIVALENT: 1819
+- EXACT_EQUIVALENT: 1746
+- SEMANTIC_EQUIVALENT: 1823
 - HOST_LANGUAGE_SUBSTITUTION: 58
-- MISSING: 7
+- MISSING: 0
 - NOT_APPLICABLE: 0
 - NEEDS_REVIEW: 0
 
@@ -37,7 +37,7 @@ Only `NOT_APPLICABLE` is removed from the C++-applicable denominator.
 
 Before production fixes: **3463 / 3627** (95.48%) represented; 164 missing.
 See [the frozen per-member baseline](xna-4-runtime-member-coverage-baseline.md).
-Newly represented entries: **157**.
+Newly represented entries: **164**.
 
 - `Microsoft.Xna.Framework.BoundingBox.Equals(System.Object)`
 - `Microsoft.Xna.Framework.BoundingFrustum.Equals(System.Object)`
@@ -57,6 +57,7 @@ Newly represented entries: **157**.
 - `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Apply3D(Microsoft.Xna.Framework.Audio.AudioListener[],Microsoft.Xna.Framework.Audio.AudioEmitter)`
 - `Microsoft.Xna.Framework.Audio.SoundEffectInstance.Dispose(System.Boolean)`
 - `Microsoft.Xna.Framework.Content.ContentLoadException.#ctor`
+- `Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)`
 - `Microsoft.Xna.Framework.Content.ContentManager.Dispose(System.Boolean)`
 - `Microsoft.Xna.Framework.Content.ContentManager.OpenStream(System.String)`
 - ``` Microsoft.Xna.Framework.Content.ContentManager.ReadAsset``1(System.String,System.Action{System.IDisposable}) ```
@@ -65,6 +66,7 @@ Newly represented entries: **157**.
 - `` Microsoft.Xna.Framework.Content.ContentTypeReader`1.#ctor ``
 - `` Microsoft.Xna.Framework.Content.ContentTypeReader`1.Read(Microsoft.Xna.Framework.Content.ContentReader,System.Object) ``
 - `Microsoft.Xna.Framework.Content.ContentTypeReaderManager.GetTypeReader(System.Type)`
+- `Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)`
 - `Microsoft.Xna.Framework.Design.BoundingBoxConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
 - `Microsoft.Xna.Framework.Design.BoundingSphereConverter.ConvertFrom(System.ComponentModel.ITypeDescriptorContext,System.Globalization.CultureInfo,System.Object)`
 - `Microsoft.Xna.Framework.Design.MathTypeConverter.propertyDescriptions`
@@ -173,6 +175,8 @@ Newly represented entries: **157**.
 - `Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
 - `Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
 - `Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect.#ctor(Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect)`
+- `Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseNullDevice`
+- `Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseReferenceDevice`
 - `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Dispose(System.Boolean)`
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32) ```
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int16[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ```
@@ -180,6 +184,7 @@ Newly represented entries: **157**.
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ```
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32) ```
 - ``` Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration) ```
+- `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)`
 - `Microsoft.Xna.Framework.Graphics.IndexBuffer.#ctor(Microsoft.Xna.Framework.Graphics.GraphicsDevice,System.Type,System.Int32,Microsoft.Xna.Framework.Graphics.BufferUsage)`
 - `Microsoft.Xna.Framework.Graphics.NoSuitableGraphicsDeviceException.#ctor(System.String,System.Exception)`
 - `Microsoft.Xna.Framework.Graphics.SkinnedEffect.#ctor(Microsoft.Xna.Framework.Graphics.SkinnedEffect)`
@@ -190,6 +195,8 @@ Newly represented entries: **157**.
 - `Microsoft.Xna.Framework.Graphics.VertexPositionNormalTexture.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Graphics.VertexPositionTexture.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Input.Touch.TouchLocation.Equals(System.Object)`
+- `Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)`
+- `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)`
 - `Microsoft.Xna.Framework.Audio.AudioCategory.Equals(System.Object)`
 - `Microsoft.Xna.Framework.Audio.AudioCategory.ToString`
 - `Microsoft.Xna.Framework.Audio.AudioEngine.Dispose(System.Boolean)`
@@ -199,38 +206,16 @@ Newly represented entries: **157**.
 
 ## Gap review
 
-Tier A gaps remaining: **0**; Tier B: **0**; Tier C: **7**.
-Tier B needs type-specific implementation and behavior tests. Tier C requires CLR
-serialization/resources, historical device selection, or presentation architecture.
-All remaining `MISSING` entries are real absent native contracts under the stated
-normalization. Matcher false negatives were corrected before production changes.
+Tier A gaps remaining: **0**; Tier B: **0**; Tier C: **0**.
+No documented runtime member is unrepresented, and the denominator is unchanged: the
+same ten reference assemblies, the same corpus hashes, no `NOT_APPLICABLE` exemption
+and no ignore list. This measures representation of the documented member surface
+only. Behavior, exception detail, renderer results and historical online-service
+availability are separate measures, and none of them is claimed here.
 
 ## Remaining missing members
 
-### Content: `Microsoft.Xna.Framework.Content.ContentLoadException`
-
-- `Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure and exception state restoration.
-
-### Content: `Microsoft.Xna.Framework.Content.ResourceContentManager`
-
-- `Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)` — Tier C: Requires System.Resources.ResourceManager support in Sharp Runtime.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.GraphicsAdapter`
-
-- `Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseNullDevice` — Tier C: Controls the historical Microsoft graphics device selection path.
-- `Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseReferenceDevice` — Tier C: Controls the historical Microsoft reference-device selection path.
-
-### Graphics: `Microsoft.Xna.Framework.Graphics.GraphicsDevice`
-
-- `Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)` — Tier C: Requires a native window-handle and presentation contract across renderers.
-
-### Net: `Microsoft.Xna.Framework.Net.NetworkSessionJoinException`
-
-- `Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure.
-
-### Storage: `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException`
-
-- `Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)` — Tier C: Requires CLR serialization infrastructure and exception state restoration.
+None.
 
 ## Entries needing review
 

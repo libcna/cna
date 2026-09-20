@@ -2,7 +2,9 @@
 
 ## 1. Purpose and snapshot
 
-This is the handoff for the documented Microsoft XNA 4.0 **runtime** public/protected API members still absent from CNA. Runtime public type coverage is complete: **331/331 (100.00%)**. Member representation is **3,467/3,627 (95.59%)**. The objective is zero unexplained `MISSING` members and zero `NEEDS_REVIEW` records, without mistaking API representation for behavioral parity. The Content Pipeline assembly and its separate parity work are outside this plan.
+This is the handoff for the documented Microsoft XNA 4.0 **runtime** public/protected API members still absent from CNA. Runtime public type coverage is complete: **331/331 (100.00%)**. Member representation was **3,467/3,627 (95.59%)** when this plan was written and is now
+**3,627/3,627 (100.00%)** with zero `MISSING` and zero `NEEDS_REVIEW`; §2a is the live record and
+§2's tables are kept as the 2026-09-20 baseline they were measured as. The objective is zero unexplained `MISSING` members and zero `NEEDS_REVIEW` records, without mistaking API representation for behavioral parity. The Content Pipeline assembly and its separate parity work are outside this plan.
 
 | Snapshot item | Value |
 | --- | --- |
@@ -59,7 +61,7 @@ as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before t
 | 1 — value surface | 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | 53 | **DONE** |
 | 2 — local subsystems | 015, 019, 018, 016, 017, 007, 009 | 3,596 / 3,627 | 99.15% | 31 | **DONE** |
 | 3 — Graphics/Content Tier B | 005, 006, 008, 012 | 3,620 / 3,627 | 99.81% | 7 | **DONE** |
-| 4 — shared prerequisites, Tier C | 013, 014, 010, 011 | | | | TODO |
+| 4 — shared prerequisites, Tier C | 013, 014, 010, 011 | 3,627 / 3,627 | 100.00% | 0 | **DONE** |
 
 | Package | Status | Closed | Commit | Note |
 | --- | --- | ---: | --- | --- |
@@ -79,7 +81,28 @@ as. Re-run `python3 tools/audit_xna_runtime_surface.py --write-reports` before t
 | XNA-MISSING-006 buffer Type constructors | **DONE** | 4 | `2df2e8e0e` | `CNA::Graphics::VertexTypeRegistryEXT` is the C++ stand-in for XNA's reflective `VertexDeclaration.FromType`. XNA's stride-vs-`Marshal.SizeOf` check is deliberately absent: an `IVertexType` structure carries a vtable pointer, so `sizeof` is not the stride. |
 | XNA-MISSING-008 generic draw arrays | **DONE** | 6 | `aa263fcf7` | Dispatch decided at compile time by what CNA can do with the type; a polymorphic `IVertexType` that is not one of the four built-ins is refused rather than drawn from its bytes. |
 | XNA-MISSING-012 Content contracts | **DONE** | 9 | `4a0775aaa` | Includes one audit matcher fix, with regression tests first: clang names a class-template constructor `ContentTypeReader<T>`. `Load<T>`'s `.xnb` tier is deliberately unchanged -- the packaged-asset route has no existence-only query. |
-| XNA-MISSING-010, 011, 013, 014 | TODO | | | Tier C; see §5 and §6. |
+| XNA-MISSING-014 CLR exception serialization | **DONE** | 3 | `2345c5e74` | The prerequisite for the other three: Sharp Runtime's `SerializationInfo` became a real name→value store, with `StreamingContext`, `StreamingContextStates` and `SerializationException` beside it. `System::Exception` itself is deliberately unchanged -- `Runtime` would have to depend on `Core.Base` backwards -- so each CNA exception writes and restores its own base state through one shared `CNA::Internal::ExceptionSerialization` helper. `NetworkSessionJoinException` round-trips its `joinError`, as XNA's own `GetObjectData` does. |
+| XNA-MISSING-013 ResourceContentManager | **DONE** | 1 | `8c1c8b412` | Sharp Runtime's `ResourceManager` gained the smallest reusable binary-object surface -- `GetObject` ×3, `GetByteArray` ×2 and a 3-argument constructor -- with the object and string lookups probed at each culture before falling back, rather than a CNA-side imitation. `Resources` joined `CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS`; it is no other component's transitive dependency. |
+| XNA-MISSING-010 device-selection flags | **DONE** | 2 | `a4fdc50fb` | Not Booleans: the flags are enforced at the top of `resolveRenderer()`, before the attempt order is consulted, so a request that cannot be honoured throws `NoSuitableGraphicsDeviceException` naming the flag and the renderer instead of quietly creating a hardware device. NULL outranks REFERENCE, as D3D9's do. `GetRequiredRendererEXT()` maps them to HEADLESS and SOFTWARE as *intent*, and its documentation says plainly that CNA's Software renderer is not D3D9 REF. |
+| XNA-MISSING-011 region/window Present | **DONE** | 1 | `ff0467fac` | `Present(null, null, 0)` is routed to the existing `Present()` untouched. Anything else is validated and clipped by `GraphicsDevice` -- oversized clips, zero-area and fully-outside refuse -- then offered to an additive `IGraphicsRenderer::PresentRegionEXT` whose shared default honours nothing, leaving all twenty-one families unchanged. HEADLESS accepts and traces; SOFTWARE presents a sub-rectangle by offset and stride, and refuses a destination rectangle or foreign window. A refusal is a `NotSupportedException` naming the renderer, never a whole-frame present. |
+
+Phase 4 evidence: 7 records closed, 0 regressed, 0 `NEEDS_REVIEW`, and the audit now reports
+**3,627 / 3,627 (100.00%)** with `MISSING: 0` and `NEEDS_REVIEW: 0` over an unchanged denominator --
+331/331 types, the same ten reference assemblies, the same corpus hashes. Each package's delta was
+attributed by a record-level diff of `docs/xna-4-runtime-member-coverage.json` between runs: 014
+moved exactly 3 records, 013 exactly 1, 010 exactly 2, 011 exactly 1, and in every run no other
+record changed classification and none moved back to `MISSING`.
+
+Three of the four needed Sharp Runtime, which was changed only where a genuine .NET facility was
+missing and only in its own focused commits (reported separately; not pushed). Its recorded
+"Serialization — ignored" permanent deviation was narrowed to what is actually true rather than left
+stale: a `SerializationInfo` store exists, and BinaryFormatter, a serializer and object graphs
+deliberately still do not.
+
+What Tier C did *not* need, and deliberately did not get: a renderer architecture change (the
+present-region capability is additive, with a default that refuses), an `Exception` base change (see
+the 014 row), or a claim that either device-selection flag reproduces a Direct3D 9 device type. Each
+of those is stated where the code makes the choice, not only here.
 
 Phase 3 evidence: 24 records closed, 0 regressed, 0 `NEEDS_REVIEW`. Every Tier B entry is now
 closed, so the 7 remaining `MISSING` records are exactly the 7 Tier C ones listed in §6. One audit
@@ -271,6 +294,17 @@ These **seven** records are already counted in 010, 011, 013, and 014. This tabl
 
 The `Present` overload is the only Tier C item likely to require renderer contract changes; inspect actual compiled renderer identities rather than assuming every backend can target a foreign window. Platform `IntPtr` needs an explicit window-handle/ownership mapping. The device flags require a documented effect on device creation or an intentional, tested unsupported mode; storing Booleans alone would produce misleading compatibility. Sharp Runtime serialization is intentionally skeletal, while ResourceManager already exists but is string-only, so those are **different** prerequisites.
 
+**All seven are now closed** (`2345c5e74`, `8c1c8b412`, `a4fdc50fb`, `ff0467fac`), and the four
+uncertainties this table raised were answered rather than avoided. Base exception state: restored per
+exception through one shared helper, because inverting `Runtime`'s dependency on `Core.Base` would
+have been a worse price than the repetition. Byte resources: added to Sharp Runtime's real
+`ResourceManager`, culture fallback included, not imitated in Content. Device flags: enforced at
+device creation, refusing explicitly when the required renderer is not compiled in, and documented as
+*intent* rather than as a Direct3D 9 device type. Foreign-window present: not attempted -- no CNA
+renderer can target a window it does not own, so that part of the request is refused by name. The one
+thing the table predicted and the work confirmed is that `Present` was the only record touching a
+renderer contract, and it did so additively, with a default that honours nothing.
+
 ## 7. Recommended order, milestones, and commits
 
 1. **Value-surface foundation:** agree on object-boxing shape; implement 001 (PackedVector), 002 (Core/Math), 003 (Input/Touch), 004 (graphics vertex), 020 (Runtime). Split by subsystem into several small commits, and re-run the audit after each. These 107 entries require no renderer work.
@@ -286,6 +320,10 @@ The `Present` overload is the only Tier C item likely to require renderer contra
 | **Measured** after 001, 002, 003, 004, 020 | **3,574 / 3,627** | **98.54%** | Exactly 107 closed, as predicted |
 | **Measured** after phase 2 (015, 019, 018, 016, 017, 007, 009) | **3,596 / 3,627** | **99.15%** | Exactly 22 closed, as predicted |
 | **Measured** after phase 3 (005, 006, 008, 012) | **3,620 / 3,627** | **99.81%** | Exactly 24 closed; all Tier B done, 7 Tier C remain |
+| **Measured** after 014 (phase 4) | **3,623 / 3,627** | **99.89%** | Exactly 3 closed |
+| **Measured** after 013 | **3,624 / 3,627** | **99.92%** | Exactly 1 closed |
+| **Measured** after 010 | **3,626 / 3,627** | **99.97%** | Exactly 2 closed |
+| **Measured** after 011 — closure | **3,627 / 3,627** | **100.00%** | Exactly 1 closed; `MISSING: 0`, `NEEDS_REVIEW: 0`, denominator unchanged |
 | After 001 PackedVector | 3,541 / 3,627 | 97.63% | Exactly 74 records close |
 | After 001, 002, 003, 004, 020 | 3,574 / 3,627 | 98.54% | Those packages close 107 disjoint records |
 | After **all Tier B** | 3,620 / 3,627 | 99.81% | All 153 Tier B close; seven Tier C remain |
@@ -295,7 +333,9 @@ If the audit corpus or classification changes, recompute these figures and expla
 
 ## 8. Validation and environmental boundaries
 
-After each batch, run `python3 -m unittest discover -s tools -p test_audit_xna_runtime_surface.py -v`, `python3 tools/audit_xna_runtime_surface.py --write-reports`, the package's focused target, and the appendix verifier below. This plan-only snapshot passed **19/19 audit regression tests**; the fresh `--json` audit passed and did not alter tracked reports. The final closure should build and test at least `CnaCoreTests`, `CnaMathTests`, `CnaRuntimeTests`, `CnaGraphicsTests`, `CnaInputModuleTests`, `CnaAudioTests`, `CnaMediaTests`, `CnaContentTests`, `CnaStorageTests`, `CnaGamerServicesTests`, `CnaNetTests`, and `CnaDesignTests` in the broadest practical HEADLESS configuration. Build targets are defined in `cmake/UnitTests.cmake`; use `cmake --build <build-dir> --target <name>`, then the binary/CTest as appropriate.
+After each batch, run `python3 -m unittest discover -s tools -p test_audit_xna_runtime_surface.py -v`, `python3 tools/audit_xna_runtime_surface.py --write-reports`, the package's focused target, and the appendix verifier below. This plan-only snapshot passed **19/19 audit regression tests**; the suite now stands at
+**21/21**, the two additions being the class-template-constructor regression written during
+phase 3 before the matcher was touched; the fresh `--json` audit passed and did not alter tracked reports. The final closure should build and test at least `CnaCoreTests`, `CnaMathTests`, `CnaRuntimeTests`, `CnaGraphicsTests`, `CnaInputModuleTests`, `CnaAudioTests`, `CnaMediaTests`, `CnaContentTests`, `CnaStorageTests`, `CnaGamerServicesTests`, `CnaNetTests`, and `CnaDesignTests` in the broadest practical HEADLESS configuration. Build targets are defined in `cmake/UnitTests.cmake`; use `cmake --build <build-dir> --target <name>`, then the binary/CTest as appropriate.
 
 The prior XNA-MEMBER-002 run, recorded in `plans/plan_xna_runtime_surface.md`, observed HEADLESS graphics skips; six Content failures in unsupported cube/3D/DXT paths; 68 Net failures when sandboxed ENet/UDP sockets could not bind; `FakeHapticTest.*` fixture failures; and unavailable `SDL_shadercross.h` for an optional SDL_GPU syntax check. On this snapshot's `build-probe` (`CNA_GRAPHICS_RENDERER=HEADLESS`), a focused Content cube test still fails because HEADLESS cannot store a complete cube face, and `ENetBackendTest.StartHostingIsIdempotent` still fails creating an ENet host. **The prior haptic caveat no longer applies here:** all 35 `FakeHapticTest.*` tests pass. `pkg-config` still does not find `SDL3_shadercross`. The old aggregate Content/Net failure counts were not remeasured in this plan-only task. Reproduce and separate environmental failures from changed-member regressions in each implementation batch; never use these notes as waivers for a new failure.
 
@@ -305,7 +345,8 @@ Even 3,627/3,627 would mean only that the documented runtime **member surface** 
 
 ## Appendix A — complete missing-member checklist
 
-**Expected unchecked entries at this snapshot: 160; after phase 1: 53.** The verifier below compares unchecked entries against the current audit, so it is the authority, not this number. Each line below is one `MISSING` `xna_signature` from the fresh JSON, grouped by audit subsystem and declaring type. Change `- [ ]` to `- [x]` only after a member is implemented, tested, and the audit no longer reports it. A future agent should regenerate `/tmp/xna_runtime_missing_plan_audit.json` before trusting the checklist.
+**Expected unchecked entries at this snapshot: 160; after phase 1: 53; after phase 4: 0.**
+Every entry is now checked, and the verifier below passes with both multisets empty. The verifier below compares unchecked entries against the current audit, so it is the authority, not this number. Each line below is one `MISSING` `xna_signature` from the fresh JSON, grouped by audit subsystem and declaring type. Change `- [ ]` to `- [x]` only after a member is implemented, tested, and the audit no longer reports it. A future agent should regenerate `/tmp/xna_runtime_missing_plan_audit.json` before trusting the checklist.
 
 The verification command compares the **signature multiset**, not just the line count; it also recomputes the subsystem and tier totals. It intentionally compares only unchecked entries, so checked work is allowed to disappear from the current audit:
 
@@ -346,7 +387,7 @@ PY
 #### Microsoft.Xna.Framework.Content.ContentLoadException
 
 - [x] Microsoft.Xna.Framework.Content.ContentLoadException.#ctor
-- [ ] Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
+- [x] Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
 
 #### Microsoft.Xna.Framework.Content.ContentManager
 
@@ -370,7 +411,7 @@ PY
 
 #### Microsoft.Xna.Framework.Content.ResourceContentManager
 
-- [ ] Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)
+- [x] Microsoft.Xna.Framework.Content.ResourceContentManager.#ctor(System.IServiceProvider,System.Resources.ResourceManager)
 
 ### Core / Math
 
@@ -497,8 +538,8 @@ PY
 
 #### Microsoft.Xna.Framework.Graphics.GraphicsAdapter
 
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseNullDevice
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseReferenceDevice
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseNullDevice
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsAdapter.UseReferenceDevice
 
 #### Microsoft.Xna.Framework.Graphics.GraphicsDevice
 
@@ -509,7 +550,7 @@ PY
 - [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserIndexedPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,System.Int32[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
 - [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32)
 - [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.DrawUserPrimitives``1(Microsoft.Xna.Framework.Graphics.PrimitiveType,``0[],System.Int32,System.Int32,Microsoft.Xna.Framework.Graphics.VertexDeclaration)
-- [ ] Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)
+- [x] Microsoft.Xna.Framework.Graphics.GraphicsDevice.Present(System.Nullable{Microsoft.Xna.Framework.Rectangle},System.Nullable{Microsoft.Xna.Framework.Rectangle},System.IntPtr)
 
 #### Microsoft.Xna.Framework.Graphics.IndexBuffer
 
@@ -715,7 +756,7 @@ PY
 
 #### Microsoft.Xna.Framework.Net.NetworkSessionJoinException
 
-- [ ] Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
+- [x] Microsoft.Xna.Framework.Net.NetworkSessionJoinException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
 
 ### Runtime
 
@@ -728,7 +769,7 @@ PY
 
 #### Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException
 
-- [ ] Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
+- [x] Microsoft.Xna.Framework.Storage.StorageDeviceNotConnectedException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
 
 ### Touch
 

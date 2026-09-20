@@ -931,12 +931,19 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
             lines += [f"- {code(item['xna_signature'])}" for item in newly_represented]
             lines.append("")
     lines += ["## Gap review", "",
-              f"Tier A gaps remaining: **{gap_tiers['A']}**; Tier B: **{gap_tiers['B']}**; Tier C: **{gap_tiers['C']}**.",
-              "Tier B needs type-specific implementation and behavior tests. Tier C requires CLR",
-              "serialization/resources, historical device selection, or presentation architecture.",
-              "All remaining `MISSING` entries are real absent native contracts under the stated",
-              "normalization. Matcher false negatives were corrected before production changes.", "",
-              "## Remaining missing members", ""]
+              f"Tier A gaps remaining: **{gap_tiers['A']}**; Tier B: **{gap_tiers['B']}**; Tier C: **{gap_tiers['C']}**."]
+    if any(gap_tiers.values()):
+        lines += ["Tier B needs type-specific implementation and behavior tests. Tier C requires CLR",
+                  "serialization/resources, historical device selection, or presentation architecture.",
+                  "All remaining `MISSING` entries are real absent native contracts under the stated",
+                  "normalization. Matcher false negatives were corrected before production changes."]
+    else:
+        lines += ["No documented runtime member is unrepresented, and the denominator is unchanged: the",
+                  "same ten reference assemblies, the same corpus hashes, no `NOT_APPLICABLE` exemption",
+                  "and no ignore list. This measures representation of the documented member surface",
+                  "only. Behavior, exception detail, renderer results and historical online-service",
+                  "availability are separate measures, and none of them is claimed here."]
+    lines += ["", "## Remaining missing members", ""]
     missing = defaultdict(list)
     for item in report["findings"]:
         if item["classification"] == "MISSING":
@@ -944,7 +951,7 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
             subsystem = item["subsystem"]
             missing[(subsystem, owner)].append(item)
     if not missing:
-        lines.append("None.")
+        lines += ["None.", ""]
     else:
         for (subsystem, owner), members in sorted(missing.items()):
             lines += [f"### {subsystem}: {code(owner)}", ""]
