@@ -910,6 +910,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Dispose()
     {
+        Dispose(true);
+    }
+
+    void GraphicsDevice::Dispose(bool disposing)
+    {
         if (isDisposed_)
         {
             return;
@@ -920,7 +925,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // from issuing work against native objects that are in the process of being torn down.
         isDisposed_ = true;
 
-        Disposing.Raise(this, System::EventArgs::Empty);
+        // Only an explicit disposal notifies subscribers; XNA's finalizer path takes the native
+        // teardown without raising the event.
+        if (disposing)
+        {
+            Disposing.Raise(this, System::EventArgs::Empty);
+        }
 
         // Copy and clear the resource list before iterating.
         // This makes RemoveResourceReference a no-op when called re-entrantly

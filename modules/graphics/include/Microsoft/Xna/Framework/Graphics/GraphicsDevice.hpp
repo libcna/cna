@@ -1513,6 +1513,29 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT void RecreateRendererForMultiSampleCount(int multiSampleCount);
 
+    protected:
+        /**
+         * @brief Releases this device's resources, optionally only the native ones.
+         *
+         * The documented protected disposal hook: `Dispose()` routes here, and a derived class
+         * overrides this rather than the public method, so one path tears the device down however
+         * it is reached. Idempotent, and it preserves the order the public disposer established --
+         * the device is marked disposed first, then `Disposing` is raised, then owned resources are
+         * disposed, then the window and the video subsystem are released.
+         *
+         * A derived class that overrides this must also write
+         * `using GraphicsDevice::Dispose;`, because declaring the name hides the public `Dispose()`
+         * from its own callers -- a C++ name-lookup consequence with no C# counterpart.
+         *
+         * XNA's finalizer calls `Dispose(false)`. C++ has no separate finalizer, so the destructor
+         * is the only other caller and it passes @c true: every member is still alive in a
+         * destructor body, which is the condition the flag exists to distinguish.
+         *
+         * @param disposing True when called from Dispose() or the destructor; false when only
+         *        native resources may be touched, in which case Disposing is not raised.
+         */
+        virtual void Dispose(bool disposing);
+
     private:
         // Borrowed from Game's enclosing platform (or the ambient lazy default for a bare
         // GraphicsDevice). The platform outlives both the window and this device.
