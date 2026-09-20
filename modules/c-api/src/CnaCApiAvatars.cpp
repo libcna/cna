@@ -407,6 +407,7 @@ CNA_Result cna_avatar_description_copy_description(
 }
 
 CNA_Result cna_avatar_description_subscribe_changed_ext(
+    const CNA_AvatarDescriptionHandle descriptionHandle,
     const CNA_GamerAsyncCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
@@ -419,7 +420,14 @@ CNA_Result cna_avatar_description_subscribe_changed_ext(
         if (callback == nullptr) {
             return InvalidInput("The avatar event callback is null.");
         }
-        auto* const source = &AvatarDescription::Changed;
+        // AvatarDescription.Changed is an instance event, so the subscription names one
+        // description rather than a process-wide source.
+        std::shared_ptr<AvatarDescriptionResource> description;
+        if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const source = &description->value->Changed;
         const auto token = source->Add(
             [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
         const CNA_Result result = GetRuntimeHandles().Create(

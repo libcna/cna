@@ -122,8 +122,18 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         [[nodiscard]] static AvatarDescription EndGetFromGamer(System::IAsyncResult* result);
 
-        /** @brief Raised when the avatar description changes. */
-        static System::EventHandler<System::EventArgs> Changed;
+        /**
+         * @brief Raised when this gamer's avatar changes.
+         *
+         * A per-instance event, as Microsoft declares it (`public event EventHandler<EventArgs>
+         * Changed;`): XNA keeps one cached AvatarDescription per signed-in player and raises the
+         * event on the description of the player whose avatar changed, so subscribers of one
+         * description never hear about another. Nothing in this runtime raises it -- the live
+         * avatar service it reported was an Xbox 360 one -- but the ownership and delivery shape
+         * is the documented one, and a copy of a description carries the subscribers it had when
+         * it was copied.
+         */
+        System::EventHandler<System::EventArgs> Changed;
 
     private:
         AvatarDescription(std::vector<SharpRuntime::bytecs> data, bool makeCopy);

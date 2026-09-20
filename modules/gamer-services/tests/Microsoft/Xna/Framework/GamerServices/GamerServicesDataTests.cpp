@@ -3,6 +3,10 @@
 #include <algorithm>
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/DateTime.hpp"
+#include "System/TimeSpan.hpp"
+#include "System/Collections/Generic/KeyValuePair.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
@@ -311,4 +315,151 @@ TEST(AchievementTest, GetPictureThrows) {
     System::DateTime dt;
     auto a = Achievement::CreateInternal("k", "n", "d", false, true, dt);
     EXPECT_THROW(a.GetPicture(), System::NotImplementedException);
+}
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-018: the ICollection<KeyValuePair<string,object>> pair operations.
+//
+// Microsoft's shipped Windows PropertyDictionary throws NotSupportedException from every member,
+// including Count, the indexer and each GetValue* -- the whole type is a "Pro feature" stub there
+// because the live property store was an Xbox 360 service
+// (xna4-decomp/.../Microsoft.Xna.Framework.GamerServices/PropertyDictionary.cs). CNA instead
+// implements the documented dictionary contract locally, which is what makes the type usable, so
+// the three pair operations follow that same local contract: .NET's own
+// ICollection<KeyValuePair<...>> semantics over a Dictionary, where Contains and Remove match on
+// key *and* value.
+// ---------------------------------------------------------------------------
+
+namespace {
+    using PropertyPair = System::Collections::Generic::KeyValuePair<std::string, std::any>;
+}
+
+TEST(PropertyDictionaryTest, PairAddInsertsTheKeyAndValue) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add(PropertyPair("score", std::any(42)));
+
+    EXPECT_EQ(dict.getCountProperty(), 1);
+    EXPECT_TRUE(dict.ContainsKey("score"));
+    EXPECT_EQ(dict.GetValueInt32("score"), 42);
+}
+
+TEST(PropertyDictionaryTest, PairAddRejectsADuplicateKey) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add(PropertyPair("score", std::any(1)));
+
+    // Same as Add(key, value): a duplicate key throws rather than overwriting.
+    EXPECT_THROW(dict.Add(PropertyPair("score", std::any(2))), System::ArgumentException);
+    EXPECT_THROW(dict.Add(PropertyPair("score", std::any(1))), System::ArgumentException);
+    EXPECT_EQ(dict.GetValueInt32("score"), 1);
+}
+
+TEST(PropertyDictionaryTest, PairContainsMatchesKeyAndValue) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("score", 42);
+    dict.SetValue("name", std::string("Ada"));
+
+    EXPECT_TRUE(dict.Contains(PropertyPair("score", std::any(42))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("name", std::any(std::string("Ada")))));
+
+    // A present key with a different value is not a match -- this is what separates Contains
+    // from ContainsKey.
+    EXPECT_TRUE(dict.ContainsKey("score"));
+    EXPECT_FALSE(dict.Contains(PropertyPair("score", std::any(43))));
+    EXPECT_FALSE(dict.Contains(PropertyPair("name", std::any(std::string("Grace")))));
+
+    // An absent key never matches, whatever the value.
+    EXPECT_FALSE(dict.Contains(PropertyPair("missing", std::any(42))));
+}
+
+TEST(PropertyDictionaryTest, PairContainsSeparatesValueTypes) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("score", 42);
+
+    // Boxed values of different types are never equal, as in the CLR: the stored Int32 42 does
+    // not match a boxed Int64, Single or Double 42.
+    EXPECT_FALSE(dict.Contains(PropertyPair("score", std::any(static_cast<long long>(42)))));
+    EXPECT_FALSE(dict.Contains(PropertyPair("score", std::any(42.0f))));
+    EXPECT_FALSE(dict.Contains(PropertyPair("score", std::any(42.0))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("score", std::any(42))));
+}
+
+TEST(PropertyDictionaryTest, PairContainsHandlesEveryDefinedValueType) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("i32", 7);
+    dict.SetValue("i64", static_cast<long long>(8));
+    dict.SetValue("single", 1.5f);
+    dict.SetValue("double", 2.5);
+    dict.SetValue("text", std::string("Ada"));
+    dict.SetValue("when", System::DateTime(2026, 9, 20));
+    dict.SetValue("span", System::TimeSpan::FromSeconds(30));
+    dict.SetValue("outcome", LeaderboardOutcome::Win);
+
+    EXPECT_TRUE(dict.Contains(PropertyPair("i32", std::any(7))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("i64", std::any(static_cast<long long>(8)))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("single", std::any(1.5f))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("double", std::any(2.5))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("text", std::any(std::string("Ada")))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("when", std::any(System::DateTime(2026, 9, 20)))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("span", std::any(System::TimeSpan::FromSeconds(30)))));
+    EXPECT_TRUE(dict.Contains(PropertyPair("outcome", std::any(LeaderboardOutcome::Win))));
+
+    EXPECT_FALSE(dict.Contains(PropertyPair("i64", std::any(static_cast<long long>(9)))));
+    EXPECT_FALSE(dict.Contains(PropertyPair("outcome", std::any(LeaderboardOutcome::Loss))));
+}
+
+TEST(PropertyDictionaryTest, PairContainsRefusesAnUncomparableBoxedType) {
+    // Add(key, std::any) accepts any boxed type, but C++ has no Object.Equals to compare an
+    // arbitrary one with, so the comparison is refused rather than reported as unequal.
+    struct Opaque { int value; };
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add("opaque", std::any(Opaque{1}));
+
+    EXPECT_THROW((void)dict.Contains(PropertyPair("opaque", std::any(Opaque{1}))),
+                 System::NotSupportedException);
+
+    // A different type on either side is still decided without comparing: types differ.
+    EXPECT_FALSE(dict.Contains(PropertyPair("opaque", std::any(1))));
+}
+
+TEST(PropertyDictionaryTest, PairContainsTreatsEmptyValuesAsNullReferences) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add("nothing", std::any());
+
+    EXPECT_TRUE(dict.Contains(PropertyPair("nothing", std::any())));
+    EXPECT_FALSE(dict.Contains(PropertyPair("nothing", std::any(0))));
+}
+
+TEST(PropertyDictionaryTest, PairRemoveOnlyRemovesAFullMatch) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("score", 42);
+    dict.SetValue("name", std::string("Ada"));
+
+    // A matching key with the wrong value leaves the entry alone.
+    EXPECT_FALSE(dict.Remove(PropertyPair("score", std::any(43))));
+    EXPECT_EQ(dict.getCountProperty(), 2);
+    EXPECT_TRUE(dict.ContainsKey("score"));
+
+    EXPECT_TRUE(dict.Remove(PropertyPair("score", std::any(42))));
+    EXPECT_EQ(dict.getCountProperty(), 1);
+    EXPECT_FALSE(dict.ContainsKey("score"));
+
+    // Removing it again finds nothing.
+    EXPECT_FALSE(dict.Remove(PropertyPair("score", std::any(42))));
+    EXPECT_EQ(dict.getCountProperty(), 1);
+
+    // An absent key is simply not found.
+    EXPECT_FALSE(dict.Remove(PropertyPair("missing", std::any(0))));
+    EXPECT_EQ(dict.getCountProperty(), 1);
+}
+
+TEST(PropertyDictionaryTest, PairOperationsRoundTrip) {
+    auto dict = PropertyDictionary::CreateInternal({});
+    const PropertyPair pair("level", std::any(std::string("boss")));
+
+    EXPECT_FALSE(dict.Contains(pair));
+    dict.Add(pair);
+    EXPECT_TRUE(dict.Contains(pair));
+    EXPECT_TRUE(dict.Remove(pair));
+    EXPECT_FALSE(dict.Contains(pair));
+    EXPECT_EQ(dict.getCountProperty(), 0);
 }

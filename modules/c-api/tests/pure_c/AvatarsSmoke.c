@@ -313,6 +313,7 @@ static int validate_renderer(void)
 int main(void)
 {
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
+    CNA_AvatarDescriptionHandle subscribed = CNA_INVALID_HANDLE;
     CNA_Handle registration = CNA_INVALID_HANDLE;
     CNA_Handle rejected = CNA_INVALID_HANDLE;
     int status = CNA_TEST_FAIL(0);
@@ -333,13 +334,22 @@ int main(void)
     if (status == 0 && !validate_renderer()) {
         status = CNA_TEST_FAIL(5);
     }
-    /* The change notification is static: it is about descriptions in general, not about one. */
+    /* The change notification is an instance event, so the subscription names one description;
+       an invalid handle and a null callback are both refused. */
     if (status == 0 &&
-        (cna_avatar_description_subscribe_changed_ext(&on_complete, &completions,
+        cna_avatar_description_create_random(&subscribed) != CNA_RESULT_SUCCESS) {
+        status = CNA_TEST_FAIL(6);
+    }
+    if (status == 0 &&
+        (cna_avatar_description_subscribe_changed_ext(subscribed, &on_complete, &completions,
                                                       &registration) != CNA_RESULT_SUCCESS ||
          registration == CNA_INVALID_HANDLE ||
-         cna_avatar_description_subscribe_changed_ext(0, &completions, &rejected) !=
+         cna_avatar_description_subscribe_changed_ext(subscribed, 0, &completions, &rejected) !=
              CNA_RESULT_INVALID_ARGUMENT ||
+         rejected != CNA_INVALID_HANDLE ||
+         cna_avatar_description_subscribe_changed_ext(CNA_INVALID_HANDLE, &on_complete,
+                                                     &completions, &rejected) !=
+             CNA_RESULT_INVALID_HANDLE ||
          rejected != CNA_INVALID_HANDLE)) {
         status = CNA_TEST_FAIL(6);
     }
@@ -348,6 +358,9 @@ int main(void)
         (cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS ||
          cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_INVALID_HANDLE)) {
         status = CNA_TEST_FAIL(7);
+    }
+    if (status == 0 && cna_avatar_description_destroy(subscribed) != CNA_RESULT_SUCCESS) {
+        status = CNA_TEST_FAIL(8);
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
         status = CNA_TEST_FAIL(8);

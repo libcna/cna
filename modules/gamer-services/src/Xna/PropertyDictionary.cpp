@@ -2,7 +2,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
+#include "System/NotSupportedException.hpp"
 #include <any>
+#include <string>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -136,6 +138,61 @@ namespace Microsoft::Xna::Framework::GamerServices
         dictionary_[key] = value;
     }
 
+
+    namespace
+    {
+        /// Compares two boxed property values the way `EqualityComparer<object>.Default` does for
+        /// the value types this dictionary defines. The CLR can compare any boxed value through
+        /// `Object.Equals`; C++ cannot, so the set is explicit and anything outside it is refused
+        /// rather than silently reported unequal.
+        template <typename T>
+        bool TryCompareAs(const std::any& left, const std::any& right, bool& equal)
+        {
+            const T* leftValue = std::any_cast<T>(&left);
+            if (leftValue == nullptr)
+            {
+                return false;
+            }
+            const T* rightValue = std::any_cast<T>(&right);
+            equal = rightValue != nullptr && *leftValue == *rightValue;
+            return true;
+        }
+
+        bool BoxedValuesEqual(const std::any& left, const std::any& right)
+        {
+            if (!left.has_value() || !right.has_value())
+            {
+                // A null reference equals only another null reference.
+                return left.has_value() == right.has_value();
+            }
+            if (left.type() != right.type())
+            {
+                // Boxed values of different types are never equal, as in the CLR.
+                return false;
+            }
+
+            bool equal = false;
+            if (TryCompareAs<std::string>(left, right, equal) ||
+                TryCompareAs<int>(left, right, equal) ||
+                TryCompareAs<long long>(left, right, equal) ||
+                TryCompareAs<float>(left, right, equal) ||
+                TryCompareAs<double>(left, right, equal) ||
+                TryCompareAs<System::DateTime>(left, right, equal) ||
+                TryCompareAs<System::TimeSpan>(left, right, equal) ||
+                TryCompareAs<LeaderboardOutcome>(left, right, equal) ||
+                // A Stream is a reference in the CLR, so identity is the comparison.
+                TryCompareAs<System::IO::Stream*>(left, right, equal))
+            {
+                return equal;
+            }
+
+            throw System::NotSupportedException(
+                std::string("Cannot compare a boxed property value of type '") + left.type().name() +
+                "'. PropertyDictionary compares the value types it defines; a value added through "
+                "Add(key, std::any) with any other type has no comparable form in C++.");
+        }
+    }
+
     void PropertyDictionary::Add(const std::string& key, std::any value)
     {
         // Task 8.1: matches Dictionary<TKey,TValue>.Add's real throw-on-duplicate-key behavior
@@ -148,9 +205,31 @@ namespace Microsoft::Xna::Framework::GamerServices
         dictionary_.emplace(key, std::move(value));
     }
 
+    void PropertyDictionary::Add(const System::Collections::Generic::KeyValuePair<std::string, std::any>& item)
+    {
+        Add(item.Key, item.Value);
+    }
+
+    bool PropertyDictionary::Contains(const System::Collections::Generic::KeyValuePair<std::string, std::any>& item) const
+    {
+        const auto found = dictionary_.find(item.Key);
+        return found != dictionary_.end() && BoxedValuesEqual(found->second, item.Value);
+    }
+
     bool PropertyDictionary::Remove(const std::string& key)
     {
         return dictionary_.erase(key) > 0;
+    }
+
+    bool PropertyDictionary::Remove(const System::Collections::Generic::KeyValuePair<std::string, std::any>& item)
+    {
+        const auto found = dictionary_.find(item.Key);
+        if (found == dictionary_.end() || !BoxedValuesEqual(found->second, item.Value))
+        {
+            return false;
+        }
+        dictionary_.erase(found);
+        return true;
     }
 
     void PropertyDictionary::Clear()

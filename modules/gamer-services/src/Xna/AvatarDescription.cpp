@@ -39,8 +39,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         };
     }
 
-    System::EventHandler<System::EventArgs> AvatarDescription::Changed;
-
     AvatarDescription::AvatarDescription(const std::vector<SharpRuntime::bytecs>& data)
         : AvatarDescription(data, true)
     {

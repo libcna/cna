@@ -151,3 +151,110 @@ TEST(AvatarDescriptionTest, EndGetFromGamerRejectsResultNotFromBegin) {
 // disposed anywhere in this codebase (isDisposed_ is a protected field never set by any
 // existing Gamer/SignedInGamer/NetworkGamer code path). Not fixed as part of this port; see
 // NEXT.md's known-limitations table.
+
+// ---------------------------------------------------------------------------
+// XNA-MISSING-018: AvatarDescription.Changed is an instance event.
+//
+// Microsoft declares `public event EventHandler<EventArgs> Changed;` and raises it on the cached
+// description of the player whose avatar changed
+// (xna4-decomp/.../Microsoft.Xna.Framework.GamerServices/AvatarDescription.cs, OnAvatarChanged).
+// CNA previously had it as a static member, so subscribers of any one description heard every
+// notification. Nothing in this runtime raises the event; what is asserted here is the ownership
+// and delivery contract.
+// ---------------------------------------------------------------------------
+
+namespace {
+    AvatarDescription MakeDescription(SharpRuntime::bytecs firstByte) {
+        std::vector<SharpRuntime::bytecs> data(kDescriptionSize, 0);
+        data[0] = firstByte;
+        return AvatarDescription(data);
+    }
+
+    /// Stands in for the sender XNA passes (the signed-in gamer whose avatar changed).
+    /// SignedInGamer is not constructible from a test and does not derive from System::Object,
+    /// which the event signature requires, so the delivery contract is exercised with a plain one.
+    class ChangeSender final : public System::Object {
+    public:
+        [[nodiscard]] const std::string& GetTypeName() const override {
+            static const std::string typeName = "CNA.Tests.AvatarChangeSender";
+            return typeName;
+        }
+    };
+}
+
+TEST(AvatarDescriptionTest, ChangedIsPerInstanceNotShared) {
+    AvatarDescription first = MakeDescription(1);
+    AvatarDescription second = MakeDescription(2);
+
+    int firstCalls = 0;
+    first.Changed += [&firstCalls](System::Object*, const System::EventArgs&) { ++firstCalls; };
+
+    // Raising the second description's event must not reach the first description's subscriber.
+    second.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(firstCalls, 0);
+
+    first.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(firstCalls, 1);
+}
+
+TEST(AvatarDescriptionTest, ChangedDeliversTheSenderAndArguments) {
+    AvatarDescription description = MakeDescription(1);
+    System::Object* observed = nullptr;
+    const System::EventArgs* observedArgs = nullptr;
+    int calls = 0;
+
+    description.Changed += [&](System::Object* sender, const System::EventArgs& args) {
+        observed = sender;
+        observedArgs = &args;
+        ++calls;
+    };
+
+    ChangeSender sender;
+    description.Changed.Raise(&sender, System::EventArgs::Empty);
+
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(observed, &sender);
+    EXPECT_EQ(observedArgs, &System::EventArgs::Empty);
+}
+
+TEST(AvatarDescriptionTest, ChangedSubscribersRunInSubscriptionOrder) {
+    AvatarDescription description = MakeDescription(1);
+    std::vector<int> order;
+
+    description.Changed += [&order](System::Object*, const System::EventArgs&) { order.push_back(1); };
+    description.Changed += [&order](System::Object*, const System::EventArgs&) { order.push_back(2); };
+    description.Changed += [&order](System::Object*, const System::EventArgs&) { order.push_back(3); };
+
+    description.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(order, (std::vector<int>{1, 2, 3}));
+}
+
+TEST(AvatarDescriptionTest, ChangedSubscriptionCanBeRemoved) {
+    AvatarDescription description = MakeDescription(1);
+    int calls = 0;
+
+    const auto token = description.Changed.Add(
+        [&calls](System::Object*, const System::EventArgs&) { ++calls; });
+    description.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(calls, 1);
+
+    description.Changed.Remove(token);
+    description.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(calls, 1);
+
+    // Removing the same token twice is a no-op rather than a failure.
+    description.Changed.Remove(token);
+    description.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(calls, 1);
+}
+
+TEST(AvatarDescriptionTest, ANewDescriptionHasNoSubscribers) {
+    AvatarDescription subscribed = MakeDescription(1);
+    int calls = 0;
+    subscribed.Changed += [&calls](System::Object*, const System::EventArgs&) { ++calls; };
+
+    // A description built afterwards starts empty; with a static event it would not have.
+    AvatarDescription fresh = MakeDescription(1);
+    fresh.Changed.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(calls, 0);
+}

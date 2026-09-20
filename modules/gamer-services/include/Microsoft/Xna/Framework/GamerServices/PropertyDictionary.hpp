@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardOutcome.hpp"
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
+#include "System/Collections/Generic/KeyValuePair.hpp"
 #include "System/IO/Stream.hpp"
 #include <any>
 #include <map>
@@ -200,21 +201,57 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Adds a value for the specified key.
          *
-         * Task 8.1: real XNA's `PropertyDictionary` implements this via explicit
-         * `IDictionary<string,object>.Add`/`ICollection<KeyValuePair<string,object>>.Add`
-         * (both of which just forward to `Dictionary<TKey,TValue>.Add`) — reachable in C# only
-         * through an interface cast, never directly on a `PropertyDictionary` variable. C++ has
-         * no equivalent of explicit interface implementation, so this is exposed as an ordinary
-         * public method instead (a documented, pragmatic mapping deviation — see CLAUDE.md's
-         * guidance on interfaces without an exact C++ equivalent); the actual throw-on-duplicate
-         * behavior matches `Dictionary<TKey,TValue>.Add` faithfully. Unlike `SetValue`/the
-         * indexer setter, which silently overwrite an existing key.
+         * Task 8.1: real XNA declares this as explicit `IDictionary<string,object>.Add`, reachable
+         * in C# only through an interface cast, never directly on a `PropertyDictionary` variable.
+         * C++ has no equivalent of explicit interface implementation, so it is exposed as an
+         * ordinary public method instead (a documented, pragmatic mapping deviation — see
+         * CLAUDE.md's guidance on interfaces without an exact C++ equivalent). Unlike
+         * `SetValue`/the indexer setter, which silently overwrite an existing key, this throws on
+         * a duplicate, as `Dictionary<TKey,TValue>.Add` does.
+         *
+         * Microsoft's shipped Windows `PropertyDictionary` throws
+         * `NotSupportedException(ProFeatureNotSupported)` from every member, including this one and
+         * `Count`, the indexer and every `GetValue*` — the whole type is a stub there, because the
+         * live property store was an Xbox 360 service. CNA instead implements the documented
+         * dictionary contract locally, which is what makes the type usable at all; that choice is
+         * the type's established CNA behaviour and applies to the pair overloads below too.
          *
          * @param key The key to add.
          * @param value The value to associate with key.
          * @throws System::ArgumentException if key already exists.
          */
         void Add(const std::string& key, std::any value);
+
+        /**
+         * @brief Adds a key/value pair.
+         *
+         * XNA's `ICollection<KeyValuePair<string,object>>.Add`. Equivalent to
+         * Add(pair.Key, pair.Value), including the duplicate-key throw.
+         *
+         * @param item The pair to add.
+         * @throws System::ArgumentException if the pair's key already exists.
+         */
+        void Add(const System::Collections::Generic::KeyValuePair<std::string, std::any>& item);
+
+        /**
+         * @brief Returns whether the dictionary contains the specified key/value pair.
+         *
+         * XNA's `ICollection<KeyValuePair<string,object>>.Contains`. Both halves must match: the
+         * key has to be present *and* its stored value equal to the pair's, which is what
+         * separates this from ContainsKey().
+         *
+         * Two boxed values of different types are never equal, as in the CLR. Values of the types
+         * this dictionary defines (`SetValue`'s eight, plus a `Stream` pointer compared by
+         * identity) are compared by value.
+         *
+         * @param item The pair to locate.
+         * @return @c true if the key is present with an equal value; @c false otherwise.
+         * @throws System::NotSupportedException if both values are of the same type and that type
+         *         is none of the documented property value types, since C++ cannot compare an
+         *         arbitrary boxed value the way `Object.Equals` can.
+         */
+        [[nodiscard]] bool Contains(
+            const System::Collections::Generic::KeyValuePair<std::string, std::any>& item) const;
 
         /**
          * @brief Removes the value for the specified key.
@@ -226,6 +263,19 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @return true if the key was found and removed; otherwise false.
          */
         bool Remove(const std::string& key);
+
+        /**
+         * @brief Removes the specified key/value pair.
+         *
+         * XNA's `ICollection<KeyValuePair<string,object>>.Remove`. Removes only when the pair is
+         * present in full, so a matching key with a different value is left alone -- the same
+         * value comparison Contains() uses.
+         *
+         * @param item The pair to remove.
+         * @return @c true if the pair was found and removed; @c false otherwise.
+         * @throws System::NotSupportedException under the same condition as Contains().
+         */
+        bool Remove(const System::Collections::Generic::KeyValuePair<std::string, std::any>& item);
 
         /**
          * @brief Removes all key/value pairs.

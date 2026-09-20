@@ -4132,18 +4132,22 @@ CNA_C_API CNA_Result cna_avatar_description_copy_description(
     uint64_t* out_bytes);
 
 /**
- * @brief Subscribes to avatar descriptions changing.
+ * @brief Subscribes to one avatar description changing.
  *
- * @param callback Callback invoked synchronously when a description changes.
+ * @param description The description whose event to subscribe to.
+ * @param callback Callback invoked synchronously when that description changes.
  * @param context Caller context passed back to @p callback.
  * @param out_registration Receives an owned registration handle, released with
  *        `cna_gamer_unsubscribe_ext`.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical event is **static**: it is about descriptions in general, not about one of them, so
- * this route takes no description handle. **Nothing in this runtime raises it.**
+ * The canonical event is an **instance** event -- `Microsoft.Xna.Framework.GamerServices`
+ * declares `public event EventHandler<EventArgs> Changed;` -- so this route names the
+ * description it belongs to. The registration borrows that description and must be released
+ * before it is destroyed. **Nothing in this runtime raises it.**
  */
 CNA_C_API CNA_Result cna_avatar_description_subscribe_changed_ext(
+    CNA_AvatarDescriptionHandle description,
     CNA_GamerAsyncCallback callback,
     void* context,
     CNA_Handle* out_registration);
