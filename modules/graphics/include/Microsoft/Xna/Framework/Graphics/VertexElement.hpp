@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <any>
 #include <cstddef>
 #include <string>
 
@@ -115,6 +116,21 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] friend bool operator!=(const VertexElement& left, const VertexElement& right)
         {
             return !(left == right);
+        }
+
+        /**
+         * @brief Compares this VertexElement with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one below.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal VertexElement; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const
+        {
+            const VertexElement* other = std::any_cast<VertexElement>(&obj);
+            return other != nullptr && Equals(*other);
         }
 
         /**

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <any>
 #include <string>
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -68,6 +69,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return True if any field differs.
          */
         bool operator!=(const VertexPositionNormalTexture& o) const { return !(*this == o); }
+        /**
+         * @brief Compares this VertexPositionNormalTexture with a boxed object for equality.
+         *
+         * Mirrors the CLR `Equals(object)` contract: an empty object, or an object holding a
+         * different type, is unequal; otherwise the comparison is the typed one below.
+         *
+         * @param obj The boxed object to compare against.
+         * @return @c true if @p obj holds an equal VertexPositionNormalTexture; @c false otherwise.
+         */
+        [[nodiscard]] bool Equals(const std::any& obj) const
+        {
+            const VertexPositionNormalTexture* other = std::any_cast<VertexPositionNormalTexture>(&obj);
+            return other != nullptr && Equals(*other);
+        }
+
         /**
          * @brief Returns true if the given vertex equals this vertex.
          * @param other The other vertex to compare.
