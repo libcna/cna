@@ -31,6 +31,11 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
     Storage
     Security.Cryptography
     Xml
+    # XNA-MISSING-013: ResourceContentManager's documented constructor names
+    # System::Resources::ResourceManager, so Resources joins the closure. Unlike Uri and
+    # ComponentModel it is not a transitive PUBLIC dependency of anything already here, so it has to
+    # be selected explicitly or SharpRuntime::Resources is never instantiated.
+    Resources
 )
 
 # SAMPLE-066: modules/math's XmlSerializationEXT.hpp includes

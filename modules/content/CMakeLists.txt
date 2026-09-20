@@ -10,7 +10,9 @@ target_sources(cna_content PRIVATE
 )
 target_compile_definitions(cna_content PRIVATE CNA_GLTF_TO_CNJ_NO_MAIN=1)
 target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core)
-cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO)
+# XNA-MISSING-013: ResourceContentManager.hpp names System::Resources::ResourceManager in its
+# public constructor, so the component is PUBLIC.
+cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO Resources)
 cna_link_sharp_runtime(cna_content PRIVATE Security.Cryptography)
 # plans/plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
