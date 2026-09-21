@@ -1021,6 +1021,26 @@ It needs something from that session and is recorded as an environment limitatio
 **Not done:** the other build directories. Each switches to the new default the next time it is
 configured, which recompiles it once for `-fPIC`; none was rebuilt here, deliberately.
 
+### Release smoke before the merge
+
+A throwaway `build-probe/vkpar-release-smoke` (removed afterwards): `CMAKE_BUILD_TYPE=Release`, the
+same `VULKAN;OPENGL33` SDL3 configuration, shared by default. Built only `libcna.so`, `cna_demo_2d`
+and three Vulkan tests — which compiles the whole engine in Release, `NDEBUG` paths included —
+rather than a whole second tree. 0 errors; **Release `libcna.so` is 16 MB**.
+
+The 24 warnings are not this branch's: 16 in vendored draco, and 8 GCC `-O2` flow diagnostics inside
+libstdc++ headers from five untouched translation units (`CnbModelCodec`, `GltfImportCore`,
+`XnbWriter`, `DibBitmap`, draco's `ply_reader`). The same five, recompiled **without** `-fPIC` in
+the static mode, emit the same 8, so the link change did not cause them either.
+
+On the private display: `Vulkan_BasicEffect_OneLight` and `Vulkan_FrontFaceWinding` pass and
+`cna_demo_2d --smoke 600` runs on the Radeon. `Vulkan_NormalizedByteFormat`'s rendering legs pass —
+blue 255 included — but its leg D1, *"VK_LAYER_KHRONOS_validation is loaded"*, fails, because Release
+deliberately runs without validation (`sEnableValidation` is off under `NDEBUG`). That assertion
+predates this workstream (`VULKAN-174`), and seven Vulkan example tests make it; they have only ever
+run in Debug trees. A validation-count assertion should skip in a build with no validation rather
+than fail — recorded for the test-infrastructure work, not fixed here.
+
 ---
 
 ## VKPAR-0013 — What is still red, and what it will take
