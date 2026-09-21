@@ -250,22 +250,45 @@ namespace CNA::Internal::Renderers::Vulkan
     //
     // Keyed on the CNA SurfaceFormat rather than the VkFormat on purpose: VK_FORMAT_R8_UNORM would
     // serve both a one-channel colour format (wanting (r,1,1,1)) and Alpha8 (wanting (0,0,0,r)),
-    // and the VkFormat cannot tell them apart. Formats this renderer does not implement are absent
-    // from the switch and take the identity default; each one adds its row here when it lands.
+    // and the VkFormat cannot tell them apart. But the VkFormat actually STORED is checked too
+    // (VKPAR-0020): TextureCube keeps every non-block format as RGBA8, and a view that expanded
+    // "missing" channels of storage that has all four would discard real data. Only a view over
+    // the format's own native storage is expanded.
     //
     // SAMPLED views only. A storage image must have the identity mapping (VUID-VkImageViewCreateInfo-
     // imageViewFormatSwizzle) and a colour attachment is written, not expanded.
-    [[nodiscard]] static VkComponentMapping ClassicSampledSwizzleEXT(int surfaceFormatOrdinal) noexcept
+    [[nodiscard]] static VkComponentMapping ClassicSampledSwizzleEXT(int surfaceFormatOrdinal,
+                                                                     VkFormat storedFormat) noexcept
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         VkComponentMapping m{VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
                              VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+        VkFormat nativeFormat = VK_FORMAT_UNDEFINED;
+        if (!VulkanRenderer::MapSurfaceFormatToVkFormatEXT(surfaceFormatOrdinal, nativeFormat) ||
+            nativeFormat != storedFormat)
+            return m;
         switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
         {
         case SurfaceFormat::NormalizedByte2:
-            // Two-channel: blue is the only gap. Alpha is already 1.0, because R8G8_SNORM has no
-            // alpha component at all and Vulkan supplies 1.0 for that case on its own.
+        case SurfaceFormat::Rg32:
+        case SurfaceFormat::Vector2:
+        case SurfaceFormat::HalfVector2:
+            // Two-channel: blue is the only gap. Alpha is already 1.0, because none of these
+            // VkFormats has an alpha component and Vulkan supplies 1.0 for that case on its own.
             m.b = VK_COMPONENT_SWIZZLE_ONE;
+            break;
+        case SurfaceFormat::Single:
+        case SurfaceFormat::HalfSingle:
+            // One colour channel: `Single|64,255,255,255`.
+            m.g = VK_COMPONENT_SWIZZLE_ONE;
+            m.b = VK_COMPONENT_SWIZZLE_ONE;
+            break;
+        case SurfaceFormat::Alpha8:
+            // Stored in R8_UNORM's only channel, sampled as alpha over black: `Alpha8|0,0,0,128`.
+            m.r = VK_COMPONENT_SWIZZLE_ZERO;
+            m.g = VK_COMPONENT_SWIZZLE_ZERO;
+            m.b = VK_COMPONENT_SWIZZLE_ZERO;
+            m.a = VK_COMPONENT_SWIZZLE_R;
             break;
         default:
             break;
@@ -634,7 +657,7 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount     = 1;
         // VKPAR-0014: XNA's measured channel expansion, on the SAMPLED view.
-        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_);
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (texture) failed");
         if ((imageUsage_ & VK_IMAGE_USAGE_STORAGE_BIT) != 0)
@@ -1587,6 +1610,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // RT — sampling still only ever sees level 0.
         VkImageViewCreateInfo sampleView = colorView;
         sampleView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 1 };
+        // VKPAR-0020: a float target is sampled by the same measured rule as a float texture --
+        // a Single target reads (r, 1, 1, 1). Only this view: colorView_ above is the attachment,
+        // which must keep the identity mapping.
+        sampleView.components = ClassicSampledSwizzleEXT(surfaceFormat_, colorVkFormat_);
         if (vkCreateImageView(dev, &sampleView, nullptr, &colorSampleView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetRenderer: vkCreateImageView (color sample) failed");
 
@@ -3274,6 +3301,49 @@ namespace CNA::Internal::Renderers::Vulkan
             case SurfaceFormat::Dxt5:
                 if (!textureCompressionBCSupported_) return false;
                 out = { VK_FORMAT_BC3_UNORM_BLOCK, 16, 4 };
+                return true;
+            // plans/plan_vulkan_parity.md VKPAR-0020. The eleven formats GraphicsProfile.HiDef adds
+            // to Reach's nine. All are core Vulkan 1.0, and ClassifySurfaceFormatEXT still asks the
+            // device for each one. Layouts, low bits first as D3D9 defines them:
+            //   Rgba1010102 is D3DFMT_A2B10G10R10 -- R 0..9, G 10..19, B 20..29, A 30..31 -- which
+            //     is VK_FORMAT_A2B10G10R10_UNORM_PACK32 field for field (Vulkan names from bit 31).
+            //   Rg32 is D3DFMT_G16R16 and Rgba64 is D3DFMT_A16B16G16R16: R in the lowest 16 bits,
+            //     the order VK_FORMAT_R16G16[B16A16]_UNORM stores them in memory.
+            //   Alpha8 lives in R8_UNORM's one channel; ClassicSampledSwizzleEXT moves it to alpha.
+            //   The float formats are the plain R/RG/RGBA 32- and 16-bit float formats, and
+            //   HdrBlendable is HalfVector4's storage, as in XNA.
+            // The one- and two-channel entries are expanded on sampling by the measured rule
+            // (VKPAR-0014), which is why that helper's switch grew with this table.
+            case SurfaceFormat::Rgba1010102:
+                out = { VK_FORMAT_A2B10G10R10_UNORM_PACK32, 4 };
+                return true;
+            case SurfaceFormat::Rg32:
+                out = { VK_FORMAT_R16G16_UNORM, 4 };
+                return true;
+            case SurfaceFormat::Rgba64:
+                out = { VK_FORMAT_R16G16B16A16_UNORM, 8 };
+                return true;
+            case SurfaceFormat::Alpha8:
+                out = { VK_FORMAT_R8_UNORM, 1 };
+                return true;
+            case SurfaceFormat::Single:
+                out = { VK_FORMAT_R32_SFLOAT, 4 };
+                return true;
+            case SurfaceFormat::Vector2:
+                out = { VK_FORMAT_R32G32_SFLOAT, 8 };
+                return true;
+            case SurfaceFormat::Vector4:
+                out = { VK_FORMAT_R32G32B32A32_SFLOAT, 16 };
+                return true;
+            case SurfaceFormat::HalfSingle:
+                out = { VK_FORMAT_R16_SFLOAT, 2 };
+                return true;
+            case SurfaceFormat::HalfVector2:
+                out = { VK_FORMAT_R16G16_SFLOAT, 4 };
+                return true;
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                out = { VK_FORMAT_R16G16B16A16_SFLOAT, 8 };
                 return true;
             default:
                 return false;
@@ -22273,7 +22343,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                        static_cast<uint32_t>(levelCount_), 0, 6 };
         // VKPAR-0014: the same measured expansion as Texture2D. A cube face is sampled by the
         // same rule as a 2D surface, so the two must not disagree about a missing channel.
-        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_);
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
 
         owner_->liveTextureCubes_.push_back(this);   // VULKAN-407
@@ -22941,6 +23011,8 @@ namespace CNA::Internal::Renderers::Vulkan
             cv.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
             cv.format   = colorVkFormat_;
             cv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 6 };
+            // VKPAR-0020: the sampling view only; the per-face attachment views stay identity.
+            cv.components = ClassicSampledSwizzleEXT(surfaceFormat_, colorVkFormat_);
             if (vkCreateImageView(dev, &cv, nullptr, &cubeView_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetCubeRenderer: vkCreateImageView (cube) failed");
         }

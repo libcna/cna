@@ -157,203 +157,207 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = dev.GetRenderer();
-        const GraphicsProfile profile = dev.getGraphicsProfileProperty();
+        const GraphicsProfile startProfile = dev.getGraphicsProfileProperty();
 
         // A0. The enum has not grown behind this file's back.
         check(kAllFormats.size() == 27,
               "A0 the SurfaceFormat list this file classifies is complete (" +
                   std::to_string(kAllFormats.size()) + " values)");
 
-        int supported = 0, unsupported = 0, deferred = 0;
-
-        for (const auto& nf : kAllFormats)
+        // plans/plan_vulkan_parity.md VKPAR-0020: both sweeps run at BOTH profiles. At Reach
+        // alone the eleven HiDef formats only ever reach leg B, so the storage this renderer
+        // holds for them would be classified here and never constructed.
+        for (const GraphicsProfile profile : {GraphicsProfile::Reach, GraphicsProfile::HiDef})
         {
-            const int ordinal = static_cast<int>(nf.format);
-            const RendererFormatVerdict verdict = renderer.ClassifySurfaceFormatEXT(ordinal);
-            const bool profileAllows = Texture::IsFormatAllowedByProfileEXT(profile, nf.format);
-            const Attempt a = TryCreate(dev, nf.format);
-            const std::string where = std::string(nf.name) + " (verdict " + VerdictName(verdict) + ")";
+            dev.SetGraphicsProfileEXT(profile);
+            const std::string profileTag =
+                profile == GraphicsProfile::HiDef ? "[HiDef] " : "[Reach] ";
+            int supported = 0, unsupported = 0, deferred = 0;
 
-            switch (verdict)
-            {
-                case RendererFormatVerdict::Supported:  ++supported;   break;
-                case RendererFormatVerdict::Unsupported: ++unsupported; break;
-                case RendererFormatVerdict::Defer:      ++deferred;    break;
-            }
-
-            if (!profileAllows)
-            {
-                // The profile is asked first and refuses with XNA's own exception type. The
-                // renderer's verdict is not what decided this case, so it is not judged here --
-                // only that the refusal came from the profile and named itself.
-                check(!a.constructed && a.profileRefused,
-                      "B " + where + ": the GraphicsProfile refuses it, and says so [" +
-                          a.message + "]");
-                continue;
-            }
-
-            switch (verdict)
-            {
-                case RendererFormatVerdict::Supported:
-                    check(a.constructed,
-                          "C " + where + ": Supported must construct [" + a.message + "]");
-                    if (a.constructed)
-                    {
-                        // plan_vulkan.md VULKAN-172: the renderer's storage description must
-                        // agree with the FRAMEWORK'S OWN arithmetic for the same format. This is
-                        // not bookkeeping -- the shared layer sizes every upload with
-                        // Texture::GetFormatSizeEXT and GetBlockSizeSquaredEXT, while this
-                        // renderer sizes its staging buffer and its memcpy from its own table, so
-                        // a disagreement is a buffer OVER-READ rather than a wrong picture. That
-                        // is why it is asserted here and cannot be left to the pixel tests:
-                        // measured, doubling Dxt1's block size to 16 leaves
-                        // Vulkan_DxtFormat at 3/3, because the GPU walks BC1 blocks by the
-                        // VkFormat and only the byte count moves.
-                        {
-                            CNA::Internal::Renderers::Vulkan::VulkanRenderer
-                                ::VulkanSurfaceFormatStorageEXT storage{};
-                            auto* vk = dynamic_cast<
-                                CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(&renderer);
-                            const bool mapped =
-                                vk != nullptr &&
-                                vk->MapSurfaceFormatToStorageEXT(ordinal, storage);
-                            const int frameworkUnitBytes = Texture::GetFormatSizeEXT(nf.format);
-                            const int frameworkBlockSq = Texture::GetBlockSizeSquaredEXT(nf.format);
-                            check(mapped &&
-                                      storage.bytesPerTexel == frameworkUnitBytes &&
-                                      storage.blockExtent * storage.blockExtent == frameworkBlockSq,
-                                  "D2 " + where + ": the storage description agrees with the "
-                                  "framework's own sizing (" +
-                                      std::to_string(storage.bytesPerTexel) + "B x " +
-                                      std::to_string(storage.blockExtent) + "^2 vs " +
-                                      std::to_string(frameworkUnitBytes) + "B x " +
-                                      std::to_string(frameworkBlockSq) + ")");
-                        }
-                        // F-11: the texture reports the format it was created with.
-                        check(a.reportedFormat == ordinal,
-                              "D " + where + ": the texture reports its own format (" +
-                                  std::to_string(a.reportedFormat) + " vs " +
-                                  std::to_string(ordinal) + ")");
-                    }
-                    break;
-                case RendererFormatVerdict::Unsupported:
-                    // "Refuses by name": the renderer's own refusal, not the profile's, and the
-                    // message identifies the format rather than being a bare failure.
-                    check(!a.constructed && !a.profileRefused &&
-                              a.message.find(std::to_string(ordinal)) != std::string::npos,
-                          "E " + where + ": Unsupported must refuse by name [" + a.message + "]");
-                    break;
-                case RendererFormatVerdict::Defer:
-                    // Defer hands the decision to Texture::ValidateFormat, which admits Color only.
-                    check(a.constructed == (nf.format == SurfaceFormat::Color),
-                          "F " + where + ": Defer follows the framework rule (Color only) [" +
-                              a.message + "]");
-                    break;
-            }
-        }
-
-        // G. The classification is not vacuous in the direction that matters: at least one format
-        // is claimed, and it is the one every renderer must carry. Without this leg a renderer that
-        // deferred EVERYTHING would satisfy every check above.
-        check(renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Color)) ==
-                  RendererFormatVerdict::Supported,
-              "G Color is claimed by the renderer itself, not merely deferred to the framework");
-
-        std::printf("[INFO] verdicts: %d Supported, %d Unsupported, %d Defer\n",
-                    supported, unsupported, deferred);
-
-        // ---------------------------------------------------------------------------------
-        // plan_vulkan.md VULKAN-171 -- the RENDER-TARGET verdict, which is a different question
-        // from the texture one and is asked separately here for that reason.
-        //
-        // MOD-2223 added a separate nine-format RenderTarget2D allocation table. It deliberately
-        // differs from texture storage: float/HDR formats are target-backed and sampleable while
-        // packed/BC/SNORM textures do not become renderable by accident. This sweep proves the
-        // two implementation boundaries stay independent and construction follows the RT one.
-        // ---------------------------------------------------------------------------------
-        {
-            int rtSupported = 0, rtUnsupported = 0, rtDeferred = 0;
             for (const auto& nf : kAllFormats)
             {
                 const int ordinal = static_cast<int>(nf.format);
-                const RendererFormatVerdict verdict = renderer.ClassifyRenderTargetFormatEXT(ordinal);
+                const RendererFormatVerdict verdict = renderer.ClassifySurfaceFormatEXT(ordinal);
+                const bool profileAllows = Texture::IsFormatAllowedByProfileEXT(profile, nf.format);
+                const Attempt a = TryCreate(dev, nf.format);
+                const std::string where = profileTag + nf.name + " (verdict " + VerdictName(verdict) + ")";
+
                 switch (verdict)
                 {
-                    case RendererFormatVerdict::Supported:   ++rtSupported;   break;
-                    case RendererFormatVerdict::Unsupported: ++rtUnsupported; break;
-                    case RendererFormatVerdict::Defer:       ++rtDeferred;    break;
+                    case RendererFormatVerdict::Supported:  ++supported;   break;
+                    case RendererFormatVerdict::Unsupported: ++unsupported; break;
+                    case RendererFormatVerdict::Defer:      ++deferred;    break;
                 }
 
-                bool constructed = false, profileRefused = false;
-                std::string message;
-                try
+                if (!profileAllows)
                 {
-                    RenderTarget2D rt(dev, 4, 4, false, nf.format, DepthFormat::None, 0,
-                                      RenderTargetUsage::DiscardContents);
-                    constructed = true;
-                }
-                catch (const System::NotSupportedException& e) { profileRefused = true; message = e.what(); }
-                catch (const std::exception& e) { message = e.what(); }
-
-                const std::string where =
-                    std::string("RT ") + nf.name + " (verdict " + VerdictName(verdict) + ")";
-
-                // The public query must agree with the constructor, always -- that is
-                // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT's whole promise.
-                const bool publicSaysYes = dev.SupportsSurfaceFormatAsRenderTargetEXT(nf.format);
-                check(publicSaysYes == (verdict == RendererFormatVerdict::Supported ||
-                                        (verdict == RendererFormatVerdict::Defer &&
-                                         nf.format == SurfaceFormat::Color)),
-                      "J " + where + ": SupportsSurfaceFormatAsRenderTargetEXT matches the verdict");
-
-                // A renderer-owned Supported verdict is the explicit promotion gate and wins;
-                // the framework's profile fallback is consulted only for Defer. This is exactly
-                // the order RenderTarget2D::CreateValidatedRenderTargetRenderer uses.
-                if (verdict != RendererFormatVerdict::Supported &&
-                    !Texture::IsRenderTargetFormatAllowedByProfileEXT(profile, nf.format))
-                {
-                    check(!constructed,
-                          "K " + where + ": the profile refuses it as a render target [" +
-                              message + "]");
+                    // The profile is asked first and refuses with XNA's own exception type. The
+                    // renderer's verdict is not what decided this case, so it is not judged here --
+                    // only that the refusal came from the profile and named itself.
+                    check(!a.constructed && a.profileRefused,
+                          "B " + where + ": the GraphicsProfile refuses it, and says so [" +
+                              a.message + "]");
                     continue;
                 }
+
                 switch (verdict)
                 {
                     case RendererFormatVerdict::Supported:
-                        check(constructed, "L " + where + ": Supported must construct [" + message + "]");
+                        check(a.constructed,
+                              "C " + where + ": Supported must construct [" + a.message + "]");
+                        if (a.constructed)
+                        {
+                            // plan_vulkan.md VULKAN-172: the renderer's storage description must
+                            // agree with the FRAMEWORK'S OWN arithmetic for the same format. This is
+                            // not bookkeeping -- the shared layer sizes every upload with
+                            // Texture::GetFormatSizeEXT and GetBlockSizeSquaredEXT, while this
+                            // renderer sizes its staging buffer and its memcpy from its own table, so
+                            // a disagreement is a buffer OVER-READ rather than a wrong picture. That
+                            // is why it is asserted here and cannot be left to the pixel tests:
+                            // measured, doubling Dxt1's block size to 16 leaves
+                            // Vulkan_DxtFormat at 3/3, because the GPU walks BC1 blocks by the
+                            // VkFormat and only the byte count moves.
+                            {
+                                CNA::Internal::Renderers::Vulkan::VulkanRenderer
+                                    ::VulkanSurfaceFormatStorageEXT storage{};
+                                auto* vk = dynamic_cast<
+                                    CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(&renderer);
+                                const bool mapped =
+                                    vk != nullptr &&
+                                    vk->MapSurfaceFormatToStorageEXT(ordinal, storage);
+                                const int frameworkUnitBytes = Texture::GetFormatSizeEXT(nf.format);
+                                const int frameworkBlockSq = Texture::GetBlockSizeSquaredEXT(nf.format);
+                                check(mapped &&
+                                          storage.bytesPerTexel == frameworkUnitBytes &&
+                                          storage.blockExtent * storage.blockExtent == frameworkBlockSq,
+                                      "D2 " + where + ": the storage description agrees with the "
+                                      "framework's own sizing (" +
+                                          std::to_string(storage.bytesPerTexel) + "B x " +
+                                          std::to_string(storage.blockExtent) + "^2 vs " +
+                                          std::to_string(frameworkUnitBytes) + "B x " +
+                                          std::to_string(frameworkBlockSq) + ")");
+                            }
+                            // F-11: the texture reports the format it was created with.
+                            check(a.reportedFormat == ordinal,
+                                  "D " + where + ": the texture reports its own format (" +
+                                      std::to_string(a.reportedFormat) + " vs " +
+                                      std::to_string(ordinal) + ")");
+                        }
                         break;
                     case RendererFormatVerdict::Unsupported:
-                        check(!constructed && profileRefused == false,
-                              "M " + where + ": Unsupported must refuse [" + message + "]");
+                        // "Refuses by name": the renderer's own refusal, not the profile's, and the
+                        // message identifies the format rather than being a bare failure.
+                        check(!a.constructed && !a.profileRefused &&
+                                  a.message.find(std::to_string(ordinal)) != std::string::npos,
+                              "E " + where + ": Unsupported must refuse by name [" + a.message + "]");
                         break;
                     case RendererFormatVerdict::Defer:
-                        check(constructed == (nf.format == SurfaceFormat::Color),
-                              "N " + where + ": Defer follows the framework rule (Color only) [" +
-                                  message + "]");
+                        // Defer hands the decision to Texture::ValidateFormat, which admits Color only.
+                        check(a.constructed == (nf.format == SurfaceFormat::Color),
+                              "F " + where + ": Defer follows the framework rule (Color only) [" +
+                                  a.message + "]");
                         break;
                 }
             }
-            std::printf("[INFO] render-target verdicts: %d Supported, %d Unsupported, %d Defer\n",
-                        rtSupported, rtUnsupported, rtDeferred);
 
-            int mappedTargets = 0;
-            auto* vk = dynamic_cast<
-                CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(&renderer);
-            for (const auto& nf : kAllFormats)
+            // G. The classification is not vacuous in the direction that matters: at least one format
+            // is claimed, and it is the one every renderer must carry. Without this leg a renderer that
+            // deferred EVERYTHING would satisfy every check above.
+            check(renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Color)) ==
+                      RendererFormatVerdict::Supported,
+                  "G Color is claimed by the renderer itself, not merely deferred to the framework");
+
+            std::printf("[INFO] verdicts: %d Supported, %d Unsupported, %d Defer\n",
+                        supported, unsupported, deferred);
+
+            // ---------------------------------------------------------------------------------
+            // plan_vulkan.md VULKAN-171 -- the RENDER-TARGET verdict, which is a different question
+            // from the texture one and is asked separately here for that reason.
+            //
+            // MOD-2223 added a separate nine-format RenderTarget2D allocation table. It deliberately
+            // differs from texture storage: float/HDR formats are target-backed and sampleable while
+            // packed/BC/SNORM textures do not become renderable by accident. This sweep proves the
+            // two implementation boundaries stay independent and construction follows the RT one.
+            // ---------------------------------------------------------------------------------
             {
-                CNA::Internal::Renderers::Vulkan::VulkanRenderer
-                    ::VulkanSurfaceFormatStorageEXT storage{};
-                if (vk != nullptr && vk->MapRenderTargetFormatToStorageEXT(
-                        static_cast<int>(nf.format), storage))
-                    ++mappedTargets;
+                int rtSupported = 0, rtUnsupported = 0, rtDeferred = 0;
+                for (const auto& nf : kAllFormats)
+                {
+                    const int ordinal = static_cast<int>(nf.format);
+                    const RendererFormatVerdict verdict = renderer.ClassifyRenderTargetFormatEXT(ordinal);
+                    switch (verdict)
+                    {
+                        case RendererFormatVerdict::Supported:   ++rtSupported;   break;
+                        case RendererFormatVerdict::Unsupported: ++rtUnsupported; break;
+                        case RendererFormatVerdict::Defer:       ++rtDeferred;    break;
+                    }
+
+                    bool constructed = false;
+                    int reportedFormat = -1;
+                    std::string message;
+                    try
+                    {
+                        RenderTarget2D rt(dev, 4, 4, false, nf.format, DepthFormat::None, 0,
+                                          RenderTargetUsage::DiscardContents);
+                        constructed = true;
+                        reportedFormat = static_cast<int>(rt.getFormatProperty());
+                    }
+                    catch (const std::exception& e) { message = e.what(); }
+
+                    const std::string where =
+                        profileTag + "RT " + nf.name + " (verdict " + VerdictName(verdict) + ")";
+
+                    // The public query must agree with the constructor, always -- that is
+                    // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT's whole promise. It
+                    // answers the EXACT question, so the profile is part of it: a Supported verdict
+                    // for a HiDef-only format is still "no" at Reach.
+                    const bool exact =
+                        Texture::IsRenderTargetFormatAllowedByProfileEXT(profile, nf.format) &&
+                        (verdict == RendererFormatVerdict::Supported ||
+                         (verdict == RendererFormatVerdict::Defer && nf.format == SurfaceFormat::Color));
+                    const bool publicSaysYes = dev.SupportsSurfaceFormatAsRenderTargetEXT(nf.format);
+                    check(publicSaysYes == exact,
+                          "J " + where + ": SupportsSurfaceFormatAsRenderTargetEXT matches the verdict "
+                          "at this profile");
+
+                    // plans/plan_vulkan_parity.md VKPAR-0020: the format a RenderTarget2D is given is
+                    // a PREFERENCE. XNA's constructor asks QueryRenderTargetFormat and builds the
+                    // target in the selected format, falling back to Color rather than throwing
+                    // (plans/plan_software.md SOFTWARE-216). So construction never refuses on format,
+                    // and what it reports is the exact format when the query says yes, Color when it
+                    // says no -- whether the no came from the profile, the device, or a deferral.
+                    check(constructed,
+                          "K " + where + ": a preferred format is never refused [" + message + "]");
+                    const int wantFormat = static_cast<int>(exact ? nf.format : SurfaceFormat::Color);
+                    check(!constructed || reportedFormat == wantFormat,
+                          "L " + where + ": reports the format it was built in (" +
+                              std::to_string(reportedFormat) + ", want " +
+                              std::to_string(wantFormat) + ")");
+                }
+                std::printf("[INFO] render-target verdicts: %d Supported, %d Unsupported, %d Defer\n",
+                            rtSupported, rtUnsupported, rtDeferred);
+
+                int mappedTargets = 0;
+                auto* vk = dynamic_cast<
+                    CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(&renderer);
+                for (const auto& nf : kAllFormats)
+                {
+                    CNA::Internal::Renderers::Vulkan::VulkanRenderer
+                        ::VulkanSurfaceFormatStorageEXT storage{};
+                    if (vk != nullptr && vk->MapRenderTargetFormatToStorageEXT(
+                            static_cast<int>(nf.format), storage))
+                        ++mappedTargets;
+                }
+                check(mappedTargets == 9 && rtSupported + rtUnsupported == mappedTargets &&
+                          rtDeferred == static_cast<int>(kAllFormats.size()) - mappedTargets,
+                      "O renderability verdicts exactly match the independent nine-format target "
+                      "allocation table (" + std::to_string(rtSupported) + " supported, " +
+                          std::to_string(rtUnsupported) + " device-refused, " +
+                          std::to_string(rtDeferred) + " deferred)");
             }
-            check(mappedTargets == 9 && rtSupported + rtUnsupported == mappedTargets &&
-                      rtDeferred == static_cast<int>(kAllFormats.size()) - mappedTargets,
-                  "O renderability verdicts exactly match the independent nine-format target "
-                  "allocation table (" + std::to_string(rtSupported) + " supported, " +
-                      std::to_string(rtUnsupported) + " device-refused, " +
-                      std::to_string(rtDeferred) + " deferred)");
+
         }
+        dev.SetGraphicsProfileEXT(startProfile);
 
         // I. The Unsupported arm, forced -- and it is forced because it is otherwise unreachable.
         // Every driver this renderer runs on reports SAMPLED_IMAGE|TRANSFER_DST for the one format

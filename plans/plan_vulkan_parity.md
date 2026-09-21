@@ -43,6 +43,7 @@ evidence:
 | VKPAR-0017 | The CNA runtime as one shared library (`libcna.so`) instead of 798 static copies | ✅ |
 | VKPAR-0018 | Classic closeout, step 1: 23 more tests that died on the Reach profile | ✅ |
 | VKPAR-0019 | `SpriteBatch_BlendState`: the white constant factor is XNA's answer, not a renderer defect | ✅ |
+| VKPAR-0020 | Format capability: the eleven HiDef texture formats, and the render-target fallback the format tests had not caught up with | ✅ |
 
 ---
 
@@ -1137,6 +1138,48 @@ A→B→A — is kept by drawing those batches **Immediate**: `Begin()` applies 
 set after it is the one the draw uses, exactly as in XNA. **RADV-HW: 23/23**, including the A→B→A
 and static/dynamic/static pipeline transitions, so the renderer's dynamic blend constant was never
 the problem.
+
+### VKPAR-0020 — The eleven HiDef texture formats, and the render-target fallback
+
+**The renderer.** Vulkan's `Texture2D` storage table held Reach's nine formats and nothing else, so
+every HiDef-only format — `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2`,
+`Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable` — was deferred to the
+framework rule and refused as *"SurfaceFormat 13 is not implemented by the selected graphics
+renderer"*. The shared `SurfaceFormat_Throws`, `BoundResourceDispose` and `MoveSemantics` tests
+construct a `Single` texture at HiDef and died on that line.
+
+All eleven are core Vulkan 1.0 formats; `ClassifySurfaceFormatEXT` still asks the device for each.
+The layouts are D3D9's, low bits first, and the table comment carries the field-for-field reasoning
+(`A2B10G10R10_UNORM_PACK32`, `R16G16[B16A16]_UNORM`, `R8_UNORM`, the plain float formats;
+`HdrBlendable` is `HalfVector4`'s storage, as in XNA). The one- and two-channel formats get the
+**measured** channel expansion of `VKPAR-0014` on their sampled view — `(r,1,1,1)` for `Single` and
+`HalfSingle`, `(r,g,1,1)` for the two-channel formats, `(0,0,0,a)` for `Alpha8` — and so do the
+sampled views of float render targets (2D and cube). The swizzle now also checks the VkFormat
+actually stored, because a cube kept every non-block format as RGBA8 at the time, and expanding
+"missing" channels of four-channel storage would have discarded data.
+
+**The render-target tests.** Four Vulkan tests still asserted the model XNA does not have: that
+`RenderTarget2D(…, Bgr565, …)` **throws**. `SOFTWARE-216` restored XNA's rule — the constructor
+asks `QueryRenderTargetFormat` and builds the selected format, falling back to `Color` — and this
+renderer stores no packed 16-bit target, so it falls back. Updated to that rule, each keeping its
+subject:
+
+| Test | Was | Now |
+|---|---|---|
+| `SurfaceFormatClassification` | RT legs K/N expected refusals; J ignored the profile; everything ran at Reach only | construction never refuses and reports the exact format when the public query says yes, `Color` otherwise; J includes the profile; **both sweeps run at Reach and HiDef**, so the new storage is constructed rather than only classified |
+| `AdapterQueryContract` | leg A, the "control", expected a throw | the device builds `Bgr565` as `Color`, and leg B checks the adapter names that same format — device and adapter both at HiDef |
+| `FormatLimitQueries` | an unadvertised base/mip/MSAA request had to refuse | it constructs as the nearest target (`Color`, or fewer samples) and never with the identity it could not have; runs at HiDef, where the snapshot's float targets are legal |
+| `MRT_MixedFormats` | "mixed-format MRT is unreachable" because `Bgr565` threw | a `Bgr565` request binds beside `Color` as `Color`; and a genuinely mixed pair, `Color` + `Single` (two VkFormats in one pass), clears and each target reads back its own representation (bytes; `128/255` as a float) |
+
+**Evidence (RADV-HW, private compositor).** Full `cmake-build-vulkan` suite after the renderer
+change: `SurfaceFormat_Throws`, `BoundResourceDispose`, `MoveSemantics` pass. The four updated
+tests pass. `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` and
+`EveryPromotedFormatPreservesFullPartialAndMipBytesExactly` **returned early on Vulkan for every
+format it did not claim**; they now execute the eleven formats' sprite samples and byte round trips
+and pass — the measured `Alpha8|0,0,0,128` and `Single|64,255,255,255` included.
+
+The same full run found the change's one casualty: four float **cube** tests that had passed or
+skipped only because the cube was refused now constructed and failed. That is `VKPAR-0021`.
 
 ---
 
