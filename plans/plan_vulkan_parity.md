@@ -36,7 +36,9 @@ evidence:
 | VKPAR-0010 | Baselines, measured and classified | ✅ |
 | VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced and narrowed, not fixed |
 | VKPAR-0012 | Validation layers and synchronization validation | ✅ |
-| VKPAR-0013 | The 51 remaining Vulkan failures | ⬜ classified, not fixed |
+| VKPAR-0013 | The remaining Vulkan failures | ⬜ classified, not fixed |
+| VKPAR-0014 | Channel expansion: two contradictory contracts, settled by measuring XNA | ✅ |
+| VKPAR-0015 | Where these tests ran: the user's live desktop, and how to stop that | ✅ |
 
 ---
 
@@ -777,6 +779,137 @@ DirectX12. `VKPAR-0004` and `VKPAR-0005` are inside `modules/renderers/vulkan/`;
 changes only CMake registration; the two gtest gate edits **add** Vulkan to a renderer list and
 leave every other renderer's arm byte-for-byte, which the EasyGL and Software columns above
 demonstrate rather than assert.
+
+---
+
+## VKPAR-0014 — Channel expansion, measured
+
+Two explicit contracts disagreed about the same pixel, so one of them had to be wrong:
+
+| Source | `NormalizedByte2(0.5, 0.25)` sampled | Provenance |
+|---|---|---|
+| `ClassicTextureFormatTests.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` (renderer-neutral) | `(129, 64, 255, 255)` | `SOFTWARE-142`: *"missing channels follow the XNA/D3D texture rule"* — reasoned from documentation and FNA, **not measured** |
+| `vulkan_snorm_format_test.cpp` (`plan_vulkan.md` `VULKAN-174`) | blue = **0** | an anti-mutation argument about storage width (*"there is no third byte"*) — **not a claim about sampling at all** |
+| Vulkan renderer | blue = **0** | `VK_COMPONENT_SWIZZLE_IDENTITY` on every view: Vulkan reads a missing colour channel as 0 |
+
+Neither side had measured anything, so neither could be the tie-break.
+
+### The measurement
+
+`tools/xna-oracle/FormatExpansionOracle.cs` — a new, deliberately small XNA program built against the
+real GAC assemblies, because the scene-driven oracle has no `SurfaceFormat` key. It is the exact
+shape of the renderer-neutral test: 1×1 texture of the format, `SpriteBatch` with `PointClamp` and
+`BlendState.Opaque`, into an 8×8 `Color` render target, centre pixel read back. Run on **XNA 4.0 →
+wine 10.0 → DXVK 2.6.0 → RADV, the same Radeon 780M**; result checked in as
+`tools/xna-oracle/reference/format-expansion/xna-format-expansion.txt`:
+
+| Format | XNA | | Format | XNA |
+|---|---|---|---|---|
+| `NormalizedByte2` | **128, 64, 255, 255** | | `Single` | 64, **255, 255, 255** |
+| `Rg32` | 128, 64, **255, 255** | | `HalfSingle` | 64, **255, 255, 255** |
+| `Vector2` | 64, 128, **255, 255** | | `Alpha8` | **0, 0, 0**, 128 |
+| `HalfVector2` | 64, 128, **255, 255** | | `Bgr565` | 132, 65, 255, **255** |
+
+The rule, now measured: **a colour channel the format does not store samples as 1.0, a missing alpha
+samples as 1.0, and `Alpha8` is the one exception at `(0, 0, 0, A)`.** The renderer-neutral suite was
+right; `VULKAN-174`'s pin was wrong. Every one of its thirteen expectations agrees with the table
+(the renderer-neutral `129` against XNA's `128` for the SNORM formats is inside its tolerance of 2).
+
+### The fix
+
+Vulkan's own rule differs only in the colour channels — it already reads a *missing alpha* as 1.0 —
+so a view's component mapping closes the gap without any shader knowing which format it samples.
+`ClassicSampledSwizzleEXT(surfaceFormat)` holds the table; it is keyed on the CNA `SurfaceFormat`
+rather than the `VkFormat` because `VK_FORMAT_R8_UNORM` could serve both a one-channel colour format
+(`(r,1,1,1)`) and `Alpha8` (`(0,0,0,r)`), which the `VkFormat` cannot tell apart.
+
+Of the formats this renderer actually implements (`Color`, `Bgr565`, `Bgra5551`, `Bgra4444`,
+`NormalizedByte2`, `NormalizedByte4`, `Dxt1/3/5`) **only `NormalizedByte2` needs a row** — blue →
+`VK_COMPONENT_SWIZZLE_ONE`. `Bgr565` already gets alpha 1.0 from Vulkan. The unimplemented formats take
+the identity default and each adds its row when it lands. Applied to the sampled 2D view and the cube
+view; the **storage-bridge view is reset to identity** before it is created, because a storage image
+must not be swizzled.
+
+`vulkan_snorm_format_test.cpp` now expects blue 255, and says what that costs: blue can no longer
+catch four-wide storage, because it is constant by construction. The R/G legs still catch a channel
+swap, the negative leg still separates SNORM from UNORM, and storage width stays pinned by
+`MapSurfaceFormatToStorageEXT`'s two-byte entry and by
+`ClassicTextureFormat.EveryPromotedFormatPreservesFullPartialAndMipBytesExactly`.
+
+### Cross-renderer
+
+`ClassicTextureFormat.*`, `cmake-build-multi` (SDL-free X11) plus `cmake-build-vulkan`:
+
+| Renderer | Passed | Failed | Skipped |
+|---|---|---|---|
+| EasyGL / OPENGL33 | 13 | 0 | 0 |
+| Software | 13 | 0 | 0 |
+| **Vulkan** | 7 | 2 | 4 |
+
+`PointSamplingExpandsChannelsAndPreservesDeclaredRanges` passes on Vulkan now. The two failures are
+`NormalizedIntegerCubeFormats{PreserveExactTransfers,FeedEnvironmentMapSampling}`, which throw
+*"TextureCube::SetData: the active renderer did not store the complete declared-format cube region"*
+— a cube-transfer defect already in `VKPAR-0013`'s transfer group, failing before this change too,
+unrelated to channel expansion. The four skips are formats Vulkan does not claim. `Vulkan_NormalizedByteFormat`
+passes with the corrected value.
+
+No Direct3D run: the change is inside `modules/renderers/vulkan/` and a Vulkan test. D3D11/12 are in
+`GSC-0001`'s matrix and were not touched.
+
+### Full-suite regression — on a private display this time
+
+All 10 141 registered tests, `cmake-build-vulkan` rebuilt with the change (0 errors, 0 warnings),
+run through the private route `VKPAR-0015` describes (headless Weston, rootful Xwayland on a private
+display, nothing on the owner's desktop), compared test by test with the earlier baseline:
+
+| Group | Before | After |
+|---|---|---|
+| `Vulkan_*` | 318 passed, 51 failed, 1 timeout | **319 passed, 51 failed** |
+| everything else (gtest) | 8 947 passed, 32 failed, 279 skipped | 9 076 passed, 34 failed, 277 skipped |
+
+`Failed → Passed`: `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` —
+this row — plus three `Unicode*` path tests whose earlier failures were environmental. `Skipped →
+Passed`: the five `TwoSidedStencilTest` cases (`VKPAR-0005`). No `Vulkan_*` test changed state in
+either direction.
+
+`Passed → Failed`, six, none of them this change:
+
+| Test | Cause |
+|---|---|
+| `ContentPipelineCliTest.WorkerCountsProduceIdenticalColdNoOpAndDependencyRebuilds`, `ContentRuntimeContractTest.TheBaseOpenStreamServesTheContentRoot`, `SavedPictureStoreTest.SavePictureWritesARealReadableFile` | **pass when re-run serially** in the same private environment. Parallel races on shared paths (`/tmp/cna_content_contract_1`, a fixture directory under `tests/assets/media/`, a staging scavenger seeing a sibling's directory) — fixture debt, not renderer |
+| `XnaPipelineGenuineRuntimeInterop`, `…InteropLzx`, `XnaDifferentialBuildTest.CnaAcceptsAndRefusesTheSameSourcesXnaDoes` | Wine + the real XNA runtime. They hang inside the private wrapper (it gives them a private `XDG_RUNTIME_DIR` and no session bus) and passed in ~11 s in the earlier run. The two interop runs were stopped by hand rather than left for 2x 15 min; a hung `winedbg --auto` was what kept the harness's pipe open. **A limitation of the private route for Wine-based tests**, not a CNA result |
+
+`EasyGL_*` is omitted from the table for the reason `VKPAR-0010` gives: in a Vulkan-default build
+those binaries run Vulkan.
+
+---
+
+## VKPAR-0015 — Where these tests ran, and how to stop that
+
+Recorded because it matters more than any single test result. **Every GPU run in this plan before
+this row — the full 10 141-test suite, the 370 `Vulkan_*` tests, the `cna_demo_2d` soaks, the Wine
+oracle and the cross-renderer format runs — opened windows on the owner's live desktop.** `:0` is the
+Xwayland of the owner's running GNOME session, and `wayland-0` is that session's compositor. Where
+the sections above describe `:0` as "the DRI3-capable server", read it as "the owner's screen".
+
+Why it is easy to do by accident, and will keep happening to anyone who runs `ctest` here:
+
+* `CNA_TEST_DISPLAY` is `:0` in the build directories, and **757** registered tests carry
+  `ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"`. `ctest` applies that per test, so
+  exporting a different `DISPLAY` before calling it changes nothing.
+* The other **9 378** (gtest cases) inherit the caller's `DISPLAY`.
+* `Xvfb :99` is the private alternative an agent shell gets, and it cannot present Vulkan at all (no
+  DRI3), which is precisely what pushes a Vulkan run toward `:0`.
+
+The route that is private *and* keeps the X11 code path identical: `tools/platform/wayland_test_server.sh`
+(headless Weston, private runtime directory, `DISPLAY` unset) with a **rootful Xwayland on a private
+display number** inside it. Measured: that display has DRI3, enumerates the Radeon 780M, and leaves
+nothing behind. The runs recorded after this row use it, through a small runner that applies each
+test's registered ctest properties but forces `DISPLAY` to the private server and refuses to start
+outside the private compositor.
+
+Not changed here, because it is the owner's decision and it affects every agent on the machine: the
+`:0` default itself.
 
 ---
 

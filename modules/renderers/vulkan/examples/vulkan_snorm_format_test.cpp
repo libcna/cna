@@ -12,10 +12,25 @@
 // [-1, 1] over [-127, 127], so 0.0 and 1.0 land on 0 and 127 and sample back to exactly 0.0 and
 // 1.0; anything in between would need a tolerance, and a tolerance is where a channel swap hides.
 //
-// NormalizedByte2 carries X and Y only, so it samples as (r, g, 0, 1) -- the missing channels are
-// the Vulkan defaults, and asserting them is part of the contract rather than an accident: a
-// renderer that quietly stored it as a four-channel format would return the caller's third byte in
-// blue instead of zero.
+// NormalizedByte2 carries X and Y only, so it samples as (r, g, 1, 1).
+//
+// plans/plan_vulkan_parity.md VKPAR-0014 corrected that value. This file used to assert blue = 0 --
+// "the Vulkan defaults" -- on the argument that there is no third byte, so a renderer storing the
+// format four-wide would leak the caller's next byte into blue. The argument is about STORAGE
+// WIDTH; blue = 0 was never a measurement of what XNA samples. It has since been measured
+// (tools/xna-oracle/FormatExpansionOracle.cs, on the real XNA 4.0 runtime):
+//
+//     NormalizedByte2|128,64,255,255
+//
+// XNA expands a missing colour channel to 1.0, not 0.0, so blue is 255 and the renderer-neutral
+// ClassicTextureFormatTests was right where this file was wrong. VulkanRenderer now applies
+// VK_COMPONENT_SWIZZLE_ONE to blue on the sampled view.
+//
+// What that costs, stated rather than glossed: blue can no longer catch four-wide storage, because
+// it is now constant by construction. The R and G legs still catch a channel swap, the negative leg
+// below still separates SNORM from UNORM, and the storage width itself is pinned independently by
+// MapSurfaceFormatToStorageEXT's two-bytes-per-texel entry and by
+// ClassicTextureFormat.EveryPromotedFormatPreservesFullPartialAndMipBytesExactly.
 //
 // A NEGATIVE leg is included, and it is the one that distinguishes SNORM from UNORM storage. -1.0
 // encodes as -127 and samples to -1.0, which the sprite shader writes and the Color render target
@@ -160,13 +175,13 @@ protected:
             SurfaceFormat::NormalizedByte4, kFour,
             [](const Case& c) { return PackedVector::NormalizedByte4(c.x, c.y, c.z, c.w); });
 
-        // NormalizedByte2: X->R, Y->G, and blue must be the format's own zero, not the caller's
-        // third byte -- there is no third byte.
+        // NormalizedByte2: X->R, Y->G, and blue is XNA's measured expansion of a channel the
+        // format does not carry -- 255, not 0 (VKPAR-0014; see this file's header).
         static const std::array<Case, 4> kTwo{{
-            {1.0f, 0.0f, 0.0f, 0.0f, 255,   0, 0},
-            {0.0f, 1.0f, 0.0f, 0.0f,   0, 255, 0},
-            {1.0f, 1.0f, 0.0f, 0.0f, 255, 255, 0},
-            {-1.0f, 1.0f, 0.0f, 0.0f,  0, 255, 0},      // the negative leg again
+            {1.0f, 0.0f, 0.0f, 0.0f, 255,   0, 255},
+            {0.0f, 1.0f, 0.0f, 0.0f,   0, 255, 255},
+            {1.0f, 1.0f, 0.0f, 0.0f, 255, 255, 255},
+            {-1.0f, 1.0f, 0.0f, 0.0f,  0, 255, 255},    // the negative leg again
         }};
         RunLeg<PackedVector::NormalizedByte2>(dev, "B NormalizedByte2",
             SurfaceFormat::NormalizedByte2, kTwo,

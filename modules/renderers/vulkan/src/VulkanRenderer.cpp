@@ -235,6 +235,45 @@ namespace CNA::Internal::Renderers::Vulkan
     static std::uint32_t sSwapchainPresentOutOfDateToInject = 0;
     static std::uint32_t sSwapchainPresentSuboptimalToInject = 0;
 
+    // plans/plan_vulkan_parity.md VKPAR-0014: the channels a SurfaceFormat does not store.
+    //
+    // MEASURED on the real XNA 4.0 runtime (tools/xna-oracle/FormatExpansionOracle.cs, reference
+    // tools/xna-oracle/reference/format-expansion/xna-format-expansion.txt): XNA expands every
+    // missing colour channel AND a missing alpha to 1.0, so a two-channel format samples
+    // (r, g, 1, 1) -- `NormalizedByte2|128,64,255,255` -- and a one-channel colour format
+    // (r, 1, 1, 1). `Alpha8` is the one exception, (0, 0, 0, A).
+    //
+    // Vulkan's own rule is different: a missing colour channel reads 0 and only a missing ALPHA
+    // reads 1, so VK_FORMAT_R8G8_SNORM hands the shader (r, g, 0, 1). The gap is exactly the
+    // colour channels, and a view's component mapping is the portable way to close it -- no shader
+    // knows or needs to know which format it is sampling.
+    //
+    // Keyed on the CNA SurfaceFormat rather than the VkFormat on purpose: VK_FORMAT_R8_UNORM would
+    // serve both a one-channel colour format (wanting (r,1,1,1)) and Alpha8 (wanting (0,0,0,r)),
+    // and the VkFormat cannot tell them apart. Formats this renderer does not implement are absent
+    // from the switch and take the identity default; each one adds its row here when it lands.
+    //
+    // SAMPLED views only. A storage image must have the identity mapping (VUID-VkImageViewCreateInfo-
+    // imageViewFormatSwizzle) and a colour attachment is written, not expanded.
+    [[nodiscard]] static VkComponentMapping ClassicSampledSwizzleEXT(int surfaceFormatOrdinal) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        VkComponentMapping m{VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                             VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+        switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
+        {
+        case SurfaceFormat::NormalizedByte2:
+            // Two-channel: blue is the only gap. Alpha is already 1.0, because R8G8_SNORM has no
+            // alpha component at all and Vulkan supplies 1.0 for that case on its own.
+            m.b = VK_COMPONENT_SWIZZLE_ONE;
+            break;
+        default:
+            break;
+        }
+        return m;
+    }
+
+
     static VkResult InjectSwapchainPresentResultForTest(VkResult result)
     {
         if (result != VK_SUCCESS) return result;
@@ -594,11 +633,18 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.subresourceRange.levelCount     = static_cast<uint32_t>(levelCount_);
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount     = 1;
+        // VKPAR-0014: XNA's measured channel expansion, on the SAMPLED view.
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_);
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (texture) failed");
         if ((imageUsage_ & VK_IMAGE_USAGE_STORAGE_BIT) != 0)
         {
             viewInfo.subresourceRange.levelCount = 1;
+            // A storage image must keep the identity mapping; the expansion above is a sampling
+            // rule, and a compute write through a swizzled view is invalid Vulkan.
+            viewInfo.components = VkComponentMapping{
+                VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
             if (vkCreateImageView(dev, &viewInfo, nullptr, &storageImageView_) != VK_SUCCESS)
             {
                 vkDestroyImageView(dev, imageView_, nullptr);
@@ -22225,6 +22271,9 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.format   = vkFormat_;
         viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
                                        static_cast<uint32_t>(levelCount_), 0, 6 };
+        // VKPAR-0014: the same measured expansion as Texture2D. A cube face is sampled by the
+        // same rule as a 2D surface, so the two must not disagree about a missing channel.
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_);
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
 
         owner_->liveTextureCubes_.push_back(this);   // VULKAN-407

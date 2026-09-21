@@ -141,6 +141,35 @@ python3 scripts/xna-diff.py xna_out.png cna_out.png --diff-out diff.png
 Requires Pillow (`pip install pillow`) — not previously a dependency of this project's other
 `scripts/*.py` tools, but the standard library has no PNG decoder.
 
+## Channel expansion
+
+`FormatExpansionOracle.cs` is a second, deliberately non-scene-driven measurement: what the real XNA
+4.0 runtime returns for the channels a `SurfaceFormat` does not store. The scene format has no
+`SurfaceFormat` key (see Status below), and this question needs one texel per format rather than a
+rendered scene, so it is its own program rather than a scene.
+
+It is the exact shape `ClassicTextureFormatTests.PointSamplingExpandsChannelsAndPreservesDeclaredRanges`
+uses — a 1x1 texture of the format, `SpriteBatch` with `PointClamp` and `BlendState.Opaque`, into an
+8x8 `SurfaceFormat.Color` render target, centre pixel read back — so the two tables are directly
+comparable and no difference can hide in the harness.
+
+```sh
+export WINEPREFIX=$HOME/.wine-cna-xna40 WINEARCH=win32
+GAC=$WINEPREFIX/drive_c/windows/Microsoft.NET/assembly
+CSC=$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/csc.exe
+wine "$CSC" /nologo /target:exe /platform:x86 /out:FormatExpansionOracle.exe \
+  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.dll          | head -1))" \
+  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Game.dll     | head -1))" \
+  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Graphics.dll | head -1))" \
+  FormatExpansionOracle.cs
+DISPLAY=:0 wine FormatExpansionOracle.exe out.txt
+```
+
+The captured result is `reference/format-expansion/xna-format-expansion.txt`, and the rule it
+establishes is: **a colour channel the format does not store samples as 1.0, a missing alpha samples
+as 1.0, and `Alpha8` is the one exception at `(0, 0, 0, A)`.** `plans/plan_vulkan_parity.md`
+VKPAR-0014 is where it was used.
+
 ## Status
 
 Thirty-nine scenes so far, **all pixel-perfect on the original D3D9 oracle path**, and every one of XNA's 5 Stock Effects plus
