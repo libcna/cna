@@ -7863,29 +7863,36 @@ namespace CNA::Internal::Renderers::Vulkan
         // faces (FNA's own real behavior: CCW fields are simply ignored when this is false, not
         // reset to any default) -- mirrors EasyGL's identical fallback-to-front pattern exactly.
         //
-        // Task 870 empirical finding: with rs.frontFace = VK_FRONT_FACE_CLOCKWISE and this
-        // renderer's vertex shaders' Y-flip (pos.y = -pos.y, see colored3d.vert.glsl et al.),
-        // VkPipelineDepthStencilStateCreateInfo::front/back end up applied to the OPPOSITE
-        // winding from what the *culling* path's frontFace determination would suggest --
-        // confirmed via a genuinely differential stencil_twosided test (a back-facing triangle's
-        // CounterClockwiseStencilFunction/Fail must apply and did not until front/back were
-        // swapped here specifically; culling itself, which uses the exact same frontFace value,
-        // is unaffected and already correct across this whole project's existing test suite).
-        // Root cause not fully isolated (plausibly an llvmpipe/Mesa software-rasterizer quirk in
-        // its own front/back VkStencilOpState assignment specifically, since culling's front/back
-        // classification is provably correct on this same driver) -- swapped here pragmatically
-        // since XNA's "front"/"CounterClockwise" stencil settings must land on whichever Vulkan
-        // slot the hardware/driver actually evaluates for each winding, not on the slot named to
-        // match culling's own already-correct convention.
+        // plans/plan_vulkan_parity.md VKPAR-0005: the CCW operations go to `back`, which is the
+        // plain reading of this renderer's own conventions and NOT what Task 870 concluded.
+        //
+        // The convention, end to end. XNA's contract (frontface_winding_test.cpp, and
+        // plans/plan_graphics_shared_cleanup.md GSC-0002 for the stencil half) is that
+        // clockwise-as-displayed is the FRONT face, that the ordinary StencilFunction/Pass/Fail/
+        // DepthBufferFail apply to it, and that CounterClockwiseStencil* apply to the other
+        // winding. Here `rs.frontFace` is VK_FRONT_FACE_CLOCKWISE everywhere, and the stock vertex
+        // shaders' `pos.y = -pos.y` does not mirror anything: it converts D3D-style clip space
+        // (+Y up, flipped by the viewport transform) into Vulkan clip space (+Y down, not
+        // flipped), so a triangle drawn clockwise as displayed is still clockwise in framebuffer
+        // space and Vulkan calls it front. Culling relies on exactly that -- CullClockwiseFace is
+        // VK_CULL_MODE_FRONT_BIT -- so ordinary-to-`front` is the assignment that agrees with it.
+        //
+        // Task 870 swapped these two, attributing the need to "plausibly an llvmpipe/Mesa
+        // software-rasterizer quirk" that it could not isolate, and the registration of
+        // Vulkan_DepthStencilState_StencilTwoSided still carries its conclusion that "stencil
+        // testing never gates on Vulkan". Measured on an AMD Radeon 780M (RADV PHOENIX), both
+        // halves of that are wrong: stencil gates normally, and with the swap in place a
+        // clockwise triangle was left stencil 255 -- the counter-clockwise operation -- where the
+        // ordinary one writes 5, and the counter-clockwise triangle got 5, for StencilPass,
+        // StencilFail and StencilDepthBufferFail alike. Exactly inverted, on all three fields.
+        // The whole of Vulkan_RasterizerState_CullMode{,_Camera,_Golden,_IndexedBasicEffect},
+        // Vulkan_FrontFaceWinding and Vulkan_TriangleStripWinding pass unchanged, which is what
+        // makes "front means clockwise here" a measurement rather than an assumption.
         if (p.twoSidedStencilMode) {
-            ds.front.failOp      = ToVkStencilOp(p.ccwStencilFail);
-            ds.front.passOp      = ToVkStencilOp(p.ccwStencilPass);
-            ds.front.depthFailOp = ToVkStencilOp(p.ccwStencilDepthFail);
-            ds.front.compareOp   = ToVkCompareOp(p.ccwStencilFunc);
-            ds.back.failOp      = ToVkStencilOp(p.stencilFail);
-            ds.back.passOp      = ToVkStencilOp(p.stencilPass);
-            ds.back.depthFailOp = ToVkStencilOp(p.stencilDepthFail);
-            ds.back.compareOp   = ToVkCompareOp(p.stencilFunc);
+            ds.back.failOp      = ToVkStencilOp(p.ccwStencilFail);
+            ds.back.passOp      = ToVkStencilOp(p.ccwStencilPass);
+            ds.back.depthFailOp = ToVkStencilOp(p.ccwStencilDepthFail);
+            ds.back.compareOp   = ToVkCompareOp(p.ccwStencilFunc);
         } else {
             ds.back = ds.front;
         }

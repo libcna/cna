@@ -566,8 +566,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 318: DepthStencilState.TwoSidedStencilMode on Vulkan (reuses the renderer-agnostic
-        # EasyGL source). NOTE: expected to FAIL the contrast check per Task 870 - stencil testing
-        # never gates on Vulkan.
+        # EasyGL source). It used to carry "expected to FAIL the contrast check per Task 870 -
+        # stencil testing never gates on Vulkan". plans/plan_vulkan_parity.md VKPAR-0005 measured
+        # both halves of that on an AMD Radeon 780M (RADV): stencil gates normally, and the failure
+        # was Task 870's own front/back swap, which is wrong on hardware. This test passes.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_twosided
                         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_twosided_test.cpp)
         cna_register_renderer_test(NAME Vulkan_DepthStencilState_StencilTwoSided COMMAND cna_test_vulkan_depthstencilstate_stencil_twosided
