@@ -206,10 +206,9 @@ unset(_cna_enable_video_normalized)
 set(CNA_DIRECT2D_TEST_RUNTIME "WINE" CACHE STRING "Cross-compiled Direct2D test runtime (WINE or PROTON)")
 set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
 
-# DISPLAY value baked into every GPU/window-creating ctest's ENVIRONMENT property (SDL_VIDEODRIVER=x11).
-# Defaults to :0 for backward compatibility; override with e.g. -DCNA_TEST_DISPLAY=:99 to run the full
-# suite against a virtual display (Xvfb) instead of the real desktop.
-set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creating ctest tests")
+# DISPLAY used by every GPU/window-creating ctest. Empty by default -- tests inherit the caller's --
+# and the live desktop is opt-in; see cmake/TestDisplayPolicy.cmake (GTI-0001).
+include(cmake/TestDisplayPolicy.cmake)
 
 # Renderer identities (plans/plan_renderer_cleanup.md RRC-002): the public set, and the refusal of a
 # retired or unknown renderer name through any of CNA_GRAPHICS_RENDERER, CNA_GRAPHICS_RENDERERS or a

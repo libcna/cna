@@ -606,6 +606,12 @@ $ readelf -d cmake-build-multi/cna_demo_2d | grep NEEDED
 selection is by the `CNA_GRAPHICS_RENDERER` environment variable, so this binary runs Vulkan on the
 native X11 backend with no SDL in the process.
 
+> **Correction (`plans/plan_gpu_test_isolation.md` GTI-0005).** `cmake-build-multi` and
+> `cmake-build-wayland` are **RelWithDebInfo**, so the renderer loaded no validation layer in either, and
+> the "zero `[Vulkan Validation]` messages" reported for the SDL-free X11 and native Wayland runs below
+> measured nothing. Re-measured with the layer injected by the loader, and proven active per instance:
+> 0 errors and 0 warnings on both paths. The rendering results were never in question.
+
 ## VKPAR-0008 — Wayland
 
 `cmake-build-wayland`: `CNA_PLATFORM=WAYLAND`, `CNA_ENABLE_SDL=OFF`, `CNA_AUDIO_PLATFORM=ALSA`,

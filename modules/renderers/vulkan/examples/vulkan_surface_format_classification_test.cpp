@@ -388,6 +388,15 @@ protected:
         // H. The Khronos layer's verdict on the sweep.
         {
             using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+#ifdef NDEBUG
+            // plans/plan_gpu_test_isolation.md GTI-0004: a build with NDEBUG (Release,
+            // RelWithDebInfo) runs without the validation layer by design -- VulkanRenderer's
+            // sEnableValidation is off under NDEBUG -- so a "no validation message" claim cannot be
+            // measured there. Reported as SKIP, not as a failure and never as a vacuous pass. A
+            // Debug build still asserts the layer is live, as before.
+            std::printf("[SKIP] %s: this build runs without the Vulkan validation layer (NDEBUG)\n",
+                        "H1/H2 validation layer loaded, no validation message");
+#else
             check(VulkanRenderer::IsValidationActiveEXT(),
                   "H1 VK_LAYER_KHRONOS_validation is loaded, so the count below means something");
             auto* vk = dynamic_cast<VulkanRenderer*>(&renderer);
@@ -402,6 +411,7 @@ protected:
             {
                 check(false, "H2 Vulkan renderer not reachable");
             }
+#endif
         }
 
         std::printf("%d/%d checks passed\n", pass_, total_);
