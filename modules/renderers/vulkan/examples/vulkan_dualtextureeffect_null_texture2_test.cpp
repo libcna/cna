@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 // Task 387: verify DualTextureEffect's second texture (`Texture2`, slot 1) null behavior on
 // Vulkan. See examples/easygl_dualtextureeffect_null_texture2_test.cpp for the full
-// derivation. Verify-only on Vulkan (the real bug this task found and fixed was Bgfx-only):
-// source-reading confirmed VulkanRenderer::DrawIndexedPrimitivesEx's dual-texture
-// branch already falls back to `defaultWhiteView_` for `params.texture1` when null
-// (`v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;`) -- this test empirically
-// confirms that with a real pixel readback.
+// derivation.
+//
+// plans/plan_vulkan_parity.md VKPAR-0004 corrected the expected value and strengthened the probe.
+// The white fallback this file was written to confirm is not XNA's rule: an unbound
+// DualTextureEffect slot samples opaque black -- tools/xna-oracle/reference/null-texture/
+// dualtexture_texture{,2}_null.png, centre (0,0,0,255) -- so the product goes to black whichever
+// slot is missing. GSC-0004 corrected DirectX11, DirectX12 and EasyGL the same way.
+//
+// Because the expected pixel is now black, the second draw clears to a WITNESS colour instead of
+// black: otherwise "sampled opaque black" and "drew nothing at all" are the same readback. The
+// witness check below is what makes the assertion mean something.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -18,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -85,6 +92,9 @@ protected:
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         const Color kBlack(0, 0, 0, 255);
+        // VKPAR-0004: the second draw's clear. Any colour the draw cannot produce will do;
+        // this is the one StockEffectNullTextureTest uses for the same reason.
+        const Color kWitness(7, 199, 53, 255);
         const Color kDistinctivePrev(20, 200, 20, 255); // "previous draw" texture2
         const Color kTex(80, 40, 120, 255);             // non-saturated Texture (slot 0)
 
@@ -111,7 +121,7 @@ protected:
         }
 
         // Second draw: Texture=kTex, Texture2=null -- the actual behavior under test.
-        dev.Clear(kBlack);
+        dev.Clear(kWitness);
         {
             DualTextureEffect fx(dev);
             fx.setTextureProperty(&tex);
@@ -121,9 +131,12 @@ protected:
         }
 
         Color got = readCenter(dev);
-        check(colourMatch(got, Color(160, 80, 240, 255)),
-              "Texture2=null falls back to white (not the previous draw's texture)",
-              got, Color(160, 80, 240, 255));
+        check(colourMatch(got, kBlack),
+              "Texture2=null samples XNA's opaque black (not the previous draw's texture)",
+              got, kBlack);
+        check(!colourMatch(got, kWitness),
+              "Texture2=null: pixel != the clear colour (proves the quad was drawn at all)",
+              got, kWitness);
         check(!colourMatch(got, kDistinctivePrev),
               "Texture2=null: pixel != previous draw's texture (proves no stale-state leak)",
               got, kDistinctivePrev);
@@ -135,6 +148,11 @@ public:
     VulkanDualTextureNullTexture2Test()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // VKPAR-0004: GetBackBufferData is a HiDef operation. Without this these three tests
+        // aborted before asserting anything -- "GetBackBufferData is not supported by the
+        // Reach graphics profile" -- on the baseline as well as here, so their registrations
+        // had been contributing nothing. The EasyGL siblings have always set it.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
     }

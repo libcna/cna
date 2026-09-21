@@ -3859,6 +3859,15 @@ namespace CNA::Internal::Renderers::Vulkan
         if (defaultWhiteCubeView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteCubeView_, nullptr); defaultWhiteCubeView_ = VK_NULL_HANDLE; }
         if (defaultWhiteCubeImage_ != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteCubeImage_, nullptr);   defaultWhiteCubeImage_ = VK_NULL_HANDLE; }
         if (defaultWhiteCubeMem_  != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteCubeMem_, nullptr);       defaultWhiteCubeMem_  = VK_NULL_HANDLE; }
+        // VKPAR-0004: the classic missing-texture fillers, 2D and cube. Neither owns a standalone
+        // descriptor set, so there is nothing else to release; both are created lazily and may
+        // legitimately still be VK_NULL_HANDLE here.
+        if (defaultOpaqueBlackCubeView_  != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultOpaqueBlackCubeView_, nullptr); defaultOpaqueBlackCubeView_  = VK_NULL_HANDLE; }
+        if (defaultOpaqueBlackCubeImage_ != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultOpaqueBlackCubeImage_, nullptr);   defaultOpaqueBlackCubeImage_ = VK_NULL_HANDLE; }
+        if (defaultOpaqueBlackCubeMem_   != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultOpaqueBlackCubeMem_, nullptr);       defaultOpaqueBlackCubeMem_   = VK_NULL_HANDLE; }
+        if (defaultOpaqueBlackView_      != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultOpaqueBlackView_, nullptr);    defaultOpaqueBlackView_      = VK_NULL_HANDLE; }
+        if (defaultOpaqueBlackImage_     != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultOpaqueBlackImage_, nullptr);       defaultOpaqueBlackImage_     = VK_NULL_HANDLE; }
+        if (defaultOpaqueBlackMemory_    != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultOpaqueBlackMemory_, nullptr);        defaultOpaqueBlackMemory_    = VK_NULL_HANDLE; }
         // Default white texture (no free of descriptorSet — will be freed with the pool).
         if (defaultWhiteArrayView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteArrayView_, nullptr); defaultWhiteArrayView_ = VK_NULL_HANDLE; }
         if (defaultWhiteView_   != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteView_, nullptr);  defaultWhiteView_   = VK_NULL_HANDLE; }
@@ -9127,6 +9136,176 @@ namespace CNA::Internal::Renderers::Vulkan
         vci.format   = VK_FORMAT_R8G8B8A8_UNORM;
         vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         vkCreateImageView(dev, &vci, nullptr, &defaultFlatNormalView_);
+    }
+
+    // plans/plan_graphics_shared_cleanup.md GSC-0004 / plans/plan_vulkan_parity.md VKPAR-0004.
+    // Microsoft XNA 4.0 reads an unbound stock-effect texture as opaque black, measured through
+    // tools/xna-oracle and checked in as tools/xna-oracle/reference/null-texture/ -- BasicEffect
+    // with TextureEnabled, SkinnedEffect, AlphaTestEffect, both DualTextureEffect slots and both
+    // EnvironmentMapEffect slots all sample (0,0,0,255). This renderer bound white everywhere,
+    // which is GLTF-386's glTF identity rather than XNA's rule; DirectX11, DirectX12 and EasyGL
+    // were corrected by GSC-0004 and Vulkan was left for GSC-F2, which is this.
+    //
+    // Structurally identical to EnsureDefaultFlatNormalTexture() above -- a 1x1 sampled image with
+    // no standalone descriptor set, because every classic family builds a shared set from views.
+    void VulkanRenderer::EnsureDefaultOpaqueBlackTexture()
+    {
+        if (defaultOpaqueBlackImage_ != VK_NULL_HANDLE) return;
+        VkDevice dev = device_;
+
+        VkImageCreateInfo info{};
+        info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        info.imageType     = VK_IMAGE_TYPE_2D;
+        info.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        info.extent        = {1, 1, 1};
+        info.mipLevels     = 1;
+        info.arrayLayers   = 1;
+        info.samples       = VK_SAMPLE_COUNT_1_BIT;
+        info.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        info.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &info, nullptr, &defaultOpaqueBlackImage_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImage (default opaque black 2D) failed");
+
+        VkMemoryRequirements req;
+        vkGetImageMemoryRequirements(dev, defaultOpaqueBlackImage_, &req);
+        VkMemoryAllocateInfo alloc{};
+        alloc.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        alloc.allocationSize  = req.size;
+        alloc.memoryTypeIndex = FindMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        vkAllocateMemory(dev, &alloc, nullptr, &defaultOpaqueBlackMemory_);
+        vkBindImageMemory(dev, defaultOpaqueBlackImage_, defaultOpaqueBlackMemory_, 0);
+
+        VkBuffer       sb = VK_NULL_HANDLE;
+        VkDeviceMemory sm = VK_NULL_HANDLE;
+        void*          sp = nullptr;
+        const uint8_t  opaqueBlackPixel[4] = {0, 0, 0, 255};
+        CreateBuffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     sb, sm, &sp);
+        std::memcpy(sp, opaqueBlackPixel, 4);
+
+        TransitionImageLayout(defaultOpaqueBlackImage_, VK_IMAGE_LAYOUT_UNDEFINED,
+                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        VkCommandBuffer cb = BeginOneTimeCommands();
+        VkBufferImageCopy reg{};
+        reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        reg.imageExtent      = {1, 1, 1};
+        vkCmdCopyBufferToImage(cb, sb, defaultOpaqueBlackImage_,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &reg);
+        EndOneTimeCommands(cb);
+        TransitionImageLayout(defaultOpaqueBlackImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vkDestroyBuffer(dev, sb, nullptr);
+        vkFreeMemory(dev, sm, nullptr);
+
+        VkImageViewCreateInfo vci{};
+        vci.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vci.image    = defaultOpaqueBlackImage_;
+        vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vci.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        if (vkCreateImageView(dev, &vci, nullptr, &defaultOpaqueBlackView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (default opaque black 2D) failed");
+    }
+
+    // VKPAR-0004, the cube half: EnvironmentMapEffect's EnvironmentMap slot. Mirrors the white
+    // cube EnsureEnvMapResources() builds, except the texel.
+    void VulkanRenderer::EnsureDefaultOpaqueBlackCubeTexture()
+    {
+        if (defaultOpaqueBlackCubeImage_ != VK_NULL_HANDLE) return;
+        VkDevice dev = device_;
+
+        VkImageCreateInfo imgInfo{};
+        imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imgInfo.flags         = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        imgInfo.imageType     = VK_IMAGE_TYPE_2D;
+        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.extent        = {1, 1, 1};
+        imgInfo.mipLevels     = 1;
+        imgInfo.arrayLayers   = 6;
+        imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &imgInfo, nullptr, &defaultOpaqueBlackCubeImage_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImage (default opaque black cube) failed");
+
+        VkMemoryRequirements memReq;
+        vkGetImageMemoryRequirements(dev, defaultOpaqueBlackCubeImage_, &memReq);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize  = memReq.size;
+        allocInfo.memoryTypeIndex = FindMemoryType(memReq.memoryTypeBits,
+                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        vkAllocateMemory(dev, &allocInfo, nullptr, &defaultOpaqueBlackCubeMem_);
+        vkBindImageMemory(dev, defaultOpaqueBlackCubeImage_, defaultOpaqueBlackCubeMem_, 0);
+
+        const uint32_t opaqueBlack = 0xFF000000u;   // RGBA8 little-endian: R=0 G=0 B=0 A=255
+        VkBuffer stageBuf = VK_NULL_HANDLE; VkDeviceMemory stageMem = VK_NULL_HANDLE;
+        CreateBuffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stageBuf, stageMem, nullptr);
+        void* mapped = nullptr;
+        vkMapMemory(dev, stageMem, 0, 4, 0, &mapped);
+        std::memcpy(mapped, &opaqueBlack, 4);
+        vkUnmapMemory(dev, stageMem);
+
+        VkCommandBuffer cb = BeginOneTimeCommands();
+        VkImageMemoryBarrier barr{};
+        barr.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barr.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+        barr.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barr.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barr.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barr.image               = defaultOpaqueBlackCubeImage_;
+        barr.subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6};
+        barr.srcAccessMask       = 0;
+        barr.dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barr);
+
+        for (uint32_t face = 0; face < 6; ++face) {
+            VkBufferImageCopy region{};
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, face, 1};
+            region.imageExtent      = {1, 1, 1};
+            vkCmdCopyBufferToImage(cb, stageBuf, defaultOpaqueBlackCubeImage_,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        }
+        barr.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barr.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barr.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barr.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr,
+                             1, &barr);
+        EndOneTimeCommands(cb);
+
+        vkDestroyBuffer(dev, stageBuf, nullptr);
+        vkFreeMemory(dev, stageMem, nullptr);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image    = defaultOpaqueBlackCubeImage_;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6};
+        if (vkCreateImageView(dev, &viewInfo, nullptr, &defaultOpaqueBlackCubeView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (default opaque black cube) failed");
+    }
+
+    VkImageView VulkanRenderer::ClassicNullTextureViewEXT()
+    {
+        EnsureDefaultOpaqueBlackTexture();
+        return defaultOpaqueBlackView_;
+    }
+
+    VkImageView VulkanRenderer::ClassicNullCubeViewEXT()
+    {
+        EnsureDefaultOpaqueBlackCubeTexture();
+        return defaultOpaqueBlackCubeView_;
     }
 
     void VulkanRenderer::FillExtPushConst(float (&pc)[32], const Matrix& wvp,
@@ -19670,7 +19849,9 @@ namespace CNA::Internal::Renderers::Vulkan
             } else if (needsSkinned) {
                 EnsureSkinnedResources();
                 const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-                VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
+                // VKPAR-0004: XNA's SkinnedEffect always samples (SkinnedEffect.cpp sets
+                // textureEnabled unconditionally) and reads an unbound Texture as opaque black.
+                VkImageView v2d = vs ? vs->GetVkImageView() : ClassicNullTextureViewEXT();
                 d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d, slotSamplers_[0]);
                 const int count = std::min(params.boneCount, 72);
                 d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
@@ -19714,8 +19895,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 EnsureEnvMapResources();
                 const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
                 const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
-                VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
-                VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
+                // VKPAR-0004: both slots read opaque black when unbound, which is also what the
+                // envmap_texture_null / envmap_cube_null references measure.
+                VkImageView v2d  = vs0 ? vs0->GetVkImageView()    : ClassicNullTextureViewEXT();
+                VkImageView vcub = vtc ? vtc->GetVkCubeImageView() : ClassicNullCubeViewEXT();
                 d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub,
                                                             slotSamplers_[0], slotSamplers_[1]);
                 d.envMapUboData[0]  = params.eyePositionWorld[0];
@@ -19750,8 +19933,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 EnsureDualTexResources();
                 const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
                 const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
-                VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
-                VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
+                // VKPAR-0004: dual_texture3d.frag samples BOTH units unconditionally, and XNA
+                // reads either unbound slot as opaque black.
+                VkImageView v0 = vs0 ? vs0->GetVkImageView() : ClassicNullTextureViewEXT();
+                VkImageView v1 = vs1 ? vs1->GetVkImageView() : ClassicNullTextureViewEXT();
                 d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
                 d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
                 d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
@@ -19764,7 +19949,13 @@ namespace CNA::Internal::Renderers::Vulkan
             } else if (needsLitTextured || needsLitUntextured || needsLitColored) {
                 EnsureLitTexturedResources();
                 const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-                VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+                // VKPAR-0004: opaque black unconditionally, unlike EasyGL's GSC-0004 hunk, which
+                // had to keep a white identity because its lit programs multiply unit 0 in
+                // whatever the flag says. These shaders read
+                // `(pc.textureEnabled > 0.5) ? texture(...) : vec4(1.0)`, so a BasicEffect with
+                // TextureEnabled=false never samples this view and the white identity is already
+                // in the shader where it belongs.
+                VkImageView view = vs ? vs->GetVkImageView() : ClassicNullTextureViewEXT();
                 d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view, slotSamplers_[0]);
                 d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
                 d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
@@ -19798,7 +19989,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
                 // by the colored3d/textured3d/colored_textured3d fog-capable bundle (Task 899).
                 const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
-                VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+                // VKPAR-0004: AlphaTestEffect samples unconditionally (alpha_test3d.frag) and the
+                // textured3d/colored_textured3d pair gates on textureEnabled in the shader, so
+                // opaque black is right for both halves of this arm.
+                VkImageView view = vs ? vs->GetVkImageView() : ClassicNullTextureViewEXT();
                 d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
                 if (d.useFogTex3D) {
                     EnsureFogTex3DResources();
@@ -20887,7 +21081,14 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             const auto* vs = params.texture0
                 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
-            const VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+            // VKPAR-0004: the same classic rule as the non-instanced arms above -- an instanced
+            // stock draw must not read a different missing-texture value from a non-instanced one.
+            // A PBR instanced draw binds d.pbrDescSet rather than this set, and its base colour
+            // keeps glTF's white identity, so the split is made explicit rather than relied on.
+            const VkImageView view = vs ? vs->GetVkImageView()
+                                        : ((d.usePbr || d.usePbrSkinned)
+                                               ? defaultWhiteView_
+                                               : ClassicNullTextureViewEXT());
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
         }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)

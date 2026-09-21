@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 // Task 379: AlphaTestEffect null/no-texture behavior (Vulkan renderer).
 //
-// See examples/easygl_alphatest_null_texture_test.cpp for the full derivation. Vulkan already had
-// the correct white-texture fallback (`defaultWhiteDescSet_`, used generically in the draw
-// dispatch) before this task — no bug found here, confirmed by pixel readback.
+// See examples/easygl_alphatest_null_texture_test.cpp for the full derivation.
+//
+// plans/plan_vulkan_parity.md VKPAR-0004 corrected the expected value. This file used to assert a
+// WHITE fallback and recorded "no bug found here"; that predates the measurement. XNA 4.0 reads an
+// unbound AlphaTestEffect texture as opaque black — tools/xna-oracle/reference/null-texture/
+// alphatest_null.png, centre (0,0,0,255) — so diffuse never reaches the target and the draw is
+// black. The alpha channel still comes from the effect, which is what keeps the alpha test itself
+// meaningful. GSC-0004 corrected DirectX11, DirectX12 and EasyGL the same way.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -16,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -31,10 +37,13 @@ using namespace Microsoft::Xna::Framework::Graphics;
 static constexpr int kSize = 64;
 
 static const Color kTexColor(200, 100, 50, 255);
+// A colour no leg of this test can draw, so "blank frame" and "drew opaque black" differ.
+static const Color kWitness(7, 199, 53, 255);
 static const Vector3 kDiffuse(0.6f, 0.4f, 0.8f);
 
 static const Color kExpectedWithTexture(120, 40, 40, 255);
-static const Color kExpectedNullTexture(153, 102, 204, 255);
+// diffuse(0.6,0.4,0.8) * opaqueBlack(0,0,0,1) = (0,0,0); alpha stays the effect's own.
+static const Color kExpectedNullTexture(0, 0, 0, 255);
 
 class VulkanAlphaTestNullTextureTest : public Game
 {
@@ -86,15 +95,20 @@ class VulkanAlphaTestNullTextureTest : public Game
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         fx.Apply();
 
+        // VKPAR-0004: the loop used to clear to black and retry "until the pixel is not black",
+        // which was a workable way to skip a blank first frame only while the expected answer could
+        // never itself be black. It can be now -- that is the whole point of the corrected rule --
+        // so the clear is a WITNESS colour the draw cannot produce, and the loop waits for the
+        // quad to land rather than for it to be non-black. A black readback is then a real draw.
         Color got(0, 0, 0, 0);
         for (int i = 0; i < 20; ++i)
         {
-            dev.Clear(Color(0, 0, 0, 255));
+            dev.Clear(kWitness);
             dev.setBlendStateProperty(BlendState::Opaque);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
-            if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
-                break; // skip blank/black frames
+            if (!matches(got, kWitness))
+                break; // the quad has landed; a blank frame still reads the clear colour
         }
         return got;
     }
@@ -121,8 +135,8 @@ protected:
 
         const Color nullTexGot = renderWith(dev, nullptr, quad);
         check(matches(nullTexGot, kExpectedNullTexture),
-              "Texture=null: falls back to white (not the previous draw's stale texture)",
-              nullTexGot, "(153,102,204)");
+              "Texture=null: samples XNA's opaque black (not the previous draw's stale texture)",
+              nullTexGot, "(0,0,0)");
         check(!matches(nullTexGot, kExpectedWithTexture),
               "Texture=null: pixel != previous draw's texture (proves no stale-state leak)",
               nullTexGot, "not (120,40,40)");
@@ -135,6 +149,11 @@ public:
     VulkanAlphaTestNullTextureTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // VKPAR-0004: GetBackBufferData is a HiDef operation. Without this these three tests
+        // aborted before asserting anything -- "GetBackBufferData is not supported by the
+        // Reach graphics profile" -- on the baseline as well as here, so their registrations
+        // had been contributing nothing. The EasyGL siblings have always set it.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

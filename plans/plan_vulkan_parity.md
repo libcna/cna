@@ -28,7 +28,7 @@ evidence:
 | VKPAR-0002 | Renderer architecture audit and parity inventory | ⬜ |
 | VKPAR-0003 | The Vulkan multi-renderer configuration does not build | ✅ |
 | VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ⬜ |
-| VKPAR-0004 | GSC-F2 — Vulkan classic null-texture semantics (white → XNA's opaque black) | ⬜ |
+| VKPAR-0004 | GSC-F2 — Vulkan classic null-texture semantics (white → XNA's opaque black) | ✅ |
 | VKPAR-0005 | Vulkan facedness: the two-sided stencil "driver quirk" claim, measured on RADV | ⬜ |
 | VKPAR-0006 | Validation layers + synchronization validation across the renderer suite | ⬜ |
 | VKPAR-0007 | X11 + Vulkan surface path on RADV | ⬜ |
@@ -272,6 +272,90 @@ XNA actually does. This is exactly the shape `GSC-F2` predicted.
 XNA, but Vulkan's lit programs — like EasyGL's — multiply unit 0 in unconditionally. That case keeps
 the white identity; the black applies where the effect genuinely samples. `GSC-0004`'s EasyGL hunk
 (`else if (!params.pbr && params.textureEnabled)`) is the precedent.
+
+---
+
+### Reproduction — RADV-HW, before any change
+
+Both renderer-neutral suites were pointed at Vulkan (the gates above extended) on the unmodified
+renderer, `cmake-build-vulkan`, `DISPLAY=:0`, device `AMD Radeon 780M (RADV PHOENIX)`:
+
+```
+9 tests from 2 test suites ran.
+[  PASSED  ] 1 test.
+[  FAILED  ] 8 tests
+```
+
+The readbacks name the defect exactly — `FF-FF FF-FF` is opaque white where the XNA reference is
+`00-00 00-FF`:
+
+| Test | Got | Expected |
+|---|---|---|
+| `StockEffectNullTextureTest.BasicEffectWithTextureEnabledSamplesOpaqueBlack` | `(255,255,255,255)` | `(0,0,0,255)` |
+| `StockEffectNullTextureTest.SkinnedEffectSamplesOpaqueBlack` (both lighting modes) | `(255,255,255,255)` | `(0,0,0,255)` |
+| `StockEffectNullTextureTest.AlphaTestEffectSamplesOpaqueBlack` | `(255,255,255,255)` | `(0,0,0,255)` |
+| `StockEffectNullTextureTest.EnvironmentMapEffectSamplesOpaqueBlackForEitherSlot` | 127 off per channel (the white cube reflecting) | reference value |
+| `DualTextureEffectNullSamplerTest.NullTexture*` (4 legs) | `(120,200,40,255)` / `(160,80,240,255)` | `(0,0,0,255)` |
+
+The single pass is `BasicEffectWithoutTextureEnabledNeverReadsTheSlot`, and it passes for the right
+reason: Vulkan's lit and textured fragment shaders read
+`(pc.textureEnabled > 0.5) ? texture(...) : vec4(1.0)`, so `TextureEnabled=false` never samples.
+
+### Fix
+
+`VulkanRenderer` gains an opaque-black 1×1 2D image and an opaque-black 1×1 cube, built exactly like
+the existing `EnsureDefaultFlatNormalTexture()` / `EnsureEnvMapResources()` fillers, created lazily
+and released with the other defaults. Six binding sites in `FillStockFamilyRecordEXT` and
+`DrawInstancedPrimitivesCoreEXT` move from `defaultWhiteView_`/`defaultWhiteCubeView_` to them:
+skinned, env-map (2D **and** cube), dual-texture (both slots), the lit BasicEffect families, the
+shared alpha-test / `textured3d` arm, and the instanced classic path.
+
+**What deliberately did not change.** The CNAEXT PBR base colour keeps opaque white — glTF's "no
+`baseColorTexture`" identity, the same split `GSC-0004` made on DirectX12 — as do the PBR maps, the
+flat-normal fallback, the IBL cube fallbacks, the shadow-map fillers, and `ShaderEffect`'s own bound
+resources (a CNAEXT custom effect sampling a unit the game never bound gets white, not undefined
+memory; that is a different contract and `VULKAN-390` owns it). The instanced site makes the split
+explicit with `d.usePbr || d.usePbrSkinned` rather than relying on the PBR pipeline binding a
+different set.
+
+**Unlike EasyGL, no `textureEnabled` special case was needed.** `GSC-0004` had to keep a white
+identity for EasyGL because its lit programs multiply unit 0 in unconditionally. Vulkan's shaders
+already branch on the flag, so the white identity lives in the shader where it belongs and the
+binding can be black unconditionally.
+
+### Result — RADV-HW
+
+```
+9 tests from 2 test suites ran.
+[  PASSED  ] 9 tests.
+```
+
+### A second defect found on the way: three Vulkan examples had never asserted anything
+
+`Vulkan_AlphaTest_NullTexture`, `Vulkan_DualTextureEffect_NullTexture0` and
+`..._NullTexture2` abort before their first check:
+
+```
+CNA: fatal exception escaped Game::Run(): GetBackBufferData is not supported by the Reach graphics profile.
+terminate called after throwing an instance of 'System::NotSupportedException'
+```
+
+Confirmed **on the baseline sources too** (the three files stashed, targets rebuilt, re-run): this is
+not a consequence of this task's edits. `GetBackBufferData` is HiDef-only and these three never
+called `setGraphicsProfileProperty`; their EasyGL siblings always have. Three registered tests were
+therefore reporting a renderer defect they could not have detected either way. Fixed with the
+missing `GraphicsProfile::HiDef`, and they now pass against the corrected values.
+
+Their headers also had to be rewritten rather than just renumbered. All three asserted the white
+fallback as *correct* — `vulkan_alphatest_null_texture_test.cpp` recorded "Vulkan already had the
+correct white-texture fallback … no bug found here, confirmed by pixel readback" — which predates
+`SOFTWARE-303` measuring XNA. And because the expected pixel is now black, each test clears to a
+witness colour `(7,199,53,255)` before the draw under test: otherwise "sampled opaque black" and
+"drew nothing at all" are the same readback. The AlphaTest test's retry loop, which used to wait for
+a *non-black* pixel, now waits for a pixel that is not the witness.
+
+**Classification:** renderer defect (the white fallback) plus test debt (three dead example tests,
+and two renderer-neutral suites that skipped this renderer).
 
 ---
 

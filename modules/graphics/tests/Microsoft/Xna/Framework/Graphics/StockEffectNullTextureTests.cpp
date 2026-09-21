@@ -68,7 +68,9 @@ namespace
     protected:
         void SetUp() override
         {
-            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12))
+            // plans/plan_vulkan_parity.md VKPAR-0004 adds Vulkan: GSC-F2 recorded it as one of the
+            // renderers still binding white here, and it now binds the measured opaque black.
+            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 
             PresentationParameters parameters;
