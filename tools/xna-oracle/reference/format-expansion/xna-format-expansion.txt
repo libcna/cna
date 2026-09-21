@@ -1,0 +1,31 @@
+# plans/plan_vulkan_parity.md VKPAR-0014 -- measured on the real XNA 4.0 runtime.
+# 1x1 texture of the named SurfaceFormat, SpriteBatch(PointClamp, BlendState.Opaque)
+# into an 8x8 SurfaceFormat.Color RenderTarget2D, centre pixel read back.
+# format|r,g,b,a   (or 'unsupported: <reason>')
+Color|128,64,255,128
+NormalizedByte2|128,64,255,255
+NormalizedByte4|128,64,255,128
+Rgba1010102|128,64,255,255
+Rg32|128,64,255,255
+Rgba64|128,64,255,128
+Alpha8|0,0,0,128
+Single|64,255,255,255
+Vector2|64,128,255,255
+Vector4|64,128,255,191
+HalfSingle|64,255,255,255
+HalfVector2|64,128,255,255
+HalfVector4|64,128,255,191
+HdrBlendable|64,128,255,191
+Bgr565|132,65,255,255
+Bgra5551|132,66,255,255
+Bgra4444|136,68,255,136
+#
+# Captured 2026-09-21. Runtime: real XNA 4.0 (GAC assemblies) under wine-10.0, WINEPREFIX
+# ~/.wine-cna-xna40, d3d9=native -> DXVK 2.6.0 -> AMD Radeon 780M (RADV PHOENIX), radv 25.0.7.
+# Reproduce: see tools/xna-oracle/README.md "Channel expansion".
+#
+# THE RULE THIS ESTABLISHES
+#   * a colour channel the format does not store samples as 1.0
+#   * an alpha the format does not store samples as 1.0
+#   * Alpha8 is the one exception: (0, 0, 0, A)
+# It settles ClassicTextureFormatTests (right) against plan_vulkan.md VULKAN-174's blue = 0 (wrong).

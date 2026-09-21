@@ -22,6 +22,7 @@ not presented as elapsed-time improvements.
 | Fast debug | Controlled content compilation fell 9.7% and the build tree fell 47.2% with line tables. | `CNA_DEBUG_INFO=FULL` is default; `dev-fast-debug` opts in. |
 | Clean-CI unity | Four-job core/math clean closure fell 25.6%; a one-source rebuild regressed 5.7%. | Default `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. |
 | Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=DEFAULT`; `AUTO`, `LLD`, and `MOLD` are explicit alternatives. |
+| Shared runtime | `cmake-build-vulkan` (Debug, `VULKAN;OPENGL33`) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a Vulkan renderer `.cpp` edit now relinks 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.27; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
 | ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
 | Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges; this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
 
@@ -250,6 +251,58 @@ speed metric. Split DWARF provided no meaningful controlled compile gain and mad
 larger, so it has no preset. Both modes remain selectable for other machines. The line-table tool
 contains 18,922 decoded source-line rows and runs normally; Clang 19.1.7 also builds and runs the
 same preset with `-gline-tables-only`.
+
+## Shared runtime library
+
+`CNA_SHARED_LIBRARY` (`plans/plan_vulkan_parity.md` VKPAR-0017) links the CNA runtime into one shared
+library, `libcna.so`, instead of statically into every executable that links `CNA`.
+
+**Why.** Every test and example is its own executable. Linked statically, each carried the whole
+engine: measured on `cmake-build-vulkan` (Debug, 2026-09-21), 798 executables at ~104 MB each —
+`.debug_*` ≈ 77 MB, `.strtab`/`.symtab` ≈ 17.5 MB, `.text` 7 MB — 83 GB in total, and one edit to a
+renderer `.cpp` relinked all of them, writing ~83 GB. On a machine whose SSD wear the repository
+rules exist to limit, that is the dominant cost of an edit–build–test cycle.
+
+**How.** `cna_shared` is linked from every CNA-owned static archive in the `CNA` closure with
+`$<LINK_LIBRARY:WHOLE_ARCHIVE,...>` (a shared library has no `main`, so without it the linker would
+pull in nothing), with `LINK_LIBRARY_OVERRIDE_<lib>` resolving the feature conflict that
+inter-module dependencies otherwise cause. `CNA` then gives consumers `libcna.so`, the
+**compile-only** usage requirements of the archives (`$<COMPILE_ONLY:...>`), and the libraries those
+archives depend on that are not inside `libcna.so` (Vulkan, SDL, X11, sharp-runtime, ...).
+`cmake/SharedRuntimeLibrary.cmake` holds the closure walk; "CNA-owned" means a non-imported target
+whose `SOURCE_DIR` is under `modules/`. The CNA archives therefore never appear on a consumer's link
+line, so a module edit does not relink consumers, and `CMAKE_LINK_DEPENDS_NO_SHARED` keeps a rebuilt
+`libcna.so` from relinking them either.
+
+**Measured**, same machine and configuration:
+
+| | Static | Shared |
+| --- | --- | --- |
+| `cmake-build-vulkan` | 87 GB (48 GB without the 341 EasyGL binaries VKPAR-0016 removed) | 5.4 GB |
+| Typical test executable | ~104 MB | 0.5–0.9 MB |
+| `libcna.so` | — | 182 MB (both renderers, 98 725 exported symbols, 0 unresolved) |
+| Relinked by a Vulkan renderer `.cpp` edit | ~800 targets, ~83 GB | 29 targets, ~1.7 GB |
+| Relinked by a rebuilt `libcna.so` | — | 0 |
+| Full suite, private display | `Vulkan_*` 319 passed / 51 failed | `Vulkan_*` 319 passed / 51 failed |
+
+The 29 targets that still relink are the ones that link module archives directly on purpose:
+`CnaTests` and the per-module `Cna*Tests`, the content tools and fuzzers, and the `probe_*`
+link-closure checks, which exist to test the static closure.
+
+**One copy of everything.** A symbol defined both in `libcna.so` and in an executable would give it
+two copies of that code and of its static state. That happens only if a static archive that also
+went into `libcna.so` precedes `libcna.so` on an executable's link line, so `CnaTests` names `CNA`
+first. Checked with `nm` on the built binaries: the only symbols defined in both are
+`R_X86_64_COPY` relocations — the ELF mechanism by which an executable holds the single live copy
+of a data object a shared library defines (`BlendState::Opaque` and similar) — and no strong
+duplicate remains.
+
+**Scope.** Native ELF with GNU/Clang and CMake ≥ 3.27 only; that is also the default there. Windows
+DLLs would need export annotations CNA does not carry, and an Emscripten `SHARED` library is a side
+module, so those builds keep the static link, as does anything configured with
+`-DCNA_SHARED_LIBRARY=OFF`. The C API (`modules/c-api`) links the module archives directly, not
+`CNA`, so its shared library stays self-contained either way. Switching an existing build directory
+recompiles it once, because the archives that go into `libcna.so` need `-fPIC`.
 
 ## Clean-CI unity pilot
 

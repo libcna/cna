@@ -4925,6 +4925,20 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceMemory        defaultFlatNormalMemory_ = VK_NULL_HANDLE;
         VkImageView            defaultFlatNormalView_  = VK_NULL_HANDLE;
 
+        // plans/plan_graphics_shared_cleanup.md GSC-0004, plans/plan_vulkan_parity.md VKPAR-0004:
+        // what a CLASSIC stock effect samples from a slot the game left unbound. Measured on
+        // Microsoft XNA 4.0 (tools/xna-oracle/reference/null-texture/): opaque black (0,0,0,255),
+        // not white. The 2D image serves BasicEffect/SkinnedEffect/AlphaTestEffect/DualTextureEffect
+        // and EnvironmentMapEffect's Texture; the cube serves EnvironmentMapEffect's EnvironmentMap.
+        // The CNAEXT PBR base colour keeps defaultWhiteImage_ -- that white is glTF's "no
+        // baseColorTexture" identity and a different contract.
+        VkImage               defaultOpaqueBlackImage_     = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultOpaqueBlackMemory_    = VK_NULL_HANDLE;
+        VkImageView           defaultOpaqueBlackView_      = VK_NULL_HANDLE;
+        VkImage               defaultOpaqueBlackCubeImage_ = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultOpaqueBlackCubeMem_   = VK_NULL_HANDLE;
+        VkImageView           defaultOpaqueBlackCubeView_  = VK_NULL_HANDLE;
+
         // --- Sprite batch GPU buffers (host-visible, one per frame-in-flight) ---
         std::array<VkBuffer,       MaxFramesInFlight> spriteVB_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> spriteVBMem_ = {};
@@ -5916,6 +5930,26 @@ namespace CNA::Internal::Renderers::Vulkan
         /// VULKAN-254: creates @ref defaultWhiteVolumeImage_ and its view, once.
         void       EnsureDefaultWhiteVolumeTexture();
         void       EnsureDefaultFlatNormalTexture();
+        /// VKPAR-0004: creates @ref defaultOpaqueBlackImage_ and its 2D view, once.
+        void       EnsureDefaultOpaqueBlackTexture();
+        /// VKPAR-0004: creates @ref defaultOpaqueBlackCubeImage_ and its cube view, once.
+        void       EnsureDefaultOpaqueBlackCubeTexture();
+        /**
+         * @brief The 2D view a classic stock effect binds for an unbound texture slot.
+         *
+         * Creates the image on first use. @see defaultOpaqueBlackImage_ for the measured rule.
+         *
+         * @return The opaque-black 1x1 2D image view; never VK_NULL_HANDLE.
+         */
+        VkImageView ClassicNullTextureViewEXT();
+        /**
+         * @brief The cube view EnvironmentMapEffect binds for an unbound EnvironmentMap.
+         *
+         * Creates the image on first use. @see defaultOpaqueBlackCubeImage_.
+         *
+         * @return The opaque-black 1x1 cube image view; never VK_NULL_HANDLE.
+         */
+        VkImageView ClassicNullCubeViewEXT();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         // Fills the 128-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and

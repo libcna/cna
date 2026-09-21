@@ -400,10 +400,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_shader_effect_uniform_arrays
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        cna_vulkan_test(cna_test_vulkan_shader_effect
-                        vulkan_shader_effect_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_ShaderEffect_SpirV COMMAND cna_test_vulkan_shader_effect
-            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # plans/plan_vulkan_parity.md VKPAR-0003: this TU builds a ShaderPackageEXT and picks a
+        # variant from it (MOD-2216/MOD-2217), and ShaderCodeEXT/ShaderPackageEXT live behind
+        # ShaderEffect.hpp's own `#ifdef CNA_CNAEXT`. Registering it unconditionally made the whole
+        # Vulkan example suite fail to compile in the default CNA_CNAEXT=OFF configuration, which is
+        # the one the classic XNA contract is tested in. Guarded like the MOD-2243 block below.
+        if(CNA_CNAEXT)
+            cna_vulkan_test(cna_test_vulkan_shader_effect
+                            vulkan_shader_effect_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ShaderEffect_SpirV COMMAND cna_test_vulkan_shader_effect
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        endif()
 
         # Task 284: Texture2D Color format mapping — linear vs. sRGB decode on Vulkan
         cna_vulkan_test(cna_test_vulkan_texture_srgb
@@ -559,8 +566,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 318: DepthStencilState.TwoSidedStencilMode on Vulkan (reuses the renderer-agnostic
-        # EasyGL source). NOTE: expected to FAIL the contrast check per Task 870 - stencil testing
-        # never gates on Vulkan.
+        # EasyGL source). It used to carry "expected to FAIL the contrast check per Task 870 -
+        # stencil testing never gates on Vulkan". plans/plan_vulkan_parity.md VKPAR-0005 measured
+        # both halves of that on an AMD Radeon 780M (RADV): stencil gates normally, and the failure
+        # was Task 870's own front/back swap, which is wrong on hardware. This test passes.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_twosided
                         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_twosided_test.cpp)
         cna_register_renderer_test(NAME Vulkan_DepthStencilState_StencilTwoSided COMMAND cna_test_vulkan_depthstencilstate_stencil_twosided
@@ -1649,11 +1658,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # a renderer whose ShaderEffect accepts nothing but SPIR-V words. Asserts the declaration,
         # that GLSL source is refused rather than silently accepted, and pins the enumerator
         # ambiguity VULKAN-264 owns.
-        cna_vulkan_test(cna_test_vulkan_shader_dialect_contract
-                        vulkan_shader_dialect_contract_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_ShaderDialectContract
-            COMMAND cna_test_vulkan_shader_dialect_contract
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # VKPAR-0003: same CNA_CNAEXT dependency as Vulkan_ShaderEffect_SpirV above -- the variant
+        # list it refuses GLSL from is a ShaderPackageEXT.
+        if(CNA_CNAEXT)
+            cna_vulkan_test(cna_test_vulkan_shader_dialect_contract
+                            vulkan_shader_dialect_contract_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ShaderDialectContract
+                COMMAND cna_test_vulkan_shader_dialect_contract
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        endif()
 
         # plans/plan_vulkan.md VULKAN-390 (F-06): GetOrCreateTexSamplerDescSet used to return the
         # default WHITE descriptor set when the 512-set pool was full, so a game with more live

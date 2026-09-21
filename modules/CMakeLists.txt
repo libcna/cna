@@ -380,7 +380,7 @@ target_link_libraries(cna_cnaext INTERFACE cna_graphics_ext cna_devices_ext)
 # and public defines. Tooling-only CNA::Design remains opt-in so converter registration and
 # ComponentModel implementation code do not enter games that never use them.
 add_library(CNA INTERFACE)
-target_link_libraries(CNA INTERFACE
+set(_cna_runtime_parts
         cna_runtime
         cna_devices
         cna_devices_ext
@@ -399,6 +399,23 @@ target_link_libraries(CNA INTERFACE
         cna_build_config
         ${RENDERER_TARGET}
 )
+if(NOT CNA_SHARED_LIBRARY)
+    target_link_libraries(CNA INTERFACE ${_cna_runtime_parts})
+else()
+    # plans/plan_vulkan_parity.md VKPAR-0017: every compiled-in renderer family, not only the
+    # default. Statically they reach executables through cna_graphics_core's private link, so the
+    # static umbrella above is left exactly as it was; inside libcna.so they must be named, because
+    # tests call renderer internals directly and the library has to export them.
+    list(APPEND _cna_runtime_parts ${CNA_RENDERER_TARGETS})
+    list(REMOVE_DUPLICATES _cna_runtime_parts)
+    # Deferred to the end of the top-level CMakeLists.txt: the walk needs every target in the
+    # closure to exist with its final link libraries. The deferred call evaluates its arguments in
+    # the top-level scope, so the inputs travel as global properties.
+    set_property(GLOBAL PROPERTY CNA_SHARED_RUNTIME_PARTS "${_cna_runtime_parts}")
+    set_property(GLOBAL PROPERTY CNA_SHARED_MODULES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+    include(${PROJECT_SOURCE_DIR}/cmake/SharedRuntimeLibrary.cmake)
+    cmake_language(DEFER DIRECTORY ${PROJECT_SOURCE_DIR} CALL cna_define_shared_runtime_deferred)
+endif()
 
 # The C API is a separate shared-library adapter over the canonical C++ aggregate. It remains
 # opt-in until its experimental ABI is proven by the C-only test matrix.
