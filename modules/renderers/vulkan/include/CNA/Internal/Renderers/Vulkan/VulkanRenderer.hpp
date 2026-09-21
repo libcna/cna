@@ -2069,6 +2069,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // within the same pass)" policy: only the first run this query appears in each frame is
         // ever actually recorded on the GPU.
         bool                    recordedThisFrame_ = false;
+        // plans/plan_vulkan_parity.md VKPAR-0026: draws tagged with this query since Begin(). A
+        // query with none is never recorded, so its pool slot never became available and
+        // IsComplete() answered false forever; with none, the answer is complete, zero pixels.
+        std::uint32_t           taggedDraws_ = 0;
     };
 
     // -------------------------------------------------------------------------

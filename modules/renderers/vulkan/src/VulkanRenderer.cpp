@@ -18777,6 +18777,7 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::PushPending3DDraw(Pending3DDraw&& d)
     {
         d.occlusionQuery = activeOcclusionQuery_;
+        if (activeOcclusionQuery_ != nullptr) ++activeOcclusionQuery_->taggedDraws_;
         // REMED-GFX-013: snapshot the scissor active at enqueue time (see Pending3DDraw) so the
         // render-target pass clips this draw with the rect that was set while its RT was bound,
         // not the frame-global rect left over at Present() (which Task 338 resets on RT unbind).
@@ -22832,6 +22833,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = false;
+        taggedDraws_ = 0;
         // Task 447/854: occlusion queries in Vulkan must be recorded inside a render pass, and
         // CNA's Vulkan renderer defers all draws to RecordCommandBuffer -- so Begin()/End() don't
         // inject any Vulkan commands directly. Instead, this marks the query "active": every
@@ -22857,6 +22859,13 @@ namespace CNA::Internal::Renderers::Vulkan
     bool VulkanOcclusionQueryRenderer::IsComplete() const
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE || !ended_) return false;
+        // VKPAR-0026: nothing was drawn between Begin() and End(), so nothing was recorded and
+        // nothing will be -- the query is complete and counted no pixels, as XNA reports it.
+        if (taggedDraws_ == 0)
+        {
+            pixelCount_ = 0;
+            return true;
+        }
         uint64_t result = 0;
         VkResult r = vkGetQueryPoolResults(owner_->device_, pool_, 0, 1,
                                            sizeof(result), &result,

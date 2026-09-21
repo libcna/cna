@@ -49,6 +49,7 @@ evidence:
 | VKPAR-0023 | `MaxMipLevel`: XNA's unsigned write, and SpriteBatch's mip state that never reached the sampler | ✅ |
 | VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
 | VKPAR-0025 | Ten transfer and render-target tests older than the XNA rules they break | ✅ |
+| VKPAR-0026 | An occlusion query with nothing drawn never completed | ✅ |
 
 ---
 
@@ -1308,6 +1309,22 @@ layer already carries:
 `Mip|Sampler|Occlusion|Lod|SpriteBatch` test (331): all pass but three transfer tests that were
 already red on the baseline (`HdrRenderTargetRoundTrip…`, `UnsupportedFormatConstruction.Dxt…`,
 `Texture3DTest.GenericValueType…AMipBox…`), untouched by this row.
+
+### VKPAR-0026 — An occlusion query with nothing drawn never completed
+
+Vulkan records an occlusion query only around the 3D draws tagged with it between `Begin()` and
+`End()` (occlusion queries must live inside a render pass, and this renderer defers every draw to
+`RecordCommandBuffer`). A query that tagged **no** draw was therefore never begun on the GPU, its
+pool slot never became available, and `IsComplete()` returned `false` forever — a game polling it
+spins. `OcclusionQuery_Cycle` has asserted since `SOFTWARE-309` that a fresh, empty
+`Begin`/`End` completes; Software and EasyGL pass it. The 50 disposed queries in that test were
+never the cause.
+
+The query now counts the draws tagged with it since `Begin()`; with none, `IsComplete()` is `true`
+and `PixelCount` is 0, which is what XNA reports for a query that drew nothing.
+
+**Evidence (RADV-HW, private compositor).** `OcclusionQuery_Cycle` passes, with
+`OcclusionQuery_{PixelCount,Precision}` and the public `OcclusionQuery*` tests still passing.
 
 ---
 
