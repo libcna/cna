@@ -44,6 +44,7 @@ evidence:
 | VKPAR-0018 | Classic closeout, step 1: 23 more tests that died on the Reach profile | ✅ |
 | VKPAR-0019 | `SpriteBatch_BlendState`: the white constant factor is XNA's answer, not a renderer defect | ✅ |
 | VKPAR-0020 | Format capability: the eleven HiDef texture formats, and the render-target fallback the format tests had not caught up with | ✅ |
+| VKPAR-0021 | Cube transfers: every stored format in its own VkFormat, exact byte and block readback | ✅ |
 
 ---
 
@@ -1180,6 +1181,38 @@ and pass — the measured `Alpha8|0,0,0,128` and `Single|64,255,255,255` include
 
 The same full run found the change's one casualty: four float **cube** tests that had passed or
 skipped only because the cube was refused now constructed and failed. That is `VKPAR-0021`.
+
+### VKPAR-0021 — Cube transfers in the cube's own format
+
+The shared layer moves a non-`Color` uncompressed cube's texels through
+`ITextureCubeRenderer::SetDataBytesEXT`/`GetDataBytesEXT`, as exact declared-format bytes. Vulkan
+never implemented either — the defaults refuse — and allocated every non-block cube as RGBA8, so
+**no** packed, integer, half or float cube could hold its data: `ClassicTextureFormat.NormalizedIntegerCube*`
+and `TextureCubeTest.{ByteTransfers…,GenericValueType…}` were red on the baseline, and the float
+cube tests passed only because the cube was refused and they returned early (`VKPAR-0020` exposed
+that). Compressed cubes kept their blocks in a CPU shadow but offered no exact block readback, so
+the four `TextureCubeTest.SetDataCompressed*` tests failed on `GetData(byte*)`.
+
+* The cube allocates every format the storage table holds in that table's VkFormat, with its real
+  texel size; the swizzle of `VKPAR-0020` applies to it for that reason.
+* `SetDataBytesEXT`/`GetDataBytesEXT` store and read exact bytes through the same per-face staging
+  copy as the RGBA8 route, which is now one helper pair. The RGBA8 `SetData`/`GetData` refuse a
+  cube stored in anything else rather than writing four-byte texels into it.
+* `GetCompressedDataEXT` returns the exact blocks of a block-aligned region from the shadow
+  `SetCompressedDataEXT` already kept.
+* `ClassifyTextureCubeFormatEXT` answers as the 2D table does, except that `NormalizedByte2/4` are
+  `Unsupported` for a cube: XNA forbids them there at both profiles, and a renderer should not claim
+  them whatever its `Texture2D` stores.
+
+**Evidence (RADV-HW, private compositor).** Every cube-related test in the build
+(`TextureCube|ClassicTextureFormat|Cube|EnvironmentMap|EnvMap`, 275): all pass except
+`Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` (a **volume** test, untouched here)
+and four Vulkan examples that assert pre-`SOFTWARE-2xx` contracts (their own row). Newly passing:
+`ClassicTextureFormat.NormalizedIntegerCube{FormatsPreserveExactTransfers,FormatsFeedEnvironmentMapSampling}`,
+the four float cube tests (now real), `TextureCubeTest.{ByteTransfersUseByteCounts…,GenericValueTypeRoundTripsAFaceMipRectangle…,ScalarFloatElementsSpanOneVector4CubeTexel,ColorElementsSpanOneVector4CubeTexelWithoutConversion}`
+and the four `SetDataCompressed*`. Vulkan also joins the renderer allowlists of three audited cube
+contracts it now meets, and passes them: `PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims`
+and the content readers' `TextureCubeReaderPreservesEveryClassic{Uncompressed,Compressed}Format…`.
 
 ---
 

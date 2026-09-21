@@ -685,8 +685,10 @@ TEST(ClassicTextureFormat, FloatCubeFormatsPreserveHdrEnvironmentMapSampling)
 
 TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims)
 {
-    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
-        GTEST_SKIP() << "the audited cube capability belongs to Software and EasyGL";
+    // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan joined once its cube stored every format
+    // natively and stopped claiming the two signed-normalized formats for a cube.
+    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan))
+        GTEST_SKIP() << "the audited cube capability belongs to Software, EasyGL and Vulkan";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());

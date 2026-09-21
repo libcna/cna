@@ -1921,10 +1921,62 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool SetCompressedDataEXT(
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
+        /**
+         * @brief Reads the exact block-compressed bytes of a block-aligned cube face region.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0021: served from the per-level block shadow that
+         * SetCompressedDataEXT already keeps, so what is returned is what was stored.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to read.
+         * @param x Left edge of the region in texels, block aligned.
+         * @param y Top edge of the region in texels, block aligned.
+         * @param w Region width in texels, block aligned or reaching the mip edge.
+         * @param h Region height in texels, block aligned or reaching the mip edge.
+         * @param data Destination for the exact compressed block payload.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete payload was copied.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
         /// REMED-GFX-130: same explicit completion contract as VulkanTexture3DRenderer::GetData --
         /// true only once the staging copy has filled the whole requested face rectangle.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Uploads exact declared-format texels into one cube face region.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0021: the typed route every non-Color uncompressed
+         * cube transfer takes. The bytes are stored as they are, in the cube's own VkFormat.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Exact declared-format texels, tightly packed by row.
+         * @param dataLength Available source bytes.
+         * @return True only when the complete region was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads exact declared-format texels from one cube face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete region was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
 
         /** @brief Returns the Vulkan cube image view for sampling. */
         [[nodiscard]] VkImageView GetImageView()        const { return imageView_; }
@@ -1939,8 +1991,16 @@ namespace CNA::Internal::Renderers::Vulkan
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
         VkFormat vkFormat_ = VK_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
         int compressedBlockBytes_ = 0;
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
+
+        [[nodiscard]] bool IsRegionInRangeEXT(int face, int level, int x, int y,
+                                              int w, int h) const noexcept;
+        [[nodiscard]] bool UploadRegionEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int regionBytes);
+        [[nodiscard]] bool ReadRegionEXT(int face, int level, int x, int y, int w, int h,
+                                         void* data, int regionBytes) const;
     };
 
     // -------------------------------------------------------------------------
@@ -2810,6 +2870,20 @@ namespace CNA::Internal::Renderers::Vulkan
          * @return This renderer's verdict.
          */
         [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a `TextureCube` may be created with the given surface format.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0021. The cube stores every format the 2D table holds
+         * in the same VkFormat, so the answer is the 2D one -- except the two signed-normalized
+         * formats, which XNA does not allow in a cube at either profile and which this renderer
+         * therefore does not claim for one, whatever it can store in a `Texture2D`.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's cube verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyTextureCubeFormatEXT(
             int surfaceFormat) const override;
 
         /**

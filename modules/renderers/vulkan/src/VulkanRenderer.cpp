@@ -3387,6 +3387,15 @@ namespace CNA::Internal::Renderers::Vulkan
             : RendererFormatVerdict::Unsupported;
     }
 
+    RendererFormatVerdict VulkanRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte2 || format == SurfaceFormat::NormalizedByte4)
+            return RendererFormatVerdict::Unsupported;
+        return ClassifySurfaceFormatEXT(surfaceFormat);
+    }
+
     RendererFormatVerdict VulkanRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
     {
         // plan_vulkan.md VULKAN-174, and the same answer EasyGL gives for the same reason. The
@@ -22247,11 +22256,20 @@ namespace CNA::Internal::Renderers::Vulkan
         levelCount_ = mipMap ? CalculateVulkanTextureCubeMipLevels(size) : 1;
 
         // plan_vulkan.md VULKAN-240. TextureCube used to drop surfaceFormat here and allocate
-        // RGBA8 unconditionally. Preserve that storage for the Color-shaped public transfer path,
-        // but allocate the exact BC format when the public compressed-byte overload selected it.
+        // RGBA8 unconditionally; VULKAN-240 allocated the exact BC format for the compressed-byte
+        // overload and left every other format in RGBA8. plans/plan_vulkan_parity.md VKPAR-0021:
+        // every format the storage table holds is now allocated in its own VkFormat, because the
+        // shared layer moves a non-Color cube's texels through SetDataBytesEXT/GetDataBytesEXT as
+        // exact declared-format bytes -- which RGBA8 storage could only refuse.
         VulkanRenderer::VulkanSurfaceFormatStorageEXT requestedStorage{};
-        if (owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, requestedStorage) &&
-            requestedStorage.blockExtent > 1)
+        const bool hasStorage =
+            owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, requestedStorage);
+        if (hasStorage && requestedStorage.blockExtent == 1)
+        {
+            vkFormat_ = requestedStorage.format;
+            bytesPerTexel_ = requestedStorage.bytesPerTexel;
+        }
+        if (hasStorage && requestedStorage.blockExtent > 1)
         {
             vkFormat_ = requestedStorage.format;
             compressedBlockBytes_ = requestedStorage.bytesPerTexel;
@@ -22377,19 +22395,45 @@ namespace CNA::Internal::Renderers::Vulkan
         ReleaseVulkanResources();
     }
 
+    bool VulkanTextureCubeRenderer::IsRegionInRangeEXT(int face, int level, int x, int y,
+                                                       int w, int h) const noexcept
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || w <= 0 || h <= 0) return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        return x >= 0 && y >= 0 && x + w <= levelSize && y + h <= levelSize;
+    }
+
     bool VulkanTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int dataLength)
     {
         // REMED-GFX-135: each of these used to be a silent `return` the shared layer could not tell
         // apart from a completed upload, and the level/rectangle were not range-checked at all.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || w <= 0 || h <= 0 ||
-            compressedBlockBytes_ != 0)
+        // This route carries RGBA8 texels, so it is refused by a cube stored in anything else
+        // (VKPAR-0021) rather than writing four-byte texels into, say, a sixteen-byte format.
+        if (!data || compressedBlockBytes_ != 0 || vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM ||
+            !IsRegionInRangeEXT(face, level, x, y, w, h))
             return false;
-        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
-        const int levelSize = std::max(1, size_ >> level);
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const int regionBytes = w * h * 4;
         if (dataLength < regionBytes) return false;
+        return UploadRegionEXT(face, level, x, y, w, h, data, regionBytes);
+    }
+
+    bool VulkanTextureCubeRenderer::SetDataBytesEXT(int face, int level, int x, int y,
+                                                    int w, int h,
+                                                    const void* data, int dataLength)
+    {
+        if (!data || compressedBlockBytes_ != 0 || !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
+        const int regionBytes = w * h * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return UploadRegionEXT(face, level, x, y, w, h, data, regionBytes);
+    }
+
+    bool VulkanTextureCubeRenderer::UploadRegionEXT(int face, int level, int x, int y,
+                                                    int w, int h,
+                                                    const void* data, int regionBytes)
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -22563,6 +22607,47 @@ namespace CNA::Internal::Renderers::Vulkan
         return true;
     }
 
+    bool VulkanTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        if (data == nullptr || compressedBlockBytes_ == 0 ||
+            !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const std::size_t blockBytes = static_cast<std::size_t>(compressedBlockBytes_);
+        const int levelBlockColumns = (levelSize + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const std::size_t shadowIndex = static_cast<std::size_t>(face * levelCount_ + level);
+        if (shadowIndex >= compressedLevels_.size()) return false;
+        const auto& blocks = compressedLevels_[shadowIndex];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t source =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            std::memcpy(destination + static_cast<std::size_t>(row) *
+                                          static_cast<std::size_t>(regionBlockColumns) *
+                                          blockBytes,
+                        blocks.data() + source,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes);
+        }
+        return true;
+    }
+
     // Task 865: real GPU readback via vkCmdCopyImageToBuffer + a host-visible staging buffer,
     // mirroring SetData's per-face upload path in reverse (inline barriers scoped to just the
     // target face layer, mirroring SetData's own approach -- the shared TransitionImageLayout
@@ -22572,11 +22657,9 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // REMED-GFX-130: these guards used to be silent `return`s, which the shared layer turned
         // into a complete transparent-black face instead of a refusal.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
-        if (face < 0 || face >= 6) return false;
-        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        if (!data || dataLength <= 0 || !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
         const int levelSize = std::max(1, size_ >> level);
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
 
         if (compressedBlockBytes_ != 0)
@@ -22609,12 +22692,32 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             return true;
         }
+        // RGBA8 texels only (VKPAR-0021); every other stored format answers GetDataBytesEXT.
+        if (vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM) return false;
+        return ReadRegionEXT(face, level, x, y, w, h, data, w * h * 4);
+    }
+
+    bool VulkanTextureCubeRenderer::GetDataBytesEXT(int face, int level, int x, int y,
+                                                    int w, int h,
+                                                    void* data, int dataLength) const
+    {
+        if (!data || compressedBlockBytes_ != 0 || !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
+        const int regionBytes = w * h * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return ReadRegionEXT(face, level, x, y, w, h, data, regionBytes);
+    }
+
+    bool VulkanTextureCubeRenderer::ReadRegionEXT(int face, int level, int x, int y,
+                                                  int w, int h,
+                                                  void* data, int regionBytes) const
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
         void*          mapped     = nullptr;
-        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
@@ -22661,7 +22764,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         owner_->EndOneTimeCommands(cb);
 
-        std::memcpy(data, mapped, static_cast<size_t>(w) * static_cast<size_t>(h) * 4u);
+        std::memcpy(data, mapped, static_cast<size_t>(regionBytes));
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
