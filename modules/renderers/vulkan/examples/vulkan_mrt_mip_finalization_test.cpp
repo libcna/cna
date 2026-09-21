@@ -35,6 +35,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "common/PixelTestGame.hpp"
 
+#include "System/InvalidOperationException.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -224,7 +226,7 @@ class VulkanMrtMipFinalizationTest final : public Game
         bool suffix = true;
         for (int i = requestedCount; i < capacity + kSuffix; ++i)
             if (!Exact(destination[static_cast<std::size_t>(kGuard + i)], kSentinel)) suffix = false;
-        Check(suffix, label + ": surplus capacity and protected suffix are untouched");
+        Check(suffix, label + ": the protected suffix past the region is untouched");
     }
 
     void ExpectFull(RenderTarget2D& target, int level, const Color& expected,
@@ -233,13 +235,15 @@ class VulkanMrtMipFinalizationTest final : public Game
         const int width = LevelDimension(target.getWidthProperty(), level);
         const int height = LevelDimension(target.getHeightProperty(), level);
         const int count = width * height;
+        // plans/plan_vulkan_parity.md VKPAR-0025: elementCount is the region's exact size; XNA
+        // refuses any other total, and the sentinel suffix still proves nothing past it is written.
         Step(label + ": full GetData(level=" + std::to_string(level) +
-             ",startIndex=7,elementCount=" + std::to_string(count + 3) + ")");
+             ",startIndex=7,elementCount=" + std::to_string(count) + ")");
         ExpectRead(
             [&](Color* data, int startIndex, int capacity) {
                 target.GetData(level, nullptr, data, startIndex, capacity);
             },
-            count, count + 3, expected, label);
+            count, count, expected, label);
     }
 
     void ExpectFull(RenderTargetCube& target, CubeMapFace face, int level,
@@ -248,12 +252,12 @@ class VulkanMrtMipFinalizationTest final : public Game
         const int edge = LevelDimension(target.getSizeProperty(), level);
         const int count = edge * edge;
         Step(label + ": cube full GetData(level=" + std::to_string(level) +
-             ",startIndex=7,elementCount=" + std::to_string(count + 3) + ")");
+             ",startIndex=7,elementCount=" + std::to_string(count) + ")");
         ExpectRead(
             [&](Color* data, int startIndex, int capacity) {
                 target.GetData(face, level, nullptr, data, startIndex, capacity);
             },
-            count, count + 3, expected, label);
+            count, count, expected, label);
     }
 
     void ExpectRect(RenderTarget2D& target, int level, const Rectangle& rectangle,
@@ -263,12 +267,12 @@ class VulkanMrtMipFinalizationTest final : public Game
         Step(label + ": rectangular GetData(level=" + std::to_string(level) + ",rect=(" +
              std::to_string(rectangle.X) + "," + std::to_string(rectangle.Y) + " " +
              std::to_string(rectangle.Width) + "x" + std::to_string(rectangle.Height) +
-             "),startIndex=7,elementCount=" + std::to_string(count + 13) + ")");
+             "),startIndex=7,elementCount=" + std::to_string(count) + ")");
         ExpectRead(
             [&](Color* data, int startIndex, int capacity) {
                 target.GetData(level, &rectangle, data, startIndex, capacity);
             },
-            count, count + 13, expected, label);
+            count, count, expected, label);
     }
 
     void ExpectChain(RenderTarget2D& target, const Color& expected, const std::string& label)
@@ -301,7 +305,10 @@ class VulkanMrtMipFinalizationTest final : public Game
         {
             target.GetData(invalidLevel, nullptr, destination.data(), 4, 1);
         }
-        catch (const std::out_of_range&)
+        // plans/plan_vulkan_parity.md VKPAR-0025: InvalidOperationException, not std::out_of_range.
+        // XNA's copy reaches GetLevelDesc(level), whose D3DERR_INVALIDCALL becomes that exception
+        // (plans/plan_software.md SOFTWARE-280); out_of_range was CNA's type before it.
+        catch (const System::InvalidOperationException&)
         {
             outOfRange = true;
         }
@@ -309,7 +316,7 @@ class VulkanMrtMipFinalizationTest final : public Game
         {
             std::printf("        wrong exception: %s\n", e.what());
         }
-        Check(outOfRange, label + ": level == LevelCount is rejected as out_of_range");
+        Check(outOfRange, label + ": level == LevelCount is rejected as XNA rejects it");
         bool untouched = true;
         for (const Color& value : destination)
             if (!Exact(value, kSentinel)) untouched = false;

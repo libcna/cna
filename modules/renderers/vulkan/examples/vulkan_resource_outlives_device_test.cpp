@@ -24,6 +24,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -66,6 +67,10 @@ int main()
 
     {
         GraphicsDevice device;
+        // plans/plan_vulkan_parity.md VKPAR-0025: a bare GraphicsDevice is Reach, and Reach has no
+        // volume textures (plans/plan_software.md SOFTWARE-179), so leg A's Texture3D was refused
+        // and there was nothing to outlive the device.
+        device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
 
         try
         {

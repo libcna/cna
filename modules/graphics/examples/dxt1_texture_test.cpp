@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/IO/Stream.hpp"
@@ -56,6 +57,12 @@ public:
     {
         return static_cast<System::IO::intcs>(data_.size());
     }
+
+    // plans/plan_vulkan_parity.md VKPAR-0025: seekable, because XNA refuses an image stream that
+    // is not (plans/plan_software.md SOFTWARE-305).
+    [[nodiscard]] bool getCanSeekProperty() const override { return true; }
+    [[nodiscard]] System::IO::intcs getPositionProperty() const override { return pos_; }
+    void setPositionProperty(System::IO::intcs value) override { pos_ = value; }
 };
 
 // ---------------------------------------------------------------------------
@@ -166,6 +173,9 @@ public:
 int main()
 {
     Dxt1TextureTest game;
+    // VKPAR-0025: the readback below is GetBackBufferData, which is HiDef-only (SOFTWARE-213).
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

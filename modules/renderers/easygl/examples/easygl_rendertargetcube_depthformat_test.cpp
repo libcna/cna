@@ -122,7 +122,11 @@ class RenderTargetCubeDepthFormatTest : public Game
         for (CubeMapFace face : faces)
         {
             dev.SetRenderTarget(&rtc, face);
-            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color(0, 0, 0, 255), 1.0f, 0);
+            // plans/plan_vulkan_parity.md VKPAR-0025: Clear(Color) clears the planes the face has
+            // -- depth to 1.0 where there is one. Naming DepthBuffer explicitly on the
+            // DepthFormat::None cube is an InvalidOperationException in XNA
+            // (plans/plan_software.md SOFTWARE-333), which FNA would have masked.
+            dev.Clear(Color(0, 0, 0, 255));
 
             fx.Apply();
             dev.setDepthStencilStateProperty(DepthStencilState::Default);

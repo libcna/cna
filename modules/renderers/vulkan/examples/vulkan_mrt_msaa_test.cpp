@@ -56,6 +56,8 @@
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "vulkan_mrt_msaa_test_spv.hpp"
 
+#include "System/ArgumentException.hpp"
+
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -465,12 +467,15 @@ class VulkanMrtMsaaTest final : public Game
     void RunCompatibilityCases()
     {
         auto& device = getGraphicsDeviceProperty();
+        // plans/plan_vulkan_parity.md VKPAR-0025: XNA raises ArgumentException for each of these
+        // (plans/plan_software.md SOFTWARE-220); std::runtime_error, which it is not derived
+        // from, was the type before that rule was recovered.
         auto msaa = MakeTarget(8);
         auto plain = MakeTarget(0);
         bool sampleRejected = false;
         try {
             device.SetRenderTargets(Bindings({msaa.get(), plain.get()}));
-        } catch (const std::runtime_error&) {
+        } catch (const System::ArgumentException&) {
             sampleRejected = true;
         }
         device.SetRenderTargets({});
@@ -481,7 +486,7 @@ class VulkanMrtMsaaTest final : public Game
         bool extentRejected = false;
         try {
             device.SetRenderTargets(Bindings({full.get(), small.get()}));
-        } catch (const std::runtime_error&) {
+        } catch (const System::ArgumentException&) {
             extentRejected = true;
         }
         device.SetRenderTargets({});
@@ -490,7 +495,7 @@ class VulkanMrtMsaaTest final : public Game
         bool duplicateRejected = false;
         try {
             device.SetRenderTargets(Bindings({full.get(), full.get()}));
-        } catch (const std::runtime_error&) {
+        } catch (const System::ArgumentException&) {
             duplicateRejected = true;
         }
         device.SetRenderTargets({});

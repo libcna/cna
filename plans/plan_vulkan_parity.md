@@ -47,6 +47,7 @@ evidence:
 | VKPAR-0021 | Cube transfers: every stored format in its own VkFormat, exact byte and block readback | ✅ |
 | VKPAR-0022 | Ten tests that asserted the public layer as it was before XNA's rules were recovered | ✅ |
 | VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
+| VKPAR-0025 | Ten transfer and render-target tests older than the XNA rules they break | ✅ |
 
 ---
 
@@ -1261,6 +1262,30 @@ with `VKPAR-0024`, which stopped RADV's `Depth24` target from carrying a stencil
 Three of the sources (`zero_length_buffer_test.cpp`, `spritebatch_sort_mode_semantics_test.cpp`,
 `sprite_font_test.cpp`) are shared with EasyGL registrations that this build does not configure
 (`VKPAR-0016`); they were not run on EasyGL here.
+
+### VKPAR-0025 — Ten transfer and render-target tests older than their rules
+
+`VKPAR-0013` filed these as renderer defects in the transfer and render-target classes, by name.
+Run for their real messages, **every one** threw from the shared layer, enforcing an XNA rule a
+`SOFTWARE-2xx` row had recovered after the test was written. None reached the renderer. Each was
+changed in the smallest way that keeps its subject:
+
+| Test | XNA rule | Change |
+|---|---|---|
+| `CubeFaceReadbackDependency` | a transfer's `elementCount` is the region's exact size (`SOFTWARE-277`); two targets need HiDef | exact counts (the sentinel suffix still guards the rest); HiDef |
+| `MrtMipFinalization` | the same exact size; an invalid level is `InvalidOperationException` (`SOFTWARE-280`), not `std::out_of_range` | exact counts; that exception type |
+| `DxtTextureCube` (shared) | a DXT cube transfers **bytes** only (`SOFTWARE-277`); image streams must seek (`SOFTWARE-305`); DDS is the named extension (`SOFTWARE-306`) | reads the exact blocks back (and the partially replaced face as red, red, red, blue) — sampling still checks the decoded colour; a seekable stream; `DDSFromStreamEXT` |
+| `Dxt1FromStream` (shared) | image streams must seek (`SOFTWARE-305`); `GetBackBufferData` is HiDef | a seekable stream; HiDef |
+| `ResourceOutlivesDevice` | Reach has no volume textures (`SOFTWARE-179`) | the bare device requests HiDef, so leg A has a volume to outlive it |
+| `BoundMsaaReadback` | Set/GetData on an active render target throws (`SOFTWARE-246`) | B: the bound read is refused and writes nothing; C: the unbound read returns the resolved draw — EasyGL's GFX-164 test took the same shape |
+| `MRT_MsaaResolve` | MRT mismatches are `ArgumentException` (`SOFTWARE-220`), not `std::runtime_error` | that type |
+| `RenderTargetCube_PluralMRT` | MRT compares resources by identity, so two faces of one cube may not be bound together (`SOFTWARE-220`) | the per-slot face legs use faces of two cubes; the same-cube pair is a rejection leg; `ArgumentException` |
+| `RenderTargetCube_DepthFormat` (shared) | clearing a missing plane throws (`SOFTWARE-333`) | `Clear(Color)`, which clears the planes the face has |
+| `FloatRenderTarget` | MRT requires equal **pixel size**, not equal format (`SOFTWARE-220`); a target format is a preference (`SOFTWARE-216`) | H: `Vector4` beside `Color` is refused, `Single` beside `Color` clears both (4.0 in the float, white in the bytes); I: a `Dxt1` request is built and reported as `Color` |
+
+**Evidence (RADV-HW, private compositor): all ten pass**, `FloatRenderTarget`'s odd-sized
+`HalfVector4` MSAA and mip-chain legs (J, K) included — they were never reached before. Three
+sources are shared with EasyGL registrations this build does not configure and were not run there.
 
 ---
 

@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -258,7 +259,7 @@ class VulkanCubeFaceReadbackDependencyTest final : public Game
         bool suffix = true;
         for (int i = requestedCount; i < capacity + kSuffix; ++i)
             if (!Exact(destination[static_cast<std::size_t>(kGuard + i)], kSentinel)) suffix = false;
-        Check(suffix, label + ": surplus capacity and protected suffix are untouched");
+        Check(suffix, label + ": the protected suffix past the region is untouched");
     }
 
     void ExpectFull(RenderTargetCube& cube, CubeMapFace face, int level,
@@ -266,14 +267,17 @@ class VulkanCubeFaceReadbackDependencyTest final : public Game
     {
         const int edge = LevelDimension(level);
         const int count = edge * edge;
+        // plans/plan_vulkan_parity.md VKPAR-0025: elementCount is the region's exact size. XNA
+        // refuses any other total (plans/plan_software.md SOFTWARE-277); the sentinel suffix
+        // past it still proves nothing beyond the region is written.
         Step(label + ": immediate full GetData(" + FaceName(face) + ",level=" +
-             std::to_string(level) + ",startIndex=9,capacity=" +
-             std::to_string(count + 5) + ")");
+             std::to_string(level) + ",startIndex=9,elementCount=" +
+             std::to_string(count) + ")");
         ExpectRead(
             [&](Color* data, int startIndex, int capacity) {
                 cube.GetData(face, level, nullptr, data, startIndex, capacity);
             },
-            count, count + 5, expected, label);
+            count, count, expected, label);
     }
 
     void ExpectRect(RenderTargetCube& cube, CubeMapFace face, int level,
@@ -289,7 +293,7 @@ class VulkanCubeFaceReadbackDependencyTest final : public Game
             [&](Color* data, int startIndex, int capacity) {
                 cube.GetData(face, level, &rectangle, data, startIndex, capacity);
             },
-            count, count + 7, expected, label);
+            count, count, expected, label);
     }
 
     void ExpectMrtMatchSlots(const std::vector<uint32_t>& expectedSlots,
@@ -524,6 +528,8 @@ public:
     VulkanCubeFaceReadbackDependencyTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // VKPAR-0025: legs B-E bind two render targets, which Reach does not allow.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
