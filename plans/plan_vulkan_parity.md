@@ -45,6 +45,7 @@ evidence:
 | VKPAR-0019 | `SpriteBatch_BlendState`: the white constant factor is XNA's answer, not a renderer defect | ✅ |
 | VKPAR-0020 | Format capability: the eleven HiDef texture formats, and the render-target fallback the format tests had not caught up with | ✅ |
 | VKPAR-0021 | Cube transfers: every stored format in its own VkFormat, exact byte and block readback | ✅ |
+| VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
 
 ---
 
@@ -1213,6 +1214,25 @@ the four float cube tests (now real), `TextureCubeTest.{ByteTransfersUseByteCoun
 and the four `SetDataCompressed*`. Vulkan also joins the renderer allowlists of three audited cube
 contracts it now meets, and passes them: `PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims`
 and the content readers' `TextureCubeReaderPreservesEveryClassic{Uncompressed,Compressed}Format…`.
+
+### VKPAR-0024 — `Depth24` on RADV was a stencil format
+
+RADV offers neither `X8_D24_UNORM_PACK32` nor `D24_UNORM_S8_UINT`. `PickDepthFormat` therefore
+fell from a `Depth24` request straight to the combined candidates and chose `D32_SFLOAT_S8_UINT`,
+which `XnaDepthFormatFromVkFormatEXT` truthfully reports as `Depth24Stencil8`. A game asking for
+depth without stencil got a stencil plane, and with it a legal `Clear(ClearOptions.Stencil)` where
+XNA throws (`SOFTWARE-333`): `RenderTarget_DepthStencilUsage` X1 failed exactly there, and only on
+RADV — `llvmpipe` offers `X8_D24`.
+
+`Depth24` now tries `D32_SFLOAT` after `X8_D24` — still no stencil, and Vulkan guarantees one of
+the two as a depth attachment; FNA3D takes the same step. The test instrument that forces the
+preferred formats away (`SetDepthFormatPreferredUnsupportedForTestEXT`) blocks `D32_SFLOAT` too,
+so `vulkan_applied_formats_test` still sees the visible substitution it exists to check.
+
+**Evidence (RADV-HW, private compositor).** Every `Depth|Stencil|Clear|AppliedFormats` test (229):
+all pass but `RenderTargetCube_DepthFormat`, a stale test of the next row. `RenderTarget_DepthStencilUsage`
+passes, and `GraphicsDevice_ClearOptions`' Depth24 suite now sees no stencil plane — which is what
+lets that test's missing-plane expectation (`VKPAR-0022`) hold on this hardware.
 
 ---
 

@@ -420,7 +420,8 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         auto supports = [pd](VkFormat fmt) {
             if (sDepthFormatPreferredUnsupportedForTest &&
-                (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_X8_D24_UNORM_PACK32))
+                (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_X8_D24_UNORM_PACK32 ||
+                 fmt == VK_FORMAT_D32_SFLOAT))
                 return false;
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(pd, fmt, &props);
@@ -434,6 +435,13 @@ namespace CNA::Internal::Renderers::Vulkan
             // X8_D24_UNORM_PACK32: real 24-bit depth, no stencil -- the closest Vulkan
             // equivalent to XNA's Depth24 (no-stencil) request.
             if (supports(VK_FORMAT_X8_D24_UNORM_PACK32)) return VK_FORMAT_X8_D24_UNORM_PACK32;
+            // plans/plan_vulkan_parity.md VKPAR-0024: then D32_SFLOAT, still without stencil.
+            // RADV offers neither X8_D24 nor D24S8, so this request used to fall through to
+            // D32_SFLOAT_S8_UINT and be REPORTED as Depth24Stencil8 -- a stencil plane the game
+            // never asked for, which made a stencil clear legal on a Depth24 target where XNA
+            // refuses it. Vulkan guarantees X8_D24 or D32_SFLOAT as a depth attachment, and
+            // FNA3D takes the same step (D24 -> D32_FLOAT).
+            if (supports(VK_FORMAT_D32_SFLOAT)) return VK_FORMAT_D32_SFLOAT;
             break;
         case DepthFormat::Depth24Stencil8:
         case DepthFormat::None:
