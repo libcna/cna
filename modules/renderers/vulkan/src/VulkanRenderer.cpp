@@ -2199,6 +2199,89 @@ namespace CNA::Internal::Renderers::Vulkan
         return true;
     }
 
+    void VulkanRenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        UploadLevelEXT(0, data, width_, height_, stride);
+    }
+
+    void VulkanRenderTargetRenderer::UpdatePixelsLevel(int level, const uint8_t* data,
+                                                       int levelW, int levelH)
+    {
+        UploadLevelEXT(level, data, levelW, levelH, levelW * bytesPerTexel_);
+    }
+
+    // plans/plan_vulkan_parity.md VKPAR-0027: the write twin of GetData above, through the same
+    // FlushDeferredRenderTarget -- any work still queued for this target is replayed first, so the
+    // upload lands on top of it instead of being overwritten by it later, and the copy is recorded
+    // behind it in the same submission, between the same transitions.
+    void VulkanRenderTargetRenderer::UploadLevelEXT(int level, const uint8_t* data,
+                                                    int w, int h, int stride)
+    {
+        if (!owner_ || colorImage_ == VK_NULL_HANDLE || data == nullptr ||
+            level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
+            return;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t size = rowBytes * static_cast<std::size_t>(h);
+        VkDevice dev = owner_->device_;
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(size),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return;
+        }
+        const bool isBGRA = surfaceFormat_ == static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
+            (colorVkFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
+             colorVkFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
+        auto* destination = static_cast<std::uint8_t*>(mapped);
+        for (int row = 0; row < h; ++row)
+        {
+            const std::uint8_t* source = data + static_cast<std::size_t>(row) * stride;
+            std::uint8_t* target = destination + static_cast<std::size_t>(row) * rowBytes;
+            if (!isBGRA)
+            {
+                std::memcpy(target, source, rowBytes);
+                continue;
+            }
+            for (int x = 0; x < w; ++x)
+            {
+                const std::size_t o = static_cast<std::size_t>(x) * 4u;
+                target[o + 0] = source[o + 2]; target[o + 1] = source[o + 1];
+                target[o + 2] = source[o + 0]; target[o + 3] = source[o + 3];
+            }
+        }
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        owner_->FlushDeferredRenderTarget(
+            pass_.get(), pass_.get(), level,
+            [&](const VkCommandBuffer cb)
+            {
+                owner_->RecordImageUsageEXT(
+                    cb, colorImage_, pass_->colorUsageStates,
+                    static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+                    0, 1, VulkanResourceIntent::TransferWrite);
+                vkCmdCopyBufferToImage(cb, stagingBuf, colorImage_,
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+                owner_->RecordImageUsageEXT(
+                    cb, colorImage_, pass_->colorUsageStates,
+                    static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+                    0, 1, VulkanResourceIntent::SampledRead);
+            });
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
     // =========================================================================
     // VulkanSpriteBatchRenderer
     // =========================================================================
@@ -23614,6 +23697,94 @@ namespace CNA::Internal::Renderers::Vulkan
         // Color is RGBA8 rather than the presentation surface's possibly-BGRA format, and wider
         // integer/float formats are copied byte-for-byte in their public storage layout.
         std::memcpy(data, mapped, regionBytes);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+        return true;
+    }
+
+    bool VulkanRenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
+                                                const void* data, int dataLength)
+    {
+        // The RGBA8 route, for a Color target only -- the same boundary GetData keeps.
+        if (surfaceFormat_ != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) ||
+            bytesPerTexel_ != 4)
+            return false;
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    // plans/plan_vulkan_parity.md VKPAR-0027: the write twin of GetNativeDataEXT, through the same
+    // per-face FlushDeferredRenderTarget, so a queued producer of this face is replayed before the
+    // upload rather than over it.
+    bool VulkanRenderTargetCubeRenderer::SetDataBytesEXT(int face, int level, int x, int y,
+                                                        int w, int h,
+                                                        const void* data, int dataLength)
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
+        if (face < 0 || face >= 6) return false;
+        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::size_t regionBytes = static_cast<std::size_t>(w) *
+            static_cast<std::size_t>(h) * static_cast<std::size_t>(bytesPerTexel_);
+        if (static_cast<std::size_t>(dataLength) < regionBytes) return false;
+
+        VulkanTargetPassEXT* const facePass =
+            facePasses_[static_cast<std::size_t>(face)].get();
+        VkDevice dev = owner_->device_;
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return false;
+        }
+        std::memcpy(mapped, data, regionBytes);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                     static_cast<uint32_t>(level),
+                                     static_cast<uint32_t>(face), 1 };
+        region.imageOffset      = { x, y, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        owner_->FlushDeferredRenderTarget(
+            facePass, facePass, level,
+            [&](const VkCommandBuffer cb)
+            {
+                VkImageMemoryBarrier toXfer{};
+                toXfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                toXfer.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                toXfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toXfer.image = image_;
+                toXfer.subresourceRange = {
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 1,
+                    static_cast<uint32_t>(face), 1};
+                toXfer.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                toXfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                vkCmdPipelineBarrier(
+                    cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &toXfer);
+
+                vkCmdCopyBufferToImage(
+                    cb, stagingBuf, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+                VkImageMemoryBarrier toRead = toXfer;
+                std::swap(toRead.oldLayout, toRead.newLayout);
+                std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+                vkCmdPipelineBarrier(
+                    cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                    &toRead);
+            });
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);

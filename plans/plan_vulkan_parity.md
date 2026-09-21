@@ -50,6 +50,7 @@ evidence:
 | VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
 | VKPAR-0025 | Ten transfer and render-target tests older than the XNA rules they break | ✅ |
 | VKPAR-0026 | An occlusion query with nothing drawn never completed | ✅ |
+| VKPAR-0027 | `SetData` on a render target: dropped on the GPU (2D), refused (cube) | ✅ |
 
 ---
 
@@ -1325,6 +1326,37 @@ and `PixelCount` is 0, which is what XNA reports for a query that drew nothing.
 
 **Evidence (RADV-HW, private compositor).** `OcclusionQuery_Cycle` passes, with
 `OcclusionQuery_{PixelCount,Precision}` and the public `OcclusionQuery*` tests still passing.
+
+### VKPAR-0027 — `SetData` on a render target
+
+XNA's `RenderTarget2D` and `RenderTargetCube` inherit `SetData` from `Texture2D`/`TextureCube`, and
+it stores texels. On Vulkan:
+
+* **`RenderTarget2D`** — `VulkanRenderTargetRenderer` overrode neither `UpdatePixels` nor
+  `UpdatePixelsLevel`, so the shared layer's upload reached the no-op defaults: the CPU shadow
+  changed and the GPU image did not, and a later `GetData` (which reads the GPU) returned the old
+  content. `HdrRenderTargetRoundTrip.FloatTargetPartialAndMipTransfersKeepExactTypedValues` read
+  zeros back from a seeded mip level; it was red on the baseline.
+* **`RenderTargetCube`** — `SetData` fell to the interface's refusing default, so a supported XNA
+  call threw `NotSupportedException`; and a non-`Color` cube target had no typed readback either.
+
+Both uploads now go through `FlushDeferredRenderTarget`, the same entry the readbacks use: work
+still queued for the target (or that face) is replayed first, and the copy is recorded behind it in
+the same submission between the same transitions — so an upload lands on top of pending rendering
+rather than being overwritten by it later. The cube target also answers `SetDataBytesEXT` and
+`GetDataBytesEXT` in its own format. Rows are copied top-first both ways, so an uploaded face is not
+mirrored (the RT-cube contract's W1 checks exactly that).
+
+Two contract tables pinned the old refusal on their Vulkan row and now say `Exact`
+(`rendertargetcube_getdata_contract_test.cpp` `rtCubeSetData`,
+`texturecube_texture3d_setdata_contract_test.cpp`'s render-target-cube entry); Vulkan joins the
+renderer lists of `RenderTargetCubeSetDataContractTest`.
+
+**Evidence (RADV-HW, private compositor).** `RenderTarget|SetData|GetData|Hdr|MRT|Mrt|Cube` (441):
+all pass except `Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` (volume). Newly
+passing: `HdrRenderTargetRoundTrip.FloatTargetPartialAndMip…`,
+`RenderTargetCubeSetDataContractTest.{StoresTheFace…,SeededFacesAndRegionsReadBackExactly}`, and
+the two contract rows.
 
 ---
 

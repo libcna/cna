@@ -162,9 +162,10 @@ namespace
 #elif defined(CNA_RENDERER_VULKAN)
     // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
     // renderer supports HiDef, and under Reach this test never reached its subject.
+    // The RenderTargetCube entry is Exact since VKPAR-0027, which gave the target a face upload.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, true};
+                                 Support::Exact, true};
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,

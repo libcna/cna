@@ -176,8 +176,10 @@ namespace
     // hardcoding the discard variant. examples/rendertargetcube_usage_test.cpp is that finding's
     // own full battery; what U1/U2 below keep is the single check that a preserved face is exactly
     // what GetData reports.
+    // `rtCubeSetData` true since plans/plan_vulkan_parity.md VKPAR-0027: the face upload goes
+    // through the same per-face flush as the readback, top row first both ways, so not mirrored.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `mipMapCubeTargets` Real / `mipLevel` Exact: WEBGPU-114 builds a real mip chain for a
     // mipMap=true RenderTargetCube -- the colour texture carries the full chain and each face is

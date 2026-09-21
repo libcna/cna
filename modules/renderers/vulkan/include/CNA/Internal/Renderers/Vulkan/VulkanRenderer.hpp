@@ -702,6 +702,25 @@ namespace CNA::Internal::Renderers::Vulkan
         // shared layer rejects the read instead of converting its own zeroed scratch buffer.
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Replaces level 0 of this target with CPU texels (RenderTarget2D::SetData).
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0027. Unoverridden, so the shared layer's upload of a
+         * target reached the no-op default: SetData changed the CPU shadow and nothing on the GPU.
+         *
+         * @param data Tightly or @p stride -packed texels in the target's own format.
+         * @param stride Source row size in bytes.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+        /**
+         * @brief Replaces one mip level of this target with CPU texels.
+         *
+         * @param level Mip level to replace.
+         * @param data Tightly packed texels in the target's own format.
+         * @param levelW Width of that level in texels.
+         * @param levelH Height of that level in texels.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
 
         void ReleaseVulkanResources();
         /** @brief Disconnects this record and invalidates its non-owning pass description. */
@@ -726,6 +745,7 @@ namespace CNA::Internal::Renderers::Vulkan
         int                     surfaceFormat_ = 0;
         VkFormat                colorVkFormat_ = VK_FORMAT_UNDEFINED;
         int                     bytesPerTexel_ = 4;
+        void UploadLevelEXT(int level, const uint8_t* data, int w, int h, int stride);
         VkImage                 colorImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
         VkImageView             colorView_    = VK_NULL_HANDLE; ///< mip 0 only — framebuffer color attachment.
@@ -2268,6 +2288,57 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool GetNativeDataEXT(
             int face, int level, int x, int y, int w, int h,
             void* data, int dataLength) const;
+        /**
+         * @brief Seeds a region of one face with RGBA8 texels (RenderTargetCube.SetData, Color).
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0027. The inherited default refused, although XNA's
+         * RenderTargetCube inherits TextureCube.SetData and stores the face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to write.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data RGBA8 texels, tightly packed by row.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region was stored.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Seeds a region of one face with exact declared-format texels.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to write.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Exact native-format texels, tightly packed by row.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads exact declared-format texels from one face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination for exact native-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete region was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override
+        {
+            return GetNativeDataEXT(face, level, x, y, w, h, data, dataLength);
+        }
         [[nodiscard]] VkSampleCountFlagBits GetColorSampleCountEXT() const
         {
             return static_cast<VkSampleCountFlagBits>(
