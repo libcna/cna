@@ -689,11 +689,22 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # plans/plan_dx.md DX-223: the same public reflection/resource/layout oracle used by both
         # modern DirectX renderers. EasyGL is the independent implementation control.
-        cna_easygl_test(cna_test_easygl_shader_effect_reflection
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_reflection_contract_test.cpp)
-        cna_register_renderer_test(NAME EasyGL_ShaderEffect_ReflectionContract
-            COMMAND cna_test_easygl_shader_effect_reflection
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        #
+        # plans/plan_vulkan_parity.md VKPAR-0003, the RTR-P9-13 rule this file's own header states:
+        # this TU names itself from the PROJECT-WIDE CNA_RENDERER_<X> macro -- which is defined for
+        # the build's DEFAULT renderer only -- and #errors for anything but EasyGL, DirectX11 or
+        # DirectX12. The CNA_GRAPHICS_RENDERER this block guards on is not that: modules/renderers/
+        # CMakeLists.txt re-points it to the identity of the family being ENTERED, so a
+        # multi-renderer build with -DCNA_GRAPHICS_RENDERERS="VULKAN;OPENGL33" enters this block
+        # for OPENGL33 while the macro says VULKAN, and the target exists but cannot compile.
+        # Registration asks the default identity, which is what the TU actually reads.
+        if(CNA_GRAPHICS_RENDERER STREQUAL _cna_default_renderer_identity)
+            cna_easygl_test(cna_test_easygl_shader_effect_reflection
+                            ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_reflection_contract_test.cpp)
+            cna_register_renderer_test(NAME EasyGL_ShaderEffect_ReflectionContract
+                COMMAND cna_test_easygl_shader_effect_reflection
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        endif()
 
         # Task 947: NormalMapping.fx (tangent-space normal mapping + Phong specular) -- with
         # this, NormalMapping sample's shader blocker is fully cleared. Uses Task 1080's custom
