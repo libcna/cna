@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -216,6 +217,11 @@ public:
     SdlGpuSkinnedTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_gpu_test_isolation.md GTI-0003: GetBackBufferData is HiDef-only (SOFTWARE-213
+        // enforces XNA's rule), so under the default Reach profile this test aborted before its
+        // first check -- the defect plans/plan_vulkan_parity.md VKPAR-0006 fixed in 104 Vulkan
+        // tests.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
         // GraphicsDeviceManager.SynchronizeWithVerticalRetrace defaults to true (the XNA

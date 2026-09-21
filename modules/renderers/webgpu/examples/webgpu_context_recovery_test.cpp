@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -107,6 +108,11 @@ public:
     WebGpuContextRecoveryTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_gpu_test_isolation.md GTI-0003: GetBackBufferData is HiDef-only (SOFTWARE-213
+        // enforces XNA's rule), so under the default Reach profile this test aborted before its
+        // first check -- the defect plans/plan_vulkan_parity.md VKPAR-0006 fixed in 104 Vulkan
+        // tests.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }
