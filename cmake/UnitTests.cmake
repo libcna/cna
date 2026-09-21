@@ -543,9 +543,13 @@ if(CNA_BUILD_TESTS)
         cna_copy_sdl_runtime(CnaRendererTests)
     endif()
 
+    # plans/plan_vulkan_parity.md VKPAR-0017: CNA first. With CNA_SHARED_LIBRARY, libcna.so has to
+    # precede every static archive that also contributed to it -- sharp-runtime, which
+    # cna_test_build_config brings -- or the linker pulls those members into CnaTests before it has
+    # seen libcna.so, and the process ends up with two copies of their code and static state.
     target_link_libraries(CnaTests PRIVATE
-        cna_test_build_config
         CNA
+        cna_test_build_config
         cna_design
         gtest_main)
 

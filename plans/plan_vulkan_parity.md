@@ -39,6 +39,8 @@ evidence:
 | VKPAR-0013 | The remaining Vulkan failures | ⬜ classified, not fixed |
 | VKPAR-0014 | Channel expansion: two contradictory contracts, settled by measuring XNA | ✅ |
 | VKPAR-0015 | Where these tests ran: the user's live desktop, and how to stop that | ✅ |
+| VKPAR-0016 | `cmake-build-vulkan` grew to 87 GB: 341 EasyGL test binaries that run Vulkan | ✅ |
+| VKPAR-0017 | The CNA runtime as one shared library (`libcna.so`) instead of 798 static copies | ✅ |
 
 ---
 
@@ -910,6 +912,114 @@ outside the private compositor.
 
 Not changed here, because it is the owner's decision and it affects every agent on the machine: the
 `:0` default itself.
+
+---
+
+## VKPAR-0016 — 87 GB in one build directory, and what it cost the SSD
+
+The owner found `cmake-build-vulkan` at **87 GB**. At the start of this workstream it was **1.4 GB**
+— only because `VKPAR-0003`'s build break stopped the build before anything linked. Unblocking it
+linked everything.
+
+| Measured | |
+|---|---|
+| Executables at the build root | **798**, 82.9 GB, mean **104 MB**, largest 691 MB |
+| `cna_test_vulkan_*` | 367 files, 38.8 GB |
+| `cna_test_easygl_*` | **341 files, 36.2 GB** |
+| One test (`cna_test_vulkan_basiceffect_one_light`, 106 MB) | `.debug_info` 42.8 + `.debug_str` 23.7 + `.debug_line` 6.5 + other DWARF ≈ **77 MB**; `.strtab`+`.symtab` 17.5 MB; **`.text` 7 MB** |
+| Linkage | the whole CNA runtime **statically** in every executable; `NEEDED` is only SDL, Vulkan and system libraries |
+
+Two separate causes, and the second multiplies the first:
+
+1. **Every test is its own executable holding a full static copy of the engine** — 7 MB of code and
+   ~80 MB of its Debug DWARF, 798 times — so any edit to a module relinks all of them.
+2. **341 of those executables should not exist in this build.** `CNA_GRAPHICS_RENDERERS` is
+   `VULKAN;OPENGL33` with Vulkan the default, and EasyGL's example block was gated on the identity of
+   the family being *entered* — the same membership-for-default mistake `VKPAR-0003` fixed for one TU
+   and for the headless block. Each of those 341 binaries selects Vulkan at run time while asserting
+   EasyGL's contracts (`VKPAR-0010` already classified their results as meaningless here), and each was
+   relinked on every Vulkan renderer edit because it links the Vulkan renderer too.
+
+**The SSD cost of this workstream**, from the build logs: ~3 300 executable links in
+`cmake-build-vulkan` (five full relinks after one-line renderer edits, plus smaller ones) ≈ **345 GB**,
+and ~240 links in `cmake-build-multi`/`cmake-build-wayland` ≈ 30 GB — **~375 GB written in one
+session**, ~140 GB of it for the 341 binaries that should not have existed. That is exactly the
+waste `CLAUDE.md` exists to prevent, and most of it came from rebuilding the whole tree to run a
+handful of targets.
+
+**Done here:**
+
+* the 341 `cna_test_easygl_*` binaries were deleted from `cmake-build-vulkan` (checked unused first;
+  82 → 48 GB);
+* EasyGL's example block now requires a GL profile to be the build's **default** renderer
+  (`_cna_default_renderer_identity IN_LIST OPENGLES2;OPENGLES3;OPENGL33`). Reconfigured,
+  `cmake-build-vulkan` generates **0** EasyGL example targets; `cmake-build-multi`, whose default is
+  OPENGL33, is unaffected. The EasyGL parity fixtures, the diagnostic scene and the 2D corpus are
+  registered inside the same block and follow it.
+
+The first cause is `VKPAR-0017`.
+
+---
+
+## VKPAR-0017 — `libcna.so` instead of 798 static copies of the engine
+
+The owner's decision, after `VKPAR-0016`: link the runtime as a shared library rather than into every
+executable. `CNA_SHARED_LIBRARY` (default **ON** on native ELF GNU/Clang with CMake ≥ 3.27, off — and
+refused if forced — elsewhere); the mechanism and its scope are written up in
+`docs/build-performance.md` "Shared runtime library", which is where build policy lives.
+
+**Measured on `cmake-build-vulkan`**, same code as `VKPAR-0014`:
+
+| | Before | After |
+|---|---|---|
+| Build directory | 87 GB | **5.4 GB** |
+| Executables at the build root | 798, mean 104 MB | 426, mean 4.8 MB (a typical test 0.5–0.9 MB) |
+| `libcna.so` | — | 182 MB once — both renderers, 98 725 exported symbols, **0 unresolved** (`ldd -r`) |
+| Relinked by one Vulkan renderer `.cpp` edit | ~800 targets, **~83 GB** | **29 targets, ~1.7 GB** (read from the `build.ninja` graph) |
+| Relinked when `libcna.so` changes | — | **0** (`CMAKE_LINK_DEPENDS_NO_SHARED`) |
+
+`ninja -t cleandead` removed 430 outputs of targets that no longer exist (the EasyGL example block's
+remaining 36 executables among them) once nothing was running from the tree.
+
+**No code is present twice.** A strong symbol in both `libcna.so` and an executable would mean two
+copies of its code and static state. `CnaTests` put `cna_test_build_config` — which brings
+sharp-runtime's archives — before `CNA`; it now names `CNA` first. Checked with `nm` on the built
+binaries: every symbol defined in both is an `R_X86_64_COPY` relocation (one live object, e.g.
+`BlendState::Opaque`); 0 strong duplicates in `CnaTests` or the sampled examples.
+
+**Both modes and the EasyGL gate, configure-only**, in `build-probe/cfg-vkpar0017*` (removed after):
+
+| Configuration | Static | Shared |
+|---|---|---|
+| OPENGL33 default, SDL3 | configures; 342 `cna_test_easygl_*`, the reflection test, 32 EasyGL parity fixtures | same, plus `libcna.so` |
+| OPENGL33 default, SDL off | configures; EasyGL block skipped by its own pre-existing SDL guard | configures |
+| `cmake-build-vulkan` (VULKAN default) | — | 0 EasyGL example targets |
+
+**Regression — the full suite, private display, test by test against the static build of the same
+commit:**
+
+| Group | Static | Shared |
+|---|---|---|
+| `Vulkan_*` | 319 passed, 51 failed | **319 passed, 51 failed** |
+| everything else | 9 066 passed, 30 failed, 277 skipped | 9 065 passed, 30 failed, 278 skipped |
+
+Three tests left `Passed` (`AudioEngineTest.UpdateSweepsFinishedFireAndForgetCue…`,
+`DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount`,
+`StorageDeviceDeleteContainerTest.ContainerAllowsNormalizedPathsThatRemainContained`) and two joined
+it; **all three pass 3 of 3 serially** — timing under `-j6`, not the link change. Eight
+parameterised audio tests appear only in one run because GoogleTest prints their parameter's raw
+bytes, pointers included, into the name.
+
+The six Wine/XNA tests ran separately on Xvfb `:99` (their harness pins it): both
+`XnaPipelineGenuineRuntimeInterop` legs pass against the shared build (30 s, 31 s);
+`XnaPipelineGenuineRuntimeBuiltFamilies` fails, **as it already did in the static baseline**;
+`XnaDifferentialBuildTest.CnaAcceptsAndRefusesTheSameSourcesXnaDoes` hangs to its timeout on `:99`,
+on the private Xwayland and inside the private compositor alike — it hung the same way with the static
+build privately, and passed only in the first run of this workstream, on the owner's live desktop.
+It needs something from that session and is recorded as an environment limitation, not rerun there.
+
+**Not done:** the other build directories. Each switches to the new default the next time it is
+configured, which recompiles it once for `-fPIC`; none was rebuilt here, deliberately.
 
 ---
 
