@@ -17,11 +17,13 @@
 //
 //   A  Control: the target really is multisampled. `GetMultiSampleCountProperty` reports what was
 //      applied; if that is 1 the rest of the test is about an ordinary target and proves nothing.
-//   B  A read while the target is STILL BOUND returns what was drawn, not the clear colour and not
-//      transparent black.
-//   C  The same read after unbinding agrees with B. Two different code paths reach the same texels;
-//      a renderer that resolved only on unbind would pass C and fail B, which is REMED-GFX-164's
-//      exact shape.
+//   B  A read while the target is STILL BOUND is refused, and writes nothing. plans/plan_vulkan_parity.md
+//      VKPAR-0025: this leg asserted the read SUCCEEDED until Microsoft XNA's rule was recovered --
+//      Set/GetData on an active render target is an InvalidOperationException
+//      (plans/plan_software.md SOFTWARE-246) -- and EasyGL's GFX-164 test was rewritten the same way.
+//   C  The read after unbinding returns what was drawn and the clear beside it -- the multisample
+//      resolve this file exists for, now judged against the expected texels directly rather than
+//      against B.
 //   D  No validation message -- a resolve issued inside a live render pass is the way this would
 //      most plausibly go wrong on Vulkan.
 //
@@ -43,6 +45,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -130,16 +134,22 @@ protected:
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, tri, 0, 2);
         }
 
-        // B. STILL BOUND.
-        std::vector<Color> bound(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
-        rt.GetData(bound.data(), 0, kN * kN);
-        const Color boundLeft  = bound[kN * (kN / 2) + 1];
-        const Color boundRight = bound[kN * (kN / 2) + kN - 2];
-        check(Is(boundLeft, kDrawn) && Is(boundRight, kClear),
-              "B a read while the target is STILL BOUND returns what was drawn: left=" +
-                  Text(boundLeft) + " right=" + Text(boundRight) + " (want " + Text(kDrawn) +
-                  " and " + Text(kClear) + "; (0,0,0,0) is the resolve-storage answer "
-                  "REMED-GFX-164 describes)");
+        // B. STILL BOUND: refused, and the destination is left as it was.
+        const Color kSentinel(1, 2, 3, 4);
+        std::vector<Color> bound(static_cast<std::size_t>(kN * kN), kSentinel);
+        bool refused = false;
+        std::string how = "no exception";
+        try {
+            rt.GetData(bound.data(), 0, kN * kN);
+        } catch (const System::InvalidOperationException& e) {
+            refused = true; how = e.what();
+        } catch (const std::exception& e) {
+            how = std::string("wrong type: ") + e.what();
+        }
+        bool untouched = true;
+        for (const Color& c : bound) untouched = untouched && Is(c, kSentinel);
+        check(refused && untouched,
+              "B a read while the target is STILL BOUND is refused and writes nothing: " + how);
 
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
@@ -148,10 +158,10 @@ protected:
         rt.GetData(after.data(), 0, kN * kN);
         const Color afterLeft  = after[kN * (kN / 2) + 1];
         const Color afterRight = after[kN * (kN / 2) + kN - 2];
-        check(Is(afterLeft, boundLeft) && Is(afterRight, boundRight),
-              "C the unbound read agrees with the bound one: left=" + Text(afterLeft) +
-                  " right=" + Text(afterRight) + " (a renderer that resolved only on unbind would "
-                  "pass this leg and fail B)");
+        check(Is(afterLeft, kDrawn) && Is(afterRight, kClear),
+              "C the unbound read returns the resolved draw: left=" + Text(afterLeft) +
+                  " right=" + Text(afterRight) + " (want " + Text(kDrawn) + " and " +
+                  Text(kClear) + ")");
 
         const std::size_t messagesAfter = Renderer().GetValidationMessagesEXT().size();
         check(!VulkanRenderer::IsValidationActiveEXT() || messagesAfter == messagesBefore,

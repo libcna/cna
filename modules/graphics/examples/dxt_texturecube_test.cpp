@@ -81,6 +81,12 @@ namespace
             return static_cast<System::IO::intcs>(bytes_.size());
         }
 
+        // plans/plan_vulkan_parity.md VKPAR-0025: seekable, because XNA refuses an image stream
+        // that is not (plans/plan_software.md SOFTWARE-305).
+        [[nodiscard]] bool getCanSeekProperty() const override { return true; }
+        [[nodiscard]] System::IO::intcs getPositionProperty() const override { return position_; }
+        void setPositionProperty(System::IO::intcs value) override { position_ = value; }
+
     private:
         const std::vector<std::uint8_t>& bytes_;
         int position_ = 0;
@@ -265,13 +271,14 @@ class DxtTextureCubeTest final : public Game
         const std::vector<std::uint8_t> block = SolidBlock(format, color565);
         FillCube(cube, block);
 
-        std::vector<Color> readback(16, Color(1, 2, 3, 4));
-        cube.GetData(CubeMapFace::PositiveX, readback.data(), 16);
-        bool readbackMatches = true;
-        for (const Color& pixel : readback)
-            readbackMatches = readbackMatches && ExactRgb(pixel, expected);
-        Check(readbackMatches, std::string(name) +
-                                   ": compressed face reads back as the encoded color");
+        // VKPAR-0025: bytes, not Color. XNA's format-size oracle gives a DXT cube one byte per
+        // element, so only byte transfers are legal (plans/plan_software.md SOFTWARE-277); what
+        // reads back is the exact block that was stored. The sampling leg below still checks the
+        // decoded colour.
+        std::vector<std::uint8_t> readback(block.size(), 0xCDu);
+        cube.GetData(CubeMapFace::PositiveX, readback.data(), static_cast<int>(readback.size()));
+        Check(readback == block, std::string(name) +
+                                     ": compressed face reads back as its exact block");
 
         const Color sampled = SampleCube(device, cube);
         Check(CloseRgb(sampled, expected), std::string(name) +
@@ -293,21 +300,16 @@ class DxtTextureCubeTest final : public Game
         cube.SetData(CubeMapFace::NegativeZ, 0, &lowerRight,
                      blue.data(), 0, static_cast<int>(blue.size()));
 
-        std::vector<Color> readback(64, Color(0, 0, 0, 0));
-        cube.GetData(CubeMapFace::NegativeZ, readback.data(), 64);
-        bool correct = true;
-        for (int y = 0; y < 8; ++y)
-        {
-            for (int x = 0; x < 8; ++x)
-            {
-                const Color expected = x >= 4 && y >= 4
-                    ? Color(0, 0, 255, 255)
-                    : Color(255, 0, 0, 255);
-                correct = correct && ExactRgb(
-                    readback[static_cast<std::size_t>(y * 8 + x)], expected);
-            }
-        }
-        Check(correct, "DXT1: a block-aligned partial update changes only the requested block");
+        // VKPAR-0025: the face's four blocks in row order -- red, red, red, then the replaced
+        // lower-right block, blue.
+        std::vector<std::uint8_t> readback(4 * red.size(), 0xCDu);
+        cube.GetData(CubeMapFace::NegativeZ, readback.data(), static_cast<int>(readback.size()));
+        std::vector<std::uint8_t> expected;
+        for (int i = 0; i < 3; ++i)
+            expected.insert(expected.end(), red.begin(), red.end());
+        expected.insert(expected.end(), blue.begin(), blue.end());
+        Check(readback == expected,
+              "DXT1: a block-aligned partial update changes only the requested block");
     }
 
     Texture2D LoadXnbTexture2D(GraphicsDevice& device, const std::vector<std::uint8_t>& body)
@@ -346,7 +348,9 @@ class DxtTextureCubeTest final : public Game
         {
             const std::vector<std::uint8_t> ddsBytes = BuildDxt1Dds();
             VectorStream ddsStream(ddsBytes);
-            Texture2D dds = Texture2D::FromStream(device, ddsStream);
+            // VKPAR-0025: DDS is CNA's named extension, not classic FromStream, which accepts only
+            // the image formats XNA's does (plans/plan_software.md SOFTWARE-306).
+            Texture2D dds = Texture2D::DDSFromStreamEXT(device, ddsStream);
             Check(dds.getFormatProperty() ==
                       (directDxt1 ? SurfaceFormat::Dxt1 : SurfaceFormat::Color) &&
                       dds.getLevelCountProperty() == 4,

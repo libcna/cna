@@ -8,10 +8,12 @@
 // **EasyGL registers those hooks while this renderer does not**, so the answer comes from a generic
 // shared table. This test measures what that costs, rather than reasoning about it.
 //
-//   A  Control: the renderer really does refuse a non-`Color` render target. Without this leg, B
-//      would be comparing two guesses.
+//   A  Control: what the device really builds for a `Bgr565` render target -- a `Color` one, since
+//      this renderer stores no packed 16-bit target and XNA's constructor falls back rather than
+//      throwing (plans/plan_software.md SOFTWARE-216; this leg asserted a throw until
+//      plans/plan_vulkan_parity.md VKPAR-0020). Without this leg, B would be comparing two guesses.
 //   B  The adapter's verdict for that same format, against the device's. A disagreement here means
-//      a game is told it may ask for something that then throws.
+//      a game is told it gets one format and is handed another.
 //   C  MSAA: the adapter's `selectedMultiSampleCount` for a count the device supports.
 //   D  `IsProfileSupported` answers, and is recorded rather than asserted -- the shared fallback
 //      returns `true` for every profile on every renderer that supplies no hook, which is
@@ -63,16 +65,19 @@ protected:
         GraphicsAdapter& adapter = GraphicsAdapter::getDefaultAdapterProperty();
 
         // A. What the device really does with a non-Color render target.
-        bool deviceRefuses = false;
+        bool deviceBuilt = false;
+        SurfaceFormat deviceFormat = SurfaceFormat::Bgr565;
         std::string refusal;
         try {
             RenderTarget2D rt(dev, 8, 8, false, SurfaceFormat::Bgr565, DepthFormat::None, 0,
                               RenderTargetUsage::DiscardContents);
-            (void)rt;
-        } catch (const std::exception& e) { deviceRefuses = true; refusal = e.what(); }
-        check(deviceRefuses,
-              "A control: the device refuses a Bgr565 render target: " +
-                  (deviceRefuses ? refusal.substr(0, 90) : std::string("it did NOT refuse")));
+            deviceBuilt = true;
+            deviceFormat = rt.getFormatProperty();
+        } catch (const std::exception& e) { refusal = e.what(); }
+        check(deviceBuilt && deviceFormat == SurfaceFormat::Color,
+              "A control: the device builds a Bgr565 request as a Color target: " +
+                  (deviceBuilt ? "format=" + std::to_string(static_cast<int>(deviceFormat))
+                               : "it threw: " + refusal.substr(0, 90)));
 
         // B. What the adapter tells a game about the same format, before any of that.
         {
@@ -82,13 +87,13 @@ protected:
             const bool exact = adapter.QueryRenderTargetFormat(
                 GraphicsProfile::HiDef, SurfaceFormat::Bgr565, DepthFormat::None, 0,
                 selected, selectedDepth, selectedSamples);
-            const bool agrees = (selected == SurfaceFormat::Color) && !exact;
+            const bool agrees = (selected == deviceFormat) && !exact;
             check(agrees,
                   "B the adapter agrees with the device about Bgr565: exact=" +
                       std::string(exact ? "true" : "false") + " selectedFormat=" +
                       std::to_string(static_cast<int>(selected)) +
-                      " (Color is " + std::to_string(static_cast<int>(SurfaceFormat::Color)) +
-                      "; disagreeing means a game is told it may ask for what then throws)");
+                      " (the device built " + std::to_string(static_cast<int>(deviceFormat)) +
+                      "; disagreeing means a game is told it gets a format it is not handed)");
         }
 
         // C. MSAA, which this device does support.
@@ -127,6 +132,8 @@ public:
     VulkanAdapterQueryContractTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // VKPAR-0020: the device answers at the profile leg B asks the adapter about.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
     }

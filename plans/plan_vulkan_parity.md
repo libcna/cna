@@ -36,11 +36,23 @@ evidence:
 | VKPAR-0010 | Baselines, measured and classified | ✅ |
 | VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced and narrowed, not fixed |
 | VKPAR-0012 | Validation layers and synchronization validation | ✅ |
-| VKPAR-0013 | The remaining Vulkan failures | ⬜ classified, not fixed |
+| VKPAR-0013 | The remaining Vulkan failures | ✅ closed out by VKPAR-0018–0029; one Vulkan test left, recorded |
 | VKPAR-0014 | Channel expansion: two contradictory contracts, settled by measuring XNA | ✅ |
 | VKPAR-0015 | Where these tests ran: the user's live desktop, and how to stop that | ✅ |
 | VKPAR-0016 | `cmake-build-vulkan` grew to 87 GB: 341 EasyGL test binaries that run Vulkan | ✅ |
 | VKPAR-0017 | The CNA runtime as one shared library (`libcna.so`) instead of 798 static copies | ✅ |
+| VKPAR-0018 | Classic closeout, step 1: 23 more tests that died on the Reach profile | ✅ |
+| VKPAR-0019 | `SpriteBatch_BlendState`: the white constant factor is XNA's answer, not a renderer defect | ✅ |
+| VKPAR-0020 | Format capability: the eleven HiDef texture formats, and the render-target fallback the format tests had not caught up with | ✅ |
+| VKPAR-0021 | Cube transfers: every stored format in its own VkFormat, exact byte and block readback | ✅ |
+| VKPAR-0022 | Ten tests that asserted the public layer as it was before XNA's rules were recovered | ✅ |
+| VKPAR-0023 | `MaxMipLevel`: XNA's unsigned write, and SpriteBatch's mip state that never reached the sampler | ✅ |
+| VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
+| VKPAR-0025 | Ten transfer and render-target tests older than the XNA rules they break | ✅ |
+| VKPAR-0026 | An occlusion query with nothing drawn never completed | ✅ |
+| VKPAR-0027 | `SetData` on a render target: dropped on the GPU (2D), refused (cube) | ✅ |
+| VKPAR-0028 | Compressed `Texture2D` readback: the blocks were stored and could not be read back | ✅ |
+| VKPAR-0029 | Volume textures: the format was dropped and every volume stored as RGBA8 | ✅ |
 
 ---
 
@@ -1069,6 +1081,361 @@ seen before `VKPAR-0006`. Classified by what would have to change:
 `Vulkan_RenderTarget_BlendFactor` and `Vulkan_Swapchain_Sync` pass now and are **not** claimed by
 either fix in this branch; they are recorded as passing without an attributed cause rather than
 counted as wins.
+
+---
+
+## Classic closeout
+
+The step after the parity merge: close what `VKPAR-0013` classified — texture/cube/volume transfers,
+render targets and MRT, format capability — and stop around 340–350 of the ~370 `Vulkan_*` tests
+rather than chase the tail. Branch `vulkan-classic-closeout`, from `next` at `33105f3ae`. Every run
+below is **RADV-HW** through `tools/platform/run_gpu_tests_private.sh` (private Weston + rootful
+Xwayland, DRI3), never the live desktop.
+
+The fifty-one failures were re-run first, unchanged, to have the real messages rather than the
+classification's guesses (`VKPAR-0013` was written from test names). **Twenty-three of them were not
+renderer defects at all.**
+
+### VKPAR-0018 — 23 more tests that died on the Reach profile
+
+The same defect `VKPAR-0006` repaired in 103 tests, in the ones it did not reach: each uses a
+HiDef-only feature — `GetBackBufferData` (9), volume textures (6), separate alpha blending (2), more
+than one render target (2), mipmapped non-power-of-two surfaces, an occlusion query, float targets —
+while `GraphicsDeviceManager` defaults to Reach, which CNA enforces (`SOFTWARE-213`). They threw
+before reaching their subject, and `VKPAR-0013` had filed several of them as transfer or
+render-target defects because of what they were *named*.
+
+`VKPAR-0006` missed them because they are not Vulkan's own sources. Nine are shared sources
+compiled for Vulkan from `modules/graphics/examples/` and `modules/renderers/sdl-renderer/examples/`,
+and four carry a per-renderer table whose Vulkan row said `wantHiDefProfile = false`. The repair is
+the same one — request HiDef — applied three ways:
+
+| Shape | Tests | Change |
+|---|---|---|
+| Per-renderer table | `Backbuffer_PassOrder`, `GraphicsDevice_OrderedClear`, `CubeVolume_{Get,Set}DataContract` | the Vulkan row's `wantHiDefProfile` false → true (other renderers' rows untouched) |
+| Shared source, manager in the constructor | 8, e.g. `BasicEffect_DiffuseColorClamp`, `InstancedTexturedDraw`, `InvalidMipLevel`, `Texture2D_FromStream` | `setGraphicsProfileProperty(HiDef)` after the manager is created |
+| Shared source, device requested in `main` | `SkinnedEffect_BoneDeformation` | `SetGraphicsProfileEXT(HiDef)` before `Run()`, the shape `alpha_test_integration_test.cpp` already uses |
+| Vulkan's own | 10: `MRT_MixedFormats`, `MrtMipFinalization`, `OcclusionQuery_Precision`, `ShaderEffect_{BoundTexture,PerUnitSampler}`, `SpriteBatch_BlendState`, `Texture3DAddressW`, `Texture3D_Mip_Layout`, `CapabilityContract`, `FloatRenderTarget` | as the constructor shape |
+
+Requesting HiDef is safe on every renderer these shared sources compile for: only DirectX9
+implements `isProfileSupported`, and every other `GraphicsAdapter::IsProfileSupported` answers true.
+
+**Result (RADV-HW): 19 of 23 pass.** The other four now reach their subject and fail on it — which is
+what they were for:
+
+| Test | What it reaches now | Taken up in |
+|---|---|---|
+| `SpriteBatch_BlendState` | 18/23; the five constant-factor legs (`Blend.BlendFactor`) draw white instead of the constant colour | a renderer row below |
+| `MRT_MixedFormats` | its premise: it expects `RenderTarget2D(Bgr565)` to throw, which has not been true since `SOFTWARE-216` restored XNA's fall-back-to-`Color` | the render-target format row below |
+| `MrtMipFinalization` | `Texture2D::GetData: total data size does not match the requested region` | the transfer row below |
+| `FloatRenderTarget` | `SetRenderTargets: render targets must have matching pixel sizes` | the render-target row below |
+
+### VKPAR-0019 — The white constant factor is XNA's answer
+
+`SpriteBatch_BlendState` S12/S13 draw with a `Blend.BlendFactor` source and expected the colour of a
+`GraphicsDevice.BlendFactor` set **between** a Deferred `Begin()` and `End()`. RADV drew white.
+
+That is what Microsoft XNA draws too. `SOFTWARE-350` measured it: `BlendState.Apply` writes the
+state's own `BlendFactor` (White by default), and assigning `GraphicsDevice.BlendFactor` dirties the
+cached state so the next `BlendState` assignment reaches `Apply` again. A Deferred batch assigns its
+state at `End()`, so the factor set before that was overwritten by White before anything was drawn.
+The test (`GFX-091`, older than `SOFTWARE-350`) asserted the pre-measurement model, and on Vulkan the
+public layer had since become right underneath it.
+
+The scene's subject — one static constant-factor state, a different dynamic constant per batch,
+A→B→A — is kept by drawing those batches **Immediate**: `Begin()` applies the state, and the factor
+set after it is the one the draw uses, exactly as in XNA. **RADV-HW: 23/23**, including the A→B→A
+and static/dynamic/static pipeline transitions, so the renderer's dynamic blend constant was never
+the problem.
+
+### VKPAR-0020 — The eleven HiDef texture formats, and the render-target fallback
+
+**The renderer.** Vulkan's `Texture2D` storage table held Reach's nine formats and nothing else, so
+every HiDef-only format — `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2`,
+`Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable` — was deferred to the
+framework rule and refused as *"SurfaceFormat 13 is not implemented by the selected graphics
+renderer"*. The shared `SurfaceFormat_Throws`, `BoundResourceDispose` and `MoveSemantics` tests
+construct a `Single` texture at HiDef and died on that line.
+
+All eleven are core Vulkan 1.0 formats; `ClassifySurfaceFormatEXT` still asks the device for each.
+The layouts are D3D9's, low bits first, and the table comment carries the field-for-field reasoning
+(`A2B10G10R10_UNORM_PACK32`, `R16G16[B16A16]_UNORM`, `R8_UNORM`, the plain float formats;
+`HdrBlendable` is `HalfVector4`'s storage, as in XNA). The one- and two-channel formats get the
+**measured** channel expansion of `VKPAR-0014` on their sampled view — `(r,1,1,1)` for `Single` and
+`HalfSingle`, `(r,g,1,1)` for the two-channel formats, `(0,0,0,a)` for `Alpha8` — and so do the
+sampled views of float render targets (2D and cube). The swizzle now also checks the VkFormat
+actually stored, because a cube kept every non-block format as RGBA8 at the time, and expanding
+"missing" channels of four-channel storage would have discarded data.
+
+**The render-target tests.** Four Vulkan tests still asserted the model XNA does not have: that
+`RenderTarget2D(…, Bgr565, …)` **throws**. `SOFTWARE-216` restored XNA's rule — the constructor
+asks `QueryRenderTargetFormat` and builds the selected format, falling back to `Color` — and this
+renderer stores no packed 16-bit target, so it falls back. Updated to that rule, each keeping its
+subject:
+
+| Test | Was | Now |
+|---|---|---|
+| `SurfaceFormatClassification` | RT legs K/N expected refusals; J ignored the profile; everything ran at Reach only | construction never refuses and reports the exact format when the public query says yes, `Color` otherwise; J includes the profile; **both sweeps run at Reach and HiDef**, so the new storage is constructed rather than only classified |
+| `AdapterQueryContract` | leg A, the "control", expected a throw | the device builds `Bgr565` as `Color`, and leg B checks the adapter names that same format — device and adapter both at HiDef |
+| `FormatLimitQueries` | an unadvertised base/mip/MSAA request had to refuse | it constructs as the nearest target (`Color`, or fewer samples) and never with the identity it could not have; runs at HiDef, where the snapshot's float targets are legal |
+| `MRT_MixedFormats` | "mixed-format MRT is unreachable" because `Bgr565` threw | a `Bgr565` request binds beside `Color` as `Color`; and a genuinely mixed pair, `Color` + `Single` (two VkFormats in one pass), clears and each target reads back its own representation (bytes; `128/255` as a float) |
+
+**Evidence (RADV-HW, private compositor).** Full `cmake-build-vulkan` suite after the renderer
+change: `SurfaceFormat_Throws`, `BoundResourceDispose`, `MoveSemantics` pass. The four updated
+tests pass. `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` and
+`EveryPromotedFormatPreservesFullPartialAndMipBytesExactly` **returned early on Vulkan for every
+format it did not claim**; they now execute the eleven formats' sprite samples and byte round trips
+and pass — the measured `Alpha8|0,0,0,128` and `Single|64,255,255,255` included.
+
+The same full run found the change's one casualty: four float **cube** tests that had passed or
+skipped only because the cube was refused now constructed and failed. That is `VKPAR-0021`.
+
+### VKPAR-0021 — Cube transfers in the cube's own format
+
+The shared layer moves a non-`Color` uncompressed cube's texels through
+`ITextureCubeRenderer::SetDataBytesEXT`/`GetDataBytesEXT`, as exact declared-format bytes. Vulkan
+never implemented either — the defaults refuse — and allocated every non-block cube as RGBA8, so
+**no** packed, integer, half or float cube could hold its data: `ClassicTextureFormat.NormalizedIntegerCube*`
+and `TextureCubeTest.{ByteTransfers…,GenericValueType…}` were red on the baseline, and the float
+cube tests passed only because the cube was refused and they returned early (`VKPAR-0020` exposed
+that). Compressed cubes kept their blocks in a CPU shadow but offered no exact block readback, so
+the four `TextureCubeTest.SetDataCompressed*` tests failed on `GetData(byte*)`.
+
+* The cube allocates every format the storage table holds in that table's VkFormat, with its real
+  texel size; the swizzle of `VKPAR-0020` applies to it for that reason.
+* `SetDataBytesEXT`/`GetDataBytesEXT` store and read exact bytes through the same per-face staging
+  copy as the RGBA8 route, which is now one helper pair. The RGBA8 `SetData`/`GetData` refuse a
+  cube stored in anything else rather than writing four-byte texels into it.
+* `GetCompressedDataEXT` returns the exact blocks of a block-aligned region from the shadow
+  `SetCompressedDataEXT` already kept.
+* `ClassifyTextureCubeFormatEXT` answers as the 2D table does, except that `NormalizedByte2/4` are
+  `Unsupported` for a cube: XNA forbids them there at both profiles, and a renderer should not claim
+  them whatever its `Texture2D` stores.
+
+**Evidence (RADV-HW, private compositor).** Every cube-related test in the build
+(`TextureCube|ClassicTextureFormat|Cube|EnvironmentMap|EnvMap`, 275): all pass except
+`Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` (a **volume** test, untouched here)
+and four Vulkan examples that assert pre-`SOFTWARE-2xx` contracts (their own row). Newly passing:
+`ClassicTextureFormat.NormalizedIntegerCube{FormatsPreserveExactTransfers,FormatsFeedEnvironmentMapSampling}`,
+the four float cube tests (now real), `TextureCubeTest.{ByteTransfersUseByteCounts…,GenericValueTypeRoundTripsAFaceMipRectangle…,ScalarFloatElementsSpanOneVector4CubeTexel,ColorElementsSpanOneVector4CubeTexelWithoutConversion}`
+and the four `SetDataCompressed*`. Vulkan also joins the renderer allowlists of three audited cube
+contracts it now meets, and passes them: `PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims`
+and the content readers' `TextureCubeReaderPreservesEveryClassic{Uncompressed,Compressed}Format…`.
+
+### VKPAR-0024 — `Depth24` on RADV was a stencil format
+
+RADV offers neither `X8_D24_UNORM_PACK32` nor `D24_UNORM_S8_UINT`. `PickDepthFormat` therefore
+fell from a `Depth24` request straight to the combined candidates and chose `D32_SFLOAT_S8_UINT`,
+which `XnaDepthFormatFromVkFormatEXT` truthfully reports as `Depth24Stencil8`. A game asking for
+depth without stencil got a stencil plane, and with it a legal `Clear(ClearOptions.Stencil)` where
+XNA throws (`SOFTWARE-333`): `RenderTarget_DepthStencilUsage` X1 failed exactly there, and only on
+RADV — `llvmpipe` offers `X8_D24`.
+
+`Depth24` now tries `D32_SFLOAT` after `X8_D24` — still no stencil, and Vulkan guarantees one of
+the two as a depth attachment; FNA3D takes the same step. The test instrument that forces the
+preferred formats away (`SetDepthFormatPreferredUnsupportedForTestEXT`) blocks `D32_SFLOAT` too,
+so `vulkan_applied_formats_test` still sees the visible substitution it exists to check.
+
+**Evidence (RADV-HW, private compositor).** Every `Depth|Stencil|Clear|AppliedFormats` test (229):
+all pass but `RenderTargetCube_DepthFormat`, a stale test of the next row. `RenderTarget_DepthStencilUsage`
+passes, and `GraphicsDevice_ClearOptions`' Depth24 suite now sees no stencil plane — which is what
+lets that test's missing-plane expectation (`VKPAR-0022`) hold on this hardware.
+
+### VKPAR-0022 — Ten tests older than the rules they break
+
+Between 2026-09-09 and 09-11 the `SOFTWARE-2xx/3xx` rows recovered a run of Microsoft XNA rules from
+its IL and made the shared layer follow them. These ten Vulkan-registered tests were written before
+that and still asserted FNA's behaviour or the older CNA one; on Vulkan the public layer had become
+right underneath them. Each was checked against the rule's own row and its code, and changed in the
+smallest way that keeps its subject:
+
+| Test | XNA rule it met | Change |
+|---|---|---|
+| `DeclaredEffectLayout` | overlapping declaration elements are refused (`SOFTWARE-205`) | the moved layout **swaps** UV and normal instead of laying the UV over the normal; a stride guess still reads the wrong half |
+| `Viewport_Subregion` | a viewport must fit the active surface (`SOFTWARE-226`) | the round-trip viewport fits the 64×64 back buffer |
+| `GraphicsDevice_ClearOptions` | bound state is immutable (`SOFTWARE-232`); `Clear(Color)` clears depth to **1.0**, not `Viewport.MaxDepth` (`SOFTWARE-334`); clearing a missing plane throws (`SOFTWARE-333`) | a copied state for the reject leg; the 1.0 expectation (the restricted viewport's `MaxDepth` of 0.73 now separates XNA from FNA); the baseline stamp clears only existing planes, and a case naming a missing plane expects the `InvalidOperationException` and an untouched surface |
+| `SkinnedEffect_VertexColor` | bound state is immutable (`SOFTWARE-232`) | leg (e) uses a copy of the bound constant-factor state |
+| `PipelineKeyStateCoverage` | Min/Max need One/One factors (`SOFTWARE-212`) | the alpha-function key field is changed to `Subtract` |
+| `IndexBuffer_UploadBounds` | an index transfer is a byte span; past the end is `InvalidOperationException` (`SOFTWARE-250`) | C and D catch that type |
+| `ZeroLengthBuffers` (shared) | a zero count is refused (`SOFTWARE-204`) | the empty buffers are expected to be refused by name before any allocation, the device still drawing; HiDef for its probe |
+| `SpriteBatch_SortModeSemantics` (shared) | .NET 4's unstable quicksort swaps two equal keys (`SOFTWARE-354`) | C2 expects the first-issued sprite on top |
+| `SpriteFont_Properties` (shared) | the content constructor stores an absent default character; only the public setter validates (`SOFTWARE-353`) | the constructor stores it, the setter refuses |
+| `ProfileLimitsAudit` | Reach has no volume textures (`SOFTWARE-179`) | HiDef; G and H are now answered by HiDef's own ceilings |
+
+**Evidence (RADV-HW, private compositor): all ten pass.** `GraphicsDevice_ClearOptions` passes
+with `VKPAR-0024`, which stopped RADV's `Depth24` target from carrying a stencil plane.
+Three of the sources (`zero_length_buffer_test.cpp`, `spritebatch_sort_mode_semantics_test.cpp`,
+`sprite_font_test.cpp`) are shared with EasyGL registrations that this build does not configure
+(`VKPAR-0016`); they were not run on EasyGL here.
+
+### VKPAR-0025 — Ten transfer and render-target tests older than their rules
+
+`VKPAR-0013` filed these as renderer defects in the transfer and render-target classes, by name.
+Run for their real messages, **every one** threw from the shared layer, enforcing an XNA rule a
+`SOFTWARE-2xx` row had recovered after the test was written. None reached the renderer. Each was
+changed in the smallest way that keeps its subject:
+
+| Test | XNA rule | Change |
+|---|---|---|
+| `CubeFaceReadbackDependency` | a transfer's `elementCount` is the region's exact size (`SOFTWARE-277`); two targets need HiDef | exact counts (the sentinel suffix still guards the rest); HiDef |
+| `MrtMipFinalization` | the same exact size; an invalid level is `InvalidOperationException` (`SOFTWARE-280`), not `std::out_of_range` | exact counts; that exception type |
+| `DxtTextureCube` (shared) | a DXT cube transfers **bytes** only (`SOFTWARE-277`); image streams must seek (`SOFTWARE-305`); DDS is the named extension (`SOFTWARE-306`) | reads the exact blocks back (and the partially replaced face as red, red, red, blue) — sampling still checks the decoded colour; a seekable stream; `DDSFromStreamEXT` |
+| `Dxt1FromStream` (shared) | image streams must seek (`SOFTWARE-305`); `GetBackBufferData` is HiDef | a seekable stream; HiDef |
+| `ResourceOutlivesDevice` | Reach has no volume textures (`SOFTWARE-179`) | the bare device requests HiDef, so leg A has a volume to outlive it |
+| `BoundMsaaReadback` | Set/GetData on an active render target throws (`SOFTWARE-246`) | B: the bound read is refused and writes nothing; C: the unbound read returns the resolved draw — EasyGL's GFX-164 test took the same shape |
+| `MRT_MsaaResolve` | MRT mismatches are `ArgumentException` (`SOFTWARE-220`), not `std::runtime_error` | that type |
+| `RenderTargetCube_PluralMRT` | MRT compares resources by identity, so two faces of one cube may not be bound together (`SOFTWARE-220`) | the per-slot face legs use faces of two cubes; the same-cube pair is a rejection leg; `ArgumentException` |
+| `RenderTargetCube_DepthFormat` (shared) | clearing a missing plane throws (`SOFTWARE-333`) | `Clear(Color)`, which clears the planes the face has |
+| `FloatRenderTarget` | MRT requires equal **pixel size**, not equal format (`SOFTWARE-220`); a target format is a preference (`SOFTWARE-216`) | H: `Vector4` beside `Color` is refused, `Single` beside `Color` clears both (4.0 in the float, white in the bytes); I: a `Dxt1` request is built and reported as `Color` |
+
+**Evidence (RADV-HW, private compositor): all ten pass**, `FloatRenderTarget`'s odd-sized
+`HalfVector4` MSAA and mip-chain legs (J, K) included — they were never reached before. Three
+sources are shared with EasyGL registrations this build does not configure and were not run there.
+
+### VKPAR-0023 — `MaxMipLevel`, and SpriteBatch's mip state
+
+Two renderer defects under `TextureFilterMipContract` (L3, L8–L10), both against rules the shared
+layer already carries:
+
+* **L3.** XNA writes `SamplerState.MaxMipLevel` through D3D9's unsigned `DWORD`, so a negative value
+  is a huge level and the sampler clamps it to the **last** one (`SOFTWARE-238`). Vulkan built
+  `minLod = max(0, maxMipLevel)` and sampled level 0. It now converts the value as unsigned and caps
+  it at `VK_LOD_CLAMP_NONE` — the `maxLod` it may not exceed — so the device clamps to
+  `levelCount − 1`, the last level.
+* **L8–L10.** SpriteBatch forwards its sampler's `MaxMipLevel` and `MipMapLevelOfDetailBias`
+  (`SOFTWARE-158`) through `ISpriteBatchRenderer::SetSamplerMipState`, which
+  `VulkanSpriteBatchRenderer` never overrode; and its flush applies filter and addressing through
+  `ApplySamplerState`, which resets the mip controls to the defaults. It now keeps the batch's
+  pending mip state and re-applies it after `ApplySamplerState`, the same shape EasyGL has.
+
+**Evidence (RADV-HW, private compositor).** `TextureFilterMipContract` passes. Every
+`Mip|Sampler|Occlusion|Lod|SpriteBatch` test (331): all pass but three transfer tests that were
+already red on the baseline (`HdrRenderTargetRoundTrip…`, `UnsupportedFormatConstruction.Dxt…`,
+`Texture3DTest.GenericValueType…AMipBox…`), untouched by this row.
+
+### VKPAR-0026 — An occlusion query with nothing drawn never completed
+
+Vulkan records an occlusion query only around the 3D draws tagged with it between `Begin()` and
+`End()` (occlusion queries must live inside a render pass, and this renderer defers every draw to
+`RecordCommandBuffer`). A query that tagged **no** draw was therefore never begun on the GPU, its
+pool slot never became available, and `IsComplete()` returned `false` forever — a game polling it
+spins. `OcclusionQuery_Cycle` has asserted since `SOFTWARE-309` that a fresh, empty
+`Begin`/`End` completes; Software and EasyGL pass it. The 50 disposed queries in that test were
+never the cause.
+
+The query now counts the draws tagged with it since `Begin()`; with none, `IsComplete()` is `true`
+and `PixelCount` is 0, which is what XNA reports for a query that drew nothing.
+
+**Evidence (RADV-HW, private compositor).** `OcclusionQuery_Cycle` passes, with
+`OcclusionQuery_{PixelCount,Precision}` and the public `OcclusionQuery*` tests still passing.
+
+### VKPAR-0027 — `SetData` on a render target
+
+XNA's `RenderTarget2D` and `RenderTargetCube` inherit `SetData` from `Texture2D`/`TextureCube`, and
+it stores texels. On Vulkan:
+
+* **`RenderTarget2D`** — `VulkanRenderTargetRenderer` overrode neither `UpdatePixels` nor
+  `UpdatePixelsLevel`, so the shared layer's upload reached the no-op defaults: the CPU shadow
+  changed and the GPU image did not, and a later `GetData` (which reads the GPU) returned the old
+  content. `HdrRenderTargetRoundTrip.FloatTargetPartialAndMipTransfersKeepExactTypedValues` read
+  zeros back from a seeded mip level; it was red on the baseline.
+* **`RenderTargetCube`** — `SetData` fell to the interface's refusing default, so a supported XNA
+  call threw `NotSupportedException`; and a non-`Color` cube target had no typed readback either.
+
+Both uploads now go through `FlushDeferredRenderTarget`, the same entry the readbacks use: work
+still queued for the target (or that face) is replayed first, and the copy is recorded behind it in
+the same submission between the same transitions — so an upload lands on top of pending rendering
+rather than being overwritten by it later. The cube target also answers `SetDataBytesEXT` and
+`GetDataBytesEXT` in its own format. Rows are copied top-first both ways, so an uploaded face is not
+mirrored (the RT-cube contract's W1 checks exactly that).
+
+Two contract tables pinned the old refusal on their Vulkan row and now say `Exact`
+(`rendertargetcube_getdata_contract_test.cpp` `rtCubeSetData`,
+`texturecube_texture3d_setdata_contract_test.cpp`'s render-target-cube entry); Vulkan joins the
+renderer lists of `RenderTargetCubeSetDataContractTest`.
+
+**Evidence (RADV-HW, private compositor).** `RenderTarget|SetData|GetData|Hdr|MRT|Mrt|Cube` (441):
+all pass except `Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` (volume). Newly
+passing: `HdrRenderTargetRoundTrip.FloatTargetPartialAndMip…`,
+`RenderTargetCubeSetDataContractTest.{StoresTheFace…,SeededFacesAndRegionsReadBackExactly}`, and
+the two contract rows.
+
+### VKPAR-0028 — Compressed `Texture2D` readback
+
+`Texture2D.GetData` on a DXT texture returns its exact blocks in XNA, and the shared layer asks the
+renderer for them (`ITextureRenderer::GetData` with a block-aligned region). `VulkanTextureRenderer`
+did not implement it — it stores BC blocks natively (`VULKAN-172`) but kept no way back — so the
+read was refused: *"renderer cannot read the requested compressed block bytes"*. Three baseline
+failures were this one gap, not three: `UnsupportedFormatConstruction.DxtFullPartialAndMipTransfersAreExact`,
+`Texture2DFromStreamFormatTest.DdsRemainsAvailableOnlyThroughNamedExtension` and
+`SaveAsPngTest.DecompressesEveryClassicDxtFormatBeforeEncoding` (which reads the blocks to decode
+them before encoding).
+
+The texture now keeps each level's blocks as uploaded — at construction, through `UpdatePixels` and
+through `UpdatePixelsLevel` — and returns the exact rows of a block-aligned region, the same shadow
+the cube already had (`VKPAR-0021`). An uncompressed texture still answers `false`, as before; the
+shared layer holds its own copy of those.
+
+**Evidence (RADV-HW, private compositor).** `Dxt|DXT|Compressed|Dds|DDS|SaveAs|FromStream|UnsupportedFormatConstruction`
+(186): all pass, the three above included.
+
+### VKPAR-0029 — Volume textures in their own format
+
+`VulkanRenderer::CreateTexture3D` received the `SurfaceFormat` and discarded it
+(`int /*surfaceFormat*/`); every volume was an RGBA8 image with RGBA8-only transfers, and the
+renderer had no volume classifier, so the framework rule admitted `Color` alone. XNA's HiDef volume
+formats are the fifteen uncompressed classic ones (not DXT, not the signed-normalized pair). On the
+baseline `Texture3DTest.GenericValueType…` (×2) and the content reader's hand-built volume failed
+with *"did not store the complete declared-format volume region"*, and the audited volume contract
+did not run on Vulkan at all.
+
+* The volume is allocated in the storage table's VkFormat with its real texel size, and sampled
+  through the measured channel expansion (`VKPAR-0014`) like 2D and cube textures.
+* `SetDataBytesEXT`/`GetDataBytesEXT` move exact voxels through the existing level-scoped staging
+  copy, now one helper pair; the RGBA8 route refuses any other storage.
+* `ClassifyTexture3DFormatEXT`: DXT and `NormalizedByte2/4` `Unsupported`; every other format the
+  table holds `Supported` when the device offers it as a sampled, transferable 3D image.
+
+**Evidence (RADV-HW, private compositor).** `Texture3D|Volume|ClassicTextureFormat|AddressW` (140):
+all pass. Newly passing: both `Texture3DTest.GenericValueType…`,
+`Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder`, and — Vulkan joining their renderer
+lists — `HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract`,
+`VolumeGenericTransfersUseTotalByteSize` (its own capability gate now opens) and the content
+readers' `Texture3DReader{PreservesEveryClassicVolumeFormat…,AcceptsDepthDominantMipChain…}`.
+`PartialTextureTransfer.ATexture3DSubBoxChangesOnlyItself` still skips on **every** renderer: it
+builds its volume on a bare Reach device. That is the test's profile, not this renderer, and is left
+for whoever owns it.
+
+### Closeout result
+
+Two full `cmake-build-vulkan` runs through the private runner (RADV-HW, `-j6`, the three Wine
+interop tests excluded — they hang inside the private wrapper for a reason unrelated to Vulkan,
+`VKPAR-0015`), one before the renderer work of `VKPAR-0020` and one after `VKPAR-0029`:
+
+| | Before (after VKPAR-0019) | After (VKPAR-0029) |
+|---|---|---|
+| All tests | 9,757: **61 failed**, 271 skipped/not run | 9,754: **13 failed**, 263 skipped/not run |
+| `Vulkan_*` examples | 370: **28 failed** (51 before VKPAR-0018) | 370: **1 failed** |
+
+The stop line was 340–350 of 370. It was passed by a wide margin not because the tail was chased
+but because most of the classified "renderer defects" were not renderer defects: of the 51, **40
+were tests** asserting a contract XNA does not have (`VKPAR-0018`, `-0019`, `-0020`, `-0022`,
+`-0025`), and every renderer change here closed a real gap in the three named areas — texture/cube/
+volume transfers (`-0021`, `-0027`, `-0028`, `-0029`), render targets and formats (`-0020`,
+`-0024`, `-0027`), and two that the same runs exposed (`-0023`, `-0026`).
+
+**What is still red, and why:**
+
+| Test | Class | Note |
+|---|---|---|
+| `Vulkan_DrawRangeValidation` | Vulkan gap, not taken | XNA forwards a negative or oversized draw range to the driver (`SOFTWARE-322`); Vulkan keeps the shared layer's managed range guard because its CPU draw copy (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`) has no bounds checks of its own. The fix is to bound that copy and then opt out of the guard; it is draw validation, outside this closeout's three areas |
+| `InstancedDrawMultiStream.DuplicateSemantic…`, `OrdinaryDrawBindingOffset.MultipleStreams…`, `OrdinaryDrawMultiStream.SixteenBindings…` | public layer, not Vulkan | `VertexDeclaration` refuses the declaration before any renderer is reached (as in `VKPAR-0013`) |
+| `CApiCoverageMatrix`, `CApiCoverageScopeModel`, `CApiLimitations`, `CApiReleaseGate`, `CNAEXT_NoPosixSetenv`, `CnaXnbModelCorpusSweep` | not the renderer | failing identically on the pre-closeout baseline |
+| `XnaContentProject.ThePublicSamplesProjectsAreBuiltEndToEnd`, `CnaInputTests`, `CnaGltfConformancePerf` | load, not defects | a 300 s timeout, a timing-sensitive input case and a 50 ms parse budget (56 ms measured) under `-j6`; **all three pass run alone** (130 s, 213 s, 15 s) |
+
+Shared sources changed here (`zero_length_buffer`, `spritebatch_sort_mode_semantics`, `sprite_font`,
+`dxt_texturecube`, `dxt1_texture`, `easygl_rendertargetcube_depthformat`) also build for EasyGL,
+whose example block this build does not configure (`VKPAR-0016`); they were not run on EasyGL.
 
 ---
 

@@ -46,6 +46,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -116,9 +117,15 @@ class VulkanSpriteBatchBlendStateTest : public Game
     void DrawSpriteWithFactor(GraphicsDevice& dev, const Rectangle& dest, const Color& tint,
                               const BlendState& blend, const Color& factor)
     {
+        // plans/plan_vulkan_parity.md VKPAR-0019: Immediate, not Deferred. XNA's BlendState.Apply
+        // writes the state's own BlendFactor, and setting GraphicsDevice.BlendFactor dirties the
+        // cached state so the next assignment re-applies it (SOFTWARE-350, measured). A Deferred
+        // batch assigns its BlendState at End(), which put White back over a factor set between
+        // Begin() and End(). Immediate applies the state at Begin(), so the factor set after it
+        // is what the draw uses -- the per-batch dynamic constant this scene exists to test.
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
-        sb.Begin(SpriteSortMode::Deferred, blend, &point, nullptr, nullptr);
+        sb.Begin(SpriteSortMode::Immediate, blend, &point, nullptr, nullptr);
         dev.setBlendFactorProperty(factor);
         sb.Draw(whiteTex_, dest, Rectangle(0, 0, 1, 1), tint);
         sb.End();
@@ -369,6 +376,12 @@ public:
     VulkanSpriteBatchBlendStateTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_parity.md VKPAR-0018: this test uses a HiDef-only feature
+        // (GetBackBufferData, volume textures, multiple render targets, separate alpha blending,
+        // mipmapped non-power-of-two surfaces, occlusion queries or float targets), and CNA
+        // enforces XNA's Reach profile, which GraphicsDeviceManager defaults to -- so under Reach
+        // it failed before reaching its subject.
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(128);
         gdm_->setPreferredBackBufferHeightProperty(96);
     }

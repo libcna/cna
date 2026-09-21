@@ -4,7 +4,8 @@
 // physical device actually reports.
 //
 // `GetMaxTextureSizeForProfileEXT`, `GetMaxCubeSizeForProfileEXT`, `GetMaxVolumeExtentForProfileEXT`
-// and `GetMaxRenderTargetsForProfileEXT` are unoverridden on both renderers and return "no ceiling";
+// and `GetMaxRenderTargetsForProfileEXT` were unoverridden on both renderers and returned "no
+// ceiling" when this was written; SOFTWARE-179 has since given them XNA's profile ceilings;
 // `GetMaxVertexStreams()` returns the public maximum of 16; `GetMaxTextureDimension()` returns a
 // hardcoded 16384, whose own comment says it "matches the guaranteed ceiling on every native API
 // this project targets ... and the value real-world Vulkan implementations report".
@@ -223,6 +224,12 @@ public:
     VulkanProfileLimitsAuditTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_parity.md VKPAR-0022: HiDef, because leg G constructs a Texture3D and
+        // Reach refuses every volume texture (SOFTWARE-179). Since then G and H are both answered
+        // by HiDef's own ceilings (256 and 4096), which name the size and so satisfy the
+        // invariant through its "says why" arm; the device-memory case VULKAN-180 found is no
+        // longer reachable through them.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(32);
     }

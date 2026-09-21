@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -22,6 +23,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+
+#include "System/ArgumentException.hpp"
 
 #include <array>
 #include <cmath>
@@ -198,37 +201,61 @@ protected:
             destination.GetData(pixels.data(), static_cast<int>(pixels.size()));
             for (const Vector4& pixel : pixels) sampledDraw = sampledDraw && Matches(pixel);
 
+            // plans/plan_vulkan_parity.md VKPAR-0025: XNA's MRT rule compares PIXEL SIZE, not
+            // format (plans/plan_software.md SOFTWARE-220). Vector4 (16 bytes) beside Color (4)
+            // is refused and binds nothing; Single beside Color, both four bytes, is the mixed
+            // pair XNA accepts, and a clear reaches both attachments.
             RenderTarget2D color(
                 device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
-            const std::vector<RenderTargetBinding> bindings{
-                RenderTargetBinding(&destination), RenderTargetBinding(&color)};
-            device.SetRenderTargets(bindings);
+            bool unequalRefused = false;
+            try
+            {
+                device.SetRenderTargets({RenderTargetBinding(&destination),
+                                         RenderTargetBinding(&color)});
+            }
+            catch (const System::ArgumentException&)
+            {
+                unequalRefused = device.GetRenderTargets().empty();
+            }
+            device.SetRenderTargets({});
+            RenderTarget2D single(
+                device, kSize, kSize, false, SurfaceFormat::Single, DepthFormat::None);
+            device.SetRenderTargets({RenderTargetBinding(&single), RenderTargetBinding(&color)});
             device.Clear(kRed, kGreen, kBlue, 1.0f);
             device.SetRenderTargets({});
             std::vector<Color> colorPixels(
                 static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
             color.GetData(colorPixels.data(), static_cast<int>(colorPixels.size()));
+            std::vector<float> singlePixels(static_cast<std::size_t>(kSize) * kSize, 0.0f);
+            single.GetData(singlePixels.data(), static_cast<int>(singlePixels.size()));
+            mixedMrt = unequalRefused && single.getFormatProperty() == SurfaceFormat::Single;
             for (const Color& pixel : colorPixels)
                 mixedMrt = mixedMrt && pixel == Color::White;
+            for (const float value : singlePixels)
+                mixedMrt = mixedMrt && std::fabs(value - kRed) < 1.0e-3f;
         }
         Check(!(hasVector && hasHalf) || sampledDraw,
               "G HalfVector4 sampling and Vector4 SpriteBatch draw preserve HDR values",
               hasVector && hasHalf ? "advertised and exercised" : "required formats unavailable");
         Check(!(hasVector && hasHalf) || mixedMrt,
-              "H mixed Vector4 and Color MRT uses matching attachment formats",
+              "H MRT refuses Vector4 beside Color and clears Single beside Color, each in its own format",
               hasVector && hasHalf ? "advertised and exercised" : "required formats unavailable");
 
-        bool refused = false;
+        // VKPAR-0025: a render-target format is a preference. XNA builds the nearest supported
+        // target instead of throwing (plans/plan_software.md SOFTWARE-216), so a Dxt1 request is
+        // a Color target -- and reports Color, which is what "no silent substitution" means now.
+        bool fellBack = false;
         try
         {
-            RenderTarget2D unsupported(
+            RenderTarget2D compressed(
                 device, kSize, kSize, false, SurfaceFormat::Dxt1, DepthFormat::None);
+            fellBack = compressed.getFormatProperty() == SurfaceFormat::Color;
         }
         catch (...)
         {
-            refused = true;
         }
-        Check(refused, "I unsupported compressed target is refused without substitution");
+        Check(fellBack, "I a compressed target request is built, and reported, as Color",
+              fellBack ? "Color" : "not Color");
 
         const CNA::RendererFormatSupport halfSupport =
             device.GetRendererSurfaceFormatSupportEXT(SurfaceFormat::HalfVector4);
@@ -430,6 +457,12 @@ public:
     VulkanFloatRenderTargetTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_parity.md VKPAR-0018: this test uses a HiDef-only feature
+        // (GetBackBufferData, volume textures, multiple render targets, separate alpha blending,
+        // mipmapped non-power-of-two surfaces, occlusion queries or float targets), and CNA
+        // enforces XNA's Reach profile, which GraphicsDeviceManager defaults to -- so under Reach
+        // it failed before reaching its subject.
+        graphics_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(kSize);
         graphics_->setPreferredBackBufferHeightProperty(kSize);
     }

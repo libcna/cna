@@ -224,8 +224,10 @@ namespace
         // WINCLOSE-0017: DirectX11's single-sample cube colour resource is an ordinary sampleable
         // TEXTURECUBE, and its RenderTargetCube renderer now uploads into it with the plain
         // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
+        // plans/plan_vulkan_parity.md VKPAR-0027: Vulkan uploads into the face through the same
+        // per-face flush its readback uses; the exact round trip is asserted below.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, OpenGL4, DirectX11, DirectX12);
+                               Software, OpenGL4, DirectX11, DirectX12, Vulkan);
     }
 }
 
@@ -283,7 +285,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, DirectX12, Vulkan);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

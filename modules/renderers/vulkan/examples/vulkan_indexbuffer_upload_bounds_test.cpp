@@ -15,9 +15,14 @@
 //   A  The allocation is exactly capacity * element width, for both widths. Read from the
 //      renderer's own GetLiveIndexBufferBytesEXT() as a before/after delta.
 //   B  A full-capacity upload of each width round-trips every index.
-//   C  An over-capacity upload is refused by name (System::ArgumentOutOfRangeException) and the
+//   C  An over-capacity upload is refused by name (System::InvalidOperationException) and the
 //      buffer still holds -- and still returns -- what was in it before the refused call.
-//   D  A width that is not this buffer's is refused by name (System::ArgumentException).
+//   D  A 32-bit source whose BYTES exceed a 16-bit buffer is refused by the same name.
+//
+//   plans/plan_vulkan_parity.md VKPAR-0022: C and D caught ArgumentOutOfRangeException and
+//   ArgumentException until XNA's own rule was recovered (plans/plan_software.md SOFTWARE-250):
+//   an index transfer is a byte span, whatever the buffer's element width, and one past the end
+//   is an InvalidOperationException.
 //   E  A full-capacity 32-bit index buffer still DRAWS: the boundary case where the draw route's
 //      own copy reads the very last byte of the mapping.
 //   F  No validation messages.
@@ -43,8 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-#include "System/ArgumentException.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
@@ -113,8 +117,8 @@ class VulkanIndexBufferUploadBoundsTest : public Game
         std::string how = "no exception";
         try {
             ib.SetData(tooMany.data(), kIndexCount + 1);
-        } catch (const System::ArgumentOutOfRangeException& e) {
-            refused = true; how = std::string("ArgumentOutOfRangeException: ") + e.what();
+        } catch (const System::InvalidOperationException& e) {
+            refused = true; how = std::string("InvalidOperationException: ") + e.what();
         } catch (const std::exception& e) {
             how = std::string("wrong type: ") + e.what();
         }
@@ -126,19 +130,21 @@ class VulkanIndexBufferUploadBoundsTest : public Game
         check(afterRefusal == payload, "C the refused upload left the contents intact",
               afterRefusal == payload ? "identical" : "contents changed");
 
-        // D: a 32-bit source into a 16-bit buffer. Widening the allocation would let this draw
-        // from misread bytes, so it must be refused rather than accommodated.
+        // D: a 32-bit source into a 16-bit buffer, twice the buffer's bytes. Widening the
+        // allocation would let this draw from misread bytes, so it must be refused rather than
+        // accommodated.
         std::vector<std::uint32_t> wrongWidth(kIndexCount, 1u);
         bool widthRefused = false;
         std::string widthHow = "no exception";
         try {
             ib.SetData(wrongWidth.data(), kIndexCount);
-        } catch (const System::ArgumentException& e) {
-            widthRefused = true; widthHow = std::string("ArgumentException: ") + e.what();
+        } catch (const System::InvalidOperationException& e) {
+            widthRefused = true; widthHow = std::string("InvalidOperationException: ") + e.what();
         } catch (const std::exception& e) {
             widthHow = std::string("wrong type: ") + e.what();
         }
-        check(widthRefused, "D a 32-bit source into a 16-bit buffer is refused by name", widthHow);
+        check(widthRefused, "D a 32-bit source larger than the 16-bit buffer's bytes is refused",
+              widthHow);
     }
 
     // ── Legs A, B, E for the 32-bit width ────────────────────────────────────

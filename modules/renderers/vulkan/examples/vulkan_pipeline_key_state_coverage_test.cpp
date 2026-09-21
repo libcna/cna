@@ -348,8 +348,11 @@ protected:
                      [](BlendState& b) { b.setAlphaDestinationBlendProperty(Blend::SourceAlpha); });
         MeasureBlend("BlendState.ColorBlendFunction", Verdict::InKey,
                      [](BlendState& b) { b.setColorBlendFunctionProperty(BlendFunction::ReverseSubtract); });
+        // plans/plan_vulkan_parity.md VKPAR-0022: Subtract, not Max. XNA refuses Min/Max unless
+        // both factors are One (plans/plan_software.md SOFTWARE-212), and the baseline's alpha
+        // factors are not; Subtract changes the same single key field and is legal.
         MeasureBlend("BlendState.AlphaBlendFunction", Verdict::InKey,
-                     [](BlendState& b) { b.setAlphaBlendFunctionProperty(BlendFunction::Max); });
+                     [](BlendState& b) { b.setAlphaBlendFunctionProperty(BlendFunction::Subtract); });
         MeasureBlend("BlendState.ColorWriteChannels", Verdict::InKey,
                      [](BlendState& b) { b.setColorWriteChannelsProperty(ColorWriteChannels::Red); });
         MeasureBlend("BlendState.ColorWriteChannels1", Verdict::InKey,

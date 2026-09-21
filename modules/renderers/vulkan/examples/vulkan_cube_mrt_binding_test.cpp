@@ -38,6 +38,8 @@
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "vulkan_mrt_msaa_test_spv.hpp"
 
+#include "System/ArgumentException.hpp"
+
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -330,10 +332,15 @@ class VulkanCubeMrtBindingTest final : public Game
               "two cube objects preserve ordered +Y/-Z views and distinct outputs: "
               + Describe(aPixel) + " / " + Describe(bPixel));
 
+        // plans/plan_vulkan_parity.md VKPAR-0025: +X and -X of TWO cubes. XNA compares MRT targets
+        // by resource identity before their face, so two faces of one cube may not be bound
+        // together (plans/plan_software.md SOFTWARE-220); that case is its own rejection leg
+        // below. What this leg keeps is its subject: per-slot face views, in slot order.
         auto oneCube = MakeCube(0);
+        auto otherCube = MakeCube(0);
         const auto twoFaces = std::vector<RenderTargetBinding>{
             CubeBinding(*oneCube, CubeMapFace::PositiveX),
-            CubeBinding(*oneCube, CubeMapFace::NegativeX),
+            CubeBinding(*otherCube, CubeMapFace::NegativeX),
         };
         device.SetRenderTargets(twoFaces);
         proxy = Renderer().GetCurrentMRTProxyEXT();
@@ -341,14 +348,14 @@ class VulkanCubeMrtBindingTest final : public Game
             && proxy->GetColorAttachmentViewEXT(0)
                 == RendererOf(*oneCube).GetFaceResolveViewEXT(0)
             && proxy->GetColorAttachmentViewEXT(1)
-                == RendererOf(*oneCube).GetFaceResolveViewEXT(1);
+                == RendererOf(*otherCube).GetFaceResolveViewEXT(1);
         device.SetRenderTargets({});
         QueueMrtDraw(twoFaces, effect, BlendState::Opaque);
         const Color positiveX = SampleFace(*oneCube, CubeMapFace::PositiveX);
-        const Color negativeX = SampleFace(*oneCube, CubeMapFace::NegativeX);
+        const Color negativeX = SampleFace(*otherCube, CubeMapFace::NegativeX);
         Check(faceStructure && MatchesRgb(positiveX, kSource)
               && MatchesRgb(negativeX, kOutput1),
-              "same cube different 1x faces are distinct valid MRT subresources: "
+              "+X and -X faces of two 1x cubes are distinct valid MRT subresources: "
               + Describe(positiveX) + " / " + Describe(negativeX));
 
         BlendState faceMasks = BlendState::Opaque;
@@ -358,10 +365,10 @@ class VulkanCubeMrtBindingTest final : public Game
         const Color maskedPositiveX =
             SampleFace(*oneCube, CubeMapFace::PositiveX);
         const Color maskedNegativeX =
-            SampleFace(*oneCube, CubeMapFace::NegativeX);
+            SampleFace(*otherCube, CubeMapFace::NegativeX);
         Check(MatchesRgb(maskedPositiveX, Color(200, 20, 30, 255))
               && MatchesRgb(maskedNegativeX, Color(10, 20, 200, 255)),
-              "ColorWriteChannels0/1 stay aligned with same-cube +X/-X subresources: "
+              "ColorWriteChannels0/1 stay aligned with the +X/-X face subresources: "
               + Describe(maskedPositiveX) + " / "
               + Describe(maskedNegativeX));
 
@@ -371,7 +378,7 @@ class VulkanCubeMrtBindingTest final : public Game
                 CubeBinding(*oneCube, CubeMapFace::PositiveX),
                 CubeBinding(*oneCube, CubeMapFace::PositiveX),
             });
-        } catch (const std::runtime_error&) {
+        } catch (const System::ArgumentException&) {
             duplicateRejected = true;
         }
         device.SetRenderTargets({});
@@ -475,43 +482,25 @@ class VulkanCubeMrtBindingTest final : public Game
         // REMED-GFX-141 turned this case from rejected into correct. It used to throw "Vulkan MRT
         // cannot bind one multisample source subresource to more than one slot (same-cube
         // multi-face MSAA is unsupported)" -- and the guard was right, because
-        // VulkanRenderTargetCubeRenderer allocated ONE multisample image for the whole cube, so both
-        // slots really did name the same storage while resolving to different layers. The cube's
-        // multisample image now has six array layers and one view per face, so two faces of one
-        // cube are two genuinely distinct sources. The guard itself is untouched and still fires
-        // for any target that really does expose one shared source; what changed is that a cube no
-        // longer does.
+        // Two faces of ONE multisampled cube. VulkanRenderTargetCubeRenderer once allocated a
+        // single multisample image for the whole cube, and later six layers with a view per face,
+        // so this leg used to prove the two slots got independent sources. XNA does not let the
+        // pair be bound at all (SOFTWARE-220): the same resource in two slots is an
+        // ArgumentException whatever the faces, and nothing is bound (VKPAR-0025).
         const auto sameCubeFaces = std::vector<RenderTargetBinding>{
             CubeBinding(*cubeA, CubeMapFace::PositiveX),
             CubeBinding(*cubeA, CubeMapFace::NegativeX),
         };
-        bool sameCubeAccepted = false;
-        bool sameCubeStructure = false;
+        bool sameCubeRejected = false;
         try {
             device.SetRenderTargets(sameCubeFaces);
-            proxy = Renderer().GetCurrentMRTProxyEXT();
-            sameCubeAccepted = true;
-            sameCubeStructure = proxy
-                && proxy->GetColorAttachmentViewEXT(0)
-                    == RendererOf(*cubeA).GetMsaaColorViewEXT(0)
-                && proxy->GetColorAttachmentViewEXT(1)
-                    == RendererOf(*cubeA).GetMsaaColorViewEXT(1)
-                && proxy->GetColorAttachmentViewEXT(0) != proxy->GetColorAttachmentViewEXT(1)
-                && proxy->GetResolveAttachmentViewEXT(0)
-                    == RendererOf(*cubeA).GetFaceResolveViewEXT(0)
-                && proxy->GetResolveAttachmentViewEXT(1)
-                    == RendererOf(*cubeA).GetFaceResolveViewEXT(1);
-        } catch (const std::runtime_error&) {
-            sameCubeAccepted = false;
+        } catch (const System::ArgumentException&) {
+            sameCubeRejected = true;
         }
+        const bool nothingBound = device.GetRenderTargets().empty();
         device.SetRenderTargets({});
-        QueueMrtDraw(sameCubeFaces, effect, BlendState::Opaque);
-        const Color facePlusX  = SampleFace(*cubeA, CubeMapFace::PositiveX);
-        const Color faceMinusX = SampleFace(*cubeA, CubeMapFace::NegativeX);
-        Check(sameCubeAccepted && sameCubeStructure
-              && MatchesRgb(facePlusX, kSource) && MatchesRgb(faceMinusX, kOutput1),
-              "same-cube different-face MSAA uses two independent per-face sources and resolves "
-              "each to its own face: " + Describe(facePlusX) + " / " + Describe(faceMinusX));
+        Check(sameCubeRejected && nothingBound,
+              "two faces of one multisampled cube are refused as one resource in two slots");
 
         auto depthCube = MakeCube(8, DepthFormat::Depth24Stencil8);
         auto depthPeer = Make2D(8, DepthFormat::Depth24Stencil8);
@@ -543,7 +532,7 @@ class VulkanCubeMrtBindingTest final : public Game
                 CubeBinding(*cube, CubeMapFace::PositiveX),
                 RenderTargetBinding(plain.get()),
             });
-        } catch (const std::runtime_error&) {
+        } catch (const System::ArgumentException&) {
             sampleRejected = true;
         }
         device.SetRenderTargets({});
@@ -557,7 +546,7 @@ class VulkanCubeMrtBindingTest final : public Game
                 CubeBinding(*cube, CubeMapFace::PositiveX),
                 RenderTargetBinding(small.get()),
             });
-        } catch (const std::runtime_error&) {
+        } catch (const System::ArgumentException&) {
             extentRejected = true;
         }
         device.SetRenderTargets({});

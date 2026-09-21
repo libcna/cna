@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #ifdef CNA_CNAEXT
@@ -428,6 +429,12 @@ protected:
         // MOD-2224: query truth is only useful if the matching public constructor behaves the
         // same way. Exercise every format at a deliberately odd size so the test also catches
         // accidental even/power-of-two assumptions in image allocation and mip calculation.
+        //
+        // plans/plan_vulkan_parity.md VKPAR-0020: "behaves the same way" for a request the snapshot
+        // does NOT advertise used to mean "refuses". XNA's constructor treats the format and sample
+        // count as preferences and builds the nearest supported target instead of throwing
+        // (plans/plan_software.md SOFTWARE-216), so an unadvertised request must construct -- as a
+        // Color target, or with fewer samples -- and never with the identity it could not have.
         constexpr int contractWidth = 7;
         constexpr int contractHeight = 5;
         constexpr int expectedMipLevels = 3; // 7x5 -> 3x2 -> 1x1
@@ -435,11 +442,11 @@ protected:
         bool mipConstructionAgrees = true;
         bool multisampleConstructionAgrees = true;
         int baseSupported = 0;
-        int baseRefused = 0;
+        int baseFellBack = 0;
         int mipSupported = 0;
-        int mipRefused = 0;
+        int mipFellBack = 0;
         int multisampleSupported = 0;
-        int multisampleRefused = 0;
+        int multisampleFellBack = 0;
         std::string firstConstructionError;
 
         const auto RecordConstructionError = [&](const FormatCase& format,
@@ -464,6 +471,7 @@ protected:
                 device.SupportsSurfaceFormatAsRenderTargetEXT(format.surface);
             bool baseReturned = false;
             bool baseIdentityExact = false;
+            bool baseFallbackExact = false;
             try
             {
                 RenderTarget2D target(
@@ -480,32 +488,35 @@ protected:
                     native->GetSurfaceFormatEXT() == static_cast<int>(format.surface) &&
                     hasRenderTargetMapping &&
                     native->GetVkFormatEXT() == renderTargetStorage.format;
-                if (!baseIdentityExact)
-                    RecordConstructionError(format, "base", "constructed with the wrong identity");
+                baseFallbackExact = native != nullptr &&
+                    target.getWidthProperty() == contractWidth &&
+                    target.getHeightProperty() == contractHeight &&
+                    target.getFormatProperty() == SurfaceFormat::Color &&
+                    native->GetVkFormatEXT() == VK_FORMAT_R8G8B8A8_UNORM;
+                if (renderTargetAdvertised ? !baseIdentityExact : !baseFallbackExact)
+                    RecordConstructionError(format, "base",
+                                            renderTargetAdvertised
+                                                ? "constructed with the wrong identity"
+                                                : "did not fall back to a Color target");
             }
             catch (const std::exception& error)
             {
-                if (renderTargetAdvertised)
-                    RecordConstructionError(format, "base", error.what());
+                RecordConstructionError(format, "base", error.what());
             }
             catch (...)
             {
-                if (renderTargetAdvertised)
-                    RecordConstructionError(format, "base", "unknown exception");
+                RecordConstructionError(format, "base", "unknown exception");
             }
-            if (!renderTargetAdvertised && baseReturned)
-                RecordConstructionError(format, "base", "unexpectedly constructed");
-            if (baseReturned) ++baseSupported; else ++baseRefused;
+            if (renderTargetAdvertised) ++baseSupported; else ++baseFellBack;
             baseConstructionAgrees = baseConstructionAgrees &&
-                renderTargetAdvertised == publicPredicate &&
-                (renderTargetAdvertised
-                    ? baseReturned && baseIdentityExact
-                    : !baseReturned);
+                renderTargetAdvertised == publicPredicate && baseReturned &&
+                (renderTargetAdvertised ? baseIdentityExact : baseFallbackExact);
 
             const bool mipAdvertised = renderTargetAdvertised &&
                 support.Supports(CNA::RendererFormatUsage::Mipmapped);
             bool mipReturned = false;
             bool mipIdentityExact = false;
+            bool mipFallbackExact = false;
             try
             {
                 RenderTarget2D target(
@@ -522,26 +533,33 @@ protected:
                     native->GetSurfaceFormatEXT() == static_cast<int>(format.surface) &&
                     hasRenderTargetMapping &&
                     native->GetVkFormatEXT() == renderTargetStorage.format;
-                if (!mipIdentityExact)
-                    RecordConstructionError(format, "mip", "constructed with the wrong identity");
+                // A fallback keeps the requested chain: only the format was a preference.
+                mipFallbackExact = native != nullptr &&
+                    target.getFormatProperty() == SurfaceFormat::Color &&
+                    target.getLevelCountProperty() == expectedMipLevels &&
+                    native->GetVkFormatEXT() == VK_FORMAT_R8G8B8A8_UNORM;
+                if (mipAdvertised ? !mipIdentityExact
+                                  : !(mipFallbackExact ||
+                                      (renderTargetAdvertised && mipIdentityExact)))
+                    RecordConstructionError(format, "mip",
+                                            mipAdvertised ? "constructed with the wrong identity"
+                                                          : "did not fall back to a Color chain");
             }
             catch (const std::exception& error)
             {
-                if (mipAdvertised)
-                    RecordConstructionError(format, "mip", error.what());
+                RecordConstructionError(format, "mip", error.what());
             }
             catch (...)
             {
-                if (mipAdvertised)
-                    RecordConstructionError(format, "mip", "unknown exception");
+                RecordConstructionError(format, "mip", "unknown exception");
             }
-            if (!mipAdvertised && mipReturned)
-                RecordConstructionError(format, "mip", "unexpectedly constructed");
-            if (mipReturned) ++mipSupported; else ++mipRefused;
-            mipConstructionAgrees = mipConstructionAgrees &&
+            if (mipAdvertised) ++mipSupported; else ++mipFellBack;
+            // An unadvertised mip chain on an ADVERTISED format has no XNA fallback to take (the
+            // format itself is fine), so either outcome that keeps the chain is accepted there.
+            mipConstructionAgrees = mipConstructionAgrees && mipReturned &&
                 (mipAdvertised
-                    ? mipReturned && mipIdentityExact
-                    : !mipReturned);
+                    ? mipIdentityExact
+                    : mipFallbackExact || (renderTargetAdvertised && mipIdentityExact));
 
             VkImageFormatProperties multisampleProperties{};
             VkSampleCountFlags availableSamples = 0;
@@ -561,6 +579,7 @@ protected:
                 support.Supports(CNA::RendererFormatUsage::Multisample);
             bool multisampleReturned = false;
             bool multisampleIdentityExact = false;
+            bool multisampleNearest = false;
             try
             {
                 RenderTarget2D target(
@@ -576,48 +595,49 @@ protected:
                         static_cast<VkSampleCountFlagBits>(highestSamples) &&
                     hasRenderTargetMapping &&
                     native->GetVkFormatEXT() == renderTargetStorage.format;
-                if (!multisampleIdentityExact)
+                // Unadvertised: the nearest supported target -- Color, or fewer samples -- and
+                // never the exact format/sample pair the snapshot said it could not build.
+                multisampleNearest = native != nullptr &&
+                    (target.getFormatProperty() != format.surface ||
+                     target.getMultiSampleCountProperty() < 2);
+                if (multisampleAdvertised ? !multisampleIdentityExact : !multisampleNearest)
                     RecordConstructionError(
-                        format, "MSAA", "constructed with the wrong format/sample count");
+                        format, "MSAA", multisampleAdvertised
+                                            ? "constructed with the wrong format/sample count"
+                                            : "claimed a format/sample pair it does not advertise");
             }
             catch (const std::exception& error)
             {
-                if (multisampleAdvertised)
-                    RecordConstructionError(format, "MSAA", error.what());
+                RecordConstructionError(format, "MSAA", error.what());
             }
             catch (...)
             {
-                if (multisampleAdvertised)
-                    RecordConstructionError(format, "MSAA", "unknown exception");
+                RecordConstructionError(format, "MSAA", "unknown exception");
             }
-            if (!multisampleAdvertised && multisampleReturned)
-                RecordConstructionError(format, "MSAA", "unexpectedly constructed");
-            if (multisampleReturned) ++multisampleSupported; else ++multisampleRefused;
+            if (multisampleAdvertised) ++multisampleSupported; else ++multisampleFellBack;
             multisampleConstructionAgrees = multisampleConstructionAgrees &&
-                ((highestSamples > 1) == multisampleAdvertised) &&
-                (multisampleAdvertised
-                    ? multisampleReturned && multisampleIdentityExact
-                    : !multisampleReturned);
+                ((highestSamples > 1) == multisampleAdvertised) && multisampleReturned &&
+                (multisampleAdvertised ? multisampleIdentityExact : multisampleNearest);
         }
 
-        Check(baseConstructionAgrees && baseSupported > 0 && baseRefused > 0,
+        Check(baseConstructionAgrees && baseSupported > 0 && baseFellBack > 0,
               "F capability snapshot agrees with all odd-sized base target constructors",
               firstConstructionError.empty()
-                  ? std::to_string(baseSupported) + " created, " +
-                        std::to_string(baseRefused) + " refused"
+                  ? std::to_string(baseSupported) + " exact, " +
+                        std::to_string(baseFellBack) + " fell back to Color"
                   : firstConstructionError);
-        Check(mipConstructionAgrees && mipSupported > 0 && mipRefused > 0,
+        Check(mipConstructionAgrees && mipSupported > 0 && mipFellBack > 0,
               "G mip capability agrees with complete 7x5 chains for every format",
               firstConstructionError.empty()
-                  ? std::to_string(mipSupported) + " created, " +
-                        std::to_string(mipRefused) + " refused"
+                  ? std::to_string(mipSupported) + " exact, " +
+                        std::to_string(mipFellBack) + " fell back"
                   : firstConstructionError);
         Check(multisampleConstructionAgrees && multisampleSupported > 0 &&
-                  multisampleRefused > 0,
+                  multisampleFellBack > 0,
               "H MSAA capability agrees with exact per-format sample construction",
               firstConstructionError.empty()
-                  ? std::to_string(multisampleSupported) + " created, " +
-                        std::to_string(multisampleRefused) + " refused"
+                  ? std::to_string(multisampleSupported) + " exact, " +
+                        std::to_string(multisampleFellBack) + " fell back"
                   : firstConstructionError);
 
         const auto& limits = renderer->GetDeviceLimitsEXT();
@@ -717,6 +737,10 @@ public:
     VulkanFormatLimitQueriesTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        // VKPAR-0020: the snapshot describes the renderer, which HiDef exposes in full; at Reach
+        // the profile would refuse the float targets the snapshot rightly advertises.
+        graphics_->setGraphicsProfileProperty(
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(64);
         graphics_->setPreferredBackBufferHeightProperty(64);
     }

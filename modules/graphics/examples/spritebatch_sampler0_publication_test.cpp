@@ -51,6 +51,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -266,6 +267,12 @@ public:
     SpriteBatchSampler0PublicationTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_parity.md VKPAR-0018: this test uses a HiDef-only feature
+        // (GetBackBufferData, volume textures, multiple render targets, separate alpha blending,
+        // mipmapped non-power-of-two surfaces, occlusion queries or float targets), and CNA
+        // enforces XNA's Reach profile, which GraphicsDeviceManager defaults to -- so under Reach
+        // it failed before reaching its subject.
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kN);
         gdm_->setPreferredBackBufferHeightProperty(kN);
     }

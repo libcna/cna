@@ -45,8 +45,11 @@
 //
 // What the mode does guarantee, and what leg C asserts instead:
 //   * no sprite is lost -- sprites with different textures still each reach their own destination;
-//   * grouping cannot reorder WITHIN a group -- CNA uses `std::stable_sort`, so two overlapping
-//     sprites that share one texture come out in issue order, and the second one wins.
+//   * grouping reorders WITHIN a group exactly as XNA does. XNA sorts with .NET Framework 4's
+//     unstable `Array.Sort` quicksort, which swaps two equal keys, so two overlapping sprites that
+//     share one texture come out REVERSED and the first-issued one wins (plans/plan_software.md
+//     SOFTWARE-354, recovered from XNA's IL; this said `std::stable_sort` and "the second one wins"
+//     until plans/plan_vulkan_parity.md VKPAR-0022).
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -290,9 +293,9 @@ protected:
                       " (want red) right=" + Text(pixels[2]) + " (want blue)");
         }
 
-        //    C2 -- the ordering promise that DOES exist. Two overlapping sprites share ONE texture,
-        //    so they are one group, and a stable sort must leave them in issue order: the second
-        //    Draw's tint is what survives. This fails if the sort is made unstable.
+        //    C2 -- the ordering that DOES exist. Two overlapping sprites share ONE texture, so
+        //    their keys are equal, and XNA's quicksort swaps two equal keys: the FIRST Draw's tint
+        //    is what survives. This fails if the sort is made stable.
         {
             RenderTarget2D rt(dev, 2, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
                               RenderTargetUsage::DiscardContents);
@@ -311,9 +314,9 @@ protected:
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             std::vector<Color> pixels(4, Color(0, 0, 0, 0));
             rt.GetData(pixels.data(), 0, 4);
-            check(Is(pixels[0], kBlue),
-                  "C2 Texture: sprites sharing a texture keep issue order, got=" +
-                      Text(pixels[0]) + " (want blue, the one issued second)");
+            check(Is(pixels[0], kRed),
+                  "C2 Texture: two sprites sharing a texture come out swapped, as XNA's sort "
+                  "leaves them, got=" + Text(pixels[0]) + " (want red, the one issued first)");
         }
 
         // D. VULKAN-057's cost, measured rather than asserted. Honouring Immediate means

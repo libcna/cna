@@ -250,22 +250,45 @@ namespace CNA::Internal::Renderers::Vulkan
     //
     // Keyed on the CNA SurfaceFormat rather than the VkFormat on purpose: VK_FORMAT_R8_UNORM would
     // serve both a one-channel colour format (wanting (r,1,1,1)) and Alpha8 (wanting (0,0,0,r)),
-    // and the VkFormat cannot tell them apart. Formats this renderer does not implement are absent
-    // from the switch and take the identity default; each one adds its row here when it lands.
+    // and the VkFormat cannot tell them apart. But the VkFormat actually STORED is checked too
+    // (VKPAR-0020): TextureCube keeps every non-block format as RGBA8, and a view that expanded
+    // "missing" channels of storage that has all four would discard real data. Only a view over
+    // the format's own native storage is expanded.
     //
     // SAMPLED views only. A storage image must have the identity mapping (VUID-VkImageViewCreateInfo-
     // imageViewFormatSwizzle) and a colour attachment is written, not expanded.
-    [[nodiscard]] static VkComponentMapping ClassicSampledSwizzleEXT(int surfaceFormatOrdinal) noexcept
+    [[nodiscard]] static VkComponentMapping ClassicSampledSwizzleEXT(int surfaceFormatOrdinal,
+                                                                     VkFormat storedFormat) noexcept
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         VkComponentMapping m{VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
                              VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+        VkFormat nativeFormat = VK_FORMAT_UNDEFINED;
+        if (!VulkanRenderer::MapSurfaceFormatToVkFormatEXT(surfaceFormatOrdinal, nativeFormat) ||
+            nativeFormat != storedFormat)
+            return m;
         switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
         {
         case SurfaceFormat::NormalizedByte2:
-            // Two-channel: blue is the only gap. Alpha is already 1.0, because R8G8_SNORM has no
-            // alpha component at all and Vulkan supplies 1.0 for that case on its own.
+        case SurfaceFormat::Rg32:
+        case SurfaceFormat::Vector2:
+        case SurfaceFormat::HalfVector2:
+            // Two-channel: blue is the only gap. Alpha is already 1.0, because none of these
+            // VkFormats has an alpha component and Vulkan supplies 1.0 for that case on its own.
             m.b = VK_COMPONENT_SWIZZLE_ONE;
+            break;
+        case SurfaceFormat::Single:
+        case SurfaceFormat::HalfSingle:
+            // One colour channel: `Single|64,255,255,255`.
+            m.g = VK_COMPONENT_SWIZZLE_ONE;
+            m.b = VK_COMPONENT_SWIZZLE_ONE;
+            break;
+        case SurfaceFormat::Alpha8:
+            // Stored in R8_UNORM's only channel, sampled as alpha over black: `Alpha8|0,0,0,128`.
+            m.r = VK_COMPONENT_SWIZZLE_ZERO;
+            m.g = VK_COMPONENT_SWIZZLE_ZERO;
+            m.b = VK_COMPONENT_SWIZZLE_ZERO;
+            m.a = VK_COMPONENT_SWIZZLE_R;
             break;
         default:
             break;
@@ -397,7 +420,8 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         auto supports = [pd](VkFormat fmt) {
             if (sDepthFormatPreferredUnsupportedForTest &&
-                (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_X8_D24_UNORM_PACK32))
+                (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_X8_D24_UNORM_PACK32 ||
+                 fmt == VK_FORMAT_D32_SFLOAT))
                 return false;
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(pd, fmt, &props);
@@ -411,6 +435,13 @@ namespace CNA::Internal::Renderers::Vulkan
             // X8_D24_UNORM_PACK32: real 24-bit depth, no stencil -- the closest Vulkan
             // equivalent to XNA's Depth24 (no-stencil) request.
             if (supports(VK_FORMAT_X8_D24_UNORM_PACK32)) return VK_FORMAT_X8_D24_UNORM_PACK32;
+            // plans/plan_vulkan_parity.md VKPAR-0024: then D32_SFLOAT, still without stencil.
+            // RADV offers neither X8_D24 nor D24S8, so this request used to fall through to
+            // D32_SFLOAT_S8_UINT and be REPORTED as Depth24Stencil8 -- a stencil plane the game
+            // never asked for, which made a stencil clear legal on a Depth24 target where XNA
+            // refuses it. Vulkan guarantees X8_D24 or D32_SFLOAT as a depth attachment, and
+            // FNA3D takes the same step (D24 -> D32_FLOAT).
+            if (supports(VK_FORMAT_D32_SFLOAT)) return VK_FORMAT_D32_SFLOAT;
             break;
         case DepthFormat::Depth24Stencil8:
         case DepthFormat::None:
@@ -509,6 +540,8 @@ namespace CNA::Internal::Renderers::Vulkan
         vkMapMemory(dev, stagingMem, 0, size, 0, &mapped);
         std::memcpy(mapped, data.pixels.data(), static_cast<size_t>(size));
         vkUnmapMemory(dev, stagingMem);
+        if (blockExtent_ > 1)
+            KeepCompressedLevelEXT(0, data.pixels.data(), static_cast<std::size_t>(size));
 
         // --- VkImage ---
         VkImageCreateInfo imgInfo{};
@@ -634,7 +667,7 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount     = 1;
         // VKPAR-0014: XNA's measured channel expansion, on the SAMPLED view.
-        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_);
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (texture) failed");
         if ((imageUsage_ & VK_IMAGE_USAGE_STORAGE_BIT) != 0)
@@ -767,6 +800,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (stride == rowBytes)
         {
             std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
+            if (blockExtent_ > 1)
+                KeepCompressedLevelEXT(0, rgba, static_cast<std::size_t>(size));
         }
         else
         {
@@ -815,6 +850,50 @@ namespace CNA::Internal::Renderers::Vulkan
         ++owner_->modernStagingAllocationCountEXT_;
         owner_->RetireResources(std::move(retired));
         owner_->QueueStorageImageUploadEXT(std::move(command));
+    }
+
+    void VulkanTextureRenderer::KeepCompressedLevelEXT(int level, const std::uint8_t* blocks,
+                                                       std::size_t bytes)
+    {
+        if (level < 0 || level >= levelCount_ || blocks == nullptr) return;
+        if (compressedLevels_.size() != static_cast<std::size_t>(levelCount_))
+            compressedLevels_.resize(static_cast<std::size_t>(levelCount_));
+        compressedLevels_[static_cast<std::size_t>(level)].assign(blocks, blocks + bytes);
+    }
+
+    bool VulkanTextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                        void* data, int dataLength) const
+    {
+        if (blockExtent_ <= 1 || data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0 || static_cast<std::size_t>(level) >= compressedLevels_.size())
+            return false;
+        const auto& blocks = compressedLevels_[static_cast<std::size_t>(level)];
+        if (blocks.empty()) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelW) || ((h % 4) != 0 && y + h != levelH))
+            return false;
+        const std::size_t blockBytes = static_cast<std::size_t>(bytesPerTexel_);
+        const int levelBlockColumns = (levelW + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t rowBytes = static_cast<std::size_t>(regionBlockColumns) * blockBytes;
+        if (dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < rowBytes * static_cast<std::size_t>(regionBlockRows))
+            return false;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t source =
+                (static_cast<std::size_t>(y / 4 + row) * static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            if (source + rowBytes > blocks.size()) return false;
+            std::memcpy(destination + static_cast<std::size_t>(row) * rowBytes,
+                        blocks.data() + source, rowBytes);
+        }
+        return true;
     }
 
     // Task 925: transitions exactly ONE mip level's layout -- the shared TransitionImageLayout
@@ -870,6 +949,8 @@ namespace CNA::Internal::Renderers::Vulkan
             stagingBuf, stagingMem, &mapped);
         std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
         vkUnmapMemory(dev, stagingMem);
+        if (blockExtent_ > 1)
+            KeepCompressedLevelEXT(level, rgba, static_cast<std::size_t>(size));
 
         if (!participatesInModernOrder_)
         {
@@ -1587,6 +1668,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // RT — sampling still only ever sees level 0.
         VkImageViewCreateInfo sampleView = colorView;
         sampleView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 1 };
+        // VKPAR-0020: a float target is sampled by the same measured rule as a float texture --
+        // a Single target reads (r, 1, 1, 1). Only this view: colorView_ above is the attachment,
+        // which must keep the identity mapping.
+        sampleView.components = ClassicSampledSwizzleEXT(surfaceFormat_, colorVkFormat_);
         if (vkCreateImageView(dev, &sampleView, nullptr, &colorSampleView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetRenderer: vkCreateImageView (color sample) failed");
 
@@ -2164,6 +2249,89 @@ namespace CNA::Internal::Renderers::Vulkan
         return true;
     }
 
+    void VulkanRenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        UploadLevelEXT(0, data, width_, height_, stride);
+    }
+
+    void VulkanRenderTargetRenderer::UpdatePixelsLevel(int level, const uint8_t* data,
+                                                       int levelW, int levelH)
+    {
+        UploadLevelEXT(level, data, levelW, levelH, levelW * bytesPerTexel_);
+    }
+
+    // plans/plan_vulkan_parity.md VKPAR-0027: the write twin of GetData above, through the same
+    // FlushDeferredRenderTarget -- any work still queued for this target is replayed first, so the
+    // upload lands on top of it instead of being overwritten by it later, and the copy is recorded
+    // behind it in the same submission, between the same transitions.
+    void VulkanRenderTargetRenderer::UploadLevelEXT(int level, const uint8_t* data,
+                                                    int w, int h, int stride)
+    {
+        if (!owner_ || colorImage_ == VK_NULL_HANDLE || data == nullptr ||
+            level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
+            return;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t size = rowBytes * static_cast<std::size_t>(h);
+        VkDevice dev = owner_->device_;
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(size),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return;
+        }
+        const bool isBGRA = surfaceFormat_ == static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
+            (colorVkFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
+             colorVkFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
+        auto* destination = static_cast<std::uint8_t*>(mapped);
+        for (int row = 0; row < h; ++row)
+        {
+            const std::uint8_t* source = data + static_cast<std::size_t>(row) * stride;
+            std::uint8_t* target = destination + static_cast<std::size_t>(row) * rowBytes;
+            if (!isBGRA)
+            {
+                std::memcpy(target, source, rowBytes);
+                continue;
+            }
+            for (int x = 0; x < w; ++x)
+            {
+                const std::size_t o = static_cast<std::size_t>(x) * 4u;
+                target[o + 0] = source[o + 2]; target[o + 1] = source[o + 1];
+                target[o + 2] = source[o + 0]; target[o + 3] = source[o + 3];
+            }
+        }
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        owner_->FlushDeferredRenderTarget(
+            pass_.get(), pass_.get(), level,
+            [&](const VkCommandBuffer cb)
+            {
+                owner_->RecordImageUsageEXT(
+                    cb, colorImage_, pass_->colorUsageStates,
+                    static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+                    0, 1, VulkanResourceIntent::TransferWrite);
+                vkCmdCopyBufferToImage(cb, stagingBuf, colorImage_,
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+                owner_->RecordImageUsageEXT(
+                    cb, colorImage_, pass_->colorUsageStates,
+                    static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+                    0, 1, VulkanResourceIntent::SampledRead);
+            });
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+    }
+
     // =========================================================================
     // VulkanSpriteBatchRenderer
     // =========================================================================
@@ -2201,6 +2369,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-164: ApplySamplerState sets W = U, which is right for every XNA preset and wrong
         // for a state that set W on its own. The batch's own W, when it supplied one, wins.
         if (pendingAddressW_ >= 0) renderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        // plans/plan_vulkan_parity.md VKPAR-0023: and the batch's own mip controls, which
+        // ApplySamplerState just reset to the XNA defaults.
+        if (pendingMaxMipLevel_ != 0 || pendingLodBias_ != 0.0f)
+            renderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
         // REMED-GFX-151: if this run of sprites samples a RENDER TARGET, the bind cycle being
         // recorded depends on that target's earlier cycles, and a mid-frame readback flush has to
         // replay them first. `activeSegment_` (not currentSegment_) is the cycle this batch belongs
@@ -3275,6 +3447,49 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (!textureCompressionBCSupported_) return false;
                 out = { VK_FORMAT_BC3_UNORM_BLOCK, 16, 4 };
                 return true;
+            // plans/plan_vulkan_parity.md VKPAR-0020. The eleven formats GraphicsProfile.HiDef adds
+            // to Reach's nine. All are core Vulkan 1.0, and ClassifySurfaceFormatEXT still asks the
+            // device for each one. Layouts, low bits first as D3D9 defines them:
+            //   Rgba1010102 is D3DFMT_A2B10G10R10 -- R 0..9, G 10..19, B 20..29, A 30..31 -- which
+            //     is VK_FORMAT_A2B10G10R10_UNORM_PACK32 field for field (Vulkan names from bit 31).
+            //   Rg32 is D3DFMT_G16R16 and Rgba64 is D3DFMT_A16B16G16R16: R in the lowest 16 bits,
+            //     the order VK_FORMAT_R16G16[B16A16]_UNORM stores them in memory.
+            //   Alpha8 lives in R8_UNORM's one channel; ClassicSampledSwizzleEXT moves it to alpha.
+            //   The float formats are the plain R/RG/RGBA 32- and 16-bit float formats, and
+            //   HdrBlendable is HalfVector4's storage, as in XNA.
+            // The one- and two-channel entries are expanded on sampling by the measured rule
+            // (VKPAR-0014), which is why that helper's switch grew with this table.
+            case SurfaceFormat::Rgba1010102:
+                out = { VK_FORMAT_A2B10G10R10_UNORM_PACK32, 4 };
+                return true;
+            case SurfaceFormat::Rg32:
+                out = { VK_FORMAT_R16G16_UNORM, 4 };
+                return true;
+            case SurfaceFormat::Rgba64:
+                out = { VK_FORMAT_R16G16B16A16_UNORM, 8 };
+                return true;
+            case SurfaceFormat::Alpha8:
+                out = { VK_FORMAT_R8_UNORM, 1 };
+                return true;
+            case SurfaceFormat::Single:
+                out = { VK_FORMAT_R32_SFLOAT, 4 };
+                return true;
+            case SurfaceFormat::Vector2:
+                out = { VK_FORMAT_R32G32_SFLOAT, 8 };
+                return true;
+            case SurfaceFormat::Vector4:
+                out = { VK_FORMAT_R32G32B32A32_SFLOAT, 16 };
+                return true;
+            case SurfaceFormat::HalfSingle:
+                out = { VK_FORMAT_R16_SFLOAT, 2 };
+                return true;
+            case SurfaceFormat::HalfVector2:
+                out = { VK_FORMAT_R16G16_SFLOAT, 4 };
+                return true;
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                out = { VK_FORMAT_R16G16B16A16_SFLOAT, 8 };
+                return true;
             default:
                 return false;
         }
@@ -3313,6 +3528,38 @@ namespace CNA::Internal::Renderers::Vulkan
             usage, 0, &imageProperties);
         return imageResult == VK_SUCCESS &&
                    (props.optimalTilingFeatures & required) == required
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
+    }
+
+    RendererFormatVerdict VulkanRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte2 || format == SurfaceFormat::NormalizedByte4)
+            return RendererFormatVerdict::Unsupported;
+        return ClassifySurfaceFormatEXT(surfaceFormat);
+    }
+
+    RendererFormatVerdict VulkanRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte2 || format == SurfaceFormat::NormalizedByte4 ||
+            format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+            return RendererFormatVerdict::Unsupported;
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage) || storage.blockExtent != 1)
+            return RendererFormatVerdict::Defer;
+        if (physicalDevice_ == VK_NULL_HANDLE)
+            return RendererFormatVerdict::Defer;
+        VkImageFormatProperties properties{};
+        constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        return vkGetPhysicalDeviceImageFormatProperties(
+                   physicalDevice_, storage.format, VK_IMAGE_TYPE_3D, VK_IMAGE_TILING_OPTIMAL,
+                   usage, 0, &properties) == VK_SUCCESS
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
     }
@@ -5679,7 +5926,13 @@ namespace CNA::Internal::Renderers::Vulkan
         ci.maxLod       = VK_LOD_CLAMP_NONE;
         // plans/plan_fx.md FX-091. XNA's MaxMipLevel names the most DETAILED level the sampler may
         // select, so it is Vulkan's minLod, not its maxLod -- the two names run opposite ways.
-        ci.minLod       = static_cast<float>(std::max(0, key.maxMipLevel));
+        //
+        // plans/plan_vulkan_parity.md VKPAR-0023: and XNA writes it through D3D9's unsigned DWORD
+        // (plans/plan_software.md SOFTWARE-238), so a negative value is a huge level, which the
+        // sampler clamps to the LAST one -- it is not level 0. Capped at VK_LOD_CLAMP_NONE, the
+        // maxLod above, which minLod may not exceed; Vulkan then clamps to levelCount - 1.
+        ci.minLod       = static_cast<float>(std::min<std::uint32_t>(
+            static_cast<std::uint32_t>(key.maxMipLevel), 1000u));
         ci.mipLodBias   = key.lodBias;
         if (enableAniso && anisotropySupported_) {
             ci.anisotropyEnable = VK_TRUE;
@@ -18680,6 +18933,7 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::PushPending3DDraw(Pending3DDraw&& d)
     {
         d.occlusionQuery = activeOcclusionQuery_;
+        if (activeOcclusionQuery_ != nullptr) ++activeOcclusionQuery_->taggedDraws_;
         // REMED-GFX-013: snapshot the scissor active at enqueue time (see Pending3DDraw) so the
         // render-target pass clips this draw with the rect that was set while its RT was bound,
         // not the frame-global rect left over at Present() (which Task 338 resets on RT unbind).
@@ -21546,9 +21800,10 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     std::unique_ptr<ITexture3DRenderer> VulkanRenderer::CreateTexture3D(
-        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<VulkanTexture3DRenderer>(this, w, h, depth, mipMap);
+        return std::make_unique<VulkanTexture3DRenderer>(this, w, h, depth, mipMap,
+                                                         surfaceFormat);
     }
 
     std::unique_ptr<ITextureCubeRenderer> VulkanRenderer::CreateTextureCube(
@@ -21874,17 +22129,29 @@ namespace CNA::Internal::Renderers::Vulkan
         return levels;
     }
 
-    VulkanTexture3DRenderer::VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap)
-        : owner_(owner), width_(w), height_(h), depth_(depth)
+    VulkanTexture3DRenderer::VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth,
+                                                     bool mipMap, int surfaceFormat)
+        : owner_(owner), surfaceFormat_(surfaceFormat), width_(w), height_(h), depth_(depth)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
         levelCount_ = mipMap ? CalculateVulkanTexture3DMipLevels(w, h, depth) : 1;
 
+        // plans/plan_vulkan_parity.md VKPAR-0029: the volume's own format from the one storage
+        // table, as 2D and cube textures use; ClassifyTexture3DFormatEXT has already refused the
+        // block-compressed ones, which have no 3D form here.
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{};
+        if (owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, storage) &&
+            storage.blockExtent == 1)
+        {
+            vkFormat_ = storage.format;
+            bytesPerTexel_ = storage.bytesPerTexel;
+        }
+
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.imageType     = VK_IMAGE_TYPE_3D;
-        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.format        = vkFormat_;
         imgInfo.extent        = { static_cast<uint32_t>(w), static_cast<uint32_t>(h),
                                    static_cast<uint32_t>(depth) };
         imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
@@ -21960,9 +22227,11 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
-        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.format   = vkFormat_;
         viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
                                        static_cast<uint32_t>(levelCount_), 0, 1 };
+        // VKPAR-0029: sampled by the same measured channel expansion as 2D and cube textures.
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
 
         owner_->liveTexture3Ds_.push_back(this);   // VULKAN-407
@@ -22048,20 +22317,46 @@ namespace CNA::Internal::Renderers::Vulkan
                              0, nullptr, 0, nullptr, 1, &barrier);
     }
 
+    bool VulkanTexture3DRenderer::IsBoxInRangeEXT(int level, int x, int y, int z,
+                                                  int w, int h, int depth) const noexcept
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        return x >= 0 && y >= 0 && z >= 0 &&
+               x + w <= levelW && y + h <= levelH && z + depth <= levelD;
+    }
+
     bool VulkanTexture3DRenderer::SetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
     {
         // REMED-GFX-135: see VulkanTextureCubeRenderer::SetData -- silent returns looked like writes.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || w <= 0 || h <= 0 || depth <= 0) return false;
-        if (level < 0 || level >= levelCount_) return false;
-        const int levelW = std::max(1, width_ >> level);
-        const int levelH = std::max(1, height_ >> level);
-        const int levelD = std::max(1, depth_ >> level);
-        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+        // RGBA8 texels only (VKPAR-0029); every other stored format answers SetDataBytesEXT.
+        if (!data || vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM ||
+            !IsBoxInRangeEXT(level, x, y, z, w, h, depth))
             return false;
         const int regionBytes = w * h * depth * 4;
         if (dataLength < regionBytes) return false;
+        return UploadBoxEXT(level, x, y, z, w, h, depth, data, regionBytes);
+    }
+
+    bool VulkanTexture3DRenderer::SetDataBytesEXT(int level, int x, int y, int z,
+                                                  int w, int h, int depth,
+                                                  const void* data, int dataLength)
+    {
+        if (!data || !IsBoxInRangeEXT(level, x, y, z, w, h, depth)) return false;
+        const int regionBytes = w * h * depth * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return UploadBoxEXT(level, x, y, z, w, h, depth, data, regionBytes);
+    }
+
+    bool VulkanTexture3DRenderer::UploadBoxEXT(int level, int x, int y, int z,
+                                               int w, int h, int depth,
+                                               const void* data, int regionBytes)
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -22110,15 +22405,33 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // REMED-GFX-130: this guard used to be a silent `return`, which the shared layer turned
         // into a complete transparent-black volume instead of a refusal.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
-        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (!data || dataLength <= 0 || vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM ||
+            !IsBoxInRangeEXT(level, x, y, z, w, h, depth))
+            return false;
         if (dataLength < w * h * depth * 4) return false;
+        return ReadBoxEXT(level, x, y, z, w, h, depth, data, w * h * depth * 4);
+    }
+
+    bool VulkanTexture3DRenderer::GetDataBytesEXT(int level, int x, int y, int z,
+                                                  int w, int h, int depth,
+                                                  void* data, int dataLength) const
+    {
+        if (!data || !IsBoxInRangeEXT(level, x, y, z, w, h, depth)) return false;
+        const int regionBytes = w * h * depth * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return ReadBoxEXT(level, x, y, z, w, h, depth, data, regionBytes);
+    }
+
+    bool VulkanTexture3DRenderer::ReadBoxEXT(int level, int x, int y, int z,
+                                             int w, int h, int depth,
+                                             void* data, int regionBytes) const
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
         void*          mapped     = nullptr;
-        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
@@ -22148,9 +22461,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         owner_->EndOneTimeCommands(cb);
 
-        std::memcpy(data, mapped,
-                    static_cast<size_t>(w) * static_cast<size_t>(h) *
-                    static_cast<size_t>(depth) * 4u);
+        std::memcpy(data, mapped, static_cast<size_t>(regionBytes));
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
@@ -22177,11 +22488,20 @@ namespace CNA::Internal::Renderers::Vulkan
         levelCount_ = mipMap ? CalculateVulkanTextureCubeMipLevels(size) : 1;
 
         // plan_vulkan.md VULKAN-240. TextureCube used to drop surfaceFormat here and allocate
-        // RGBA8 unconditionally. Preserve that storage for the Color-shaped public transfer path,
-        // but allocate the exact BC format when the public compressed-byte overload selected it.
+        // RGBA8 unconditionally; VULKAN-240 allocated the exact BC format for the compressed-byte
+        // overload and left every other format in RGBA8. plans/plan_vulkan_parity.md VKPAR-0021:
+        // every format the storage table holds is now allocated in its own VkFormat, because the
+        // shared layer moves a non-Color cube's texels through SetDataBytesEXT/GetDataBytesEXT as
+        // exact declared-format bytes -- which RGBA8 storage could only refuse.
         VulkanRenderer::VulkanSurfaceFormatStorageEXT requestedStorage{};
-        if (owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, requestedStorage) &&
-            requestedStorage.blockExtent > 1)
+        const bool hasStorage =
+            owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, requestedStorage);
+        if (hasStorage && requestedStorage.blockExtent == 1)
+        {
+            vkFormat_ = requestedStorage.format;
+            bytesPerTexel_ = requestedStorage.bytesPerTexel;
+        }
+        if (hasStorage && requestedStorage.blockExtent > 1)
         {
             vkFormat_ = requestedStorage.format;
             compressedBlockBytes_ = requestedStorage.bytesPerTexel;
@@ -22273,7 +22593,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                        static_cast<uint32_t>(levelCount_), 0, 6 };
         // VKPAR-0014: the same measured expansion as Texture2D. A cube face is sampled by the
         // same rule as a 2D surface, so the two must not disagree about a missing channel.
-        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_);
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
 
         owner_->liveTextureCubes_.push_back(this);   // VULKAN-407
@@ -22307,19 +22627,45 @@ namespace CNA::Internal::Renderers::Vulkan
         ReleaseVulkanResources();
     }
 
+    bool VulkanTextureCubeRenderer::IsRegionInRangeEXT(int face, int level, int x, int y,
+                                                       int w, int h) const noexcept
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || w <= 0 || h <= 0) return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        return x >= 0 && y >= 0 && x + w <= levelSize && y + h <= levelSize;
+    }
+
     bool VulkanTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int dataLength)
     {
         // REMED-GFX-135: each of these used to be a silent `return` the shared layer could not tell
         // apart from a completed upload, and the level/rectangle were not range-checked at all.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || w <= 0 || h <= 0 ||
-            compressedBlockBytes_ != 0)
+        // This route carries RGBA8 texels, so it is refused by a cube stored in anything else
+        // (VKPAR-0021) rather than writing four-byte texels into, say, a sixteen-byte format.
+        if (!data || compressedBlockBytes_ != 0 || vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM ||
+            !IsRegionInRangeEXT(face, level, x, y, w, h))
             return false;
-        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
-        const int levelSize = std::max(1, size_ >> level);
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const int regionBytes = w * h * 4;
         if (dataLength < regionBytes) return false;
+        return UploadRegionEXT(face, level, x, y, w, h, data, regionBytes);
+    }
+
+    bool VulkanTextureCubeRenderer::SetDataBytesEXT(int face, int level, int x, int y,
+                                                    int w, int h,
+                                                    const void* data, int dataLength)
+    {
+        if (!data || compressedBlockBytes_ != 0 || !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
+        const int regionBytes = w * h * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return UploadRegionEXT(face, level, x, y, w, h, data, regionBytes);
+    }
+
+    bool VulkanTextureCubeRenderer::UploadRegionEXT(int face, int level, int x, int y,
+                                                    int w, int h,
+                                                    const void* data, int regionBytes)
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -22493,6 +22839,47 @@ namespace CNA::Internal::Renderers::Vulkan
         return true;
     }
 
+    bool VulkanTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        if (data == nullptr || compressedBlockBytes_ == 0 ||
+            !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const std::size_t blockBytes = static_cast<std::size_t>(compressedBlockBytes_);
+        const int levelBlockColumns = (levelSize + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const std::size_t shadowIndex = static_cast<std::size_t>(face * levelCount_ + level);
+        if (shadowIndex >= compressedLevels_.size()) return false;
+        const auto& blocks = compressedLevels_[shadowIndex];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t source =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            std::memcpy(destination + static_cast<std::size_t>(row) *
+                                          static_cast<std::size_t>(regionBlockColumns) *
+                                          blockBytes,
+                        blocks.data() + source,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes);
+        }
+        return true;
+    }
+
     // Task 865: real GPU readback via vkCmdCopyImageToBuffer + a host-visible staging buffer,
     // mirroring SetData's per-face upload path in reverse (inline barriers scoped to just the
     // target face layer, mirroring SetData's own approach -- the shared TransitionImageLayout
@@ -22502,11 +22889,9 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // REMED-GFX-130: these guards used to be silent `return`s, which the shared layer turned
         // into a complete transparent-black face instead of a refusal.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
-        if (face < 0 || face >= 6) return false;
-        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        if (!data || dataLength <= 0 || !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
         const int levelSize = std::max(1, size_ >> level);
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
 
         if (compressedBlockBytes_ != 0)
@@ -22539,12 +22924,32 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             return true;
         }
+        // RGBA8 texels only (VKPAR-0021); every other stored format answers GetDataBytesEXT.
+        if (vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM) return false;
+        return ReadRegionEXT(face, level, x, y, w, h, data, w * h * 4);
+    }
+
+    bool VulkanTextureCubeRenderer::GetDataBytesEXT(int face, int level, int x, int y,
+                                                    int w, int h,
+                                                    void* data, int dataLength) const
+    {
+        if (!data || compressedBlockBytes_ != 0 || !IsRegionInRangeEXT(face, level, x, y, w, h))
+            return false;
+        const int regionBytes = w * h * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return ReadRegionEXT(face, level, x, y, w, h, data, regionBytes);
+    }
+
+    bool VulkanTextureCubeRenderer::ReadRegionEXT(int face, int level, int x, int y,
+                                                  int w, int h,
+                                                  void* data, int regionBytes) const
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
         void*          mapped     = nullptr;
-        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
@@ -22591,7 +22996,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         owner_->EndOneTimeCommands(cb);
 
-        std::memcpy(data, mapped, static_cast<size_t>(w) * static_cast<size_t>(h) * 4u);
+        std::memcpy(data, mapped, static_cast<size_t>(regionBytes));
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
@@ -22641,6 +23046,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = false;
+        taggedDraws_ = 0;
         // Task 447/854: occlusion queries in Vulkan must be recorded inside a render pass, and
         // CNA's Vulkan renderer defers all draws to RecordCommandBuffer -- so Begin()/End() don't
         // inject any Vulkan commands directly. Instead, this marks the query "active": every
@@ -22666,6 +23072,13 @@ namespace CNA::Internal::Renderers::Vulkan
     bool VulkanOcclusionQueryRenderer::IsComplete() const
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE || !ended_) return false;
+        // VKPAR-0026: nothing was drawn between Begin() and End(), so nothing was recorded and
+        // nothing will be -- the query is complete and counted no pixels, as XNA reports it.
+        if (taggedDraws_ == 0)
+        {
+            pixelCount_ = 0;
+            return true;
+        }
         uint64_t result = 0;
         VkResult r = vkGetQueryPoolResults(owner_->device_, pool_, 0, 1,
                                            sizeof(result), &result,
@@ -22941,6 +23354,8 @@ namespace CNA::Internal::Renderers::Vulkan
             cv.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
             cv.format   = colorVkFormat_;
             cv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 6 };
+            // VKPAR-0020: the sampling view only; the per-face attachment views stay identity.
+            cv.components = ClassicSampledSwizzleEXT(surfaceFormat_, colorVkFormat_);
             if (vkCreateImageView(dev, &cv, nullptr, &cubeView_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetCubeRenderer: vkCreateImageView (cube) failed");
         }
@@ -23412,6 +23827,94 @@ namespace CNA::Internal::Renderers::Vulkan
         // Color is RGBA8 rather than the presentation surface's possibly-BGRA format, and wider
         // integer/float formats are copied byte-for-byte in their public storage layout.
         std::memcpy(data, mapped, regionBytes);
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+        return true;
+    }
+
+    bool VulkanRenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
+                                                const void* data, int dataLength)
+    {
+        // The RGBA8 route, for a Color target only -- the same boundary GetData keeps.
+        if (surfaceFormat_ != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) ||
+            bytesPerTexel_ != 4)
+            return false;
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    // plans/plan_vulkan_parity.md VKPAR-0027: the write twin of GetNativeDataEXT, through the same
+    // per-face FlushDeferredRenderTarget, so a queued producer of this face is replayed before the
+    // upload rather than over it.
+    bool VulkanRenderTargetCubeRenderer::SetDataBytesEXT(int face, int level, int x, int y,
+                                                        int w, int h,
+                                                        const void* data, int dataLength)
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
+        if (face < 0 || face >= 6) return false;
+        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::size_t regionBytes = static_cast<std::size_t>(w) *
+            static_cast<std::size_t>(h) * static_cast<std::size_t>(bytesPerTexel_);
+        if (static_cast<std::size_t>(dataLength) < regionBytes) return false;
+
+        VulkanTargetPassEXT* const facePass =
+            facePasses_[static_cast<std::size_t>(face)].get();
+        VkDevice dev = owner_->device_;
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return false;
+        }
+        std::memcpy(mapped, data, regionBytes);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                     static_cast<uint32_t>(level),
+                                     static_cast<uint32_t>(face), 1 };
+        region.imageOffset      = { x, y, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        owner_->FlushDeferredRenderTarget(
+            facePass, facePass, level,
+            [&](const VkCommandBuffer cb)
+            {
+                VkImageMemoryBarrier toXfer{};
+                toXfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                toXfer.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                toXfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toXfer.image = image_;
+                toXfer.subresourceRange = {
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 1,
+                    static_cast<uint32_t>(face), 1};
+                toXfer.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                toXfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                vkCmdPipelineBarrier(
+                    cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &toXfer);
+
+                vkCmdCopyBufferToImage(
+                    cb, stagingBuf, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+                VkImageMemoryBarrier toRead = toXfer;
+                std::swap(toRead.oldLayout, toRead.newLayout);
+                std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+                vkCmdPipelineBarrier(
+                    cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                    &toRead);
+            });
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
