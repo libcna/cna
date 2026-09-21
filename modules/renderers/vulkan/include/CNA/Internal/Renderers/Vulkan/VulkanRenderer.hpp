@@ -1233,6 +1233,20 @@ namespace CNA::Internal::Renderers::Vulkan
         /// W-follows-U default for any caller that flushes sprites without going through
         /// SpriteBatch::Begin.
         void SetSamplerAddressModeWEXT(int addressW) override { pendingAddressW_ = addressW; }
+        /**
+         * @brief Records the batch sampler's MaxMipLevel and MipMapLevelOfDetailBias.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0023. Unoverridden, so SpriteBatch's forwarding
+         * (SOFTWARE-158) reached the no-op default and every flush sampled with the defaults.
+         *
+         * @param maxMipLevel Most detailed mip level the sampler may select (XNA's unsigned rule).
+         * @param lodBias Bias added to the computed level of detail.
+         */
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override
+        {
+            pendingMaxMipLevel_ = maxMipLevel;
+            pendingLodBias_ = lodBias;
+        }
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -1374,6 +1388,8 @@ namespace CNA::Internal::Renderers::Vulkan
         int                              pendingAddressU_     = 1; // TextureAddressMode::Clamp
         int                              pendingAddressV_     = 1; // TextureAddressMode::Clamp
         int                              pendingAddressW_     = -1; // -1: follow U (see setter)
+        int                              pendingMaxMipLevel_  = 0;  // VKPAR-0023
+        float                            pendingLodBias_      = 0.0f;
 
         void FlushTexture();
     };

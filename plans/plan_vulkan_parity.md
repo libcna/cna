@@ -46,6 +46,7 @@ evidence:
 | VKPAR-0020 | Format capability: the eleven HiDef texture formats, and the render-target fallback the format tests had not caught up with | ✅ |
 | VKPAR-0021 | Cube transfers: every stored format in its own VkFormat, exact byte and block readback | ✅ |
 | VKPAR-0022 | Ten tests that asserted the public layer as it was before XNA's rules were recovered | ✅ |
+| VKPAR-0023 | `MaxMipLevel`: XNA's unsigned write, and SpriteBatch's mip state that never reached the sampler | ✅ |
 | VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
 | VKPAR-0025 | Ten transfer and render-target tests older than the XNA rules they break | ✅ |
 
@@ -1286,6 +1287,27 @@ changed in the smallest way that keeps its subject:
 **Evidence (RADV-HW, private compositor): all ten pass**, `FloatRenderTarget`'s odd-sized
 `HalfVector4` MSAA and mip-chain legs (J, K) included — they were never reached before. Three
 sources are shared with EasyGL registrations this build does not configure and were not run there.
+
+### VKPAR-0023 — `MaxMipLevel`, and SpriteBatch's mip state
+
+Two renderer defects under `TextureFilterMipContract` (L3, L8–L10), both against rules the shared
+layer already carries:
+
+* **L3.** XNA writes `SamplerState.MaxMipLevel` through D3D9's unsigned `DWORD`, so a negative value
+  is a huge level and the sampler clamps it to the **last** one (`SOFTWARE-238`). Vulkan built
+  `minLod = max(0, maxMipLevel)` and sampled level 0. It now converts the value as unsigned and caps
+  it at `VK_LOD_CLAMP_NONE` — the `maxLod` it may not exceed — so the device clamps to
+  `levelCount − 1`, the last level.
+* **L8–L10.** SpriteBatch forwards its sampler's `MaxMipLevel` and `MipMapLevelOfDetailBias`
+  (`SOFTWARE-158`) through `ISpriteBatchRenderer::SetSamplerMipState`, which
+  `VulkanSpriteBatchRenderer` never overrode; and its flush applies filter and addressing through
+  `ApplySamplerState`, which resets the mip controls to the defaults. It now keeps the batch's
+  pending mip state and re-applies it after `ApplySamplerState`, the same shape EasyGL has.
+
+**Evidence (RADV-HW, private compositor).** `TextureFilterMipContract` passes. Every
+`Mip|Sampler|Occlusion|Lod|SpriteBatch` test (331): all pass but three transfer tests that were
+already red on the baseline (`HdrRenderTargetRoundTrip…`, `UnsupportedFormatConstruction.Dxt…`,
+`Texture3DTest.GenericValueType…AMipBox…`), untouched by this row.
 
 ---
 

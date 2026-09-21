@@ -2236,6 +2236,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-164: ApplySamplerState sets W = U, which is right for every XNA preset and wrong
         // for a state that set W on its own. The batch's own W, when it supplied one, wins.
         if (pendingAddressW_ >= 0) renderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        // plans/plan_vulkan_parity.md VKPAR-0023: and the batch's own mip controls, which
+        // ApplySamplerState just reset to the XNA defaults.
+        if (pendingMaxMipLevel_ != 0 || pendingLodBias_ != 0.0f)
+            renderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
         // REMED-GFX-151: if this run of sprites samples a RENDER TARGET, the bind cycle being
         // recorded depends on that target's earlier cycles, and a mid-frame readback flush has to
         // replay them first. `activeSegment_` (not currentSegment_) is the cycle this batch belongs
@@ -5766,7 +5770,13 @@ namespace CNA::Internal::Renderers::Vulkan
         ci.maxLod       = VK_LOD_CLAMP_NONE;
         // plans/plan_fx.md FX-091. XNA's MaxMipLevel names the most DETAILED level the sampler may
         // select, so it is Vulkan's minLod, not its maxLod -- the two names run opposite ways.
-        ci.minLod       = static_cast<float>(std::max(0, key.maxMipLevel));
+        //
+        // plans/plan_vulkan_parity.md VKPAR-0023: and XNA writes it through D3D9's unsigned DWORD
+        // (plans/plan_software.md SOFTWARE-238), so a negative value is a huge level, which the
+        // sampler clamps to the LAST one -- it is not level 0. Capped at VK_LOD_CLAMP_NONE, the
+        // maxLod above, which minLod may not exceed; Vulkan then clamps to levelCount - 1.
+        ci.minLod       = static_cast<float>(std::min<std::uint32_t>(
+            static_cast<std::uint32_t>(key.maxMipLevel), 1000u));
         ci.mipLodBias   = key.lodBias;
         if (enableAniso && anisotropySupported_) {
             ci.anisotropyEnable = VK_TRUE;
