@@ -159,13 +159,15 @@ namespace
     };
 
 #if defined(CNA_RENDERER_VULKAN)
+    // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
+    // renderer supports HiDef, and under Reach this test never reached its subject.
     // REMED-GFX-129's subject. `orderedClear` and `clearOnPreserveTarget` declare the CORRECT
     // contract from the start: this file was written red, with every ordered-Clear check failing on
     // the pre-fix renderer, precisely so the fix is measured against it instead of being credited
     // with it.
     constexpr Contract kContract{"VULKAN", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_EASYGL)
     // Microsoft XNA and FNA both disable scissor testing across Clear. This declaration is the
     // XNA contract, not raw glClear behavior: the renderer must neutralise GL_SCISSOR_TEST and

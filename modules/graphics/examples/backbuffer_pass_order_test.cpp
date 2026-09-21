@@ -176,6 +176,8 @@ namespace
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_VULKAN)
+    // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
+    // renderer supports HiDef, and under Reach this test never reached its subject.
     // REMED-GFX-143's primary subject. `orderedBackbufferSegments` was false until this task:
     // Phase 2 of RecordCommandBuffer was one trailing swapchain pass passed `kAllSegments`.
     // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157: `activeBatches_` and
@@ -189,7 +191,7 @@ namespace
     // now assert the correct behaviour on this renderer; both were measured red the moment the fix
     // landed, which is what turned these two declarations over.
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `clearAfterDrawWinsOnBackbuffer` was false while REMED-GFX-156 was open: WebGPU delivered a
     // backbuffer clear colour only through the render-pass load op, the same mechanism

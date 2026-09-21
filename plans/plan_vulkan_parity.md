@@ -41,6 +41,7 @@ evidence:
 | VKPAR-0015 | Where these tests ran: the user's live desktop, and how to stop that | ✅ |
 | VKPAR-0016 | `cmake-build-vulkan` grew to 87 GB: 341 EasyGL test binaries that run Vulkan | ✅ |
 | VKPAR-0017 | The CNA runtime as one shared library (`libcna.so`) instead of 798 static copies | ✅ |
+| VKPAR-0018 | Classic closeout, step 1: 23 more tests that died on the Reach profile | ✅ |
 
 ---
 
@@ -1069,6 +1070,54 @@ seen before `VKPAR-0006`. Classified by what would have to change:
 `Vulkan_RenderTarget_BlendFactor` and `Vulkan_Swapchain_Sync` pass now and are **not** claimed by
 either fix in this branch; they are recorded as passing without an attributed cause rather than
 counted as wins.
+
+---
+
+## Classic closeout
+
+The step after the parity merge: close what `VKPAR-0013` classified — texture/cube/volume transfers,
+render targets and MRT, format capability — and stop around 340–350 of the ~370 `Vulkan_*` tests
+rather than chase the tail. Branch `vulkan-classic-closeout`, from `next` at `33105f3ae`. Every run
+below is **RADV-HW** through `tools/platform/run_gpu_tests_private.sh` (private Weston + rootful
+Xwayland, DRI3), never the live desktop.
+
+The fifty-one failures were re-run first, unchanged, to have the real messages rather than the
+classification's guesses (`VKPAR-0013` was written from test names). **Twenty-three of them were not
+renderer defects at all.**
+
+### VKPAR-0018 — 23 more tests that died on the Reach profile
+
+The same defect `VKPAR-0006` repaired in 103 tests, in the ones it did not reach: each uses a
+HiDef-only feature — `GetBackBufferData` (9), volume textures (6), separate alpha blending (2), more
+than one render target (2), mipmapped non-power-of-two surfaces, an occlusion query, float targets —
+while `GraphicsDeviceManager` defaults to Reach, which CNA enforces (`SOFTWARE-213`). They threw
+before reaching their subject, and `VKPAR-0013` had filed several of them as transfer or
+render-target defects because of what they were *named*.
+
+`VKPAR-0006` missed them because they are not Vulkan's own sources. Nine are shared sources
+compiled for Vulkan from `modules/graphics/examples/` and `modules/renderers/sdl-renderer/examples/`,
+and four carry a per-renderer table whose Vulkan row said `wantHiDefProfile = false`. The repair is
+the same one — request HiDef — applied three ways:
+
+| Shape | Tests | Change |
+|---|---|---|
+| Per-renderer table | `Backbuffer_PassOrder`, `GraphicsDevice_OrderedClear`, `CubeVolume_{Get,Set}DataContract` | the Vulkan row's `wantHiDefProfile` false → true (other renderers' rows untouched) |
+| Shared source, manager in the constructor | 8, e.g. `BasicEffect_DiffuseColorClamp`, `InstancedTexturedDraw`, `InvalidMipLevel`, `Texture2D_FromStream` | `setGraphicsProfileProperty(HiDef)` after the manager is created |
+| Shared source, device requested in `main` | `SkinnedEffect_BoneDeformation` | `SetGraphicsProfileEXT(HiDef)` before `Run()`, the shape `alpha_test_integration_test.cpp` already uses |
+| Vulkan's own | 10: `MRT_MixedFormats`, `MrtMipFinalization`, `OcclusionQuery_Precision`, `ShaderEffect_{BoundTexture,PerUnitSampler}`, `SpriteBatch_BlendState`, `Texture3DAddressW`, `Texture3D_Mip_Layout`, `CapabilityContract`, `FloatRenderTarget` | as the constructor shape |
+
+Requesting HiDef is safe on every renderer these shared sources compile for: only DirectX9
+implements `isProfileSupported`, and every other `GraphicsAdapter::IsProfileSupported` answers true.
+
+**Result (RADV-HW): 19 of 23 pass.** The other four now reach their subject and fail on it — which is
+what they were for:
+
+| Test | What it reaches now | Taken up in |
+|---|---|---|
+| `SpriteBatch_BlendState` | 18/23; the five constant-factor legs (`Blend.BlendFactor`) draw white instead of the constant colour | a renderer row below |
+| `MRT_MixedFormats` | its premise: it expects `RenderTarget2D(Bgr565)` to throw, which has not been true since `SOFTWARE-216` restored XNA's fall-back-to-`Color` | the render-target format row below |
+| `MrtMipFinalization` | `Texture2D::GetData: total data size does not match the requested region` | the transfer row below |
+| `FloatRenderTarget` | `SetRenderTargets: render targets must have matching pixel sizes` | the render-target row below |
 
 ---
 
