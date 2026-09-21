@@ -36,7 +36,7 @@ evidence:
 | VKPAR-0010 | Baselines, measured and classified | ✅ |
 | VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced and narrowed, not fixed |
 | VKPAR-0012 | Validation layers and synchronization validation | ✅ |
-| VKPAR-0013 | The remaining Vulkan failures | ⬜ classified, not fixed |
+| VKPAR-0013 | The remaining Vulkan failures | ✅ closed out by VKPAR-0018–0029; one Vulkan test left, recorded |
 | VKPAR-0014 | Channel expansion: two contradictory contracts, settled by measuring XNA | ✅ |
 | VKPAR-0015 | Where these tests ran: the user's live desktop, and how to stop that | ✅ |
 | VKPAR-0016 | `cmake-build-vulkan` grew to 87 GB: 341 EasyGL test binaries that run Vulkan | ✅ |
@@ -1405,6 +1405,37 @@ readers' `Texture3DReader{PreservesEveryClassicVolumeFormat…,AcceptsDepthDomin
 `PartialTextureTransfer.ATexture3DSubBoxChangesOnlyItself` still skips on **every** renderer: it
 builds its volume on a bare Reach device. That is the test's profile, not this renderer, and is left
 for whoever owns it.
+
+### Closeout result
+
+Two full `cmake-build-vulkan` runs through the private runner (RADV-HW, `-j6`, the three Wine
+interop tests excluded — they hang inside the private wrapper for a reason unrelated to Vulkan,
+`VKPAR-0015`), one before the renderer work of `VKPAR-0020` and one after `VKPAR-0029`:
+
+| | Before (after VKPAR-0019) | After (VKPAR-0029) |
+|---|---|---|
+| All tests | 9,757: **61 failed**, 271 skipped/not run | 9,754: **13 failed**, 263 skipped/not run |
+| `Vulkan_*` examples | 370: **28 failed** (51 before VKPAR-0018) | 370: **1 failed** |
+
+The stop line was 340–350 of 370. It was passed by a wide margin not because the tail was chased
+but because most of the classified "renderer defects" were not renderer defects: of the 51, **40
+were tests** asserting a contract XNA does not have (`VKPAR-0018`, `-0019`, `-0020`, `-0022`,
+`-0025`), and every renderer change here closed a real gap in the three named areas — texture/cube/
+volume transfers (`-0021`, `-0027`, `-0028`, `-0029`), render targets and formats (`-0020`,
+`-0024`, `-0027`), and two that the same runs exposed (`-0023`, `-0026`).
+
+**What is still red, and why:**
+
+| Test | Class | Note |
+|---|---|---|
+| `Vulkan_DrawRangeValidation` | Vulkan gap, not taken | XNA forwards a negative or oversized draw range to the driver (`SOFTWARE-322`); Vulkan keeps the shared layer's managed range guard because its CPU draw copy (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`) has no bounds checks of its own. The fix is to bound that copy and then opt out of the guard; it is draw validation, outside this closeout's three areas |
+| `InstancedDrawMultiStream.DuplicateSemantic…`, `OrdinaryDrawBindingOffset.MultipleStreams…`, `OrdinaryDrawMultiStream.SixteenBindings…` | public layer, not Vulkan | `VertexDeclaration` refuses the declaration before any renderer is reached (as in `VKPAR-0013`) |
+| `CApiCoverageMatrix`, `CApiCoverageScopeModel`, `CApiLimitations`, `CApiReleaseGate`, `CNAEXT_NoPosixSetenv`, `CnaXnbModelCorpusSweep` | not the renderer | failing identically on the pre-closeout baseline |
+| `XnaContentProject.ThePublicSamplesProjectsAreBuiltEndToEnd`, `CnaInputTests`, `CnaGltfConformancePerf` | load, not defects | a 300 s timeout, a timing-sensitive input case and a 50 ms parse budget (56 ms measured) under `-j6`; **all three pass run alone** (130 s, 213 s, 15 s) |
+
+Shared sources changed here (`zero_length_buffer`, `spritebatch_sort_mode_semantics`, `sprite_font`,
+`dxt_texturecube`, `dxt1_texture`, `easygl_rendertargetcube_depthformat`) also build for EasyGL,
+whose example block this build does not configure (`VKPAR-0016`); they were not run on EasyGL.
 
 ---
 
