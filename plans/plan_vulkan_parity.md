@@ -24,18 +24,19 @@ evidence:
 
 | ID | Task | Status |
 |---|---|---|
-| VKPAR-0001 | Baseline: repository, hardware, platform paths, build | ⬜ |
-| VKPAR-0002 | Renderer architecture audit and parity inventory | ⬜ |
-| VKPAR-0003 | The Vulkan multi-renderer configuration does not build | ✅ |
-| VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced, not fixed |
+| VKPAR-0001 | Baseline: repository, hardware, platform paths | ✅ |
+| VKPAR-0002 | Renderer architecture audit | ✅ |
+| VKPAR-0003 | Three configurations of this tree did not build | ✅ |
 | VKPAR-0004 | GSC-F2 — Vulkan classic null-texture semantics (white → XNA's opaque black) | ✅ |
 | VKPAR-0005 | Vulkan facedness: the two-sided stencil "driver quirk" claim, measured on RADV | ✅ |
 | VKPAR-0006 | 103 Vulkan example tests abort before asserting anything (Reach profile) | ✅ |
-| VKPAR-0012 | Validation layers + synchronization validation across the renderer suite | ✅ |
 | VKPAR-0007 | X11 + Vulkan surface path on RADV | ✅ |
 | VKPAR-0008 | Wayland + Vulkan surface path on RADV | ✅ |
 | VKPAR-0009 | SDL-free native configurations (X11 and Wayland) | ✅ |
-| VKPAR-0010 | Parity corpus and CnaTests baselines, classified | ⬜ |
+| VKPAR-0010 | Baselines, measured and classified | ✅ |
+| VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced and narrowed, not fixed |
+| VKPAR-0012 | Validation layers and synchronization validation | ✅ |
+| VKPAR-0013 | The 51 remaining Vulkan failures | ⬜ classified, not fixed |
 
 ---
 
@@ -776,6 +777,49 @@ DirectX12. `VKPAR-0004` and `VKPAR-0005` are inside `modules/renderers/vulkan/`;
 changes only CMake registration; the two gtest gate edits **add** Vulkan to a renderer list and
 leave every other renderer's arm byte-for-byte, which the EasyGL and Software columns above
 demonstrate rather than assert.
+
+---
+
+## VKPAR-0013 — What is still red, and what it will take
+
+Fifty-one `Vulkan_*` tests still fail, plus a handful of shared-suite cases. **None is unexplained
+and none is new**; every one was failing on the baseline too, and twelve of them could not even be
+seen before `VKPAR-0006`. Classified by what would have to change:
+
+| Class | Count | Examples |
+|---|---|---|
+| **Renderer defect — texture/cube/volume transfer** | ~11 | `CubeVolume_{Get,Set}DataContract`, `Texture3D_Mip_Layout`, `Texture3DAddressW`, `DxtTextureCube`, `Dxt1FromStream`, `TextureFilterMipContract`, `InvalidMipLevel`, plus the two content-reader cases that fail inside `TextureCube::GetData` and `Texture3D::SetData` |
+| **Renderer defect — render targets / MRT** | ~9 | `MRT_MixedFormats`, `MRT_MsaaResolve`, `MrtMipFinalization`, `RenderTargetCube_{DepthFormat,PluralMRT}`, `RenderTarget_DepthStencilUsage`, `FloatRenderTarget`, `BoundMsaaReadback` |
+| **Renderer defect — format capability** | ~6 | `SurfaceFormat{_Throws,Classification}`, `FormatLimitQueries`, `CapabilityContract`, `ProfileLimitsAudit`, `AdapterQueryContract` |
+| **Renderer defect — channel expansion** | 3 | `ClassicTextureFormat.*`. Diagnosed: Vulkan sets `VK_COMPONENT_SWIZZLE_IDENTITY` on every view and never expands a missing channel, so `NormalizedByte2` samples blue 0 where XNA's D3D9 one-/two-channel rule says 255. `plan_vulkan.md` **F-11 predicted exactly this**, and `VULKAN-174` then pinned blue = 0 in the renderer's own test, so the two suites now contradict each other by construction. Fixing it means the swizzles **and** retiring that pin |
+| **Renderer defect — other** | ~14 | SpriteBatch/SpriteFont, resource lifetime, clear/present ordering, occlusion queries, `ShaderEffect` binding, draw/layout validation |
+| **Public-layer defect, not Vulkan** | 2 | `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices` and `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset` both throw *"The vertex declaration contains a duplicate usage and usage index"* from `VertexDeclaration`, before any renderer is reached |
+| **Environment, not CNA** | 3 | `UnicodeContentRootTest` / `UnicodeTree` — content path resolution, no renderer involved |
+| **Stress** | 1 | `Vulkan_DynamicBufferStress` times out |
+
+`Vulkan_RenderTarget_BlendFactor` and `Vulkan_Swapchain_Sync` pass now and are **not** claimed by
+either fix in this branch; they are recorded as passing without an attributed cause rather than
+counted as wins.
+
+---
+
+## Future modern-Vulkan work — inventory only, nothing implemented
+
+Recorded because the brief asks, and deliberately not acted on:
+
+* **Reusable as-is.** The `PipelineKey`/`PipelineKeyHash` cache, the growing descriptor-pool
+  allocator (`AllocateFromGrowingPoolEXT`, which chains rather than refusing), the retirement queue
+  (`RetiredResources`, `(pool, set)` pairs), `VulkanStorageBufferRenderer` /
+  `VulkanComputeShaderRenderer` / `VulkanTexture2DArrayRenderer` / `VulkanStorageTexture2DRenderer`
+  / `VulkanGpuTimerRenderer`, the debug-utils messenger with its message-id classification, and the
+  opt-in synchronization-validation plumbing.
+* **Missing for a modern API.** A public command-buffer or explicit-barrier surface; a descriptor
+  model that is not per-draw set construction; SPIR-V that is authored rather than preprocessed
+  (`ShaderEffect` on Vulkan takes SPIR-V words, not the GLSL the CNAEXT engine layer writes — see
+  `docs/cnaext-engine-layer.md`); and a real allocator, since today every resource takes its own
+  `vkAllocateMemory`.
+* **Blocking first.** The texture-transfer and render-target rows above. A modern layer built on
+  them would inherit them.
 
 ---
 
