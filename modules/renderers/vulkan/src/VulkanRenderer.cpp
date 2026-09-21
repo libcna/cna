@@ -3541,6 +3541,29 @@ namespace CNA::Internal::Renderers::Vulkan
         return ClassifySurfaceFormatEXT(surfaceFormat);
     }
 
+    RendererFormatVerdict VulkanRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte2 || format == SurfaceFormat::NormalizedByte4 ||
+            format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+            return RendererFormatVerdict::Unsupported;
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage) || storage.blockExtent != 1)
+            return RendererFormatVerdict::Defer;
+        if (physicalDevice_ == VK_NULL_HANDLE)
+            return RendererFormatVerdict::Defer;
+        VkImageFormatProperties properties{};
+        constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        return vkGetPhysicalDeviceImageFormatProperties(
+                   physicalDevice_, storage.format, VK_IMAGE_TYPE_3D, VK_IMAGE_TILING_OPTIMAL,
+                   usage, 0, &properties) == VK_SUCCESS
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
+    }
+
     RendererFormatVerdict VulkanRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
     {
         // plan_vulkan.md VULKAN-174, and the same answer EasyGL gives for the same reason. The
@@ -21777,9 +21800,10 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     std::unique_ptr<ITexture3DRenderer> VulkanRenderer::CreateTexture3D(
-        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<VulkanTexture3DRenderer>(this, w, h, depth, mipMap);
+        return std::make_unique<VulkanTexture3DRenderer>(this, w, h, depth, mipMap,
+                                                         surfaceFormat);
     }
 
     std::unique_ptr<ITextureCubeRenderer> VulkanRenderer::CreateTextureCube(
@@ -22105,17 +22129,29 @@ namespace CNA::Internal::Renderers::Vulkan
         return levels;
     }
 
-    VulkanTexture3DRenderer::VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap)
-        : owner_(owner), width_(w), height_(h), depth_(depth)
+    VulkanTexture3DRenderer::VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth,
+                                                     bool mipMap, int surfaceFormat)
+        : owner_(owner), surfaceFormat_(surfaceFormat), width_(w), height_(h), depth_(depth)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
         levelCount_ = mipMap ? CalculateVulkanTexture3DMipLevels(w, h, depth) : 1;
 
+        // plans/plan_vulkan_parity.md VKPAR-0029: the volume's own format from the one storage
+        // table, as 2D and cube textures use; ClassifyTexture3DFormatEXT has already refused the
+        // block-compressed ones, which have no 3D form here.
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{};
+        if (owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, storage) &&
+            storage.blockExtent == 1)
+        {
+            vkFormat_ = storage.format;
+            bytesPerTexel_ = storage.bytesPerTexel;
+        }
+
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.imageType     = VK_IMAGE_TYPE_3D;
-        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.format        = vkFormat_;
         imgInfo.extent        = { static_cast<uint32_t>(w), static_cast<uint32_t>(h),
                                    static_cast<uint32_t>(depth) };
         imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
@@ -22191,9 +22227,11 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
-        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.format   = vkFormat_;
         viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
                                        static_cast<uint32_t>(levelCount_), 0, 1 };
+        // VKPAR-0029: sampled by the same measured channel expansion as 2D and cube textures.
+        viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
 
         owner_->liveTexture3Ds_.push_back(this);   // VULKAN-407
@@ -22279,20 +22317,46 @@ namespace CNA::Internal::Renderers::Vulkan
                              0, nullptr, 0, nullptr, 1, &barrier);
     }
 
+    bool VulkanTexture3DRenderer::IsBoxInRangeEXT(int level, int x, int y, int z,
+                                                  int w, int h, int depth) const noexcept
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        return x >= 0 && y >= 0 && z >= 0 &&
+               x + w <= levelW && y + h <= levelH && z + depth <= levelD;
+    }
+
     bool VulkanTexture3DRenderer::SetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
     {
         // REMED-GFX-135: see VulkanTextureCubeRenderer::SetData -- silent returns looked like writes.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || w <= 0 || h <= 0 || depth <= 0) return false;
-        if (level < 0 || level >= levelCount_) return false;
-        const int levelW = std::max(1, width_ >> level);
-        const int levelH = std::max(1, height_ >> level);
-        const int levelD = std::max(1, depth_ >> level);
-        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+        // RGBA8 texels only (VKPAR-0029); every other stored format answers SetDataBytesEXT.
+        if (!data || vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM ||
+            !IsBoxInRangeEXT(level, x, y, z, w, h, depth))
             return false;
         const int regionBytes = w * h * depth * 4;
         if (dataLength < regionBytes) return false;
+        return UploadBoxEXT(level, x, y, z, w, h, depth, data, regionBytes);
+    }
+
+    bool VulkanTexture3DRenderer::SetDataBytesEXT(int level, int x, int y, int z,
+                                                  int w, int h, int depth,
+                                                  const void* data, int dataLength)
+    {
+        if (!data || !IsBoxInRangeEXT(level, x, y, z, w, h, depth)) return false;
+        const int regionBytes = w * h * depth * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return UploadBoxEXT(level, x, y, z, w, h, depth, data, regionBytes);
+    }
+
+    bool VulkanTexture3DRenderer::UploadBoxEXT(int level, int x, int y, int z,
+                                               int w, int h, int depth,
+                                               const void* data, int regionBytes)
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -22341,15 +22405,33 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // REMED-GFX-130: this guard used to be a silent `return`, which the shared layer turned
         // into a complete transparent-black volume instead of a refusal.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
-        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (!data || dataLength <= 0 || vkFormat_ != VK_FORMAT_R8G8B8A8_UNORM ||
+            !IsBoxInRangeEXT(level, x, y, z, w, h, depth))
+            return false;
         if (dataLength < w * h * depth * 4) return false;
+        return ReadBoxEXT(level, x, y, z, w, h, depth, data, w * h * depth * 4);
+    }
+
+    bool VulkanTexture3DRenderer::GetDataBytesEXT(int level, int x, int y, int z,
+                                                  int w, int h, int depth,
+                                                  void* data, int dataLength) const
+    {
+        if (!data || !IsBoxInRangeEXT(level, x, y, z, w, h, depth)) return false;
+        const int regionBytes = w * h * depth * bytesPerTexel_;
+        if (dataLength < regionBytes) return false;
+        return ReadBoxEXT(level, x, y, z, w, h, depth, data, regionBytes);
+    }
+
+    bool VulkanTexture3DRenderer::ReadBoxEXT(int level, int x, int y, int z,
+                                             int w, int h, int depth,
+                                             void* data, int regionBytes) const
+    {
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
         void*          mapped     = nullptr;
-        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
@@ -22379,9 +22461,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         owner_->EndOneTimeCommands(cb);
 
-        std::memcpy(data, mapped,
-                    static_cast<size_t>(w) * static_cast<size_t>(h) *
-                    static_cast<size_t>(depth) * 4u);
+        std::memcpy(data, mapped, static_cast<size_t>(regionBytes));
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);

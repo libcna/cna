@@ -740,8 +740,11 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract)
 {
     // WINCLOSE-0013: DirectX11's ClassifyTexture3DFormatEXT states this same contract.
-    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12))
-        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL and DirectX11";
+    // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan joined once its volume stored every
+    // uncompressed classic format natively.
+    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
+                         Vulkan))
+        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL, DirectX11 and Vulkan";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());

@@ -52,6 +52,7 @@ evidence:
 | VKPAR-0026 | An occlusion query with nothing drawn never completed | ✅ |
 | VKPAR-0027 | `SetData` on a render target: dropped on the GPU (2D), refused (cube) | ✅ |
 | VKPAR-0028 | Compressed `Texture2D` readback: the blocks were stored and could not be read back | ✅ |
+| VKPAR-0029 | Volume textures: the format was dropped and every volume stored as RGBA8 | ✅ |
 
 ---
 
@@ -1377,6 +1378,33 @@ shared layer holds its own copy of those.
 
 **Evidence (RADV-HW, private compositor).** `Dxt|DXT|Compressed|Dds|DDS|SaveAs|FromStream|UnsupportedFormatConstruction`
 (186): all pass, the three above included.
+
+### VKPAR-0029 — Volume textures in their own format
+
+`VulkanRenderer::CreateTexture3D` received the `SurfaceFormat` and discarded it
+(`int /*surfaceFormat*/`); every volume was an RGBA8 image with RGBA8-only transfers, and the
+renderer had no volume classifier, so the framework rule admitted `Color` alone. XNA's HiDef volume
+formats are the fifteen uncompressed classic ones (not DXT, not the signed-normalized pair). On the
+baseline `Texture3DTest.GenericValueType…` (×2) and the content reader's hand-built volume failed
+with *"did not store the complete declared-format volume region"*, and the audited volume contract
+did not run on Vulkan at all.
+
+* The volume is allocated in the storage table's VkFormat with its real texel size, and sampled
+  through the measured channel expansion (`VKPAR-0014`) like 2D and cube textures.
+* `SetDataBytesEXT`/`GetDataBytesEXT` move exact voxels through the existing level-scoped staging
+  copy, now one helper pair; the RGBA8 route refuses any other storage.
+* `ClassifyTexture3DFormatEXT`: DXT and `NormalizedByte2/4` `Unsupported`; every other format the
+  table holds `Supported` when the device offers it as a sampled, transferable 3D image.
+
+**Evidence (RADV-HW, private compositor).** `Texture3D|Volume|ClassicTextureFormat|AddressW` (140):
+all pass. Newly passing: both `Texture3DTest.GenericValueType…`,
+`Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder`, and — Vulkan joining their renderer
+lists — `HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract`,
+`VolumeGenericTransfersUseTotalByteSize` (its own capability gate now opens) and the content
+readers' `Texture3DReader{PreservesEveryClassicVolumeFormat…,AcceptsDepthDominantMipChain…}`.
+`PartialTextureTransfer.ATexture3DSubBoxChangesOnlyItself` still skips on **every** renderer: it
+builds its volume on a bare Reach device. That is the test's profile, not this renderer, and is left
+for whoever owns it.
 
 ---
 

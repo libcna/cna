@@ -1885,7 +1885,21 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief The VK_IMAGE_VIEW_TYPE_3D view this volume is sampled through. */
         [[nodiscard]] VkImageView GetVkVolumeImageView() const override { return imageView_; }
 
-        VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap);
+        /**
+         * @brief Creates volume storage in the requested surface format.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0029: the format was dropped and every volume stored
+         * as RGBA8; it is now allocated in the storage table's VkFormat, as 2D and cube are.
+         *
+         * @param owner Owning Vulkan renderer.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depth Depth in texels.
+         * @param mipMap Whether to allocate the complete mip chain.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         */
+        VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap,
+                                int surfaceFormat);
         ~VulkanTexture3DRenderer() override;
 
         /**
@@ -1916,12 +1930,55 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool GetData(int level, int x, int y, int z,
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Uploads exact declared-format voxels into a box of one mip level.
+         *
+         * @param level Mip level to write.
+         * @param x Left edge in voxels.
+         * @param y Top edge in voxels.
+         * @param z Front edge in voxels.
+         * @param w Width in voxels.
+         * @param h Height in voxels.
+         * @param depth Depth in voxels.
+         * @param data Exact declared-format voxels, slice by slice, rows tightly packed.
+         * @param dataLength Available source bytes.
+         * @return True only when the complete box was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int level, int x, int y, int z,
+                                           int w, int h, int depth,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads exact declared-format voxels from a box of one mip level.
+         *
+         * @param level Mip level to read.
+         * @param x Left edge in voxels.
+         * @param y Top edge in voxels.
+         * @param z Front edge in voxels.
+         * @param w Width in voxels.
+         * @param h Height in voxels.
+         * @param depth Depth in voxels.
+         * @param data Destination for exact declared-format voxels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete box was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int level, int x, int y, int z,
+                                           int w, int h, int depth,
+                                           void* data, int dataLength) const override;
 
     private:
         VulkanRenderer* owner_ = nullptr;
         VkImage        image_     = VK_NULL_HANDLE;
         VkDeviceMemory memory_    = VK_NULL_HANDLE;
         VkImageView    imageView_ = VK_NULL_HANDLE;
+        int surfaceFormat_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
+        [[nodiscard]] bool IsBoxInRangeEXT(int level, int x, int y, int z,
+                                           int w, int h, int depth) const noexcept;
+        [[nodiscard]] bool UploadBoxEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                        const void* data, int boxBytes);
+        [[nodiscard]] bool ReadBoxEXT(int level, int x, int y, int z, int w, int h, int depth,
+                                      void* data, int boxBytes) const;
         int width_ = 0, height_ = 0, depth_ = 0;
         int levelCount_ = 1;
     };
@@ -2996,6 +3053,19 @@ namespace CNA::Internal::Renderers::Vulkan
          * @return This renderer's cube verdict.
          */
         [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a `Texture3D` may be created with the given surface format.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0029. Every uncompressed format the storage table
+         * holds, when the device offers it as a sampled, transferable 3D image; block-compressed
+         * and signed-normalized formats are `Unsupported`, as XNA's volume formats exclude them.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's volume verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
 
         /**
