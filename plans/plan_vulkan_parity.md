@@ -29,8 +29,9 @@ evidence:
 | VKPAR-0003 | The Vulkan multi-renderer configuration does not build | ✅ |
 | VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ⬜ |
 | VKPAR-0004 | GSC-F2 — Vulkan classic null-texture semantics (white → XNA's opaque black) | ✅ |
-| VKPAR-0005 | Vulkan facedness: the two-sided stencil "driver quirk" claim, measured on RADV | ⬜ |
-| VKPAR-0006 | Validation layers + synchronization validation across the renderer suite | ⬜ |
+| VKPAR-0005 | Vulkan facedness: the two-sided stencil "driver quirk" claim, measured on RADV | ✅ |
+| VKPAR-0006 | 103 Vulkan example tests abort before asserting anything (Reach profile) | ✅ |
+| VKPAR-0012 | Validation layers + synchronization validation across the renderer suite | ⬜ |
 | VKPAR-0007 | X11 + Vulkan surface path on RADV | ⬜ |
 | VKPAR-0008 | Wayland + Vulkan surface path on RADV | ⬜ |
 | VKPAR-0009 | SDL-free native configurations | ⬜ |
@@ -379,22 +380,177 @@ reverse of XNA's displayed winding**, and with `rs.frontFace = VK_FRONT_FACE_CLO
 XNA-displayed-clockwise triangle is `back` to Vulkan. The stencil swap is then exactly right, and
 principled — not a workaround.
 
-That same reasoning predicts something the comment explicitly denies, which is what makes this
-testable rather than cosmetic: culling maps `CullClockwiseFace → VK_CULL_MODE_FRONT_BIT`
-(`VulkanRenderer.cpp:8654`), i.e. it culls the faces Vulkan calls front, which under the Y-flip are
-XNA's *counter-clockwise* ones. `frontface_winding_test.cpp`'s oracle — unconditional, and
-registered for Vulkan as `Vulkan_FrontFaceWinding` — states the contract that decides it:
+### What the hardware says
 
-> clockwise-as-displayed is the FRONT face, and each enum names the face it CULLS
+The renderer-neutral `TwoSidedStencilTest` (GSC-0002's, five cases) skipped Vulkan:
+`CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12)`. Pointed at
+Vulkan on RADV-HW it fails, and the failure is a clean inversion on every field:
 
-So either the comment is wrong about the quirk, or the cull mapping is wrong, or the Y-flip's effect
-on facedness is cancelled somewhere this audit has not found. The MojoShader compiled-effect path
-uses a negative-height viewport instead of the shader flip (`dvp.height = -dvp.height`), which
-reverses winding the same way — so whatever the answer is, it has to hold for both routes.
+```
+StencilPass:            clockwise triangle left stencil 255 (counter-clockwise operation), expected 5
+StencilPass:    counter-clockwise triangle left stencil   5 (ordinary operation),          expected 255
+StencilFail:            clockwise triangle left stencil 255 …  StencilDepthBufferFail: same
+```
 
-**This row is resolved by measurement on RADV-HW, not by argument**, and the comment is corrected to
-say what the measurement shows. `plans/plan_vulkan.md` Task 870 derived it on llvmpipe; this is the
-first time the question has had real hardware to answer it.
+Two things follow immediately, and both contradict what was recorded here.
+
+1. **Stencil gates perfectly well on Vulkan.** Both values land where a rule put them. The
+   registration of `Vulkan_DepthStencilState_StencilTwoSided` still says *"expected to FAIL the
+   contrast check per Task 870 — stencil testing never gates on Vulkan"*. On this GPU it does.
+2. **`front` is the clockwise face here, so the swap is backwards.** A clockwise triangle received
+   the *counter-clockwise* operations, i.e. it was evaluated against `ds.front` — which Task 870
+   had filled with the CCW fields.
+
+### The convention, settled
+
+The Y-flip does not mirror anything. `pos.y = -pos.y` converts D3D-style clip space (+Y up, flipped
+by the viewport transform) into Vulkan clip space (+Y down, not flipped), so a triangle drawn
+clockwise as displayed is still clockwise in framebuffer space, and with
+`rs.frontFace = VK_FRONT_FACE_CLOCKWISE` Vulkan calls it **front**. Culling has always relied on
+exactly that — `CullClockwiseFace → VK_CULL_MODE_FRONT_BIT` — and the whole cull/winding set passes
+unchanged on RADV-HW, which is what makes this a measurement rather than a second guess:
+
+| Test | Result |
+|---|---|
+| `Vulkan_FrontFaceWinding` (the unconditional XNA oracle) | Passed |
+| `Vulkan_TriangleStripWinding` | Passed |
+| `Vulkan_RasterizerState_CullMode` / `_Camera` / `_Golden` / `_IndexedBasicEffect` | Passed |
+
+So the ordinary operations belong on `front` and the CounterClockwise ones on `back` — the plain,
+unswapped assignment, agreeing with culling, with `frontface_winding_test.cpp`'s contract and with
+`GSC-0002`'s reading of XNA's `DepthStencilState::Apply`. The swap is removed and the comment now
+records the measurement instead of an unisolated "llvmpipe/Mesa quirk".
+
+**Classification:** renderer defect, introduced by a software-rasterizer-era diagnosis that real
+hardware contradicts. It is also the answer to the question `VKPAR-0002` left open about whether
+`plan_vulkan.md`'s llvmpipe verdicts survive contact with RADV: this one did not.
+
+---
+
+## VKPAR-0006 — 103 Vulkan example tests had stopped asserting anything
+
+The largest single finding of this workstream, and it is not a rendering defect.
+
+`SOFTWARE-213` (`d72162d7b`, 2026-09-09) made `GraphicsDevice::GetBackBufferData` throw under
+`GraphicsProfile::Reach`, which is XNA's real rule and is correct. It updated the gtest suites that
+needed it. It did not touch any renderer's example tests, and `GraphicsDeviceManager` defaults to
+Reach. Every example that reads the back buffer without asking for HiDef has aborted ever since:
+
+```
+CNA: fatal exception escaped Game::Run(): GetBackBufferData is not supported by the Reach graphics profile.
+terminate called after throwing an instance of 'System::NotSupportedException'
+```
+
+Measured across the example suites on the baseline — TUs that call `GetBackBufferData` and never set
+`GraphicsProfile::HiDef`:
+
+| Family | example TUs | call `GetBackBufferData` | of those, no HiDef |
+|---|---|---|---|
+| **vulkan** | 154 | 110 | **104** |
+| easygl | 246 | 171 | 4 |
+| software | 22 | 18 | 0 |
+| webgpu | 60 | 35 | 32 |
+| sdl-gpu | 46 | 4 | 3 |
+
+EasyGL and Software were carried across the change; Vulkan was not. Re-running each failing
+`Vulkan_*` ctest **serially**, so that nothing is blamed on parallel GPU contention, classifies them:
+
+| Cause | Count |
+|---|---|
+| Aborts on the Reach profile — asserts nothing | **103** |
+| Genuine failures (see `VKPAR-0010`) | 42 |
+
+None passed when run alone, so the parallel run's counts were not flattered or inflated by
+contention either.
+
+`plan_vulkan.md`'s parity verdict is dated **2026-09-11**, two days after `SOFTWARE-213`. Its
+`^Vulkan_ 258/258` evidence predates the change, which is how a suite this large went quiet without
+anyone noticing: a test that aborts is red in `ctest`, and these were being read as the renderer's
+known-failing set rather than as a suite that had stopped running.
+
+**Fix.** All 104 TUs now request HiDef, by the two shapes the EasyGL and Software suites already use
+— `gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef)` where the test owns a
+`GraphicsDeviceManager` (82 files), and
+`game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(...)` in `main()` before `Run()` where it
+does not (22 files). No test's assertions were touched.
+
+**Not fixed here:** WebGPU's 32 and SDL_GPU's 3. They are the same defect in renderers this
+workstream is explicitly not opening; recorded for their own plans.
+
+### Result — the `^Vulkan_` suite, RADV-HW
+
+| | Before | After |
+|---|---|---|
+| Registered | 370 | 370 |
+| **Passing** | **224** | **318** |
+| Failing | 146 | **52** |
+| — aborting on the Reach profile | 103 | **0** |
+| — genuine failures | 42 | 51 |
+| Newly failing | — | **0** |
+
+Ninety-four tests changed state and none went the wrong way. Of the 103 that were dead, **91 now
+pass outright** and **12 run far enough to fail for a real reason** — they are not new defects, they
+are defects that were already there and could not be seen. `Vulkan_DepthStencilState_StencilTwoSided`
+is `VKPAR-0005`'s; `Vulkan_RenderTarget_BlendFactor` and `Vulkan_Swapchain_Sync` also pass now and
+are not claimed by either fix, so they are recorded as passing without an attributed cause rather
+than counted as wins.
+
+**Classification:** test debt, shared across renderer families, caused by a correct production
+change that a whole class of test was not carried across.
+
+---
+
+## VKPAR-0010 — Baselines
+
+`cmake-build-vulkan`, `DISPLAY=:0` (Xwayland, DRI3), `ctest -j6`, RADV-HW. Whole suite, 812 s:
+
+```
+10141 tests, 97% passed, 267 failed
+```
+
+That single number is not usable as it stands, and saying why is the point of this row:
+
+| Group | Failing | What it actually is |
+|---|---|---|
+| `Vulkan_*` | 146 | this renderer. **103** abort on the Reach profile (`VKPAR-0006`), **42** are genuine, 1 is a stress timeout |
+| `EasyGL_*` | 89 | **not an EasyGL result.** This build's default renderer is VULKAN, so these binaries select Vulkan at runtime while asserting EasyGL's contracts. The same membership-vs-default confusion `VKPAR-0003` fixed for one TU, here affecting a whole block. EasyGL is measured in `cmake-build-multi`, where OPENGL33 **is** the default |
+| everything else | 32 | shared gtest suites; see below |
+
+Before `VKPAR-0003` this suite could not be measured at all: the build stopped, and `ctest`
+registered **917** tests rather than 10141.
+
+### The 42 genuine `Vulkan_*` failures, by area
+
+Each was re-run alone, so none of these is parallel-GPU contention; none passed when isolated.
+
+| Area | Tests |
+|---|---|
+| Texture / cube / volume transfer | `CubeVolume_GetDataContract`, `CubeVolume_SetDataContract`, `CubeFaceReadbackDependency`, `Texture3D_Mip_Layout`, `Texture3DAddressW`, `Dxt1FromStream`, `DxtTextureCube`, `InvalidMipLevel`, `TextureFilterMipContract` |
+| Render targets / MRT | `MRT_MixedFormats`, `MRT_MsaaResolve`, `MrtMipFinalization`, `RenderTargetCube_DepthFormat`, `RenderTargetCube_PluralMRT`, `RenderTarget_BlendFactor`, `RenderTarget_DepthStencilUsage`, `FloatRenderTarget`, `BoundMsaaReadback` |
+| Format capability | `SurfaceFormat_Throws`, `SurfaceFormatClassification`, `FormatLimitQueries`, `CapabilityContract`, `ProfileLimitsAudit`, `AdapterQueryContract` |
+| Two-sided stencil | `DepthStencilState_StencilTwoSided` — **closed by `VKPAR-0005`** |
+| Draw / layout | `DrawRangeValidation`, `IndexBuffer_UploadBounds`, `DeclaredEffectLayout`, `PipelineKeyStateCoverage` |
+| SpriteBatch / font | `SpriteBatch_BlendState`, `SpriteBatch_SortModeSemantics`, `SpriteFont_Properties` |
+| Resource lifetime | `BoundResourceDispose`, `ResourceOutlivesDevice`, `MoveSemantics`, `DescriptorContractUniformity` |
+| Clear / present / sync | `GraphicsDevice_ClearOptions`, `GraphicsDevice_OrderedClear`, `Backbuffer_PassOrder`, `Swapchain_Sync` |
+| Occlusion / shader-effect | `OcclusionQuery_Cycle`, `OcclusionQuery_Precision`, `ShaderEffect_BoundTexture`, `ShaderEffect_PerUnitSampler` |
+| Stress | `DynamicBufferStress` (timeout) |
+
+### Shared-suite failures that are not `Vulkan_*`-prefixed
+
+| Test | First read |
+|---|---|
+| `Texture3DTextureCubeContentTypeReaderTest.TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd` | `TextureCube::GetData: the active renderer did not return the complete compressed cube face region` — renderer, compressed cube readback |
+| `…Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` | `Texture3D::SetData: the active renderer did not store the complete declared-format volume region` — renderer, volume upload |
+| `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` | `NormalizedByte2` samples blue **0**, contract says **255**. Vulkan sets `VK_COMPONENT_SWIZZLE_IDENTITY` everywhere and never expands a missing channel, so XNA's D3D9 one-/two-channel rule is not implemented. `plan_vulkan.md`'s own `F-11` predicted exactly this ("the D3D9 one-/two-channel expansion rule it exists for would then be wrong") and `VULKAN-174` then pinned blue **= 0** in the renderer's own test, so the two suites disagree by construction |
+| `ClassicTextureFormat.NormalizedIntegerCubeFormats*` (2) | same family |
+| `HdrRenderTargetRoundTripTest` (2) | float/HDR render-target transfers |
+| `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`, `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset` | both throw *"The vertex declaration contains a duplicate usage and usage index"* from the **public layer**, before the renderer sees anything |
+| `OrdinaryDrawMultiStreamTest.SixteenBindingsCanSupplyAConsumedSemanticFromSlot15` | `CNA Vulkan: the combined multi-stream declaration does not supply every input of the selected stock shader` |
+| `UnicodeContentRootTest` / `UnicodeTree` (3) | content path resolution, no renderer involvement |
+
+None of these is caused by this branch: `VKPAR-0004`'s change decides only which image view is
+bound when a texture is **null**, and `VKPAR-0005`'s only the `front`/`back` stencil assignment.
 
 ---
 
