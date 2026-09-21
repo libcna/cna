@@ -557,12 +557,22 @@ protected:
     {
         if (vk_)
         {
+#ifdef NDEBUG
+            // plans/plan_gpu_test_isolation.md GTI-0004: a build with NDEBUG (Release,
+            // RelWithDebInfo) runs without the validation layer by design -- VulkanRenderer's
+            // sEnableValidation is off under NDEBUG -- so a "no validation message" claim cannot be
+            // measured there. Reported as SKIP, not as a failure and never as a vacuous pass. A
+            // Debug build still asserts the layer is live, as before.
+            std::printf("[SKIP] %s: this build runs without the Vulkan validation layer (NDEBUG)\n",
+                        "validation layer active, the MRT mip matrix emitted no validation message");
+#else
             Check(VulkanRenderer::IsValidationActiveEXT(),
                   "VK_LAYER_KHRONOS_validation is active");
             const auto& messages = vk_->GetValidationMessagesEXT();
             if (!messages.empty())
                 std::printf("        first validation message: %.400s\n", messages.front().c_str());
             Check(messages.empty(), "the full MRT mip matrix emitted no Vulkan validation messages");
+#endif
             Check(vk_->GetFrameSubmitCountEXT() == submitCountAtDraw_ + 1,
                   "the matrix used exactly the ordinary Game::EndDraw frame submit");
             Check(vk_->GetPresentCountEXT() == presentCountAtDraw_ + 1,

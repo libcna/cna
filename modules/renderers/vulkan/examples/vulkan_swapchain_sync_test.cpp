@@ -666,6 +666,15 @@ public:
 
 int main()
 {
+#ifdef NDEBUG
+    // plans/plan_gpu_test_isolation.md GTI-0004: this test IS a synchronization-hazard measurement
+    // through the Khronos layer, and a build with NDEBUG does not load the layer (VulkanRenderer's
+    // sEnableValidation is off under NDEBUG). Every hazard leg would pass because nothing was
+    // measured, so the whole test reports the ctest skip code instead. Debug builds run it in full.
+    std::printf("[SKIP] Vulkan_Swapchain_Sync measures hazards through the validation layer, which this "
+                "NDEBUG build does not load\n");
+    return 77;
+#else
     // BEFORE the Game is constructed: the renderer creates its VkInstance during Game construction,
     // well before Initialize() runs, and VkValidationFeaturesEXT can only be supplied there. Asking
     // any later silently produces an instance WITHOUT synchronization validation, which would make
@@ -675,4 +684,5 @@ int main()
     VulkanSwapchainSyncTest test;
     test.Run();
     return test.Result();
+#endif
 }
