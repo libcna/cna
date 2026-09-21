@@ -45,6 +45,7 @@ evidence:
 | VKPAR-0019 | `SpriteBatch_BlendState`: the white constant factor is XNA's answer, not a renderer defect | ✅ |
 | VKPAR-0020 | Format capability: the eleven HiDef texture formats, and the render-target fallback the format tests had not caught up with | ✅ |
 | VKPAR-0021 | Cube transfers: every stored format in its own VkFormat, exact byte and block readback | ✅ |
+| VKPAR-0022 | Ten tests that asserted the public layer as it was before XNA's rules were recovered | ✅ |
 | VKPAR-0024 | `Depth24` on RADV was a stencil format, reported as `Depth24Stencil8` | ✅ |
 
 ---
@@ -1233,6 +1234,33 @@ so `vulkan_applied_formats_test` still sees the visible substitution it exists t
 all pass but `RenderTargetCube_DepthFormat`, a stale test of the next row. `RenderTarget_DepthStencilUsage`
 passes, and `GraphicsDevice_ClearOptions`' Depth24 suite now sees no stencil plane — which is what
 lets that test's missing-plane expectation (`VKPAR-0022`) hold on this hardware.
+
+### VKPAR-0022 — Ten tests older than the rules they break
+
+Between 2026-09-09 and 09-11 the `SOFTWARE-2xx/3xx` rows recovered a run of Microsoft XNA rules from
+its IL and made the shared layer follow them. These ten Vulkan-registered tests were written before
+that and still asserted FNA's behaviour or the older CNA one; on Vulkan the public layer had become
+right underneath them. Each was checked against the rule's own row and its code, and changed in the
+smallest way that keeps its subject:
+
+| Test | XNA rule it met | Change |
+|---|---|---|
+| `DeclaredEffectLayout` | overlapping declaration elements are refused (`SOFTWARE-205`) | the moved layout **swaps** UV and normal instead of laying the UV over the normal; a stride guess still reads the wrong half |
+| `Viewport_Subregion` | a viewport must fit the active surface (`SOFTWARE-226`) | the round-trip viewport fits the 64×64 back buffer |
+| `GraphicsDevice_ClearOptions` | bound state is immutable (`SOFTWARE-232`); `Clear(Color)` clears depth to **1.0**, not `Viewport.MaxDepth` (`SOFTWARE-334`); clearing a missing plane throws (`SOFTWARE-333`) | a copied state for the reject leg; the 1.0 expectation (the restricted viewport's `MaxDepth` of 0.73 now separates XNA from FNA); the baseline stamp clears only existing planes, and a case naming a missing plane expects the `InvalidOperationException` and an untouched surface |
+| `SkinnedEffect_VertexColor` | bound state is immutable (`SOFTWARE-232`) | leg (e) uses a copy of the bound constant-factor state |
+| `PipelineKeyStateCoverage` | Min/Max need One/One factors (`SOFTWARE-212`) | the alpha-function key field is changed to `Subtract` |
+| `IndexBuffer_UploadBounds` | an index transfer is a byte span; past the end is `InvalidOperationException` (`SOFTWARE-250`) | C and D catch that type |
+| `ZeroLengthBuffers` (shared) | a zero count is refused (`SOFTWARE-204`) | the empty buffers are expected to be refused by name before any allocation, the device still drawing; HiDef for its probe |
+| `SpriteBatch_SortModeSemantics` (shared) | .NET 4's unstable quicksort swaps two equal keys (`SOFTWARE-354`) | C2 expects the first-issued sprite on top |
+| `SpriteFont_Properties` (shared) | the content constructor stores an absent default character; only the public setter validates (`SOFTWARE-353`) | the constructor stores it, the setter refuses |
+| `ProfileLimitsAudit` | Reach has no volume textures (`SOFTWARE-179`) | HiDef; G and H are now answered by HiDef's own ceilings |
+
+**Evidence (RADV-HW, private compositor): all ten pass.** `GraphicsDevice_ClearOptions` passes
+with `VKPAR-0024`, which stopped RADV's `Depth24` target from carrying a stencil plane.
+Three of the sources (`zero_length_buffer_test.cpp`, `spritebatch_sort_mode_semantics_test.cpp`,
+`sprite_font_test.cpp`) are shared with EasyGL registrations that this build does not configure
+(`VKPAR-0016`); they were not run on EasyGL here.
 
 ---
 

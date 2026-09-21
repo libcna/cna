@@ -170,7 +170,10 @@ protected:
             check(isGreen(left),  "full Viewport restored: left-half",  left,  "GREEN");
             check(isGreen(right), "full Viewport restored: right-half", right, "GREEN");
 
-            const Viewport testVp(10, 20, 300, 200);
+            // plans/plan_vulkan_parity.md VKPAR-0022: inside the 64x64 back buffer. XNA refuses a
+            // viewport that does not fit the active surface (plans/plan_software.md SOFTWARE-226);
+            // 300x200 was only ever legal against a larger default back buffer.
+            const Viewport testVp(10, 20, 30, 20);
             dev.setViewportProperty(testVp);
             const Viewport got = dev.getViewportProperty();
             const bool roundTripOk =

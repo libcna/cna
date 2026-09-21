@@ -15,7 +15,7 @@
 // that the two offsets sample opposite halves. A renderer that took the offset from the stride
 // gives both draws the same pixel; one that takes it from the declaration gives two.
 //
-//   A  AlphaTestEffect, stride 32, UV at 24 (canonical) versus at 12.
+//   A  AlphaTestEffect, stride 32, UV at 24 (canonical) versus at 12 with the normal moved to 20.
 //   B  EnvironmentMapEffect, stride 32, the same pair. Its shader consumes the UV as well, so the
 //      same discriminator works without a second cube map.
 //   C  SkinnedEffect, stride 52, UV at 24 (canonical) versus at 12, with one identity bone -- a
@@ -175,11 +175,11 @@ class VulkanDeclaredEffectLayoutTest : public Game
                    int canonicalUv, int movedUv, int weightOffset, int indexOffset,
                    Configure configure)
     {
-        auto declarationFor = [&](int uvOffset) {
+        auto declarationFor = [&](int uvOffset, int normalAt) {
             std::vector<VertexElement> elements;
             elements.emplace_back(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0);
-            if (normalOffset >= 0)
-                elements.emplace_back(normalOffset, VertexElementFormat::Vector3,
+            if (normalAt >= 0)
+                elements.emplace_back(normalAt, VertexElementFormat::Vector3,
                                       VertexElementUsage::Normal, 0);
             elements.emplace_back(uvOffset, VertexElementFormat::Vector2,
                                   VertexElementUsage::TextureCoordinate, 0);
@@ -195,15 +195,21 @@ class VulkanDeclaredEffectLayoutTest : public Game
         // Canonical layout addressing the LEFT texel; moved layout addressing the RIGHT one.
         const std::size_t pipesBefore = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
 
-        VertexDeclaration declA = declarationFor(canonicalUv);
+        // plans/plan_vulkan_parity.md VKPAR-0022: the moved record SWAPS the UV and the normal
+        // rather than laying the UV over the normal's bytes. XNA refuses a declaration whose
+        // elements overlap (plans/plan_software.md SOFTWARE-205), and the swap keeps the stride
+        // and still hands a stride guess (UV at 24) the normal's zero instead of the UV.
+        const int movedNormal = normalOffset >= 0 ? movedUv + 8 : -1;
+
+        VertexDeclaration declA = declarationFor(canonicalUv, normalOffset);
         VertexBuffer vbA(dev, declA, 6, BufferUsage::None);
         const auto bytesA = BuildRecords(stride, normalOffset, canonicalUv, 0.25f,
                                          weightOffset, indexOffset);
         vbA.SetDataRaw(bytesA.data(), 6, stride);
 
-        VertexDeclaration declB = declarationFor(movedUv);
+        VertexDeclaration declB = declarationFor(movedUv, movedNormal);
         VertexBuffer vbB(dev, declB, 6, BufferUsage::None);
-        const auto bytesB = BuildRecords(stride, normalOffset, movedUv, 0.75f,
+        const auto bytesB = BuildRecords(stride, movedNormal, movedUv, 0.75f,
                                          weightOffset, indexOffset);
         vbB.SetDataRaw(bytesB.data(), 6, stride);
 

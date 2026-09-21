@@ -207,9 +207,12 @@ protected:
         check(matches(d, Color(26, 39, 38, 255)),
               "(d) SkinnedEffect BlendFactor: litRGB*constant", d, "~(26,39,38)");
 
-        constant.setColorSourceBlendProperty(Blend::InverseBlendFactor);
+        // plans/plan_vulkan_parity.md VKPAR-0022: a copy, because leg (d) bound `constant` and XNA
+        // makes a bound state immutable (plans/plan_software.md SOFTWARE-232).
+        BlendState inverse(constant);
+        inverse.setColorSourceBlendProperty(Blend::InverseBlendFactor);
         // (102,77,51) * (191,127,63) / 255 ~= (76,38,13).
-        const Color e = renderWith(dev, whiteTex, false, 200, 100, 50, 255, constant);
+        const Color e = renderWith(dev, whiteTex, false, 200, 100, 50, 255, inverse);
         check(matches(e, Color(76, 38, 13, 255)),
               "(e) SkinnedEffect InverseBlendFactor: litRGB*(1-constant)", e, "~(76,38,13)");
 

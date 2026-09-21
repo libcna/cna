@@ -3,23 +3,20 @@
 // plan_vulkan.md VULKAN-137 -- a VertexBuffer or IndexBuffer of ZERO elements.
 //
 // `vkCreateBuffer` rejects a size of 0, so this renderer allocates `max(1, size)` for an empty
-// buffer. That is a real divergence in the implementation from EasyGL, which hands the size
-// straight to `glBufferData`, and it had no test on either side. The divergence is only legitimate
-// if it is invisible from the public API, which is what this file measures -- so it is written
-// renderer-agnostic and registered on Vulkan AND on EasyGL, and the two must agree line for line.
+// buffer, and this file was written to prove that padding invisible from the public API.
 //
-// The half that cannot be asserted from inside the process is the interesting half: the padded
-// allocation must not produce a Vulkan validation message, and a message emitted at buffer
-// destruction arrives after this program's last statement. That is what the VULKAN-408 CTest output
-// gate is for -- `Vulkan_ZeroLengthBuffers` fails on any `[Vulkan Validation]` line, whenever it is
-// printed. Running the binary by hand proves the pixels; running it through ctest proves the rest.
+// plans/plan_vulkan_parity.md VKPAR-0022: the premise changed underneath it. Microsoft XNA rejects
+// a zero count, not only a negative one -- `vertexCount <= 0` and `indexCount <= 0` in every
+// constructor (plans/plan_software.md SOFTWARE-204) -- so an empty buffer is no longer a legal
+// object and the padding is unreachable through the public API. What is left to prove, on every
+// renderer this is registered for, is that the refusal comes first: XNA's exception, raised before
+// any native allocation, with the device still drawing afterwards. The CTest output gate still
+// fails the run on any `[Vulkan Validation]` line, which is what shows nothing native was touched.
 //
 // Legs:
-//   A  A zero-element VertexBuffer constructs and reports a count of zero.
-//   B  Binding it, and unbinding it, leaves the device able to draw normally afterwards -- the
-//      leg that would catch a padded allocation being bound as if it held a vertex.
+//   A  A zero-element VertexBuffer is refused with ArgumentOutOfRangeException, naming the count,
+//      and the device still draws.
 //   C  The same for a zero-element IndexBuffer.
-//   D  Both dispose cleanly while the device is still alive, and a draw after that still works.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -33,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -42,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <cstdio>
 #include <exception>
@@ -132,72 +131,38 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        // A. Construction. XNA rejects a NEGATIVE count and accepts zero, so an empty buffer is a
-        //    legal object whose count is the count it was given -- not the 1 the allocation pads to.
-        std::unique_ptr<VertexBuffer> emptyVB;
-        try {
-            emptyVB = std::make_unique<VertexBuffer>(dev, Decl(), 0, BufferUsage::None);
-            check(emptyVB->getVertexCountProperty() == 0,
-                  "A a zero-element VertexBuffer constructs and reports VertexCount=" +
-                      std::to_string(emptyVB->getVertexCountProperty()) + " (want 0)");
-        } catch (const std::exception& e) {
-            check(false, std::string("A a zero-element VertexBuffer must construct, but threw: ") +
-                             e.what());
-        }
-
-        // B. Bound, then unbound, then an ordinary draw. A padded allocation bound as if it held a
-        //    vertex would show up here rather than in the constructor.
-        if (emptyVB) {
-            bool threw = false;
-            try {
-                dev.SetVertexBuffer(emptyVB.get());
-                dev.SetVertexBuffer(nullptr);
-            } catch (const std::exception&) { threw = true; }
-            const Color got = DrawControlQuad();
-            check(!threw && Is(got, kQuad),
-                  "B binding and unbinding an empty VertexBuffer leaves the device drawable: "
-                  "threw=" + std::string(threw ? "yes" : "no") + " centre=" + Text(got) +
-                      " (want " + Text(kQuad) + ")");
-        }
-
-        // C. The same for an IndexBuffer, whose zero-size allocation takes the same max(1, ...)
-        //    path and whose bind is a separate command.
-        std::unique_ptr<IndexBuffer> emptyIB;
+        // A. Construction is refused, by XNA's exception and before any allocation.
         {
-            bool threw = false;
-            std::string what;
+            bool refused = false;
+            std::string what = "no exception";
             try {
-                emptyIB = std::make_unique<IndexBuffer>(dev, IndexElementSize::SixteenBits, 0,
-                                                        BufferUsage::None);
-                dev.setIndicesProperty(emptyIB.get());
-                dev.setIndicesProperty(nullptr);
-            } catch (const std::exception& e) { threw = true; what = e.what(); }
+                VertexBuffer emptyVB(dev, Decl(), 0, BufferUsage::None);
+            } catch (const System::ArgumentOutOfRangeException& e) {
+                refused = true; what = e.what();
+            } catch (const std::exception& e) {
+                what = std::string("wrong type: ") + e.what();
+            }
             const Color got = DrawControlQuad();
-            check(!threw && emptyIB && emptyIB->getIndexCountProperty() == 0 && Is(got, kQuad),
-                  "C a zero-element IndexBuffer constructs, binds and unbinds: threw=" +
-                      (threw ? what : std::string("no")) + " IndexCount=" +
-                      std::to_string(emptyIB ? emptyIB->getIndexCountProperty() : -1) +
-                      " centre=" + Text(got));
+            check(refused && what.find("vertexCount") != std::string::npos && Is(got, kQuad),
+                  "A a zero-element VertexBuffer is refused by name and the device still draws: " +
+                      what + " centre=" + Text(got));
         }
 
-        // D. Disposal while the device is alive, and a draw after it. The empty buffers' padded
-        //    allocations have to be released like any other -- on Vulkan that means they enter the
-        //    same retirement lists, and anything wrong there is reported at vkDestroyDevice, after
-        //    this program's last line. That half belongs to the CTest output gate, not to this
-        //    assertion, which only establishes that disposal itself is clean and non-fatal.
+        // C. The same for an IndexBuffer.
         {
-            bool threw = false;
-            std::string what;
+            bool refused = false;
+            std::string what = "no exception";
             try {
-                if (emptyVB) emptyVB->Dispose();
-                if (emptyIB) emptyIB->Dispose();
-            } catch (const std::exception& e) { threw = true; what = e.what(); }
+                IndexBuffer emptyIB(dev, IndexElementSize::SixteenBits, 0, BufferUsage::None);
+            } catch (const System::ArgumentOutOfRangeException& e) {
+                refused = true; what = e.what();
+            } catch (const std::exception& e) {
+                what = std::string("wrong type: ") + e.what();
+            }
             const Color got = DrawControlQuad();
-            check(!threw && Is(got, kQuad),
-                  "D disposing both empty buffers is clean and the device still draws: threw=" +
-                      (threw ? what : std::string("no")) + " centre=" + Text(got));
-            emptyVB.reset();
-            emptyIB.reset();
+            check(refused && what.find("indexCount") != std::string::npos && Is(got, kQuad),
+                  "C a zero-element IndexBuffer is refused by name and the device still draws: " +
+                      what + " centre=" + Text(got));
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
@@ -209,6 +174,8 @@ public:
     ZeroLengthBufferTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // VKPAR-0022: GetBackBufferData, which every leg's probe uses, is HiDef-only.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

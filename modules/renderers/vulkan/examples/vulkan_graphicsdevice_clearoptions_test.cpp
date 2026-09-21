@@ -61,7 +61,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
-
+#include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -96,6 +96,11 @@ namespace
     constexpr float kBaselineDepth = 0.23f;
     constexpr float kRequestedDepth = 0.67f;
     constexpr float kSingleColorDepth = 0.73f;
+    // plans/plan_vulkan_parity.md VKPAR-0022: what Clear(Color) actually clears depth to. Microsoft
+    // XNA uses 1.0 whatever the viewport says (plans/plan_software.md SOFTWARE-334); FNA uses
+    // Viewport.MaxDepth, which is what this file expected. The restricted viewport below still sets
+    // MaxDepth to kSingleColorDepth, so the two rules land on opposite sides of the probes.
+    constexpr float kClearColorOverloadDepth = 1.0f;
     constexpr int kSeedStencil = 0x11;
     constexpr int kBaselineStencil = 0x2d;
     constexpr int kRequestedStencil = 0xa6;
@@ -383,8 +388,12 @@ class GraphicsDeviceClearOptionsTest final : public Game
                        int stencil = kBaselineStencil)
     {
         ApplyFullRasterState(device, width, height);
-        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                     kSeedColor, kSeedDepth, kSeedStencil);
+        // VKPAR-0022: only the planes the surface has. XNA refuses to clear a missing depth or
+        // stencil plane (plans/plan_software.md SOFTWARE-333) instead of masking it as FNA does.
+        ClearOptions seedPlanes = ClearOptions::Target;
+        if (hasDepth) seedPlanes = seedPlanes | ClearOptions::DepthBuffer;
+        if (hasStencil) seedPlanes = seedPlanes | ClearOptions::Stencil;
+        device.Clear(seedPlanes, kSeedColor, kSeedDepth, kSeedStencil);
 
         DepthStencilState stamp;
         stamp.setDepthBufferEnableProperty(hasDepth);
@@ -401,6 +410,29 @@ class GraphicsDeviceClearOptionsTest final : public Game
         device.setDepthStencilStateProperty(stamp);
         device.setBlendStateProperty(BlendState::Opaque);
         DrawRect(device, Rectangle(0, 0, width, height), width, height, depth, color);
+    }
+
+    void InvokeClearUnguarded(GraphicsDevice& device, const ClearCase& clearCase)
+    {
+        switch (clearCase.invocation)
+        {
+        case Invocation::Options:
+            device.Clear(clearCase.options, kRequestedColor, kRequestedDepth, kRequestedStencil);
+            break;
+        case Invocation::FloatColor:
+            device.Clear(
+                static_cast<float>(kRequestedColor.getRProperty()) / 255.0f,
+                static_cast<float>(kRequestedColor.getGProperty()) / 255.0f,
+                static_cast<float>(kRequestedColor.getBProperty()) / 255.0f,
+                static_cast<float>(kRequestedColor.getAProperty()) / 255.0f);
+            break;
+        case Invocation::ColorAndDepth:
+            device.Clear(kRequestedColor, kRequestedDepth);
+            break;
+        case Invocation::ColorAll:
+            device.Clear(kRequestedColor);
+            break;
+        }
     }
 
     bool InvokeClear(GraphicsDevice& device, const ClearCase& clearCase)
@@ -483,8 +515,12 @@ class GraphicsDeviceClearOptionsTest final : public Game
         device.setBlendStateProperty(BlendState::Opaque);
         DrawRect(device, StencilPassRect(width, height), width, height, 0.5f, kBlue);
 
-        stencilTest.setReferenceStencilProperty(wrongStencil);
-        device.setDepthStencilStateProperty(stencilTest);
+        // plans/plan_vulkan_parity.md VKPAR-0022: a copy, not the bound object. XNA makes a
+        // state object immutable once a device has bound it (plans/plan_software.md
+        // SOFTWARE-232), so the reject leg needs a state of its own.
+        DepthStencilState stencilReject(stencilTest);
+        stencilReject.setReferenceStencilProperty(wrongStencil);
+        device.setDepthStencilStateProperty(stencilReject);
         DrawRect(device, StencilRejectRect(width, height), width, height, 0.5f, kRed);
     }
 
@@ -510,9 +546,30 @@ class GraphicsDeviceClearOptionsTest final : public Game
         int stencil;
     };
 
+    // VKPAR-0022: a case that names a plane the surface lacks is refused by XNA before anything
+    // is cleared (SOFTWARE-333), so it expects an InvalidOperationException and the baseline.
+    static bool RequestsMissingPlane(const ClearCase& clearCase, bool hasDepth, bool hasStencil)
+    {
+        const int options = static_cast<int>(clearCase.options);
+        switch (clearCase.invocation)
+        {
+        case Invocation::Options:
+            return ((options & static_cast<int>(ClearOptions::DepthBuffer)) != 0 && !hasDepth) ||
+                   ((options & static_cast<int>(ClearOptions::Stencil)) != 0 && !hasStencil);
+        case Invocation::ColorAndDepth:
+            return !hasDepth;
+        case Invocation::FloatColor:
+        case Invocation::ColorAll:
+            return false;
+        }
+        return false;
+    }
+
     ExpectedState ExpectedFor(const ClearCase& clearCase,
                               bool hasDepth, bool hasStencil) const
     {
+        if (RequestsMissingPlane(clearCase, hasDepth, hasStencil))
+            return ExpectedState{kBaselineColor, kBaselineDepth, kBaselineStencil};
         ExpectedState result{
             clearCase.clearsColor ? kRequestedColor : kBaselineColor,
             kBaselineDepth,
@@ -520,7 +577,7 @@ class GraphicsDeviceClearOptionsTest final : public Game
         };
         if (hasDepth && clearCase.clearsDepth)
             result.depth = clearCase.invocation == Invocation::ColorAll
-                ? kSingleColorDepth
+                ? kClearColorOverloadDepth
                 : kRequestedDepth;
         if (hasStencil && clearCase.clearsStencil)
             result.stencil = clearCase.invocation == Invocation::ColorAll
@@ -535,8 +592,31 @@ class GraphicsDeviceClearOptionsTest final : public Game
                                       bool drawAlphaProbe)
     {
         ApplyRestrictedClearState(device, width, height);
-        const bool invoked = InvokeClear(device, clearCase);
-        Check(invoked, std::string(clearCase.name) + " / public invocation accepted");
+        if (RequestsMissingPlane(clearCase, hasDepth, hasStencil))
+        {
+            bool refused = false;
+            std::string what = "no exception";
+            try
+            {
+                InvokeClearUnguarded(device, clearCase);
+            }
+            catch (const System::InvalidOperationException& exception)
+            {
+                refused = true;
+                what = exception.what();
+            }
+            catch (const std::exception& exception)
+            {
+                what = std::string("wrong type: ") + exception.what();
+            }
+            Check(refused, std::string(clearCase.name) +
+                               " / a missing depth or stencil plane is refused [" + what + "]");
+        }
+        else
+        {
+            const bool invoked = InvokeClear(device, clearCase);
+            Check(invoked, std::string(clearCase.name) + " / public invocation accepted");
+        }
 
         const ExpectedState expected = ExpectedFor(clearCase, hasDepth, hasStencil);
         ApplyFullRasterState(device, width, height);

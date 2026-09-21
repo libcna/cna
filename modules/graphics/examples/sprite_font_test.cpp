@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cmath>
 #include <vector>
+#include <exception>
 #include <optional>
 
 using namespace Microsoft::Xna::Framework;
@@ -63,22 +64,36 @@ protected:
         const int   lineSpacing    = 24;
         const float spacing        = 0.0f;
 
-        // Task REMED-GFX-002: defaultCharacter='?' is deliberately absent from the character
-        // list here -- this precondition must now be rejected at construction time
-        // (System::ArgumentException) rather than silently accepted and left to invoke UB the
-        // first time MeasureString/DrawString needed the fallback (the audit's original finding).
+        // Task REMED-GFX-002 made the constructor refuse a defaultCharacter absent from the
+        // character list. plans/plan_software.md SOFTWARE-353 then recovered what XNA does: its
+        // internal (content) constructor stores the value unchecked, and only the PUBLIC setter
+        // validates. plans/plan_vulkan_parity.md VKPAR-0022 moved this leg to that contract.
         {
-            bool threw = false;
+            bool ctorThrew = false;
+            bool kept = false;
+            bool setterThrew = false;
             try
             {
                 SpriteFont badFont(atlas, bounds, cropping, chars, lineSpacing, spacing, kerning,
                                    std::optional<charcs>(u'?'));
+                kept = badFont.getDefaultCharacterProperty() == std::optional<charcs>(u'?');
+                try
+                {
+                    badFont.setDefaultCharacterProperty(std::optional<charcs>(u'Z'));
+                }
+                catch (const System::ArgumentException&)
+                {
+                    setterThrew = true;
+                }
             }
-            catch (const System::ArgumentException&)
+            catch (const std::exception&)
             {
-                threw = true;
+                ctorThrew = true;
             }
-            check(threw, "SpriteFont ctor throws ArgumentException for defaultCharacter absent from characters");
+            check(!ctorThrew && kept,
+                  "SpriteFont ctor stores a defaultCharacter absent from characters, as XNA's does");
+            check(setterThrew,
+                  "the public DefaultCharacter setter refuses a character absent from characters");
         }
 
         // Inject a '?' glyph so the default fallback works
