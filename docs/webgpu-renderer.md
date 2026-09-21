@@ -176,25 +176,25 @@ renderer failure.
 
 ## Running the full WebGPU test suite
 
-The WebGPU CTests create a real GPU-backed surface (wgpu-native needs a real adapter), so the DISPLAY
-they use is fixed at configure time via `CNA_TEST_DISPLAY` (each test's CTest `ENVIRONMENT` sets
-`SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}`). The reproducible configuration is:
+The WebGPU CTests create a real GPU-backed surface (wgpu-native needs a real adapter), so they need an
+X display with a real GPU behind it. Since `plans/plan_gpu_test_isolation.md` GTI-0001 the build no longer
+bakes one in: `CNA_TEST_DISPLAY` is empty by default and each test inherits the launcher's `DISPLAY`.
+The reproducible configuration and run:
 
 ```bash
 cmake -S . -B cmake-build-webgpu \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
   -DCNA_BUILD_TESTS=ON \
-  -DCNA_TEST_DISPLAY=:0 \
   -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
 cmake --build cmake-build-webgpu -j"$(nproc)"
-ctest --test-dir cmake-build-webgpu -L WebGPU --output-on-failure -j1
+tools/platform/run_gpu_tests_private.sh cmake-build-webgpu -L WebGPU --output-on-failure -j1
 ```
 
-`:0` is a real desktop with a GPU. In a headless sandbox use a **GPU-backed virtual display** instead
-— an `Xvfb` started with the GLX extension on a host whose render node (`/dev/dri/renderD*`) exposes a
-real Vulkan adapter (e.g. `Xvfb :131 -screen 0 1280x1024x24 +extension GLX`), configured with
-`-DCNA_TEST_DISPLAY=:131`. A plain software `Xvfb` (no render node / no adapter) has **no** WebGPU
-adapter and the readback tests fail for that reason alone — that is an environment limitation, not a
+`run_gpu_tests_private.sh` provides a private rootful Xwayland inside a headless compositor: it has DRI3
+and the host's real GPU, and nothing appears on the desktop. **Do not point the tests at `:0`** — that is
+the owner's live desktop; it takes `-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` on purpose.
+A plain software `Xvfb` (no render node / no adapter) has **no** WebGPU adapter and the readback tests
+fail for that reason alone — that is an environment limitation, not a
 renderer defect. (`WebGPU_ChecksumVerification` and `WebGPU_PresentModeMapping` are pure CMake/unit
 tests and run with no display or GPU at all.)
 

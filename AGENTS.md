@@ -390,6 +390,22 @@ After making changes:
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
 
+### Running GPU/window tests (mandatory)
+
+**Never run tests, examples, demos or oracles on the owner's live desktop** — not `DISPLAY=:0`, not
+`WAYLAND_DISPLAY=wayland-0`. Run GPU/window tests through the private runner:
+
+```bash
+tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
+# e.g. tools/platform/run_gpu_tests_private.sh cmake-build-vulkan -R '^Vulkan_' -j6
+```
+
+It starts a headless Weston and a private rootful Xwayland (DRI3, the real GPU — Xvfb cannot present
+Vulkan) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
+default, so registered tests inherit the launcher's `DISPLAY`; the live desktop needs an explicit
+`-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` (see `cmake/TestDisplayPolicy.cmake` and
+`plans/plan_gpu_test_isolation.md`). The runner refuses a tree that still forces a display.
+
 ---
 
 ## Git Commits — Always Commit After Finishing a Task
