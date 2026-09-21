@@ -42,6 +42,7 @@ evidence:
 | VKPAR-0016 | `cmake-build-vulkan` grew to 87 GB: 341 EasyGL test binaries that run Vulkan | ✅ |
 | VKPAR-0017 | The CNA runtime as one shared library (`libcna.so`) instead of 798 static copies | ✅ |
 | VKPAR-0018 | Classic closeout, step 1: 23 more tests that died on the Reach profile | ✅ |
+| VKPAR-0019 | `SpriteBatch_BlendState`: the white constant factor is XNA's answer, not a renderer defect | ✅ |
 
 ---
 
@@ -1118,6 +1119,24 @@ what they were for:
 | `MRT_MixedFormats` | its premise: it expects `RenderTarget2D(Bgr565)` to throw, which has not been true since `SOFTWARE-216` restored XNA's fall-back-to-`Color` | the render-target format row below |
 | `MrtMipFinalization` | `Texture2D::GetData: total data size does not match the requested region` | the transfer row below |
 | `FloatRenderTarget` | `SetRenderTargets: render targets must have matching pixel sizes` | the render-target row below |
+
+### VKPAR-0019 — The white constant factor is XNA's answer
+
+`SpriteBatch_BlendState` S12/S13 draw with a `Blend.BlendFactor` source and expected the colour of a
+`GraphicsDevice.BlendFactor` set **between** a Deferred `Begin()` and `End()`. RADV drew white.
+
+That is what Microsoft XNA draws too. `SOFTWARE-350` measured it: `BlendState.Apply` writes the
+state's own `BlendFactor` (White by default), and assigning `GraphicsDevice.BlendFactor` dirties the
+cached state so the next `BlendState` assignment reaches `Apply` again. A Deferred batch assigns its
+state at `End()`, so the factor set before that was overwritten by White before anything was drawn.
+The test (`GFX-091`, older than `SOFTWARE-350`) asserted the pre-measurement model, and on Vulkan the
+public layer had since become right underneath it.
+
+The scene's subject — one static constant-factor state, a different dynamic constant per batch,
+A→B→A — is kept by drawing those batches **Immediate**: `Begin()` applies the state, and the factor
+set after it is the one the draw uses, exactly as in XNA. **RADV-HW: 23/23**, including the A→B→A
+and static/dynamic/static pipeline transitions, so the renderer's dynamic blend constant was never
+the problem.
 
 ---
 
