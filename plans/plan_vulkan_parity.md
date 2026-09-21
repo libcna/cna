@@ -33,8 +33,8 @@ evidence:
 | VKPAR-0006 | 103 Vulkan example tests abort before asserting anything (Reach profile) | ✅ |
 | VKPAR-0012 | Validation layers + synchronization validation across the renderer suite | ✅ |
 | VKPAR-0007 | X11 + Vulkan surface path on RADV | ✅ |
-| VKPAR-0008 | Wayland + Vulkan surface path on RADV | ⬜ |
-| VKPAR-0009 | SDL-free native configurations | ◐ X11 done, Wayland open |
+| VKPAR-0008 | Wayland + Vulkan surface path on RADV | ✅ |
+| VKPAR-0009 | SDL-free native configurations (X11 and Wayland) | ✅ |
 | VKPAR-0010 | Parity corpus and CnaTests baselines, classified | ⬜ |
 
 ---
@@ -601,10 +601,64 @@ $ readelf -d cmake-build-multi/cna_demo_2d | grep NEEDED
 selection is by the `CNA_GRAPHICS_RENDERER` environment variable, so this binary runs Vulkan on the
 native X11 backend with no SDL in the process.
 
-**Wayland is not yet measured.** `cmake-build-wayland` is configured for it
-(`CNA_PLATFORM=WAYLAND`, `CNA_ENABLE_SDL=OFF`, `CNA_AUDIO_PLATFORM=ALSA`, VULKAN compiled in) and
-`VK_KHR_wayland_surface` is present on this host, but the tree has not been rebuilt at this
-baseline. `VKPAR-0008` stays open and is **not** claimed by the X11 evidence above.
+## VKPAR-0008 — Wayland
+
+`cmake-build-wayland`: `CNA_PLATFORM=WAYLAND`, `CNA_ENABLE_SDL=OFF`, `CNA_AUDIO_PLATFORM=ALSA`,
+VULKAN among `CNA_GRAPHICS_RENDERERS`. Rebuilt at this baseline, 0 errors.
+
+### SDL-free, and X11-free
+
+`cna_demo_2d`'s **direct** dependencies are the whole story:
+
+```
+NEEDED  libwayland-client.so.0   libxkbcommon.so.0   libvulkan.so.1
+        libzstd  libav{codec,format,util}  libswresample  libstdc++  libm  libgcc_s  libc
+```
+
+No SDL, no X11, no xcb, no GLX. `ldd` does show `libX11`/`libxcb` transitively, and they are
+traceable to **`libavutil.so.59`** (FFmpeg's VA-API), not to CNA: `libavcodec`, `libavformat` and
+`libvulkan` each reference none. The repository's own gates agree — `CnaWaylandLinkClosure` and
+`WaylandIsSdlFree`, **6/6 passed**.
+
+### The surface path, against the real compositor
+
+`cna_demo_2d` has no test-harness environment override, so it runs against the live GNOME/Mutter
+session (`WAYLAND_DISPLAY=wayland-0`), which is the genuine
+window → `VkSurfaceKHR` → RADV → swapchain → present path:
+
+| | |
+|---|---|
+| Device | `AMD Radeon 780M (RADV PHOENIX)` |
+| Frames | 3 000, exit 0 |
+| RSS | 112 628 kB → 112 636 kB (**+8 kB**) |
+| fds | 49 → 49 |
+| `[Vulkan Validation]` | **0** |
+
+### The contract tests, against a private compositor
+
+`CnaTests` deliberately cannot reach the developer's desktop: `WaylandTestEnvironment` rewrites
+`WAYLAND_DISPLAY` to `cna-test-no-compositor` and the session bus to a nonexistent path before any
+test runs (`plan_wayland.md` WAYLAND-0110), so a test can never open a window on a screen nobody is
+watching. The sanctioned route is `tools/platform/wayland_test_server.sh`, which starts a private
+compositor and names it in `CNA_WAYLAND_TEST_DISPLAY`. Through Weston's headless backend with the
+GL renderer, selecting Vulkan at runtime:
+
+```
+14 tests from 3 test suites ran.   [  PASSED  ] 14 tests.
+[Vulkan] GPU: AMD Radeon 780M (RADV PHOENIX)
+```
+
+— the same `StockEffectNullTextureTest`, `DualTextureEffectNullSamplerTest` and
+`TwoSidedStencilTest` cases this branch corrected, passing on the native Wayland backend on real
+hardware.
+
+### Fractional scaling
+
+125% **is** active on this desktop and the Wayland run above happened under it:
+`~/.config/monitors.xml` carries `<scale>1.25</scale>`, `org.gnome.mutter experimental-features` is
+`['scale-monitor-framebuffer']`, and Xwayland's logical size is `1536x960`. What is demonstrated is
+that the Vulkan path runs cleanly on a fractionally-scaled session; a positive assertion tying
+logical size to swapchain extent is **not** made here and is left to a later row rather than implied.
 
 ---
 
@@ -697,6 +751,31 @@ Each was re-run alone, so none of these is parallel-GPU contention; none passed 
 
 None of these is caused by this branch: `VKPAR-0004`'s change decides only which image view is
 bound when a texture is **null**, and `VKPAR-0005`'s only the `front`/`back` stencil assignment.
+
+---
+
+## Regression matrix
+
+Every renderer below runs on this machine's real hardware. `cmake-build-multi` is
+`CNA_PLATFORM=X11`, `CNA_ENABLE_SDL=OFF`, four renderers compiled in and selected by the
+`CNA_GRAPHICS_RENDERER` environment variable; `cmake-build-vulkan` is the SDL3 platform.
+
+The suites are the ones this branch touched — `StockEffectNullTextureTest`,
+`DualTextureEffectNullSamplerTest` and `TwoSidedStencilTest`, 14 cases:
+
+| Renderer | Build | Result |
+|---|---|---|
+| **Vulkan** (RADV, SDL3 platform) | `cmake-build-vulkan` | **14/14 passed** |
+| **Vulkan** (RADV, native X11, **no SDL**) | `cmake-build-multi` | **14/14 passed** |
+| **EasyGL / OPENGL33** (Mesa 25.0.7, OpenGL 4.6 core) | `cmake-build-multi` | **14/14 passed** |
+| **Software** | `cmake-build-multi` | **14/14 passed** |
+| **Headless** | `cmake-build-multi` | skipped cleanly — no raster path, which is what the gates say |
+
+No Direct3D regression is required by this branch: nothing it changes is shared with DirectX11 or
+DirectX12. `VKPAR-0004` and `VKPAR-0005` are inside `modules/renderers/vulkan/`; `VKPAR-0003`
+changes only CMake registration; the two gtest gate edits **add** Vulkan to a renderer list and
+leave every other renderer's arm byte-for-byte, which the EasyGL and Software columns above
+demonstrate rather than assert.
 
 ---
 
