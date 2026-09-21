@@ -540,6 +540,8 @@ namespace CNA::Internal::Renderers::Vulkan
         vkMapMemory(dev, stagingMem, 0, size, 0, &mapped);
         std::memcpy(mapped, data.pixels.data(), static_cast<size_t>(size));
         vkUnmapMemory(dev, stagingMem);
+        if (blockExtent_ > 1)
+            KeepCompressedLevelEXT(0, data.pixels.data(), static_cast<std::size_t>(size));
 
         // --- VkImage ---
         VkImageCreateInfo imgInfo{};
@@ -798,6 +800,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (stride == rowBytes)
         {
             std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
+            if (blockExtent_ > 1)
+                KeepCompressedLevelEXT(0, rgba, static_cast<std::size_t>(size));
         }
         else
         {
@@ -846,6 +850,50 @@ namespace CNA::Internal::Renderers::Vulkan
         ++owner_->modernStagingAllocationCountEXT_;
         owner_->RetireResources(std::move(retired));
         owner_->QueueStorageImageUploadEXT(std::move(command));
+    }
+
+    void VulkanTextureRenderer::KeepCompressedLevelEXT(int level, const std::uint8_t* blocks,
+                                                       std::size_t bytes)
+    {
+        if (level < 0 || level >= levelCount_ || blocks == nullptr) return;
+        if (compressedLevels_.size() != static_cast<std::size_t>(levelCount_))
+            compressedLevels_.resize(static_cast<std::size_t>(levelCount_));
+        compressedLevels_[static_cast<std::size_t>(level)].assign(blocks, blocks + bytes);
+    }
+
+    bool VulkanTextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                        void* data, int dataLength) const
+    {
+        if (blockExtent_ <= 1 || data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0 || static_cast<std::size_t>(level) >= compressedLevels_.size())
+            return false;
+        const auto& blocks = compressedLevels_[static_cast<std::size_t>(level)];
+        if (blocks.empty()) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelW) || ((h % 4) != 0 && y + h != levelH))
+            return false;
+        const std::size_t blockBytes = static_cast<std::size_t>(bytesPerTexel_);
+        const int levelBlockColumns = (levelW + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t rowBytes = static_cast<std::size_t>(regionBlockColumns) * blockBytes;
+        if (dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < rowBytes * static_cast<std::size_t>(regionBlockRows))
+            return false;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t source =
+                (static_cast<std::size_t>(y / 4 + row) * static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            if (source + rowBytes > blocks.size()) return false;
+            std::memcpy(destination + static_cast<std::size_t>(row) * rowBytes,
+                        blocks.data() + source, rowBytes);
+        }
+        return true;
     }
 
     // Task 925: transitions exactly ONE mip level's layout -- the shared TransitionImageLayout
@@ -901,6 +949,8 @@ namespace CNA::Internal::Renderers::Vulkan
             stagingBuf, stagingMem, &mapped);
         std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
         vkUnmapMemory(dev, stagingMem);
+        if (blockExtent_ > 1)
+            KeepCompressedLevelEXT(level, rgba, static_cast<std::size_t>(size));
 
         if (!participatesInModernOrder_)
         {

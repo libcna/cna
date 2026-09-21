@@ -304,6 +304,24 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 925 (split from Task 867): real GPU upload for level>0, mirroring
         // VulkanTexture3DRenderer::SetData's established staging-buffer pattern (Task 864).
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /**
+         * @brief Reads back the exact blocks of a block-aligned region of a compressed texture.
+         *
+         * plans/plan_vulkan_parity.md VKPAR-0028. Served from the per-level block shadow the
+         * uploads keep, so what returns is what was stored; an uncompressed texture still answers
+         * false, as before, and the shared layer keeps its own CPU copy of those.
+         *
+         * @param level Mip level to read.
+         * @param x Left edge in texels, block aligned.
+         * @param y Top edge in texels, block aligned.
+         * @param w Width in texels, block aligned or reaching the level's edge.
+         * @param h Height in texels, block aligned or reaching the level's edge.
+         * @param data Destination for tightly packed block rows.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete region was copied.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /**
          * @brief The SurfaceFormat ordinal this texture was created with. CNAEXT.
@@ -378,6 +396,9 @@ namespace CNA::Internal::Renderers::Vulkan
         int                 bytesPerTexel_ = 4;
         /// VULKAN-172: 4 when the storage is block-compressed, so every size is block-counted.
         int                 blockExtent_   = 1;
+        /// VKPAR-0028: each level's blocks as last uploaded, for exact compressed readback.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
+        void KeepCompressedLevelEXT(int level, const std::uint8_t* blocks, std::size_t bytes);
         VkImage             image_         = VK_NULL_HANDLE;
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;

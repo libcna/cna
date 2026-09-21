@@ -51,6 +51,7 @@ evidence:
 | VKPAR-0025 | Ten transfer and render-target tests older than the XNA rules they break | ✅ |
 | VKPAR-0026 | An occlusion query with nothing drawn never completed | ✅ |
 | VKPAR-0027 | `SetData` on a render target: dropped on the GPU (2D), refused (cube) | ✅ |
+| VKPAR-0028 | Compressed `Texture2D` readback: the blocks were stored and could not be read back | ✅ |
 
 ---
 
@@ -1357,6 +1358,25 @@ all pass except `Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` 
 passing: `HdrRenderTargetRoundTrip.FloatTargetPartialAndMip…`,
 `RenderTargetCubeSetDataContractTest.{StoresTheFace…,SeededFacesAndRegionsReadBackExactly}`, and
 the two contract rows.
+
+### VKPAR-0028 — Compressed `Texture2D` readback
+
+`Texture2D.GetData` on a DXT texture returns its exact blocks in XNA, and the shared layer asks the
+renderer for them (`ITextureRenderer::GetData` with a block-aligned region). `VulkanTextureRenderer`
+did not implement it — it stores BC blocks natively (`VULKAN-172`) but kept no way back — so the
+read was refused: *"renderer cannot read the requested compressed block bytes"*. Three baseline
+failures were this one gap, not three: `UnsupportedFormatConstruction.DxtFullPartialAndMipTransfersAreExact`,
+`Texture2DFromStreamFormatTest.DdsRemainsAvailableOnlyThroughNamedExtension` and
+`SaveAsPngTest.DecompressesEveryClassicDxtFormatBeforeEncoding` (which reads the blocks to decode
+them before encoding).
+
+The texture now keeps each level's blocks as uploaded — at construction, through `UpdatePixels` and
+through `UpdatePixelsLevel` — and returns the exact rows of a block-aligned region, the same shadow
+the cube already had (`VKPAR-0021`). An uncompressed texture still answers `false`, as before; the
+shared layer holds its own copy of those.
+
+**Evidence (RADV-HW, private compositor).** `Dxt|DXT|Compressed|Dds|DDS|SaveAs|FromStream|UnsupportedFormatConstruction`
+(186): all pass, the three above included.
 
 ---
 
