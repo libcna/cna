@@ -27,14 +27,14 @@ evidence:
 | VKPAR-0001 | Baseline: repository, hardware, platform paths, build | ⬜ |
 | VKPAR-0002 | Renderer architecture audit and parity inventory | ⬜ |
 | VKPAR-0003 | The Vulkan multi-renderer configuration does not build | ✅ |
-| VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ⬜ |
+| VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced, not fixed |
 | VKPAR-0004 | GSC-F2 — Vulkan classic null-texture semantics (white → XNA's opaque black) | ✅ |
 | VKPAR-0005 | Vulkan facedness: the two-sided stencil "driver quirk" claim, measured on RADV | ✅ |
 | VKPAR-0006 | 103 Vulkan example tests abort before asserting anything (Reach profile) | ✅ |
-| VKPAR-0012 | Validation layers + synchronization validation across the renderer suite | ⬜ |
-| VKPAR-0007 | X11 + Vulkan surface path on RADV | ⬜ |
+| VKPAR-0012 | Validation layers + synchronization validation across the renderer suite | ✅ |
+| VKPAR-0007 | X11 + Vulkan surface path on RADV | ✅ |
 | VKPAR-0008 | Wayland + Vulkan surface path on RADV | ⬜ |
-| VKPAR-0009 | SDL-free native configurations | ⬜ |
+| VKPAR-0009 | SDL-free native configurations | ◐ X11 done, Wayland open |
 | VKPAR-0010 | Parity corpus and CnaTests baselines, classified | ⬜ |
 
 ---
@@ -215,8 +215,26 @@ configuration; only the ones that switch on the default-renderer macro cannot, a
 one that does. Widening the block's own guard would drop EasyGL tests that currently build and pass,
 which is a different decision and not this workstream's to make.
 
-**Classification:** test/fixture defect (registration), not a renderer defect. Neither changes any
-rendering behaviour.
+### (c) The same defect a third time, in the headless examples
+
+Found later, rebuilding `cmake-build-multi` (`OPENGL33` default, `HEADLESS` also compiled in) for the
+EasyGL and Software regressions:
+
+```
+headless_smoke_test.cpp:41:10: fatal error:
+    CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp: No such file or directory
+```
+
+Six targets, same shape as (b): the block guards on `CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS"`,
+which the per-family re-point makes true whenever HEADLESS is merely a *member*. These TUs include a
+renderer-private header that only reaches them when headless is the **default**, so the targets exist
+and cannot compile. Same fix, and it is also the semantically right one: a test asserting the
+headless renderer's behaviour is meaningless in a build that will run OPENGL33.
+
+**Classification:** test/fixture defect (registration), not a renderer defect. None of the three
+changes any rendering behaviour. All three are the same rule broken the same way, which is why they
+are one task: `CNA_GRAPHICS_RENDERER` inside a family directory names *the family being entered*,
+not the renderer the resulting binary will run.
 
 ---
 
@@ -497,6 +515,134 @@ than counted as wins.
 
 **Classification:** test debt, shared across renderer families, caused by a correct production
 change that a whole class of test was not carried across.
+
+---
+
+## VKPAR-0012 — Validation and synchronization validation
+
+Nothing had to be switched on for this: `VulkanRenderer` already requests
+`VK_LAYER_KHRONOS_validation` in any build without `NDEBUG` (`sEnableValidation`), checks at runtime
+that the layer is really present, installs a `VK_EXT_debug_utils` messenger at
+`WARNING|ERROR` severity, and records both `pMessage` and the stable `pMessageIdName` before echoing
+through `CNA::Logger` with a `[Vulkan Validation]` prefix. `cmake/TestHelpers.cmake` then puts that
+prefix in **every** registered renderer test's `FAIL_REGULAR_EXPRESSION`, so a warning or error fails
+the test that produced it. `cmake-build-vulkan` is `Debug`, so **every run in this plan already had
+validation on**.
+
+| Measurement | Result |
+|---|---|
+| `[Vulkan Validation]` messages, whole 10141-test run | **0** |
+| `[Vulkan Validation]` messages, 370-test `^Vulkan_` run | **0** |
+| `VK_LAYER_KHRONOS_validation` confirmed loaded by the tests that assert it | yes (3 assertions) |
+| `Vulkan_RenderTarget_ProducerConsumer_SyncVal` | **Passed** |
+| `Vulkan_Swapchain_Sync` | **Passed** (28.5 s) |
+
+Synchronization validation is not part of the layer's default set; CNA requests it through
+`VkValidationFeaturesEXT` from inside the process (`SetSyncValidationEnabledEXT`), and lifts the
+layer's ten-repeats-per-id cap via `VK_EXT_layer_settings` so a reported hazard *count* means
+something. Both tests that use it pass on RADV-HW.
+
+So: **zero unexplained validation errors, zero unexplained synchronization hazards, nothing
+suppressed by string.** What this does *not* yet cover is sync validation across the whole suite
+rather than the two tests that opt into it; that is the remaining half of the phase and is recorded
+as such rather than claimed.
+
+---
+
+## VKPAR-0007 / VKPAR-0009 — X11, and the SDL-free X11 configuration
+
+### The surface path, RADV-HW
+
+Every Vulkan run in this plan presents through `DISPLAY=:0`, which is **Xwayland** under the live
+GNOME/Mutter session, and every one of them reports the hardware device:
+
+```
+[Vulkan] GPU: AMD Radeon 780M (RADV PHOENIX)
+CNA: Vulkan capabilities -- device=AMD Radeon 780M (RADV PHOENIX); MSAA up to 8x;
+     MRT up to 4 targets (FNA MAX_RENDERTARGET_BINDINGS); anisotropic filtering: supported, max 16x;
+     wireframe fill mode: supported; independent MRT blend/write state: supported;
+     render-target formats: Color plus device-queried Rgba64/float/HDR 2D and cube storage;
+     detailed format usage: 27 formats classified
+```
+
+So the X11 window → `VkSurfaceKHR` → RADV → swapchain → present path is exercised by all 370
+`Vulkan_*` tests and by the demo runs below. `Xvfb :99` cannot do this at all (no DRI3, see
+`VKPAR-0001`), which is worth stating plainly because it is the display an agent shell gets by
+default here.
+
+### `cna_demo_2d` on Vulkan + X11
+
+`cna_demo_2d --smoke N` runs exactly N frames and exits, so a soak is bounded and its exit code
+means something.
+
+| Run | Frames | Exit | RSS | fds | threads | `[Vulkan Validation]` |
+|---|---|---|---|---|---|---|
+| short | 3 000 | 0 | 98 760 kB → 98 760 kB | 31 → 31 | — | 0 |
+| soak | 10 000 | 0 | 98 512 kB → 98 516 kB (**+4 kB total**) | 31 → 31 | 9 → 9 | 0 |
+
+The soak was sampled at roughly 10 s, 45 s, 90 s, 135 s and 165 s. Four kilobytes of drift across ten
+thousand frames is not progressive growth, and neither descriptors nor file descriptors nor threads
+moved at all.
+
+### SDL-free
+
+`cmake-build-multi` is configured `CNA_PLATFORM=X11`, `CNA_ENABLE_SDL=OFF`, `CNA_AUDIO_PLATFORM=NULL`,
+with VULKAN among `CNA_GRAPHICS_RENDERERS` — the configuration the brief asks for, already in the
+tree. Its `cna_demo_2d` (which links `cna_content`) has **no SDL dependency of any kind**:
+
+```
+$ ldd  cmake-build-multi/cna_demo_2d | grep -ci libSDL      → 0
+$ readelf -d cmake-build-multi/cna_demo_2d | grep NEEDED
+    libX11.so.6  libXext.so.6  libXi.so.6  libXrandr.so.2  libXcursor.so.1  libXau.so.6
+    libXss.so.1  libvulkan.so.1  libzstd.so.1  libav*.so  libstdc++  libm  libgcc_s  libc
+```
+
+`libvulkan.so.1` and the X libraries, and nothing else window-system-shaped. Runtime renderer
+selection is by the `CNA_GRAPHICS_RENDERER` environment variable, so this binary runs Vulkan on the
+native X11 backend with no SDL in the process.
+
+**Wayland is not yet measured.** `cmake-build-wayland` is configured for it
+(`CNA_PLATFORM=WAYLAND`, `CNA_ENABLE_SDL=OFF`, `CNA_AUDIO_PLATFORM=ALSA`, VULKAN compiled in) and
+`VK_KHR_wayland_surface` is present on this host, but the tree has not been rebuilt at this
+baseline. `VKPAR-0008` stays open and is **not** claimed by the X11 evidence above.
+
+---
+
+## VKPAR-0011 — GSC-F1, reproduced on hardware and narrowed, not fixed
+
+The brief asks for this first and time-boxes it. Reproduced, narrowed by one measurement, and
+stopped there on purpose.
+
+**Reproduced**, `cmake-build-multi` (`OPENGL33` default, EasyGL on Mesa 25.0.7 / Radeon 780M),
+with `StockEffectNullTextureTest`'s own `GSC-F1` skip lifted:
+
+```
+StockEffectNullTextureTests.cpp:230: Failure    [trace: per pixel]
+  Render([&]{ DrawSkinnedQuad(effect); })  is  <FF-FF FF-FF>   (255,255,255,255)
+  kRed                                     is  <FF-00 00-FF>   (255,0,0,255)
+```
+
+Note *which* draw fails: the **control** draw, with a real red `Texture2D` bound — not the
+missing-texture leg. The per-vertex leg of the same loop passes, so the two programs disagree while
+everything above them is identical. That matches `GSC-F1`'s description and confirms it on hardware
+this project had not run it on.
+
+**Narrowed.** The obvious candidate was the specular term: `EnsureSkinnedProgram`'s fragment stage
+ends with `FragColor.rgb += specularRGB * FragColor.a`, and a stale or non-zeroed per-light specular
+with the material's default `SpecularColor` of white would add exactly enough to saturate
+`(1,0,0)` to `(1,1,1)`. It is **not** that. `SkinnedEffect.cpp:437` already zeroes each disabled
+light's specular (`light0On ? … : Vector3::Zero`), and forcing `SpecularColor` to zero in the test
+leaves the pixel white.
+
+So the white is in the diffuse path — `litRGB * texColor.rgb` — which leaves two candidates worth
+trying next: `uEmissiveColor` (the pre-folded `emissive + ambient*diffuse`) arriving wrong for this
+program, or `texColor` itself sampling white, i.e. the per-pixel skinned program not seeing the
+bound texture that the per-vertex one does.
+
+**Not fixed.** Past this point it is an EasyGL shader/uniform-binding investigation, which is the
+workstream the brief explicitly says not to start. The skip in `StockEffectNullTextureTest` stays
+and still names `GSC-F1`; what is new here is that the defect is now reproduced on real hardware and
+one hypothesis is eliminated in writing rather than left for the next reader to re-try.
 
 ---
 
