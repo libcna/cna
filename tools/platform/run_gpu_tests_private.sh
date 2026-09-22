@@ -23,6 +23,9 @@
 # directory; exclude them (-E 'XnaPipelineGenuineRuntime|XnaDifferentialBuildTest') or run them on
 # their own, where their harness pins Xvfb :99.
 #
+# After the run, tools/platform/profile_dead_tests.py names every failed test that died on a
+# graphics-profile refusal before its assertions (GTI-0007) -- a test defect, not a renderer result.
+#
 # Exit status is ctest's; 77 (skip) when no compositor or Xwayland is available.
 
 set -u
@@ -55,8 +58,18 @@ if [ "${1:-}" = "--inside-private-compositor" ]; then
         echo "WARNING: private display $DISPLAY has no DRI3; Vulkan tests will not be able to present" >&2
     fi
     echo "run_gpu_tests_private: DISPLAY=$DISPLAY (private Xwayland), WAYLAND_DISPLAY=$WAYLAND_DISPLAY (private Weston)" >&2
+    STARTED="$XDG_RUNTIME_DIR/ctest-started"
+    : > "$STARTED"
     ctest --test-dir "$BUILD" "$@"
-    exit $?
+    STATUS=$?
+    # GTI-0007: a test that died on a graphics-profile refusal before its first check fails exactly
+    # like a renderer defect. Name every such failure of THIS run (a log older than the run is a
+    # previous one's), so it is never read as a renderer result. ctest's exit status is kept.
+    LOG="$BUILD/Testing/Temporary/LastTest.log"
+    if [ -f "$LOG" ] && [ "$LOG" -nt "$STARTED" ] && command -v python3 >/dev/null 2>&1; then
+        python3 "$HERE/profile_dead_tests.py" "$LOG" >&2
+    fi
+    exit "$STATUS"
 fi
 
 if [ $# -lt 1 ]; then

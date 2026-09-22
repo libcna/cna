@@ -678,4 +678,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --wayland-guard-applies ${CNA_TEST_WAYLAND_GUARD_APPLIES})
         set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
     endif()
+    # plans/plan_gpu_test_isolation.md GTI-0007: the classifier the private GPU runner applies to
+    # every run, which names tests that died on a graphics-profile refusal before their first check.
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CnaProfileDeadTestClassifier
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/profile_dead_tests.py" --self-test)
+        set_tests_properties(CnaProfileDeadTestClassifier PROPERTIES LABELS "configuration")
+    endif()
 endif()
