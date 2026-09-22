@@ -29,7 +29,20 @@
 #include "CNA/Graphics/StorageTexture2D.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "EngineTestSupport.hpp"
 #include "ModernConformanceShaderPackage.generated.hpp"
 
@@ -56,7 +69,20 @@ using CNA::Graphics::StorageBufferUsage;
 using CNA::Graphics::StorageTexture2D;
 using CNA::Graphics::StorageTexture2DDescriptor;
 using CNA::Graphics::StorageTexture2DUsage;
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::BasicEffect;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::DepthFormat;
+using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
+using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace {
 
@@ -491,6 +517,127 @@ TEST_F(ModernGpuConformance, AStorageImageHoldsExactlyWhatComputeWrote)
         }
     Check(wrong == 0, std::to_string(wrong) + " of 256 texels differ from what the compute program "
                                               "stored");
+}
+
+TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
+{
+    // The two APIs share one device and one renderer (ADR 0001: one observable order). A frame of
+    // ordinary XNA drawing -- additive blending, no culling, depth on, a vertex-coloured BasicEffect
+    // into a render target -- must produce the same pixels and leave the same device state whether
+    // or not compute work is recorded before, between and after its draws.
+    //
+    // A dispatch inside a bind cycle ends the native render pass on renderers that cannot compute
+    // inside one, so the cycle is resumed afterwards. Every render-target shape is exercised, and
+    // the NEAR triangle is drawn first: a resumed cycle that dropped its depth would let the far
+    // triangle through where they overlap, and one that dropped its colour would lose the first
+    // draw entirely.
+    if (LacksCompute())
+        GTEST_SKIP() << "this renderer has no compute shaders";
+    if (Lacks(gd.SupportsCapability(GraphicsCapability::ThreeD), "3D"))
+        GTEST_SKIP() << "this renderer has no 3D pipeline";
+
+    constexpr int kSize = 32;
+    constexpr std::size_t kCount = 256;
+    BasicEffect effect(gd);
+    effect.VertexColorEnabled = true;
+    effect.setLightingEnabledProperty(false);
+    effect.setWorldProperty(Matrix::getIdentityProperty());
+    effect.setViewProperty(Matrix::getIdentityProperty());
+    effect.setProjectionProperty(Matrix::getIdentityProperty());
+    const VertexPositionColor farTriangle[3] = {
+        VertexPositionColor(Vector3(-1.0f, -1.0f, 0.5f), Color(200, 0, 0)),
+        VertexPositionColor(Vector3(0.6f, -1.0f, 0.5f), Color(200, 0, 0)),
+        VertexPositionColor(Vector3(-1.0f, 1.0f, 0.5f), Color(200, 0, 0))};
+    const VertexPositionColor nearTriangle[3] = {
+        VertexPositionColor(Vector3(1.0f, 1.0f, 0.25f), Color(0, 60, 180)),
+        VertexPositionColor(Vector3(-0.6f, 1.0f, 0.25f), Color(0, 60, 180)),
+        VertexPositionColor(Vector3(1.0f, -1.0f, 0.25f), Color(0, 60, 180))};
+
+    ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource, Package::kChainSpirV,
+                                           {StorageAt("Source", 0), StorageAt("Destination", 1)}));
+    auto a = Buffer(kCount * sizeof(std::uint32_t), kStorage);
+    auto b = Buffer(kCount * sizeof(std::uint32_t), kStorage);
+    Upload(*a, std::vector<std::uint32_t>(kCount, 5u));
+    chain.bindStorageBuffer(0, *a);
+    chain.bindStorageBuffer(1, *b);
+    chain.setUniform("uCount", static_cast<int>(kCount));
+
+    const auto check = [&](const std::string& shape, RenderTarget2D& target,
+                           const std::vector<RenderTargetBinding>& bindings) {
+        const auto frame = [&](bool withCompute) {
+            if (withCompute) chain.dispatch(static_cast<int>(kCount / 64));
+            gd.SetRenderTargets(bindings);
+            gd.Clear(Color(10, 20, 30, 255));
+            gd.setBlendStateProperty(BlendState::Additive);
+            gd.setRasterizerStateProperty(RasterizerState::CullNone);
+            gd.setDepthStencilStateProperty(DepthStencilState::Default);
+            effect.Apply();
+            gd.DrawUserPrimitives(PrimitiveType::TriangleList, nearTriangle, 0, 1);
+            if (withCompute) chain.dispatch(static_cast<int>(kCount / 64));
+            effect.Apply();
+            gd.DrawUserPrimitives(PrimitiveType::TriangleList, farTriangle, 0, 1);
+            if (withCompute) chain.dispatch(static_cast<int>(kCount / 64));
+            gd.SetRenderTarget(nullptr);
+            std::vector<Color> pixels(static_cast<std::size_t>(kSize * kSize));
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels;
+        };
+
+        const auto plain = frame(false);
+        const auto mixed = frame(true);
+        int differing = 0;
+        for (std::size_t i = 0; i < plain.size(); ++i)
+            differing += plain[i] != mixed[i] ? 1 : 0;
+        Check(differing == 0, shape + ": " + std::to_string(differing) +
+                                  " pixels differ once compute is interleaved with the classic "
+                                  "draws");
+        // The frame must have drawn both triangles and depth-rejected the far one where they
+        // overlap, or the comparison proves nothing about either attachment.
+        int red = 0, blue = 0, both = 0;
+        for (const Color& c : plain)
+        {
+            const bool r = c.getRProperty() > 150;
+            const bool bl = c.getBProperty() > 150;
+            red += r ? 1 : 0;
+            blue += bl ? 1 : 0;
+            both += (r && bl) ? 1 : 0;
+        }
+        Check(red > 0 && blue > 0 && both == 0,
+              shape + ": the classic frame drew both triangles with the far one depth-tested away "
+                      "(red " + std::to_string(red) + ", blue " + std::to_string(blue) +
+                  ", both " + std::to_string(both) + " pixels)");
+    };
+
+    {
+        RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::Depth24);
+        check("single-sample DiscardContents", target, {RenderTargetBinding(&target)});
+    }
+    {
+        RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::Depth24,
+                              0, RenderTargetUsage::PreserveContents);
+        check("single-sample PreserveContents", target, {RenderTargetBinding(&target)});
+    }
+    {
+        RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::Depth24,
+                              4);
+        check("multisampled DiscardContents", target, {RenderTargetBinding(&target)});
+    }
+    if (gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets))
+    {
+        RenderTarget2D first(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::Depth24);
+        RenderTarget2D second(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+        check("two render targets", first,
+              {RenderTargetBinding(&first), RenderTargetBinding(&second)});
+    }
+
+    Check(gd.getBlendStateProperty().getColorSourceBlendProperty() ==
+              BlendState::Additive.getColorSourceBlendProperty() &&
+              gd.getRasterizerStateProperty().getCullModeProperty() ==
+                  RasterizerState::CullNone.getCullModeProperty(),
+          "compute work changed the device's classic blend or rasterizer state");
+    const auto chained = Download<std::uint32_t>(*b, kCount);
+    Check(chained.front() == 11u && chained.back() == 11u,
+          "the interleaved compute work itself produced its result (5 * 2 + 1)");
 }
 
 #endif // CNA_CNAEXT

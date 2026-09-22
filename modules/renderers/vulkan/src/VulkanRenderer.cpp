@@ -4255,6 +4255,13 @@ namespace CNA::Internal::Renderers::Vulkan
         for (auto& [fmt, rp] : rtRenderPassMsaaLoadByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassMsaaLoadByDepthFmt_.clear();
+        // VMG-0014: the split-head "store everything" variants share the same lifetime.
+        for (auto& [key, rp] : rtRenderPassStoreAllByDepthFmt_)
+            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
+        rtRenderPassStoreAllByDepthFmt_.clear();
+        for (auto& [key, rp] : rtRenderPassMsaaStoreAllByDepthFmt_)
+            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
+        rtRenderPassMsaaStoreAllByDepthFmt_.clear();
         // REMED-GFX-143: the per-load/store swapchain variants share renderPass_'s lifetime.
         DestroySwapchainPassVariants();
         if (renderPass_       != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,       nullptr); renderPass_       = VK_NULL_HANDLE; }
@@ -5138,9 +5145,13 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkRenderPass VulkanRenderer::GetOrCreateRTRenderPass(
-        VkFormat colorFmt, VkFormat depthFmt, bool discardContents)
+        VkFormat colorFmt, VkFormat depthFmt, bool discardContents, bool storeAll)
     {
-        auto& cache = discardContents ? rtRenderPassByDepthFmt_ : rtRenderPassLoadByDepthFmt_;
+        // VMG-0014: storeAll only changes the discarding variant; the loading one stores already.
+        storeAll = storeAll && discardContents;
+        auto& cache = discardContents
+            ? (storeAll ? rtRenderPassStoreAllByDepthFmt_ : rtRenderPassByDepthFmt_)
+            : rtRenderPassLoadByDepthFmt_;
         RTPassKey cacheKey{};
         cacheKey.colorFormats[0] = static_cast<int32_t>(colorFmt);
         cacheKey.depthFormat = static_cast<int32_t>(depthFmt);
@@ -5178,11 +5189,11 @@ namespace CNA::Internal::Renderers::Vulkan
         depthAtt.format         = depthFmt;
         depthAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.storeOp        = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
         depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.stencilStoreOp = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.stencilStoreOp = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
         // LOAD_OP_LOAD needs a defined layout, which UNDEFINED is not: the owning target
         // transitions its depth image once at construction (see VulkanRenderTargetRenderer's and
         // VulkanRenderTargetCubeRenderer's init barrier) so the FIRST preserving bind is legal, and
@@ -5258,13 +5269,17 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VkRenderPass VulkanRenderer::GetOrCreateRTRenderPassMsaa(
         VkFormat colorFmt, VkFormat depthFmt, bool discardContents,
-        VkSampleCountFlagBits samples)
+        VkSampleCountFlagBits samples, bool storeAll)
     {
+        // VMG-0014: storeAll only changes the discarding variant; the loading one stores already.
+        storeAll = storeAll && discardContents;
         // REMED-GFX-141: two caches, exactly like GetOrCreateRTRenderPass's own clear/load pair.
         // plan_vulkan.md VULKAN-216 / MOD-2223: keyed by colour format, depth format and sample
         // count. Render-pass compatibility requires every attachment format and sample count to
         // agree, so changing any member of that tuple genuinely needs another pass.
-        auto& cache = discardContents ? rtRenderPassMsaaByDepthFmt_ : rtRenderPassMsaaLoadByDepthFmt_;
+        auto& cache = discardContents
+            ? (storeAll ? rtRenderPassMsaaStoreAllByDepthFmt_ : rtRenderPassMsaaByDepthFmt_)
+            : rtRenderPassMsaaLoadByDepthFmt_;
         RTPassKey cacheKey{};
         cacheKey.colorFormats[0] = static_cast<int32_t>(colorFmt);
         cacheKey.depthFormat = static_cast<int32_t>(depthFmt);
@@ -5307,8 +5322,8 @@ namespace CNA::Internal::Renderers::Vulkan
         colorAtt.samples        = samples;
         colorAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                   : VK_ATTACHMENT_LOAD_OP_LOAD;
-        colorAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        colorAtt.storeOp        = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
         colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
@@ -5330,11 +5345,11 @@ namespace CNA::Internal::Renderers::Vulkan
         depthAtt.format         = depthFmt;
         depthAtt.samples        = samples;
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.storeOp        = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
         depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.stencilStoreOp = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.stencilStoreOp = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
         depthAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
                                                   : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -5405,12 +5420,17 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VkRenderPass VulkanRenderer::GetOrCreateMRTRenderPass(
         const std::vector<VkFormat>& colorFormats, VkSampleCountFlagBits sampleCount,
-        VkFormat depthFormat)
+        VkFormat depthFormat, uint32_t splitRole)
     {
         const uint32_t colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
         const bool msaa = sampleCount > VK_SAMPLE_COUNT_1_BIT;
         const bool hasDepth = depthFormat != VK_FORMAT_UNDEFINED;
+        // VMG-0014: splitRole 1 is a split head (stores every attachment) and 2 a continuation
+        // (loads what the head stored, and stores again in case the continuation is split too).
+        const bool splitStores = splitRole != 0;
+        const bool splitLoads  = splitRole == 2;
         RTPassKey key{};
+        key.splitRole = splitRole;
         key.colorCount = colorAttachmentCount;
         key.depthFormat = static_cast<int32_t>(depthFormat);
         key.samples = static_cast<uint32_t>(sampleCount);
@@ -5433,12 +5453,14 @@ namespace CNA::Internal::Renderers::Vulkan
             auto& color = atts[i];
             color.format         = colorFormats[i];
             color.samples        = sampleCount;
-            color.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            color.storeOp        = msaa ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                        : VK_ATTACHMENT_STORE_OP_STORE;
+            color.loadOp         = splitLoads ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+            color.storeOp        = (msaa && !splitStores) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                          : VK_ATTACHMENT_STORE_OP_STORE;
             color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+            color.initialLayout  = !splitLoads ? VK_IMAGE_LAYOUT_UNDEFINED
+                                 : msaa        ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                               : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             color.finalLayout    = msaa ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
                                         : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             if (msaa) {
@@ -5457,11 +5479,14 @@ namespace CNA::Internal::Renderers::Vulkan
             auto& depth = atts[depthIndex];
             depth.format         = depthFormat;
             depth.samples        = sampleCount;
-            depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depth.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depth.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+            depth.loadOp         = splitLoads ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.storeOp        = splitStores ? VK_ATTACHMENT_STORE_OP_STORE
+                                               : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.stencilLoadOp  = splitLoads ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.stencilStoreOp = splitStores ? VK_ATTACHMENT_STORE_OP_STORE
+                                               : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.initialLayout  = splitLoads ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                              : VK_IMAGE_LAYOUT_UNDEFINED;
             depth.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         }
 
@@ -15684,6 +15709,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // for the discarding case because the shared layer issues a Clear() on EVERY
             // DiscardContents bind, so an unfolded version would pay one extra full-target clear per
             // bind for a result the load action already produces.
+            // VMG-0014: a segment continuing a bind cycle a modern command split loads what the
+            // previous segment stored, so nothing may ride its load action.
+            const bool splitLoads  = splitLoadSegmentsEXT_.count(seg.id) != 0;
+            const bool splitStores = splitStoreSegmentsEXT_.count(seg.id) != 0;
             const PendingClear* folded =
                 (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder &&
                  std::none_of(
@@ -15692,7 +15721,7 @@ namespace CNA::Internal::Renderers::Vulkan
                          return event.rt.get() == seg.rt && event.segment == seg.id &&
                                 event.order < seg.clears.front()->order;
                      }) &&
-                 rt->ColorLoadOpIsClearEXT())
+                 rt->ColorLoadOpIsClearEXT() && !splitLoads)
                     ? seg.clears.front()
                     : nullptr;
             // A segment with no folded clear keeps the pre-fix fallback to the frame-global values.
@@ -15716,7 +15745,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 };
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            rtRp.renderPass      = rt->GetRenderPass();
+            rtRp.renderPass      = (splitLoads || splitStores) ? SplitRenderPassEXT(*rt, splitLoads)
+                                                           : rt->GetRenderPass();
             rtRp.framebuffer     = rt->GetFramebuffer();
             const uint32_t rtW   = static_cast<uint32_t>(rt->GetWidth());
             const uint32_t rtH   = static_cast<uint32_t>(rt->GetHeight());
@@ -15846,6 +15876,10 @@ namespace CNA::Internal::Renderers::Vulkan
         pendingClears_.clear();
         pendingTimestamps_.clear();
         pendingModernCommands_.clear();
+        // VMG-0014: every split segment was just recorded. Only the still-open segment can take
+        // more work, and it keeps its role for as long as it stays open.
+        std::erase_if(splitStoreSegmentsEXT_, [this](uint64_t id) { return id < currentSegment_; });
+        std::erase_if(splitLoadSegmentsEXT_, [this](uint64_t id) { return id < currentSegment_; });
         // REMED-GFX-151: the whole frame was just recorded, so no sampling dependency survives it.
         segmentSampledGroups_.clear();
         pendingSampledImages_.clear();
@@ -18290,7 +18324,69 @@ namespace CNA::Internal::Renderers::Vulkan
         // Compute and transfer commands are illegal inside a render pass. Advancing the logical
         // segment leaves the target bound but guarantees that later graphics work receives a new
         // native pass, with the modern command recorded between the two passes.
+        //
+        // plans/plan_vulkan_modern_graphics.md VMG-0014: the two native passes are ONE public bind
+        // cycle, so the second must continue the first rather than begin the target again. The
+        // target's own pass would clear a DiscardContents target and throw its depth away, which
+        // erased every draw issued before the dispatch. The segment being closed stores all of its
+        // attachments and the one being opened loads them -- but only when the closed segment has
+        // content (or is itself a continuation), so a dispatch issued straight after the bind still
+        // gets the bind's own load action. The backbuffer needs none of this: every backbuffer
+        // cycle after the frame's first already takes the swapchain pass's LOAD variant.
+        if (currentRT_ != nullptr)
+        {
+            const uint64_t head = currentSegment_;
+            const auto inHead = [head](const auto& entry) { return entry.segment == head; };
+            const bool headHasContent =
+                splitLoadSegmentsEXT_.count(head) != 0 ||
+                std::any_of(pendingClears_.begin(), pendingClears_.end(), inHead) ||
+                std::any_of(activeBatches_.begin(), activeBatches_.end(), inHead) ||
+                std::any_of(pending3D_.begin(), pending3D_.end(), inHead);
+            BeginRenderPassSegmentEXT(currentRT_);
+            if (headHasContent)
+            {
+                splitStoreSegmentsEXT_.insert(head);
+                splitLoadSegmentsEXT_.insert(currentSegment_);
+            }
+            return;
+        }
         BeginRenderPassSegmentEXT(currentRT_);
+    }
+
+    VkRenderPass VulkanRenderer::SplitRenderPassEXT(VulkanRTSource& rt, const bool continuation)
+    {
+        // Each variant is substituted only when the target's own pass is the ordinary variant of
+        // the same shape, so the framebuffer is compatible by construction; anything else keeps its
+        // own pass exactly as before.
+        if (auto* mrt = dynamic_cast<VulkanMRTProxy*>(&rt))
+        {
+            std::vector<VkFormat> formats;
+            for (uint32_t i = 0; i < mrt->GetColorAttachmentCount(); ++i)
+                formats.push_back(mrt->GetColorFormatEXT(i));
+            const VkSampleCountFlagBits samples = mrt->GetMsaaSampleCountEXT();
+            const VkFormat depth = mrt->GetDepthFormat();
+            if (GetOrCreateMRTRenderPass(formats, samples, depth) != mrt->GetRenderPass())
+                return mrt->GetRenderPass();
+            return GetOrCreateMRTRenderPass(formats, samples, depth, continuation ? 2u : 1u);
+        }
+        if (auto* pass = dynamic_cast<VulkanTargetPassEXT*>(&rt))
+        {
+            const bool discard = pass->loadOpIsClear;
+            if (pass->msaa)
+            {
+                if (GetOrCreateRTRenderPassMsaa(pass->colorFormat, pass->depthFormat, discard,
+                                                pass->samples) != pass->renderPass)
+                    return pass->renderPass;
+                return GetOrCreateRTRenderPassMsaa(pass->colorFormat, pass->depthFormat,
+                                                   discard && !continuation, pass->samples, true);
+            }
+            if (GetOrCreateRTRenderPass(pass->colorFormat, pass->depthFormat, discard) !=
+                pass->renderPass)
+                return pass->renderPass;
+            return GetOrCreateRTRenderPass(pass->colorFormat, pass->depthFormat,
+                                           discard && !continuation, true);
+        }
+        return rt.GetRenderPass();
     }
 
     void VulkanRenderer::QueueComputeDispatchEXT(PendingModernCommand&& command)
