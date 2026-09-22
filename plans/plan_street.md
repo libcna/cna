@@ -20,6 +20,7 @@ are fixed here, on the layer they belong to, with a regression test.
 | STREET-0005 | Vulkan: an engine-layer effect allocated device memory on every draw (shadow pass 14.8 s a frame) | ✅ |
 | STREET-0006 | Vulkan: the depth/normal prepass was the scene mirrored top to bottom; SSAO darkened mirrored geometry | ✅ |
 | STREET-0007 | Vulkan: directional shadow casters had mirrored winding; back-face culling kept the faces turned from the light | ✅ |
+| STREET-0008 | Vulkan: casters between the light and a cascade's near plane were clipped; tall buildings cast no shadow | ✅ |
 
 ---
 
@@ -175,6 +176,26 @@ and the fragment programs that include the sampling code changed). **Test:** `Vu
 must hold its top face (A, whichever way up) at the texel the receiver reads (C). Old shaders: the
 bottom face, at the mirrored texel. All 414 other `Vulkan_*`/`CNAEXT_*` tests unchanged (the two
 failures, `CNAEXT_NoPosixSetenv` and `Vulkan_DrawRangeValidation`, predate this branch).
+
+## STREET-0008 — casters nearer the light than the near plane were clipped on Vulkan
+
+**Symptom.** After STREET-0007 the Vulkan and EasyGL atlases agreed except in the two nearest
+cascades, where EasyGL held the buildings between the sun and the street and Vulkan held only the
+cars and trees under them: on Vulkan the road stood in full sun where EasyGL (and the verified
+baseline) has it in a building's shadow.
+
+**Root cause.** The cascade fit (`CascadedShadowMap::update`) stands the light `2r` back from the
+cascade's bounding sphere with an XNA orthographic projection over `[0, 4r]`, and the casters store
+`z*0.5+0.5` -- the GL mapping of a `[-w, w]` clip range, which the receiver's atlas matrix repeats.
+GL therefore keeps every caster with clip z in `[-w, 0)`, the space between the light and the near
+plane, and stores it below 0.5; that is where a 20 m facade stands when the nearest cascade is a few
+metres across. Vulkan clips z to `[0, w]`, so those casters vanished.
+
+**Fix.** The Vulkan directional and skinned casters output `(z + w) / 2`, GL's range in Vulkan's
+clip volume; the stored distance and every receiver are unchanged. **Test:**
+`Vulkan_ShadowCasterWinding` check D -- a tower whose top is nearer the light than cascade 0's near
+plane (stored depth 0.248) is in the map by its top; the Vulkan caster without the remap leaves the
+texel cleared. EasyGL passes all checks of the same program.
 
 ## cna-street's own defects (fixed in cna-street)
 

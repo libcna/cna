@@ -19,6 +19,11 @@ void main()
     // CullCounterClockwise lost the faces that face the light -- every roof and the ground -- and
     // kept the ones that face away. The receiver (shadow_sampling.glsl) reads the map top-down to
     // match.
-    gl_Position = vec4(lightSpace.x, -lightSpace.y, lightSpace.z, lightSpace.w);
+    // Depth the way GL clips it: the stored distance is z*0.5+0.5, the GL mapping of a [-w, w]
+    // clip range, and the cascade fit relies on GL keeping casters with z in [-w, 0) -- the ones
+    // between the light and the near plane, which are exactly the tall buildings between the sun
+    // and the street. Vulkan clips to [0, w], so they vanished; (z + w) / 2 keeps GL's range.
+    gl_Position = vec4(lightSpace.x, -lightSpace.y, (lightSpace.z + lightSpace.w) * 0.5,
+                       lightSpace.w);
     vDistance = lightSpace.z / lightSpace.w * 0.5 + 0.5;
 }

@@ -15,6 +15,10 @@
 //   A  the box is stored by its top face, whichever way up the map is -- the winding itself
 //   B  the validation layer stayed silent
 //   C  and it is where the receiver reads it (shadow_sampling.glsl reads the map top-down)
+//   D  a tower whose top is between the light and the cascade's near plane still casts from its
+//      top: the casters store depth the GL way (z*0.5+0.5 of a [-w, w] clip range) and the cascade
+//      fit relies on GL keeping z in [-w, 0); Vulkan clipped it, and every tall building between
+//      the sun and the street stopped casting
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = skipped (no cascades on this device).
 
@@ -116,11 +120,6 @@ class VulkanShadowCasterWindingTest : public Game
         if (ok) ++pass_; else ++fail_;
     }
 
-    VulkanRenderer& Renderer()
-    {
-        return *dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
-    }
-
 protected:
     void Initialize() override
     {
@@ -185,11 +184,44 @@ protected:
               "receiver reads " + std::to_string(stored) + ", mirrored texel "
                   + std::to_string(mirrored));
 
-        const auto& messages = Renderer().GetValidationMessagesEXT();
-        check(messages.empty(), "B no validation messages",
-              messages.empty() ? "0 captured"
-                               : std::to_string(messages.size()) + " captured, first: "
-                                     + messages.front());
+        {
+            // The same cascade refitted, and a tower instead of the box: tall enough that its top
+            // is nearer the light than the cascade's near plane, not so tall that GL clips it.
+            cascades.update(sun, view, projection);
+            const Matrix fitted = cascades.getCascadeMatrix(0);
+            float towerTop = 4.0f;
+            for (float t = 4.0f; t < 400.0f; t += 1.0f) {
+                const float z = Project(fitted, Vector3(0, t, 0)).Z;   // z*0.5+0.5 of clip z
+                if (z < 0.25f) { towerTop = t; break; }
+            }
+            const auto tower = Box(0.5f, towerTop);
+            VertexBuffer towerVb(dev, VertexPositionNormalTexture::getVertexDeclarationStatic(),
+                                 static_cast<int>(tower.size()), BufferUsage::None);
+            towerVb.SetData(tower.data(), static_cast<int>(tower.size()));
+            dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+            cascades.begin(0);
+            caster->SetUniformMat4("uWorld", &identity.M11);
+            dev.SetVertexBuffer(&towerVb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, static_cast<int>(tower.size()) / 3);
+            cascades.end();
+            atlas->GetData(texels.data(), static_cast<int>(texels.size()));
+            const Vector3 top = Project(fitted, Vector3(0, towerTop, 0));
+            const int tx = std::clamp(static_cast<int>(top.X * width), 0, width - 1);
+            const int ty = std::clamp(static_cast<int>((1.0f - top.Y) * height), 0, height - 1);
+            const float towerStored = texels[static_cast<std::size_t>(ty) * width + tx];
+            check(top.Z < 0.5f && std::fabs(towerStored - top.Z) < 0.01f,
+                  "D a caster nearer the light than the cascade's near plane still casts",
+                  "tower top " + std::to_string(towerTop) + " m at stored depth "
+                      + std::to_string(top.Z) + ", map holds " + std::to_string(towerStored));
+        }
+
+        if (auto* vulkan = dynamic_cast<VulkanRenderer*>(&dev.GetRenderer())) {
+            const auto& messages = vulkan->GetValidationMessagesEXT();
+            check(messages.empty(), "B no validation messages",
+                  messages.empty() ? "0 captured"
+                                   : std::to_string(messages.size()) + " captured, first: "
+                                         + messages.front());
+        }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         result_ = fail_ > 0 ? 1 : 0;
