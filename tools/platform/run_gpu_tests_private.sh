@@ -7,13 +7,19 @@
 #   tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
 #   e.g. tools/platform/run_gpu_tests_private.sh cmake-build-vulkan -R '^Vulkan_' -j6
 #
-# What it builds around ctest:
+#   tools/platform/run_gpu_tests_private.sh --exec <command> [arguments...]
+#   e.g. tools/platform/run_gpu_tests_private.sh --exec cmake-build-cnaext/CnaGraphicsExtTests \
+#            --gtest_filter='ComputeTest.*'
+#   (GTI-0008) runs one command -- a test binary with a gtest filter, a demo, a stress run --
+#   in exactly the same private environment, for what ctest does not register.
+#
+# What it builds around the command:
 #   tools/platform/wayland_test_server.sh     headless Weston (GL renderer), private XDG_RUNTIME_DIR,
 #                                             no session bus, DISPLAY unset
 #     + a rootful Xwayland on a display number the X server picks itself (-displayfd), which has
 #       DRI3 and therefore presents Vulkan on the real GPU -- Xvfb cannot (no DRI3)
-#     + ctest --test-dir <build-dir> with DISPLAY pointing at that Xwayland, and WAYLAND_DISPLAY at
-#       the private compositor for the native Wayland backend's tests
+#     + ctest --test-dir <build-dir> (or the --exec command) with DISPLAY pointing at that
+#       Xwayland, and WAYLAND_DISPLAY at the private compositor for the native Wayland backend
 #
 # Nothing appears on the owner's desktop. It refuses a build tree whose tests force a DISPLAY of
 # their own (CNA_TEST_DISPLAY), because ctest would override the private one with it
@@ -23,10 +29,11 @@
 # directory; exclude them (-E 'XnaPipelineGenuineRuntime|XnaDifferentialBuildTest') or run them on
 # their own, where their harness pins Xvfb :99.
 #
-# After the run, tools/platform/profile_dead_tests.py names every failed test that died on a
+# After a ctest run, tools/platform/profile_dead_tests.py names every failed test that died on a
 # graphics-profile refusal before its assertions (GTI-0007) -- a test defect, not a renderer result.
 #
-# Exit status is ctest's; 77 (skip) when no compositor or Xwayland is available.
+# Exit status is ctest's (or the command's); 77 (skip) when no compositor or Xwayland is available.
+# Every process this starts -- Weston, its shell client, Xwayland -- is gone when it returns.
 
 set -u
 
@@ -34,8 +41,13 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 
 if [ "${1:-}" = "--inside-private-compositor" ]; then
     shift
-    BUILD=$1
+    MODE=$1
     shift
+    BUILD=""
+    if [ "$MODE" = ctest ]; then
+        BUILD=$1
+        shift
+    fi
     FD_FILE="$XDG_RUNTIME_DIR/xwayland-display"
     : > "$FD_FILE"
     # -displayfd: the server chooses a free display number and writes it to fd 3 once it listens.
@@ -58,6 +70,10 @@ if [ "${1:-}" = "--inside-private-compositor" ]; then
         echo "WARNING: private display $DISPLAY has no DRI3; Vulkan tests will not be able to present" >&2
     fi
     echo "run_gpu_tests_private: DISPLAY=$DISPLAY (private Xwayland), WAYLAND_DISPLAY=$WAYLAND_DISPLAY (private Weston)" >&2
+    if [ "$MODE" = exec ]; then
+        "$@"
+        exit $?
+    fi
     STARTED="$XDG_RUNTIME_DIR/ctest-started"
     : > "$STARTED"
     ctest --test-dir "$BUILD" "$@"
@@ -74,8 +90,24 @@ fi
 
 if [ $# -lt 1 ]; then
     echo "usage: $0 <build-dir> [ctest arguments...]" >&2
+    echo "       $0 --exec <command> [arguments...]" >&2
     exit 2
 fi
+if ! command -v Xwayland >/dev/null 2>&1; then
+    echo "SKIP: Xwayland is not installed; the private GPU display needs it" >&2
+    exit 77
+fi
+
+if [ "$1" = "--exec" ]; then
+    shift
+    if [ $# -lt 1 ]; then
+        echo "usage: $0 --exec <command> [arguments...]" >&2
+        exit 2
+    fi
+    exec "$HERE/wayland_test_server.sh" --compositor weston --renderer gl \
+        "$0" --inside-private-compositor exec "$@"
+fi
+
 BUILD=$(cd "$1" 2>/dev/null && pwd) || { echo "run_gpu_tests_private: no such directory: $1" >&2; exit 2; }
 shift
 if [ ! -f "$BUILD/CMakeCache.txt" ]; then
@@ -88,10 +120,6 @@ if [ -n "$FORCED" ]; then
     echo "so ctest would override the private display. Reconfigure with -DCNA_TEST_DISPLAY= first." >&2
     exit 2
 fi
-if ! command -v Xwayland >/dev/null 2>&1; then
-    echo "SKIP: Xwayland is not installed; the private GPU display needs it" >&2
-    exit 77
-fi
 
 exec "$HERE/wayland_test_server.sh" --compositor weston --renderer gl \
-    "$0" --inside-private-compositor "$BUILD" "$@"
+    "$0" --inside-private-compositor ctest "$BUILD" "$@"
