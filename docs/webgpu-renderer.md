@@ -1271,10 +1271,22 @@ than failing. What is supported now:
   across those families, the WGSL twin of Vulkan's `shadow_sampling.glsl`. A draw with a shadow map
   takes the per-pixel path whatever `PreferPerPixelLighting` says, as on Vulkan.
 
-What a caller must still ask about, and gets a truthful `false` for:
+* **Image-based lighting** (`WMG-0022`) in `PbrEffect` and `SkinnedPbrEffect`, through a group-3
+  block that is the WGSL twin of Vulkan's `CnaIblAmbient` and EasyGL's `cnaIblAmbient` — the same
+  split-sum equation, with `roughness * (mipCount - 1)` selecting the prefiltered mip through
+  `textureSampleLevel`, and the three resources read through sampler slots 10, 11 and 12 as on the
+  other two renderers. `SupportsImageBasedLightingEXT()` answers **true**.
+* **Debug labels** (`WMG-0020`). `SetStringMarkerEXT` queues a label into the ordered stream and
+  `wgpuRenderPassEncoderInsertDebugMarker` emits it at its own position among the draws; the
+  renderer additionally opens a debug group around each of its render and compute passes.
+* **Per-instance vertex streams for a `ShaderEffect`** (`WMG-0021`), on both the descriptor and the
+  legacy contract. Instance attribute locations continue after the per-vertex declaration's element
+  count, which is EasyGL's and Vulkan's convention, so one shader source describes its inputs on all
+  three. The `InstanceFrequency` divisor is expanded per instance at queue time, because
+  wgpu-native's `WGPUVertexBufferLayout` carries a step mode and no step rate.
 
-* `SupportsImageBasedLightingEXT()` — the WGSL PBR program has no IBL path yet, so an
-  `iblIrradiance`/`iblPrefilteredSpecular`/`iblBrdfLut` set on an effect is accepted and ignored.
+What a caller must still ask about:
+
 * `ExecutesShaderEffectSourceEXT()` is **true** here, unlike Vulkan — this renderer really does
   compile the source a `ShaderEffect` carries. That source must be WGSL: `GetShaderDialectEXT()`
   answers `Wgsl`, and a test that types GLSL into a `ShaderEffect` is asking a question this
@@ -1530,11 +1542,15 @@ line-by-line Vulkan translation:
   shader module(s), pipeline layout and label, and keeps its own cache key/map. The SpriteBatch and
   MipBlit pipelines keep their own builders (not 3D families).
 - Native surface creation is performed directly from SDL3 window properties; CNA does not require
-  the separate `sdl3webgpu` compatibility library.
+  the separate `sdl3webgpu` compatibility library. It does not require SDL at all: `WMG-0024`
+  builds and runs this renderer with `CNA_ENABLE_SDL=OFF` on CNA's native Wayland and X11 backends,
+  and `libcna.so`'s direct `NEEDED` list carries `libwayland-client`/`libxkbcommon` (or the Xlib
+  set) and `libwgpu_native`, with no `libSDL2`, `libSDL3` or `libSDL3_mixer` anywhere in the
+  closure.
 
 The deliberate, collected departures from the Vulkan renderer — push constants → UBO, wireframe
-refusal, async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, the
-`SetStringMarkerEXT` no-op, and windowing handled by the shared platform — are documented in
-`docs/webgpu-vs-vulkan-deviations.md`.
+refusal, async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing
+handled by the shared platform — are documented in `docs/webgpu-vs-vulkan-deviations.md`.
+(`SetStringMarkerEXT` is no longer among them: `WMG-0020` implemented it.)
 
 See `plans/plan_webgpu.md` for task-level status and the remaining parity work.

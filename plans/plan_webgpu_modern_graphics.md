@@ -38,6 +38,16 @@ barriers, descriptor sets, queues or native handles (ADR 0001, `MOD-2202`), so n
 | WMG-0016 | `SupportsTexture3DSamplingEXT` answered false about something the renderer does | 🟩 |
 | WMG-0017 | The GPU timer measured its own overhead instead of the work | 🟩 |
 | WMG-0018 | The renderer's own 198 tests, and which failures are this workstream's | 🟩 |
+| WMG-0019 | The GPU timer measured against a workload that scales | 🟩 |
+| WMG-0020 | Debug markers: labels reach the command stream, groups are balanced | 🟩 |
+| WMG-0021 | Descriptor-effect instance streams, and the silent wrong-shader draw | 🟩 |
+| WMG-0022 | Image-based lighting on both PBR families | 🟩 |
+| WMG-0023 | ASan, UBSan and LSan over the modern path | 🟩 |
+| WMG-0024 | The SDL-free configuration, on Wayland and on X11 | 🟩 |
+| WMG-0025 | Classic: an unbound stock texture reads XNA's opaque black | 🟩 |
+| WMG-0026 | The browser route: configure, compile and link under Emscripten | 🟩 |
+| WMG-0027 | A soak over the modern resources, and the timer lifetime defect | 🟩 |
+| WMG-0028 | Final regression, and the corpus fix it found | 🟩 |
 
 ---
 
@@ -450,49 +460,365 @@ measurement or by the project's own record, and none by assertion.
 
 ---
 
-## What this workstream did not do
+# The closeout, WMG-0019..0028
 
-Recorded here rather than left for a reader to discover by running the suite.
+The owner's brief of 2026-09-22: finish the acceptance items the workstream had recorded as *not
+implemented* or *not measured*, and leave the branch merge-ready without reopening the renderer as
+a feature project. Everything below was measured on the private compositor
+(`tools/platform/run_gpu_tests_private.sh`), never on the live desktop, on the adapter WMG-0004
+names — AMD Radeon 780M (RADV PHOENIX), Mesa 25.0.7, Vulkan backend.
 
-**Not implemented, and answering a truthful `false`:**
+## WMG-0019 — the GPU timer, measured against a workload that scales
 
-* **Image-based lighting.** `SupportsImageBasedLightingEXT()` is false: the WGSL PBR program has no
-  IBL path, so an irradiance cube, a prefiltered specular cube and a BRDF LUT set on an effect are
-  accepted and ignored — the documented convention, not silence. Vulkan and EasyGL answer true.
-* **Debug markers.** `SetStringMarkerEXT` is not wired to
-  `wgpuRenderPassEncoderInsertDebugMarker`/`PushDebugGroup`.
-* **GPU timers end to end.** `CreateGpuTimerEXT` is implemented and the query set, the two empty
-  compute passes and the async map/poll are in place, but the workstream never measured a timing
-  against a known-duration dispatch, so the number it returns is not yet evidence of anything.
-* **Instance streams for a descriptor-contract effect.** An engine-layer `ShaderEffect` draw takes
-  the single-stream route; a split per-instance stream is refused by name, as it was at base.
+WMG-0017 fixed the timer and proved it with one ratio. One ratio is a weak claim: two samples drawn
+from noise around a constant satisfy it about half the time.
+`GpuTimerTest.TheNumberTracksTheWorkloadAcrossThreeSizes` asks whether the number *follows* the
+work across three full-screen-draw workloads an order of magnitude apart, and asserts four separate
+things — every reading finite and non-negative, the curve rising at every step, forty times the
+fill taking at least four times as long, and every reading smaller than the CPU wall clock that
+encloses its own submission and read-back. That last one is the bound a tick-to-nanosecond error
+breaks: WebGPU timestamps are nanoseconds by specification and need no period, while Vulkan
+multiplies by `timestampPeriod`.
 
-**Not measured, so not claimed:**
+Renderer-neutral, and each assertion fails on the behaviour WMG-0017 removed (0.2365 → 0.2006 ms):
 
-* **Sanitizers.** No ASan/UBSan/LSan build of this renderer was made or run.
-* **The SDL-free configuration.** `CNA_ENABLE_SDL=OFF` with `CNA_PLATFORM=WAYLAND` or `X11` was not
-  configured, so no `ldd`/`readelf` evidence exists that a modern WebGPU binary links no SDL. The
-  tree used here links SDL3 because MojoShader (the classic compiled-effect route) resolves it.
-* **The native X11 path.** Everything here ran on CNA's Wayland backend inside the private
-  compositor. The X11 backend was not exercised with WebGPU.
-* **The browser/Emscripten path.** The WGSL the packages now carry was never compiled under
-  `emdawnwebgpu`; only the native wgpu-native route was run.
-* **Stress and long-run stability.** The existing `webgpu_resource_lifetime_stress_test` was not
-  extended to the modern resources, and no long-running soak was done.
+| renderer | 4 draws | 40 draws | 160 draws | 40 draws, three repeats |
+|---|---|---|---|---|
+| WEBGPU | 0.0348 ms | 0.1877 ms | 0.6017 ms | 0.1551 / 0.1971 / 0.1729 |
+| VULKAN | 0.0915 ms | 0.6090 ms | 2.3711 ms | 0.5933 / 0.5939 / 0.5921 |
+| OPENGLES3 | 0.0565 ms | 0.4850 ms | 1.9445 ms | 0.4749 / 0.4752 / 0.4754 |
 
-**Found and deliberately not fixed, because it is outside this renderer:**
+## WMG-0020 — debug markers
 
-* `D3D9SpriteBatch.cpp:388`, `D3D11SpriteBatch.cpp:469`, `D3D12SpriteBatch.cpp:579` still use the
-  pre-`SOFTWARE-255` `.` spelling of `EffectPassCollection::operator[]`, exactly as the WebGPU sites
-  did before `WMG-0001`. Those are Windows renderers and were not built or touched here.
-* `vulkan_mrt_mip_finalization_test.cpp` and `vulkan_cube_face_readback_dependency_test.cpp` both
-  `#error` unless `CNA_RENDERER_VULKAN` is defined, which in a multi-renderer tree is only the
-  **default** renderer's macro. So in `cmake-build-webgpu` (default WEBGPU, Vulkan compiled in) they
-  fail to compile. They are registered by CMake without a default-renderer condition; every other
-  target in that tree builds. Pre-existing, unrelated to this workstream, and a Vulkan-examples
-  CMake question rather than a WebGPU one.
+`SetStringMarkerEXT` took `IGraphicsRenderer`'s no-op body. It is the **only** debug-label entry
+point CNA has — there is no public push/pop group API on the interface, and none was added.
 
-**A trap worth recording for the next session:** compiling a large translation unit while the
-private-compositor test run is live got the test process OOM-killed part-way through
-`DepthNormalPrepassTest` — silently, with nothing in the log but `Killed`. Build, then test; never
-both.
+A label is queued into the ordered stream rather than emitted at the call, for the reason every
+public graphics command in this renderer is: nothing is recorded until the bind cycle flushes. That
+makes it a third `OrderedKind` beside REMED-GFX-156's `Clear`, differing in the one way that
+matters to `BuildPassSegments` — a `Clear` is observable in the pixels and therefore a pass
+boundary, a label is not, so it extends the segment it landed in and
+`wgpuRenderPassEncoderInsertDebugMarker` emits it inline. It does not advance
+`nativeDrawIssueCount_`, because WEBGPU-115 measures a refused draw's "nothing reached the GPU"
+with that counter and a label is not work.
+
+Debug groups around the renderer's own render and compute passes come with it — the role
+`VulkanRenderer`'s `beginDebugRegion`/`endDebugRegion` lambdas play. Counts are exposed as
+`GetRecordedDebugMarkerCountEXT` and its two region siblings, the shape `Vulkan_GpuTimerDebug`
+already reads Vulkan's.
+
+`WebGPU_DebugMarker`, 7/7. Every check is a **difference** between two measurements rather than an
+absolute, so a renderer that ignored the labels would leave the difference at zero: one label
+emitted once; three labels around three draws, none coalesced; the render pass opened a group and
+every group opened was closed; a compute dispatch opens exactly one and closes it; a null and an
+empty label insert nothing; a label with no pass behind it emits nothing and is safe.
+
+## WMG-0021 — instance streams for a ShaderEffect, and what measuring found
+
+WMG-0018 recorded this as a refusal — "a split per-instance stream is refused by name". Measuring
+it found something worse: **it was not refused at all.** `DrawInstancedPrimitivesEx` never looked at
+`params.customEffectRenderer`, unlike `DrawPrimitivesEx` and `DrawIndexedPrimitivesEx` which have
+branched on it since WEBGPU-76, so an instanced draw through a `ShaderEffect` fell into the stock
+`instanced3d` family and was rendered with CNA's own shader instead of the game's. A silent
+wrong-shader result: the MOD-1699 failure mode again, the draw succeeding and drawing the wrong
+thing.
+
+The contract is XNA's own and there is only one of it — `SetVertexBuffers` with an
+`InstanceFrequency` above zero, then `DrawInstancedPrimitives` — and nothing in it is particular to
+a stock effect. `CNA::Graphics::InstancedRendererEXT` documents that an effect wanting its tint
+stream *"must be a `ShaderEffect` whose vertex input declares it"*; `CNA::Graphics::ParticleSystem`
+is a `ShaderEffect` with an instance **count** and no instance stream at all; Vulkan and EasyGL both
+implement it. So it is implemented rather than refused.
+
+The route the other two renderers take, followed: the custom-effect branch moves ahead of the
+instance-stream search, because a `ShaderEffect` draw with no per-instance stream is still an
+instanced draw and the old fallback flattened `ParticleSystem` to a single instance; instance
+attribute locations continue after the per-vertex declaration's element count and then across the
+instance streams in order, which is EasyGL's `PerVertexLocationCount` convention and the one Vulkan
+copied at VULKAN-168; the `InstanceFrequency` divisor is expanded into one record per instance at
+queue time, because wgpu-native v29.0.1.1's `WGPUVertexBufferLayout` carries a step **mode** and no
+step **rate**; each stream's stride and attributes join the pipeline cache key, or an instanced
+draw and an otherwise identical non-instanced one would share a cached pipeline; and MOD-2237's
+supplied-location rule now counts an instance attribute as supplied, which it could not before
+because there was no instance half to supply it from.
+
+Both contracts take it — the descriptor route filters attributes through its WGSL reflection, the
+legacy route has none and offers every declared attribute. The per-**vertex** split is still refused
+by name (`RequireSingleStreamRouteEXT`), unchanged: a different gap, untouched.
+
+`WebGPU_ShaderEffectInstanced`, 6/6, on four instances differing **only** in their per-instance
+record, so a draw that ignored the stream, re-read one record, or ran the stock shader each fails a
+different check: four distinct quadrants; each quadrant the colour its own record named; a second
+per-instance stream reaching its own locations (the tint shape); an identical second draw reusing
+the pipeline and agreeing; an instanced draw with no instance stream running the game's shader;
+`InstanceFrequency` 2 advancing the record every second instance.
+`InstancedRendererEXT`, `ParticleSystem`, `GpuInstanceCuller` and the instanced-draw tests: 28/28.
+
+## WMG-0022 — image-based lighting
+
+`SupportsImageBasedLightingEXT()` was the interface default, `false`, which was truthful: an
+irradiance cube, a prefiltered specular cube and a BRDF table set on a `PbrEffect` were accepted and
+ignored. Vulkan and EasyGL answered true.
+
+`webgpu_shaders::kIblSampling` is the WGSL twin of `VulkanRenderer`'s `CnaIblAmbient` and EasyGL's
+`cnaIblAmbient` — the same split-sum equation term for term, so the three renderers answer an IBL
+query from one equation rather than three readings of one description. The mip for a given
+roughness is `roughness * (mipCount - 1)`, which is
+`CNA::Graphics::EnvironmentProcessor::mipForRoughness` and what `iblPrefilteredMipCount` documents.
+
+At **group 3**, appended to both PBR families exactly as WMG-0014 appends `kShadowSampling` at
+group 2. The three resources are read through sampler slots 10, 11 and 12, where Vulkan's
+`PbrSlotSamplersRawEXT()` and EasyGL's texture units read them (MOD-1225).
+
+Three things particular to WebGPU: `textureSampleLevel` throughout, because the prefiltered tap
+needs an explicit LOD and every tap sits behind the function's early return, which is non-uniform
+control flow; a draw with no environment still binds all seven bindings, because a pipeline
+statically uses every binding its layout declares; and the state is resolved to values at the public
+draw call (REMED-GFX-167), so an environment set before the flush cannot change an already-queued
+draw. The ambient line is a **sum**, not a branch, because the engine already zeroed `ambientColor`
+when a valid bundle is bound (MOD-1226), and occlusion multiplies the ambient/IBL term only
+(MOD-1227). `ValidateAllShadersEXT` compiles the four PBR variants with the block appended, for the
+reason WMG-0017 had to state about the shadow block.
+
+`CNAEXT_ImageBasedLighting` 8/8 — ahead of Vulkan's 7/7 and level with EasyGL — and
+`CNAEXT_GltfPbr` and `CNAEXT_Showcase` both un-SKIP and pass. The check worth naming is the white
+furnace: a white environment on a white non-metal returns close to the energy it received, at four
+roughness points.
+
+## WMG-0023 — ASan, UBSan and LSan
+
+Built in the sanctioned reusable `build-asan/` and `build-ubsan/`, configured
+`CNA_GRAPHICS_RENDERER=WEBGPU`, `CNA_PLATFORM=WAYLAND`, `CNA_ENABLE_SDL=OFF`, `CNA_CNAEXT=ON`,
+Debug, ccache launchers.
+
+| | suite | result |
+|---|---|---|
+| **ASan** | 90 modern engine tests (compute, storage buffers and textures, indirect, GPU timer, device loss, multi-device, ShaderEffect, shader packages, particles) | **0 defects** |
+| **ASan** | `cna_test_webgpu_modern_stress`, 310 cycles | **0 defects** |
+| **UBSan** | the same 90 tests, `-fno-sanitize-recover=all` | **0 runtime errors** |
+| **UBSan** | the same stress run, 300 cycles | **0 runtime errors**, 6/6 |
+| **LSan** | the stress run at 100 and at 400 cycles | see below |
+
+LeakSanitizer reports **1 873 223 bytes in 1 110 allocations**, and the number that settles what
+they are is that it is *the same number at both scales*: byte for byte, allocation for allocation,
+at one hundred cycles and at four hundred. A resource-lifetime leak would have scaled with four
+times the create/dispose traffic. The stacks agree — they run through
+`wgpu_core::hub::Hub::new`, `wgpu_core::track::TrackerIndexAllocators::new` and
+`amdgpu_va_range_alloc2`, with CNA frames only on the device-**construction** path. One-time
+provider and driver allocations never freed at process exit; **0 CNA leaks**. LSan is demonstrably
+working here, since it reported them.
+
+## WMG-0024 — the SDL-free configuration, and two defects it found
+
+`CNA_ENABLE_SDL=OFF` with `CNA_GRAPHICS_RENDERER=WEBGPU` had never been configured. Configuring it
+found two things, both latent since the code was written.
+
+The configure failed outright: two WebGPU example targets borrow an EasyGL source that reaches for
+SDL3 itself and linked `SDL3::SDL3` unconditionally. Then the link succeeded and the **run** failed,
+which is worse: `IssueDescriptorEffectDrawEXT` and `IssueDescriptorSpriteEXT` had drifted inside the
+`#if defined(CNA_WEBGPU_COMPILED_EFFECTS)` block while their only call sites stayed outside it, so
+`libcna.so` carried two undefined symbols that the dynamic linker did not resolve until the first
+`ShaderEffect` draw reached them. They are descriptor-contract draws (WMG-0008/0009/0011), not
+compiled-effect ones; the block now begins after them.
+
+`libcna.so`'s direct `NEEDED` entries, which is the evidence that matters:
+
+| tree | direct dependencies |
+|---|---|
+| WAYLAND | `libzstd`, FFmpeg (`libavcodec`/`avformat`/`avutil`/`swresample`, optional video), **`libwayland-client`**, **`libxkbcommon`**, **`libwgpu_native`**, `libstdc++`, `libm`, `libgcc_s`, `libc`, `ld-linux` |
+| X11 | the same, with `libX11`/`libXext`/`libXi`/`libXrandr`/`libXcursor`/`libXau`/`libXss` in place of the two Wayland ones |
+
+No `libSDL2`, `libSDL3` or `libSDL3_mixer` in either, nor anywhere in the `ldd` closure of
+`libcna.so`, `CnaGraphicsExtTests`, `cna_test_cnaext_ibl` or `cna_test_webgpu_modern_stress`. The
+X11 entries in the *Wayland* tree's transitive `ldd` come from FFmpeg's `libva-x11`, not from CNA —
+a provider dependency, classified separately.
+
+Measured on both, real hardware adapter logged at device creation, never a software one:
+
+| | Wayland (private Weston) | X11 (private rootful Xwayland, DRI3) |
+|---|---|---|
+| `CNAEXT_ImageBasedLighting` | 8/8 | 8/8 |
+| modern stress, 1010 cycles | 6/6, RSS +16 KiB | 6/6, RSS +24 KiB |
+| `CnaGraphicsExtTests` | — | **933 pass / 0 fail / 29 skip** |
+
+## WMG-0025 — the classic gap WMG-0018 recorded
+
+Microsoft XNA 4.0 reads an unbound stock-effect texture as opaque black, and this renderer had no
+null-texture handling at all: every classic family bound the neutral-white `tex * colour` identity,
+which is glTF's default material (GLTF-474) rather than XNA's rule. GSC-0004 corrected DirectX11,
+DirectX12 and EasyGL; VKPAR-0004 corrected Vulkan; WebGPU was the renderer nobody had reached.
+
+Eight bind sites take the new 1×1 opaque-black 2D and cube: `QueueLitTexturedDraw`,
+`QueueAlphaTestDraw`, `QueueTexturedDraw`, `QueueSkinnedDraw`, both `DualTextureEffect` layers and
+both `EnvironmentMapEffect` slots. White stays where white is right — the PBR family's glTF
+fallbacks, a `ShaderEffect`'s own sampler slots, the compiled-effect route. Bound
+*unconditionally*, which is Vulkan's reading rather than EasyGL's: the WGSL stock programs already
+carry the identity where it belongs, as
+`select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)`.
+
+`StockEffectNullTextureTest` — five renderer-neutral cases that had skipped WebGPU by name — 5/5,
+and `WebGPU_Parity_dual_texture_terms` passes, having failed on its null-texture claims since
+`e05b3d0f0` (2026-09-13), an ancestor of this branch's base. Small and isolated, so fixed here
+rather than deferred as `WEBGPU-CLASSIC-F1`.
+
+## WMG-0026 — the browser route
+
+emsdk 6.0.9, the repository's own supported path (`cmake/ThirdPartyWebGPU.cmake` selects
+Emscripten's `--use-port=emdawnwebgpu` when `EMSCRIPTEN`), build directory
+`cmake-build-wasm-webgpu` as `scripts/run-webgpu-browser-test.sh` names it.
+
+```
+emcmake cmake -S . -B cmake-build-wasm-webgpu -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DCNA_GRAPHICS_RENDERER=WEBGPU -DCNA_CNAEXT=ON -DCNA_BUILD_EXAMPLES=ON
+cmake --build cmake-build-wasm-webgpu --target cna_demo_2d -j6
+```
+
+Configure ✅, compile ✅, link ✅ — `libcna_renderer_webgpu.a` and `libcna_graphics_ext.a` both
+compile to WebAssembly, and `cna_demo_2d.{html,js,wasm,data}` links (7.5 MB wasm). The wasm carries
+43 WGSL entry-point markers, so the stock shader packages WMG-0006 generated reach the browser
+build, and the JS references `navigator.gpu`/`requestAdapter`.
+
+**Runtime was not tested**, and nothing here claims it was. A compile smoke says the code builds for
+the browser, not that it renders in one.
+
+## WMG-0027 — the soak, and the defect it found
+
+`WebGPU_ModernStress`. `webgpu_resource_lifetime_stress_test` (WEBGPU-191) does this for the classic
+path; it predates every modern resource, so compute shaders, storage buffers, storage textures,
+indirect arguments and GPU timers had never been stressed. The oracle is the renderer's own
+uncaptured-error count rather than a crash or a pixel, because a test that only checked for a crash
+would pass on a renderer quietly submitting invalid work.
+
+It found a defect on its second run. WMG-0017 made every render pass carry the open timer's query
+set until the range closes, and the renderer held that query set as a **raw handle**. A `GpuTimer`
+destroyed while its range is open — which is what any exception between `begin()` and `end()` does —
+released the query set and left the renderer naming it, and the next pass built after that
+referenced freed memory. wgpu-native reports that as a *non-unwinding panic* inside
+`wgpuCommandEncoderBeginRenderPass`: a recoverable error turned into an abort at the next `Present`,
+with the original error never reported. That is exactly how it surfaced — the stress test's own
+first failure was invisible behind it. `ForgetOpenGpuTimerEXT` closes it, from the timer renderer's
+destructor, and only for the timer that owns the open range.
+
+3010 cycles, each creating, using, reading back and destroying every modern resource, with a
+render-target resize every 64th:
+
+| | |
+|---|---|
+| RSS | 157 832 → 157 852 KiB (**+20 KiB**) |
+| file descriptors | 22 → 22 |
+| threads | 22 → 22 |
+| uncaptured provider errors | 0 → 0 |
+| device lost | no |
+| checks | 6/6, and the last cycle's readback holds what its own dispatch wrote |
+
+Registered at 512 cycles so an ordinary ctest run can afford it.
+
+## WMG-0028 — the final regression, and the corpus fix it found
+
+Building `cmake-build-vulkan` for the classic Vulkan run found that WMG-0007's WGSL reflection suite
+had joined **every** renderer's `CnaTests` through `cmake/UnitTests.cmake`'s recursive glob, and it
+includes a header whose include root arrives with the WebGPU renderer target. Any non-WebGPU
+configure produced a `CnaTests` that could not compile. Excluded exactly as `plans/plan_fna3d.md`'s
+suite already is, and for the reason that entry states in the same file. Nothing had configured a
+non-WebGPU tree since WMG-0007 landed.
+
+### Modern conformance, final
+
+`CnaGraphicsExtTests`, same binary, runtime renderer selection, private compositor:
+
+| renderer | total | pass | fail | skip | against the pre-closeout row |
+|---|---|---|---|---|---|
+| **WEBGPU** | 962 | **933** | **0** | **29** | 932/0/29 of 961, +1 new test |
+| VULKAN | 962 | 930 | 0 | 32 | 929/0/32 of 961, +1 |
+| OPENGLES3 | 962 | 954 | 0 | 8 | 953/0/8 of 961, +1 |
+
+The one added test is WMG-0019's. No renderer gained a failure and no renderer's skip count moved.
+
+**The WEBGPU row is measured in four gtest shards.** In one process the run is OOM-killed at about
+five hundred tests on this 30 GB machine, and the reason is measured rather than guessed: over the
+same ~200 tests, peak RSS is **1 115 MB on WEBGPU against 167 MB on VULKAN** from the same binary.
+The suite builds a `GraphicsDevice` per test and each one costs a wgpu-native hub; it is a harness
+property, not a renderer result. Every test passes when the run is sharded, and WMG-0027 shows no
+growth *within* a device — +20 KiB over 3010 cycles.
+
+### Classic WebGPU
+
+`ctest -R '^WebGPU'` is now **201** tests (198 plus WMG-0020/0021/0027's three, all passing) with
+**13** failures, against WMG-0018's 14 of 198. The difference is exactly
+`WebGPU_Parity_dual_texture_terms`, fixed by WMG-0025. **No new failure.** The remaining thirteen
+are the ones WMG-0018 established pre-existing, by measurement or by the project's own record.
+
+### The rest
+
+| suite | result |
+|---|---|
+| Classic Vulkan, `ctest -R '^Vulkan_'` in `cmake-build-vulkan` | **370 / 371**; `Vulkan_DrawRangeValidation` fails identically with `modules/graphics` and `modules/graphics-ext` checked out at `origin/next`, so it is pre-existing and measured, not assumed |
+| CNAEXT examples (`-L CnaExt`) | 32 registered, **30 pass**, 2 pre-existing failures |
+
+The two CNAEXT failures, each established rather than asserted:
+
+* `CNAEXT_LeakLoop` segfaults on WEBGPU and passes on VULKAN and OPENGLES3. Building it from this
+  branch's own pre-closeout commit `63e208bed` reproduces the segfault exactly, so it is not this
+  closeout's. It is a **genuine pre-existing WebGPU defect** and the one item below that is real
+  renderer debt rather than environment.
+* `CNAEXT_NoPosixSetenv` names `::unsetenv` call sites in `modules/platform/src/Wayland/` and
+  `modules/platform/tests/`, none of which this branch touches (`git log origin/next..HEAD` over
+  those paths is empty). It belongs to the Wayland workstream.
+
+### The private-display policy, proven rather than asserted
+
+Every run above went through `tools/platform/run_gpu_tests_private.sh`, which prints what it built:
+
+```
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-<pid> (private Weston)
+[WebGPU] Adapter: AMD Radeon 780M (RADV PHOENIX) (Mesa 25.0.7-2+deb13u1), Vulkan backend,
+         integrated GPU, vendor 0x1002 device 0x15bf
+```
+
+The display number is one the X server chose itself (`-displayfd`) and the Wayland socket is named
+after the runner's pid, so neither can be `:0` or `wayland-0`. `CNA_TEST_DISPLAY` is empty in every
+tree used here, which is what the runner refuses to proceed without. The compositor, its shell
+client and Xwayland are all torn down when the runner returns.
+
+### Build sizes
+
+| tree | size |
+|---|---|
+| `cmake-build-webgpu` (the working tree, unchanged by this closeout) | 6.7 GB |
+| `cmake-build-webgpu-nosdl` (Wayland, SDL-free, Release) | 172 MB |
+| `cmake-build-webgpu-x11` (X11, SDL-free, Release) | 171 MB |
+
+Well inside the 15 GB the brief asks for. The two SDL-free trees are small because they are Release
+and share one `libcna.so`.
+
+---
+
+## What is left, and what kind of thing it is
+
+Classified rather than listed, so a reader can tell debt from environment.
+
+**Genuine renderer debt (classic WebGPU).** `CNAEXT_LeakLoop` segfaults on WEBGPU and on no other
+renderer, established pre-existing by building it at `63e208bed`. The thirteen `ctest -R '^WebGPU'`
+failures WMG-0018 enumerated, minus the one WMG-0025 fixed.
+
+**Provider limitation.** LSan's 1 873 223 bytes are wgpu-native's and the AMD driver's one-time
+allocations, proven by being identical at one hundred and at four hundred cycles. A `GraphicsDevice`
+costs roughly 1.1 GB of peak RSS across a 200-test run on WEBGPU against Vulkan's 167 MB, which is
+what forces the engine-layer suite to be sharded on a 30 GB machine.
+
+**Browser runtime validation.** Not done, and not claimed. WMG-0026 is a compile smoke: configure,
+compile and link under `emdawnwebgpu`. Running it in a browser is its own task.
+
+**Test debt.** The `ShaderEffect`-with-instance-stream coverage added by WMG-0021 is a WebGPU
+example, because the tree has no renderer-neutral suite for that combination — Vulkan's and
+EasyGL's are renderer-specific example binaries too. A renderer-neutral conformance case would need
+a multi-language shader package.
+
+**Environment.** `Vulkan_MrtMipFinalization` and `Vulkan_CubeFaceReadbackDependency` still `#error`
+unless `CNA_RENDERER_VULKAN` is the *default* renderer, so they do not build in a multi-renderer
+tree; a Vulkan-examples CMake question, recorded by WMG-0018 and untouched here.
+`CNAEXT_NoPosixSetenv` belongs to the Wayland workstream.
+
+**Not reopened, deliberately.** The per-**vertex** multi-stream split on the custom `ShaderEffect`
+route is still refused by name (`RequireSingleStreamRouteEXT`). It is a different gap from
+WMG-0021's, it was refused before this closeout and it is refused after, honestly and by name.
