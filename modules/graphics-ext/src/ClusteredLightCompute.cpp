@@ -67,6 +67,10 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "clustered_light_compute/assign.vulkan.comp.spv",
                                   ToBytes(kAssignVulkanComputeSpirV)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "clustered_light_compute/assign.vulkan.comp.wgsl",
+                                  std::string(kAssignVulkanComputeWgsl)),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {

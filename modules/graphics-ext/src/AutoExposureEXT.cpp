@@ -57,6 +57,10 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "auto_exposure/reduction.vulkan.comp.spv",
                                   ToBytes(kReductionVulkanComputeSpirV)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "auto_exposure/reduction.vulkan.comp.wgsl",
+                                  std::string(kReductionVulkanComputeWgsl)),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {

@@ -29,8 +29,10 @@ namespace CNA::Tests::Transparency
         [[nodiscard]] inline CNA::Graphics::ShaderPackageEXT CreatePackage(
             const std::string_view esVertex, const std::string_view desktopVertex,
             const std::uint32_t (&vulkanVertex)[VulkanVertexSize],
+            const std::string_view wgslVertex,
             const std::string_view esFragment, const std::string_view desktopFragment,
-            const std::uint32_t (&vulkanFragment)[VulkanFragmentSize], const char* label)
+            const std::uint32_t (&vulkanFragment)[VulkanFragmentSize],
+            const std::string_view wgslFragment, const char* label)
         {
             using CNA::Graphics::ShaderCodeEXT;
             using namespace CNA::Tests::TransparencyGenerated;
@@ -60,6 +62,14 @@ namespace CNA::Tests::Transparency
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   std::string(label) + ".vulkan.frag.spv",
                                   ToBytes(vulkanFragment)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  std::string(label) + ".wgsl.vert.wgsl",
+                                  std::string(wgslVertex)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  std::string(label) + ".wgsl.frag.wgsl",
+                                  std::string(wgslFragment)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
@@ -71,9 +81,11 @@ namespace CNA::Tests::Transparency
         return Detail::CreatePackage(kBasicEsVertexSource,
                                      kBasicDesktopVertexSource,
                                      kBasicVulkanVertexSpirV,
+                                     kBasicVulkanVertexWgsl,
                                      kEmitterEsFragmentSource,
                                      kEmitterDesktopFragmentSource,
                                      kEmitterVulkanFragmentSpirV,
+                                     kEmitterVulkanFragmentWgsl,
                                      "transparency/emitter");
     }
 
@@ -83,9 +95,11 @@ namespace CNA::Tests::Transparency
         return Detail::CreatePackage(kBasicEsVertexSource,
                                      kBasicDesktopVertexSource,
                                      kBasicVulkanVertexSpirV,
+                                     kBasicVulkanVertexWgsl,
                                      kFlatEsFragmentSource,
                                      kFlatDesktopFragmentSource,
                                      kFlatVulkanFragmentSpirV,
+                                     kFlatVulkanFragmentWgsl,
                                      "transparency/flat");
     }
 
@@ -95,9 +109,11 @@ namespace CNA::Tests::Transparency
         return Detail::CreatePackage(kDirectEsVertexSource,
                                      kDirectDesktopVertexSource,
                                      kDirectVulkanVertexSpirV,
+                                     kDirectVulkanVertexWgsl,
                                      kWeightProbeEsFragmentSource,
                                      kWeightProbeDesktopFragmentSource,
                                      kWeightProbeVulkanFragmentSpirV,
+                                     kWeightProbeVulkanFragmentWgsl,
                                      "transparency/weight_probe");
     }
 }

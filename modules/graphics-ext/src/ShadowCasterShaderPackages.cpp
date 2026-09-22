@@ -39,6 +39,12 @@ namespace CNA::Graphics::detail
         using Generated::kSpotDesktopVertexSource;
         using Generated::kSpotEsVertexSource;
 
+        using Generated::kDirectionalVulkanFragmentWgsl;
+        using Generated::kDirectionalVulkanVertexWgsl;
+        using Generated::kPunctualVulkanFragmentWgsl;
+        using Generated::kPunctualVulkanVertexWgsl;
+        using Generated::kSkinnedVulkanVertexWgsl;
+
         struct TextStage
         {
             std::string_view source;
@@ -61,7 +67,8 @@ namespace CNA::Graphics::detail
         [[nodiscard]] ShaderPackageEXT MakePackage(
             const TextStage& esVertex, const TextStage& esFragment,
             const TextStage& desktopVertex, const TextStage& desktopFragment,
-            const SpirVStage& vulkanVertex, const SpirVStage& vulkanFragment)
+            const SpirVStage& vulkanVertex, const SpirVStage& vulkanFragment,
+            const TextStage& wgslVertex, const TextStage& wgslFragment)
         {
             return ShaderPackageEXT(
                 {
@@ -83,6 +90,13 @@ namespace CNA::Graphics::detail
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
                                   CNA::ShaderStageEXT::Fragment, "main", vulkanFragment.label,
                                   ToBytes(vulkanFragment)),
+                    // plans/plan_webgpu_modern_graphics.md WMG-0005: the same program as WGSL.
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Vertex, "main", wgslVertex.label,
+                                  std::string(wgslVertex.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Fragment, "main", wgslFragment.label,
+                                  std::string(wgslFragment.source)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
@@ -98,7 +112,9 @@ namespace CNA::Graphics::detail
             {kDirectionalVulkanVertexSpirV, kDirectionalVulkanVertexSpirVByteSize,
              "shadow_caster/directional.vulkan.vert.spv"},
             {kDirectionalVulkanFragmentSpirV, kDirectionalVulkanFragmentSpirVByteSize,
-             "shadow_caster/directional.vulkan.frag.spv"});
+             "shadow_caster/directional.vulkan.frag.spv"},
+            {kDirectionalVulkanVertexWgsl, "shadow_caster/directional.vulkan.vert.wgsl"},
+            {kDirectionalVulkanFragmentWgsl, "shadow_caster/directional.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateSkinnedDirectionalShadowCasterPackage()
@@ -111,7 +127,9 @@ namespace CNA::Graphics::detail
             {kSkinnedVulkanVertexSpirV, kSkinnedVulkanVertexSpirVByteSize,
              "shadow_caster/skinned.vulkan.vert.spv"},
             {kDirectionalVulkanFragmentSpirV, kDirectionalVulkanFragmentSpirVByteSize,
-             "shadow_caster/directional.vulkan.frag.spv"});
+             "shadow_caster/directional.vulkan.frag.spv"},
+            {kSkinnedVulkanVertexWgsl, "shadow_caster/skinned.vulkan.vert.wgsl"},
+            {kDirectionalVulkanFragmentWgsl, "shadow_caster/directional.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateCubeShadowCasterPackage()
@@ -124,7 +142,9 @@ namespace CNA::Graphics::detail
             {kPunctualVulkanVertexSpirV, kPunctualVulkanVertexSpirVByteSize,
              "shadow_caster/punctual.vulkan.vert.spv"},
             {kPunctualVulkanFragmentSpirV, kPunctualVulkanFragmentSpirVByteSize,
-             "shadow_caster/punctual.vulkan.frag.spv"});
+             "shadow_caster/punctual.vulkan.frag.spv"},
+            {kPunctualVulkanVertexWgsl, "shadow_caster/punctual.vulkan.vert.wgsl"},
+            {kPunctualVulkanFragmentWgsl, "shadow_caster/punctual.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateSpotShadowCasterPackage()
@@ -137,7 +157,9 @@ namespace CNA::Graphics::detail
             {kPunctualVulkanVertexSpirV, kPunctualVulkanVertexSpirVByteSize,
              "shadow_caster/punctual.vulkan.vert.spv"},
             {kPunctualVulkanFragmentSpirV, kPunctualVulkanFragmentSpirVByteSize,
-             "shadow_caster/punctual.vulkan.frag.spv"});
+             "shadow_caster/punctual.vulkan.frag.spv"},
+            {kPunctualVulkanVertexWgsl, "shadow_caster/punctual.vulkan.vert.wgsl"},
+            {kPunctualVulkanFragmentWgsl, "shadow_caster/punctual.vulkan.frag.wgsl"});
     }
 }
 

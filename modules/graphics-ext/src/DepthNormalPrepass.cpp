@@ -100,6 +100,17 @@ float cnaUnpackDepth(vec4 channels) {
                 : SpirVStage{kPrepassVulkanFragmentSpirV,
                              kPrepassVulkanFragmentSpirVByteSize,
                              "depth_normal_prepass/prepass.vulkan.frag.spv"};
+            // plans/plan_webgpu_modern_graphics.md WMG-0005: the WGSL the generator derives from the
+            // same Vulkan GLSL, so a WGSL renderer runs this program rather than skipping the pass.
+            const TextStage wgslVertex = skinned
+                ? TextStage{kSkinnedVulkanVertexWgsl,
+                            "depth_normal_prepass/skinned.vulkan.vert.wgsl"}
+                : TextStage{kRigidVulkanVertexWgsl, "depth_normal_prepass/rigid.vulkan.vert.wgsl"};
+            const TextStage wgslFragment = velocityOutputs
+                ? TextStage{kPrepassVelocityVulkanFragmentWgsl,
+                            "depth_normal_prepass/prepass_velocity.vulkan.frag.wgsl"}
+                : TextStage{kPrepassVulkanFragmentWgsl,
+                            "depth_normal_prepass/prepass.vulkan.frag.wgsl"};
 
             return ShaderPackageEXT(
                 {
@@ -123,6 +134,12 @@ float cnaUnpackDepth(vec4 channels) {
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
                                   CNA::ShaderStageEXT::Fragment, "main", vulkanFragment.label,
                                   ToBytes(vulkanFragment)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Vertex, "main", wgslVertex.label,
+                                  std::string(wgslVertex.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Fragment, "main", wgslFragment.label,
+                                  std::string(wgslFragment.source)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
