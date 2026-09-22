@@ -273,20 +273,21 @@ Both renderer-neutral: on VULKAN and OPENGLES3 every one of these tests keeps th
 | | total | pass | fail | skip |
 |---|---|---|---|---|
 | WEBGPU at base | 961 | 685 | 31 | 245 |
-| WEBGPU now | 961 | **879** | **0** | **82** |
-| VULKAN (unchanged) | 961 | 929 | 0 | 32 |
-| OPENGLES3 (unchanged) | 961 | 953 | 0 | 8 |
+| WEBGPU after WMG-0010..0012 | 961 | 879 | 0 | 82 |
+| WEBGPU after WMG-0013 (indirect) | 961 | 890 | 0 | 71 |
+| **WEBGPU final** (WMG-0014..0017) | 961 | **932** | **0** | **29** |
+| VULKAN (re-measured, unchanged) | 961 | 929 | 0 | 32 |
+| OPENGLES3 (re-measured, unchanged) | 961 | 953 | 0 | 8 |
 
-**No failures.** The 82 skips are what is left to implement, and every one names itself:
+The final WEBGPU row is **ahead of Vulkan** on this suite, on a renderer that began the workstream
+with 31 failures and a third of the suite declining to run. Vulkan and EasyGL were re-measured after
+every change to shared engine code and are byte-for-byte on their own baselines.
 
-| count | what it skips for |
-|---|---|
-| 31 | `SupportsShadowSamplingEXT` is false — the stock WGSL effects do not sample a shadow map yet |
-| 12 | no indirect draw route (`IndirectDrawTest` 6, `GpuInstanceCullerTest` 6) |
-| 5 | `ComputeShaderTests` packages that offer only SPIR-V compute |
-| 4 | `VolumetricFogTest` cannot select both of its packages |
-| 3 | `EffectPassTest` / `ShaderPackageSelectionEXTTest` language-list expectations |
-| 27 | skipped on Vulkan too (the inline-GLSL probes of WMG-0012 and the shared capability skips) |
+**No failures**, and the 29 remaining skips are *fewer* than Vulkan's 32. They are the shape Vulkan's
+are: tests that type GLSL into a `ShaderEffect` (WMG-0012), tests whose negative case needs a
+renderer *without* a capability this one now has, and the handful of shared capability skips. What
+the workstream removed from this column, in order: 31 shadow-reception skips (WMG-0014), 12 indirect
+(WMG-0013), 5 compute-package, 4 volumetric-fog and 3 language-list skips (WMG-0015).
 
 ## WMG-0013 — indirect draws
 
