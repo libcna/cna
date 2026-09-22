@@ -28,6 +28,9 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <string>
 
@@ -225,6 +228,145 @@ TEST(GpuTimerTest, MoreWorkTakesMoreGpuTime)
     ASSERT_GE(many, 0.0);
     std::printf("    4 full-screen draws %.4f ms, 40 draws %.4f ms\n", few, many);
     EXPECT_GT(many, few * 2.0) << "ten times the fill did not take at least twice as long";
+}
+
+// ── The deterministic scaling validation ────────────────────────────────────
+
+TEST(GpuTimerTest, TheNumberTracksTheWorkloadAcrossThreeSizes)
+{
+    // `MoreWorkTakesMoreGpuTime` compares two workloads, which a timer can satisfy by accident:
+    // two samples drawn from noise around one constant pass it roughly half the time. This asks
+    // the stronger question -- does the number *follow* the work -- across three sizes an order of
+    // magnitude apart, and it asks it about the shape of the whole curve rather than one ratio.
+    //
+    // It exists because a timer can be wrong in a way that still returns a number. On WebGPU the
+    // timestamps were written at the boundaries of two *empty compute passes* that nothing ordered
+    // against the graphics work between them, so the pair measured a fixed submission overhead:
+    // 4 draws read 0.2365 ms and 40 draws read 0.2006 ms -- ten times the fill coming back as
+    // slightly less time (plans/plan_webgpu_modern_graphics.md WMG-0017). Every assertion below is
+    // chosen to fail on that behaviour and to pass on a real GPU's noise.
+    CnaTest::EngineLayer::HiDefDevice gd;
+    GpuTimer timer(gd);
+    if (!timer.isSupported()) GTEST_SKIP() << timer.getUnsupportedReason();
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Graphics::BasicEffect;
+    using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+
+    const auto at = [](const float x, const float y) {
+        return VertexPositionColor(Vector3(x, y, 0.0f), Color(60, 60, 60, 255));
+    };
+    const VertexPositionColor quad[6] = {
+        at(-1.0f, -1.0f), at(-1.0f, 1.0f), at(1.0f, 1.0f),
+        at(-1.0f, -1.0f), at(1.0f, 1.0f),  at(1.0f, -1.0f),
+    };
+
+    RenderTarget2D target(gd, 512, 512);
+    BasicEffect effect(gd);
+    effect.VertexColorEnabled = true;
+    effect.World      = Matrix::getIdentityProperty();
+    effect.View       = Matrix::getIdentityProperty();
+    effect.Projection = Matrix::getIdentityProperty();
+
+    // Returns the GPU milliseconds for `draws` full-screen quads, and reports through `wallMs` the
+    // CPU time the whole submission and read-back took. The wall clock is not the measurement --
+    // it is the plausibility bound: GPU time inside the range cannot exceed the wall clock that
+    // encloses submitting it and waiting for it, so a units error (ticks read as nanoseconds when
+    // they are not) shows up here as a number larger than the clock that contains it.
+    const auto measure = [&](const int draws, double* wallMs) {
+        const auto started = std::chrono::steady_clock::now();
+        timer.begin();
+        gd.SetRenderTarget(&target);
+        gd.setRasterizerStateProperty(RasterizerState::CullNone);
+        gd.Clear(Color::Black);
+        effect.Apply();
+        gd.SetVertexBuffer(nullptr);
+        for (int i = 0; i < draws; ++i)
+            gd.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+        gd.SetRenderTarget(nullptr);
+        timer.end();
+        gd.Present();
+
+        Color probe = Color::Black;
+        const Rectangle oneTexel(0, 0, 1, 1);
+        target.GetData(0, &oneTexel, &probe, 0, 1);
+
+        double result = -1.0;
+        for (int attempt = 0; attempt < 1000; ++attempt)
+            if (timer.poll()) { result = timer.getLastMilliseconds(); break; }
+        const auto finished = std::chrono::steady_clock::now();
+        if (wallMs != nullptr)
+            *wallMs = std::chrono::duration<double, std::milli>(finished - started).count();
+        return result;
+    };
+
+    // Lazy pipeline creation is a one-time cost and belongs outside a steady-state comparison.
+    ASSERT_GE(measure(4, nullptr), 0.0) << "the GPU never finished the warm-up range";
+
+    constexpr int kDraws[3] = { 4, 40, 160 };
+    double gpuMs[3] = {};
+    double wallMs[3] = {};
+    for (int tier = 0; tier < 3; ++tier)
+    {
+        gpuMs[tier] = measure(kDraws[tier], &wallMs[tier]);
+        ASSERT_GE(gpuMs[tier], 0.0) << "the GPU never finished the range of " << kDraws[tier]
+                                    << " draws";
+        std::printf("    %3d full-screen draws: GPU %.4f ms (CPU wall %.4f ms)\n", kDraws[tier],
+                    gpuMs[tier], wallMs[tier]);
+    }
+
+    // Finite and non-negative. A NaN or an infinity compares false against every bound below, so
+    // it would otherwise slip through the ordering assertions rather than fail them.
+    for (int tier = 0; tier < 3; ++tier)
+    {
+        EXPECT_TRUE(std::isfinite(gpuMs[tier]))
+            << kDraws[tier] << " draws produced a non-finite GPU time";
+        EXPECT_GE(gpuMs[tier], 0.0) << kDraws[tier] << " draws produced a negative GPU time";
+    }
+
+    // Monotone: the curve rises at every step. The broken timer's 0.2365 -> 0.2006 fails here.
+    EXPECT_GT(gpuMs[1], gpuMs[0])
+        << "ten times the fill did not take longer at all -- the timer is not measuring the work";
+    EXPECT_GT(gpuMs[2], gpuMs[1])
+        << "four times the fill again did not take longer at all";
+
+    // And it rises by an amount related to the work. Forty times the fill; a factor of four is
+    // well under any real scaling (Radeon 780M measures ~27x) and far above the ~1.0 a timer
+    // returns when it is measuring a fixed overhead.
+    EXPECT_GT(gpuMs[2], gpuMs[0] * 4.0)
+        << "forty times the fill took less than four times as long: " << gpuMs[0] << " ms -> "
+        << gpuMs[2] << " ms";
+
+    // Plausible in absolute terms. Not a wall-clock equality -- GPU timing is not that -- but the
+    // range cannot have taken longer than the CPU spent submitting it and waiting for it. The 5 ms
+    // allowance covers a clock whose own overhead is smaller than its resolution.
+    for (int tier = 0; tier < 3; ++tier)
+        EXPECT_LT(gpuMs[tier], wallMs[tier] + 5.0)
+            << kDraws[tier] << " draws reported " << gpuMs[tier]
+            << " ms of GPU time inside a submission that took " << wallMs[tier]
+            << " ms of wall clock -- the tick-to-nanosecond conversion is wrong";
+
+    // Repeated runs of one workload are plausible: they land in the same neighbourhood rather than
+    // wandering. Deliberately loose -- a shared GPU makes any tight bound flaky -- and it is the
+    // spread that is under test, not the value.
+    double repeats[3] = {};
+    for (double& sample : repeats)
+    {
+        sample = measure(kDraws[1], nullptr);
+        ASSERT_GE(sample, 0.0);
+    }
+    const double lowest  = std::min({ repeats[0], repeats[1], repeats[2] });
+    const double highest = std::max({ repeats[0], repeats[1], repeats[2] });
+    std::printf("    %d draws repeated three times: %.4f / %.4f / %.4f ms\n", kDraws[1],
+                repeats[0], repeats[1], repeats[2]);
+    EXPECT_GT(lowest, 0.0) << "a repeat of a workload that measured above zero came back as zero";
+    EXPECT_LT(highest, lowest * 20.0)
+        << "three runs of the same workload spread further than a shared GPU explains: " << lowest
+        << " ms to " << highest << " ms";
 }
 
 } // namespace
