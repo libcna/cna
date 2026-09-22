@@ -47,7 +47,7 @@ barriers, descriptor sets, queues or native handles (ADR 0001, `MOD-2202`), so n
 | WMG-0025 | Classic: an unbound stock texture reads XNA's opaque black | 🟩 |
 | WMG-0026 | The browser route: configure, compile and link under Emscripten | 🟩 |
 | WMG-0027 | A soak over the modern resources, and the timer lifetime defect | 🟩 |
-| WMG-0028 | Final regression, and the corpus fix it found | 🟩 |
+| WMG-0028 | Final regression, the corpus fix and the seventh dead row it found | 🟩 |
 
 ---
 
@@ -744,9 +744,47 @@ growth *within* a device — +20 KiB over 3010 cycles.
 ### Classic WebGPU
 
 `ctest -R '^WebGPU'` is now **201** tests (198 plus WMG-0020/0021/0027's three, all passing) with
-**13** failures, against WMG-0018's 14 of 198. The difference is exactly
-`WebGPU_Parity_dual_texture_terms`, fixed by WMG-0025. **No new failure.** The remaining thirteen
-are the ones WMG-0018 established pre-existing, by measurement or by the project's own record.
+**12** failures, against WMG-0018's 14 of 198. **No new failure**, and two fewer:
+
+* `WebGPU_Parity_dual_texture_terms`, fixed by WMG-0025;
+* `WebGPUCompiledEffectDrawTest.AddressWSelectsADifferentVolumeSliceForEachMode`, which was never
+  a renderer failure at all. `profile_dead_tests.py` — which the private runner executes after
+  every ctest run, and which the brief asked to be used — named it `DEAD-ON-PROFILE`: a
+  default-constructed `GraphicsDevice` is Reach, Reach has no volume textures, and the test builds
+  a `Texture3D` on its third line, so it threw before reaching a single assertion. Exactly
+  WMG-0005's defect in a seventh row, and WMG-0018 had counted it as one of the three pre-existing
+  compiled-effect failures without learning it was a *test* defect. Asking for the profile the test
+  uses is the whole fix.
+
+The remaining twelve are the ones WMG-0018 established pre-existing, by measurement or by the
+project's own record, and **none of them is now a test that never ran** — the dead-test detector
+reports a clean sweep.
+
+**`CnaTests` on WEBGPU was not re-measured in this closeout, and no number for it is claimed.**
+WMG-0003's baseline is 10564 / 9998 / 63 / 503. The run was attempted twice — four shards, then
+twelve — and both were stopped by this machine's own low-memory reaper rather than by anything in
+the suite: 10 564 tests each building a `GraphicsDevice`, at the ~1.1 GB peak per 200 tests
+measured above, is more than 30 GB and no swap will hold however it is sharded. What *is* measured
+is the part that bears on this branch: the five renderer-neutral `StockEffectNullTextureTest` cases
+WMG-0025 turned on (5/5), the 201 registered `WebGPU_*` ctest entries (12 failures, all
+pre-existing), and the four failures shard 0 reached before it was stopped, each already in the
+classic baseline's 63. Re-measuring the whole classic corpus on WEBGPU needs a machine with more
+memory, or a harness that shares one device across tests; it is recorded here as owed rather than
+answered.
+
+### Provider errors
+
+`WebGPURenderer::OnUncapturedError` counts every device-level validation, internal and
+out-of-memory error the provider raises, and `GetUncapturedErrorCountEXT()` is that count — the
+oracle WMG-0027's soak fails on. Across **every** run in this closeout — the four final WEBGPU
+engine-layer shards, the four X11 shards, both sanitizer suites and both sanitizer stress runs —
+the renderer logged **zero** uncaptured errors.
+
+The only provider diagnostics in those logs are 24 lines of one explained class: a `ShaderEffect`
+handed `#version 300 es` on a renderer that takes WGSL. Those are shader *compile* diagnostics
+reported through CNA's own channel, in tests whose negative case is precisely that the pass reports
+it could not compile and copies its input through — WMG-0012's subject. Not device errors, and not
+unexplained.
 
 ### The rest
 
