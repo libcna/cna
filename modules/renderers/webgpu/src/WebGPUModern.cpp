@@ -868,6 +868,17 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (owner_ != nullptr)
         {
+            // plans/plan_webgpu_modern_graphics.md WMG-0027: a timer destroyed while its range is
+            // still open would leave the renderer naming a query set that is about to be released,
+            // and WMG-0017 made every render pass carry that name until the range closes. The next
+            // pass built after this destructor then references a freed query set, which
+            // wgpu-native reports as a non-unwinding panic inside
+            // wgpuCommandEncoderBeginRenderPass rather than as an error this process can handle.
+            //
+            // Nothing exotic reaches this: any exception thrown between begin() and end() -- a
+            // read-back that fails, a dispatch the device refuses -- unwinds through here with the
+            // range open, and turned a recoverable error into an abort at the next Present.
+            owner_->ForgetOpenGpuTimerEXT(querySet_);
             owner_->UnregisterModernResourceEXT(this);
             // A map still in flight names mapState_ as its userdata; let it land before release.
             if (mapping_ && mapState_ != nullptr && !mapState_->completed)

@@ -5415,6 +5415,18 @@ namespace CNA::Internal::Renderers::WebGPU
          * because a WGPURenderPassDescriptor carries exactly one set of timestamp writes.
          */
         WGPUQuerySet timerQuerySetEXT_ = nullptr;
+    public:
+        /**
+         * @brief WMG-0027: forgets an open timed range whose query set is about to be released.
+         *
+         * Called by `WebGPUGpuTimerRenderer`'s destructor. A range left open past its timer's life
+         * would have every later render pass name a freed query set, which wgpu-native reports as
+         * a non-unwinding panic rather than as a recoverable error.
+         *
+         * @param querySet The dying timer's query set; ignored unless it owns the open range.
+         */
+        CNAEXT void ForgetOpenGpuTimerEXT(WGPUQuerySet querySet) noexcept;
+    private:
         /// WMG-0017: true until a pass has written the open timer's start timestamp.
         bool timerWriteBeginEXT_ = false;
         /// WMG-0017: whether any real pass carried this timer's writes; false means `End` must

@@ -949,6 +949,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
     // ---- timestamps ----------------------------------------------------------------------------
 
+    void WebGPURenderer::ForgetOpenGpuTimerEXT(WGPUQuerySet querySet) noexcept
+    {
+        // WMG-0027. Only the timer that actually owns the open range clears it: a second timer
+        // destroyed while a first one's range is open must leave that range alone, which is the
+        // same "one timer at a time" rule WriteTimestampEXT applies.
+        if (querySet == nullptr || timerQuerySetEXT_ != querySet) return;
+        timerQuerySetEXT_ = nullptr;
+        timerWriteBeginEXT_ = false;
+        timerWrotePassEXT_ = false;
+    }
+
     void WebGPURenderer::WriteTimestampEXT(WGPUQuerySet querySet, std::uint32_t index,
                                            WGPUBuffer resolveBuffer, WGPUBuffer readbackBuffer)
     {
