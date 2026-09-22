@@ -44,7 +44,11 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
+// plans/plan_vulkan_modern_graphics.md VMG-0003: a CNA_ENABLE_SDL=OFF build (CNA_EXAMPLES_NO_SDL)
+// has no SDL window to ask; the platform's own GameWindow reports the same logical client size.
+#if !defined(CNA_EXAMPLES_NO_SDL)
 #include <SDL3/SDL.h>
+#endif
 
 #include <cstdio>
 #include <memory>
@@ -143,9 +147,15 @@ protected:
 
         // --- Step 4: poll until the (possibly-async, see the header comment) resize has fully
         // propagated, then verify the FNA-matching reset to (0, 0, newW, newH).
+#if defined(CNA_EXAMPLES_NO_SDL)
+        const auto clientBounds = getWindowProperty().getClientBoundsProperty();
+        const int physW = clientBounds.Width;
+        const int physH = clientBounds.Height;
+#else
         SDL_Window* window = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
         int physW = 0, physH = 0;
         SDL_GetWindowSize(window, &physW, &physH);
+#endif
         const bool physicalResizeApplied = (physW == kNewBackBufferWidth && physH == kNewBackBufferHeight);
         const auto& vp = dev.getViewportProperty();
         const bool viewportSettled = (vp.getWidthProperty() == kNewBackBufferWidth &&

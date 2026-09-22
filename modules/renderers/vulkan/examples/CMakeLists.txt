@@ -10,19 +10,13 @@
 # the golden-image working-directory conventions rely on it); keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-# plans/plan_native_platform_validation.md NPV-0106: this suite links SDL3 directly -- its test
-# macro names SDL3::SDL3, several examples include <SDL3/SDL.h>, and the shared
-# common/PixelTestGame.hpp probes for a display through SDL_InitSubSystem. A CNA_ENABLE_SDL=OFF
-# configuration has no SDL3 target at all, and without this guard selecting the Vulkan renderer
-# there failed the entire configure on an unresolved SDL3::SDL3. The suite is skipped, and says
-# so, rather than the SDL-free configuration being unusable with a real GPU renderer.
-if(NOT TARGET SDL3::SDL3)
-    if(CNA_BUILD_TESTS)
-        message(STATUS "CNA: Vulkan renderer example/test suite skipped -- it links SDL3 "
-                       "directly and this configuration has no SDL (CNA_ENABLE_SDL=OFF)")
-    endif()
-    return()
-endif()
+# plans/plan_native_platform_validation.md NPV-0106 used to skip this whole suite without SDL,
+# because its test macro named SDL3::SDL3 unconditionally. No example source here includes SDL; the
+# one SDL use left is common/PixelTestGame.hpp's display probe, which CNA_EXAMPLES_NO_SDL turns off
+# (plans/plan_directx12_parity.md DX12-0005). plans/plan_vulkan_modern_graphics.md VMG-0003: the
+# macro below links SDL only where it exists, so a CNA_ENABLE_SDL=OFF build runs the classic and
+# modern Vulkan oracles on the native X11 and Wayland platforms instead of dropping them.
+
 # Shared example-support headers ("common/PixelTestGame.hpp", ...) are owned by
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
@@ -44,17 +38,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         macro(cna_vulkan_test target src)
             add_executable(${target} ${src} ${CNA_VULKAN_EXAMPLE_SKIP_GUARD})
-            # SDL3::SDL3 is linked explicitly like every other renderer's test macro already
-            # does: several of these example TUs include <SDL3/SDL.h> directly, and nothing on
-            # the CNA surface propagates SDL's include directories (SDL has always been a
-            # PRIVATE implementation dependency). This was a latent pre-existing gap unique to
-            # the Vulkan macro -- the same TU fails to compile in the pristine tree too.
-            if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-                target_link_libraries(${target} PRIVATE
-                    CNA
-                    SHARP_RUNTIME SDL3::SDL3)
+            # SDL3::SDL3 is linked where it is configured, like every other renderer's test macro:
+            # nothing on the CNA surface propagates SDL's include directories (SDL has always been
+            # a PRIVATE implementation dependency). Without SDL (CNA_ENABLE_SDL=OFF) the target
+            # does not exist, and CNA_EXAMPLES_NO_SDL leaves PixelTestGame.hpp's display probe to
+            # the platform the build selected -- the same idiom as the Direct3D suites.
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+            if(TARGET SDL3::SDL3)
+                target_link_libraries(${target} PRIVATE SDL3::SDL3)
             else()
-                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+                target_compile_definitions(${target} PRIVATE CNA_EXAMPLES_NO_SDL)
             endif()
             if(TARGET SDL3::SDL3main)
                 target_link_libraries(${target} PRIVATE SDL3::SDL3main)
@@ -2733,11 +2726,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # plan_vulkan.md VULKAN-350: a real window resize, which on Vulkan is a swapchain recreation.
-        cna_vulkan_test(cna_test_vulkan_real_window_resize
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_RealWindowResize
-            COMMAND cna_test_vulkan_real_window_resize
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # The test plays the user dragging the window edge by resizing the SDL window behind the
+        # game's back -- there is no public API for an outside resize to call instead -- so it
+        # exists only where SDL does (plans/plan_vulkan_modern_graphics.md VMG-0003). The modern
+        # recreation paths keep their own SDL-free coverage in Vulkan_ModernResourceLifetime and
+        # Vulkan_ModernAllocatorStress, which resize through GraphicsDeviceManager.
+        if(TARGET SDL3::SDL3)
+            cna_vulkan_test(cna_test_vulkan_real_window_resize
+                            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_RealWindowResize
+                COMMAND cna_test_vulkan_real_window_resize
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        endif()
 
         # plan_vulkan.md VULKAN-432: the stock-effect goldens, compared against the SAME PNGs EasyGL is compared against -- the point of a golden is that two renderers land on one image, not that each keeps its own.
         cna_vulkan_test(cna_test_vulkan_basiceffect_golden
