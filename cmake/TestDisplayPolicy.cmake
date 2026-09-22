@@ -69,12 +69,17 @@ function(_cna_test_display_directories out dir)
     set(${out} "${_dirs}" PARENT_SCOPE)
 endfunction()
 
-function(cna_apply_test_display_policy)
+# Deferred to the end of the top-level directory, so it runs in THAT scope: when CNA is a subproject
+# (cna-street, a template) the variables set above belong to CNA's directory and are not visible
+# there. Everything the sweep needs from CNA's scope is therefore passed in, fixed when the call is
+# scheduled, and the sweep covers CNA's own directory tree -- a consumer's tests are its own.
+function(cna_apply_test_display_policy root guard_applies guard)
+    set(CNA_TEST_WAYLAND_GUARD "${guard}")
     set(_display_empty FALSE)
     if(CNA_TEST_DISPLAY STREQUAL "")
         set(_display_empty TRUE)
     endif()
-    _cna_test_display_directories(_dirs "${CMAKE_SOURCE_DIR}")
+    _cna_test_display_directories(_dirs "${root}")
     set(_inheriting 0)
     set(_guarded 0)
     foreach(_dir IN LISTS _dirs)
@@ -83,7 +88,7 @@ function(cna_apply_test_display_policy)
             get_test_property("${_test}" ENVIRONMENT DIRECTORY "${_dir}" _env)
             get_test_property("${_test}" ENVIRONMENT_MODIFICATION DIRECTORY "${_dir}" _mod)
             cna_apply_test_display_policy_to("${_env}" "${_mod}" ${_display_empty}
-                                             ${CNA_TEST_WAYLAND_GUARD_APPLIES} _new_env _new_mod)
+                                             ${guard_applies} _new_env _new_mod)
             # Each property is written back only when the policy changed it, so an ENVIRONMENT the
             # policy has no business with is never round-tripped through CMake's list handling.
             if(_display_empty AND _env AND "DISPLAY=" IN_LIST _env)
@@ -101,14 +106,18 @@ function(cna_apply_test_display_policy)
         message(STATUS "CNA: ${_inheriting} GPU/window tests inherit the caller's DISPLAY (CNA_TEST_DISPLAY is empty; "
                        "run them privately with tools/platform/run_gpu_tests_private.sh)")
     endif()
-    if(CNA_TEST_WAYLAND_GUARD_APPLIES)
+    if(guard_applies)
         message(STATUS "CNA: ${_guarded} configure-time tests never fall back to the default Wayland socket "
                        "(WAYLAND_DISPLAY unset -> empty; an exported value is kept)")
     endif()
 endfunction()
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
-    cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL cna_apply_test_display_policy)
+    # A deferred call evaluates its arguments when it runs; EVAL with bracket arguments fixes them now.
+    cmake_language(EVAL CODE "
+        cmake_language(DEFER DIRECTORY [[${CMAKE_SOURCE_DIR}]] CALL cna_apply_test_display_policy
+                       [[${CMAKE_CURRENT_SOURCE_DIR}]] [[${CNA_TEST_WAYLAND_GUARD_APPLIES}]]
+                       [[${CNA_TEST_WAYLAND_GUARD}]])")
 else()
     # get_test_property/set_tests_properties gained DIRECTORY in 3.28. Older CMake leaves the
     # empty DISPLAY in place: tests then fail to open a display, which is safe -- they cannot

@@ -682,6 +682,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             -DCNA_TEST_DISPLAY_RULES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestDisplayPolicyRules.cmake
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/TestDisplayPolicyCase.cmake)
     set_tests_properties(CnaTestDisplayPolicy PROPERTIES LABELS "configuration")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+        # The same policy with CNA as a subproject, where the deferred sweep runs in the consumer's
+        # top-level scope (cna-street: every configure failed there once).
+        add_test(NAME CnaTestDisplayPolicyAsSubproject
+            COMMAND ${CMAKE_COMMAND}
+                -S ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/TestDisplayPolicySubproject
+                -B ${CMAKE_CURRENT_BINARY_DIR}/TestDisplayPolicySubproject
+                -DCNA_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR} -DCNA_TEST_DISPLAY=)
+        set_tests_properties(CnaTestDisplayPolicyAsSubproject PROPERTIES LABELS "configuration")
+    endif()
     if(Python3_Interpreter_FOUND AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
         add_test(NAME CnaTestDisplayIsolation
             COMMAND Python3::Interpreter
