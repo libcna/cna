@@ -678,6 +678,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --wayland-guard-applies ${CNA_TEST_WAYLAND_GUARD_APPLIES})
         set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
     endif()
+    # plans/plan_vulkan_modern_graphics.md VMG-0007: every SPIR-V module the tree ships -- the Vulkan
+    # renderer's own shaders and every generated shader package -- validated by spirv-val against
+    # the Vulkan 1.1 environment VulkanRenderer creates. An offline gate like the package
+    # reproducibility tests: it exits 77 where spirv-val is not installed.
+    if(Python3_Interpreter_FOUND AND "VULKAN" IN_LIST CNA_RENDERER_IDENTITIES)
+        add_test(NAME SpirvPayloadValidation
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/vulkan/validate_spirv_payloads.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules" "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+        set_tests_properties(SpirvPayloadValidation PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "vulkan;shader;configuration")
+    endif()
     # plans/plan_gpu_test_isolation.md GTI-0007: the classifier the private GPU runner applies to
     # every run, which names tests that died on a graphics-profile refusal before their first check.
     if(Python3_Interpreter_FOUND)
