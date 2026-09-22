@@ -3602,8 +3602,8 @@ namespace CNA::Internal::Renderers::WebGPU
         DestroySkinnedPbrResources();
         pbrDefaultWhiteTexture_.reset();
         pbrDefaultFlatNormalTexture_.reset();
-        envMapDefaultWhiteTexture_.reset();
-        envMapDefaultWhiteCube_.reset();
+        classicNullTexture_.reset();
+        classicNullCube_.reset();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
         pendingBindGroupReleases_.clear();
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
@@ -6016,40 +6016,6 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to create EnvMap3D GPU resources");
     }
 
-    void WebGPURenderer::EnsureEnvMapDefaultTextures()
-    {
-        // Mirrors EnsurePbrDefaultTextures()'s own lazy-at-first-draw pattern and
-        // VulkanRenderer's defaultWhiteView_/defaultWhiteCubeView_ fallback role: neither
-        // EnvironmentMapEffect::Texture nor ::EnvironmentMap is required to be set.
-        if (envMapDefaultWhiteTexture_ == nullptr)
-        {
-            ImageData white{};
-            white.width = 1;
-            white.height = 1;
-            white.mipLevels = 1;
-            white.pixels = {255, 255, 255, 255};
-            envMapDefaultWhiteTexture_ = std::make_unique<WebGPUTextureRenderer>(*this, white);
-        }
-        if (envMapDefaultWhiteCube_ == nullptr)
-        {
-            envMapDefaultWhiteCube_ = std::make_unique<WebGPUTextureCubeRenderer>(*this, 1, false);
-            const std::array<std::uint8_t, 4> whitePixel{255, 255, 255, 255};
-            for (int face = 0; face < 6; ++face)
-            {
-                // REMED-GFX-135: SetData now reports completion. This 1x1 white fallback is what
-                // an EnvironmentMapEffect without a cube map samples, so a face that failed to
-                // upload would silently darken every such draw -- say so instead.
-                if (!envMapDefaultWhiteCube_->SetData(face, 0, 0, 0, 1, 1, whitePixel.data(),
-                                                      static_cast<int>(whitePixel.size())))
-                {
-                    throw std::runtime_error(
-                        "CNA WebGPU: failed to upload the default white env-map cube face " +
-                        std::to_string(face));
-                }
-            }
-        }
-    }
-
     WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineEnvMap3D(WGPUPrimitiveTopology topology,
                                                                           WGPUIndexFormat stripIndexFormat,
                                                                           bool depthTest, bool depthWrite,
@@ -6106,7 +6072,6 @@ namespace CNA::Internal::Renderers::WebGPU
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // WEBGPU-155: reached because the declaration names Position, Normal and TEXCOORD0, at
         // whatever offsets and stride it puts them.
-        EnsureEnvMapDefaultTextures();
 
         EnvMapDrawCommand command;
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
@@ -6244,12 +6209,15 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
                                                      "EnvironmentMap3D");
+        // GSC-0004: EnvironmentMapEffect samples both slots unconditionally, and XNA reads
+        // either unbound one as opaque black -- what the envmap_texture_null / envmap_cube_null
+        // oracle references measure.
         WGPUTextureView texView = command.texture
             ? command.texture.View()
-            : envMapDefaultWhiteTexture_->View();
+            : ClassicNullTextureEXT().View();
         WGPUTextureView cubeView = command.envMap
             ? command.envMap.View()
-            : envMapDefaultWhiteCube_->CubeView();
+            : ClassicNullCubeViewEXT();
         // REMED-GFX-172: the reflection cube's own SamplerStates[1], from the description captured
         // at this draw's public call. The fallback 1x1 white cube is filtered by the same slot --
         // a missing resource does not change WHICH sampler slot owns that binding.
@@ -12594,12 +12562,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // in one frame differ, so it cannot be read as frame-global at replay).
         command.stencil = CaptureStencilStateEXT();
         command.stencilRef = referenceStencil_;
-        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
-        // then collapses to the colour, which is what an untextured stock-effect draw should be.
-        EnsurePbrDefaultTextures();
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: XNA reads an unbound stock-effect
+        // texture as opaque black, not as the neutral-white `tex * colour` identity GLTF-474 put
+        // here -- that identity belongs to glTF's default material, and it lives in the WGSL as
+        // `select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)` for the one family
+        // that needs it.
         command.texture = params.texture0 != nullptr
             ? ResolveSamplable(params.texture0)
-            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            : ClassicNullTextureEXT();
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
         command.textureFilter = slotSamplers_[0].filter;
@@ -12807,12 +12777,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // in one frame differ, so it cannot be read as frame-global at replay).
         command.stencil = CaptureStencilStateEXT();
         command.stencilRef = referenceStencil_;
-        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
-        // then collapses to the colour, which is what an untextured stock-effect draw should be.
-        EnsurePbrDefaultTextures();
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: XNA reads an unbound stock-effect
+        // texture as opaque black, not as the neutral-white `tex * colour` identity GLTF-474 put
+        // here -- that identity belongs to glTF's default material, and it lives in the WGSL as
+        // `select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)` for the one family
+        // that needs it.
         command.texture = params.texture0 != nullptr
             ? ResolveSamplable(params.texture0)
-            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            : ClassicNullTextureEXT();
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
         command.textureFilter = slotSamplers_[0].filter;
@@ -12990,12 +12962,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPU-155/159: no stride requirement -- the canonical XNA dual-texture vertex is
         // `PositionNormalDualTexture` at stride 40, which this route used to refuse outright.
         const std::size_t stride = webgpuVb.Stride();
-        // WEBGPU-175: an unbound layer is no longer refused. FNA's PSDualTexture is
-        // `color.rgb *= 2; color *= overlay * pin.Diffuse`, so opaque white is the identity for
-        // either factor, and EasyGLRenderer binds exactly that from EnsureDefaultWhiteTexture()
-        // when a layer is missing -- the two renderers now agree to the byte on a null `Texture`,
-        // a null `Texture2` and on both null at once (parity_dual_texture_terms).
-        EnsurePbrDefaultTextures();
+        // WEBGPU-175: an unbound layer is no longer refused; GSC-0004 below decides what it
+        // samples instead.
 
         DualTextureDrawCommand command;
         command.hasVertexColor = (shape == StockVertexShapeEXT::DualTexturedColored);
@@ -13031,9 +12999,11 @@ namespace CNA::Internal::Renderers::WebGPU
         // in one frame differ, so it cannot be read as frame-global at replay).
         command.stencil = CaptureStencilStateEXT();
         command.stencilRef = referenceStencil_;
+        // GSC-0004: dual_texture3d samples BOTH layers unconditionally, and XNA reads either
+        // unbound slot as opaque black.
         command.texture0 = params.texture0 != nullptr
             ? ResolveSamplable(params.texture0)
-            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            : ClassicNullTextureEXT();
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
         command.textureFilter = slotSamplers_[0].filter;
@@ -13044,7 +13014,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.texture1 = params.texture1 != nullptr
             ? ResolveSamplable(params.texture1)
-            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            : ClassicNullTextureEXT();
         // REMED-GFX-172: and the SECOND layer's own slot, captured here for the same reason. Both
         // descriptions travel with the command, so replay never reads live sampler state.
         command.texture1Filter = slotSamplers_[1].filter;
@@ -13135,12 +13105,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // in one frame differ, so it cannot be read as frame-global at replay).
         command.stencil = CaptureStencilStateEXT();
         command.stencilRef = referenceStencil_;
-        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
-        // then collapses to the colour, which is what an untextured stock-effect draw should be.
-        EnsurePbrDefaultTextures();
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: XNA reads an unbound stock-effect
+        // texture as opaque black, not as the neutral-white `tex * colour` identity GLTF-474 put
+        // here -- that identity belongs to glTF's default material, and it lives in the WGSL as
+        // `select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)` for the one family
+        // that needs it.
         command.texture = params.texture0 != nullptr
             ? ResolveSamplable(params.texture0)
-            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            : ClassicNullTextureEXT();
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
         command.textureFilter = slotSamplers_[0].filter;
@@ -13524,6 +13496,59 @@ namespace
             flatNormal.pixels = {128, 128, 255, 255};
             pbrDefaultFlatNormalTexture_ = std::make_unique<WebGPUTextureRenderer>(*this, flatNormal);
         }
+    }
+
+    void WebGPURenderer::EnsureClassicNullTextures()
+    {
+        // plans/plan_graphics_shared_cleanup.md GSC-0004 / plans/plan_vulkan_parity.md VKPAR-0004.
+        // The same 1x1 lazy pattern as EnsurePbrDefaultTextures() above, with XNA's value instead
+        // of glTF's: BasicEffect with TextureEnabled, SkinnedEffect, AlphaTestEffect, both
+        // DualTextureEffect slots and both EnvironmentMapEffect slots all sample (0,0,0,255) when
+        // the application binds nothing.
+        //
+        // Bound unconditionally by the families below rather than behind a `textureEnabled` test,
+        // which is VulkanRenderer's reading and not EasyGL's: the WGSL stock programs already
+        // carry the white identity where it belongs, as
+        // `select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)`, so a BasicEffect
+        // with TextureEnabled=false never samples this view at all.
+        if (classicNullTexture_ == nullptr)
+        {
+            ImageData black{};
+            black.width = 1;
+            black.height = 1;
+            black.mipLevels = 1;
+            black.pixels = {0, 0, 0, 255};
+            classicNullTexture_ = std::make_unique<WebGPUTextureRenderer>(*this, black);
+        }
+        if (classicNullCube_ == nullptr)
+        {
+            classicNullCube_ = std::make_unique<WebGPUTextureCubeRenderer>(*this, 1, false);
+            const std::array<std::uint8_t, 4> blackPixel{0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+            {
+                // REMED-GFX-135's rule, for the same reason the white cube beside it states: a
+                // face that failed to upload would silently change what every such draw samples.
+                if (!classicNullCube_->SetData(face, 0, 0, 0, 1, 1, blackPixel.data(),
+                                               static_cast<int>(blackPixel.size())))
+                {
+                    throw std::runtime_error(
+                        "CNA WebGPU: failed to upload the XNA null-texture cube face " +
+                        std::to_string(face));
+                }
+            }
+        }
+    }
+
+    WebGPUSampledTextureEXT WebGPURenderer::ClassicNullTextureEXT()
+    {
+        EnsureClassicNullTextures();
+        return classicNullTexture_->Sampled();
+    }
+
+    WGPUTextureView WebGPURenderer::ClassicNullCubeViewEXT()
+    {
+        EnsureClassicNullTextures();
+        return classicNullCube_->CubeView();
     }
 
     void WebGPURenderer::QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
@@ -14197,12 +14222,14 @@ namespace
         // in one frame differ, so it cannot be read as frame-global at replay).
         command.stencil = CaptureStencilStateEXT();
         command.stencilRef = referenceStencil_;
-        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
-        // then collapses to the colour, which is what an untextured stock-effect draw should be.
-        EnsurePbrDefaultTextures();
+        // plans/plan_graphics_shared_cleanup.md GSC-0004: XNA reads an unbound stock-effect
+        // texture as opaque black, not as the neutral-white `tex * colour` identity GLTF-474 put
+        // here -- that identity belongs to glTF's default material, and it lives in the WGSL as
+        // `select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)` for the one family
+        // that needs it.
         command.texture = params.texture0 != nullptr
             ? ResolveSamplable(params.texture0)
-            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            : ClassicNullTextureEXT();
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
         command.textureFilter = slotSamplers_[0].filter;

@@ -4558,12 +4558,6 @@ namespace CNA::Internal::Renderers::WebGPU
         };
         void CreateEnvMapResources();
         void DestroyEnvMapResources();
-        /// Lazily creates the 1x1 white 2D texture / 1x1 white cube map used whenever
-        /// EnvironmentMapEffect::Texture/EnvironmentMap is left unbound. Mirrors
-        /// EnsurePbrDefaultTextures()'s own lazy-at-first-draw pattern (not tied to surface
-        /// format/sample count, so it does not need to be recreated by
-        /// CreateEnvMapResources()/ClearAllPipelineCaches()).
-        void EnsureEnvMapDefaultTextures();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineEnvMap3D(WGPUPrimitiveTopology topology,
                                                                       WGPUIndexFormat stripIndexFormat,
                                                                       bool depthTest, bool depthWrite,
@@ -4586,8 +4580,6 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUPipelineLayout envMapPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
-        std::unique_ptr<WebGPUTextureRenderer> envMapDefaultWhiteTexture_;
-        std::unique_ptr<WebGPUTextureCubeRenderer> envMapDefaultWhiteCube_;
 
         // WEBGPU-27/38/68: instanced3d.wgsl -- a genuinely SECOND vertex buffer binding
         // (WGPUVertexStepMode_Instance) carrying a per-instance mat4 world transform, ported from
@@ -4798,6 +4790,22 @@ namespace CNA::Internal::Renderers::WebGPU
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultFlatNormalTexture_;
+
+        /// plans/plan_graphics_shared_cleanup.md GSC-0004 / plans/plan_vulkan_parity.md VKPAR-0004:
+        /// Microsoft XNA 4.0 reads an unbound stock-effect texture as opaque black, measured
+        /// through tools/xna-oracle and checked in as tools/xna-oracle/reference/null-texture/.
+        /// This renderer bound the neutral-white `tex * colour` identity everywhere, which is
+        /// glTF's default-material rule (GLTF-474) rather than XNA's. White is still right for the
+        /// PBR family and for an effect's own sampler slots; these two are what every *classic*
+        /// stock family binds for a slot the application left null. Lazily created together,
+        /// because a family that samples a cube samples a 2D beside it.
+        void EnsureClassicNullTextures();
+        /// @brief XNA's opaque-black 2D, for an unbound classic stock-effect texture slot.
+        [[nodiscard]] WebGPUSampledTextureEXT ClassicNullTextureEXT();
+        /// @brief XNA's opaque-black cube, for an unbound EnvironmentMapEffect::EnvironmentMap.
+        [[nodiscard]] WGPUTextureView ClassicNullCubeViewEXT();
+        std::unique_ptr<WebGPUTextureRenderer> classicNullTexture_;
+        std::unique_ptr<WebGPUTextureCubeRenderer> classicNullCube_;
 
         // plans/plan_cnj.md Phase 14J: closing this renderer's pre-existing "no skinning shader at all"
         // gap for SkinnedEffect -- both PreferPerPixelLighting lighting variants (matching every
