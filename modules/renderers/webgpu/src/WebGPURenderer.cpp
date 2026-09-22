@@ -6189,7 +6189,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                 ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty())
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty())
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -6306,14 +6308,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -6448,7 +6452,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() ||
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() ||
             command.instanceCount == 0)
             return;
 
@@ -6506,14 +6512,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, command.instanceCount,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, command.instanceCount,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(bindGroup);
@@ -8356,8 +8364,10 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         Begin3DDrawState(pass, state);
         WebGPUEffectRenderer* effect = command.effect;
+        // WMG-0013: an indirect draw's vertexCount is zero by construction -- the count lives in
+        // the GPU buffer -- so it is not the "nothing to draw" signal it is for every other draw.
         if (effect == nullptr || !effect->valid_ ||
-            command.vertexCount == 0 || command.vertexData.empty())
+            (command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty())
             return;
 
         // Vertex buffer.
@@ -8526,13 +8536,15 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1, command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1, command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(bindGroup);
@@ -8586,8 +8598,9 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         Begin3DDrawState(pass, state);
         WebGPUEffectRenderer* effect = command.effect;
+        // WMG-0013: see the legacy twin -- an indirect draw carries no CPU vertex count.
         if (effect == nullptr || !effect->IsValid() || command.descriptor == nullptr ||
-            command.vertexCount == 0 || command.vertexData.empty())
+            (command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty())
             return;
 
         WGPUBufferDescriptor vertexDescriptor{};
@@ -8733,13 +8746,15 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer =
                 CreateAndBindDeferredIndexBuffer(pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, command.firstIndex,
-                                             command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, command.firstIndex,
+                                                 command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
         state.boundPipeline = nullptr;
         for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
@@ -9608,13 +9623,15 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
-                                             command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
+                                                 command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
 
         for (WGPUBindGroup group : bindGroups)
@@ -12184,7 +12201,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                  ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty())
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty())
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -12244,14 +12263,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(bindGroup);
@@ -12264,7 +12285,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                   ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -12349,14 +12372,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -12370,7 +12395,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -12465,14 +12492,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -12587,7 +12616,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -12663,14 +12694,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -12783,7 +12816,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() ||
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() ||
             !command.texture0 || !command.texture1)
             return;
 
@@ -12882,14 +12917,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -13541,7 +13578,9 @@ namespace
                                              ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || !command.baseColorTexture ||
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() || !command.baseColorTexture ||
             !command.normalMap || !command.metallicRoughnessMap ||
             !command.emissiveMap || !command.occlusionMap)
             return;
@@ -13645,14 +13684,16 @@ namespace
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -14119,7 +14160,9 @@ namespace
                                                  ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -14207,14 +14250,16 @@ namespace
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -14537,7 +14582,9 @@ namespace
                                                     ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || !command.baseColorTexture ||
+        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
+        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
+        if ((command.vertexCount == 0 && !command.indirect.enabled) || command.vertexData.empty() || !command.baseColorTexture ||
             !command.normalMap || !command.metallicRoughnessMap ||
             !command.emissiveMap || !command.occlusionMap)
             return;
@@ -14651,14 +14698,16 @@ namespace
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
-            wgpuRenderPassEncoderDrawIndexed(
-                pass, command.indexCount, 1,
-                command.firstIndex, command.baseVertex, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);

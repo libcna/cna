@@ -1997,6 +1997,64 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief WMG: compute is core WebGPU. @return True. */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override { return device_ != nullptr; }
         /**
+         * @brief WMG-0013: whether a draw can take its counts out of a GPU buffer here.
+         *
+         * `drawIndirect` is core WebGPU, but an argument block's `firstInstance` may only be
+         * non-zero with the optional `IndirectFirstInstance` feature, and the modern API's
+         * argument structs carry that field. Answered from the device this renderer actually
+         * created rather than from the family, the same way Vulkan answers it.
+         *
+         * @return True when the device has the feature.
+         */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override
+        {
+            return device_ != nullptr && indirectFirstInstanceSupported_;
+        }
+        /** @copydoc IGraphicsRenderer::DrawPrimitivesIndirectEXT */
+        void DrawPrimitivesIndirectEXT(
+            const CNA::Internal::Renderers::IVertexBufferRenderer& vb,
+            const Microsoft::Xna::Framework::Matrix& world,
+            const Microsoft::Xna::Framework::Matrix& view,
+            const Microsoft::Xna::Framework::Matrix& projection,
+            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive,
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset,
+            const CNA::Internal::Renderers::GpuDrawParams& params) override;
+        /** @copydoc IGraphicsRenderer::DrawIndexedPrimitivesIndirectEXT */
+        void DrawIndexedPrimitivesIndirectEXT(
+            const CNA::Internal::Renderers::IVertexBufferRenderer& vb,
+            const CNA::Internal::Renderers::IIndexBufferRenderer& ib,
+            const Microsoft::Xna::Framework::Matrix& world,
+            const Microsoft::Xna::Framework::Matrix& view,
+            const Microsoft::Xna::Framework::Matrix& projection,
+            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive,
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset,
+            const CNA::Internal::Renderers::GpuDrawParams& params) override;
+        /**
+         * @brief WMG-0013: the body both indirect entry points share.
+         *
+         * @param vb                 The bound vertex buffer.
+         * @param ib                 The bound index buffer, or null for the non-indexed route.
+         * @param world              The world matrix.
+         * @param view               The view matrix.
+         * @param projection         The projection matrix.
+         * @param primitive          The topology; the buffer supplies counts, never this.
+         * @param argumentBuffer     The buffer holding the arguments.
+         * @param argumentByteOffset Where in it they start.
+         * @param params             The draw description the ordinary routes take.
+         */
+        void QueueIndirectDrawEXT(
+            const CNA::Internal::Renderers::IVertexBufferRenderer& vb,
+            const CNA::Internal::Renderers::IIndexBufferRenderer* ib,
+            const Microsoft::Xna::Framework::Matrix& world,
+            const Microsoft::Xna::Framework::Matrix& view,
+            const Microsoft::Xna::Framework::Matrix& projection,
+            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive,
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset,
+            const CNA::Internal::Renderers::GpuDrawParams& params);
+        /**
          * @brief WMG-0008: whether a storage image binds to a compute program here. True.
          *
          * Both routes are implemented: a `StorageTexture2D` in any storage-capable format, and a
@@ -3791,8 +3849,28 @@ namespace CNA::Internal::Renderers::WebGPU
         // dispatch) lands -- IGraphicsRenderer::DrawPrimitivesEx's own default implementation
         // already falls back to DrawColoredPrimitives, so this also unblocks simple (unlit,
         // untextured) Model/BasicEffect draws going through that fallback.
+        /**
+         * @brief plans/plan_webgpu_modern_graphics.md WMG-0013: a queued draw's indirect arguments.
+         *
+         * Empty on every ordinary draw, which is what @ref enabled being false means. When it is
+         * true the replay issues `drawIndirect`/`drawIndexedIndirect` and the command's own
+         * `vertexCount`/`indexCount` are not read at all -- they were never known on the CPU,
+         * which is the entire point of the route.
+         */
+        struct WebGPUIndirectArgsEXT
+        {
+            /// The public `StorageBuffer`'s renderer record, retained so a `Dispose()` between the
+            /// public call and the flush cannot leave this command holding a freed `WGPUBuffer`.
+            std::shared_ptr<const CNA::Internal::Renderers::IStorageBufferRenderer> lifetime;
+            WGPUBuffer    buffer = nullptr;  ///< The native argument buffer; never owned here.
+            std::uint64_t offset = 0;        ///< Byte offset of the arguments inside it.
+            bool          enabled = false;   ///< False on every ordinary draw.
+        };
+
         struct ColoredDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -3856,6 +3934,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4004,6 +4084,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4123,6 +4205,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4219,6 +4303,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4338,6 +4424,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4465,6 +4553,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // lighting/texture -- this shader family has neither).
         struct InstancedDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -4565,6 +4655,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // shaders; alpha coverage stays in this PBR shader for glTF MASK draws.
         struct PbrDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -4679,6 +4771,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // always-pass default).
         struct SkinnedDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -4767,6 +4861,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
         struct SkinnedPbrDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -4860,6 +4956,8 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct CustomEffectDrawCommand
         {
+            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
+            WebGPUIndirectArgsEXT indirect{};
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
             bool indexed = false;
@@ -4909,6 +5007,10 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct CompiledEffectDrawCommand
         {
+            /// WMG-0013: always false here -- an indirect draw refuses a compiled effect by name,
+            /// because that route needs the primitive count this command deliberately leaves on
+            /// the GPU. Present so the replay's draw call is written once for every family.
+            WebGPUIndirectArgsEXT indirect{};
             /// One captured stream of vertex bytes, in the order the draw bound them.
             struct Stream
             {
@@ -5028,6 +5130,17 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param destination The pass's attachments.
          * @param state The replay bookkeeping.
          */
+        /**
+         * @brief WMG-0013: issues this draw as an indirect one, or says it is not one.
+         *
+         * @param pass     The open render pass.
+         * @param indirect The command's captured arguments.
+         * @param indexed  Whether an index buffer is bound for this draw.
+         * @return True when the indirect command was issued, so the caller issues nothing.
+         */
+        [[nodiscard]] bool IssueIndirectDrawIfRequestedEXT(
+            WGPURenderPassEncoder pass, const WebGPUIndirectArgsEXT& indirect, bool indexed);
+
         void IssueDescriptorEffectDrawEXT(WGPURenderPassEncoder pass,
                                           const CustomEffectDrawCommand& command,
                                           const PassDestination& destination, ReplayState& state);

@@ -970,4 +970,140 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         }
         SubmitModernEncoderEXT(encoder, {}, {});
     }
+
+    // ---- WMG-0013: indirect draws ---------------------------------------------------------------
+
+    namespace
+    {
+        /// `CNA::Graphics::StorageBufferUsage::IndirectArguments`, as the portable bit the public
+        /// descriptor carries. Named here rather than included because the enum lives in the
+        /// engine layer, which this renderer does not depend on.
+        constexpr std::uint32_t kStorageUsageIndirectArgumentsEXT = UINT32_C(1) << 3;
+    }
+
+    bool WebGPURenderer::IssueIndirectDrawIfRequestedEXT(
+        WGPURenderPassEncoder pass, const WebGPUIndirectArgsEXT& indirect, const bool indexed)
+    {
+        if (!indirect.enabled || indirect.buffer == nullptr) return false;
+        if (indexed)
+            wgpuRenderPassEncoderDrawIndexedIndirect(pass, indirect.buffer, indirect.offset);
+        else
+            wgpuRenderPassEncoderDrawIndirect(pass, indirect.buffer, indirect.offset);
+        return true;
+    }
+
+    void WebGPURenderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        QueueIndirectDrawEXT(vb, nullptr, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
+    }
+
+    void WebGPURenderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib, const Matrix& world,
+        const Matrix& view, const Matrix& projection, const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        QueueIndirectDrawEXT(vb, &ib, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
+    }
+
+    void WebGPURenderer::QueueIndirectDrawEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, const Matrix& world,
+        const Matrix& view, const Matrix& projection, const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        if (!SupportsIndirectDrawEXT())
+            throw System::NotSupportedException(
+                "CNA WebGPU: this device cannot execute an indirect draw whose arguments carry a "
+                "first instance (the optional IndirectFirstInstance feature is absent).");
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+            throw System::NotSupportedException(
+                "CNA WebGPU: an indirect draw does not accept a compiled (FX) effect; that route "
+                "needs the primitive count this command deliberately leaves on the GPU.");
+#endif
+        if (fillModeWireframe_)
+            throw System::NotSupportedException(
+                "CNA WebGPU: an indirect draw cannot be rendered as wireframe here. The wireframe "
+                "route rewrites a draw's own triangles into line segments at queue time, and an "
+                "indirect draw's triangles are not known until the GPU reads them.");
+
+        const auto* nativeArguments =
+            dynamic_cast<const WebGPUStorageBufferRenderer*>(&argumentBuffer);
+        if (nativeArguments == nullptr || !nativeArguments->IsOwnedByEXT(this) ||
+            nativeArguments->Buffer() == nullptr)
+            throw std::invalid_argument(
+                "CNA WebGPU: indirect arguments must be a StorageBuffer belonging to this device.");
+        // WGPUBufferUsage_Indirect is only set when the caller declared IndirectArguments, so the
+        // check is on the portable usage the caller actually asked for rather than on the native
+        // bits this renderer happens to add.
+        if ((nativeArguments->GetUsageEXT() & kStorageUsageIndirectArgumentsEXT) == 0)
+            throw System::NotSupportedException(
+                "CNA WebGPU: this StorageBuffer was not declared with IndirectArguments usage, so "
+                "the GPU may not read a draw command out of it. Refused rather than bound as "
+                "something it is not.");
+
+        // The public StorageBuffer owns its renderer record through shared_ptr, and retaining that
+        // record is what keeps a Dispose() between this call and the flush from leaving a queued
+        // command holding a freed WGPUBuffer. A renderer object created directly has no such
+        // portable lifetime and is refused instead of borrowed.
+        std::shared_ptr<const IStorageBufferRenderer> argumentLifetime =
+            argumentBuffer.weak_from_this().lock();
+        if (argumentLifetime == nullptr)
+            throw System::NotSupportedException(
+                "CNA WebGPU: a deferred indirect draw needs a tracked StorageBuffer, so its native "
+                "argument allocation can be retained until the command is recorded.");
+
+        // The counts are never copied to the CPU -- that is the whole point of the route -- so the
+        // draw is queued through the ORDINARY path with a legal zero primitive count, purely to
+        // capture this call's effect, declaration, pipeline state, viewport and scissor. Every
+        // Queue*Draw already snapshots the COMPLETE vertex and index window rather than the
+        // primitiveCount's worth, so the geometry the GPU will index into is already there.
+        GpuDrawParams seed = params;
+        seed.firstInstance = 0;
+        const std::size_t orderBefore = drawOrder_.size();
+        if (ib != nullptr && FirstInstanceStream(seed) != nullptr)
+            DrawInstancedPrimitivesEx(vb, *ib, world, view, projection, primitive, 0, 1, seed);
+        else if (ib != nullptr)
+            DrawIndexedPrimitivesEx(vb, *ib, world, view, projection, primitive, 0, seed);
+        else
+            DrawPrimitivesEx(vb, world, view, projection, primitive, 0, seed);
+        if (drawOrder_.size() != orderBefore + 1)
+            throw std::runtime_error(
+                "CNA WebGPU: indirect state capture did not produce exactly one queued draw.");
+
+        WebGPUIndirectArgsEXT indirect;
+        indirect.lifetime = std::move(argumentLifetime);
+        indirect.buffer = nativeArguments->Buffer();
+        indirect.offset = static_cast<std::uint64_t>(argumentByteOffset);
+        indirect.enabled = true;
+
+        const DrawOrderEntry& entry = drawOrder_.back();
+        const std::size_t index = static_cast<std::size_t>(entry.index);
+        switch (entry.family)
+        {
+        case DrawFamily::Colored:      coloredDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::Textured:     texturedDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::LitTextured:  litTexturedDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::AlphaTest:    alphaTestDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::DualTexture:  dualTextureDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::EnvMap:       envMapDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::Instanced:    instancedDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::Pbr:          pbrDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::Skinned:      skinnedDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::SkinnedPbr:   skinnedPbrDrawCommands_[index].indirect = indirect; break;
+        case DrawFamily::CustomEffect: customEffectDrawCommands_[index].indirect = indirect; break;
+        default:
+            throw System::NotSupportedException(
+                std::string("CNA WebGPU: the ") + DrawFamilyName(entry.family) +
+                " draw family has no indirect route.");
+        }
+    }
+
 }
