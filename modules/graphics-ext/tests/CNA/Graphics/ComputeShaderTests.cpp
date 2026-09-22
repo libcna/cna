@@ -111,6 +111,10 @@ void main() {
                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[1].source),
                     ToBytes(kVulkanComputeSpirV)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[2].source),
+                    std::string(kVulkanComputeWgsl)),
             },
             {CNA::ShaderStageEXT::Compute},
             {
@@ -145,6 +149,10 @@ void main() {
                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[1].source),
                     ToBytes(kVulkanComputeSpirV)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[2].source),
+                    std::string(kVulkanComputeWgsl)),
             },
             {CNA::ShaderStageEXT::Compute},
             {
@@ -527,7 +535,7 @@ TEST_F(ComputeTest, VulkanRejectsAnIntegerSamplerBeforeItCanAliasAFloatTexture)
         ComputeShader shader(
             gd, ShaderCodeEXT(
                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
-                    "main", std::string(kPayloads[2].source),
+                    "main", std::string(kPayloads[3].source),
                     ToBytes(kVulkanUnsignedSamplerComputeSpirV)));
         FAIL() << "an unsigned sampler must not compile against CNA's float-sampled XNA textures";
     }

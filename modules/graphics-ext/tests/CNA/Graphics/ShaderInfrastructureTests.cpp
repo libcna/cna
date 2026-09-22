@@ -684,7 +684,10 @@ TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChec
 {
     CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
+    // WMG-0012: WGSL among the candidates, so a WGSL renderer has a language to build the probe
+    // package in rather than skipping a selection rule that is not about languages at all.
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
+                                 CNA::ShaderLanguageEXT::Wgsl,
                                  CNA::ShaderLanguageEXT::GlslDesktop,
                                  CNA::ShaderLanguageEXT::GlslEs})
     {
@@ -721,7 +724,10 @@ TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRo
 {
     CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
+    // WMG-0012: WGSL among the candidates, so a WGSL renderer has a language to build the probe
+    // package in rather than skipping a selection rule that is not about languages at all.
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
+                                 CNA::ShaderLanguageEXT::Wgsl,
                                  CNA::ShaderLanguageEXT::GlslDesktop,
                                  CNA::ShaderLanguageEXT::GlslEs})
     {

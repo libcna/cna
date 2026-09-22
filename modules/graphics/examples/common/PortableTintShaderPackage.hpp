@@ -31,7 +31,7 @@ namespace CNA::Examples::PortableTint
 
     /**
      * @brief Creates the portable tint fixture from every checked-in generated variant.
-     * @return An owning package containing GLSL ES and SPIR-V vertex/fragment pairs.
+     * @return An owning package containing GLSL ES, SPIR-V and WGSL vertex/fragment pairs.
      */
     [[nodiscard]] inline CNA::Graphics::ShaderPackageEXT CreatePackage()
     {
@@ -51,9 +51,17 @@ namespace CNA::Examples::PortableTint
                     "main", std::string(kPayloads[2].source),
                     Detail::ToBytes(kVulkanVertexSpirV)),
                 ShaderCodeEXT(
-                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                    CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Vertex,
                     "main", std::string(kPayloads[3].source),
+                    std::string(kVulkanVertexWgsl)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                    "main", std::string(kPayloads[4].source),
                     Detail::ToBytes(kVulkanFragmentSpirV)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Fragment,
+                    "main", std::string(kPayloads[5].source),
+                    std::string(kVulkanFragmentWgsl)),
             },
             {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
     }
