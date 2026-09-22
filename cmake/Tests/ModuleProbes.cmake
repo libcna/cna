@@ -659,4 +659,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(CnaRendererRetired_${_cna_case_name}
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
+
+    # plans/plan_gpu_test_isolation.md GTI-0006: no automated test may reach the owner's live
+    # desktop by default. CnaTestDisplayPolicy runs the policy's decisions (which X displays are the
+    # live desktop, the opt-in, the Wayland guard) in script mode; CnaTestDisplayIsolation checks this
+    # tree's actual registrations -- what ctest would run -- so a registration that bypasses the
+    # policy is caught as well as a regression inside it.
+    add_test(NAME CnaTestDisplayPolicy
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_TEST_DISPLAY_RULES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestDisplayPolicyRules.cmake
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/TestDisplayPolicyCase.cmake)
+    set_tests_properties(CnaTestDisplayPolicy PROPERTIES LABELS "configuration")
+    if(Python3_Interpreter_FOUND AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+        add_test(NAME CnaTestDisplayIsolation
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_test_display_isolation.py"
+                --ctest "${CMAKE_CTEST_COMMAND}" --build-dir "${CMAKE_BINARY_DIR}"
+                --wayland-guard-applies ${CNA_TEST_WAYLAND_GUARD_APPLIES})
+        set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
+    endif()
 endif()
