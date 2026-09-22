@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "auto_exposure";
-inline constexpr std::string_view kManifestSha256 = "68b5ed5ab3bc544eae4cbff84c7b573e890602054b88bff8cad01849534ffab0";
+inline constexpr std::string_view kManifestSha256 = "f5e2d984aa1642bd19e0ef948b6eb613797ecf0e70eba191ed472692fdf07eeb";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kReductionEsComputeSource =
     R"CNA_SHADER(#version 310 es
@@ -184,10 +188,106 @@ inline constexpr std::uint32_t kReductionVulkanComputeSpirV[] = {
 };
 inline constexpr std::size_t kReductionVulkanComputeSpirVByteSize = sizeof(kReductionVulkanComputeSpirV);
 
-inline constexpr std::array<PayloadProvenance, 3> kPayloads = {{
+inline constexpr std::string_view kReductionVulkanComputeWgsl =
+    R"CNA_SHADER(// reduction.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Partials {
+    partials: array<f32>,
+}
+
+var<private> gl_NumWorkGroups_1: vec3<u32>;
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(0) @binding(0) 
+var uScene_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var uScene_cnaSampler: sampler;
+var<private> gl_LocalInvocationIndex_1: u32;
+var<workgroup> sharedSums: array<f32, 64>;
+var<private> gl_WorkGroupID_1: vec3<u32>;
+@group(0) @binding(1) 
+var<storage, read_write> unnamed: Partials;
+
+fn main_1() {
+    var grid: vec2<f32>;
+    var uv: vec2<f32>;
+    var colour: vec3<f32>;
+    var luminance: f32;
+    var value: f32;
+    var local: u32;
+    var stride: u32;
+    var group: u32;
+
+    let _e33 = gl_NumWorkGroups_1;
+    grid = vec2<f32>((_e33.xy * vec2<u32>(8u, 8u)));
+    let _e37 = gl_GlobalInvocationID_1;
+    let _e42 = grid;
+    uv = ((vec2<f32>(_e37.xy) + vec2(0.5f)) / _e42);
+    let _e44 = uv;
+    let _e45 = textureSampleLevel(uScene_cnaTexture, uScene_cnaSampler, _e44, 0f);
+    colour = _e45.xyz;
+    let _e47 = colour;
+    luminance = dot(_e47, vec3<f32>(0.2126f, 0.7152f, 0.0722f));
+    let _e49 = luminance;
+    value = log(max(_e49, 0.0001f));
+    let _e52 = gl_LocalInvocationIndex_1;
+    local = _e52;
+    let _e53 = local;
+    let _e54 = value;
+    sharedSums[_e53] = _e54;
+    workgroupBarrier();
+    workgroupBarrier();
+    stride = 32u;
+    loop {
+        let _e56 = stride;
+        if (_e56 > 0u) {
+            let _e58 = local;
+            let _e59 = stride;
+            if (_e58 < _e59) {
+                let _e61 = local;
+                let _e62 = local;
+                let _e63 = stride;
+                let _e66 = sharedSums[(_e62 + _e63)];
+                let _e68 = sharedSums[_e61];
+                sharedSums[_e61] = (_e68 + _e66);
+            }
+            workgroupBarrier();
+            workgroupBarrier();
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e71 = stride;
+            stride = (_e71 >> bitcast<u32>(1u));
+        }
+    }
+    let _e74 = local;
+    if (_e74 == 0u) {
+        let _e77 = gl_WorkGroupID_1[1u];
+        let _e79 = gl_NumWorkGroups_1[0u];
+        let _e82 = gl_WorkGroupID_1[0u];
+        group = ((_e77 * _e79) + _e82);
+        let _e84 = group;
+        let _e86 = sharedSums[0i];
+        unnamed.partials[_e84] = _e86;
+    }
+    return;
+}
+
+@compute @workgroup_size(8, 8, 1) 
+fn main(@builtin(num_workgroups) gl_NumWorkGroups: vec3<u32>, @builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>, @builtin(local_invocation_index) gl_LocalInvocationIndex: u32, @builtin(workgroup_id) gl_WorkGroupID: vec3<u32>) {
+    gl_NumWorkGroups_1 = gl_NumWorkGroups;
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    gl_LocalInvocationIndex_1 = gl_LocalInvocationIndex;
+    gl_WorkGroupID_1 = gl_WorkGroupID;
+    main_1();
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
     {"kReductionEsComputeSource", "reduction.es.comp.glsl", "59c462baec909f0ee870b97d0d4c0826e8e8b66eeef07e5d0a21b7fd23cd119d", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kReductionDesktopComputeSource", "reduction.desktop.comp.glsl", "96e48c3df68ea695470d40bc1cd96a5261bda1121288fb3c4447f805a5b22be0", "glsl", "glsl", "compute", "text", "main"},
     {"kReductionVulkanComputeSpirV", "reduction.vulkan.comp.glsl", "fae1808a0f4ce0a2634dee5b2070566896a9eccaaac040d25b568928de6ada42", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kReductionVulkanComputeWgsl", "reduction.vulkan.comp.glsl", "fae1808a0f4ce0a2634dee5b2070566896a9eccaaac040d25b568928de6ada42", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::AutoExposureGenerated

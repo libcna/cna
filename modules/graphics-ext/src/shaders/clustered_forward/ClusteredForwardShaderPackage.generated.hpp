@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "clustered_forward";
-inline constexpr std::string_view kManifestSha256 = "20d512726375dd4d70153720c2ef051bbf19b673a4dd7f05831b3bb273f56cd1";
+inline constexpr std::string_view kManifestSha256 = "ac11a61064dabf51cb340a9778f23a376385823b75db765d73e17001c8076a5c";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kForwardEsVertexSource =
     R"CNA_SHADER(#version 300 es
@@ -661,6 +665,78 @@ inline constexpr std::uint32_t kForwardVulkanVertexSpirV[] = {
     0x00000048u, 0x0000004du, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kForwardVulkanVertexSpirVByteSize = sizeof(kForwardVulkanVertexSpirV);
+
+inline constexpr std::string_view kForwardVulkanVertexWgsl =
+    R"CNA_SHADER(// forward.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Mat4Array {
+    uClusterMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: vec3<f32>,
+    @location(1) member_1: vec3<f32>,
+    @location(2) member_2: vec4<f32>,
+    @location(3) member_3: f32,
+}
+
+@group(1) @binding(15) 
+var<uniform> unnamed: Mat4Array;
+var<private> aPosition_1: vec3<f32>;
+var<private> unnamed_1: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> vWorldPosition: vec3<f32>;
+var<private> vWorldNormal: vec3<f32>;
+var<private> aNormal_1: vec3<f32>;
+var<private> vClipPosition: vec4<f32>;
+var<private> vViewDistance: f32;
+
+fn main_1() {
+    var world: vec4<f32>;
+    var view: vec4<f32>;
+
+    let _e19 = unnamed.uClusterMatrices[0i];
+    let _e20 = aPosition_1;
+    world = (_e19 * vec4<f32>(_e20.x, _e20.y, _e20.z, 1f));
+    let _e28 = unnamed.uClusterMatrices[1i];
+    let _e29 = world;
+    view = (_e28 * _e29);
+    let _e33 = unnamed.uClusterMatrices[2i];
+    let _e34 = view;
+    unnamed_1.gl_Position = (_e33 * _e34);
+    let _e37 = world;
+    vWorldPosition = _e37.xyz;
+    let _e41 = unnamed.uClusterMatrices[0i];
+    let _e49 = aNormal_1;
+    vWorldNormal = (mat3x3<f32>(_e41[0].xyz, _e41[1].xyz, _e41[2].xyz) * _e49);
+    let _e52 = unnamed_1.gl_Position;
+    vClipPosition = _e52;
+    let _e54 = view[2u];
+    vViewDistance = -(_e54);
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPosition: vec3<f32>, @location(1) aNormal: vec3<f32>) -> VertexOutput {
+    aPosition_1 = aPosition;
+    aNormal_1 = aNormal;
+    main_1();
+    let _e11 = unnamed_1.gl_Position.y;
+    unnamed_1.gl_Position.y = -(_e11);
+    let _e13 = unnamed_1.gl_Position;
+    let _e14 = vWorldPosition;
+    let _e15 = vWorldNormal;
+    let _e16 = vClipPosition;
+    let _e17 = vViewDistance;
+    return VertexOutput(_e13, _e14, _e15, _e16, _e17);
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kForwardVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00001172u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -1453,11 +1529,1529 @@ inline constexpr std::uint32_t kForwardVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kForwardVulkanFragmentSpirVByteSize = sizeof(kForwardVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
+inline constexpr std::string_view kForwardVulkanFragmentWgsl =
+    R"CNA_SHADER(// forward.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct CnaClusteredLight {
+    position: vec3<f32>,
+    range: f32,
+    colour: vec3<f32>,
+    isSpot: f32,
+    direction: vec3<f32>,
+    cosOuter: f32,
+    cosInner: f32,
+}
+
+struct CnaClusteredLights {
+    uCnaLights: array<vec4<f32>>,
+}
+
+struct FloatArray {
+    uClusterScalars: array<f32, 72>,
+}
+
+struct CnaClusterTable {
+    uCnaClusters: array<vec2<u32>>,
+}
+
+struct CnaLightIndices {
+    uCnaIndices: array<u32>,
+}
+
+struct Vec3Array {
+    uClusterVectors: array<vec3<f32>, 72>,
+}
+
+struct Mat4Array {
+    uClusterMatrices: array<mat4x4<f32>, 72>,
+}
+
+@group(2) @binding(6) 
+var<storage> unnamed: CnaClusteredLights;
+@group(1) @binding(12) 
+var<storage> unnamed_1: FloatArray;
+@group(2) @binding(7) 
+var<storage> unnamed_2: CnaClusterTable;
+@group(2) @binding(8) 
+var<storage> unnamed_3: CnaLightIndices;
+@group(1) @binding(0) 
+var uCnaAreaBrdf_cnaTexture: texture_2d<f32>;
+@group(1) @binding(32) 
+var uCnaAreaBrdf_cnaSampler: sampler;
+@group(1) @binding(14) 
+var<uniform> unnamed_4: Vec3Array;
+var<private> vWorldNormal_1: vec3<f32>;
+var<private> vWorldPosition_1: vec3<f32>;
+var<private> vClipPosition_1: vec4<f32>;
+var<private> vViewDistance_1: f32;
+@group(1) @binding(15) 
+var<uniform> unnamed_5: Mat4Array;
+@group(1) @binding(1) 
+var uOpaqueFrame_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uOpaqueFrame_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+
+fn cnaSheenVisibility_u0028_f1_u003b_f1_u003b(NoV: ptr<function, f32>, NoL: ptr<function, f32>) -> f32 {
+    let _e162 = (*NoL);
+    let _e163 = (*NoV);
+    let _e165 = (*NoL);
+    let _e166 = (*NoV);
+    return (1f / max((4f * ((_e162 + _e163) - (_e165 * _e166))), 0.0000001f));
+}
+
+fn cnaSheenDistribution_u0028_f1_u003b_f1_u003b(NoH: ptr<function, f32>, roughness: ptr<function, f32>) -> f32 {
+    var alpha: f32;
+    var inverseAlpha: f32;
+    var sinSquared: f32;
+
+    let _e165 = (*roughness);
+    let _e166 = (*roughness);
+    alpha = max((_e165 * _e166), 0.07f);
+    let _e169 = alpha;
+    inverseAlpha = (1f / _e169);
+    let _e171 = (*NoH);
+    let _e172 = (*NoH);
+    sinSquared = max((1f - (_e171 * _e172)), 0.0078125f);
+    let _e176 = inverseAlpha;
+    let _e178 = sinSquared;
+    let _e179 = inverseAlpha;
+    return (((2f + _e176) * pow(_e178, (_e179 * 0.5f))) / 6.2831855f);
+}
+
+fn cnaGeometry_u0028_f1_u003b_f1_u003b_f1_u003b(NoV_1: ptr<function, f32>, NoL_1: ptr<function, f32>, roughness_1: ptr<function, f32>) -> f32 {
+    var k: f32;
+    var gv: f32;
+    var gl: f32;
+
+    let _e166 = (*roughness_1);
+    let _e168 = (*roughness_1);
+    k = (((_e166 + 1f) * (_e168 + 1f)) / 8f);
+    let _e172 = (*NoV_1);
+    let _e173 = (*NoV_1);
+    let _e174 = k;
+    let _e177 = k;
+    gv = (_e172 / max(((_e173 * (1f - _e174)) + _e177), 0.0000001f));
+    let _e181 = (*NoL_1);
+    let _e182 = (*NoL_1);
+    let _e183 = k;
+    let _e186 = k;
+    gl = (_e181 / max(((_e182 * (1f - _e183)) + _e186), 0.0000001f));
+    let _e190 = gv;
+    let _e191 = gl;
+    return (_e190 * _e191);
+}
+
+fn cnaDistribution_u0028_f1_u003b_f1_u003b(NoH_1: ptr<function, f32>, roughness_2: ptr<function, f32>) -> f32 {
+    var a: f32;
+    var aa: f32;
+    var d: f32;
+
+    let _e165 = (*roughness_2);
+    let _e166 = (*roughness_2);
+    a = (_e165 * _e166);
+    let _e168 = a;
+    let _e169 = a;
+    aa = (_e168 * _e169);
+    let _e171 = (*NoH_1);
+    let _e172 = (*NoH_1);
+    let _e174 = aa;
+    d = (((_e171 * _e172) * (_e174 - 1f)) + 1f);
+    let _e178 = aa;
+    let _e179 = d;
+    let _e181 = d;
+    return (_e178 / max(((3.1415927f * _e179) * _e181), 0.0000001f));
+}
+
+fn cnaFilmSquare_u0028_f1_u003b(v: ptr<function, f32>) -> f32 {
+    let _e161 = (*v);
+    let _e162 = (*v);
+    return (_e161 * _e162);
+}
+
+fn cnaFilmSensitivity_u0028_f1_u003b_vf3_u003b(opd: ptr<function, f32>, shift: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var phase: f32;
+    var value: vec3<f32>;
+    var position: vec3<f32>;
+    var variance: vec3<f32>;
+    var xyz: vec3<f32>;
+    var param: f32;
+    var param_1: f32;
+
+    let _e169 = (*opd);
+    phase = ((6.2831855f * _e169) * 0.000000001f);
+    value = vec3<f32>(0.00000000000054856f, 0.00000000000044201f, 0.00000000000052481f);
+    position = vec3<f32>(1681000f, 1795300f, 2208400f);
+    variance = vec3<f32>(4327800000f, 9304600000f, 6612100000f);
+    let _e172 = value;
+    let _e173 = variance;
+    let _e177 = position;
+    let _e178 = phase;
+    let _e180 = (*shift);
+    let _e184 = phase;
+    param = _e184;
+    let _e185 = cnaFilmSquare_u0028_f1_u003b((&param));
+    let _e187 = variance;
+    xyz = (((_e172 * sqrt((_e173 * 6.2831855f))) * cos(((_e177 * _e178) + _e180))) * exp((_e187 * -(_e185))));
+    let _e191 = phase;
+    let _e194 = (*shift)[0u];
+    let _e198 = phase;
+    param_1 = _e198;
+    let _e199 = cnaFilmSquare_u0028_f1_u003b((&param_1));
+    let _e204 = xyz[0u];
+    xyz[0u] = (_e204 + ((0.00000001644083f * cos(((2239900f * _e191) + _e194))) * exp((-4528200000f * _e199))));
+    let _e207 = xyz;
+    xyz = (_e207 / vec3(0.00000010685f));
+    let _e211 = xyz[0u];
+    let _e214 = xyz[1u];
+    let _e218 = xyz[2u];
+    let _e222 = xyz[0u];
+    let _e225 = xyz[1u];
+    let _e229 = xyz[2u];
+    let _e233 = xyz[0u];
+    let _e236 = xyz[1u];
+    let _e240 = xyz[2u];
+    return vec3<f32>((((3.2404542f * _e211) - (1.5371385f * _e214)) - (0.4985314f * _e218)), (((-0.969266f * _e222) + (1.8760108f * _e225)) + (0.041556f * _e229)), (((0.0556434f * _e233) - (0.2040259f * _e236)) + (1.0572252f * _e240)));
+}
+
+fn cnaFilmSquare_u0028_vf3_u003b(v_1: ptr<function, vec3<f32>>) -> vec3<f32> {
+    let _e161 = (*v_1);
+    let _e162 = (*v_1);
+    return (_e161 * _e162);
+}
+
+fn cnaFilmIorToFresnel0_u0028_vf3_u003b_f1_u003b(transmitted: ptr<function, vec3<f32>>, incident: ptr<function, f32>) -> vec3<f32> {
+    var param_2: vec3<f32>;
+
+    let _e163 = (*transmitted);
+    let _e164 = (*incident);
+    let _e167 = (*transmitted);
+    let _e168 = (*incident);
+    param_2 = ((_e163 - vec3(_e164)) / (_e167 + vec3(_e168)));
+    let _e172 = cnaFilmSquare_u0028_vf3_u003b((&param_2));
+    return _e172;
+}
+
+fn cnaFilmFresnel0ToIor_u0028_vf3_u003b(fresnel0_: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var root: vec3<f32>;
+
+    let _e162 = (*fresnel0_);
+    root = sqrt(clamp(_e162, vec3(0f), vec3(0.9999f)));
+    let _e167 = root;
+    let _e169 = root;
+    return ((vec3<f32>(1f, 1f, 1f) + _e167) / (vec3<f32>(1f, 1f, 1f) - _e169));
+}
+
+fn cnaFilmSchlick_u0028_f1_u003b_f1_u003b(f0_: ptr<function, f32>, cosTheta: ptr<function, f32>) -> f32 {
+    let _e162 = (*f0_);
+    let _e163 = (*f0_);
+    let _e165 = (*cosTheta);
+    return (_e162 + ((1f - _e163) * pow(clamp((1f - _e165), 0f, 1f), 5f)));
+}
+
+fn cnaFilmIorToFresnel0_u0028_f1_u003b_f1_u003b(transmitted_1: ptr<function, f32>, incident_1: ptr<function, f32>) -> f32 {
+    var param_3: f32;
+
+    let _e163 = (*transmitted_1);
+    let _e164 = (*incident_1);
+    let _e166 = (*transmitted_1);
+    let _e167 = (*incident_1);
+    param_3 = ((_e163 - _e164) / (_e166 + _e167));
+    let _e170 = cnaFilmSquare_u0028_f1_u003b((&param_3));
+    return _e170;
+}
+
+fn cnaFilmSchlick_u0028_vf3_u003b_f1_u003b(f0_1: ptr<function, vec3<f32>>, cosTheta_1: ptr<function, f32>) -> vec3<f32> {
+    let _e162 = (*f0_1);
+    let _e163 = (*f0_1);
+    let _e165 = (*cosTheta_1);
+    return (_e162 + ((vec3<f32>(1f, 1f, 1f) - _e163) * pow(clamp((1f - _e165), 0f, 1f), 5f)));
+}
+
+fn cnaThinFilmIridescence_u0028_f1_u003b_f1_u003b_f1_u003b_f1_u003b_vf3_u003b(outsideIor: ptr<function, f32>, filmIor: ptr<function, f32>, cosTheta_2: ptr<function, f32>, thicknessNm: ptr<function, f32>, baseF0_: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var cosTheta1_: f32;
+    var param_4: vec3<f32>;
+    var param_5: f32;
+    var iridescenceIor: f32;
+    var sinTheta2Squared: f32;
+    var param_6: f32;
+    var param_7: f32;
+    var cosTheta2Squared: f32;
+    var cosTheta2_: f32;
+    var r0_: f32;
+    var param_8: f32;
+    var param_9: f32;
+    var r12_: f32;
+    var param_10: f32;
+    var param_11: f32;
+    var t121_: f32;
+    var phi12_: f32;
+    var phi21_: f32;
+    var baseIor: vec3<f32>;
+    var param_12: vec3<f32>;
+    var r23_: vec3<f32>;
+    var param_13: vec3<f32>;
+    var param_14: f32;
+    var param_15: vec3<f32>;
+    var param_16: f32;
+    var phi23_: vec3<f32>;
+    var opd_1: f32;
+    var phi: vec3<f32>;
+    var r123_: vec3<f32>;
+    var rs: vec3<f32>;
+    var param_17: vec3<f32>;
+    var result: vec3<f32>;
+    var cm: vec3<f32>;
+    var order: i32;
+    var param_18: f32;
+    var param_19: vec3<f32>;
+
+    let _e201 = (*cosTheta_2);
+    cosTheta1_ = clamp(_e201, 0f, 1f);
+    let _e203 = (*thicknessNm);
+    if (_e203 <= 0f) {
+        let _e205 = (*baseF0_);
+        param_4 = _e205;
+        let _e206 = cosTheta1_;
+        param_5 = _e206;
+        let _e207 = cnaFilmSchlick_u0028_vf3_u003b_f1_u003b((&param_4), (&param_5));
+        return _e207;
+    }
+    let _e208 = (*outsideIor);
+    let _e209 = (*filmIor);
+    let _e210 = (*thicknessNm);
+    iridescenceIor = mix(_e208, _e209, smoothstep(0f, 0.03f, _e210));
+    let _e213 = (*outsideIor);
+    let _e214 = iridescenceIor;
+    param_6 = (_e213 / _e214);
+    let _e216 = cnaFilmSquare_u0028_f1_u003b((&param_6));
+    let _e217 = cosTheta1_;
+    param_7 = _e217;
+    let _e218 = cnaFilmSquare_u0028_f1_u003b((&param_7));
+    sinTheta2Squared = (_e216 * (1f - _e218));
+    let _e221 = sinTheta2Squared;
+    cosTheta2Squared = (1f - _e221);
+    let _e223 = cosTheta2Squared;
+    if (_e223 < 0f) {
+        return vec3<f32>(1f, 1f, 1f);
+    }
+    let _e225 = cosTheta2Squared;
+    cosTheta2_ = sqrt(_e225);
+    let _e227 = iridescenceIor;
+    param_8 = _e227;
+    let _e228 = (*outsideIor);
+    param_9 = _e228;
+    let _e229 = cnaFilmIorToFresnel0_u0028_f1_u003b_f1_u003b((&param_8), (&param_9));
+    r0_ = _e229;
+    let _e230 = r0_;
+    param_10 = _e230;
+    let _e231 = cosTheta1_;
+    param_11 = _e231;
+    let _e232 = cnaFilmSchlick_u0028_f1_u003b_f1_u003b((&param_10), (&param_11));
+    r12_ = _e232;
+    let _e233 = r12_;
+    t121_ = (1f - _e233);
+    let _e235 = iridescenceIor;
+    let _e236 = (*outsideIor);
+    phi12_ = select(0f, 3.1415927f, (_e235 < _e236));
+    let _e239 = phi12_;
+    phi21_ = (3.1415927f - _e239);
+    let _e241 = (*baseF0_);
+    param_12 = _e241;
+    let _e242 = cnaFilmFresnel0ToIor_u0028_vf3_u003b((&param_12));
+    baseIor = _e242;
+    let _e243 = baseIor;
+    param_13 = _e243;
+    let _e244 = iridescenceIor;
+    param_14 = _e244;
+    let _e245 = cnaFilmIorToFresnel0_u0028_vf3_u003b_f1_u003b((&param_13), (&param_14));
+    param_15 = _e245;
+    let _e246 = cosTheta2_;
+    param_16 = _e246;
+    let _e247 = cnaFilmSchlick_u0028_vf3_u003b_f1_u003b((&param_15), (&param_16));
+    r23_ = _e247;
+    let _e249 = baseIor[0u];
+    let _e250 = iridescenceIor;
+    let _e254 = baseIor[1u];
+    let _e255 = iridescenceIor;
+    let _e259 = baseIor[2u];
+    let _e260 = iridescenceIor;
+    phi23_ = vec3<f32>(select(0f, 3.1415927f, (_e249 < _e250)), select(0f, 3.1415927f, (_e254 < _e255)), select(0f, 3.1415927f, (_e259 < _e260)));
+    let _e264 = iridescenceIor;
+    let _e266 = (*thicknessNm);
+    let _e268 = cosTheta2_;
+    opd_1 = (((2f * _e264) * _e266) * _e268);
+    let _e270 = phi21_;
+    let _e272 = phi23_;
+    phi = (vec3(_e270) + _e272);
+    let _e274 = r12_;
+    let _e276 = r23_;
+    r123_ = clamp((vec3(_e274) * _e276), vec3(0.00001f), vec3(0.9999f));
+    let _e281 = t121_;
+    param_17 = vec3(_e281);
+    let _e283 = cnaFilmSquare_u0028_vf3_u003b((&param_17));
+    let _e284 = r23_;
+    let _e286 = r123_;
+    rs = ((_e283 * _e284) / (vec3<f32>(1f, 1f, 1f) - _e286));
+    let _e289 = r12_;
+    let _e291 = rs;
+    result = (vec3(_e289) + _e291);
+    let _e293 = rs;
+    let _e294 = t121_;
+    cm = (_e293 - vec3(_e294));
+    order = 1i;
+    loop {
+        let _e297 = order;
+        if (_e297 <= 2i) {
+            let _e299 = r123_;
+            let _e301 = cm;
+            cm = (_e301 * sqrt(_e299));
+            let _e303 = cm;
+            let _e305 = order;
+            let _e307 = opd_1;
+            let _e309 = order;
+            let _e311 = phi;
+            param_18 = (f32(_e305) * _e307);
+            param_19 = (_e311 * f32(_e309));
+            let _e313 = cnaFilmSensitivity_u0028_f1_u003b_vf3_u003b((&param_18), (&param_19));
+            let _e315 = result;
+            result = (_e315 + ((_e303 * 2f) * _e313));
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e317 = order;
+            order = (_e317 + 1i);
+        }
+    }
+    let _e319 = result;
+    return max(_e319, vec3<f32>(0f, 0f, 0f));
+}
+
+fn cnaFresnel_u0028_f1_u003b_vf3_u003b(VoH: ptr<function, f32>, f0_2: ptr<function, vec3<f32>>) -> vec3<f32> {
+    let _e162 = (*f0_2);
+    let _e163 = (*f0_2);
+    let _e165 = (*VoH);
+    return (_e162 + ((vec3<f32>(1f, 1f, 1f) - _e163) * pow(clamp((1f - _e165), 0f, 1f), 5f)));
+}
+
+fn cnaFalloff_u0028_f1_u003b_f1_u003b(distance: ptr<function, f32>, range: ptr<function, f32>) -> f32 {
+    var ratio: f32;
+    var window: f32;
+
+    let _e164 = (*distance);
+    let _e165 = (*range);
+    ratio = (_e164 / max(_e165, 0.0001f));
+    let _e168 = ratio;
+    let _e169 = ratio;
+    let _e171 = ratio;
+    let _e173 = ratio;
+    window = clamp((1f - (((_e168 * _e169) * _e171) * _e173)), 0f, 1f);
+    let _e177 = window;
+    let _e178 = window;
+    let _e180 = (*distance);
+    let _e181 = (*distance);
+    return ((_e177 * _e178) / max((_e180 * _e181), 0.0001f));
+}
+
+fn cnaShade_u0028_struct_u002d_CnaClusteredLight_u002d_vf3_u002d_f1_u002d_vf3_u002d_f1_u002d_vf3_u002d_f1_u002d_f11_u003b_vf3_u003b_vf3_u003b_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b_vf3_u003b(light: ptr<function, CnaClusteredLight>, surface: ptr<function, vec3<f32>>, normal: ptr<function, vec3<f32>>, viewDirection: ptr<function, vec3<f32>>, baseColor: ptr<function, vec3<f32>>, metallic: ptr<function, f32>, roughness_3: ptr<function, f32>, diffuseOut: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var toLight: vec3<f32>;
+    var distance_1: f32;
+    var L: vec3<f32>;
+    var attenuation: f32;
+    var param_20: f32;
+    var param_21: f32;
+    var cosAngle: f32;
+    var halfSum: vec3<f32>;
+    var H: vec3<f32>;
+    var local: vec3<f32>;
+    var rawNoL: f32;
+    var NoL_2: f32;
+    var subsurface: f32;
+    var wrappedNoL: f32;
+    var w: f32;
+    var NoV_2: f32;
+    var NoH_2: f32;
+    var VoH_1: f32;
+    var backScatter: f32;
+    var f0_3: vec3<f32>;
+    var fresnel: vec3<f32>;
+    var param_22: f32;
+    var param_23: vec3<f32>;
+    var film: vec3<f32>;
+    var param_24: f32;
+    var param_25: f32;
+    var param_26: f32;
+    var param_27: f32;
+    var param_28: vec3<f32>;
+    var specular: vec3<f32>;
+    var param_29: f32;
+    var param_30: f32;
+    var param_31: f32;
+    var param_32: f32;
+    var param_33: f32;
+    var diffuse: vec3<f32>;
+    var layered: vec3<f32>;
+    var param_34: f32;
+    var param_35: f32;
+    var param_36: f32;
+    var param_37: f32;
+    var ccRoughness: f32;
+    var ccFresnel: f32;
+    var ccSpecular: f32;
+    var param_38: f32;
+    var param_39: f32;
+    var param_40: f32;
+    var param_41: f32;
+    var param_42: f32;
+
+    (*diffuseOut) = vec3<f32>(0f, 0f, 0f);
+    let _e218 = (*light).position;
+    let _e219 = (*surface);
+    toLight = (_e218 - _e219);
+    let _e221 = toLight;
+    distance_1 = length(_e221);
+    let _e223 = distance_1;
+    let _e225 = (*light).range;
+    let _e227 = distance_1;
+    if ((_e223 >= _e225) || (_e227 <= 0f)) {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e230 = toLight;
+    let _e231 = distance_1;
+    L = (_e230 / vec3(_e231));
+    let _e234 = distance_1;
+    param_20 = _e234;
+    let _e236 = (*light).range;
+    param_21 = _e236;
+    let _e237 = cnaFalloff_u0028_f1_u003b_f1_u003b((&param_20), (&param_21));
+    attenuation = _e237;
+    let _e239 = (*light).isSpot;
+    if (_e239 > 0.5f) {
+        let _e241 = L;
+        let _e244 = (*light).direction;
+        cosAngle = dot(-(_e241), _e244);
+        let _e246 = cosAngle;
+        let _e248 = (*light).cosOuter;
+        let _e251 = (*light).cosInner;
+        let _e253 = (*light).cosOuter;
+        let _e258 = attenuation;
+        attenuation = (_e258 * clamp(((_e246 - _e248) / max((_e251 - _e253), 0.0001f)), 0f, 1f));
+    }
+    let _e260 = attenuation;
+    if (_e260 <= 0f) {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e262 = L;
+    let _e263 = (*viewDirection);
+    halfSum = (_e262 + _e263);
+    let _e265 = halfSum;
+    let _e266 = halfSum;
+    if (dot(_e265, _e266) > 0.00000001f) {
+        let _e269 = halfSum;
+        local = normalize(_e269);
+    } else {
+        let _e271 = (*normal);
+        local = _e271;
+    }
+    let _e272 = local;
+    H = _e272;
+    let _e273 = (*normal);
+    let _e274 = L;
+    rawNoL = dot(_e273, _e274);
+    let _e276 = rawNoL;
+    NoL_2 = max(_e276, 0f);
+    let _e281 = unnamed_4.uClusterVectors[13i][0u];
+    let _e285 = unnamed_4.uClusterVectors[13i][1u];
+    let _e290 = unnamed_4.uClusterVectors[13i][2u];
+    subsurface = ((_e281 + _e285) + _e290);
+    let _e292 = NoL_2;
+    wrappedNoL = _e292;
+    let _e293 = subsurface;
+    if (_e293 > 0f) {
+        let _e297 = unnamed_1.uClusterScalars[6i];
+        w = _e297;
+        let _e298 = rawNoL;
+        let _e299 = w;
+        let _e301 = w;
+        let _e303 = w;
+        wrappedNoL = clamp(((_e298 + _e299) / ((1f + _e301) * (1f + _e303))), 0f, 1f);
+    }
+    let _e308 = (*normal);
+    let _e309 = (*viewDirection);
+    NoV_2 = max(dot(_e308, _e309), 0.0001f);
+    let _e312 = (*normal);
+    let _e313 = H;
+    NoH_2 = max(dot(_e312, _e313), 0f);
+    let _e316 = (*viewDirection);
+    let _e317 = H;
+    VoH_1 = max(dot(_e316, _e317), 0f);
+    backScatter = 0f;
+    let _e320 = subsurface;
+    if (_e320 > 0f) {
+        let _e322 = (*viewDirection);
+        let _e323 = L;
+        backScatter = pow(clamp(dot(_e322, -(_e323)), 0f, 1f), 4f);
+    }
+    let _e328 = NoL_2;
+    let _e330 = wrappedNoL;
+    let _e333 = backScatter;
+    if (((_e328 <= 0f) && (_e330 <= 0f)) && (_e333 <= 0f)) {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e336 = (*baseColor);
+    let _e337 = (*metallic);
+    f0_3 = mix(vec3<f32>(0.04f, 0.04f, 0.04f), _e336, vec3(_e337));
+    let _e340 = VoH_1;
+    param_22 = _e340;
+    let _e341 = f0_3;
+    param_23 = _e341;
+    let _e342 = cnaFresnel_u0028_f1_u003b_vf3_u003b((&param_22), (&param_23));
+    fresnel = _e342;
+    let _e345 = unnamed_1.uClusterScalars[7i];
+    if (_e345 > 0f) {
+        param_24 = 1f;
+        let _e349 = unnamed_1.uClusterScalars[8i];
+        param_25 = _e349;
+        let _e350 = NoV_2;
+        param_26 = _e350;
+        let _e353 = unnamed_1.uClusterScalars[9i];
+        param_27 = _e353;
+        let _e354 = f0_3;
+        param_28 = _e354;
+        let _e355 = cnaThinFilmIridescence_u0028_f1_u003b_f1_u003b_f1_u003b_f1_u003b_vf3_u003b((&param_24), (&param_25), (&param_26), (&param_27), (&param_28));
+        film = _e355;
+        let _e356 = fresnel;
+        let _e357 = film;
+        let _e360 = unnamed_1.uClusterScalars[7i];
+        fresnel = mix(_e356, _e357, vec3(_e360));
+    }
+    let _e363 = fresnel;
+    let _e364 = NoH_2;
+    param_29 = _e364;
+    let _e365 = (*roughness_3);
+    param_30 = _e365;
+    let _e366 = cnaDistribution_u0028_f1_u003b_f1_u003b((&param_29), (&param_30));
+    let _e368 = NoV_2;
+    param_31 = _e368;
+    let _e369 = NoL_2;
+    param_32 = _e369;
+    let _e370 = (*roughness_3);
+    param_33 = _e370;
+    let _e371 = cnaGeometry_u0028_f1_u003b_f1_u003b_f1_u003b((&param_31), (&param_32), (&param_33));
+    let _e373 = NoV_2;
+    let _e375 = NoL_2;
+    specular = (((_e363 * _e366) * _e371) / vec3(max(((4f * _e373) * _e375), 0.0000001f)));
+    let _e380 = fresnel;
+    let _e382 = (*metallic);
+    let _e385 = (*baseColor);
+    diffuse = ((((vec3<f32>(1f, 1f, 1f) - _e380) * (1f - _e382)) * _e385) / vec3(3.1415927f));
+    let _e389 = diffuse;
+    let _e391 = (*light).colour;
+    let _e393 = attenuation;
+    let _e395 = wrappedNoL;
+    (*diffuseOut) = (((_e389 * _e391) * _e393) * _e395);
+    let _e397 = subsurface;
+    if (_e397 > 0f) {
+        let _e401 = unnamed_4.uClusterVectors[13i];
+        let _e402 = backScatter;
+        let _e405 = (*light).colour;
+        let _e407 = attenuation;
+        let _e409 = (*diffuseOut);
+        (*diffuseOut) = (_e409 + (((_e401 * _e402) * _e405) * _e407));
+    }
+    let _e411 = specular;
+    layered = _e411;
+    let _e415 = unnamed_4.uClusterVectors[12i][0u];
+    let _e419 = unnamed_4.uClusterVectors[12i][1u];
+    let _e424 = unnamed_4.uClusterVectors[12i][2u];
+    if (((_e415 + _e419) + _e424) > 0f) {
+        let _e429 = unnamed_4.uClusterVectors[12i];
+        let _e430 = NoH_2;
+        param_34 = _e430;
+        let _e433 = unnamed_1.uClusterScalars[5i];
+        param_35 = _e433;
+        let _e434 = cnaSheenDistribution_u0028_f1_u003b_f1_u003b((&param_34), (&param_35));
+        let _e436 = NoV_2;
+        param_36 = _e436;
+        let _e437 = NoL_2;
+        param_37 = _e437;
+        let _e438 = cnaSheenVisibility_u0028_f1_u003b_f1_u003b((&param_36), (&param_37));
+        let _e440 = layered;
+        layered = (_e440 + ((_e429 * _e434) * _e438));
+    }
+    let _e444 = unnamed_1.uClusterScalars[3i];
+    if (_e444 > 0f) {
+        let _e448 = unnamed_1.uClusterScalars[4i];
+        ccRoughness = max(_e448, 0.04f);
+        let _e450 = VoH_1;
+        ccFresnel = (0.04f + (0.96f * pow(clamp((1f - _e450), 0f, 1f), 5f)));
+        let _e456 = ccFresnel;
+        let _e457 = NoH_2;
+        param_38 = _e457;
+        let _e458 = ccRoughness;
+        param_39 = _e458;
+        let _e459 = cnaDistribution_u0028_f1_u003b_f1_u003b((&param_38), (&param_39));
+        let _e461 = NoV_2;
+        param_40 = _e461;
+        let _e462 = NoL_2;
+        param_41 = _e462;
+        let _e463 = ccRoughness;
+        param_42 = _e463;
+        let _e464 = cnaGeometry_u0028_f1_u003b_f1_u003b_f1_u003b((&param_40), (&param_41), (&param_42));
+        let _e466 = NoV_2;
+        let _e468 = NoL_2;
+        ccSpecular = (((_e456 * _e459) * _e464) / max(((4f * _e466) * _e468), 0.0000001f));
+        let _e472 = layered;
+        let _e475 = unnamed_1.uClusterScalars[3i];
+        let _e476 = ccFresnel;
+        let _e482 = unnamed_1.uClusterScalars[3i];
+        let _e483 = ccSpecular;
+        layered = ((_e472 * (1f - (_e475 * _e476))) + vec3((_e482 * _e483)));
+    }
+    let _e487 = layered;
+    let _e489 = (*light).colour;
+    let _e491 = attenuation;
+    let _e493 = NoL_2;
+    return (((_e487 * _e489) * _e491) * _e493);
+}
+
+fn cnaLoadLight_u0028_i1_u003b(index: ptr<function, i32>) -> CnaClusteredLight {
+    var base: i32;
+    var light_1: CnaClusteredLight;
+
+    let _e163 = (*index);
+    base = (_e163 * 4i);
+    let _e165 = base;
+    let _e168 = unnamed.uCnaLights[_e165];
+    light_1.position = _e168.xyz;
+    let _e171 = base;
+    let _e175 = unnamed.uCnaLights[_e171][3u];
+    light_1.range = _e175;
+    let _e177 = base;
+    let _e181 = unnamed.uCnaLights[(_e177 + 1i)];
+    light_1.colour = _e181.xyz;
+    let _e184 = base;
+    let _e189 = unnamed.uCnaLights[(_e184 + 1i)][3u];
+    light_1.isSpot = _e189;
+    let _e191 = base;
+    let _e195 = unnamed.uCnaLights[(_e191 + 2i)];
+    light_1.direction = _e195.xyz;
+    let _e198 = base;
+    let _e203 = unnamed.uCnaLights[(_e198 + 2i)][3u];
+    light_1.cosOuter = _e203;
+    let _e205 = base;
+    let _e210 = unnamed.uCnaLights[(_e205 + 3i)][0u];
+    light_1.cosInner = _e210;
+    let _e212 = light_1;
+    return _e212;
+}
+
+fn cnaClusterLightIndex_u0028_i1_u003b_i1_u003b(cluster: ptr<function, i32>, i: ptr<function, i32>) -> i32 {
+    let _e162 = (*cluster);
+    let _e166 = unnamed_2.uCnaClusters[_e162][0u];
+    let _e167 = (*i);
+    let _e172 = unnamed_3.uCnaIndices[(_e166 + bitcast<u32>(_e167))];
+    return bitcast<i32>(_e172);
+}
+
+fn cnaFrameTangent_u0028_vf3_u003b(axis: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var guess: vec3<f32>;
+
+    let _e163 = (*axis)[2u];
+    guess = select(vec3<f32>(1f, 0f, 0f), vec3<f32>(0f, 0f, 1f), vec3((abs(_e163) < 0.9f)));
+    let _e168 = guess;
+    let _e169 = (*axis);
+    return normalize(cross(_e168, _e169));
+}
+
+fn cnaAreaBrdfTerms_u0028_f1_u003b_f1_u003b(nDotV: ptr<function, f32>, roughness_4: ptr<function, f32>) -> vec4<f32> {
+    var index_1: vec2<f32>;
+    var uv: vec2<f32>;
+
+    let _e164 = (*nDotV);
+    let _e165 = (*roughness_4);
+    index_1 = clamp(vec2<f32>(_e164, _e165), vec2(0f), vec2(1f));
+    let _e170 = index_1;
+    let _e173 = unnamed_1.uClusterScalars[15i];
+    let _e180 = unnamed_1.uClusterScalars[15i];
+    uv = (((_e170 * (_e173 - 1f)) + vec2(0.5f)) / vec2(max(_e180, 1f)));
+    let _e184 = uv;
+    let _e185 = textureSample(uCnaAreaBrdf_cnaTexture, uCnaAreaBrdf_cnaSampler, _e184);
+    return _e185;
+}
+
+fn cnaIntegrateEdge_u0028_vf3_u003b_vf3_u003b(a_1: ptr<function, vec3<f32>>, b: ptr<function, vec3<f32>>) -> f32 {
+    var cosine: f32;
+    var angle: f32;
+
+    let _e164 = (*a_1);
+    let _e165 = (*b);
+    cosine = clamp(dot(_e164, _e165), -0.9999f, 0.9999f);
+    let _e168 = cosine;
+    angle = acos(_e168);
+    let _e170 = (*a_1);
+    let _e171 = (*b);
+    let _e174 = angle;
+    let _e176 = angle;
+    return ((cross(_e170, _e171).z * _e174) / max(sin(_e176), 0.0001f));
+}
+
+fn cnaAreaCoverage_u0028_vf3_u005b_4_u005d_u003b_vf3_u003b_vf3_u003b_f1_u003b_b1_u003b(quad: ptr<function, array<vec3<f32>, 4>>, surface_1: ptr<function, vec3<f32>>, lobeAxis: ptr<function, vec3<f32>>, lobeScale: ptr<function, f32>, twoSided: ptr<function, bool>) -> f32 {
+    var axis_1: vec3<f32>;
+    var tangent: vec3<f32>;
+    var param_43: vec3<f32>;
+    var bitangent: vec3<f32>;
+    var inverseScale: f32;
+    var i_1: i32;
+    var relative: vec3<f32>;
+    var p: array<vec3<f32>, 5>;
+    var count: i32;
+    var i_2: i32;
+    var current: vec3<f32>;
+    var next: vec3<f32>;
+    var currentIn: bool;
+    var nextIn: bool;
+    var clipped: array<vec3<f32>, 8>;
+    var t: f32;
+    var i_3: i32;
+    var sum: f32;
+    var i_4: i32;
+    var next_1: i32;
+    var local_1: i32;
+    var param_44: vec3<f32>;
+    var param_45: vec3<f32>;
+    var local_2: f32;
+
+    let _e189 = (*lobeAxis);
+    axis_1 = normalize(_e189);
+    let _e191 = axis_1;
+    param_43 = _e191;
+    let _e192 = cnaFrameTangent_u0028_vf3_u003b((&param_43));
+    tangent = _e192;
+    let _e193 = axis_1;
+    let _e194 = tangent;
+    bitangent = cross(_e193, _e194);
+    let _e196 = (*lobeScale);
+    inverseScale = (1f / max(_e196, 0.0001f));
+    i_1 = 0i;
+    loop {
+        let _e199 = i_1;
+        if (_e199 < 4i) {
+            let _e201 = i_1;
+            let _e203 = (*quad)[_e201];
+            let _e204 = (*surface_1);
+            relative = (_e203 - _e204);
+            let _e206 = i_1;
+            let _e207 = relative;
+            let _e208 = tangent;
+            let _e210 = inverseScale;
+            let _e212 = relative;
+            let _e213 = bitangent;
+            let _e215 = inverseScale;
+            let _e217 = relative;
+            let _e218 = axis_1;
+            p[_e206] = vec3<f32>((dot(_e207, _e208) * _e210), (dot(_e212, _e213) * _e215), dot(_e217, _e218));
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e222 = i_1;
+            i_1 = (_e222 + 1i);
+        }
+    }
+    let _e225 = p[0i];
+    p[4i] = _e225;
+    count = 0i;
+    i_2 = 0i;
+    loop {
+        let _e227 = i_2;
+        if (_e227 < 4i) {
+            let _e229 = i_2;
+            let _e231 = p[_e229];
+            current = _e231;
+            let _e232 = i_2;
+            let _e235 = p[(_e232 + 1i)];
+            next = _e235;
+            let _e237 = current[2u];
+            currentIn = (_e237 > 0f);
+            let _e240 = next[2u];
+            nextIn = (_e240 > 0f);
+            let _e242 = currentIn;
+            if _e242 {
+                let _e243 = count;
+                let _e244 = current;
+                clipped[_e243] = _e244;
+                let _e246 = count;
+                count = (_e246 + 1i);
+            }
+            let _e248 = currentIn;
+            let _e249 = nextIn;
+            if (_e248 != _e249) {
+                let _e252 = current[2u];
+                let _e254 = current[2u];
+                let _e256 = next[2u];
+                t = (_e252 / (_e254 - _e256));
+                let _e259 = count;
+                let _e260 = current;
+                let _e261 = next;
+                let _e262 = current;
+                let _e264 = t;
+                clipped[_e259] = (_e260 + ((_e261 - _e262) * _e264));
+                let _e268 = count;
+                count = (_e268 + 1i);
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e270 = i_2;
+            i_2 = (_e270 + 1i);
+        }
+    }
+    let _e272 = count;
+    if (_e272 < 3i) {
+        return 0f;
+    }
+    i_3 = 0i;
+    loop {
+        let _e274 = i_3;
+        if (_e274 < 8i) {
+            let _e276 = i_3;
+            let _e277 = count;
+            if (_e276 >= _e277) {
+                break;
+            }
+            let _e279 = i_3;
+            let _e280 = i_3;
+            let _e282 = clipped[_e280];
+            clipped[_e279] = normalize(_e282);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e285 = i_3;
+            i_3 = (_e285 + 1i);
+        }
+    }
+    sum = 0f;
+    i_4 = 0i;
+    loop {
+        let _e287 = i_4;
+        if (_e287 < 8i) {
+            let _e289 = i_4;
+            let _e290 = count;
+            if (_e289 >= _e290) {
+                break;
+            }
+            let _e292 = i_4;
+            let _e294 = count;
+            if ((_e292 + 1i) == _e294) {
+                local_1 = 0i;
+            } else {
+                let _e296 = i_4;
+                local_1 = (_e296 + 1i);
+            }
+            let _e298 = local_1;
+            next_1 = _e298;
+            let _e299 = i_4;
+            let _e300 = next_1;
+            let _e302 = clipped[_e299];
+            param_44 = _e302;
+            let _e304 = clipped[_e300];
+            param_45 = _e304;
+            let _e305 = cnaIntegrateEdge_u0028_vf3_u003b_vf3_u003b((&param_44), (&param_45));
+            let _e306 = sum;
+            sum = (_e306 + _e305);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e308 = i_4;
+            i_4 = (_e308 + 1i);
+        }
+    }
+    let _e310 = (*twoSided);
+    if _e310 {
+        let _e311 = sum;
+        local_2 = abs(_e311);
+    } else {
+        let _e313 = sum;
+        local_2 = max(-(_e313), 0f);
+    }
+    let _e316 = local_2;
+    sum = _e316;
+    let _e317 = sum;
+    return clamp((_e317 / 6.2831855f), 0f, 1f);
+}
+
+fn cnaAreaQuad_u0028_vf3_u003b_vf3_u005b_4_u005d_u003b(surface_2: ptr<function, vec3<f32>>, quad_1: ptr<function, array<vec3<f32>, 4>>) {
+    var right: vec3<f32>;
+    var up: vec3<f32>;
+    var radius: f32;
+    var axis_2: vec3<f32>;
+    var toSurface: vec3<f32>;
+    var facing: vec3<f32>;
+    var local_3: vec3<f32>;
+    var param_46: vec3<f32>;
+
+    let _e172 = unnamed_4.uClusterVectors[16i];
+    right = _e172;
+    let _e175 = unnamed_4.uClusterVectors[17i];
+    up = _e175;
+    let _e178 = unnamed_1.uClusterScalars[14i];
+    if (i32(_e178) == 1i) {
+        let _e181 = right;
+        right = (_e181 * 0.88622695f);
+        let _e183 = up;
+        up = (_e183 * 0.88622695f);
+    } else {
+        let _e187 = unnamed_1.uClusterScalars[14i];
+        if (i32(_e187) == 2i) {
+            let _e190 = up;
+            radius = length(_e190);
+            let _e192 = right;
+            axis_2 = normalize(_e192);
+            let _e194 = (*surface_2);
+            let _e197 = unnamed_4.uClusterVectors[15i];
+            toSurface = (_e194 - _e197);
+            let _e199 = toSurface;
+            let _e200 = axis_2;
+            facing = cross(_e199, _e200);
+            let _e202 = facing;
+            let _e203 = facing;
+            if (dot(_e202, _e203) > 0.000000000001f) {
+                let _e206 = facing;
+                local_3 = normalize(_e206);
+            } else {
+                let _e208 = axis_2;
+                param_46 = _e208;
+                let _e209 = cnaFrameTangent_u0028_vf3_u003b((&param_46));
+                local_3 = _e209;
+            }
+            let _e210 = local_3;
+            facing = _e210;
+            let _e211 = facing;
+            let _e212 = radius;
+            up = (_e211 * _e212);
+        }
+    }
+    let _e216 = unnamed_4.uClusterVectors[15i];
+    let _e217 = right;
+    let _e219 = up;
+    (*quad_1)[0i] = ((_e216 - _e217) - _e219);
+    let _e224 = unnamed_4.uClusterVectors[15i];
+    let _e225 = right;
+    let _e227 = up;
+    (*quad_1)[1i] = ((_e224 + _e225) - _e227);
+    let _e232 = unnamed_4.uClusterVectors[15i];
+    let _e233 = right;
+    let _e235 = up;
+    (*quad_1)[2i] = ((_e232 + _e233) + _e235);
+    let _e240 = unnamed_4.uClusterVectors[15i];
+    let _e241 = right;
+    let _e243 = up;
+    (*quad_1)[3i] = ((_e240 - _e241) + _e243);
+    return;
+}
+
+fn cnaAreaContribution_u0028_vf3_u003b_vf3_u003b_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b(surface_3: ptr<function, vec3<f32>>, normal_1: ptr<function, vec3<f32>>, viewDirection_1: ptr<function, vec3<f32>>, baseColor_1: ptr<function, vec3<f32>>, metallic_1: ptr<function, f32>, roughness_5: ptr<function, f32>) -> vec3<f32> {
+    var toLight_1: vec3<f32>;
+    var quad_2: array<vec3<f32>, 4>;
+    var param_47: vec3<f32>;
+    var param_48: array<vec3<f32>, 4>;
+    var twoSided_1: bool;
+    var diffuseCoverage: f32;
+    var param_49: array<vec3<f32>, 4>;
+    var param_50: vec3<f32>;
+    var param_51: vec3<f32>;
+    var param_52: f32;
+    var param_53: bool;
+    var nDotV_1: f32;
+    var terms: vec4<f32>;
+    var param_54: f32;
+    var param_55: f32;
+    var tangentBase: vec3<f32>;
+    var tangent_1: vec3<f32>;
+    var local_4: vec3<f32>;
+    var param_56: vec3<f32>;
+    var lobeAxis_1: vec3<f32>;
+    var lobeScale_1: f32;
+    var specularCoverage: f32;
+    var param_57: array<vec3<f32>, 4>;
+    var param_58: vec3<f32>;
+    var param_59: vec3<f32>;
+    var param_60: f32;
+    var param_61: bool;
+    var scale: f32;
+    var bias: f32;
+    var f0_4: vec3<f32>;
+    var specular_1: vec3<f32>;
+    var diffuse_1: vec3<f32>;
+
+    let _e200 = unnamed_1.uClusterScalars[14i];
+    if (i32(_e200) < 0i) {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e205 = unnamed_4.uClusterVectors[15i];
+    let _e206 = (*surface_3);
+    toLight_1 = (_e205 - _e206);
+    let _e208 = toLight_1;
+    let _e209 = toLight_1;
+    let _e213 = unnamed_1.uClusterScalars[16i];
+    let _e216 = unnamed_1.uClusterScalars[16i];
+    if (dot(_e208, _e209) >= (_e213 * _e216)) {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e219 = (*surface_3);
+    param_47 = _e219;
+    cnaAreaQuad_u0028_vf3_u003b_vf3_u005b_4_u005d_u003b((&param_47), (&param_48));
+    let _e220 = param_48;
+    quad_2 = _e220;
+    let _e223 = unnamed_1.uClusterScalars[17i];
+    twoSided_1 = (_e223 > 0.5f);
+    let _e225 = quad_2;
+    param_49 = _e225;
+    let _e226 = (*surface_3);
+    param_50 = _e226;
+    let _e227 = (*normal_1);
+    param_51 = _e227;
+    param_52 = 1f;
+    let _e228 = twoSided_1;
+    param_53 = _e228;
+    let _e229 = cnaAreaCoverage_u0028_vf3_u005b_4_u005d_u003b_vf3_u003b_vf3_u003b_f1_u003b_b1_u003b((&param_49), (&param_50), (&param_51), (&param_52), (&param_53));
+    diffuseCoverage = _e229;
+    let _e230 = (*normal_1);
+    let _e231 = (*viewDirection_1);
+    nDotV_1 = clamp(dot(_e230, _e231), 0.001f, 1f);
+    let _e234 = nDotV_1;
+    param_54 = _e234;
+    let _e235 = (*roughness_5);
+    param_55 = _e235;
+    let _e236 = cnaAreaBrdfTerms_u0028_f1_u003b_f1_u003b((&param_54), (&param_55));
+    terms = _e236;
+    let _e237 = (*normal_1);
+    let _e238 = nDotV_1;
+    let _e240 = (*viewDirection_1);
+    tangentBase = ((_e237 * _e238) - _e240);
+    let _e242 = tangentBase;
+    let _e243 = tangentBase;
+    if (dot(_e242, _e243) > 0.000000000001f) {
+        let _e246 = tangentBase;
+        local_4 = normalize(_e246);
+    } else {
+        let _e248 = (*normal_1);
+        param_56 = _e248;
+        let _e249 = cnaFrameTangent_u0028_vf3_u003b((&param_56));
+        local_4 = _e249;
+    }
+    let _e250 = local_4;
+    tangent_1 = _e250;
+    let _e251 = tangent_1;
+    let _e253 = terms[2u];
+    let _e255 = (*normal_1);
+    let _e257 = terms[3u];
+    lobeAxis_1 = normalize(((_e251 * _e253) + (_e255 * _e257)));
+    let _e261 = (*roughness_5);
+    let _e262 = (*roughness_5);
+    lobeScale_1 = max((_e261 * _e262), 0.02f);
+    let _e265 = quad_2;
+    param_57 = _e265;
+    let _e266 = (*surface_3);
+    param_58 = _e266;
+    let _e267 = lobeAxis_1;
+    param_59 = _e267;
+    let _e268 = lobeScale_1;
+    param_60 = _e268;
+    let _e269 = twoSided_1;
+    param_61 = _e269;
+    let _e270 = cnaAreaCoverage_u0028_vf3_u005b_4_u005d_u003b_vf3_u003b_vf3_u003b_f1_u003b_b1_u003b((&param_57), (&param_58), (&param_59), (&param_60), (&param_61));
+    specularCoverage = _e270;
+    let _e272 = terms[0u];
+    let _e274 = terms[1u];
+    scale = (_e272 - _e274);
+    let _e277 = terms[1u];
+    bias = _e277;
+    let _e278 = (*baseColor_1);
+    let _e279 = (*metallic_1);
+    f0_4 = mix(vec3<f32>(0.04f, 0.04f, 0.04f), _e278, vec3(_e279));
+    let _e282 = specularCoverage;
+    let _e283 = f0_4;
+    let _e284 = scale;
+    let _e286 = bias;
+    specular_1 = (((_e283 * _e284) + vec3(_e286)) * _e282);
+    let _e290 = diffuseCoverage;
+    let _e291 = (*baseColor_1);
+    let _e293 = (*metallic_1);
+    diffuse_1 = ((_e291 * _e290) * (1f - _e293));
+    let _e296 = diffuse_1;
+    let _e297 = specular_1;
+    let _e301 = unnamed_4.uClusterVectors[18i];
+    return ((_e296 + _e297) * _e301);
+}
+
+fn cnaProbeIrradiance_u0028_vf3_u005b_72_u005d_u003b_vf3_u003b(coefficients: ptr<function, array<vec3<f32>, 72>>, normal_2: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var n: vec3<f32>;
+    var result_1: vec3<f32>;
+
+    let _e164 = (*normal_2);
+    n = normalize(_e164);
+    let _e167 = (*coefficients)[0i];
+    let _e170 = (*coefficients)[1i];
+    let _e172 = n[1u];
+    let _e175 = (*coefficients)[2i];
+    let _e177 = n[2u];
+    let _e181 = (*coefficients)[3i];
+    let _e183 = n[0u];
+    let _e189 = (*coefficients)[4i];
+    let _e191 = n[0u];
+    let _e194 = n[1u];
+    let _e197 = (*coefficients)[5i];
+    let _e199 = n[1u];
+    let _e202 = n[2u];
+    let _e206 = (*coefficients)[7i];
+    let _e208 = n[0u];
+    let _e211 = n[2u];
+    let _e217 = (*coefficients)[6i];
+    let _e220 = n[2u];
+    let _e223 = n[2u];
+    let _e227 = (*coefficients)[6i];
+    let _e231 = (*coefficients)[8i];
+    let _e234 = n[0u];
+    let _e236 = n[0u];
+    let _e239 = n[1u];
+    let _e241 = n[1u];
+    result_1 = ((((((_e167 * 0.886227f) + ((((_e170 * _e172) + (_e175 * _e177)) + (_e181 * _e183)) * 1.023328f)) + (((((_e189 * _e191) * _e194) + ((_e197 * _e199) * _e202)) + ((_e206 * _e208) * _e211)) * 0.858086f)) + (((_e217 * 0.743125f) * _e220) * _e223)) - (_e227 * 0.247708f)) + ((_e231 * 0.429043f) * ((_e234 * _e236) - (_e239 * _e241))));
+    let _e246 = result_1;
+    return max(_e246, vec3<f32>(0f, 0f, 0f));
+}
+
+fn cnaClusterLightCount_u0028_i1_u003b(cluster_1: ptr<function, i32>) -> i32 {
+    let _e161 = (*cluster_1);
+    let _e165 = unnamed_2.uCnaClusters[_e161][1u];
+    return bitcast<i32>(_e165);
+}
+
+fn cnaClusterFromNdc_u0028_vf2_u003b_f1_u003b(ndc: ptr<function, vec2<f32>>, viewDistance: ptr<function, f32>) -> i32 {
+    var tx: i32;
+    var ty: i32;
+    var span: f32;
+    var t_1: f32;
+    var tz: i32;
+
+    let _e168 = (*ndc)[0u];
+    let _e173 = unnamed_1.uClusterScalars[18i];
+    let _e180 = unnamed_1.uClusterScalars[18i];
+    tx = clamp(i32((((_e168 * 0.5f) + 0.5f) * f32(i32(_e173)))), 0i, (i32(_e180) - 1i));
+    let _e185 = (*ndc)[1u];
+    let _e190 = unnamed_1.uClusterScalars[19i];
+    let _e197 = unnamed_1.uClusterScalars[19i];
+    ty = clamp(i32((((_e185 * 0.5f) + 0.5f) * f32(i32(_e190)))), 0i, (i32(_e197) - 1i));
+    let _e203 = unnamed_1.uClusterScalars[23i];
+    let _e206 = unnamed_1.uClusterScalars[22i];
+    span = log((_e203 / _e206));
+    let _e209 = (*viewDistance);
+    let _e212 = unnamed_1.uClusterScalars[22i];
+    let _e216 = unnamed_1.uClusterScalars[22i];
+    let _e219 = span;
+    t_1 = (log((max(_e209, _e212) / _e216)) / max(_e219, 0.000001f));
+    let _e222 = t_1;
+    let _e225 = unnamed_1.uClusterScalars[20i];
+    let _e233 = unnamed_1.uClusterScalars[20i];
+    tz = clamp(i32(floor((_e222 * f32(i32(_e225))))), 0i, (i32(_e233) - 1i));
+    let _e237 = tz;
+    let _e240 = unnamed_1.uClusterScalars[19i];
+    let _e243 = ty;
+    let _e247 = unnamed_1.uClusterScalars[18i];
+    let _e250 = tx;
+    return ((((_e237 * i32(_e240)) + _e243) * i32(_e247)) + _e250);
+}
+
+fn main_1() {
+    var normal_3: vec3<f32>;
+    var viewDirection_2: vec3<f32>;
+    var ndc_1: vec2<f32>;
+    var cluster_2: i32;
+    var param_62: vec2<f32>;
+    var param_63: f32;
+    var count_1: i32;
+    var param_64: i32;
+    var ambient: vec3<f32>;
+    var param_65: array<vec3<f32>, 72>;
+    var param_66: vec3<f32>;
+    var diffuseSum: vec3<f32>;
+    var param_67: vec3<f32>;
+    var param_68: vec3<f32>;
+    var param_69: vec3<f32>;
+    var param_70: vec3<f32>;
+    var param_71: f32;
+    var param_72: f32;
+    var otherSum: vec3<f32>;
+    var i_5: i32;
+    var light_2: CnaClusteredLight;
+    var param_73: i32;
+    var param_74: i32;
+    var param_75: i32;
+    var lightDiffuse: vec3<f32>;
+    var param_76: CnaClusteredLight;
+    var param_77: vec3<f32>;
+    var param_78: vec3<f32>;
+    var param_79: vec3<f32>;
+    var param_80: vec3<f32>;
+    var param_81: f32;
+    var param_82: f32;
+    var param_83: vec3<f32>;
+    var refracted: vec3<f32>;
+    var exitPoint: vec3<f32>;
+    var exitClip: vec4<f32>;
+    var uv_1: vec2<f32>;
+    var behind: vec3<f32>;
+    var absorbed: vec3<f32>;
+    var sigma: vec3<f32>;
+    var phi_2185_: bool;
+
+    let _e200 = vWorldNormal_1;
+    normal_3 = normalize(_e200);
+    let _e204 = unnamed_4.uClusterVectors[9i];
+    let _e205 = vWorldPosition_1;
+    viewDirection_2 = normalize((_e204 - _e205));
+    let _e208 = vClipPosition_1;
+    let _e211 = vClipPosition_1[3u];
+    let _e217 = vClipPosition_1[3u];
+    ndc_1 = ((_e208.xy / vec2(max(abs(_e211), 0.000001f))) * sign(_e217));
+    let _e220 = ndc_1;
+    param_62 = _e220;
+    let _e221 = vViewDistance_1;
+    param_63 = _e221;
+    let _e222 = cnaClusterFromNdc_u0028_vf2_u003b_f1_u003b((&param_62), (&param_63));
+    cluster_2 = _e222;
+    let _e223 = cluster_2;
+    param_64 = _e223;
+    let _e224 = cnaClusterLightCount_u0028_i1_u003b((&param_64));
+    count_1 = _e224;
+    let _e227 = unnamed_4.uClusterVectors[11i];
+    let _e230 = unnamed_4.uClusterVectors[10i];
+    ambient = (_e227 * _e230);
+    let _e234 = unnamed_1.uClusterScalars[0i];
+    if (_e234 > 0.5f) {
+        let _e237 = unnamed_4.uClusterVectors;
+        param_65[0i] = _e237[0];
+        param_65[1i] = _e237[1];
+        param_65[2i] = _e237[2];
+        param_65[3i] = _e237[3];
+        param_65[4i] = _e237[4];
+        param_65[5i] = _e237[5];
+        param_65[6i] = _e237[6];
+        param_65[7i] = _e237[7];
+        param_65[8i] = _e237[8];
+        param_65[9i] = _e237[9];
+        param_65[10i] = _e237[10];
+        param_65[11i] = _e237[11];
+        param_65[12i] = _e237[12];
+        param_65[13i] = _e237[13];
+        param_65[14i] = _e237[14];
+        param_65[15i] = _e237[15];
+        param_65[16i] = _e237[16];
+        param_65[17i] = _e237[17];
+        param_65[18i] = _e237[18];
+        param_65[19i] = _e237[19];
+        param_65[20i] = _e237[20];
+        param_65[21i] = _e237[21];
+        param_65[22i] = _e237[22];
+        param_65[23i] = _e237[23];
+        param_65[24i] = _e237[24];
+        param_65[25i] = _e237[25];
+        param_65[26i] = _e237[26];
+        param_65[27i] = _e237[27];
+        param_65[28i] = _e237[28];
+        param_65[29i] = _e237[29];
+        param_65[30i] = _e237[30];
+        param_65[31i] = _e237[31];
+        param_65[32i] = _e237[32];
+        param_65[33i] = _e237[33];
+        param_65[34i] = _e237[34];
+        param_65[35i] = _e237[35];
+        param_65[36i] = _e237[36];
+        param_65[37i] = _e237[37];
+        param_65[38i] = _e237[38];
+        param_65[39i] = _e237[39];
+        param_65[40i] = _e237[40];
+        param_65[41i] = _e237[41];
+        param_65[42i] = _e237[42];
+        param_65[43i] = _e237[43];
+        param_65[44i] = _e237[44];
+        param_65[45i] = _e237[45];
+        param_65[46i] = _e237[46];
+        param_65[47i] = _e237[47];
+        param_65[48i] = _e237[48];
+        param_65[49i] = _e237[49];
+        param_65[50i] = _e237[50];
+        param_65[51i] = _e237[51];
+        param_65[52i] = _e237[52];
+        param_65[53i] = _e237[53];
+        param_65[54i] = _e237[54];
+        param_65[55i] = _e237[55];
+        param_65[56i] = _e237[56];
+        param_65[57i] = _e237[57];
+        param_65[58i] = _e237[58];
+        param_65[59i] = _e237[59];
+        param_65[60i] = _e237[60];
+        param_65[61i] = _e237[61];
+        param_65[62i] = _e237[62];
+        param_65[63i] = _e237[63];
+        param_65[64i] = _e237[64];
+        param_65[65i] = _e237[65];
+        param_65[66i] = _e237[66];
+        param_65[67i] = _e237[67];
+        param_65[68i] = _e237[68];
+        param_65[69i] = _e237[69];
+        param_65[70i] = _e237[70];
+        param_65[71i] = _e237[71];
+        let _e382 = normal_3;
+        param_66 = _e382;
+        let _e383 = cnaProbeIrradiance_u0028_vf3_u005b_72_u005d_u003b_vf3_u003b((&param_65), (&param_66));
+        let _e386 = unnamed_4.uClusterVectors[10i];
+        ambient = ((_e383 * _e386) / vec3(3.1415927f));
+    }
+    let _e390 = ambient;
+    diffuseSum = _e390;
+    let _e391 = vWorldPosition_1;
+    param_67 = _e391;
+    let _e392 = normal_3;
+    param_68 = _e392;
+    let _e393 = viewDirection_2;
+    param_69 = _e393;
+    let _e396 = unnamed_4.uClusterVectors[10i];
+    param_70 = _e396;
+    let _e399 = unnamed_1.uClusterScalars[1i];
+    param_71 = _e399;
+    let _e402 = unnamed_1.uClusterScalars[2i];
+    param_72 = _e402;
+    let _e403 = cnaAreaContribution_u0028_vf3_u003b_vf3_u003b_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b((&param_67), (&param_68), (&param_69), (&param_70), (&param_71), (&param_72));
+    let _e404 = diffuseSum;
+    diffuseSum = (_e404 + _e403);
+    otherSum = vec3<f32>(0f, 0f, 0f);
+    i_5 = 0i;
+    loop {
+        let _e406 = i_5;
+        if (_e406 < 128i) {
+            let _e408 = i_5;
+            let _e409 = count_1;
+            if (_e408 >= _e409) {
+                break;
+            }
+            let _e411 = cluster_2;
+            param_73 = _e411;
+            let _e412 = i_5;
+            param_74 = _e412;
+            let _e413 = cnaClusterLightIndex_u0028_i1_u003b_i1_u003b((&param_73), (&param_74));
+            param_75 = _e413;
+            let _e414 = cnaLoadLight_u0028_i1_u003b((&param_75));
+            light_2 = _e414;
+            let _e415 = light_2;
+            param_76 = _e415;
+            let _e416 = vWorldPosition_1;
+            param_77 = _e416;
+            let _e417 = normal_3;
+            param_78 = _e417;
+            let _e418 = viewDirection_2;
+            param_79 = _e418;
+            let _e421 = unnamed_4.uClusterVectors[10i];
+            param_80 = _e421;
+            let _e424 = unnamed_1.uClusterScalars[1i];
+            param_81 = _e424;
+            let _e427 = unnamed_1.uClusterScalars[2i];
+            param_82 = _e427;
+            let _e428 = cnaShade_u0028_struct_u002d_CnaClusteredLight_u002d_vf3_u002d_f1_u002d_vf3_u002d_f1_u002d_vf3_u002d_f1_u002d_f11_u003b_vf3_u003b_vf3_u003b_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b_vf3_u003b((&param_76), (&param_77), (&param_78), (&param_79), (&param_80), (&param_81), (&param_82), (&param_83));
+            let _e429 = param_83;
+            lightDiffuse = _e429;
+            let _e430 = otherSum;
+            otherSum = (_e430 + _e428);
+            let _e432 = lightDiffuse;
+            let _e433 = diffuseSum;
+            diffuseSum = (_e433 + _e432);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e435 = i_5;
+            i_5 = (_e435 + 1i);
+        }
+    }
+    let _e439 = unnamed_1.uClusterScalars[10i];
+    if (_e439 > 0f) {
+        let _e441 = viewDirection_2;
+        let _e443 = normal_3;
+        let _e446 = unnamed_1.uClusterScalars[11i];
+        refracted = refract(-(_e441), _e443, (1f / max(_e446, 1f)));
+        let _e450 = vWorldPosition_1;
+        let _e451 = refracted;
+        let _e454 = unnamed_1.uClusterScalars[12i];
+        exitPoint = (_e450 + (_e451 * _e454));
+        let _e459 = unnamed_5.uClusterMatrices[3i];
+        let _e460 = exitPoint;
+        exitClip = (_e459 * vec4<f32>(_e460.x, _e460.y, _e460.z, 1f));
+        let _e466 = exitClip;
+        let _e469 = exitClip[3u];
+        let _e475 = exitClip[3u];
+        uv_1 = ((((_e466.xy / vec2(max(abs(_e469), 0.0001f))) * sign(_e475)) * 0.5f) + vec2(0.5f));
+        let _e481 = uv_1;
+        let _e485 = textureSample(uOpaqueFrame_cnaTexture, uOpaqueFrame_cnaSampler, clamp(_e481, vec2(0f), vec2(1f)));
+        behind = _e485.xyz;
+        absorbed = vec3<f32>(1f, 1f, 1f);
+        let _e489 = unnamed_1.uClusterScalars[13i];
+        let _e490 = (_e489 > 0f);
+        phi_2185_ = _e490;
+        if _e490 {
+            let _e493 = unnamed_1.uClusterScalars[12i];
+            phi_2185_ = (_e493 > 0f);
+        }
+        let _e496 = phi_2185_;
+        if _e496 {
+            let _e499 = unnamed_4.uClusterVectors[14i];
+            let _e507 = unnamed_1.uClusterScalars[13i];
+            sigma = (-(log(clamp(_e499, vec3(0.0001f), vec3(1f)))) / vec3(_e507));
+            let _e510 = sigma;
+            let _e514 = unnamed_1.uClusterScalars[12i];
+            absorbed = exp((-(_e510) * _e514));
+        }
+        let _e517 = diffuseSum;
+        let _e518 = behind;
+        let _e519 = absorbed;
+        let _e523 = unnamed_1.uClusterScalars[10i];
+        diffuseSum = mix(_e517, (_e518 * _e519), vec3(_e523));
+    }
+    let _e526 = diffuseSum;
+    let _e527 = otherSum;
+    let _e528 = (_e526 + _e527);
+    FragColor = vec4<f32>(_e528.x, _e528.y, _e528.z, 1f);
+    return;
+}
+
+@fragment 
+fn main(@location(1) vWorldNormal: vec3<f32>, @location(0) vWorldPosition: vec3<f32>, @location(2) vClipPosition: vec4<f32>, @location(3) vViewDistance: f32) -> @location(0) vec4<f32> {
+    vWorldNormal_1 = vWorldNormal;
+    vWorldPosition_1 = vWorldPosition;
+    vClipPosition_1 = vClipPosition;
+    vViewDistance_1 = vViewDistance;
+    main_1();
+    let _e9 = FragColor;
+    return _e9;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 6> kPayloads = {{
     {"kForwardEsVertexSource", "forward.es.vert.glsl", "4b7fb528faa193ea2b306ccb282d9df303d67f9ea3995d0dfaae813c5f741347", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kForwardEsFragmentSource", "forward.es.frag.glsl", "de81b77ddc926b0420814d06aeef4d30db3cbc98107a405b1fdeb72695d51428", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kForwardVulkanVertexSpirV", "forward.vulkan.vert.glsl", "f418ed961d5e0037e561902b25f6d20b638c40f28f89fe260a081e899a1a6cc5", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kForwardVulkanVertexWgsl", "forward.vulkan.vert.glsl", "f418ed961d5e0037e561902b25f6d20b638c40f28f89fe260a081e899a1a6cc5", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kForwardVulkanFragmentSpirV", "forward.vulkan.frag.glsl", "088fdc85bb5330ef9a574f1faeb2cb5b9ce67c68dbc86e0e10e35e1c3583c13f", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kForwardVulkanFragmentWgsl", "forward.vulkan.frag.glsl", "088fdc85bb5330ef9a574f1faeb2cb5b9ce67c68dbc86e0e10e35e1c3583c13f", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::ClusteredForwardGenerated

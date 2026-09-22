@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "volumetric_fog";
-inline constexpr std::string_view kManifestSha256 = "0851baecba00e83cf2f6ab07021016c7a029966109e56d8c802c75f5c4d4dd39";
+inline constexpr std::string_view kManifestSha256 = "f6323f5641d9ac76e21d28fe8569063be3ae28de0dca6217d6a7b8dde89e3fad";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kFullscreenEsVertexSource =
     R"CNA_SHADER(#version 300 es
@@ -442,6 +446,64 @@ inline constexpr std::uint32_t kFullscreenVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kFullscreenVulkanVertexSpirVByteSize = sizeof(kFullscreenVulkanVertexSpirV);
 
+inline constexpr std::string_view kFullscreenVulkanVertexWgsl =
+    R"CNA_SHADER(// fullscreen.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: vec2<f32>,
+    @location(1) member_1: vec4<f32>,
+}
+
+var<private> aPos_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> TexCoord: vec2<f32>;
+var<private> aTexCoord_1: vec2<f32>;
+var<private> SpriteColor: vec4<f32>;
+var<private> aColor_1: vec4<f32>;
+
+fn main_1() {
+    var ndc: vec2<f32>;
+
+    let _e14 = aPos_1;
+    let _e16 = pc.viewportSize;
+    ndc = (((_e14 / _e16) * 2f) - vec2<f32>(1f, 1f));
+    let _e20 = ndc;
+    unnamed.gl_Position = vec4<f32>(_e20.x, _e20.y, 0f, 1f);
+    let _e25 = aTexCoord_1;
+    TexCoord = _e25;
+    let _e26 = aColor_1;
+    SpriteColor = _e26;
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPos: vec2<f32>, @location(1) aTexCoord: vec2<f32>, @location(2) aColor: vec4<f32>) -> VertexOutput {
+    aPos_1 = aPos;
+    aTexCoord_1 = aTexCoord;
+    aColor_1 = aColor;
+    main_1();
+    let _e11 = unnamed.gl_Position.y;
+    unnamed.gl_Position.y = -(_e11);
+    let _e13 = unnamed.gl_Position;
+    let _e14 = TexCoord;
+    let _e15 = SpriteColor;
+    return VertexOutput(_e13, _e14, _e15);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kBuildVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000001e9u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -582,6 +644,233 @@ inline constexpr std::uint32_t kBuildVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kBuildVulkanFragmentSpirVByteSize = sizeof(kBuildVulkanFragmentSpirV);
 
+inline constexpr std::string_view kBuildVulkanFragmentWgsl =
+    R"CNA_SHADER(// build.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uVolumetricBuildScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uVolumetricBuildMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec3Array {
+    uVolumetricBuildVectors: array<vec3<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+@group(1) @binding(1) 
+var uShadowSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uShadowSampler_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(14) 
+var<uniform> unnamed_2: Vec3Array;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+
+fn cnaLitFraction_u0028_vf3_u003b(world: ptr<function, vec3<f32>>) -> f32 {
+    var lightClip: vec4<f32>;
+    var lightNdc: vec3<f32>;
+    var lightUv: vec2<f32>;
+    var stored: f32;
+    var here: f32;
+    var phi_161_: bool;
+    var phi_168_: bool;
+    var phi_175_: bool;
+
+    let _e39 = unnamed.uVolumetricBuildScalars[5i];
+    if (_e39 < 0.5f) {
+        return 1f;
+    }
+    let _e43 = unnamed_1.uVolumetricBuildMatrices[2i];
+    let _e44 = (*world);
+    lightClip = (_e43 * vec4<f32>(_e44.x, _e44.y, _e44.z, 1f));
+    let _e51 = lightClip[3u];
+    if (_e51 <= 0f) {
+        return 1f;
+    }
+    let _e53 = lightClip;
+    let _e56 = lightClip[3u];
+    lightNdc = (_e53.xyz / vec3(_e56));
+    let _e59 = lightNdc;
+    lightUv = ((_e59.xy * 0.5f) + vec2(0.5f));
+    let _e65 = lightUv[0u];
+    let _e66 = (_e65 < 0f);
+    phi_161_ = _e66;
+    if !(_e66) {
+        let _e69 = lightUv[0u];
+        phi_161_ = (_e69 > 1f);
+    }
+    let _e72 = phi_161_;
+    phi_168_ = _e72;
+    if !(_e72) {
+        let _e75 = lightUv[1u];
+        phi_168_ = (_e75 < 0f);
+    }
+    let _e78 = phi_168_;
+    phi_175_ = _e78;
+    if !(_e78) {
+        let _e81 = lightUv[1u];
+        phi_175_ = (_e81 > 1f);
+    }
+    let _e84 = phi_175_;
+    if _e84 {
+        return 1f;
+    }
+    let _e85 = lightUv;
+    let _e86 = textureSample(uShadowSampler_cnaTexture, uShadowSampler_cnaSampler, _e85);
+    stored = _e86.x;
+    let _e89 = lightNdc[2u];
+    here = ((_e89 * 0.5f) + 0.5f);
+    let _e92 = here;
+    let _e94 = stored;
+    return select(1f, 0f, ((_e92 - 0.002f) > _e94));
+}
+
+fn cnaPhase_u0028_f1_u003b(cosAngle: ptr<function, f32>) -> f32 {
+    var g: f32;
+    var gg: f32;
+    var d: f32;
+
+    let _e37 = unnamed.uVolumetricBuildScalars[3i];
+    g = _e37;
+    let _e38 = g;
+    let _e39 = g;
+    gg = (_e38 * _e39);
+    let _e41 = gg;
+    let _e43 = g;
+    let _e45 = (*cosAngle);
+    d = ((1f + _e41) - ((2f * _e43) * _e45));
+    let _e48 = gg;
+    let _e50 = d;
+    return ((1f - _e48) / (12.566371f * max(pow(max(_e50, 0.0001f), 1.5f), 0.0001f)));
+}
+
+fn cnaSliceDepth_u0028_f1_u003b(slice: ptr<function, f32>) -> f32 {
+    var t: f32;
+
+    let _e33 = (*slice);
+    let _e37 = unnamed.uVolumetricBuildScalars[0i];
+    t = ((_e33 + 0.5f) / _e37);
+    let _e41 = unnamed.uVolumetricBuildScalars[4i];
+    let _e42 = t;
+    let _e44 = t;
+    return ((_e41 * _e42) * _e44);
+}
+
+fn cnaAtlasSplit_u0028_vf2_u003b_f1_u003b_vf2_u003b(atlasUv: ptr<function, vec2<f32>>, slice_1: ptr<function, f32>, inside: ptr<function, vec2<f32>>) {
+    var scaled: f32;
+
+    let _e36 = (*atlasUv)[0u];
+    let _e39 = unnamed.uVolumetricBuildScalars[0i];
+    scaled = (_e36 * _e39);
+    let _e41 = scaled;
+    let _e45 = unnamed.uVolumetricBuildScalars[0i];
+    (*slice_1) = min(floor(_e41), (_e45 - 1f));
+    let _e48 = scaled;
+    let _e49 = (*slice_1);
+    let _e52 = (*atlasUv)[1u];
+    (*inside) = vec2<f32>((_e48 - _e49), _e52);
+    return;
+}
+
+fn main_1() {
+    var slice_2: f32;
+    var inside_1: vec2<f32>;
+    var param: vec2<f32>;
+    var param_1: f32;
+    var param_2: vec2<f32>;
+    var depth: f32;
+    var param_3: f32;
+    var cameraUv: vec2<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+    var viewPosition: vec3<f32>;
+    var world_1: vec4<f32>;
+    var cameraWorld: vec4<f32>;
+    var toCamera: vec3<f32>;
+    var phase: f32;
+    var param_4: f32;
+    var lit: f32;
+    var param_5: vec3<f32>;
+    var scattered: vec3<f32>;
+
+    let _e50 = TexCoord_1;
+    param = _e50;
+    cnaAtlasSplit_u0028_vf2_u003b_f1_u003b_vf2_u003b((&param), (&param_1), (&param_2));
+    let _e51 = param_1;
+    slice_2 = _e51;
+    let _e52 = param_2;
+    inside_1 = _e52;
+    let _e53 = slice_2;
+    param_3 = _e53;
+    let _e54 = cnaSliceDepth_u0028_f1_u003b((&param_3));
+    depth = _e54;
+    let _e56 = inside_1[0u];
+    let _e58 = inside_1[1u];
+    cameraUv = vec2<f32>(_e56, (1f - _e58));
+    let _e63 = unnamed_1.uVolumetricBuildMatrices[0i];
+    let _e64 = cameraUv;
+    let _e67 = ((_e64 * 2f) - vec2(1f));
+    ray = (_e63 * vec4<f32>(_e67.x, _e67.y, 1f, 1f));
+    let _e72 = ray;
+    let _e75 = ray[3u];
+    direction = (_e72.xyz / vec3(_e75));
+    let _e78 = direction;
+    let _e79 = depth;
+    let _e81 = direction[2u];
+    viewPosition = (_e78 * (_e79 / max(-(_e81), 0.000001f)));
+    let _e88 = unnamed_1.uVolumetricBuildMatrices[1i];
+    let _e89 = viewPosition;
+    world_1 = (_e88 * vec4<f32>(_e89.x, _e89.y, _e89.z, 1f));
+    let _e97 = unnamed_1.uVolumetricBuildMatrices[1i];
+    cameraWorld = (_e97 * vec4<f32>(0f, 0f, 0f, 1f));
+    let _e99 = cameraWorld;
+    let _e101 = world_1;
+    toCamera = normalize((_e99.xyz - _e101.xyz));
+    let _e107 = unnamed_2.uVolumetricBuildVectors[0i];
+    let _e109 = toCamera;
+    param_4 = dot(normalize(_e107), _e109);
+    let _e111 = cnaPhase_u0028_f1_u003b((&param_4));
+    phase = _e111;
+    let _e112 = world_1;
+    param_5 = _e112.xyz;
+    let _e114 = cnaLitFraction_u0028_vf3_u003b((&param_5));
+    lit = _e114;
+    let _e117 = unnamed_2.uVolumetricBuildVectors[1i];
+    let _e118 = lit;
+    let _e120 = phase;
+    let _e124 = unnamed.uVolumetricBuildScalars[2i];
+    scattered = (((_e117 * _e118) * _e120) * _e124);
+    let _e126 = scattered;
+    let _e129 = unnamed.uVolumetricBuildScalars[2i];
+    let _e134 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e126.x, _e126.y, _e126.z, _e129) * _e134);
+    let _e136 = TexCoord_1;
+    let _e137 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e136);
+    let _e141 = FragColor[3u];
+    FragColor[3u] = (_e141 + (_e137.w * 0f));
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kResolveVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000138u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -681,7 +970,187 @@ inline constexpr std::uint32_t kResolveVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kResolveVulkanFragmentSpirVByteSize = sizeof(kResolveVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 9> kPayloads = {{
+inline constexpr std::string_view kResolveVulkanFragmentWgsl =
+    R"CNA_SHADER(// resolve.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uVolumetricResolveScalars: array<f32, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+@group(1) @binding(2) 
+var uVolumeSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(34) 
+var uVolumeSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaAtlasJoin_u0028_f1_u003b_vf2_u003b(slice: ptr<function, f32>, inside: ptr<function, vec2<f32>>) -> vec2<f32> {
+    var sliceWidth: f32;
+    var texelWidth: f32;
+    var u: f32;
+
+    let _e36 = unnamed.uVolumetricResolveScalars[0i];
+    sliceWidth = (1f / _e36);
+    let _e38 = sliceWidth;
+    let _e41 = unnamed.uVolumetricResolveScalars[1i];
+    texelWidth = (_e38 / _e41);
+    let _e43 = (*slice);
+    let _e44 = sliceWidth;
+    let _e46 = texelWidth;
+    let _e50 = (*inside)[0u];
+    let _e51 = texelWidth;
+    let _e55 = unnamed.uVolumetricResolveScalars[1i];
+    u = (((_e43 * _e44) + (0.5f * _e46)) + ((_e50 * _e51) * (_e55 - 1f)));
+    let _e59 = u;
+    let _e61 = (*inside)[1u];
+    return vec2<f32>(_e59, _e61);
+}
+
+fn cnaSliceDepth_u0028_f1_u003b(slice_1: ptr<function, f32>) -> f32 {
+    var t: f32;
+
+    let _e31 = (*slice_1);
+    let _e35 = unnamed.uVolumetricResolveScalars[0i];
+    t = ((_e31 + 0.5f) / _e35);
+    let _e39 = unnamed.uVolumetricResolveScalars[3i];
+    let _e40 = t;
+    let _e42 = t;
+    return ((_e39 * _e40) * _e42);
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e32 = unnamed.uVolumetricResolveScalars[4i];
+    if (_e32 < 0.5f) {
+        let _e35 = (*channels)[0u];
+        return _e35;
+    }
+    let _e36 = (*channels);
+    return dot(_e36, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var depth: f32;
+    var param: vec4<f32>;
+    var travelled: f32;
+    var local: f32;
+    var scattered: vec3<f32>;
+    var transmittance: f32;
+    var previousDepth: f32;
+    var i: i32;
+    var sliceDepth: f32;
+    var param_1: f32;
+    var thickness: f32;
+    var froxel: vec4<f32>;
+    var param_2: f32;
+    var param_3: vec2<f32>;
+    var extinction: f32;
+
+    let _e45 = TexCoord_1;
+    let _e46 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e45);
+    source = _e46;
+    let _e47 = TexCoord_1;
+    let _e48 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e47);
+    param = _e48;
+    let _e49 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param));
+    depth = _e49;
+    let _e50 = depth;
+    let _e52 = depth;
+    if ((_e50 <= 0f) || (_e52 >= 0.999f)) {
+        let _e57 = unnamed.uVolumetricResolveScalars[3i];
+        local = _e57;
+    } else {
+        let _e58 = depth;
+        let _e61 = unnamed.uVolumetricResolveScalars[2i];
+        let _e65 = unnamed.uVolumetricResolveScalars[3i];
+        local = min((_e58 * _e61), _e65);
+    }
+    let _e67 = local;
+    travelled = _e67;
+    scattered = vec3<f32>(0f, 0f, 0f);
+    transmittance = 1f;
+    previousDepth = 0f;
+    i = 0i;
+    loop {
+        let _e68 = i;
+        if (_e68 < 64i) {
+            let _e70 = i;
+            let _e74 = unnamed.uVolumetricResolveScalars[0i];
+            if (f32(_e70) >= _e74) {
+                break;
+            }
+            let _e76 = i;
+            param_1 = f32(_e76);
+            let _e78 = cnaSliceDepth_u0028_f1_u003b((&param_1));
+            sliceDepth = _e78;
+            let _e79 = sliceDepth;
+            let _e80 = travelled;
+            if (_e79 > _e80) {
+                break;
+            }
+            let _e82 = sliceDepth;
+            let _e83 = previousDepth;
+            thickness = (_e82 - _e83);
+            let _e85 = sliceDepth;
+            previousDepth = _e85;
+            let _e86 = i;
+            param_2 = f32(_e86);
+            let _e88 = TexCoord_1;
+            param_3 = _e88;
+            let _e89 = cnaAtlasJoin_u0028_f1_u003b_vf2_u003b((&param_2), (&param_3));
+            let _e90 = textureSample(uVolumeSampler_cnaTexture, uVolumeSampler_cnaSampler, _e89);
+            froxel = _e90;
+            let _e92 = froxel[3u];
+            let _e93 = thickness;
+            extinction = (_e92 * _e93);
+            let _e95 = froxel;
+            let _e97 = thickness;
+            let _e99 = transmittance;
+            let _e101 = scattered;
+            scattered = (_e101 + ((_e95.xyz * _e97) * _e99));
+            let _e103 = extinction;
+            let _e106 = transmittance;
+            transmittance = (_e106 * exp(-(_e103)));
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e108 = i;
+            i = (_e108 + 1i);
+        }
+    }
+    let _e110 = source;
+    let _e112 = transmittance;
+    let _e114 = scattered;
+    let _e115 = ((_e110.xyz * _e112) + _e114);
+    let _e117 = source[3u];
+    let _e122 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e115.x, _e115.y, _e115.z, _e117) * _e122);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 12> kPayloads = {{
     {"kFullscreenEsVertexSource", "fullscreen.es.vert.glsl", "8cdfb0a708dbc0ce8a5f2c4f4123a5c7be01b89c8d0d212d9e6017e0205c2fb1", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kBuildEsFragmentSource", "build.es.frag.glsl", "920ce8469be10272155ff236475f7285867dc37147f7beef352e51467d0d4f1b", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kResolveEsFragmentSource", "resolve.es.frag.glsl", "3f54a9c1d33f7a8d3f22411b0d74610f4f8b996e59ad307bb4b43c66709679b3", "glsl-es", "glsl-es", "fragment", "text", "main"},
@@ -689,8 +1158,11 @@ inline constexpr std::array<PayloadProvenance, 9> kPayloads = {{
     {"kBuildDesktopFragmentSource", "build.desktop.frag.glsl", "cf0db8e488f5a7ea8ad3e57186fc45c7c117f64a4d103d1f6498247d4a393b0d", "glsl", "glsl", "fragment", "text", "main"},
     {"kResolveDesktopFragmentSource", "resolve.desktop.frag.glsl", "7d01d9133c5ff2cf3f4a41ba7a93f204dd211ceea423d4fa1ce65a96137b7e0e", "glsl", "glsl", "fragment", "text", "main"},
     {"kFullscreenVulkanVertexSpirV", "fullscreen.vulkan.vert.glsl", "c347a0738d726e58833e35577e9a5bf70e9a213fc0129af71e57783672f912bd", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kFullscreenVulkanVertexWgsl", "fullscreen.vulkan.vert.glsl", "c347a0738d726e58833e35577e9a5bf70e9a213fc0129af71e57783672f912bd", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kBuildVulkanFragmentSpirV", "build.vulkan.frag.glsl", "02fee4fcf958e2df95e9926081fd6b88707d90aa86f67bbfaddddbc61bec079a", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kBuildVulkanFragmentWgsl", "build.vulkan.frag.glsl", "02fee4fcf958e2df95e9926081fd6b88707d90aa86f67bbfaddddbc61bec079a", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kResolveVulkanFragmentSpirV", "resolve.vulkan.frag.glsl", "98b5783e225fc2d1738912b73dcea81cea4d42f56a2349fc7792bef6ad8f6350", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kResolveVulkanFragmentWgsl", "resolve.vulkan.frag.glsl", "98b5783e225fc2d1738912b73dcea81cea4d42f56a2349fc7792bef6ad8f6350", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::VolumetricFogGenerated

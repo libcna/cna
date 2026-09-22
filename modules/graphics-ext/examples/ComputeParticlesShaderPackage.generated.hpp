@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "compute_particles_example";
-inline constexpr std::string_view kManifestSha256 = "b983ff6abb83c1b9681aba5444ea3fc552ab2d414d606e90bce405d4328503ce";
+inline constexpr std::string_view kManifestSha256 = "ac6d1cb2430049a8bdd2c1533beffed06c3ec12900f14b26d9272708865565b8";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kIntegratorEsComputeSource =
     R"CNA_SHADER(#version 310 es
@@ -153,10 +157,84 @@ inline constexpr std::uint32_t kIntegratorVulkanComputeSpirV[] = {
 };
 inline constexpr std::size_t kIntegratorVulkanComputeSpirVByteSize = sizeof(kIntegratorVulkanComputeSpirV);
 
-inline constexpr std::array<PayloadProvenance, 3> kPayloads = {{
+inline constexpr std::string_view kIntegratorVulkanComputeWgsl =
+    R"CNA_SHADER(// integrate.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct IntegratorParameters {
+    uIntegrator: vec4<f32>,
+}
+
+struct Particle {
+    position: vec4<f32>,
+    velocity: vec4<f32>,
+}
+
+struct Particles {
+    particles: array<Particle>,
+}
+
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(0) @binding(1) 
+var<uniform> unnamed: IntegratorParameters;
+@group(0) @binding(0) 
+var<storage, read_write> unnamed_1: Particles;
+
+fn main_1() {
+    var index: u32;
+    var count: u32;
+    var step: f32;
+    var velocity: vec3<f32>;
+    var position: vec3<f32>;
+
+    let _e20 = gl_GlobalInvocationID_1[0u];
+    index = _e20;
+    let _e23 = unnamed.uIntegrator[0u];
+    count = u32((max(_e23, 0f) + 0.5f));
+    let _e27 = index;
+    let _e28 = count;
+    if (_e27 >= _e28) {
+        return;
+    }
+    let _e32 = unnamed.uIntegrator[1u];
+    step = _e32;
+    let _e33 = index;
+    let _e37 = unnamed_1.particles[_e33].velocity;
+    let _e39 = step;
+    velocity = (_e37.xyz + (vec3<f32>(0f, -9.81f, 0f) * _e39));
+    let _e42 = index;
+    let _e46 = unnamed_1.particles[_e42].position;
+    let _e48 = velocity;
+    let _e49 = step;
+    position = (_e46.xyz + (_e48 * _e49));
+    let _e53 = position[1u];
+    if (_e53 < 0f) {
+        let _e56 = position[1u];
+        position[1u] = -(_e56);
+        let _e60 = velocity[1u];
+        velocity[1u] = (-(_e60) * 0.5f);
+    }
+    let _e64 = index;
+    let _e65 = position;
+    let _e66 = index;
+    let _e71 = unnamed_1.particles[_e66].position[3u];
+    unnamed_1.particles[_e64].position = vec4<f32>(_e65.x, _e65.y, _e65.z, _e71);
+    let _e79 = index;
+    let _e80 = velocity;
+    unnamed_1.particles[_e79].velocity = vec4<f32>(_e80.x, _e80.y, _e80.z, 0f);
+    return;
+}
+
+@compute @workgroup_size(64, 1, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
     {"kIntegratorEsComputeSource", "integrate.es.comp.glsl", "71fd4fc687bb9846f4c137f6975f0f21a5cbd2689c6dc873bd936c6c7071a3ab", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kIntegratorDesktopComputeSource", "integrate.desktop.comp.glsl", "c7d62e6199bc74fd84facf3d2649b918e13a8e9adb9fb40ee531d18b36d86782", "glsl", "glsl", "compute", "text", "main"},
     {"kIntegratorVulkanComputeSpirV", "integrate.vulkan.comp.glsl", "e5032d13ed366f1e0676e56cdf5b4de9e701601fabc80ad3e086c56ea151676b", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kIntegratorVulkanComputeWgsl", "integrate.vulkan.comp.glsl", "e5032d13ed366f1e0676e56cdf5b4de9e701601fabc80ad3e086c56ea151676b", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
 }};
 
 } // namespace CNA::Examples::ComputeParticlesGenerated

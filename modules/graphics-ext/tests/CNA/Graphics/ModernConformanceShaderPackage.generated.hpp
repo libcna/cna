@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "modern_conformance";
-inline constexpr std::string_view kManifestSha256 = "8f70f023b97a104a74cc177e7edc0dd65e596d1f49176d66d189412c23b2ef85";
+inline constexpr std::string_view kManifestSha256 = "6f78263cd1cf35b0cd46ae0faee59cee6dfc7ec6d7898c1bdbd5462daa2f3d46";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -30,6 +30,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "zero";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kGridEsSource =
     R"CNA_SHADER(#version 310 es
@@ -111,6 +115,51 @@ inline constexpr std::uint32_t kGridSpirV[] = {
     0x0003003eu, 0x0000003fu, 0x0000003du, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kGridSpirVByteSize = sizeof(kGridSpirV);
+
+inline constexpr std::string_view kGridWgsl =
+    R"CNA_SHADER(// grid.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Params {
+    uWidth: i32,
+    uHeight: i32,
+}
+
+struct Output {
+    values: array<u32>,
+}
+
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(3) @binding(0) 
+var<uniform> params: Params;
+@group(0) @binding(0) 
+var<storage, read_write> unnamed: Output;
+
+fn main_1() {
+    var g: vec3<u32>;
+    var index: u32;
+
+    let _e14 = gl_GlobalInvocationID_1;
+    g = _e14;
+    let _e16 = g[0u];
+    let _e18 = g[1u];
+    let _e20 = params.uWidth;
+    let _e25 = g[2u];
+    let _e27 = params.uWidth;
+    let _e31 = params.uHeight;
+    index = ((_e16 + (_e18 * bitcast<u32>(_e20))) + ((_e25 * bitcast<u32>(_e27)) * bitcast<u32>(_e31)));
+    let _e35 = index;
+    let _e37 = g[0u];
+    let _e41 = g[1u];
+    let _e46 = g[2u];
+    unnamed.values[_e35] = (((_e37 << bitcast<u32>(20u)) | (_e41 << bitcast<u32>(10u))) | _e46);
+    return;
+}
+
+@compute @workgroup_size(4, 2, 2) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
 
 inline constexpr std::string_view kAccumulateEsSource =
     R"CNA_SHADER(#version 310 es
@@ -195,6 +244,55 @@ inline constexpr std::uint32_t kAccumulateSpirV[] = {
 };
 inline constexpr std::size_t kAccumulateSpirVByteSize = sizeof(kAccumulateSpirV);
 
+inline constexpr std::string_view kAccumulateWgsl =
+    R"CNA_SHADER(// accumulate.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Params {
+    uCount: i32,
+    uScale: f32,
+}
+
+struct Accumulator {
+    acc: array<f32>,
+}
+
+struct Input {
+    inputs: array<f32>,
+}
+
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(3) @binding(0) 
+var<uniform> params: Params;
+@group(0) @binding(1) 
+var<storage, read_write> unnamed: Accumulator;
+@group(0) @binding(0) 
+var<storage> unnamed_1: Input;
+
+fn main_1() {
+    var i: u32;
+
+    let _e12 = gl_GlobalInvocationID_1[0u];
+    i = _e12;
+    let _e13 = i;
+    let _e15 = params.uCount;
+    if (_e13 < bitcast<u32>(_e15)) {
+        let _e18 = i;
+        let _e19 = i;
+        let _e22 = unnamed.acc[_e19];
+        let _e23 = i;
+        let _e26 = unnamed_1.inputs[_e23];
+        let _e28 = params.uScale;
+        unnamed.acc[_e18] = (_e22 + (_e26 * _e28));
+    }
+    return;
+}
+
+@compute @workgroup_size(64, 1, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
 inline constexpr std::string_view kChainEsSource =
     R"CNA_SHADER(#version 310 es
 precision highp float;
@@ -272,6 +370,51 @@ inline constexpr std::uint32_t kChainSpirV[] = {
 };
 inline constexpr std::size_t kChainSpirVByteSize = sizeof(kChainSpirV);
 
+inline constexpr std::string_view kChainWgsl =
+    R"CNA_SHADER(// chain.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Params {
+    uCount: i32,
+}
+
+struct Destination {
+    dst: array<u32>,
+}
+
+struct Source {
+    src: array<u32>,
+}
+
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(3) @binding(0) 
+var<uniform> params: Params;
+@group(0) @binding(1) 
+var<storage, read_write> unnamed: Destination;
+@group(0) @binding(0) 
+var<storage> unnamed_1: Source;
+
+fn main_1() {
+    var i: u32;
+
+    let _e12 = gl_GlobalInvocationID_1[0u];
+    i = _e12;
+    let _e13 = i;
+    let _e15 = params.uCount;
+    if (_e13 < bitcast<u32>(_e15)) {
+        let _e18 = i;
+        let _e19 = i;
+        let _e22 = unnamed_1.src[_e19];
+        unnamed.dst[_e18] = ((_e22 * 2u) + 1u);
+    }
+    return;
+}
+
+@compute @workgroup_size(64, 1, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
 inline constexpr std::string_view kImageEsSource =
     R"CNA_SHADER(#version 310 es
 precision highp float;
@@ -329,15 +472,46 @@ inline constexpr std::uint32_t kImageSpirV[] = {
 };
 inline constexpr std::size_t kImageSpirVByteSize = sizeof(kImageSpirV);
 
-inline constexpr std::array<PayloadProvenance, 8> kPayloads = {{
+inline constexpr std::string_view kImageWgsl =
+    R"CNA_SHADER(// image.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(0) @binding(0) 
+var uImage: texture_storage_2d<rgba8unorm,write>;
+
+fn main_1() {
+    var p: vec2<i32>;
+
+    let _e8 = gl_GlobalInvocationID_1;
+    p = bitcast<vec2<i32>>(_e8.xy);
+    let _e11 = p;
+    let _e13 = p[0u];
+    let _e16 = p[1u];
+    let _e19 = p[0u];
+    let _e21 = p[1u];
+    textureStore(uImage, _e11, (vec4<f32>(f32(_e13), f32(_e16), f32((_e19 ^ _e21)), 255f) / vec4(255f)));
+    return;
+}
+
+@compute @workgroup_size(8, 8, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 12> kPayloads = {{
     {"kGridEsSource", "grid.es.comp.glsl", "28c6e2e6ecab4d70b968b33766240ce83c16c2274fa0953307190a5d5c6d55bf", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kGridSpirV", "grid.vulkan.comp.glsl", "ca44c1f5a0fef7c460b8e585720f22480124c339ff6dc27f05aed13fa838c71e", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kGridWgsl", "grid.vulkan.comp.glsl", "ca44c1f5a0fef7c460b8e585720f22480124c339ff6dc27f05aed13fa838c71e", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
     {"kAccumulateEsSource", "accumulate.es.comp.glsl", "e1ddb16eb1a502992619b92a7ef1bfeffc739782476e30d0ce9c090ae54e4527", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kAccumulateSpirV", "accumulate.vulkan.comp.glsl", "89c7048ccdcbeaf8b125ec69a31bf9c37dfdcc1ba02f4b8b983c5e06e1fa924c", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kAccumulateWgsl", "accumulate.vulkan.comp.glsl", "89c7048ccdcbeaf8b125ec69a31bf9c37dfdcc1ba02f4b8b983c5e06e1fa924c", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
     {"kChainEsSource", "chain.es.comp.glsl", "6eb3c8a87a05d44c8d7968871618f5ddd1b6e9836e1d0380272ebae422fdad36", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kChainSpirV", "chain.vulkan.comp.glsl", "123efb44366e5596cdf1f2f3702ce20d72ecaf95273389194681fa52d60edb17", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kChainWgsl", "chain.vulkan.comp.glsl", "123efb44366e5596cdf1f2f3702ce20d72ecaf95273389194681fa52d60edb17", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
     {"kImageEsSource", "image.es.comp.glsl", "640b207c30916fae4a3eb5dfdea7a6ec29c8115d035a2ac5d22e5b5498a42526", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kImageSpirV", "image.vulkan.comp.glsl", "978e15a776f882edc4c61f87fe7623d79efe37180d272d157c550e367c032729", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kImageWgsl", "image.vulkan.comp.glsl", "978e15a776f882edc4c61f87fe7623d79efe37180d272d157c550e367c032729", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
 }};
 
 } // namespace CNA::Tests::ModernConformance

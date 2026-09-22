@@ -22,6 +22,15 @@
       "entry_point": "main"
     },
     {
+      "symbol": "kGridWgsl",
+      "source": "grid.vulkan.comp.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
       "symbol": "kAccumulateEsSource",
       "source": "accumulate.es.comp.glsl",
       "language": "glsl-es",
@@ -36,6 +45,15 @@
       "source_language": "vulkan-glsl",
       "stage": "compute",
       "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kAccumulateWgsl",
+      "source": "accumulate.vulkan.comp.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "wgsl",
       "entry_point": "main"
     },
     {
@@ -56,6 +74,15 @@
       "entry_point": "main"
     },
     {
+      "symbol": "kChainWgsl",
+      "source": "chain.vulkan.comp.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
       "symbol": "kImageEsSource",
       "source": "image.es.comp.glsl",
       "language": "glsl-es",
@@ -70,6 +97,15 @@
       "source_language": "vulkan-glsl",
       "stage": "compute",
       "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kImageWgsl",
+      "source": "image.vulkan.comp.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "wgsl",
       "entry_point": "main"
     }
   ]

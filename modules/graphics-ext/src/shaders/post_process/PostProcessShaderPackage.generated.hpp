@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "post_process";
-inline constexpr std::string_view kManifestSha256 = "8eee8ade3b30c27247f91784b8b6dcd90a00feaece339ffacf6d7d6e72703b69";
+inline constexpr std::string_view kManifestSha256 = "32b06882303719666c402170f39678c69ad0e27a8e00bb0eea1fa25d1edf9c57";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kAerialPerspectiveEsFragmentSource =
     R"CNA_SHADER(#version 300 es
@@ -3382,6 +3386,67 @@ inline constexpr std::uint32_t kFullscreenVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kFullscreenVulkanVertexSpirVByteSize = sizeof(kFullscreenVulkanVertexSpirV);
 
+inline constexpr std::string_view kFullscreenVulkanVertexWgsl =
+    R"CNA_SHADER(// fullscreen.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uVector: vec4<f32>,
+    uScalar: f32,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: vec2<f32>,
+    @location(1) member_1: vec4<f32>,
+}
+
+var<private> aPos_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> TexCoord: vec2<f32>;
+var<private> aTexCoord_1: vec2<f32>;
+var<private> SpriteColor: vec4<f32>;
+var<private> aColor_1: vec4<f32>;
+
+fn main_1() {
+    var ndc: vec2<f32>;
+
+    let _e14 = aPos_1;
+    let _e16 = pc.viewportSize;
+    ndc = (((_e14 / _e16) * 2f) - vec2<f32>(1f, 1f));
+    let _e20 = ndc;
+    unnamed.gl_Position = vec4<f32>(_e20.x, _e20.y, 0f, 1f);
+    let _e25 = aTexCoord_1;
+    TexCoord = _e25;
+    let _e26 = aColor_1;
+    SpriteColor = _e26;
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPos: vec2<f32>, @location(1) aTexCoord: vec2<f32>, @location(2) aColor: vec4<f32>) -> VertexOutput {
+    aPos_1 = aPos;
+    aTexCoord_1 = aTexCoord;
+    aColor_1 = aColor;
+    main_1();
+    let _e11 = unnamed.gl_Position.y;
+    unnamed.gl_Position.y = -(_e11);
+    let _e13 = unnamed.gl_Position;
+    let _e14 = TexCoord;
+    let _e15 = SpriteColor;
+    return VertexOutput(_e13, _e14, _e15);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kBloomBlurVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000087u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -3453,6 +3518,89 @@ inline constexpr std::uint32_t kBloomBlurVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kBloomBlurVulkanFragmentSpirVByteSize = sizeof(kBloomBlurVulkanFragmentSpirV);
 
+inline constexpr std::string_view kBloomBlurVulkanFragmentWgsl =
+    R"CNA_SHADER(// bloom_blur.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uBloomParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var direction: vec2<f32>;
+    var sum: vec3<f32>;
+
+    let _e19 = pc.uBloomParams;
+    direction = _e19.xy;
+    let _e21 = TexCoord_1;
+    let _e22 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e21);
+    sum = (_e22.xyz * 0.22702703f);
+    let _e25 = TexCoord_1;
+    let _e26 = direction;
+    let _e29 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e25 + (_e26 * 1f)));
+    let _e32 = sum;
+    sum = (_e32 + (_e29.xyz * 0.19459459f));
+    let _e34 = TexCoord_1;
+    let _e35 = direction;
+    let _e38 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e34 - (_e35 * 1f)));
+    let _e41 = sum;
+    sum = (_e41 + (_e38.xyz * 0.19459459f));
+    let _e43 = TexCoord_1;
+    let _e44 = direction;
+    let _e47 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e43 + (_e44 * 2f)));
+    let _e50 = sum;
+    sum = (_e50 + (_e47.xyz * 0.12162162f));
+    let _e52 = TexCoord_1;
+    let _e53 = direction;
+    let _e56 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e52 - (_e53 * 2f)));
+    let _e59 = sum;
+    sum = (_e59 + (_e56.xyz * 0.12162162f));
+    let _e61 = TexCoord_1;
+    let _e62 = direction;
+    let _e65 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e61 + (_e62 * 3f)));
+    let _e68 = sum;
+    sum = (_e68 + (_e65.xyz * 0.054054055f));
+    let _e70 = TexCoord_1;
+    let _e71 = direction;
+    let _e74 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e70 - (_e71 * 3f)));
+    let _e77 = sum;
+    sum = (_e77 + (_e74.xyz * 0.054054055f));
+    let _e79 = TexCoord_1;
+    let _e80 = direction;
+    let _e83 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e79 + (_e80 * 4f)));
+    let _e86 = sum;
+    sum = (_e86 + (_e83.xyz * 0.016216217f));
+    let _e88 = TexCoord_1;
+    let _e89 = direction;
+    let _e92 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e88 - (_e89 * 4f)));
+    let _e95 = sum;
+    sum = (_e95 + (_e92.xyz * 0.016216217f));
+    let _e97 = sum;
+    let _e102 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e97.x, _e97.y, _e97.z, 1f) * _e102);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kBloomCombineVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000003au, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -3493,6 +3641,58 @@ inline constexpr std::uint32_t kBloomCombineVulkanFragmentSpirV[] = {
     0x0003003eu, 0x0000001du, 0x00000039u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kBloomCombineVulkanFragmentSpirVByteSize = sizeof(kBloomCombineVulkanFragmentSpirV);
+
+inline constexpr std::string_view kBloomCombineVulkanFragmentWgsl =
+    R"CNA_SHADER(// bloom_combine.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uBloomParams: vec4<f32>,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uBloomSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uBloomSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var scene: vec4<f32>;
+    var bloom: vec3<f32>;
+
+    let _e13 = TexCoord_1;
+    let _e14 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e13);
+    scene = _e14;
+    let _e15 = TexCoord_1;
+    let _e16 = textureSample(uBloomSampler_cnaTexture, uBloomSampler_cnaSampler, _e15);
+    bloom = _e16.xyz;
+    let _e18 = scene;
+    let _e20 = bloom;
+    let _e23 = pc.uBloomParams[0u];
+    let _e25 = (_e18.xyz + (_e20 * _e23));
+    let _e27 = scene[3u];
+    let _e32 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e25.x, _e25.y, _e25.z, _e27) * _e32);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kBloomExtractVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000004du, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -3540,6 +3740,66 @@ inline constexpr std::uint32_t kBloomExtractVulkanFragmentSpirV[] = {
     0x0000004bu, 0x0003003eu, 0x00000041u, 0x0000004cu, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kBloomExtractVulkanFragmentSpirVByteSize = sizeof(kBloomExtractVulkanFragmentSpirV);
+
+inline constexpr std::string_view kBloomExtractVulkanFragmentWgsl =
+    R"CNA_SHADER(// bloom_extract.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uBloomParams: vec4<f32>,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var color: vec3<f32>;
+    var threshold: f32;
+    var luminance: f32;
+    var knee: f32;
+    var contribution: f32;
+
+    let _e22 = TexCoord_1;
+    let _e23 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e22);
+    color = _e23.xyz;
+    let _e27 = pc.uBloomParams[0u];
+    threshold = _e27;
+    let _e28 = color;
+    luminance = dot(_e28, vec3<f32>(0.2126f, 0.7152f, 0.0722f));
+    let _e30 = threshold;
+    knee = max((_e30 * 0.5f), 0.0001f);
+    let _e33 = luminance;
+    let _e34 = threshold;
+    let _e36 = knee;
+    let _e38 = knee;
+    contribution = clamp((((_e33 - _e34) + _e36) / (2f * _e38)), 0f, 1f);
+    let _e42 = contribution;
+    let _e43 = contribution;
+    contribution = (_e43 * _e42);
+    let _e45 = color;
+    let _e46 = contribution;
+    let _e47 = (_e45 * _e46);
+    let _e52 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e47.x, _e47.y, _e47.z, 1f) * _e52);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kBloomUpsampleVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000085u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -3605,6 +3865,91 @@ inline constexpr std::uint32_t kBloomUpsampleVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kBloomUpsampleVulkanFragmentSpirVByteSize = sizeof(kBloomUpsampleVulkanFragmentSpirV);
 
+inline constexpr std::string_view kBloomUpsampleVulkanFragmentWgsl =
+    R"CNA_SHADER(// bloom_upsample.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uBloomParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uSmallerSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uSmallerSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var smallerTexel: vec2<f32>;
+    var larger: vec3<f32>;
+    var smaller: vec3<f32>;
+    var halfTexel: vec2<f32>;
+
+    let _e20 = pc.uBloomParams;
+    smallerTexel = _e20.xy;
+    let _e22 = TexCoord_1;
+    let _e23 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e22);
+    larger = _e23.xyz;
+    let _e27 = pc.uBloomParams[2u];
+    if (_e27 < 0.5f) {
+        let _e29 = TexCoord_1;
+        let _e30 = textureSample(uSmallerSampler_cnaTexture, uSmallerSampler_cnaSampler, _e29);
+        smaller = _e30.xyz;
+    } else {
+        let _e32 = smallerTexel;
+        halfTexel = (_e32 * 0.5f);
+        let _e34 = TexCoord_1;
+        let _e36 = halfTexel[0u];
+        let _e39 = halfTexel[1u];
+        let _e43 = textureSample(uSmallerSampler_cnaTexture, uSmallerSampler_cnaSampler, (_e34 + vec2<f32>(-(_e36), -(_e39))));
+        smaller = _e43.xyz;
+        let _e45 = TexCoord_1;
+        let _e47 = halfTexel[0u];
+        let _e49 = halfTexel[1u];
+        let _e53 = textureSample(uSmallerSampler_cnaTexture, uSmallerSampler_cnaSampler, (_e45 + vec2<f32>(_e47, -(_e49))));
+        let _e55 = smaller;
+        smaller = (_e55 + _e53.xyz);
+        let _e57 = TexCoord_1;
+        let _e59 = halfTexel[0u];
+        let _e62 = halfTexel[1u];
+        let _e65 = textureSample(uSmallerSampler_cnaTexture, uSmallerSampler_cnaSampler, (_e57 + vec2<f32>(-(_e59), _e62)));
+        let _e67 = smaller;
+        smaller = (_e67 + _e65.xyz);
+        let _e69 = TexCoord_1;
+        let _e71 = halfTexel[0u];
+        let _e73 = halfTexel[1u];
+        let _e76 = textureSample(uSmallerSampler_cnaTexture, uSmallerSampler_cnaSampler, (_e69 + vec2<f32>(_e71, _e73)));
+        let _e78 = smaller;
+        smaller = (_e78 + _e76.xyz);
+        let _e80 = smaller;
+        smaller = (_e80 * 0.25f);
+    }
+    let _e82 = larger;
+    let _e83 = smaller;
+    let _e84 = (_e82 + _e83);
+    let _e89 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e84.x, _e84.y, _e84.z, 1f) * _e89);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kChromaticVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000047u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -3646,6 +3991,61 @@ inline constexpr std::uint32_t kChromaticVulkanFragmentSpirV[] = {
     0x00010038u,
 };
 inline constexpr std::size_t kChromaticVulkanFragmentSpirVByteSize = sizeof(kChromaticVulkanFragmentSpirV);
+
+inline constexpr std::string_view kChromaticVulkanFragmentWgsl =
+    R"CNA_SHADER(// chromatic.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uVector: vec4<f32>,
+    uStrength: f32,
+}
+
+var<private> TexCoord_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> FragColor: vec4<f32>;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var fromCentre: vec2<f32>;
+    var redUv: vec2<f32>;
+    var blueUv: vec2<f32>;
+
+    let _e17 = TexCoord_1;
+    fromCentre = (_e17 - vec2<f32>(0.5f, 0.5f));
+    let _e19 = fromCentre;
+    let _e21 = pc.uStrength;
+    redUv = (vec2<f32>(0.5f, 0.5f) + (_e19 * (1f + _e21)));
+    let _e25 = fromCentre;
+    let _e27 = pc.uStrength;
+    blueUv = (vec2<f32>(0.5f, 0.5f) + (_e25 * (1f - _e27)));
+    let _e31 = redUv;
+    let _e32 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e31);
+    let _e34 = TexCoord_1;
+    let _e35 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e34);
+    let _e37 = blueUv;
+    let _e38 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e37);
+    let _e40 = TexCoord_1;
+    let _e41 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e40);
+    let _e44 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e32.x, _e35.y, _e38.z, _e41.w) * _e44);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kContactShadowVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000214u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -3814,6 +4214,274 @@ inline constexpr std::uint32_t kContactShadowVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kContactShadowVulkanFragmentSpirVByteSize = sizeof(kContactShadowVulkanFragmentSpirV);
 
+inline constexpr std::string_view kContactShadowVulkanFragmentWgsl =
+    R"CNA_SHADER(// contact_shadow.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uContactScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uContactMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec2Array {
+    uContactVectors: array<vec2<f32>, 72>,
+}
+
+struct Vec3Array {
+    uContactDirections: array<vec3<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+@group(1) @binding(13) 
+var<storage> unnamed_2: Vec2Array;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+@group(1) @binding(14) 
+var<uniform> unnamed_3: Vec3Array;
+
+fn cnaContactOccluded_u0028_f1_u003b_f1_u003b_f1_u003b_f1_u003b(rayViewDepth: ptr<function, f32>, sceneViewDepth: ptr<function, f32>, bias: ptr<function, f32>, thickness: ptr<function, f32>) -> bool {
+    var difference: f32;
+
+    let _e40 = (*rayViewDepth);
+    let _e41 = (*sceneViewDepth);
+    difference = (_e40 - _e41);
+    let _e43 = difference;
+    let _e44 = (*bias);
+    let _e46 = difference;
+    let _e47 = (*thickness);
+    return ((_e43 > _e44) && (_e46 < _e47));
+}
+
+fn cnaTextureUvFromClip_u0028_vf4_u003b(clip: ptr<function, vec4<f32>>) -> vec2<f32> {
+    var ndc: vec2<f32>;
+
+    let _e37 = (*clip);
+    let _e40 = (*clip)[3u];
+    ndc = (_e37.xy / vec2(_e40));
+    let _e44 = ndc[0u];
+    let _e48 = ndc[1u];
+    return vec2<f32>(((_e44 * 0.5f) + 0.5f), (0.5f - (_e48 * 0.5f)));
+}
+
+fn cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b(uv: ptr<function, vec2<f32>>, linearDepth: ptr<function, f32>) -> vec3<f32> {
+    var cameraUv: vec2<f32>;
+    var clip_1: vec4<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+
+    let _e42 = (*uv)[0u];
+    let _e44 = (*uv)[1u];
+    cameraUv = vec2<f32>(_e42, (1f - _e44));
+    let _e47 = cameraUv;
+    let _e50 = ((_e47 * 2f) - vec2(1f));
+    clip_1 = vec4<f32>(_e50.x, _e50.y, 1f, 1f);
+    let _e56 = unnamed_1.uContactMatrices[1i];
+    let _e57 = clip_1;
+    ray = (_e56 * _e57);
+    let _e59 = ray;
+    let _e62 = ray[3u];
+    direction = (_e59.xyz / vec3(_e62));
+    let _e65 = direction;
+    let _e66 = (*linearDepth);
+    let _e68 = direction[2u];
+    return (_e65 * (_e66 / max(-(_e68), 0.000001f)));
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e38 = unnamed.uContactScalars[6i];
+    if (_e38 < 0.5f) {
+        let _e41 = (*channels)[0u];
+        return _e41;
+    }
+    let _e42 = (*channels);
+    return dot(_e42, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn cnaSnapToTexel_u0028_vf2_u003b(uv_1: ptr<function, vec2<f32>>) -> vec2<f32> {
+    let _e36 = (*uv_1);
+    let _e39 = unnamed_2.uContactVectors[0i];
+    let _e46 = unnamed_2.uContactVectors[0i];
+    return ((floor((_e36 * _e39)) + vec2(0.5f)) / _e46);
+}
+
+fn main_1() {
+    var scene: vec4<f32>;
+    var centerDepth: f32;
+    var param: vec2<f32>;
+    var param_1: vec4<f32>;
+    var position: vec3<f32>;
+    var param_2: vec2<f32>;
+    var param_3: f32;
+    var stepLength: f32;
+    var occluded: f32;
+    var i: i32;
+    var samplePosition: vec3<f32>;
+    var clip_2: vec4<f32>;
+    var sampleUv: vec2<f32>;
+    var param_4: vec4<f32>;
+    var sceneDepth: f32;
+    var param_5: vec2<f32>;
+    var param_6: vec4<f32>;
+    var param_7: f32;
+    var param_8: f32;
+    var param_9: f32;
+    var param_10: f32;
+    var visibility: f32;
+    var phi_294_: bool;
+    var phi_301_: bool;
+    var phi_308_: bool;
+
+    let _e57 = TexCoord_1;
+    let _e58 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e57);
+    scene = _e58;
+    let _e59 = TexCoord_1;
+    param = _e59;
+    let _e60 = cnaSnapToTexel_u0028_vf2_u003b((&param));
+    let _e61 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e60);
+    param_1 = _e61;
+    let _e62 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_1));
+    centerDepth = _e62;
+    let _e63 = centerDepth;
+    let _e65 = centerDepth;
+    if ((_e63 <= 0f) || (_e65 >= 0.999f)) {
+        let _e68 = scene;
+        let _e69 = SpriteColor_1;
+        FragColor = (_e68 * _e69);
+        return;
+    }
+    let _e71 = TexCoord_1;
+    param_2 = _e71;
+    let _e72 = centerDepth;
+    param_3 = _e72;
+    let _e73 = cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b((&param_2), (&param_3));
+    let _e76 = unnamed.uContactScalars[0i];
+    position = (_e73 * _e76);
+    let _e80 = unnamed.uContactScalars[1i];
+    let _e83 = unnamed.uContactScalars[5i];
+    stepLength = (_e80 / _e83);
+    occluded = 0f;
+    i = 1i;
+    loop {
+        let _e85 = i;
+        if (_e85 <= 64i) {
+            let _e87 = i;
+            let _e91 = unnamed.uContactScalars[5i];
+            if (f32(_e87) > _e91) {
+                break;
+            }
+            let _e93 = position;
+            let _e96 = unnamed_3.uContactDirections[0i];
+            let _e97 = stepLength;
+            let _e98 = i;
+            samplePosition = (_e93 + (_e96 * (_e97 * f32(_e98))));
+            let _e104 = samplePosition[2u];
+            if (_e104 >= -0.000001f) {
+                break;
+            }
+            let _e108 = unnamed_1.uContactMatrices[0i];
+            let _e109 = samplePosition;
+            clip_2 = (_e108 * vec4<f32>(_e109.x, _e109.y, _e109.z, 1f));
+            let _e116 = clip_2[3u];
+            if (_e116 <= 0f) {
+                break;
+            }
+            let _e118 = clip_2;
+            param_4 = _e118;
+            let _e119 = cnaTextureUvFromClip_u0028_vf4_u003b((&param_4));
+            sampleUv = _e119;
+            let _e121 = sampleUv[0u];
+            let _e122 = (_e121 < 0f);
+            phi_294_ = _e122;
+            if !(_e122) {
+                let _e125 = sampleUv[0u];
+                phi_294_ = (_e125 > 1f);
+            }
+            let _e128 = phi_294_;
+            phi_301_ = _e128;
+            if !(_e128) {
+                let _e131 = sampleUv[1u];
+                phi_301_ = (_e131 < 0f);
+            }
+            let _e134 = phi_301_;
+            phi_308_ = _e134;
+            if !(_e134) {
+                let _e137 = sampleUv[1u];
+                phi_308_ = (_e137 > 1f);
+            }
+            let _e140 = phi_308_;
+            if _e140 {
+                break;
+            }
+            let _e141 = sampleUv;
+            param_5 = _e141;
+            let _e142 = cnaSnapToTexel_u0028_vf2_u003b((&param_5));
+            let _e143 = textureSampleLevel(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e142, 0f);
+            param_6 = _e143;
+            let _e144 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_6));
+            sceneDepth = _e144;
+            let _e145 = sceneDepth;
+            let _e147 = sceneDepth;
+            if ((_e145 <= 0f) || (_e147 >= 0.999f)) {
+                continue;
+            }
+            let _e151 = samplePosition[2u];
+            let _e153 = sceneDepth;
+            let _e156 = unnamed.uContactScalars[0i];
+            param_7 = -(_e151);
+            param_8 = (_e153 * _e156);
+            let _e160 = unnamed.uContactScalars[3i];
+            param_9 = _e160;
+            let _e163 = unnamed.uContactScalars[2i];
+            param_10 = _e163;
+            let _e164 = cnaContactOccluded_u0028_f1_u003b_f1_u003b_f1_u003b_f1_u003b((&param_7), (&param_8), (&param_9), (&param_10));
+            if _e164 {
+                occluded = 1f;
+                break;
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e165 = i;
+            i = (_e165 + 1i);
+        }
+    }
+    let _e167 = occluded;
+    let _e170 = unnamed.uContactScalars[4i];
+    visibility = (1f - (_e167 * clamp(_e170, 0f, 1f)));
+    let _e174 = scene;
+    let _e176 = visibility;
+    let _e177 = (_e174.xyz * _e176);
+    let _e179 = scene[3u];
+    let _e184 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e177.x, _e177.y, _e177.z, _e179) * _e184);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kCrtVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000000fcu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -3918,6 +4586,165 @@ inline constexpr std::uint32_t kCrtVulkanFragmentSpirV[] = {
     0x000000ceu, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kCrtVulkanFragmentSpirVByteSize = sizeof(kCrtVulkanFragmentSpirV);
+
+inline constexpr std::string_view kCrtVulkanFragmentWgsl =
+    R"CNA_SHADER(// crt.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uCrtParams: vec4<f32>,
+    uMaskType: f32,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> SpriteColor_1: vec4<f32>;
+var<private> gl_FragCoord_1: vec4<f32>;
+
+fn applyCurvature_u0028_vf2_u003b(uv: ptr<function, vec2<f32>>) -> vec2<f32> {
+    var cc: vec2<f32>;
+    var dist: f32;
+
+    let _e24 = (*uv);
+    cc = (_e24 - vec2(0.5f));
+    let _e27 = cc;
+    let _e28 = cc;
+    let _e32 = pc.uCrtParams[1u];
+    dist = (dot(_e27, _e28) * _e32);
+    let _e34 = (*uv);
+    let _e35 = cc;
+    let _e36 = dist;
+    return (_e34 + (_e35 * _e36));
+}
+
+fn main_1() {
+    var uv_1: vec2<f32>;
+    var param: vec2<f32>;
+    var texColor: vec4<f32>;
+    var rgb: vec3<f32>;
+    var easyGlFragCoord: vec2<f32>;
+    var rowParity: f32;
+    var maskType: i32;
+    var colBase: f32;
+    var rowGroup: f32;
+    var col: f32;
+    var mask: vec3<f32>;
+    var vc: vec2<f32>;
+    var vignette: f32;
+    var phi_62_: bool;
+    var phi_69_: bool;
+    var phi_76_: bool;
+
+    let _e34 = TexCoord_1;
+    param = _e34;
+    let _e35 = applyCurvature_u0028_vf2_u003b((&param));
+    uv_1 = _e35;
+    let _e37 = uv_1[0u];
+    let _e38 = (_e37 < 0f);
+    phi_62_ = _e38;
+    if !(_e38) {
+        let _e41 = uv_1[0u];
+        phi_62_ = (_e41 > 1f);
+    }
+    let _e44 = phi_62_;
+    phi_69_ = _e44;
+    if !(_e44) {
+        let _e47 = uv_1[1u];
+        phi_69_ = (_e47 < 0f);
+    }
+    let _e50 = phi_69_;
+    phi_76_ = _e50;
+    if !(_e50) {
+        let _e53 = uv_1[1u];
+        phi_76_ = (_e53 > 1f);
+    }
+    let _e56 = phi_76_;
+    if _e56 {
+        FragColor = vec4<f32>(0f, 0f, 0f, 1f);
+        return;
+    }
+    let _e57 = uv_1;
+    let _e58 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e57);
+    let _e59 = SpriteColor_1;
+    texColor = (_e58 * _e59);
+    let _e61 = texColor;
+    rgb = _e61.xyz;
+    let _e64 = gl_FragCoord_1[0u];
+    let _e67 = pc.viewportSize[1u];
+    let _e69 = gl_FragCoord_1[1u];
+    easyGlFragCoord = vec2<f32>(_e64, (_e67 - _e69));
+    let _e73 = easyGlFragCoord[1u];
+    let _e74 = floor(_e73);
+    rowParity = (_e74 - (floor((_e74 / 2f)) * 2f));
+    let _e81 = pc.uCrtParams[0u];
+    let _e83 = rowParity;
+    let _e85 = rgb;
+    rgb = (_e85 * mix(1f, (1f - _e81), _e83));
+    let _e88 = pc.uMaskType;
+    maskType = i32(_e88);
+    let _e90 = maskType;
+    if (_e90 != 0i) {
+        let _e93 = easyGlFragCoord[0u];
+        colBase = floor(_e93);
+        let _e95 = maskType;
+        if (_e95 == 2i) {
+            let _e98 = easyGlFragCoord[1u];
+            let _e100 = floor((_e98 / 2f));
+            rowGroup = (_e100 - (floor((_e100 / 2f)) * 2f));
+            let _e105 = rowGroup;
+            let _e107 = colBase;
+            colBase = (_e107 + (_e105 * 1.5f));
+        }
+        let _e109 = colBase;
+        col = (_e109 - (floor((_e109 / 3f)) * 3f));
+        let _e116 = pc.uCrtParams[3u];
+        mask = vec3((1f - _e116));
+        let _e119 = col;
+        if (_e119 < 1f) {
+            mask[0u] = 1f;
+        } else {
+            let _e122 = col;
+            if (_e122 < 2f) {
+                mask[1u] = 1f;
+            } else {
+                mask[2u] = 1f;
+            }
+        }
+        let _e126 = mask;
+        let _e127 = rgb;
+        rgb = (_e127 * _e126);
+    }
+    let _e129 = TexCoord_1;
+    vc = (_e129 - vec2(0.5f));
+    let _e134 = pc.uCrtParams[2u];
+    let _e135 = vc;
+    let _e136 = vc;
+    vignette = (1f - ((_e134 * dot(_e135, _e136)) * 2f));
+    let _e141 = vignette;
+    let _e143 = rgb;
+    rgb = (_e143 * clamp(_e141, 0f, 1f));
+    let _e145 = rgb;
+    let _e147 = texColor[3u];
+    FragColor = vec4<f32>(_e145.x, _e145.y, _e145.z, _e147);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    gl_FragCoord_1 = gl_FragCoord;
+    main_1();
+    let _e7 = FragColor;
+    return _e7;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kDecalVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000119u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -4031,6 +4858,144 @@ inline constexpr std::uint32_t kDecalVulkanFragmentSpirV[] = {
     0x000000ccu, 0x000000cfu, 0x0003003eu, 0x000000beu, 0x000000d0u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kDecalVulkanFragmentSpirVByteSize = sizeof(kDecalVulkanFragmentSpirV);
+
+inline constexpr std::string_view kDecalVulkanFragmentWgsl =
+    R"CNA_SHADER(// decal.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uDecalScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uDecalMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec3Array {
+    uDecalVectors: array<vec3<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(2) 
+var uNormalSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(34) 
+var uNormalSampler_cnaSampler: sampler;
+@group(1) @binding(14) 
+var<uniform> unnamed_2: Vec3Array;
+@group(1) @binding(1) 
+var uDecalSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDecalSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b(uv: ptr<function, vec2<f32>>, linearDepth: ptr<function, f32>) -> vec3<f32> {
+    var cameraUv: vec2<f32>;
+    var clip: vec4<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+
+    let _e39 = (*uv)[0u];
+    let _e41 = (*uv)[1u];
+    cameraUv = vec2<f32>(_e39, (1f - _e41));
+    let _e44 = cameraUv;
+    let _e47 = ((_e44 * 2f) - vec2(1f));
+    clip = vec4<f32>(_e47.x, _e47.y, 1f, 1f);
+    let _e53 = unnamed_1.uDecalMatrices[0i];
+    let _e54 = clip;
+    ray = (_e53 * _e54);
+    let _e56 = ray;
+    let _e59 = ray[3u];
+    direction = (_e56.xyz / vec3(_e59));
+    let _e62 = direction;
+    let _e63 = (*linearDepth);
+    let _e65 = direction[2u];
+    return (_e62 * (_e63 / max(-(_e65), 0.000001f)));
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e35 = unnamed.uDecalScalars[4i];
+    if (_e35 < 0.5f) {
+        let _e38 = (*channels)[0u];
+        return _e38;
+    }
+    let _e39 = (*channels);
+    return dot(_e39, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var depth: f32;
+    var param: vec4<f32>;
+    var viewPosition: vec3<f32>;
+    var param_1: vec2<f32>;
+    var param_2: f32;
+    var local: vec3<f32>;
+    var normal: vec3<f32>;
+    var decal: vec4<f32>;
+
+    let _e40 = TexCoord_1;
+    let _e41 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e40);
+    param = _e41;
+    let _e42 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param));
+    depth = _e42;
+    let _e43 = depth;
+    if (_e43 >= 0.999f) {
+        discard;
+    }
+    let _e45 = TexCoord_1;
+    param_1 = _e45;
+    let _e46 = depth;
+    param_2 = _e46;
+    let _e47 = cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b((&param_1), (&param_2));
+    let _e50 = unnamed.uDecalScalars[0i];
+    viewPosition = (_e47 * _e50);
+    let _e54 = unnamed_1.uDecalMatrices[1i];
+    let _e55 = viewPosition;
+    local = (_e54 * vec4<f32>(_e55.x, _e55.y, _e55.z, 1f)).xyz;
+    let _e62 = local;
+    if any((abs(_e62) > vec3<f32>(0.5f, 0.5f, 0.5f))) {
+        discard;
+    }
+    let _e68 = unnamed.uDecalScalars[3i];
+    if (_e68 > 0.5f) {
+        let _e70 = TexCoord_1;
+        let _e71 = textureSample(uNormalSampler_cnaTexture, uNormalSampler_cnaSampler, _e70);
+        normal = normalize(((_e71.xyz * 2f) - vec3(1f)));
+        let _e77 = normal;
+        let _e80 = unnamed_2.uDecalVectors[0i];
+        let _e85 = unnamed.uDecalScalars[2i];
+        if (dot(_e77, -(_e80)) < _e85) {
+            discard;
+        }
+    }
+    let _e87 = local;
+    let _e91 = textureSample(uDecalSampler_cnaTexture, uDecalSampler_cnaSampler, (_e87.xy + vec2(0.5f)));
+    decal = _e91;
+    let _e92 = decal;
+    let _e96 = unnamed_2.uDecalVectors[1i];
+    let _e97 = (_e92.xyz * _e96);
+    let _e99 = decal[3u];
+    let _e102 = unnamed.uDecalScalars[1i];
+    let _e108 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e97.x, _e97.y, _e97.z, (_e99 * _e102)) * _e108);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kDepthEffectVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000004dcu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -4408,6 +5373,261 @@ inline constexpr std::uint32_t kDepthEffectVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kDepthEffectVulkanFragmentSpirVByteSize = sizeof(kDepthEffectVulkanFragmentSpirV);
 
+inline constexpr std::string_view kDepthEffectVulkanFragmentWgsl =
+    R"CNA_SHADER(// depth_effect.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uDepthParams: vec4<f32>,
+    unusedScalar: f32,
+}
+
+var<private> gl_FragCoord_1: vec4<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(1) @binding(1) 
+var uPalette_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uPalette_cnaSampler: sampler;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+var<private> FragColor: vec4<f32>;
+
+fn easyGlFragCoord_u0028_() -> vec2<f32> {
+    let _e97 = gl_FragCoord_1[0u];
+    let _e100 = pc.viewportSize[1u];
+    let _e102 = gl_FragCoord_1[1u];
+    return vec2<f32>(_e97, (_e100 - _e102));
+}
+
+fn ditherThreshold_u0028_() -> f32 {
+    var fragment: vec2<f32>;
+    var ditherMode: i32;
+    var x: i32;
+    var y: i32;
+    var indexable: array<f32, 16>;
+    var x_1: i32;
+    var y_1: i32;
+    var indexable_1: array<f32, 64>;
+
+    let _e104 = easyGlFragCoord_u0028_();
+    fragment = _e104;
+    let _e107 = pc.uDepthParams[1u];
+    ditherMode = i32(_e107);
+    let _e109 = ditherMode;
+    if (_e109 == 1i) {
+        let _e112 = fragment[0u];
+        x = i32((_e112 - (floor((_e112 / 4f)) * 4f)));
+        let _e119 = fragment[1u];
+        y = i32((_e119 - (floor((_e119 / 4f)) * 4f)));
+        let _e125 = y;
+        let _e127 = x;
+        indexable = array<f32, 16>(0f, 8f, 2f, 10f, 12f, 4f, 14f, 6f, 3f, 11f, 1f, 9f, 15f, 7f, 13f, 5f);
+        let _e130 = indexable[((_e125 * 4i) + _e127)];
+        return (((_e130 + 0.5f) / 16f) - 0.5f);
+    }
+    let _e134 = ditherMode;
+    if (_e134 == 2i) {
+        let _e137 = fragment[0u];
+        x_1 = i32((_e137 - (floor((_e137 / 8f)) * 8f)));
+        let _e144 = fragment[1u];
+        y_1 = i32((_e144 - (floor((_e144 / 8f)) * 8f)));
+        let _e150 = y_1;
+        let _e152 = x_1;
+        indexable_1 = array<f32, 64>(0f, 32f, 8f, 40f, 2f, 34f, 10f, 42f, 48f, 16f, 56f, 24f, 50f, 18f, 58f, 26f, 12f, 44f, 4f, 36f, 14f, 46f, 6f, 38f, 60f, 28f, 52f, 20f, 62f, 30f, 54f, 22f, 3f, 35f, 11f, 43f, 1f, 33f, 9f, 41f, 51f, 19f, 59f, 27f, 49f, 17f, 57f, 25f, 15f, 47f, 7f, 39f, 13f, 45f, 5f, 37f, 63f, 31f, 55f, 23f, 61f, 29f, 53f, 21f);
+        let _e155 = indexable_1[((_e150 * 8i) + _e152)];
+        return (((_e155 + 0.5f) / 64f) - 0.5f);
+    }
+    return 0f;
+}
+
+fn nearestPaletteColor_u0028_vf3_u003b(color: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var dithered: vec3<f32>;
+    var best: vec3<f32>;
+    var bestDist: f32;
+    var paletteSize: i32;
+    var i: i32;
+    var candidate: vec3<f32>;
+    var difference: vec3<f32>;
+    var distanceSquared: f32;
+
+    let _e105 = (*color);
+    let _e106 = ditherThreshold_u0028_();
+    dithered = clamp((_e105 + vec3((_e106 * 0.0625f))), vec3(0f), vec3(1f));
+    let _e113 = dithered;
+    best = _e113;
+    bestDist = 1000000000f;
+    let _e116 = pc.uDepthParams[2u];
+    paletteSize = i32(_e116);
+    i = 0i;
+    loop {
+        let _e118 = i;
+        if (_e118 < 256i) {
+            let _e120 = i;
+            let _e121 = paletteSize;
+            if (_e120 >= _e121) {
+                break;
+            }
+            let _e123 = i;
+            let _e125 = textureLoad(uPalette_cnaTexture, vec2<i32>(_e123, 0i), 0i);
+            candidate = _e125.xyz;
+            let _e127 = dithered;
+            let _e128 = candidate;
+            difference = (_e127 - _e128);
+            let _e130 = difference;
+            let _e131 = difference;
+            distanceSquared = dot(_e130, _e131);
+            let _e133 = distanceSquared;
+            let _e134 = bestDist;
+            if (_e133 < _e134) {
+                let _e136 = distanceSquared;
+                bestDist = _e136;
+                let _e137 = candidate;
+                best = _e137;
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e138 = i;
+            i = (_e138 + 1i);
+        }
+    }
+    let _e140 = best;
+    return _e140;
+}
+
+fn quantizeChannel_u0028_f1_u003b_f1_u003b(value: ptr<function, f32>, levels: ptr<function, f32>) -> f32 {
+    var dithered_1: f32;
+
+    let _e99 = (*value);
+    let _e100 = ditherThreshold_u0028_();
+    let _e101 = (*levels);
+    dithered_1 = (_e99 + (_e100 / (_e101 - 1f)));
+    let _e105 = dithered_1;
+    let _e107 = (*levels);
+    let _e112 = (*levels);
+    return (floor(((clamp(_e105, 0f, 1f) * (_e107 - 1f)) + 0.5f)) / (_e112 - 1f));
+}
+
+fn main_1() {
+    var texColor: vec4<f32>;
+    var rgb: vec3<f32>;
+    var mode: i32;
+    var param: f32;
+    var param_1: f32;
+    var param_2: f32;
+    var param_3: f32;
+    var param_4: f32;
+    var param_5: f32;
+    var param_6: f32;
+    var param_7: f32;
+    var param_8: f32;
+    var param_9: f32;
+    var param_10: f32;
+    var param_11: f32;
+    var levels_1: f32;
+    var local: f32;
+    var gray: f32;
+    var param_12: f32;
+    var param_13: f32;
+    var param_14: vec3<f32>;
+
+    let _e117 = TexCoord_1;
+    let _e118 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e117);
+    let _e119 = SpriteColor_1;
+    texColor = (_e118 * _e119);
+    let _e121 = texColor;
+    rgb = _e121.xyz;
+    let _e125 = pc.uDepthParams[0u];
+    mode = i32(_e125);
+    let _e127 = mode;
+    if (_e127 == 0i) {
+        let _e130 = rgb[0u];
+        param = _e130;
+        param_1 = 32f;
+        let _e131 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param), (&param_1));
+        rgb[0u] = _e131;
+        let _e134 = rgb[1u];
+        param_2 = _e134;
+        param_3 = 64f;
+        let _e135 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param_2), (&param_3));
+        rgb[1u] = _e135;
+        let _e138 = rgb[2u];
+        param_4 = _e138;
+        param_5 = 32f;
+        let _e139 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param_4), (&param_5));
+        rgb[2u] = _e139;
+    } else {
+        let _e141 = mode;
+        if (_e141 == 1i) {
+            let _e144 = rgb[0u];
+            param_6 = _e144;
+            param_7 = 8f;
+            let _e145 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param_6), (&param_7));
+            rgb[0u] = _e145;
+            let _e148 = rgb[1u];
+            param_8 = _e148;
+            param_9 = 8f;
+            let _e149 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param_8), (&param_9));
+            rgb[1u] = _e149;
+            let _e152 = rgb[2u];
+            param_10 = _e152;
+            param_11 = 4f;
+            let _e153 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param_10), (&param_11));
+            rgb[2u] = _e153;
+        } else {
+            let _e155 = mode;
+            let _e157 = mode;
+            let _e160 = mode;
+            if (((_e155 == 2i) || (_e157 == 3i)) || (_e160 == 4i)) {
+                let _e163 = mode;
+                if (_e163 == 2i) {
+                    local = 16f;
+                } else {
+                    let _e165 = mode;
+                    local = select(2f, 4f, (_e165 == 3i));
+                }
+                let _e168 = local;
+                levels_1 = _e168;
+                let _e169 = rgb;
+                gray = dot(_e169, vec3<f32>(0.299f, 0.587f, 0.114f));
+                let _e171 = gray;
+                param_12 = _e171;
+                let _e172 = levels_1;
+                param_13 = _e172;
+                let _e173 = quantizeChannel_u0028_f1_u003b_f1_u003b((&param_12), (&param_13));
+                rgb = vec3(_e173);
+            } else {
+                let _e175 = rgb;
+                param_14 = _e175;
+                let _e176 = nearestPaletteColor_u0028_vf3_u003b((&param_14));
+                rgb = _e176;
+            }
+        }
+    }
+    let _e177 = rgb;
+    let _e179 = texColor[3u];
+    FragColor = vec4<f32>(_e177.x, _e177.y, _e177.z, _e179);
+    return;
+}
+
+@fragment 
+fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    gl_FragCoord_1 = gl_FragCoord;
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e7 = FragColor;
+    return _e7;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kColorGradeInterpolatedStripVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000006aeu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -4625,6 +5845,410 @@ inline constexpr std::uint32_t kColorGradeInterpolatedStripVulkanFragmentSpirV[]
 };
 inline constexpr std::size_t kColorGradeInterpolatedStripVulkanFragmentSpirVByteSize = sizeof(kColorGradeInterpolatedStripVulkanFragmentSpirV);
 
+inline constexpr std::string_view kColorGradeInterpolatedStripVulkanFragmentWgsl =
+    R"CNA_SHADER(// color_grade_interpolated_strip.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uColorGradeParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(1) @binding(1) 
+var uLutSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uLutSampler_cnaSampler: sampler;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaLutFetch_u0028_vi3_u003b(index: ptr<function, vec3<i32>>) -> vec3<f32> {
+    var slices: i32;
+
+    let _e23 = pc.uColorGradeParams[0u];
+    slices = i32(_e23);
+    let _e26 = (*index)[2u];
+    let _e27 = slices;
+    let _e30 = (*index)[0u];
+    let _e33 = (*index)[1u];
+    let _e35 = textureLoad(uLutSampler_cnaTexture, vec2<i32>(((_e26 * _e27) + _e30), _e33), 0i);
+    return _e35.xyz;
+}
+
+fn cnaLutTrilinear_u0028_vf3_u003b(colour: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var last: f32;
+    var p: vec3<f32>;
+    var i0_: vec3<i32>;
+    var i1_: vec3<i32>;
+    var f: vec3<f32>;
+    var c000_: vec3<f32>;
+    var param: vec3<i32>;
+    var c100_: vec3<f32>;
+    var param_1: vec3<i32>;
+    var c010_: vec3<f32>;
+    var param_2: vec3<i32>;
+    var c110_: vec3<f32>;
+    var param_3: vec3<i32>;
+    var c001_: vec3<f32>;
+    var param_4: vec3<i32>;
+    var c101_: vec3<f32>;
+    var param_5: vec3<i32>;
+    var c011_: vec3<f32>;
+    var param_6: vec3<i32>;
+    var c111_: vec3<f32>;
+    var param_7: vec3<i32>;
+
+    let _e43 = pc.uColorGradeParams[0u];
+    last = (_e43 - 1f);
+    let _e45 = (*colour);
+    let _e49 = last;
+    p = (clamp(_e45, vec3(0f), vec3(1f)) * _e49);
+    let _e51 = p;
+    i0_ = vec3<i32>(floor(_e51));
+    let _e54 = i0_;
+    let _e56 = last;
+    i1_ = min((_e54 + vec3<i32>(1i, 1i, 1i)), vec3(i32(_e56)));
+    let _e60 = p;
+    let _e61 = i0_;
+    f = (_e60 - vec3<f32>(_e61));
+    let _e65 = i0_[0u];
+    let _e67 = i0_[1u];
+    let _e69 = i0_[2u];
+    param = vec3<i32>(_e65, _e67, _e69);
+    let _e71 = cnaLutFetch_u0028_vi3_u003b((&param));
+    c000_ = _e71;
+    let _e73 = i1_[0u];
+    let _e75 = i0_[1u];
+    let _e77 = i0_[2u];
+    param_1 = vec3<i32>(_e73, _e75, _e77);
+    let _e79 = cnaLutFetch_u0028_vi3_u003b((&param_1));
+    c100_ = _e79;
+    let _e81 = i0_[0u];
+    let _e83 = i1_[1u];
+    let _e85 = i0_[2u];
+    param_2 = vec3<i32>(_e81, _e83, _e85);
+    let _e87 = cnaLutFetch_u0028_vi3_u003b((&param_2));
+    c010_ = _e87;
+    let _e89 = i1_[0u];
+    let _e91 = i1_[1u];
+    let _e93 = i0_[2u];
+    param_3 = vec3<i32>(_e89, _e91, _e93);
+    let _e95 = cnaLutFetch_u0028_vi3_u003b((&param_3));
+    c110_ = _e95;
+    let _e97 = i0_[0u];
+    let _e99 = i0_[1u];
+    let _e101 = i1_[2u];
+    param_4 = vec3<i32>(_e97, _e99, _e101);
+    let _e103 = cnaLutFetch_u0028_vi3_u003b((&param_4));
+    c001_ = _e103;
+    let _e105 = i1_[0u];
+    let _e107 = i0_[1u];
+    let _e109 = i1_[2u];
+    param_5 = vec3<i32>(_e105, _e107, _e109);
+    let _e111 = cnaLutFetch_u0028_vi3_u003b((&param_5));
+    c101_ = _e111;
+    let _e113 = i0_[0u];
+    let _e115 = i1_[1u];
+    let _e117 = i1_[2u];
+    param_6 = vec3<i32>(_e113, _e115, _e117);
+    let _e119 = cnaLutFetch_u0028_vi3_u003b((&param_6));
+    c011_ = _e119;
+    let _e121 = i1_[0u];
+    let _e123 = i1_[1u];
+    let _e125 = i1_[2u];
+    param_7 = vec3<i32>(_e121, _e123, _e125);
+    let _e127 = cnaLutFetch_u0028_vi3_u003b((&param_7));
+    c111_ = _e127;
+    let _e128 = c000_;
+    let _e129 = c100_;
+    let _e131 = f[0u];
+    let _e134 = c010_;
+    let _e135 = c110_;
+    let _e137 = f[0u];
+    let _e141 = f[1u];
+    let _e144 = c001_;
+    let _e145 = c101_;
+    let _e147 = f[0u];
+    let _e150 = c011_;
+    let _e151 = c111_;
+    let _e153 = f[0u];
+    let _e157 = f[1u];
+    let _e161 = f[2u];
+    return mix(mix(mix(_e128, _e129, vec3(_e131)), mix(_e134, _e135, vec3(_e137)), vec3(_e141)), mix(mix(_e144, _e145, vec3(_e147)), mix(_e150, _e151, vec3(_e153)), vec3(_e157)), vec3(_e161));
+}
+
+fn cnaLutTetrahedral_u0028_vf3_u003b(colour_1: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var last_1: f32;
+    var p_1: vec3<f32>;
+    var i0_1: vec3<i32>;
+    var i1_1: vec3<i32>;
+    var f_1: vec3<f32>;
+    var c000_1: vec3<f32>;
+    var param_8: vec3<i32>;
+    var c111_1: vec3<f32>;
+    var param_9: vec3<i32>;
+    var c100_1: vec3<f32>;
+    var param_10: vec3<i32>;
+    var c110_1: vec3<f32>;
+    var param_11: vec3<i32>;
+    var c100_2: vec3<f32>;
+    var param_12: vec3<i32>;
+    var c101_1: vec3<f32>;
+    var param_13: vec3<i32>;
+    var c001_1: vec3<f32>;
+    var param_14: vec3<i32>;
+    var c101_2: vec3<f32>;
+    var param_15: vec3<i32>;
+    var c001_2: vec3<f32>;
+    var param_16: vec3<i32>;
+    var c011_1: vec3<f32>;
+    var param_17: vec3<i32>;
+    var c010_1: vec3<f32>;
+    var param_18: vec3<i32>;
+    var c011_2: vec3<f32>;
+    var param_19: vec3<i32>;
+    var c010_2: vec3<f32>;
+    var param_20: vec3<i32>;
+    var c110_2: vec3<f32>;
+    var param_21: vec3<i32>;
+
+    let _e55 = pc.uColorGradeParams[0u];
+    last_1 = (_e55 - 1f);
+    let _e57 = (*colour_1);
+    let _e61 = last_1;
+    p_1 = (clamp(_e57, vec3(0f), vec3(1f)) * _e61);
+    let _e63 = p_1;
+    i0_1 = vec3<i32>(floor(_e63));
+    let _e66 = i0_1;
+    let _e68 = last_1;
+    i1_1 = min((_e66 + vec3<i32>(1i, 1i, 1i)), vec3(i32(_e68)));
+    let _e72 = p_1;
+    let _e73 = i0_1;
+    f_1 = (_e72 - vec3<f32>(_e73));
+    let _e77 = i0_1[0u];
+    let _e79 = i0_1[1u];
+    let _e81 = i0_1[2u];
+    param_8 = vec3<i32>(_e77, _e79, _e81);
+    let _e83 = cnaLutFetch_u0028_vi3_u003b((&param_8));
+    c000_1 = _e83;
+    let _e85 = i1_1[0u];
+    let _e87 = i1_1[1u];
+    let _e89 = i1_1[2u];
+    param_9 = vec3<i32>(_e85, _e87, _e89);
+    let _e91 = cnaLutFetch_u0028_vi3_u003b((&param_9));
+    c111_1 = _e91;
+    let _e93 = f_1[0u];
+    let _e95 = f_1[1u];
+    if (_e93 > _e95) {
+        let _e98 = f_1[1u];
+        let _e100 = f_1[2u];
+        if (_e98 > _e100) {
+            let _e103 = i1_1[0u];
+            let _e105 = i0_1[1u];
+            let _e107 = i0_1[2u];
+            param_10 = vec3<i32>(_e103, _e105, _e107);
+            let _e109 = cnaLutFetch_u0028_vi3_u003b((&param_10));
+            c100_1 = _e109;
+            let _e111 = i1_1[0u];
+            let _e113 = i1_1[1u];
+            let _e115 = i0_1[2u];
+            param_11 = vec3<i32>(_e111, _e113, _e115);
+            let _e117 = cnaLutFetch_u0028_vi3_u003b((&param_11));
+            c110_1 = _e117;
+            let _e118 = c000_1;
+            let _e120 = f_1[0u];
+            let _e121 = c100_1;
+            let _e122 = c000_1;
+            let _e127 = f_1[1u];
+            let _e128 = c110_1;
+            let _e129 = c100_1;
+            let _e134 = f_1[2u];
+            let _e135 = c111_1;
+            let _e136 = c110_1;
+            return (((_e118 + ((_e121 - _e122) * _e120)) + ((_e128 - _e129) * _e127)) + ((_e135 - _e136) * _e134));
+        }
+        let _e141 = f_1[0u];
+        let _e143 = f_1[2u];
+        if (_e141 > _e143) {
+            let _e146 = i1_1[0u];
+            let _e148 = i0_1[1u];
+            let _e150 = i0_1[2u];
+            param_12 = vec3<i32>(_e146, _e148, _e150);
+            let _e152 = cnaLutFetch_u0028_vi3_u003b((&param_12));
+            c100_2 = _e152;
+            let _e154 = i1_1[0u];
+            let _e156 = i0_1[1u];
+            let _e158 = i1_1[2u];
+            param_13 = vec3<i32>(_e154, _e156, _e158);
+            let _e160 = cnaLutFetch_u0028_vi3_u003b((&param_13));
+            c101_1 = _e160;
+            let _e161 = c000_1;
+            let _e163 = f_1[0u];
+            let _e164 = c100_2;
+            let _e165 = c000_1;
+            let _e170 = f_1[2u];
+            let _e171 = c101_1;
+            let _e172 = c100_2;
+            let _e177 = f_1[1u];
+            let _e178 = c111_1;
+            let _e179 = c101_1;
+            return (((_e161 + ((_e164 - _e165) * _e163)) + ((_e171 - _e172) * _e170)) + ((_e178 - _e179) * _e177));
+        }
+        let _e184 = i0_1[0u];
+        let _e186 = i0_1[1u];
+        let _e188 = i1_1[2u];
+        param_14 = vec3<i32>(_e184, _e186, _e188);
+        let _e190 = cnaLutFetch_u0028_vi3_u003b((&param_14));
+        c001_1 = _e190;
+        let _e192 = i1_1[0u];
+        let _e194 = i0_1[1u];
+        let _e196 = i1_1[2u];
+        param_15 = vec3<i32>(_e192, _e194, _e196);
+        let _e198 = cnaLutFetch_u0028_vi3_u003b((&param_15));
+        c101_2 = _e198;
+        let _e199 = c000_1;
+        let _e201 = f_1[2u];
+        let _e202 = c001_1;
+        let _e203 = c000_1;
+        let _e208 = f_1[0u];
+        let _e209 = c101_2;
+        let _e210 = c001_1;
+        let _e215 = f_1[1u];
+        let _e216 = c111_1;
+        let _e217 = c101_2;
+        return (((_e199 + ((_e202 - _e203) * _e201)) + ((_e209 - _e210) * _e208)) + ((_e216 - _e217) * _e215));
+    }
+    let _e222 = f_1[2u];
+    let _e224 = f_1[1u];
+    if (_e222 > _e224) {
+        let _e227 = i0_1[0u];
+        let _e229 = i0_1[1u];
+        let _e231 = i1_1[2u];
+        param_16 = vec3<i32>(_e227, _e229, _e231);
+        let _e233 = cnaLutFetch_u0028_vi3_u003b((&param_16));
+        c001_2 = _e233;
+        let _e235 = i0_1[0u];
+        let _e237 = i1_1[1u];
+        let _e239 = i1_1[2u];
+        param_17 = vec3<i32>(_e235, _e237, _e239);
+        let _e241 = cnaLutFetch_u0028_vi3_u003b((&param_17));
+        c011_1 = _e241;
+        let _e242 = c000_1;
+        let _e244 = f_1[2u];
+        let _e245 = c001_2;
+        let _e246 = c000_1;
+        let _e251 = f_1[1u];
+        let _e252 = c011_1;
+        let _e253 = c001_2;
+        let _e258 = f_1[0u];
+        let _e259 = c111_1;
+        let _e260 = c011_1;
+        return (((_e242 + ((_e245 - _e246) * _e244)) + ((_e252 - _e253) * _e251)) + ((_e259 - _e260) * _e258));
+    }
+    let _e265 = f_1[2u];
+    let _e267 = f_1[0u];
+    if (_e265 > _e267) {
+        let _e270 = i0_1[0u];
+        let _e272 = i1_1[1u];
+        let _e274 = i0_1[2u];
+        param_18 = vec3<i32>(_e270, _e272, _e274);
+        let _e276 = cnaLutFetch_u0028_vi3_u003b((&param_18));
+        c010_1 = _e276;
+        let _e278 = i0_1[0u];
+        let _e280 = i1_1[1u];
+        let _e282 = i1_1[2u];
+        param_19 = vec3<i32>(_e278, _e280, _e282);
+        let _e284 = cnaLutFetch_u0028_vi3_u003b((&param_19));
+        c011_2 = _e284;
+        let _e285 = c000_1;
+        let _e287 = f_1[1u];
+        let _e288 = c010_1;
+        let _e289 = c000_1;
+        let _e294 = f_1[2u];
+        let _e295 = c011_2;
+        let _e296 = c010_1;
+        let _e301 = f_1[0u];
+        let _e302 = c111_1;
+        let _e303 = c011_2;
+        return (((_e285 + ((_e288 - _e289) * _e287)) + ((_e295 - _e296) * _e294)) + ((_e302 - _e303) * _e301));
+    }
+    let _e308 = i0_1[0u];
+    let _e310 = i1_1[1u];
+    let _e312 = i0_1[2u];
+    param_20 = vec3<i32>(_e308, _e310, _e312);
+    let _e314 = cnaLutFetch_u0028_vi3_u003b((&param_20));
+    c010_2 = _e314;
+    let _e316 = i1_1[0u];
+    let _e318 = i1_1[1u];
+    let _e320 = i0_1[2u];
+    param_21 = vec3<i32>(_e316, _e318, _e320);
+    let _e322 = cnaLutFetch_u0028_vi3_u003b((&param_21));
+    c110_2 = _e322;
+    let _e323 = c000_1;
+    let _e325 = f_1[1u];
+    let _e326 = c010_2;
+    let _e327 = c000_1;
+    let _e332 = f_1[0u];
+    let _e333 = c110_2;
+    let _e334 = c010_2;
+    let _e339 = f_1[2u];
+    let _e340 = c111_1;
+    let _e341 = c110_2;
+    return (((_e323 + ((_e326 - _e327) * _e325)) + ((_e333 - _e334) * _e332)) + ((_e340 - _e341) * _e339));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var colour_2: vec3<f32>;
+    var graded: vec3<f32>;
+    var local: vec3<f32>;
+    var param_22: vec3<f32>;
+    var param_23: vec3<f32>;
+
+    let _e25 = TexCoord_1;
+    let _e26 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e25);
+    source = _e26;
+    let _e27 = source;
+    colour_2 = clamp(_e27.xyz, vec3(0f), vec3(1f));
+    let _e34 = pc.uColorGradeParams[2u];
+    if (_e34 >= 0.5f) {
+        let _e36 = colour_2;
+        param_22 = _e36;
+        let _e37 = cnaLutTetrahedral_u0028_vf3_u003b((&param_22));
+        local = _e37;
+    } else {
+        let _e38 = colour_2;
+        param_23 = _e38;
+        let _e39 = cnaLutTrilinear_u0028_vf3_u003b((&param_23));
+        local = _e39;
+    }
+    let _e40 = local;
+    graded = _e40;
+    let _e41 = source;
+    let _e43 = graded;
+    let _e46 = pc.uColorGradeParams[1u];
+    let _e48 = mix(_e41.xyz, _e43, vec3(_e46));
+    let _e50 = source[3u];
+    let _e55 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e48.x, _e48.y, _e48.z, _e50) * _e55);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kColorGradeStripVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000000f2u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -4691,6 +6315,121 @@ inline constexpr std::uint32_t kColorGradeStripVulkanFragmentSpirV[] = {
     0x0000008du, 0x00000090u, 0x0003003eu, 0x0000007fu, 0x00000091u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kColorGradeStripVulkanFragmentSpirVByteSize = sizeof(kColorGradeStripVulkanFragmentSpirV);
+
+inline constexpr std::string_view kColorGradeStripVulkanFragmentWgsl =
+    R"CNA_SHADER(// color_grade_strip.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uColorGradeParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(1) @binding(1) 
+var uLutSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uLutSampler_cnaSampler: sampler;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaSampleSlice_u0028_vf3_u003b_f1_u003b(colour: ptr<function, vec3<f32>>, slice: ptr<function, f32>) -> vec3<f32> {
+    var lutSize: f32;
+    var sliceWidth: f32;
+    var texelWidth: f32;
+    var u: f32;
+    var v: f32;
+
+    let _e25 = pc.uColorGradeParams[0u];
+    lutSize = _e25;
+    let _e26 = lutSize;
+    sliceWidth = (1f / _e26);
+    let _e28 = sliceWidth;
+    let _e29 = lutSize;
+    texelWidth = (_e28 / _e29);
+    let _e31 = (*slice);
+    let _e32 = sliceWidth;
+    let _e34 = texelWidth;
+    let _e38 = (*colour)[0u];
+    let _e39 = texelWidth;
+    let _e41 = lutSize;
+    u = (((_e31 * _e32) + (0.5f * _e34)) + ((_e38 * _e39) * (_e41 - 1f)));
+    let _e45 = lutSize;
+    let _e48 = (*colour)[1u];
+    let _e49 = lutSize;
+    let _e52 = lutSize;
+    v = ((0.5f / _e45) + ((_e48 * (_e49 - 1f)) / _e52));
+    let _e55 = u;
+    let _e56 = v;
+    let _e58 = textureSample(uLutSampler_cnaTexture, uLutSampler_cnaSampler, vec2<f32>(_e55, _e56));
+    return _e58.xyz;
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var colour_1: vec3<f32>;
+    var last: f32;
+    var blue: f32;
+    var lower: f32;
+    var upper: f32;
+    var graded: vec3<f32>;
+    var param: vec3<f32>;
+    var param_1: f32;
+    var param_2: vec3<f32>;
+    var param_3: f32;
+
+    let _e27 = TexCoord_1;
+    let _e28 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e27);
+    source = _e28;
+    let _e29 = source;
+    colour_1 = clamp(_e29.xyz, vec3(0f), vec3(1f));
+    let _e36 = pc.uColorGradeParams[0u];
+    last = (_e36 - 1f);
+    let _e39 = colour_1[2u];
+    let _e40 = last;
+    blue = (_e39 * _e40);
+    let _e42 = blue;
+    lower = floor(_e42);
+    let _e44 = lower;
+    let _e46 = last;
+    upper = min((_e44 + 1f), _e46);
+    let _e48 = colour_1;
+    param = _e48;
+    let _e49 = lower;
+    param_1 = _e49;
+    let _e50 = cnaSampleSlice_u0028_vf3_u003b_f1_u003b((&param), (&param_1));
+    let _e51 = colour_1;
+    param_2 = _e51;
+    let _e52 = upper;
+    param_3 = _e52;
+    let _e53 = cnaSampleSlice_u0028_vf3_u003b_f1_u003b((&param_2), (&param_3));
+    let _e54 = blue;
+    let _e55 = lower;
+    graded = mix(_e50, _e53, vec3((_e54 - _e55)));
+    let _e59 = source;
+    let _e61 = graded;
+    let _e64 = pc.uColorGradeParams[1u];
+    let _e66 = mix(_e59.xyz, _e61, vec3(_e64));
+    let _e68 = source[3u];
+    let _e73 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e66.x, _e66.y, _e66.z, _e68) * _e73);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kColorGradeVolumeVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000543u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -4899,6 +6638,403 @@ inline constexpr std::uint32_t kColorGradeVolumeVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kColorGradeVolumeVulkanFragmentSpirVByteSize = sizeof(kColorGradeVolumeVulkanFragmentSpirV);
 
+inline constexpr std::string_view kColorGradeVolumeVulkanFragmentWgsl =
+    R"CNA_SHADER(// color_grade_volume.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uColorGradeParams: vec4<f32>,
+}
+
+@group(1) @binding(9) 
+var uLutVolume_cnaTexture: texture_3d<f32>;
+@group(1) @binding(41) 
+var uLutVolume_cnaSampler: sampler;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaLutFetch_u0028_vi3_u003b(index: ptr<function, vec3<i32>>) -> vec3<f32> {
+    let _e20 = (*index);
+    let _e21 = textureLoad(uLutVolume_cnaTexture, _e20, 0i);
+    return _e21.xyz;
+}
+
+fn cnaLutTrilinear_u0028_vf3_u003b(colour: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var last: f32;
+    var p: vec3<f32>;
+    var i0_: vec3<i32>;
+    var i1_: vec3<i32>;
+    var f: vec3<f32>;
+    var c000_: vec3<f32>;
+    var param: vec3<i32>;
+    var c100_: vec3<f32>;
+    var param_1: vec3<i32>;
+    var c010_: vec3<f32>;
+    var param_2: vec3<i32>;
+    var c110_: vec3<f32>;
+    var param_3: vec3<i32>;
+    var c001_: vec3<f32>;
+    var param_4: vec3<i32>;
+    var c101_: vec3<f32>;
+    var param_5: vec3<i32>;
+    var c011_: vec3<f32>;
+    var param_6: vec3<i32>;
+    var c111_: vec3<f32>;
+    var param_7: vec3<i32>;
+
+    let _e43 = pc.uColorGradeParams[0u];
+    last = (_e43 - 1f);
+    let _e45 = (*colour);
+    let _e49 = last;
+    p = (clamp(_e45, vec3(0f), vec3(1f)) * _e49);
+    let _e51 = p;
+    i0_ = vec3<i32>(floor(_e51));
+    let _e54 = i0_;
+    let _e56 = last;
+    i1_ = min((_e54 + vec3<i32>(1i, 1i, 1i)), vec3(i32(_e56)));
+    let _e60 = p;
+    let _e61 = i0_;
+    f = (_e60 - vec3<f32>(_e61));
+    let _e65 = i0_[0u];
+    let _e67 = i0_[1u];
+    let _e69 = i0_[2u];
+    param = vec3<i32>(_e65, _e67, _e69);
+    let _e71 = cnaLutFetch_u0028_vi3_u003b((&param));
+    c000_ = _e71;
+    let _e73 = i1_[0u];
+    let _e75 = i0_[1u];
+    let _e77 = i0_[2u];
+    param_1 = vec3<i32>(_e73, _e75, _e77);
+    let _e79 = cnaLutFetch_u0028_vi3_u003b((&param_1));
+    c100_ = _e79;
+    let _e81 = i0_[0u];
+    let _e83 = i1_[1u];
+    let _e85 = i0_[2u];
+    param_2 = vec3<i32>(_e81, _e83, _e85);
+    let _e87 = cnaLutFetch_u0028_vi3_u003b((&param_2));
+    c010_ = _e87;
+    let _e89 = i1_[0u];
+    let _e91 = i1_[1u];
+    let _e93 = i0_[2u];
+    param_3 = vec3<i32>(_e89, _e91, _e93);
+    let _e95 = cnaLutFetch_u0028_vi3_u003b((&param_3));
+    c110_ = _e95;
+    let _e97 = i0_[0u];
+    let _e99 = i0_[1u];
+    let _e101 = i1_[2u];
+    param_4 = vec3<i32>(_e97, _e99, _e101);
+    let _e103 = cnaLutFetch_u0028_vi3_u003b((&param_4));
+    c001_ = _e103;
+    let _e105 = i1_[0u];
+    let _e107 = i0_[1u];
+    let _e109 = i1_[2u];
+    param_5 = vec3<i32>(_e105, _e107, _e109);
+    let _e111 = cnaLutFetch_u0028_vi3_u003b((&param_5));
+    c101_ = _e111;
+    let _e113 = i0_[0u];
+    let _e115 = i1_[1u];
+    let _e117 = i1_[2u];
+    param_6 = vec3<i32>(_e113, _e115, _e117);
+    let _e119 = cnaLutFetch_u0028_vi3_u003b((&param_6));
+    c011_ = _e119;
+    let _e121 = i1_[0u];
+    let _e123 = i1_[1u];
+    let _e125 = i1_[2u];
+    param_7 = vec3<i32>(_e121, _e123, _e125);
+    let _e127 = cnaLutFetch_u0028_vi3_u003b((&param_7));
+    c111_ = _e127;
+    let _e128 = c000_;
+    let _e129 = c100_;
+    let _e131 = f[0u];
+    let _e134 = c010_;
+    let _e135 = c110_;
+    let _e137 = f[0u];
+    let _e141 = f[1u];
+    let _e144 = c001_;
+    let _e145 = c101_;
+    let _e147 = f[0u];
+    let _e150 = c011_;
+    let _e151 = c111_;
+    let _e153 = f[0u];
+    let _e157 = f[1u];
+    let _e161 = f[2u];
+    return mix(mix(mix(_e128, _e129, vec3(_e131)), mix(_e134, _e135, vec3(_e137)), vec3(_e141)), mix(mix(_e144, _e145, vec3(_e147)), mix(_e150, _e151, vec3(_e153)), vec3(_e157)), vec3(_e161));
+}
+
+fn cnaLutTetrahedral_u0028_vf3_u003b(colour_1: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var last_1: f32;
+    var p_1: vec3<f32>;
+    var i0_1: vec3<i32>;
+    var i1_1: vec3<i32>;
+    var f_1: vec3<f32>;
+    var c000_1: vec3<f32>;
+    var param_8: vec3<i32>;
+    var c111_1: vec3<f32>;
+    var param_9: vec3<i32>;
+    var c100_1: vec3<f32>;
+    var param_10: vec3<i32>;
+    var c110_1: vec3<f32>;
+    var param_11: vec3<i32>;
+    var c100_2: vec3<f32>;
+    var param_12: vec3<i32>;
+    var c101_1: vec3<f32>;
+    var param_13: vec3<i32>;
+    var c001_1: vec3<f32>;
+    var param_14: vec3<i32>;
+    var c101_2: vec3<f32>;
+    var param_15: vec3<i32>;
+    var c001_2: vec3<f32>;
+    var param_16: vec3<i32>;
+    var c011_1: vec3<f32>;
+    var param_17: vec3<i32>;
+    var c010_1: vec3<f32>;
+    var param_18: vec3<i32>;
+    var c011_2: vec3<f32>;
+    var param_19: vec3<i32>;
+    var c010_2: vec3<f32>;
+    var param_20: vec3<i32>;
+    var c110_2: vec3<f32>;
+    var param_21: vec3<i32>;
+
+    let _e55 = pc.uColorGradeParams[0u];
+    last_1 = (_e55 - 1f);
+    let _e57 = (*colour_1);
+    let _e61 = last_1;
+    p_1 = (clamp(_e57, vec3(0f), vec3(1f)) * _e61);
+    let _e63 = p_1;
+    i0_1 = vec3<i32>(floor(_e63));
+    let _e66 = i0_1;
+    let _e68 = last_1;
+    i1_1 = min((_e66 + vec3<i32>(1i, 1i, 1i)), vec3(i32(_e68)));
+    let _e72 = p_1;
+    let _e73 = i0_1;
+    f_1 = (_e72 - vec3<f32>(_e73));
+    let _e77 = i0_1[0u];
+    let _e79 = i0_1[1u];
+    let _e81 = i0_1[2u];
+    param_8 = vec3<i32>(_e77, _e79, _e81);
+    let _e83 = cnaLutFetch_u0028_vi3_u003b((&param_8));
+    c000_1 = _e83;
+    let _e85 = i1_1[0u];
+    let _e87 = i1_1[1u];
+    let _e89 = i1_1[2u];
+    param_9 = vec3<i32>(_e85, _e87, _e89);
+    let _e91 = cnaLutFetch_u0028_vi3_u003b((&param_9));
+    c111_1 = _e91;
+    let _e93 = f_1[0u];
+    let _e95 = f_1[1u];
+    if (_e93 > _e95) {
+        let _e98 = f_1[1u];
+        let _e100 = f_1[2u];
+        if (_e98 > _e100) {
+            let _e103 = i1_1[0u];
+            let _e105 = i0_1[1u];
+            let _e107 = i0_1[2u];
+            param_10 = vec3<i32>(_e103, _e105, _e107);
+            let _e109 = cnaLutFetch_u0028_vi3_u003b((&param_10));
+            c100_1 = _e109;
+            let _e111 = i1_1[0u];
+            let _e113 = i1_1[1u];
+            let _e115 = i0_1[2u];
+            param_11 = vec3<i32>(_e111, _e113, _e115);
+            let _e117 = cnaLutFetch_u0028_vi3_u003b((&param_11));
+            c110_1 = _e117;
+            let _e118 = c000_1;
+            let _e120 = f_1[0u];
+            let _e121 = c100_1;
+            let _e122 = c000_1;
+            let _e127 = f_1[1u];
+            let _e128 = c110_1;
+            let _e129 = c100_1;
+            let _e134 = f_1[2u];
+            let _e135 = c111_1;
+            let _e136 = c110_1;
+            return (((_e118 + ((_e121 - _e122) * _e120)) + ((_e128 - _e129) * _e127)) + ((_e135 - _e136) * _e134));
+        }
+        let _e141 = f_1[0u];
+        let _e143 = f_1[2u];
+        if (_e141 > _e143) {
+            let _e146 = i1_1[0u];
+            let _e148 = i0_1[1u];
+            let _e150 = i0_1[2u];
+            param_12 = vec3<i32>(_e146, _e148, _e150);
+            let _e152 = cnaLutFetch_u0028_vi3_u003b((&param_12));
+            c100_2 = _e152;
+            let _e154 = i1_1[0u];
+            let _e156 = i0_1[1u];
+            let _e158 = i1_1[2u];
+            param_13 = vec3<i32>(_e154, _e156, _e158);
+            let _e160 = cnaLutFetch_u0028_vi3_u003b((&param_13));
+            c101_1 = _e160;
+            let _e161 = c000_1;
+            let _e163 = f_1[0u];
+            let _e164 = c100_2;
+            let _e165 = c000_1;
+            let _e170 = f_1[2u];
+            let _e171 = c101_1;
+            let _e172 = c100_2;
+            let _e177 = f_1[1u];
+            let _e178 = c111_1;
+            let _e179 = c101_1;
+            return (((_e161 + ((_e164 - _e165) * _e163)) + ((_e171 - _e172) * _e170)) + ((_e178 - _e179) * _e177));
+        }
+        let _e184 = i0_1[0u];
+        let _e186 = i0_1[1u];
+        let _e188 = i1_1[2u];
+        param_14 = vec3<i32>(_e184, _e186, _e188);
+        let _e190 = cnaLutFetch_u0028_vi3_u003b((&param_14));
+        c001_1 = _e190;
+        let _e192 = i1_1[0u];
+        let _e194 = i0_1[1u];
+        let _e196 = i1_1[2u];
+        param_15 = vec3<i32>(_e192, _e194, _e196);
+        let _e198 = cnaLutFetch_u0028_vi3_u003b((&param_15));
+        c101_2 = _e198;
+        let _e199 = c000_1;
+        let _e201 = f_1[2u];
+        let _e202 = c001_1;
+        let _e203 = c000_1;
+        let _e208 = f_1[0u];
+        let _e209 = c101_2;
+        let _e210 = c001_1;
+        let _e215 = f_1[1u];
+        let _e216 = c111_1;
+        let _e217 = c101_2;
+        return (((_e199 + ((_e202 - _e203) * _e201)) + ((_e209 - _e210) * _e208)) + ((_e216 - _e217) * _e215));
+    }
+    let _e222 = f_1[2u];
+    let _e224 = f_1[1u];
+    if (_e222 > _e224) {
+        let _e227 = i0_1[0u];
+        let _e229 = i0_1[1u];
+        let _e231 = i1_1[2u];
+        param_16 = vec3<i32>(_e227, _e229, _e231);
+        let _e233 = cnaLutFetch_u0028_vi3_u003b((&param_16));
+        c001_2 = _e233;
+        let _e235 = i0_1[0u];
+        let _e237 = i1_1[1u];
+        let _e239 = i1_1[2u];
+        param_17 = vec3<i32>(_e235, _e237, _e239);
+        let _e241 = cnaLutFetch_u0028_vi3_u003b((&param_17));
+        c011_1 = _e241;
+        let _e242 = c000_1;
+        let _e244 = f_1[2u];
+        let _e245 = c001_2;
+        let _e246 = c000_1;
+        let _e251 = f_1[1u];
+        let _e252 = c011_1;
+        let _e253 = c001_2;
+        let _e258 = f_1[0u];
+        let _e259 = c111_1;
+        let _e260 = c011_1;
+        return (((_e242 + ((_e245 - _e246) * _e244)) + ((_e252 - _e253) * _e251)) + ((_e259 - _e260) * _e258));
+    }
+    let _e265 = f_1[2u];
+    let _e267 = f_1[0u];
+    if (_e265 > _e267) {
+        let _e270 = i0_1[0u];
+        let _e272 = i1_1[1u];
+        let _e274 = i0_1[2u];
+        param_18 = vec3<i32>(_e270, _e272, _e274);
+        let _e276 = cnaLutFetch_u0028_vi3_u003b((&param_18));
+        c010_1 = _e276;
+        let _e278 = i0_1[0u];
+        let _e280 = i1_1[1u];
+        let _e282 = i1_1[2u];
+        param_19 = vec3<i32>(_e278, _e280, _e282);
+        let _e284 = cnaLutFetch_u0028_vi3_u003b((&param_19));
+        c011_2 = _e284;
+        let _e285 = c000_1;
+        let _e287 = f_1[1u];
+        let _e288 = c010_1;
+        let _e289 = c000_1;
+        let _e294 = f_1[2u];
+        let _e295 = c011_2;
+        let _e296 = c010_1;
+        let _e301 = f_1[0u];
+        let _e302 = c111_1;
+        let _e303 = c011_2;
+        return (((_e285 + ((_e288 - _e289) * _e287)) + ((_e295 - _e296) * _e294)) + ((_e302 - _e303) * _e301));
+    }
+    let _e308 = i0_1[0u];
+    let _e310 = i1_1[1u];
+    let _e312 = i0_1[2u];
+    param_20 = vec3<i32>(_e308, _e310, _e312);
+    let _e314 = cnaLutFetch_u0028_vi3_u003b((&param_20));
+    c010_2 = _e314;
+    let _e316 = i1_1[0u];
+    let _e318 = i1_1[1u];
+    let _e320 = i0_1[2u];
+    param_21 = vec3<i32>(_e316, _e318, _e320);
+    let _e322 = cnaLutFetch_u0028_vi3_u003b((&param_21));
+    c110_2 = _e322;
+    let _e323 = c000_1;
+    let _e325 = f_1[1u];
+    let _e326 = c010_2;
+    let _e327 = c000_1;
+    let _e332 = f_1[0u];
+    let _e333 = c110_2;
+    let _e334 = c010_2;
+    let _e339 = f_1[2u];
+    let _e340 = c111_1;
+    let _e341 = c110_2;
+    return (((_e323 + ((_e326 - _e327) * _e325)) + ((_e333 - _e334) * _e332)) + ((_e340 - _e341) * _e339));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var colour_2: vec3<f32>;
+    var graded: vec3<f32>;
+    var local: vec3<f32>;
+    var param_22: vec3<f32>;
+    var param_23: vec3<f32>;
+
+    let _e25 = TexCoord_1;
+    let _e26 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e25);
+    source = _e26;
+    let _e27 = source;
+    colour_2 = clamp(_e27.xyz, vec3(0f), vec3(1f));
+    let _e34 = pc.uColorGradeParams[2u];
+    if (_e34 >= 0.5f) {
+        let _e36 = colour_2;
+        param_22 = _e36;
+        let _e37 = cnaLutTetrahedral_u0028_vf3_u003b((&param_22));
+        local = _e37;
+    } else {
+        let _e38 = colour_2;
+        param_23 = _e38;
+        let _e39 = cnaLutTrilinear_u0028_vf3_u003b((&param_23));
+        local = _e39;
+    }
+    let _e40 = local;
+    graded = _e40;
+    let _e41 = source;
+    let _e43 = graded;
+    let _e46 = pc.uColorGradeParams[1u];
+    let _e48 = mix(_e41.xyz, _e43, vec3(_e46));
+    let _e50 = source[3u];
+    let _e55 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e48.x, _e48.y, _e48.z, _e50) * _e55);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kDepthOfFieldVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000021cu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -5077,6 +7213,220 @@ inline constexpr std::uint32_t kDepthOfFieldVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kDepthOfFieldVulkanFragmentSpirVByteSize = sizeof(kDepthOfFieldVulkanFragmentSpirV);
 
+inline constexpr std::string_view kDepthOfFieldVulkanFragmentWgsl =
+    R"CNA_SHADER(// depth_of_field.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uDofScalars: array<f32, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaCircleOfConfusionMm_u0028_f1_u003b(depthWorld: ptr<function, f32>) -> f32 {
+    var focusDistance: f32;
+    var focalLength: f32;
+    var fNumber: f32;
+    var focusMm: f32;
+    var depthMm: f32;
+
+    let _e87 = unnamed.uDofScalars[1i];
+    focusDistance = _e87;
+    let _e90 = unnamed.uDofScalars[2i];
+    focalLength = _e90;
+    let _e93 = unnamed.uDofScalars[3i];
+    fNumber = _e93;
+    let _e94 = (*depthWorld);
+    let _e96 = focusDistance;
+    let _e99 = fNumber;
+    if (((_e94 <= 0f) || (_e96 <= 0f)) || (_e99 <= 0f)) {
+        return 0f;
+    }
+    let _e102 = focusDistance;
+    focusMm = (_e102 * 1000f);
+    let _e104 = (*depthWorld);
+    depthMm = (_e104 * 1000f);
+    let _e106 = focusMm;
+    let _e107 = focalLength;
+    if (_e106 <= _e107) {
+        return 0f;
+    }
+    let _e109 = focalLength;
+    let _e110 = focalLength;
+    let _e112 = fNumber;
+    let _e113 = focusMm;
+    let _e114 = focalLength;
+    let _e118 = depthMm;
+    let _e119 = focusMm;
+    let _e123 = depthMm;
+    return ((((_e109 * _e110) / (_e112 * (_e113 - _e114))) * abs((_e118 - _e119))) / _e123);
+}
+
+fn cnaBlurRadius_u0028_f1_u003b(linearDepth: ptr<function, f32>) -> f32 {
+    var diameterMm: f32;
+    var param: f32;
+
+    let _e82 = (*linearDepth);
+    let _e85 = unnamed.uDofScalars[0i];
+    param = (_e82 * _e85);
+    let _e87 = cnaCircleOfConfusionMm_u0028_f1_u003b((&param));
+    diameterMm = _e87;
+    let _e88 = diameterMm;
+    let _e93 = unnamed.uDofScalars[4i];
+    return min(((0.5f * _e88) / 24f), _e93);
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e82 = unnamed.uDofScalars[5i];
+    if (_e82 < 0.5f) {
+        let _e85 = (*channels)[0u];
+        return _e85;
+    }
+    let _e86 = (*channels);
+    return dot(_e86, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var centerColor: vec3<f32>;
+    var centerDepth: f32;
+    var param_1: vec4<f32>;
+    var centerRadius: f32;
+    var param_2: f32;
+    var sum: vec3<f32>;
+    var weight: f32;
+    var i: i32;
+    var offset: vec2<f32>;
+    var indexable: array<vec2<f32>, 16>;
+    var tapUv: vec2<f32>;
+    var tapDepth: f32;
+    var param_3: vec4<f32>;
+    var tapRadius: f32;
+    var param_4: f32;
+    var accept: f32;
+    var phi_262_: bool;
+    var phi_270_: bool;
+    var phi_277_: bool;
+
+    let _e95 = TexCoord_1;
+    let _e96 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e95);
+    centerColor = _e96.xyz;
+    let _e98 = TexCoord_1;
+    let _e99 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e98);
+    param_1 = _e99;
+    let _e100 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_1));
+    centerDepth = _e100;
+    let _e101 = centerDepth;
+    let _e103 = centerDepth;
+    if ((_e101 <= 0f) || (_e103 >= 0.999f)) {
+        let _e106 = centerColor;
+        let _e111 = SpriteColor_1;
+        FragColor = (vec4<f32>(_e106.x, _e106.y, _e106.z, 1f) * _e111);
+        return;
+    }
+    let _e113 = centerDepth;
+    param_2 = _e113;
+    let _e114 = cnaBlurRadius_u0028_f1_u003b((&param_2));
+    centerRadius = _e114;
+    let _e115 = centerColor;
+    sum = _e115;
+    weight = 1f;
+    i = 0i;
+    loop {
+        let _e116 = i;
+        if (_e116 < 16i) {
+            let _e118 = i;
+            indexable = array<vec2<f32>, 16>(vec2<f32>(0.2165f, 0.0745f), vec2<f32>(-0.1863f, 0.2549f), vec2<f32>(-0.0851f, -0.3777f), vec2<f32>(0.3966f, 0.2154f), vec2<f32>(-0.4644f, 0.1509f), vec2<f32>(0.226f, -0.4707f), vec2<f32>(0.1751f, 0.5411f), vec2<f32>(-0.5527f, -0.2338f), vec2<f32>(0.6033f, -0.2467f), vec2<f32>(-0.2249f, 0.6414f), vec2<f32>(-0.3225f, -0.6321f), vec2<f32>(0.7108f, 0.2116f), vec2<f32>(-0.7357f, 0.242f), vec2<f32>(0.2941f, -0.7628f), vec2<f32>(0.2497f, 0.8004f), vec2<f32>(-0.8098f, -0.2646f));
+            let _e120 = indexable[_e118];
+            let _e121 = centerRadius;
+            offset = (_e120 * _e121);
+            let _e123 = TexCoord_1;
+            let _e124 = offset;
+            tapUv = (_e123 + _e124);
+            let _e127 = tapUv[0u];
+            let _e128 = (_e127 < 0f);
+            phi_262_ = _e128;
+            if !(_e128) {
+                let _e131 = tapUv[0u];
+                phi_262_ = (_e131 > 1f);
+            }
+            let _e134 = phi_262_;
+            phi_270_ = _e134;
+            if !(_e134) {
+                let _e137 = tapUv[1u];
+                phi_270_ = (_e137 < 0f);
+            }
+            let _e140 = phi_270_;
+            phi_277_ = _e140;
+            if !(_e140) {
+                let _e143 = tapUv[1u];
+                phi_277_ = (_e143 > 1f);
+            }
+            let _e146 = phi_277_;
+            if _e146 {
+                continue;
+            }
+            let _e147 = tapUv;
+            let _e148 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e147);
+            param_3 = _e148;
+            let _e149 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_3));
+            tapDepth = _e149;
+            let _e150 = tapDepth;
+            let _e152 = tapDepth;
+            if ((_e150 <= 0f) || (_e152 >= 0.999f)) {
+                continue;
+            }
+            let _e155 = tapDepth;
+            param_4 = _e155;
+            let _e156 = cnaBlurRadius_u0028_f1_u003b((&param_4));
+            tapRadius = _e156;
+            let _e157 = offset;
+            let _e160 = tapRadius;
+            accept = smoothstep(0f, max(length(_e157), 0.00001f), _e160);
+            let _e162 = tapUv;
+            let _e163 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e162);
+            let _e165 = accept;
+            let _e167 = sum;
+            sum = (_e167 + (_e163.xyz * _e165));
+            let _e169 = accept;
+            let _e170 = weight;
+            weight = (_e170 + _e169);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e172 = i;
+            i = (_e172 + 1i);
+        }
+    }
+    let _e174 = sum;
+    let _e175 = weight;
+    let _e178 = (_e174 / vec3(max(_e175, 0.00001f)));
+    let _e183 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e178.x, _e178.y, _e178.z, 1f) * _e183);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kFilmGrainVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000077u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -5138,6 +7488,74 @@ inline constexpr std::uint32_t kFilmGrainVulkanFragmentSpirV[] = {
     0x0000005au, 0x0000006fu, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kFilmGrainVulkanFragmentSpirVByteSize = sizeof(kFilmGrainVulkanFragmentSpirV);
+
+inline constexpr std::string_view kFilmGrainVulkanFragmentWgsl =
+    R"CNA_SHADER(// film_grain.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uGrainParams: vec4<f32>,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaHash_u0028_vf2_u003b(p: ptr<function, vec2<f32>>) -> f32 {
+    let _e24 = (*p);
+    return fract((sin(dot(_e24, vec2<f32>(12.9898f, 78.233f))) * 43758.547f));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var pixel: vec2<f32>;
+    var noise: f32;
+    var param: vec2<f32>;
+    var luma: f32;
+    var weight: f32;
+
+    let _e29 = TexCoord_1;
+    let _e30 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e29);
+    source = _e30;
+    let _e31 = TexCoord_1;
+    let _e33 = pc.uGrainParams;
+    pixel = floor((_e31 * _e33.xy));
+    let _e37 = pixel;
+    let _e40 = pc.uGrainParams[3u];
+    let _e44 = pc.uGrainParams[3u];
+    param = (_e37 + vec2<f32>((_e40 * 71f), (_e44 * 113f)));
+    let _e48 = cnaHash_u0028_vf2_u003b((&param));
+    noise = (_e48 - 0.5f);
+    let _e50 = source;
+    luma = dot(_e50.xyz, vec3<f32>(0.299f, 0.587f, 0.114f));
+    let _e53 = luma;
+    weight = (1f - abs(((clamp(_e53, 0f, 1f) * 2f) - 1f)));
+    let _e59 = source;
+    let _e61 = noise;
+    let _e64 = pc.uGrainParams[2u];
+    let _e66 = weight;
+    let _e69 = (_e59.xyz + vec3(((_e61 * _e64) * _e66)));
+    let _e71 = source[3u];
+    let _e76 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e69.x, _e69.y, _e69.z, _e71) * _e76);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kFxaaVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000011au, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -5250,6 +7668,163 @@ inline constexpr std::uint32_t kFxaaVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kFxaaVulkanFragmentSpirVByteSize = sizeof(kFxaaVulkanFragmentSpirV);
 
+inline constexpr std::string_view kFxaaVulkanFragmentWgsl =
+    R"CNA_SHADER(// fxaa.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uTexelSize: vec4<f32>,
+    uEdgeThreshold: f32,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn luma_u0028_vf3_u003b(c: ptr<function, vec3<f32>>) -> f32 {
+    let _e26 = (*c);
+    return dot(_e26, vec3<f32>(0.299f, 0.587f, 0.114f));
+}
+
+fn main_1() {
+    var center: vec3<f32>;
+    var lumaCenter: f32;
+    var param: vec3<f32>;
+    var lumaNW: f32;
+    var param_1: vec3<f32>;
+    var lumaNE: f32;
+    var param_2: vec3<f32>;
+    var lumaSW: f32;
+    var param_3: vec3<f32>;
+    var lumaSE: f32;
+    var param_4: vec3<f32>;
+    var lumaMin: f32;
+    var lumaMax: f32;
+    var direction: vec2<f32>;
+    var scale: f32;
+    var blended: vec3<f32>;
+    var wider: vec3<f32>;
+    var lumaWider: f32;
+    var param_5: vec3<f32>;
+
+    let _e44 = TexCoord_1;
+    let _e45 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e44);
+    center = _e45.xyz;
+    let _e47 = center;
+    param = _e47;
+    let _e48 = luma_u0028_vf3_u003b((&param));
+    lumaCenter = _e48;
+    let _e49 = TexCoord_1;
+    let _e52 = pc.uTexelSize[0u];
+    let _e56 = pc.uTexelSize[1u];
+    let _e60 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e49 + vec2<f32>(-(_e52), -(_e56))));
+    param_1 = _e60.xyz;
+    let _e62 = luma_u0028_vf3_u003b((&param_1));
+    lumaNW = _e62;
+    let _e63 = TexCoord_1;
+    let _e66 = pc.uTexelSize[0u];
+    let _e69 = pc.uTexelSize[1u];
+    let _e73 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e63 + vec2<f32>(_e66, -(_e69))));
+    param_2 = _e73.xyz;
+    let _e75 = luma_u0028_vf3_u003b((&param_2));
+    lumaNE = _e75;
+    let _e76 = TexCoord_1;
+    let _e79 = pc.uTexelSize[0u];
+    let _e83 = pc.uTexelSize[1u];
+    let _e86 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e76 + vec2<f32>(-(_e79), _e83)));
+    param_3 = _e86.xyz;
+    let _e88 = luma_u0028_vf3_u003b((&param_3));
+    lumaSW = _e88;
+    let _e89 = TexCoord_1;
+    let _e92 = pc.uTexelSize[0u];
+    let _e95 = pc.uTexelSize[1u];
+    let _e98 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e89 + vec2<f32>(_e92, _e95)));
+    param_4 = _e98.xyz;
+    let _e100 = luma_u0028_vf3_u003b((&param_4));
+    lumaSE = _e100;
+    let _e101 = lumaCenter;
+    let _e102 = lumaNW;
+    let _e103 = lumaNE;
+    let _e105 = lumaSW;
+    let _e106 = lumaSE;
+    lumaMin = min(_e101, min(min(_e102, _e103), min(_e105, _e106)));
+    let _e110 = lumaCenter;
+    let _e111 = lumaNW;
+    let _e112 = lumaNE;
+    let _e114 = lumaSW;
+    let _e115 = lumaSE;
+    lumaMax = max(_e110, max(max(_e111, _e112), max(_e114, _e115)));
+    let _e119 = lumaMax;
+    let _e120 = lumaMin;
+    let _e123 = pc.uEdgeThreshold;
+    if ((_e119 - _e120) < _e123) {
+        let _e125 = center;
+        FragColor = vec4<f32>(_e125.x, _e125.y, _e125.z, 1f);
+        return;
+    }
+    let _e130 = lumaNW;
+    let _e131 = lumaNE;
+    let _e133 = lumaSW;
+    let _e134 = lumaSE;
+    let _e138 = lumaNW;
+    let _e139 = lumaSW;
+    let _e141 = lumaNE;
+    let _e142 = lumaSE;
+    direction = vec2<f32>(-(((_e130 + _e131) - (_e133 + _e134))), ((_e138 + _e139) - (_e141 + _e142)));
+    let _e147 = direction[0u];
+    let _e150 = direction[1u];
+    scale = (1f / (min(abs(_e147), abs(_e150)) + 0.125f));
+    let _e155 = direction;
+    let _e156 = scale;
+    let _e160 = pc.uTexelSize;
+    direction = (clamp((_e155 * _e156), vec2<f32>(-8f, -8f), vec2<f32>(8f, 8f)) * _e160.xy);
+    let _e163 = TexCoord_1;
+    let _e164 = direction;
+    let _e167 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e163 + (_e164 * -0.16666667f)));
+    let _e169 = TexCoord_1;
+    let _e170 = direction;
+    let _e173 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e169 + (_e170 * 0.16666667f)));
+    blended = ((_e167.xyz + _e173.xyz) * 0.5f);
+    let _e177 = blended;
+    let _e179 = TexCoord_1;
+    let _e180 = direction;
+    let _e183 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e179 + (_e180 * -0.5f)));
+    let _e185 = TexCoord_1;
+    let _e186 = direction;
+    let _e189 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e185 + (_e186 * 0.5f)));
+    wider = ((_e177 * 0.5f) + ((_e183.xyz + _e189.xyz) * 0.25f));
+    let _e194 = wider;
+    param_5 = _e194;
+    let _e195 = luma_u0028_vf3_u003b((&param_5));
+    lumaWider = _e195;
+    let _e196 = lumaWider;
+    let _e197 = lumaMin;
+    let _e199 = lumaWider;
+    let _e200 = lumaMax;
+    let _e203 = blended;
+    let _e204 = wider;
+    let _e206 = select(_e204, _e203, vec3(((_e196 < _e197) || (_e199 > _e200))));
+    let _e211 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e206.x, _e206.y, _e206.z, 1f) * _e211);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kHdrDisplayVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000012bu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -5351,6 +7926,136 @@ inline constexpr std::uint32_t kHdrDisplayVulkanFragmentSpirV[] = {
     0x000200f8u, 0x000000c5u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kHdrDisplayVulkanFragmentSpirVByteSize = sizeof(kHdrDisplayVulkanFragmentSpirV);
+
+inline constexpr std::string_view kHdrDisplayVulkanFragmentWgsl =
+    R"CNA_SHADER(// hdr_display.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uHdrDisplayParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaEncodePq_u0028_vf3_u003b(nits: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var l: vec3<f32>;
+    var p: vec3<f32>;
+
+    let _e39 = (*nits);
+    l = clamp((_e39 / vec3(10000f)), vec3(0f), vec3(1f));
+    let _e45 = l;
+    p = pow(_e45, vec3<f32>(0.15930176f, 0.15930176f, 0.15930176f));
+    let _e47 = p;
+    let _e51 = p;
+    return pow(((vec3(0.8359375f) + (_e47 * 18.851563f)) / (vec3(1f) + (_e51 * 18.6875f))), vec3<f32>(78.84375f, 78.84375f, 78.84375f));
+}
+
+fn cnaRec709ToRec2020_u0028_vf3_u003b(c: ptr<function, vec3<f32>>) -> vec3<f32> {
+    let _e37 = (*c);
+    let _e39 = (*c);
+    let _e41 = (*c);
+    return vec3<f32>(dot(_e37, vec3<f32>(0.6274039f, 0.329283f, 0.0433131f)), dot(_e39, vec3<f32>(0.0690973f, 0.9195404f, 0.0113623f)), dot(_e41, vec3<f32>(0.0163914f, 0.0880133f, 0.8955953f)));
+}
+
+fn cnaRollOff_u0028_f1_u003b_f1_u003b(nits_1: ptr<function, f32>, peak: ptr<function, f32>) -> f32 {
+    var local: f32;
+
+    let _e39 = (*nits_1);
+    if (_e39 <= 0f) {
+        local = 0f;
+    } else {
+        let _e41 = (*peak);
+        let _e42 = (*nits_1);
+        let _e44 = (*peak);
+        let _e45 = (*nits_1);
+        local = ((_e41 * _e42) / (_e44 + _e45));
+    }
+    let _e48 = local;
+    return _e48;
+}
+
+fn main_1() {
+    var space: i32;
+    var source: vec4<f32>;
+    var nits_2: vec3<f32>;
+    var param: f32;
+    var param_1: f32;
+    var param_2: f32;
+    var param_3: f32;
+    var param_4: f32;
+    var param_5: f32;
+    var param_6: vec3<f32>;
+    var param_7: vec3<f32>;
+
+    let _e49 = pc.uHdrDisplayParams[0u];
+    space = i32(_e49);
+    let _e51 = TexCoord_1;
+    let _e52 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e51);
+    source = _e52;
+    let _e53 = space;
+    if (_e53 == 0i) {
+        let _e55 = source;
+        let _e56 = SpriteColor_1;
+        FragColor = (_e55 * _e56);
+        return;
+    }
+    let _e58 = space;
+    if (_e58 == 1i) {
+        let _e60 = source;
+        let _e64 = pc.uHdrDisplayParams[1u];
+        let _e66 = (_e60.xyz * (_e64 / 80f));
+        let _e68 = source[3u];
+        let _e73 = SpriteColor_1;
+        FragColor = (vec4<f32>(_e66.x, _e66.y, _e66.z, _e68) * _e73);
+        return;
+    }
+    let _e75 = source;
+    let _e79 = pc.uHdrDisplayParams[1u];
+    nits_2 = (_e75.xyz * _e79);
+    let _e82 = nits_2[0u];
+    param = _e82;
+    let _e85 = pc.uHdrDisplayParams[2u];
+    param_1 = _e85;
+    let _e86 = cnaRollOff_u0028_f1_u003b_f1_u003b((&param), (&param_1));
+    let _e88 = nits_2[1u];
+    param_2 = _e88;
+    let _e91 = pc.uHdrDisplayParams[2u];
+    param_3 = _e91;
+    let _e92 = cnaRollOff_u0028_f1_u003b_f1_u003b((&param_2), (&param_3));
+    let _e94 = nits_2[2u];
+    param_4 = _e94;
+    let _e97 = pc.uHdrDisplayParams[2u];
+    param_5 = _e97;
+    let _e98 = cnaRollOff_u0028_f1_u003b_f1_u003b((&param_4), (&param_5));
+    nits_2 = vec3<f32>(_e86, _e92, _e98);
+    let _e100 = nits_2;
+    param_6 = _e100;
+    let _e101 = cnaRec709ToRec2020_u0028_vf3_u003b((&param_6));
+    param_7 = _e101;
+    let _e102 = cnaEncodePq_u0028_vf3_u003b((&param_7));
+    let _e104 = source[3u];
+    let _e109 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e102.x, _e102.y, _e102.z, _e104) * _e109);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kHeightFogVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000174u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -5474,6 +8179,183 @@ inline constexpr std::uint32_t kHeightFogVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kHeightFogVulkanFragmentSpirVByteSize = sizeof(kHeightFogVulkanFragmentSpirV);
 
+inline constexpr std::string_view kHeightFogVulkanFragmentWgsl =
+    R"CNA_SHADER(// height_fog.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uFogScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uFogMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec3Array {
+    uFogVectors: array<vec3<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+@group(1) @binding(14) 
+var<uniform> unnamed_2: Vec3Array;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaOpticalDepth_u0028_f1_u003b_f1_u003b_f1_u003b(cameraHeight: ptr<function, f32>, rayHeightStep: ptr<function, f32>, distance: ptr<function, f32>) -> f32 {
+    var atCamera: f32;
+    var climb: f32;
+
+    let _e40 = unnamed.uFogScalars[1i];
+    let _e43 = unnamed.uFogScalars[2i];
+    let _e45 = (*cameraHeight);
+    let _e48 = unnamed.uFogScalars[3i];
+    atCamera = (_e40 * exp((-(_e43) * (_e45 - _e48))));
+    let _e55 = unnamed.uFogScalars[2i];
+    let _e56 = (*rayHeightStep);
+    climb = (_e55 * _e56);
+    let _e58 = climb;
+    if (abs(_e58) < 0.00001f) {
+        let _e61 = atCamera;
+        let _e62 = (*distance);
+        return max((_e61 * _e62), 0f);
+    }
+    let _e65 = atCamera;
+    let _e66 = climb;
+    let _e68 = (*distance);
+    let _e73 = climb;
+    return max(((_e65 * (1f - exp((-(_e66) * _e68)))) / _e73), 0f);
+}
+
+fn cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b(uv: ptr<function, vec2<f32>>, linearDepth: ptr<function, f32>) -> vec3<f32> {
+    var clip: vec4<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+
+    let _e38 = (*uv);
+    let _e41 = ((_e38 * 2f) - vec2(1f));
+    clip = vec4<f32>(_e41.x, _e41.y, 1f, 1f);
+    let _e47 = unnamed_1.uFogMatrices[0i];
+    let _e48 = clip;
+    ray = (_e47 * _e48);
+    let _e50 = ray;
+    let _e53 = ray[3u];
+    direction = (_e50.xyz / vec3(_e53));
+    let _e56 = direction;
+    let _e57 = (*linearDepth);
+    let _e59 = direction[2u];
+    return (_e56 * (_e57 / max(-(_e59), 0.000001f)));
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e36 = unnamed.uFogScalars[4i];
+    if (_e36 < 0.5f) {
+        let _e39 = (*channels)[0u];
+        return _e39;
+    }
+    let _e40 = (*channels);
+    return dot(_e40, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var depth: f32;
+    var param: vec4<f32>;
+    var farPlane: f32;
+    var travelled: f32;
+    var local: f32;
+    var viewPosition: vec3<f32>;
+    var param_1: vec2<f32>;
+    var param_2: f32;
+    var world: vec4<f32>;
+    var cameraWorld: vec4<f32>;
+    var alongRay: vec3<f32>;
+    var rayLength: f32;
+    var optical: f32;
+    var param_3: f32;
+    var param_4: f32;
+    var param_5: f32;
+    var fog: f32;
+
+    let _e51 = TexCoord_1;
+    let _e52 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e51);
+    source = _e52;
+    let _e53 = TexCoord_1;
+    let _e54 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e53);
+    param = _e54;
+    let _e55 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param));
+    depth = _e55;
+    let _e58 = unnamed.uFogScalars[0i];
+    farPlane = _e58;
+    let _e59 = depth;
+    let _e61 = depth;
+    if ((_e59 <= 0f) || (_e61 >= 0.999f)) {
+        let _e64 = farPlane;
+        local = _e64;
+    } else {
+        let _e65 = depth;
+        let _e66 = farPlane;
+        local = (_e65 * _e66);
+    }
+    let _e68 = local;
+    travelled = _e68;
+    let _e69 = depth;
+    let _e71 = TexCoord_1;
+    param_1 = _e71;
+    param_2 = max(_e69, 0.0001f);
+    let _e72 = cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b((&param_1), (&param_2));
+    let _e73 = farPlane;
+    viewPosition = (_e72 * _e73);
+    let _e77 = unnamed_1.uFogMatrices[1i];
+    let _e78 = viewPosition;
+    world = (_e77 * vec4<f32>(_e78.x, _e78.y, _e78.z, 1f));
+    let _e86 = unnamed_1.uFogMatrices[1i];
+    cameraWorld = (_e86 * vec4<f32>(0f, 0f, 0f, 1f));
+    let _e88 = world;
+    let _e90 = cameraWorld;
+    alongRay = (_e88.xyz - _e90.xyz);
+    let _e93 = alongRay;
+    rayLength = max(length(_e93), 0.0001f);
+    let _e97 = alongRay[1u];
+    let _e98 = rayLength;
+    let _e101 = cameraWorld[1u];
+    param_3 = _e101;
+    param_4 = (_e97 / _e98);
+    let _e102 = travelled;
+    param_5 = _e102;
+    let _e103 = cnaOpticalDepth_u0028_f1_u003b_f1_u003b_f1_u003b((&param_3), (&param_4), (&param_5));
+    optical = _e103;
+    let _e104 = optical;
+    fog = (1f - exp(-(_e104)));
+    let _e108 = source;
+    let _e112 = unnamed_2.uFogVectors[0i];
+    let _e113 = fog;
+    let _e116 = mix(_e108.xyz, _e112, vec3(clamp(_e113, 0f, 1f)));
+    let _e118 = source[3u];
+    let _e123 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e116.x, _e116.y, _e116.z, _e118) * _e123);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kLensFlareVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000000d6u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -5555,6 +8437,121 @@ inline constexpr std::uint32_t kLensFlareVulkanFragmentSpirV[] = {
     0x00000092u, 0x0003003eu, 0x00000082u, 0x00000093u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kLensFlareVulkanFragmentSpirVByteSize = sizeof(kLensFlareVulkanFragmentSpirV);
+
+inline constexpr std::string_view kLensFlareVulkanFragmentWgsl =
+    R"CNA_SHADER(// lens_flare.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uLensFlareParams: vec4<f32>,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaBright_u0028_vf2_u003b(uv: ptr<function, vec2<f32>>) -> vec3<f32> {
+    var phi_29_: bool;
+    var phi_37_: bool;
+    var phi_44_: bool;
+
+    let _e20 = (*uv)[0u];
+    let _e21 = (_e20 < 0f);
+    phi_29_ = _e21;
+    if !(_e21) {
+        let _e24 = (*uv)[0u];
+        phi_29_ = (_e24 > 1f);
+    }
+    let _e27 = phi_29_;
+    phi_37_ = _e27;
+    if !(_e27) {
+        let _e30 = (*uv)[1u];
+        phi_37_ = (_e30 < 0f);
+    }
+    let _e33 = phi_37_;
+    phi_44_ = _e33;
+    if !(_e33) {
+        let _e36 = (*uv)[1u];
+        phi_44_ = (_e36 > 1f);
+    }
+    let _e39 = phi_44_;
+    if _e39 {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e40 = (*uv);
+    let _e41 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e40);
+    let _e45 = pc.uLensFlareParams[0u];
+    return max((_e41.xyz - vec3(_e45)), vec3<f32>(0f, 0f, 0f));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var toCentre: vec2<f32>;
+    var ghosts: vec3<f32>;
+    var i: i32;
+    var uv_1: vec2<f32>;
+    var param: vec2<f32>;
+
+    let _e24 = TexCoord_1;
+    let _e25 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e24);
+    source = _e25;
+    let _e26 = TexCoord_1;
+    toCentre = (vec2<f32>(0.5f, 0.5f) - _e26);
+    ghosts = vec3<f32>(0f, 0f, 0f);
+    i = 1i;
+    loop {
+        let _e28 = i;
+        if (_e28 <= 8i) {
+            let _e30 = i;
+            let _e33 = pc.uLensFlareParams[3u];
+            if (_e30 > i32(_e33)) {
+                break;
+            }
+            let _e36 = TexCoord_1;
+            let _e37 = toCentre;
+            let _e38 = i;
+            let _e42 = pc.uLensFlareParams[2u];
+            uv_1 = (_e36 + (_e37 * (1f + (f32(_e38) * _e42))));
+            let _e47 = uv_1;
+            param = _e47;
+            let _e48 = cnaBright_u0028_vf2_u003b((&param));
+            let _e49 = i;
+            let _e53 = ghosts;
+            ghosts = (_e53 + (_e48 / vec3(f32(_e49))));
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e55 = i;
+            i = (_e55 + 1i);
+        }
+    }
+    let _e57 = source;
+    let _e59 = ghosts;
+    let _e62 = pc.uLensFlareParams[1u];
+    let _e64 = (_e57.xyz + (_e59 * _e62));
+    let _e66 = source[3u];
+    let _e71 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e64.x, _e64.y, _e64.z, _e66) * _e71);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kLightShaftVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000107u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -5652,6 +8649,145 @@ inline constexpr std::uint32_t kLightShaftVulkanFragmentSpirV[] = {
     0x00010038u,
 };
 inline constexpr std::size_t kLightShaftVulkanFragmentSpirVByteSize = sizeof(kLightShaftVulkanFragmentSpirV);
+
+inline constexpr std::string_view kLightShaftVulkanFragmentWgsl =
+    R"CNA_SHADER(// light_shaft.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uLightShaftParams: vec4<f32>,
+    uDecay: f32,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaBright_u0028_vf2_u003b(uv: ptr<function, vec2<f32>>) -> vec3<f32> {
+    var phi_29_: bool;
+    var phi_37_: bool;
+    var phi_44_: bool;
+
+    let _e24 = (*uv)[0u];
+    let _e25 = (_e24 < 0f);
+    phi_29_ = _e25;
+    if !(_e25) {
+        let _e28 = (*uv)[0u];
+        phi_29_ = (_e28 > 1f);
+    }
+    let _e31 = phi_29_;
+    phi_37_ = _e31;
+    if !(_e31) {
+        let _e34 = (*uv)[1u];
+        phi_37_ = (_e34 < 0f);
+    }
+    let _e37 = phi_37_;
+    phi_44_ = _e37;
+    if !(_e37) {
+        let _e40 = (*uv)[1u];
+        phi_44_ = (_e40 > 1f);
+    }
+    let _e43 = phi_44_;
+    if _e43 {
+        return vec3<f32>(0f, 0f, 0f);
+    }
+    let _e44 = (*uv);
+    let _e45 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e44);
+    let _e49 = pc.uLightShaftParams[2u];
+    return max((_e45.xyz - vec3(_e49)), vec3<f32>(0f, 0f, 0f));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var lightPosition: vec2<f32>;
+    var outside: vec2<f32>;
+    var offScreen: f32;
+    var reach: f32;
+    var step: vec2<f32>;
+    var gathered: vec3<f32>;
+    var weight: f32;
+    var uv_1: vec2<f32>;
+    var i: i32;
+    var param: vec2<f32>;
+
+    let _e33 = TexCoord_1;
+    let _e34 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e33);
+    source = _e34;
+    let _e36 = pc.uLightShaftParams;
+    lightPosition = _e36.xy;
+    let _e38 = lightPosition;
+    let _e40 = lightPosition;
+    outside = max((vec2<f32>(0f, 0f) - _e38), (_e40 - vec2<f32>(1f, 1f)));
+    let _e44 = outside[0u];
+    let _e46 = outside[1u];
+    offScreen = max(max(_e44, _e46), 0f);
+    let _e49 = offScreen;
+    reach = clamp((1f - (_e49 * 2f)), 0f, 1f);
+    let _e53 = reach;
+    if (_e53 <= 0f) {
+        let _e55 = source;
+        let _e56 = SpriteColor_1;
+        FragColor = (_e55 * _e56);
+        return;
+    }
+    let _e58 = lightPosition;
+    let _e59 = TexCoord_1;
+    step = ((_e58 - _e59) / vec2(24f));
+    gathered = vec3<f32>(0f, 0f, 0f);
+    weight = 1f;
+    let _e63 = TexCoord_1;
+    uv_1 = _e63;
+    i = 0i;
+    loop {
+        let _e64 = i;
+        if (_e64 < 24i) {
+            let _e66 = step;
+            let _e67 = uv_1;
+            uv_1 = (_e67 + _e66);
+            let _e69 = uv_1;
+            param = _e69;
+            let _e70 = cnaBright_u0028_vf2_u003b((&param));
+            let _e71 = weight;
+            let _e73 = gathered;
+            gathered = (_e73 + (_e70 * _e71));
+            let _e76 = pc.uDecay;
+            let _e77 = weight;
+            weight = (_e77 * _e76);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e79 = i;
+            i = (_e79 + 1i);
+        }
+    }
+    let _e81 = source;
+    let _e83 = gathered;
+    let _e86 = pc.uLightShaftParams[3u];
+    let _e89 = reach;
+    let _e91 = (_e81.xyz + ((_e83 * (_e86 / 24f)) * _e89));
+    let _e93 = source[3u];
+    let _e98 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e91.x, _e91.y, _e91.z, _e93) * _e98);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kMotionBlurVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000025fu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -5851,6 +8987,251 @@ inline constexpr std::uint32_t kMotionBlurVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kMotionBlurVulkanFragmentSpirVByteSize = sizeof(kMotionBlurVulkanFragmentSpirV);
 
+inline constexpr std::string_view kMotionBlurVulkanFragmentWgsl =
+    R"CNA_SHADER(// motion_blur.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uMotionScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uMotionMatrices: array<mat4x4<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+var<private> TexCoord_1: vec2<f32>;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+@group(1) @binding(2) 
+var uVelocitySampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(34) 
+var uVelocitySampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e36 = unnamed.uMotionScalars[5i];
+    if (_e36 < 0.5f) {
+        let _e39 = (*channels)[0u];
+        return _e39;
+    }
+    let _e40 = (*channels);
+    return dot(_e40, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn cnaGather_u0028_vf4_u003b_vf2_u003b_i1_u003b(source: ptr<function, vec4<f32>>, velocity: ptr<function, vec2<f32>>, sampleCount: ptr<function, i32>) -> vec4<f32> {
+    var distance: f32;
+    var sum: vec3<f32>;
+    var weight: f32;
+    var i: i32;
+    var uv: vec2<f32>;
+    var phi_126_: bool;
+    var phi_134_: bool;
+    var phi_141_: bool;
+
+    let _e41 = (*velocity);
+    distance = length(_e41);
+    let _e43 = distance;
+    let _e46 = unnamed.uMotionScalars[3i];
+    if (_e43 > _e46) {
+        let _e50 = unnamed.uMotionScalars[3i];
+        let _e51 = distance;
+        let _e53 = (*velocity);
+        (*velocity) = (_e53 * (_e50 / _e51));
+    }
+    let _e55 = (*source);
+    sum = _e55.xyz;
+    weight = 1f;
+    i = 1i;
+    loop {
+        let _e57 = i;
+        if (_e57 <= 16i) {
+            let _e59 = i;
+            let _e60 = (*sampleCount);
+            if (_e59 >= _e60) {
+                break;
+            }
+            let _e62 = TexCoord_1;
+            let _e63 = (*velocity);
+            let _e64 = i;
+            let _e66 = (*sampleCount);
+            uv = (_e62 - (_e63 * (f32(_e64) / f32((_e66 - 1i)))));
+            let _e73 = uv[0u];
+            let _e74 = (_e73 < 0f);
+            phi_126_ = _e74;
+            if !(_e74) {
+                let _e77 = uv[0u];
+                phi_126_ = (_e77 > 1f);
+            }
+            let _e80 = phi_126_;
+            phi_134_ = _e80;
+            if !(_e80) {
+                let _e83 = uv[1u];
+                phi_134_ = (_e83 < 0f);
+            }
+            let _e86 = phi_134_;
+            phi_141_ = _e86;
+            if !(_e86) {
+                let _e89 = uv[1u];
+                phi_141_ = (_e89 > 1f);
+            }
+            let _e92 = phi_141_;
+            if _e92 {
+                continue;
+            }
+            let _e93 = uv;
+            let _e94 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e93);
+            let _e96 = sum;
+            sum = (_e96 + _e94.xyz);
+            let _e98 = weight;
+            weight = (_e98 + 1f);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e100 = i;
+            i = (_e100 + 1i);
+        }
+    }
+    let _e102 = sum;
+    let _e103 = weight;
+    let _e105 = (_e102 / vec3(_e103));
+    let _e107 = (*source)[3u];
+    return vec4<f32>(_e105.x, _e105.y, _e105.z, _e107);
+}
+
+fn cnaDecodeVelocity_u0028_vf4_u003b(channels_1: ptr<function, vec4<f32>>) -> vec2<f32> {
+    let _e34 = (*channels_1);
+    return ((_e34.xy - vec2(0.5f)) * 2f);
+}
+
+fn main_1() {
+    var source_1: vec4<f32>;
+    var sampleCount_1: i32;
+    var stored: vec4<f32>;
+    var param: vec4<f32>;
+    var param_1: vec4<f32>;
+    var param_2: vec2<f32>;
+    var param_3: i32;
+    var depth: f32;
+    var param_4: vec4<f32>;
+    var clip: vec4<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+    var viewPosition: vec3<f32>;
+    var world: vec4<f32>;
+    var previousClip: vec4<f32>;
+    var previousUv: vec2<f32>;
+    var velocity_1: vec2<f32>;
+    var param_5: vec4<f32>;
+    var param_6: vec2<f32>;
+    var param_7: i32;
+
+    let _e53 = TexCoord_1;
+    let _e54 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e53);
+    source_1 = _e54;
+    let _e57 = unnamed.uMotionScalars[4i];
+    sampleCount_1 = i32((_e57 + 0.5f));
+    let _e62 = unnamed.uMotionScalars[0i];
+    if (_e62 > 0.5f) {
+        let _e64 = TexCoord_1;
+        let _e65 = textureSample(uVelocitySampler_cnaTexture, uVelocitySampler_cnaSampler, _e64);
+        stored = _e65;
+        let _e67 = stored[3u];
+        if (_e67 < 0.5f) {
+            let _e69 = stored;
+            param = _e69;
+            let _e70 = cnaDecodeVelocity_u0028_vf4_u003b((&param));
+            let _e73 = unnamed.uMotionScalars[2i];
+            let _e75 = source_1;
+            param_1 = _e75;
+            param_2 = (_e70 * _e73);
+            let _e76 = sampleCount_1;
+            param_3 = _e76;
+            let _e77 = cnaGather_u0028_vf4_u003b_vf2_u003b_i1_u003b((&param_1), (&param_2), (&param_3));
+            let _e78 = SpriteColor_1;
+            FragColor = (_e77 * _e78);
+            return;
+        }
+    }
+    let _e80 = TexCoord_1;
+    let _e81 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e80);
+    param_4 = _e81;
+    let _e82 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_4));
+    depth = _e82;
+    let _e83 = depth;
+    let _e85 = depth;
+    if ((_e83 <= 0f) || (_e85 >= 0.999f)) {
+        let _e88 = source_1;
+        let _e89 = SpriteColor_1;
+        FragColor = (_e88 * _e89);
+        return;
+    }
+    let _e91 = TexCoord_1;
+    let _e94 = ((_e91 * 2f) - vec2(1f));
+    clip = vec4<f32>(_e94.x, _e94.y, 1f, 1f);
+    let _e100 = unnamed_1.uMotionMatrices[0i];
+    let _e101 = clip;
+    ray = (_e100 * _e101);
+    let _e103 = ray;
+    let _e106 = ray[3u];
+    direction = (_e103.xyz / vec3(_e106));
+    let _e109 = direction;
+    let _e110 = depth;
+    let _e112 = direction[2u];
+    let _e119 = unnamed.uMotionScalars[1i];
+    viewPosition = ((_e109 * (_e110 / max(-(_e112), 0.000001f))) * _e119);
+    let _e123 = unnamed_1.uMotionMatrices[1i];
+    let _e124 = viewPosition;
+    world = (_e123 * vec4<f32>(_e124.x, _e124.y, _e124.z, 1f));
+    let _e132 = unnamed_1.uMotionMatrices[2i];
+    let _e133 = world;
+    previousClip = (_e132 * _e133);
+    let _e136 = previousClip[3u];
+    if (_e136 <= 0f) {
+        let _e138 = source_1;
+        let _e139 = SpriteColor_1;
+        FragColor = (_e138 * _e139);
+        return;
+    }
+    let _e141 = previousClip;
+    let _e144 = previousClip[3u];
+    previousUv = (((_e141.xy / vec2(_e144)) * 0.5f) + vec2(0.5f));
+    let _e150 = TexCoord_1;
+    let _e151 = previousUv;
+    let _e155 = unnamed.uMotionScalars[2i];
+    velocity_1 = ((_e150 - _e151) * _e155);
+    let _e157 = source_1;
+    param_5 = _e157;
+    let _e158 = velocity_1;
+    param_6 = _e158;
+    let _e159 = sampleCount_1;
+    param_7 = _e159;
+    let _e160 = cnaGather_u0028_vf4_u003b_vf2_u003b_i1_u003b((&param_5), (&param_6), (&param_7));
+    let _e161 = SpriteColor_1;
+    FragColor = (_e160 * _e161);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kSpatialUpscaleVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000001ecu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -5985,6 +9366,237 @@ inline constexpr std::uint32_t kSpatialUpscaleVulkanFragmentSpirV[] = {
     0x0000012du, 0x000200f9u, 0x0000012eu, 0x000200f8u, 0x0000012eu, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kSpatialUpscaleVulkanFragmentSpirVByteSize = sizeof(kSpatialUpscaleVulkanFragmentSpirV);
+
+inline constexpr std::string_view kSpatialUpscaleVulkanFragmentWgsl =
+    R"CNA_SHADER(// spatial_upscale.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uUpscaleParams: vec4<f32>,
+    uIdentity: f32,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> TexCoord_1: vec2<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaLuma_u0028_vf3_u003b(colour: ptr<function, vec3<f32>>) -> f32 {
+    let _e31 = (*colour);
+    return dot(_e31, vec3<f32>(0.2126f, 0.7152f, 0.0722f));
+}
+
+fn cnaFetch_u0028_vf2_u003b(texel: ptr<function, vec2<f32>>) -> vec3<f32> {
+    var sourceSize: vec2<f32>;
+
+    let _e33 = pc.uUpscaleParams;
+    sourceSize = _e33.xy;
+    let _e35 = (*texel);
+    let _e36 = sourceSize;
+    let _e40 = sourceSize;
+    let _e42 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (clamp(_e35, vec2<f32>(0.5f, 0.5f), (_e36 - vec2(0.5f))) / _e40));
+    return _e42.xyz;
+}
+
+fn main_1() {
+    var position: vec2<f32>;
+    var base: vec2<f32>;
+    var f: vec2<f32>;
+    var c00_: vec3<f32>;
+    var param: vec2<f32>;
+    var c10_: vec3<f32>;
+    var param_1: vec2<f32>;
+    var c01_: vec3<f32>;
+    var param_2: vec2<f32>;
+    var c11_: vec3<f32>;
+    var param_3: vec2<f32>;
+    var upscaled: vec3<f32>;
+    var l00_: f32;
+    var param_4: vec3<f32>;
+    var l10_: f32;
+    var param_5: vec3<f32>;
+    var l01_: f32;
+    var param_6: vec3<f32>;
+    var l11_: f32;
+    var param_7: vec3<f32>;
+    var gradient: vec2<f32>;
+    var strength: f32;
+    var edge: vec2<f32>;
+    var along: vec3<f32>;
+    var param_8: vec2<f32>;
+    var param_9: vec2<f32>;
+    var trust: f32;
+    var up: vec3<f32>;
+    var param_10: vec2<f32>;
+    var down: vec3<f32>;
+    var param_11: vec2<f32>;
+    var left: vec3<f32>;
+    var param_12: vec2<f32>;
+    var right: vec3<f32>;
+    var param_13: vec2<f32>;
+    var neighbourhood: vec3<f32>;
+    var sharpened: vec3<f32>;
+    var lowest: vec3<f32>;
+    var highest: vec3<f32>;
+
+    let _e70 = pc.uIdentity;
+    if (_e70 > 0.5f) {
+        let _e72 = TexCoord_1;
+        let _e73 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e72);
+        let _e74 = SpriteColor_1;
+        FragColor = (_e73 * _e74);
+        return;
+    }
+    let _e76 = TexCoord_1;
+    let _e78 = pc.uUpscaleParams;
+    position = ((_e76 * _e78.xy) - vec2(0.5f));
+    let _e83 = position;
+    base = floor(_e83);
+    let _e85 = position;
+    let _e86 = base;
+    f = (_e85 - _e86);
+    let _e88 = base;
+    param = (_e88 + vec2<f32>(0.5f, 0.5f));
+    let _e90 = cnaFetch_u0028_vf2_u003b((&param));
+    c00_ = _e90;
+    let _e91 = base;
+    param_1 = (_e91 + vec2<f32>(1.5f, 0.5f));
+    let _e93 = cnaFetch_u0028_vf2_u003b((&param_1));
+    c10_ = _e93;
+    let _e94 = base;
+    param_2 = (_e94 + vec2<f32>(0.5f, 1.5f));
+    let _e96 = cnaFetch_u0028_vf2_u003b((&param_2));
+    c01_ = _e96;
+    let _e97 = base;
+    param_3 = (_e97 + vec2<f32>(1.5f, 1.5f));
+    let _e99 = cnaFetch_u0028_vf2_u003b((&param_3));
+    c11_ = _e99;
+    let _e100 = c00_;
+    let _e101 = c10_;
+    let _e103 = f[0u];
+    let _e106 = c01_;
+    let _e107 = c11_;
+    let _e109 = f[0u];
+    let _e113 = f[1u];
+    upscaled = mix(mix(_e100, _e101, vec3(_e103)), mix(_e106, _e107, vec3(_e109)), vec3(_e113));
+    let _e118 = pc.uUpscaleParams[3u];
+    if (_e118 > 0.5f) {
+        let _e120 = c00_;
+        param_4 = _e120;
+        let _e121 = cnaLuma_u0028_vf3_u003b((&param_4));
+        l00_ = _e121;
+        let _e122 = c10_;
+        param_5 = _e122;
+        let _e123 = cnaLuma_u0028_vf3_u003b((&param_5));
+        l10_ = _e123;
+        let _e124 = c01_;
+        param_6 = _e124;
+        let _e125 = cnaLuma_u0028_vf3_u003b((&param_6));
+        l01_ = _e125;
+        let _e126 = c11_;
+        param_7 = _e126;
+        let _e127 = cnaLuma_u0028_vf3_u003b((&param_7));
+        l11_ = _e127;
+        let _e128 = l10_;
+        let _e129 = l11_;
+        let _e131 = l00_;
+        let _e132 = l01_;
+        let _e135 = l01_;
+        let _e136 = l11_;
+        let _e138 = l00_;
+        let _e139 = l10_;
+        gradient = vec2<f32>(((_e128 + _e129) - (_e131 + _e132)), ((_e135 + _e136) - (_e138 + _e139)));
+        let _e143 = gradient;
+        strength = length(_e143);
+        let _e145 = strength;
+        if (_e145 > 0.0001f) {
+            let _e148 = gradient[1u];
+            let _e151 = gradient[0u];
+            edge = normalize(vec2<f32>(-(_e148), _e151));
+            let _e154 = base;
+            let _e156 = f;
+            let _e158 = edge;
+            param_8 = (((_e154 + vec2<f32>(0.5f, 0.5f)) + _e156) + _e158);
+            let _e160 = cnaFetch_u0028_vf2_u003b((&param_8));
+            let _e161 = base;
+            let _e163 = f;
+            let _e165 = edge;
+            param_9 = (((_e161 + vec2<f32>(0.5f, 0.5f)) + _e163) - _e165);
+            let _e167 = cnaFetch_u0028_vf2_u003b((&param_9));
+            along = (_e160 + _e167);
+            let _e169 = strength;
+            trust = (clamp((_e169 * 2f), 0f, 1f) * 0.5f);
+            let _e173 = upscaled;
+            let _e174 = along;
+            let _e176 = trust;
+            upscaled = mix(_e173, (_e174 * 0.5f), vec3(_e176));
+        }
+    }
+    let _e181 = pc.uUpscaleParams[2u];
+    if (_e181 > 0f) {
+        let _e183 = base;
+        param_10 = (_e183 + vec2<f32>(0.5f, -0.5f));
+        let _e185 = cnaFetch_u0028_vf2_u003b((&param_10));
+        up = _e185;
+        let _e186 = base;
+        param_11 = (_e186 + vec2<f32>(0.5f, 1.5f));
+        let _e188 = cnaFetch_u0028_vf2_u003b((&param_11));
+        down = _e188;
+        let _e189 = base;
+        param_12 = (_e189 + vec2<f32>(-0.5f, 0.5f));
+        let _e191 = cnaFetch_u0028_vf2_u003b((&param_12));
+        left = _e191;
+        let _e192 = base;
+        param_13 = (_e192 + vec2<f32>(1.5f, 0.5f));
+        let _e194 = cnaFetch_u0028_vf2_u003b((&param_13));
+        right = _e194;
+        let _e195 = up;
+        let _e196 = down;
+        let _e198 = left;
+        let _e200 = right;
+        neighbourhood = ((((_e195 + _e196) + _e198) + _e200) * 0.25f);
+        let _e203 = upscaled;
+        let _e204 = upscaled;
+        let _e205 = neighbourhood;
+        let _e209 = pc.uUpscaleParams[2u];
+        sharpened = (_e203 + ((_e204 - _e205) * _e209));
+        let _e212 = up;
+        let _e213 = down;
+        let _e215 = left;
+        let _e216 = right;
+        let _e219 = upscaled;
+        lowest = min(min(min(_e212, _e213), min(_e215, _e216)), _e219);
+        let _e221 = up;
+        let _e222 = down;
+        let _e224 = left;
+        let _e225 = right;
+        let _e228 = upscaled;
+        highest = max(max(max(_e221, _e222), max(_e224, _e225)), _e228);
+        let _e230 = sharpened;
+        let _e231 = lowest;
+        let _e232 = highest;
+        upscaled = clamp(_e230, _e231, _e232);
+    }
+    let _e234 = upscaled;
+    let _e239 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e234.x, _e234.y, _e234.z, 1f) * _e239);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kAerialPerspectiveVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000023fu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -6141,6 +9753,258 @@ inline constexpr std::uint32_t kAerialPerspectiveVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kAerialPerspectiveVulkanFragmentSpirVByteSize = sizeof(kAerialPerspectiveVulkanFragmentSpirV);
 
+inline constexpr std::string_view kAerialPerspectiveVulkanFragmentWgsl =
+    R"CNA_SHADER(// aerial_perspective.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uAerialScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uAerialMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec3Array {
+    uAerialVectors: array<vec3<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+@group(1) @binding(14) 
+var<uniform> unnamed_2: Vec3Array;
+
+fn cnaMiePhase_u0028_f1_u003b(cosAngle: ptr<function, f32>) -> f32 {
+    var gg: f32;
+    var d: f32;
+
+    gg = 0.5776f;
+    let _e50 = gg;
+    let _e52 = (*cosAngle);
+    d = ((1f + _e50) - (1.52f * _e52));
+    let _e55 = gg;
+    let _e58 = d;
+    let _e61 = gg;
+    return ((0.07957747f * (1f - _e55)) / max((pow(max(_e58, 0.0001f), 1.5f) * (2f + _e61)), 0.0001f));
+}
+
+fn cnaRayleighPhase_u0028_f1_u003b(cosAngle_1: ptr<function, f32>) -> f32 {
+    let _e48 = (*cosAngle_1);
+    let _e49 = (*cosAngle_1);
+    return (0.059683103f * (1f + (_e48 * _e49)));
+}
+
+fn cnaAirMass_u0028_f1_u003b(upwards: ptr<function, f32>) -> f32 {
+    var up: f32;
+    var zenithDegrees: f32;
+
+    let _e50 = (*upwards);
+    up = clamp(_e50, 0f, 1f);
+    let _e52 = up;
+    zenithDegrees = degrees(acos(_e52));
+    let _e55 = up;
+    let _e56 = zenithDegrees;
+    return (1f / max((_e55 + (0.50572f * pow(max((96.07995f - _e56), 0.001f), -1.6364f))), 0.0001f));
+}
+
+fn cnaScatteringAlongPath_u0028_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b(viewDirection: ptr<function, vec3<f32>>, sunDirection: ptr<function, vec3<f32>>, turbidity: ptr<function, f32>, viewMass: ptr<function, f32>) -> vec3<f32> {
+    var view: vec3<f32>;
+    var toSun: vec3<f32>;
+    var cosAngle_2: f32;
+    var sunMass: f32;
+    var param: f32;
+    var mie: f32;
+    var total: vec3<f32>;
+    var scattered: vec3<f32>;
+    var param_1: f32;
+    var param_2: f32;
+    var alongView: vec3<f32>;
+    var sunlight: vec3<f32>;
+
+    let _e63 = (*viewDirection);
+    view = normalize(_e63);
+    let _e65 = (*sunDirection);
+    toSun = -(normalize(_e65));
+    let _e68 = view;
+    let _e69 = toSun;
+    cosAngle_2 = dot(_e68, _e69);
+    let _e72 = toSun[1u];
+    param = _e72;
+    let _e73 = cnaAirMass_u0028_f1_u003b((&param));
+    sunMass = _e73;
+    let _e74 = (*turbidity);
+    mie = (0.021f * max((_e74 - 1f), 0f));
+    let _e78 = mie;
+    total = (vec3<f32>(0.0464f, 0.1085f, 0.265f) + vec3(_e78));
+    let _e81 = cosAngle_2;
+    param_1 = _e81;
+    let _e82 = cnaRayleighPhase_u0028_f1_u003b((&param_1));
+    let _e84 = mie;
+    let _e85 = cosAngle_2;
+    param_2 = _e85;
+    let _e86 = cnaMiePhase_u0028_f1_u003b((&param_2));
+    scattered = ((vec3<f32>(0.0464f, 0.1085f, 0.265f) * _e82) + vec3((_e84 * _e86)));
+    let _e90 = total;
+    let _e92 = (*viewMass);
+    alongView = (vec3<f32>(1f, 1f, 1f) - exp((-(_e90) * _e92)));
+    let _e96 = total;
+    let _e98 = sunMass;
+    sunlight = exp((-(_e96) * _e98));
+    let _e101 = scattered;
+    let _e102 = total;
+    let _e104 = alongView;
+    let _e106 = sunlight;
+    return ((((_e101 / _e102) * _e104) * _e106) * 24f);
+}
+
+fn cnaAtmosphereTransmittance_u0028_f1_u003b_f1_u003b(turbidity_1: ptr<function, f32>, viewMass_1: ptr<function, f32>) -> vec3<f32> {
+    var mie_1: f32;
+
+    let _e50 = (*turbidity_1);
+    mie_1 = (0.021f * max((_e50 - 1f), 0f));
+    let _e54 = mie_1;
+    let _e58 = (*viewMass_1);
+    return exp((-((vec3<f32>(0.0464f, 0.1085f, 0.265f) + vec3(_e54))) * _e58));
+}
+
+fn cnaAerialAirMass_u0028_vf3_u003b_f1_u003b_f1_u003b(viewDirection_1: ptr<function, vec3<f32>>, distance: ptr<function, f32>, scaleHeight: ptr<function, f32>) -> f32 {
+    var full: f32;
+    var param_3: f32;
+
+    let _e52 = (*viewDirection_1);
+    param_3 = normalize(_e52).y;
+    let _e55 = cnaAirMass_u0028_f1_u003b((&param_3));
+    full = _e55;
+    let _e56 = (*distance);
+    let _e58 = (*scaleHeight);
+    let _e61 = full;
+    return min((max(_e56, 0f) / max(_e58, 0.001f)), _e61);
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e50 = unnamed.uAerialScalars[4i];
+    if (_e50 < 0.5f) {
+        let _e53 = (*channels)[0u];
+        return _e53;
+    }
+    let _e54 = (*channels);
+    return dot(_e54, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var source: vec4<f32>;
+    var depth: f32;
+    var param_4: vec4<f32>;
+    var cameraUv: vec2<f32>;
+    var ndc: vec2<f32>;
+    var world: vec4<f32>;
+    var direction: vec3<f32>;
+    var viewRay: vec4<f32>;
+    var view_1: vec3<f32>;
+    var alongRay: f32;
+    var airMass: f32;
+    var param_5: vec3<f32>;
+    var param_6: f32;
+    var param_7: f32;
+    var graded: vec3<f32>;
+    var param_8: f32;
+    var param_9: f32;
+    var param_10: vec3<f32>;
+    var param_11: vec3<f32>;
+    var param_12: f32;
+    var param_13: f32;
+
+    let _e68 = TexCoord_1;
+    let _e69 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e68);
+    source = _e69;
+    let _e70 = TexCoord_1;
+    let _e71 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e70);
+    param_4 = _e71;
+    let _e72 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_4));
+    depth = _e72;
+    let _e73 = depth;
+    let _e75 = depth;
+    if ((_e73 <= 0f) || (_e75 >= 0.999f)) {
+        let _e78 = source;
+        let _e79 = SpriteColor_1;
+        FragColor = (_e78 * _e79);
+        return;
+    }
+    let _e82 = TexCoord_1[0u];
+    let _e84 = TexCoord_1[1u];
+    cameraUv = vec2<f32>(_e82, (1f - _e84));
+    let _e87 = cameraUv;
+    ndc = ((_e87 * 2f) - vec2(1f));
+    let _e93 = unnamed_1.uAerialMatrices[0i];
+    let _e94 = ndc;
+    world = (_e93 * vec4<f32>(_e94.x, _e94.y, 1f, 1f));
+    let _e99 = world;
+    let _e102 = world[3u];
+    direction = normalize((_e99.xyz / vec3(_e102)));
+    let _e108 = unnamed_1.uAerialMatrices[1i];
+    let _e109 = ndc;
+    viewRay = (_e108 * vec4<f32>(_e109.x, _e109.y, 1f, 1f));
+    let _e114 = viewRay;
+    let _e117 = viewRay[3u];
+    view_1 = (_e114.xyz / vec3(_e117));
+    let _e120 = depth;
+    let _e123 = unnamed.uAerialScalars[3i];
+    let _e125 = view_1;
+    let _e128 = view_1[2u];
+    alongRay = ((_e120 * _e123) * (length(_e125) / max(-(_e128), 0.0001f)));
+    let _e133 = direction;
+    param_5 = _e133;
+    let _e134 = alongRay;
+    param_6 = _e134;
+    let _e137 = unnamed.uAerialScalars[2i];
+    param_7 = _e137;
+    let _e138 = cnaAerialAirMass_u0028_vf3_u003b_f1_u003b_f1_u003b((&param_5), (&param_6), (&param_7));
+    airMass = _e138;
+    let _e139 = source;
+    let _e143 = unnamed.uAerialScalars[0i];
+    param_8 = _e143;
+    let _e144 = airMass;
+    param_9 = _e144;
+    let _e145 = cnaAtmosphereTransmittance_u0028_f1_u003b_f1_u003b((&param_8), (&param_9));
+    let _e147 = direction;
+    param_10 = _e147;
+    let _e150 = unnamed_2.uAerialVectors[0i];
+    param_11 = _e150;
+    let _e153 = unnamed.uAerialScalars[0i];
+    param_12 = _e153;
+    let _e154 = airMass;
+    param_13 = _e154;
+    let _e155 = cnaScatteringAlongPath_u0028_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b((&param_10), (&param_11), (&param_12), (&param_13));
+    let _e158 = unnamed.uAerialScalars[1i];
+    graded = ((_e139.xyz * _e145) + (_e155 * _e158));
+    let _e161 = graded;
+    let _e163 = source[3u];
+    let _e168 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e161.x, _e161.y, _e161.z, _e163) * _e168);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kSsaoComposeVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000078u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -6207,6 +10071,100 @@ inline constexpr std::uint32_t kSsaoComposeVulkanFragmentSpirV[] = {
     0x0000006cu, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kSsaoComposeVulkanFragmentSpirVByteSize = sizeof(kSsaoComposeVulkanFragmentSpirV);
+
+inline constexpr std::string_view kSsaoComposeVulkanFragmentWgsl =
+    R"CNA_SHADER(// ssao_compose.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Vec2Array {
+    uSsaoComposeVectors: array<vec2<f32>, 72>,
+}
+
+struct FloatArray {
+    uSsaoComposeScalars: array<f32, 72>,
+}
+
+@group(1) @binding(1) 
+var uOcclusionSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uOcclusionSampler_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(13) 
+var<storage> unnamed: Vec2Array;
+@group(1) @binding(12) 
+var<storage> unnamed_1: FloatArray;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var blurred: f32;
+    var y: i32;
+    var x: i32;
+    var visibility: f32;
+    var scene: vec4<f32>;
+
+    blurred = 0f;
+    y = -2i;
+    loop {
+        let _e24 = y;
+        if (_e24 <= 2i) {
+            x = -2i;
+            loop {
+                let _e26 = x;
+                if (_e26 <= 2i) {
+                    let _e28 = TexCoord_1;
+                    let _e29 = x;
+                    let _e31 = y;
+                    let _e36 = unnamed.uSsaoComposeVectors[0i];
+                    let _e39 = textureSample(uOcclusionSampler_cnaTexture, uOcclusionSampler_cnaSampler, (_e28 + (vec2<f32>(f32(_e29), f32(_e31)) * _e36)));
+                    let _e41 = blurred;
+                    blurred = (_e41 + _e39.x);
+                    continue;
+                } else {
+                    break;
+                }
+                continuing {
+                    let _e43 = x;
+                    x = (_e43 + 1i);
+                }
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e45 = y;
+            y = (_e45 + 1i);
+        }
+    }
+    let _e47 = blurred;
+    blurred = (_e47 / 25f);
+    let _e49 = blurred;
+    let _e53 = unnamed_1.uSsaoComposeScalars[0i];
+    visibility = clamp((1f - ((1f - _e49) * _e53)), 0f, 1f);
+    let _e57 = TexCoord_1;
+    let _e58 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e57);
+    scene = _e58;
+    let _e59 = scene;
+    let _e61 = visibility;
+    let _e62 = (_e59.xyz * _e61);
+    let _e64 = scene[3u];
+    let _e69 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e62.x, _e62.y, _e62.z, _e64) * _e69);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kSsaoOcclusionVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000014cu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -6347,6 +10305,204 @@ inline constexpr std::uint32_t kSsaoOcclusionVulkanFragmentSpirV[] = {
     0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kSsaoOcclusionVulkanFragmentSpirVByteSize = sizeof(kSsaoOcclusionVulkanFragmentSpirV);
+
+inline constexpr std::string_view kSsaoOcclusionVulkanFragmentWgsl =
+    R"CNA_SHADER(// ssao_occlusion.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uSsaoScalars: array<f32, 72>,
+}
+
+struct Vec2Array {
+    uSsaoVectors: array<vec2<f32>, 72>,
+}
+
+struct Vec3Array {
+    uSsaoKernel: array<vec3<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> FragColor: vec4<f32>;
+@group(1) @binding(1) 
+var uNormalSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uNormalSampler_cnaSampler: sampler;
+@group(1) @binding(2) 
+var uNoiseSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(34) 
+var uNoiseSampler_cnaSampler: sampler;
+@group(1) @binding(13) 
+var<storage> unnamed_1: Vec2Array;
+@group(1) @binding(14) 
+var<uniform> unnamed_2: Vec3Array;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e40 = unnamed.uSsaoScalars[4i];
+    if (_e40 < 0.5f) {
+        let _e43 = (*channels)[0u];
+        return _e43;
+    }
+    let _e44 = (*channels);
+    return dot(_e44, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var centerDepth: f32;
+    var param: vec4<f32>;
+    var rawNormal: vec3<f32>;
+    var normal: vec3<f32>;
+    var local: vec3<f32>;
+    var rawRandom: vec3<f32>;
+    var randomVector: vec3<f32>;
+    var local_1: vec3<f32>;
+    var rawTangent: vec3<f32>;
+    var tangent: vec3<f32>;
+    var local_2: vec3<f32>;
+    var bitangent: vec3<f32>;
+    var tbn: mat3x3<f32>;
+    var occlusion: f32;
+    var count: i32;
+    var i: i32;
+    var samplePosition: vec3<f32>;
+    var sampleUv: vec2<f32>;
+    var sampleDepth: f32;
+    var param_1: vec4<f32>;
+    var rangeCheck: f32;
+    var visibility: f32;
+
+    let _e59 = TexCoord_1;
+    let _e60 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e59);
+    param = _e60;
+    let _e61 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param));
+    centerDepth = _e61;
+    let _e62 = centerDepth;
+    if (_e62 <= 0f) {
+        FragColor = vec4<f32>(1f, 1f, 1f, 1f);
+        return;
+    }
+    let _e64 = TexCoord_1;
+    let _e65 = textureSample(uNormalSampler_cnaTexture, uNormalSampler_cnaSampler, _e64);
+    rawNormal = ((_e65.xyz * 2f) - vec3(1f));
+    let _e70 = rawNormal;
+    if (length(_e70) > 0.0001f) {
+        let _e73 = rawNormal;
+        local = normalize(_e73);
+    } else {
+        local = vec3<f32>(0f, 0f, 1f);
+    }
+    let _e75 = local;
+    normal = _e75;
+    let _e76 = TexCoord_1;
+    let _e79 = unnamed_1.uSsaoVectors[0i];
+    let _e81 = textureSample(uNoiseSampler_cnaTexture, uNoiseSampler_cnaSampler, (_e76 * _e79));
+    let _e85 = ((_e81.xy * 2f) - vec2(1f));
+    rawRandom = vec3<f32>(_e85.x, _e85.y, 0f);
+    let _e89 = rawRandom;
+    if (length(_e89) > 0.0001f) {
+        let _e92 = rawRandom;
+        local_1 = normalize(_e92);
+    } else {
+        local_1 = vec3<f32>(1f, 0f, 0f);
+    }
+    let _e94 = local_1;
+    randomVector = _e94;
+    let _e95 = randomVector;
+    let _e96 = normal;
+    let _e97 = randomVector;
+    let _e98 = normal;
+    rawTangent = (_e95 - (_e96 * dot(_e97, _e98)));
+    let _e102 = rawTangent;
+    if (length(_e102) > 0.0001f) {
+        let _e105 = rawTangent;
+        local_2 = normalize(_e105);
+    } else {
+        let _e107 = normal;
+        local_2 = normalize((cross(_e107, vec3<f32>(0f, 1f, 0f)) + vec3<f32>(0.001f, 0f, 0f)));
+    }
+    let _e111 = local_2;
+    tangent = _e111;
+    let _e112 = normal;
+    let _e113 = tangent;
+    bitangent = cross(_e112, _e113);
+    let _e115 = tangent;
+    let _e116 = bitangent;
+    let _e117 = normal;
+    tbn = mat3x3<f32>(vec3<f32>(_e115.x, _e115.y, _e115.z), vec3<f32>(_e116.x, _e116.y, _e116.z), vec3<f32>(_e117.x, _e117.y, _e117.z));
+    occlusion = 0f;
+    let _e133 = unnamed.uSsaoScalars[3i];
+    count = i32((_e133 + 0.5f));
+    i = 0i;
+    loop {
+        let _e136 = i;
+        if (_e136 < 64i) {
+            let _e138 = i;
+            let _e139 = count;
+            if (_e138 >= _e139) {
+                break;
+            }
+            let _e141 = tbn;
+            let _e142 = i;
+            let _e145 = unnamed_2.uSsaoKernel[_e142];
+            samplePosition = (_e141 * _e145);
+            let _e147 = TexCoord_1;
+            let _e149 = samplePosition[0u];
+            let _e151 = samplePosition[1u];
+            let _e156 = unnamed.uSsaoScalars[0i];
+            sampleUv = (_e147 + (vec2<f32>(_e149, -(_e151)) * _e156));
+            let _e159 = sampleUv;
+            let _e160 = textureSampleLevel(texture1_cnaTexture, texture1_cnaSampler, _e159, 0f);
+            param_1 = _e160;
+            let _e161 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_1));
+            sampleDepth = _e161;
+            let _e162 = sampleDepth;
+            if (_e162 <= 0f) {
+                continue;
+            }
+            let _e164 = sampleDepth;
+            let _e165 = centerDepth;
+            let _e168 = unnamed.uSsaoScalars[1i];
+            if (_e164 < (_e165 - _e168)) {
+                let _e173 = unnamed.uSsaoScalars[2i];
+                let _e174 = centerDepth;
+                let _e175 = sampleDepth;
+                rangeCheck = smoothstep(0f, 1f, (_e173 / max(abs((_e174 - _e175)), 0.00001f)));
+                let _e181 = rangeCheck;
+                let _e182 = occlusion;
+                occlusion = (_e182 + _e181);
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e184 = i;
+            i = (_e184 + 1i);
+        }
+    }
+    let _e186 = occlusion;
+    let _e187 = count;
+    visibility = (1f - (_e186 / f32(_e187)));
+    let _e191 = visibility;
+    let _e193 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e191, _e191, _e191, 1f) * _e193);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kSsrVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000386u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -6633,6 +10789,455 @@ inline constexpr std::uint32_t kSsrVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kSsrVulkanFragmentSpirVByteSize = sizeof(kSsrVulkanFragmentSpirV);
 
+inline constexpr std::string_view kSsrVulkanFragmentWgsl =
+    R"CNA_SHADER(// ssr.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uSsrScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uSsrMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec2Array {
+    uSsrVectors: array<vec2<f32>, 72>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+@group(1) @binding(15) 
+var<uniform> unnamed_1: Mat4Array;
+@group(1) @binding(13) 
+var<storage> unnamed_2: Vec2Array;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uDepthSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uDepthSampler_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+@group(1) @binding(2) 
+var uNormalSampler_cnaTexture: texture_2d<f32>;
+@group(1) @binding(34) 
+var uNormalSampler_cnaSampler: sampler;
+
+fn cnaTextureUvFromClip_u0028_vf4_u003b(clip: ptr<function, vec4<f32>>) -> vec2<f32> {
+    var ndc: vec2<f32>;
+
+    let _e47 = (*clip);
+    let _e50 = (*clip)[3u];
+    ndc = (_e47.xy / vec2(_e50));
+    let _e54 = ndc[0u];
+    let _e58 = ndc[1u];
+    return vec2<f32>(((_e54 * 0.5f) + 0.5f), (0.5f - (_e58 * 0.5f)));
+}
+
+fn cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b(uv: ptr<function, vec2<f32>>, linearDepth: ptr<function, f32>) -> vec3<f32> {
+    var cameraUv: vec2<f32>;
+    var clip_1: vec4<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+
+    let _e52 = (*uv)[0u];
+    let _e54 = (*uv)[1u];
+    cameraUv = vec2<f32>(_e52, (1f - _e54));
+    let _e57 = cameraUv;
+    let _e60 = ((_e57 * 2f) - vec2(1f));
+    clip_1 = vec4<f32>(_e60.x, _e60.y, 1f, 1f);
+    let _e66 = unnamed_1.uSsrMatrices[1i];
+    let _e67 = clip_1;
+    ray = (_e66 * _e67);
+    let _e69 = ray;
+    let _e72 = ray[3u];
+    direction = (_e69.xyz / vec3(_e72));
+    let _e75 = direction;
+    let _e76 = (*linearDepth);
+    let _e78 = direction[2u];
+    return (_e75 * (_e76 / max(-(_e78), 0.000001f)));
+}
+
+fn cnaDecodeLinearDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e48 = unnamed.uSsrScalars[8i];
+    if (_e48 < 0.5f) {
+        let _e51 = (*channels)[0u];
+        return _e51;
+    }
+    let _e52 = (*channels);
+    return dot(_e52, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn cnaSnapToTexel_u0028_vf2_u003b(uv_1: ptr<function, vec2<f32>>) -> vec2<f32> {
+    let _e46 = (*uv_1);
+    let _e49 = unnamed_2.uSsrVectors[0i];
+    let _e56 = unnamed_2.uSsrVectors[0i];
+    return ((floor((_e46 * _e49)) + vec2(0.5f)) / _e56);
+}
+
+fn main_1() {
+    var sourceColor: vec3<f32>;
+    var centerDepth: f32;
+    var param: vec2<f32>;
+    var param_1: vec4<f32>;
+    var normalTexel: vec4<f32>;
+    var param_2: vec2<f32>;
+    var roughness: f32;
+    var rawNormal: vec3<f32>;
+    var normal: vec3<f32>;
+    var local: vec3<f32>;
+    var position: vec3<f32>;
+    var param_3: vec2<f32>;
+    var param_4: f32;
+    var incident: vec3<f32>;
+    var local_1: vec3<f32>;
+    var reflected: vec3<f32>;
+    var stepLength: f32;
+    var hitColor: vec3<f32>;
+    var hit: f32;
+    var lastClear: vec3<f32>;
+    var i: i32;
+    var samplePosition: vec3<f32>;
+    var clip_2: vec4<f32>;
+    var sampleUv: vec2<f32>;
+    var param_5: vec4<f32>;
+    var snappedUv: vec2<f32>;
+    var param_6: vec2<f32>;
+    var sceneDepth: f32;
+    var param_7: vec4<f32>;
+    var difference: f32;
+    var nearPoint: vec3<f32>;
+    var farPoint: vec3<f32>;
+    var k: i32;
+    var middle: vec3<f32>;
+    var middleClip: vec4<f32>;
+    var middleUv: vec2<f32>;
+    var param_8: vec4<f32>;
+    var param_9: vec2<f32>;
+    var middleDepth: f32;
+    var param_10: vec4<f32>;
+    var behind: bool;
+    var hitClip: vec4<f32>;
+    var hitUv: vec2<f32>;
+    var param_11: vec4<f32>;
+    var param_12: vec2<f32>;
+    var rawHitNormal: vec3<f32>;
+    var hitNormal: vec3<f32>;
+    var local_2: vec3<f32>;
+    var toEdge: vec2<f32>;
+    var fade: f32;
+    var local_3: f32;
+    var blur: vec2<f32>;
+    var gathered: vec3<f32>;
+    var phi_328_: bool;
+    var phi_335_: bool;
+    var phi_342_: bool;
+    var phi_384_: bool;
+    var phi_454_: bool;
+
+    let _e98 = TexCoord_1;
+    let _e99 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e98);
+    sourceColor = _e99.xyz;
+    let _e101 = TexCoord_1;
+    param = _e101;
+    let _e102 = cnaSnapToTexel_u0028_vf2_u003b((&param));
+    let _e103 = textureSample(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e102);
+    param_1 = _e103;
+    let _e104 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_1));
+    centerDepth = _e104;
+    let _e105 = centerDepth;
+    let _e107 = centerDepth;
+    if ((_e105 <= 0f) || (_e107 >= 0.999f)) {
+        let _e110 = sourceColor;
+        let _e115 = SpriteColor_1;
+        FragColor = (vec4<f32>(_e110.x, _e110.y, _e110.z, 1f) * _e115);
+        return;
+    }
+    let _e117 = TexCoord_1;
+    param_2 = _e117;
+    let _e118 = cnaSnapToTexel_u0028_vf2_u003b((&param_2));
+    let _e119 = textureSample(uNormalSampler_cnaTexture, uNormalSampler_cnaSampler, _e118);
+    normalTexel = _e119;
+    let _e121 = normalTexel[3u];
+    roughness = clamp(_e121, 0f, 1f);
+    let _e123 = normalTexel;
+    rawNormal = ((_e123.xyz * 2f) - vec3(1f));
+    let _e128 = rawNormal;
+    if (length(_e128) > 0.0001f) {
+        let _e131 = rawNormal;
+        local = normalize(_e131);
+    } else {
+        local = vec3<f32>(0f, 0f, 1f);
+    }
+    let _e133 = local;
+    normal = _e133;
+    let _e134 = TexCoord_1;
+    param_3 = _e134;
+    let _e135 = centerDepth;
+    param_4 = _e135;
+    let _e136 = cnaViewPositionFromDepth_u0028_vf2_u003b_f1_u003b((&param_3), (&param_4));
+    position = _e136;
+    let _e137 = position;
+    if (length(_e137) > 0.000001f) {
+        let _e140 = position;
+        local_1 = normalize(_e140);
+    } else {
+        local_1 = vec3<f32>(0f, 0f, -1f);
+    }
+    let _e142 = local_1;
+    incident = _e142;
+    let _e143 = incident;
+    let _e144 = normal;
+    reflected = normalize(reflect(_e143, _e144));
+    let _e149 = unnamed.uSsrScalars[1i];
+    let _e152 = unnamed.uSsrScalars[7i];
+    stepLength = (_e149 / _e152);
+    hitColor = vec3<f32>(0f, 0f, 0f);
+    hit = 0f;
+    let _e154 = position;
+    lastClear = _e154;
+    i = 1i;
+    loop {
+        let _e155 = i;
+        if (_e155 <= 64i) {
+            let _e157 = i;
+            let _e161 = unnamed.uSsrScalars[7i];
+            if (f32(_e157) > _e161) {
+                break;
+            }
+            let _e163 = position;
+            let _e164 = reflected;
+            let _e165 = stepLength;
+            let _e166 = i;
+            samplePosition = (_e163 + (_e164 * (_e165 * f32(_e166))));
+            let _e172 = samplePosition[2u];
+            if (_e172 >= -0.000001f) {
+                break;
+            }
+            let _e176 = unnamed_1.uSsrMatrices[0i];
+            let _e177 = samplePosition;
+            let _e180 = unnamed.uSsrScalars[0i];
+            let _e181 = (_e177 * _e180);
+            clip_2 = (_e176 * vec4<f32>(_e181.x, _e181.y, _e181.z, 1f));
+            let _e188 = clip_2[3u];
+            if (_e188 <= 0f) {
+                break;
+            }
+            let _e190 = clip_2;
+            param_5 = _e190;
+            let _e191 = cnaTextureUvFromClip_u0028_vf4_u003b((&param_5));
+            sampleUv = _e191;
+            let _e193 = sampleUv[0u];
+            let _e194 = (_e193 < 0f);
+            phi_328_ = _e194;
+            if !(_e194) {
+                let _e197 = sampleUv[0u];
+                phi_328_ = (_e197 > 1f);
+            }
+            let _e200 = phi_328_;
+            phi_335_ = _e200;
+            if !(_e200) {
+                let _e203 = sampleUv[1u];
+                phi_335_ = (_e203 < 0f);
+            }
+            let _e206 = phi_335_;
+            phi_342_ = _e206;
+            if !(_e206) {
+                let _e209 = sampleUv[1u];
+                phi_342_ = (_e209 > 1f);
+            }
+            let _e212 = phi_342_;
+            if _e212 {
+                break;
+            }
+            let _e213 = sampleUv;
+            param_6 = _e213;
+            let _e214 = cnaSnapToTexel_u0028_vf2_u003b((&param_6));
+            snappedUv = _e214;
+            let _e215 = snappedUv;
+            let _e216 = textureSampleLevel(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e215, 0f);
+            param_7 = _e216;
+            let _e217 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_7));
+            sceneDepth = _e217;
+            let _e218 = sceneDepth;
+            let _e220 = sceneDepth;
+            if ((_e218 <= 0f) || (_e220 >= 0.999f)) {
+                continue;
+            }
+            let _e224 = samplePosition[2u];
+            let _e226 = sceneDepth;
+            difference = (-(_e224) - _e226);
+            let _e228 = difference;
+            let _e231 = unnamed.uSsrScalars[2i];
+            let _e232 = (_e228 > _e231);
+            phi_384_ = _e232;
+            if _e232 {
+                let _e233 = difference;
+                let _e236 = unnamed.uSsrScalars[3i];
+                phi_384_ = (_e233 < _e236);
+            }
+            let _e239 = phi_384_;
+            if _e239 {
+                let _e240 = lastClear;
+                nearPoint = _e240;
+                let _e241 = samplePosition;
+                farPoint = _e241;
+                k = 0i;
+                loop {
+                    let _e242 = k;
+                    if (_e242 < 6i) {
+                        let _e244 = nearPoint;
+                        let _e245 = farPoint;
+                        middle = ((_e244 + _e245) * 0.5f);
+                        let _e250 = unnamed_1.uSsrMatrices[0i];
+                        let _e251 = middle;
+                        let _e254 = unnamed.uSsrScalars[0i];
+                        let _e255 = (_e251 * _e254);
+                        middleClip = (_e250 * vec4<f32>(_e255.x, _e255.y, _e255.z, 1f));
+                        let _e262 = middleClip[3u];
+                        if (_e262 <= 0f) {
+                            break;
+                        }
+                        let _e264 = middleClip;
+                        param_8 = _e264;
+                        let _e265 = cnaTextureUvFromClip_u0028_vf4_u003b((&param_8));
+                        param_9 = _e265;
+                        let _e266 = cnaSnapToTexel_u0028_vf2_u003b((&param_9));
+                        middleUv = _e266;
+                        let _e267 = middleUv;
+                        let _e268 = textureSampleLevel(uDepthSampler_cnaTexture, uDepthSampler_cnaSampler, _e267, 0f);
+                        param_10 = _e268;
+                        let _e269 = cnaDecodeLinearDepth_u0028_vf4_u003b((&param_10));
+                        middleDepth = _e269;
+                        let _e270 = middleDepth;
+                        let _e272 = middleDepth;
+                        let _e274 = ((_e270 > 0f) && (_e272 < 0.999f));
+                        phi_454_ = _e274;
+                        if _e274 {
+                            let _e276 = middle[2u];
+                            let _e278 = middleDepth;
+                            let _e282 = unnamed.uSsrScalars[2i];
+                            phi_454_ = ((-(_e276) - _e278) > _e282);
+                        }
+                        let _e285 = phi_454_;
+                        behind = _e285;
+                        let _e286 = behind;
+                        if _e286 {
+                            let _e287 = middle;
+                            farPoint = _e287;
+                        } else {
+                            let _e288 = middle;
+                            nearPoint = _e288;
+                        }
+                        continue;
+                    } else {
+                        break;
+                    }
+                    continuing {
+                        let _e289 = k;
+                        k = (_e289 + 1i);
+                    }
+                }
+                let _e293 = unnamed_1.uSsrMatrices[0i];
+                let _e294 = farPoint;
+                let _e297 = unnamed.uSsrScalars[0i];
+                let _e298 = (_e294 * _e297);
+                hitClip = (_e293 * vec4<f32>(_e298.x, _e298.y, _e298.z, 1f));
+                let _e304 = hitClip;
+                param_11 = _e304;
+                let _e305 = cnaTextureUvFromClip_u0028_vf4_u003b((&param_11));
+                param_12 = _e305;
+                let _e306 = cnaSnapToTexel_u0028_vf2_u003b((&param_12));
+                hitUv = _e306;
+                let _e307 = hitUv;
+                let _e308 = textureSample(uNormalSampler_cnaTexture, uNormalSampler_cnaSampler, _e307);
+                rawHitNormal = ((_e308.xyz * 2f) - vec3(1f));
+                let _e313 = rawHitNormal;
+                if (length(_e313) > 0.0001f) {
+                    let _e316 = rawHitNormal;
+                    local_2 = normalize(_e316);
+                } else {
+                    local_2 = vec3<f32>(0f, 0f, 1f);
+                }
+                let _e318 = local_2;
+                hitNormal = _e318;
+                let _e319 = reflected;
+                let _e320 = hitNormal;
+                if (dot(_e319, _e320) > 0f) {
+                    break;
+                }
+                let _e323 = hitUv;
+                let _e324 = hitUv;
+                toEdge = min(_e323, (vec2<f32>(1f, 1f) - _e324));
+                let _e329 = unnamed.uSsrScalars[5i];
+                if (_e329 > 0f) {
+                    let _e333 = unnamed.uSsrScalars[5i];
+                    let _e335 = toEdge[0u];
+                    let _e339 = unnamed.uSsrScalars[5i];
+                    let _e341 = toEdge[1u];
+                    local_3 = min(smoothstep(0f, _e333, _e335), smoothstep(0f, _e339, _e341));
+                } else {
+                    local_3 = 1f;
+                }
+                let _e344 = local_3;
+                fade = _e344;
+                let _e345 = roughness;
+                let _e348 = unnamed.uSsrScalars[6i];
+                blur = vec2((_e345 * _e348));
+                let _e351 = hitUv;
+                let _e352 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e351);
+                let _e354 = hitUv;
+                let _e356 = blur[0u];
+                let _e359 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e354 + vec2<f32>(_e356, 0f)));
+                let _e362 = hitUv;
+                let _e364 = blur[0u];
+                let _e368 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e362 + vec2<f32>(-(_e364), 0f)));
+                let _e371 = hitUv;
+                let _e373 = blur[1u];
+                let _e376 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e371 + vec2<f32>(0f, _e373)));
+                let _e379 = hitUv;
+                let _e381 = blur[1u];
+                let _e385 = textureSample(texture1_cnaTexture, texture1_cnaSampler, (_e379 + vec2<f32>(0f, -(_e381))));
+                gathered = ((((_e352.xyz + _e359.xyz) + _e368.xyz) + _e376.xyz) + _e385.xyz);
+                let _e388 = gathered;
+                hitColor = (_e388 * 0.2f);
+                let _e390 = fade;
+                hit = _e390;
+                break;
+            }
+            let _e391 = samplePosition;
+            lastClear = _e391;
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e392 = i;
+            i = (_e392 + 1i);
+        }
+    }
+    let _e394 = sourceColor;
+    let _e395 = hitColor;
+    let _e396 = hit;
+    let _e399 = unnamed.uSsrScalars[4i];
+    let _e402 = mix(_e394, _e395, vec3((_e396 * _e399)));
+    let _e407 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e402.x, _e402.y, _e402.z, 1f) * _e407);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kTonemapVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000001abu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -6752,6 +11357,173 @@ inline constexpr std::uint32_t kTonemapVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kTonemapVulkanFragmentSpirVByteSize = sizeof(kTonemapVulkanFragmentSpirV);
 
+inline constexpr std::string_view kTonemapVulkanFragmentWgsl =
+    R"CNA_SHADER(// tonemap.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uTonemapParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+var<private> gl_FragCoord_1: vec4<f32>;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn cnaDitherHash_u0028_vf2_u003b(position: ptr<function, vec2<f32>>) -> f32 {
+    let _e41 = (*position);
+    return fract((sin(dot(_e41, vec2<f32>(12.9898f, 78.233f))) * 43758.547f));
+}
+
+fn cnaTriangularDither_u0028_vf2_u003b(position_1: ptr<function, vec2<f32>>) -> f32 {
+    var param: vec2<f32>;
+    var param_1: vec2<f32>;
+
+    let _e43 = (*position_1);
+    param = _e43;
+    let _e44 = cnaDitherHash_u0028_vf2_u003b((&param));
+    let _e45 = (*position_1);
+    param_1 = (_e45 + vec2<f32>(17f, 23f));
+    let _e47 = cnaDitherHash_u0028_vf2_u003b((&param_1));
+    return (_e44 - _e47);
+}
+
+fn uncharted2Curve_u0028_vf3_u003b(x: ptr<function, vec3<f32>>) -> vec3<f32> {
+    let _e41 = (*x);
+    let _e42 = (*x);
+    let _e49 = (*x);
+    let _e50 = (*x);
+    return ((((_e41 * ((_e42 * 0.15f) + vec3(0.05f))) + vec3(0.004f)) / ((_e49 * ((_e50 * 0.15f) + vec3(0.5f))) + vec3(0.06f))) - vec3(0.06666667f));
+}
+
+fn uncharted2_u0028_vf3_u003b(c: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var param_2: vec3<f32>;
+    var param_3: vec3<f32>;
+
+    let _e43 = (*c);
+    param_2 = _e43;
+    let _e44 = uncharted2Curve_u0028_vf3_u003b((&param_2));
+    param_3 = vec3<f32>(11.2f, 11.2f, 11.2f);
+    let _e45 = uncharted2Curve_u0028_vf3_u003b((&param_3));
+    return (_e44 / _e45);
+}
+
+fn aces_u0028_vf3_u003b(c_1: ptr<function, vec3<f32>>) -> vec3<f32> {
+    let _e41 = (*c_1);
+    let _e42 = (*c_1);
+    let _e47 = (*c_1);
+    let _e48 = (*c_1);
+    return clamp(((_e41 * ((_e42 * 2.51f) + vec3(0.03f))) / ((_e47 * ((_e48 * 2.43f) + vec3(0.59f))) + vec3(0.14f))), vec3(0f), vec3(1f));
+}
+
+fn filmic_u0028_vf3_u003b(c_2: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var x_1: vec3<f32>;
+
+    let _e42 = (*c_2);
+    x_1 = max(vec3<f32>(0f, 0f, 0f), (_e42 - vec3(0.004f)));
+    let _e46 = x_1;
+    let _e47 = x_1;
+    let _e52 = x_1;
+    let _e53 = x_1;
+    return ((_e46 * ((_e47 * 6.2f) + vec3(0.5f))) / ((_e52 * ((_e53 * 6.2f) + vec3(1.7f))) + vec3(0.06f)));
+}
+
+fn reinhard_u0028_vf3_u003b(c_3: ptr<function, vec3<f32>>) -> vec3<f32> {
+    let _e41 = (*c_3);
+    let _e42 = (*c_3);
+    return (_e41 / (vec3(1f) + _e42));
+}
+
+fn main_1() {
+    var mode: i32;
+    var source: vec4<f32>;
+    var color: vec3<f32>;
+    var param_4: vec3<f32>;
+    var param_5: vec3<f32>;
+    var param_6: vec3<f32>;
+    var param_7: vec3<f32>;
+    var param_8: vec2<f32>;
+
+    let _e50 = pc.uTonemapParams[0u];
+    mode = i32(_e50);
+    let _e52 = TexCoord_1;
+    let _e53 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e52);
+    source = _e53;
+    let _e54 = source;
+    let _e58 = pc.uTonemapParams[1u];
+    color = (_e54.xyz * _e58);
+    let _e60 = mode;
+    if (_e60 == 1i) {
+        let _e62 = color;
+        param_4 = _e62;
+        let _e63 = reinhard_u0028_vf3_u003b((&param_4));
+        color = _e63;
+    } else {
+        let _e64 = mode;
+        if (_e64 == 2i) {
+            let _e66 = color;
+            param_5 = _e66;
+            let _e67 = filmic_u0028_vf3_u003b((&param_5));
+            color = _e67;
+        } else {
+            let _e68 = mode;
+            if (_e68 == 3i) {
+                let _e70 = color;
+                param_6 = _e70;
+                let _e71 = aces_u0028_vf3_u003b((&param_6));
+                color = _e71;
+            } else {
+                let _e72 = mode;
+                if (_e72 == 4i) {
+                    let _e74 = color;
+                    param_7 = _e74;
+                    let _e75 = uncharted2_u0028_vf3_u003b((&param_7));
+                    color = _e75;
+                }
+            }
+        }
+    }
+    let _e76 = color;
+    color = clamp(_e76, vec3(0f), vec3(1f));
+    let _e80 = mode;
+    if (_e80 != 2i) {
+        let _e82 = color;
+        let _e85 = pc.uTonemapParams[2u];
+        color = pow(_e82, vec3(_e85));
+    }
+    let _e90 = pc.uTonemapParams[3u];
+    if (_e90 > 0f) {
+        let _e92 = gl_FragCoord_1;
+        param_8 = _e92.xy;
+        let _e94 = cnaTriangularDither_u0028_vf2_u003b((&param_8));
+        let _e97 = pc.uTonemapParams[3u];
+        let _e100 = color;
+        color = (_e100 + vec3((_e94 * _e97)));
+    }
+    let _e102 = color;
+    let _e104 = source[3u];
+    let _e109 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e102.x, _e102.y, _e102.z, _e104) * _e109);
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    gl_FragCoord_1 = gl_FragCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e7 = FragColor;
+    return _e7;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kWeightedTransparencyResolveVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000003du, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -6788,7 +11560,55 @@ inline constexpr std::uint32_t kWeightedTransparencyResolveVulkanFragmentSpirV[]
 };
 inline constexpr std::size_t kWeightedTransparencyResolveVulkanFragmentSpirVByteSize = sizeof(kWeightedTransparencyResolveVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 84> kPayloads = {{
+inline constexpr std::string_view kWeightedTransparencyResolveVulkanFragmentWgsl =
+    R"CNA_SHADER(// weighted_transparency_resolve.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(1) 
+var uRevealage_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uRevealage_cnaSampler: sampler;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+
+fn main_1() {
+    var accumulation: vec4<f32>;
+    var revealage: f32;
+    var colour: vec3<f32>;
+
+    let _e16 = TexCoord_1;
+    let _e17 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e16);
+    accumulation = _e17;
+    let _e18 = TexCoord_1;
+    let _e19 = textureSample(uRevealage_cnaTexture, uRevealage_cnaSampler, _e18);
+    revealage = clamp(exp(_e19.x), 0f, 1f);
+    let _e23 = revealage;
+    if (_e23 > 0.9999f) {
+        discard;
+    }
+    let _e25 = accumulation;
+    let _e28 = accumulation[3u];
+    colour = (_e25.xyz / vec3(max(_e28, 0.00001f)));
+    let _e32 = colour;
+    let _e33 = revealage;
+    FragColor = vec4<f32>(_e32.x, _e32.y, _e32.z, (1f - _e33));
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 112> kPayloads = {{
     {"kAerialPerspectiveEsFragmentSource", "aerial_perspective.es.frag.glsl", "e7d4744ae31835559a63e9cce1600bbb656fc476cc467ac833b2fe73abf98fea", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kFullscreenEsVertexSource", "fullscreen.es.vert.glsl", "ec4dbe0b5e367feed5a59d1091c93da8004f83e95c0fa1697aa5c3ae13539ef7", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kBloomBlurEsFragmentSource", "bloom_blur.es.frag.glsl", "e6b4ddc563374f57de7cc96a5bcccba77fbc7a6a0f9e8f4e0e54d3053bf46da7", "glsl-es", "glsl-es", "fragment", "text", "main"},
@@ -6846,33 +11666,61 @@ inline constexpr std::array<PayloadProvenance, 84> kPayloads = {{
     {"kTonemapDesktopFragmentSource", "tonemap.desktop.frag.glsl", "0e6a85e1cca4f96510a41412e1d5774920c59d1fa838c1215edc82e2ef9e7314", "glsl", "glsl", "fragment", "text", "main"},
     {"kWeightedTransparencyResolveDesktopFragmentSource", "weighted_transparency_resolve.desktop.frag.glsl", "239a0b79ee68e9ccb74228a62b80b7bd508bc080c3535e7fbd85c04eb5731b3a", "glsl", "glsl", "fragment", "text", "main"},
     {"kFullscreenVulkanVertexSpirV", "fullscreen.vulkan.vert.glsl", "6d784f7a18b1ddafc05cb150ae9dc192bad43231c64b77d6659ade09246c3feb", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kFullscreenVulkanVertexWgsl", "fullscreen.vulkan.vert.glsl", "6d784f7a18b1ddafc05cb150ae9dc192bad43231c64b77d6659ade09246c3feb", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kBloomBlurVulkanFragmentSpirV", "bloom_blur.vulkan.frag.glsl", "08427f39eee25462f84670c22a8bd713b10a7c9605b129e0292fa951925634db", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kBloomBlurVulkanFragmentWgsl", "bloom_blur.vulkan.frag.glsl", "08427f39eee25462f84670c22a8bd713b10a7c9605b129e0292fa951925634db", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kBloomCombineVulkanFragmentSpirV", "bloom_combine.vulkan.frag.glsl", "cb54f72ecadc78813385a73358e9074da923151ddf5cde45a813c645e1a89604", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kBloomCombineVulkanFragmentWgsl", "bloom_combine.vulkan.frag.glsl", "cb54f72ecadc78813385a73358e9074da923151ddf5cde45a813c645e1a89604", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kBloomExtractVulkanFragmentSpirV", "bloom_extract.vulkan.frag.glsl", "6fbb3429cce34154dcb5cc926ba0e08bd2cd7e37f1e4cf4fa5e0015e083d9e8a", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kBloomExtractVulkanFragmentWgsl", "bloom_extract.vulkan.frag.glsl", "6fbb3429cce34154dcb5cc926ba0e08bd2cd7e37f1e4cf4fa5e0015e083d9e8a", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kBloomUpsampleVulkanFragmentSpirV", "bloom_upsample.vulkan.frag.glsl", "d548699956ba5de5de240ed823fa26d5df72f8f83fb0f41924777bb0aad9c3cc", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kBloomUpsampleVulkanFragmentWgsl", "bloom_upsample.vulkan.frag.glsl", "d548699956ba5de5de240ed823fa26d5df72f8f83fb0f41924777bb0aad9c3cc", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kChromaticVulkanFragmentSpirV", "chromatic.vulkan.frag.glsl", "ba84740abf65410ffe208652abb9f7e2cf9c915f2c28c2e1a8bd7d18b2537f32", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kChromaticVulkanFragmentWgsl", "chromatic.vulkan.frag.glsl", "ba84740abf65410ffe208652abb9f7e2cf9c915f2c28c2e1a8bd7d18b2537f32", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kContactShadowVulkanFragmentSpirV", "contact_shadow.vulkan.frag.glsl", "43d1e86ce0209e628ece72df95f404161cacab42d4712ab88f3950c4e4cf2037", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kContactShadowVulkanFragmentWgsl", "contact_shadow.vulkan.frag.glsl", "43d1e86ce0209e628ece72df95f404161cacab42d4712ab88f3950c4e4cf2037", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kCrtVulkanFragmentSpirV", "crt.vulkan.frag.glsl", "cc9d9b1e1110e0bd486722efa25cd514e04bf1667ad3950698a21edb94b8da4b", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kCrtVulkanFragmentWgsl", "crt.vulkan.frag.glsl", "cc9d9b1e1110e0bd486722efa25cd514e04bf1667ad3950698a21edb94b8da4b", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kDecalVulkanFragmentSpirV", "decal.vulkan.frag.glsl", "a4c3bc04d5176d6c0f6c76814b629aab016c4559dab1d77bc6c986ae867871fc", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kDecalVulkanFragmentWgsl", "decal.vulkan.frag.glsl", "a4c3bc04d5176d6c0f6c76814b629aab016c4559dab1d77bc6c986ae867871fc", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kDepthEffectVulkanFragmentSpirV", "depth_effect.vulkan.frag.glsl", "64bec1bd3040f27905b3e2e1289e5e387dbd8f701eaf8fe951a7770f3b4b8778", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kDepthEffectVulkanFragmentWgsl", "depth_effect.vulkan.frag.glsl", "64bec1bd3040f27905b3e2e1289e5e387dbd8f701eaf8fe951a7770f3b4b8778", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kColorGradeInterpolatedStripVulkanFragmentSpirV", "color_grade_interpolated_strip.vulkan.frag.glsl", "b3953ca618c907b8d868ce575e5e410d4575f221515785726b6e965f263a24c6", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kColorGradeInterpolatedStripVulkanFragmentWgsl", "color_grade_interpolated_strip.vulkan.frag.glsl", "b3953ca618c907b8d868ce575e5e410d4575f221515785726b6e965f263a24c6", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kColorGradeStripVulkanFragmentSpirV", "color_grade_strip.vulkan.frag.glsl", "97d13bba7d44a6e64a31550a7493c71b6e7389be1abdb921281cd94c6dbb5908", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kColorGradeStripVulkanFragmentWgsl", "color_grade_strip.vulkan.frag.glsl", "97d13bba7d44a6e64a31550a7493c71b6e7389be1abdb921281cd94c6dbb5908", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kColorGradeVolumeVulkanFragmentSpirV", "color_grade_volume.vulkan.frag.glsl", "b1d51788e372e0b90a767d408a4a6a0dbff18fecb249cb258fbddb974a525424", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kColorGradeVolumeVulkanFragmentWgsl", "color_grade_volume.vulkan.frag.glsl", "b1d51788e372e0b90a767d408a4a6a0dbff18fecb249cb258fbddb974a525424", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kDepthOfFieldVulkanFragmentSpirV", "depth_of_field.vulkan.frag.glsl", "7c41daae1cba57cde44d4bbb1f5d16c990ad559fcca6dbdfd9ae5ac4931ed27b", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kDepthOfFieldVulkanFragmentWgsl", "depth_of_field.vulkan.frag.glsl", "7c41daae1cba57cde44d4bbb1f5d16c990ad559fcca6dbdfd9ae5ac4931ed27b", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kFilmGrainVulkanFragmentSpirV", "film_grain.vulkan.frag.glsl", "9ea7dbc92fdf62ba4e437064106ba1d11686de66aabdb2ef0bab36d34101dc01", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kFilmGrainVulkanFragmentWgsl", "film_grain.vulkan.frag.glsl", "9ea7dbc92fdf62ba4e437064106ba1d11686de66aabdb2ef0bab36d34101dc01", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kFxaaVulkanFragmentSpirV", "fxaa.vulkan.frag.glsl", "590117f758c2224108abe2f177d7acd19fbee0dd9747528df6fc4fc9d3d7eaf5", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kFxaaVulkanFragmentWgsl", "fxaa.vulkan.frag.glsl", "590117f758c2224108abe2f177d7acd19fbee0dd9747528df6fc4fc9d3d7eaf5", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kHdrDisplayVulkanFragmentSpirV", "hdr_display.vulkan.frag.glsl", "aa6b745e6b15e93befc802147837e235becaf739e5cb6ec34ef674d4eb4751ba", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kHdrDisplayVulkanFragmentWgsl", "hdr_display.vulkan.frag.glsl", "aa6b745e6b15e93befc802147837e235becaf739e5cb6ec34ef674d4eb4751ba", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kHeightFogVulkanFragmentSpirV", "height_fog.vulkan.frag.glsl", "e15f99f858107a25d0ab9a1686d32aa9f960d47bb3a9356a454cbb848a88a161", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kHeightFogVulkanFragmentWgsl", "height_fog.vulkan.frag.glsl", "e15f99f858107a25d0ab9a1686d32aa9f960d47bb3a9356a454cbb848a88a161", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kLensFlareVulkanFragmentSpirV", "lens_flare.vulkan.frag.glsl", "beb9462227f8eb7fbfa0ab74248575a6f472a60e630d33495296f48934040057", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kLensFlareVulkanFragmentWgsl", "lens_flare.vulkan.frag.glsl", "beb9462227f8eb7fbfa0ab74248575a6f472a60e630d33495296f48934040057", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kLightShaftVulkanFragmentSpirV", "light_shaft.vulkan.frag.glsl", "ba1048fde7f7acf50df753933bca2c86a7e22b938ae7e998f632326b6f511d0d", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kLightShaftVulkanFragmentWgsl", "light_shaft.vulkan.frag.glsl", "ba1048fde7f7acf50df753933bca2c86a7e22b938ae7e998f632326b6f511d0d", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kMotionBlurVulkanFragmentSpirV", "motion_blur.vulkan.frag.glsl", "1a7d40091ea339f82f81a3de563fa8636773a0878e6b7a3012c9054b2f8ebc40", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kMotionBlurVulkanFragmentWgsl", "motion_blur.vulkan.frag.glsl", "1a7d40091ea339f82f81a3de563fa8636773a0878e6b7a3012c9054b2f8ebc40", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kSpatialUpscaleVulkanFragmentSpirV", "spatial_upscale.vulkan.frag.glsl", "705634f28a74334ec9928097fd8b247194bc680966c2e25404ae8d0d65b5895e", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kSpatialUpscaleVulkanFragmentWgsl", "spatial_upscale.vulkan.frag.glsl", "705634f28a74334ec9928097fd8b247194bc680966c2e25404ae8d0d65b5895e", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kAerialPerspectiveVulkanFragmentSpirV", "aerial_perspective.vulkan.frag.glsl", "5c45775d44ff1b1f8c3185db8e82bb25cd234c38bfc8a96c70ab1cc7fde6571f", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kAerialPerspectiveVulkanFragmentWgsl", "aerial_perspective.vulkan.frag.glsl", "5c45775d44ff1b1f8c3185db8e82bb25cd234c38bfc8a96c70ab1cc7fde6571f", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kSsaoComposeVulkanFragmentSpirV", "ssao_compose.vulkan.frag.glsl", "7cc060eb485c29bde1f6e9ca6ef3b04d62e84615a65884879cc6fadbeb474aa6", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kSsaoComposeVulkanFragmentWgsl", "ssao_compose.vulkan.frag.glsl", "7cc060eb485c29bde1f6e9ca6ef3b04d62e84615a65884879cc6fadbeb474aa6", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kSsaoOcclusionVulkanFragmentSpirV", "ssao_occlusion.vulkan.frag.glsl", "27bd8083e787bb6fd09d436a6d5d676f7bdfcceda0c13986eb91ea8ae8b81d7a", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kSsaoOcclusionVulkanFragmentWgsl", "ssao_occlusion.vulkan.frag.glsl", "27bd8083e787bb6fd09d436a6d5d676f7bdfcceda0c13986eb91ea8ae8b81d7a", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kSsrVulkanFragmentSpirV", "ssr.vulkan.frag.glsl", "1fb0fb8d6cb20e26ac79388a76dccd01c361e49796b978a4874d37bf3af01dfa", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kSsrVulkanFragmentWgsl", "ssr.vulkan.frag.glsl", "1fb0fb8d6cb20e26ac79388a76dccd01c361e49796b978a4874d37bf3af01dfa", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kTonemapVulkanFragmentSpirV", "tonemap.vulkan.frag.glsl", "c2e7dfb599f0c0368d6e380394c9c551c7b81e9f84a27c6c65a498b931337028", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kTonemapVulkanFragmentWgsl", "tonemap.vulkan.frag.glsl", "c2e7dfb599f0c0368d6e380394c9c551c7b81e9f84a27c6c65a498b931337028", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kWeightedTransparencyResolveVulkanFragmentSpirV", "weighted_transparency_resolve.vulkan.frag.glsl", "b4bf191f8928db43d5ef4b2e491029a8774d1375977fc35003ef940c89048257", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kWeightedTransparencyResolveVulkanFragmentWgsl", "weighted_transparency_resolve.vulkan.frag.glsl", "b4bf191f8928db43d5ef4b2e491029a8774d1375977fc35003ef940c89048257", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::PostProcessGenerated

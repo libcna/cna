@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "gpu_instance_culler";
-inline constexpr std::string_view kManifestSha256 = "12b8d939e20f06566928223d212ca7e3124d713bccbf492af37fc0c977056200";
+inline constexpr std::string_view kManifestSha256 = "d8466d517bb4a22296efed2482d357a44b2bc48bbe3a48866ea4584d73cf56db";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kCullEsComputeSource =
     R"CNA_SHADER(#version 310 es
@@ -217,10 +221,113 @@ inline constexpr std::uint32_t kCullVulkanComputeSpirV[] = {
 };
 inline constexpr std::size_t kCullVulkanComputeSpirVByteSize = sizeof(kCullVulkanComputeSpirV);
 
-inline constexpr std::array<PayloadProvenance, 3> kPayloads = {{
+inline constexpr std::string_view kCullVulkanComputeWgsl =
+    R"CNA_SHADER(// cull.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct CnaCommand {
+    cnaCommand: array<u32>,
+}
+
+struct CnaInstance {
+    world: mat4x4<f32>,
+    centre: vec4<f32>,
+    extent: vec4<f32>,
+}
+
+struct CnaInstances {
+    cnaInstances: array<CnaInstance>,
+}
+
+struct CnaPlanes {
+    cnaPlanes: array<vec4<f32>>,
+}
+
+struct CnaVisible {
+    cnaVisible: array<mat4x4<f32>>,
+}
+
+struct CnaCommand_1 {
+    cnaCommand: array<atomic<u32>>,
+}
+
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(0) @binding(3) 
+var<storage, read_write> unnamed: CnaCommand_1;
+@group(0) @binding(0) 
+var<storage> unnamed_1: CnaInstances;
+@group(0) @binding(2) 
+var<storage> unnamed_2: CnaPlanes;
+@group(0) @binding(1) 
+var<storage, read_write> unnamed_3: CnaVisible;
+
+fn main_1() {
+    var index: u32;
+    var centre: vec3<f32>;
+    var extent: vec3<f32>;
+    var i: i32;
+    var plane: vec4<f32>;
+    var radius: f32;
+    var slot: u32;
+
+    let _e24 = gl_GlobalInvocationID_1[0u];
+    index = _e24;
+    let _e25 = index;
+    let _e28 = atomicLoad((&unnamed.cnaCommand[5i]));
+    if (_e25 >= _e28) {
+        return;
+    }
+    let _e30 = index;
+    let _e34 = unnamed_1.cnaInstances[_e30].centre;
+    centre = _e34.xyz;
+    let _e36 = index;
+    let _e40 = unnamed_1.cnaInstances[_e36].extent;
+    extent = _e40.xyz;
+    i = 0i;
+    loop {
+        let _e42 = i;
+        if (_e42 < 6i) {
+            let _e44 = i;
+            let _e47 = unnamed_2.cnaPlanes[_e44];
+            plane = _e47;
+            let _e48 = extent;
+            let _e49 = plane;
+            radius = dot(_e48, abs(_e49.xyz));
+            let _e53 = plane;
+            let _e55 = centre;
+            let _e58 = plane[3u];
+            let _e60 = radius;
+            if (((dot(_e53.xyz, _e55) + _e58) - _e60) > 0f) {
+                return;
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e63 = i;
+            i = (_e63 + 1i);
+        }
+    }
+    let _e67 = atomicAdd((&unnamed.cnaCommand[1i]), 1u);
+    slot = _e67;
+    let _e68 = slot;
+    let _e69 = index;
+    let _e73 = unnamed_1.cnaInstances[_e69].world;
+    unnamed_3.cnaVisible[_e68] = _e73;
+    return;
+}
+
+@compute @workgroup_size(64, 1, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
     {"kCullEsComputeSource", "cull.es.comp.glsl", "27eb923be7ccbc1539da7743028c3417cc881c4c901eb0f83dc99de96e614bef", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kCullDesktopComputeSource", "cull.desktop.comp.glsl", "ffd4179d0336610db639eadc5bb70aa4ffc7d550a060ffd8e3f54e2ca9ab251c", "glsl", "glsl", "compute", "text", "main"},
     {"kCullVulkanComputeSpirV", "cull.vulkan.comp.glsl", "f914253a3cd47dd2b0ba0ac9059ef0618065c7af55148d8e14ed45ef6a5706e5", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kCullVulkanComputeWgsl", "cull.vulkan.comp.glsl", "f914253a3cd47dd2b0ba0ac9059ef0618065c7af55148d8e14ed45ef6a5706e5", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::GpuInstanceCullerGenerated

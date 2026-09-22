@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "portable_tint";
-inline constexpr std::string_view kManifestSha256 = "29c9e7c02c70df5b7b681bfc4280c3b6080bdcaac929805525ded4dde395c6b6";
+inline constexpr std::string_view kManifestSha256 = "1df44fbaf2027bd653377c1856da152af8a8326b57b298649ff060330c2862f2";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -30,6 +30,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kEasyGlVertexSource =
     R"CNA_SHADER(#version 300 es
@@ -113,6 +117,68 @@ inline constexpr std::uint32_t kVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kVulkanVertexSpirVByteSize = sizeof(kVulkanVertexSpirV);
 
+inline constexpr std::string_view kVulkanVertexWgsl =
+    R"CNA_SHADER(// vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    vpSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uColor: vec4<f32>,
+    uFloat0_: f32,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: vec2<f32>,
+    @location(1) member_1: vec4<f32>,
+}
+
+var<private> aPos_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> vUV: vec2<f32>;
+var<private> aUV_1: vec2<f32>;
+var<private> vColor: vec4<f32>;
+var<private> aColor_1: vec4<f32>;
+
+fn main_1() {
+    var ndc: vec2<f32>;
+
+    let _e15 = aPos_1;
+    let _e17 = pc.vpSize;
+    ndc = (((_e15 / _e17) * 2f) - vec2<f32>(1f, 1f));
+    let _e22 = ndc[0u];
+    let _e24 = ndc[1u];
+    unnamed.gl_Position = vec4<f32>(_e22, -(_e24), 0f, 1f);
+    let _e28 = aUV_1;
+    vUV = _e28;
+    let _e29 = aColor_1;
+    vColor = _e29;
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPos: vec2<f32>, @location(1) aUV: vec2<f32>, @location(2) aColor: vec4<f32>) -> VertexOutput {
+    aPos_1 = aPos;
+    aUV_1 = aUV;
+    aColor_1 = aColor;
+    main_1();
+    let _e11 = unnamed.gl_Position.y;
+    unnamed.gl_Position.y = -(_e11);
+    let _e13 = unnamed.gl_Position;
+    let _e14 = vUV;
+    let _e15 = vColor;
+    return VertexOutput(_e13, _e14, _e15);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000022u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -145,11 +211,51 @@ inline constexpr std::uint32_t kVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kVulkanFragmentSpirVByteSize = sizeof(kVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
+inline constexpr std::string_view kVulkanFragmentWgsl =
+    R"CNA_SHADER(// vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    vpSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uColor: vec4<f32>,
+    uFloat0_: f32,
+}
+
+var<private> fragColor: vec4<f32>;
+@group(0) @binding(0) 
+var uTex_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var uTex_cnaSampler: sampler;
+var<private> vUV_1: vec2<f32>;
+var<private> vColor_1: vec4<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+
+fn main_1() {
+    let _e7 = vUV_1;
+    let _e8 = textureSample(uTex_cnaTexture, uTex_cnaSampler, _e7);
+    let _e9 = vColor_1;
+    let _e12 = pc.uColor;
+    fragColor = ((_e8 * _e9) * _e12);
+    return;
+}
+
+@fragment 
+fn main(@location(0) vUV: vec2<f32>, @location(1) vColor: vec4<f32>) -> @location(0) vec4<f32> {
+    vUV_1 = vUV;
+    vColor_1 = vColor;
+    main_1();
+    let _e5 = fragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 6> kPayloads = {{
     {"kEasyGlVertexSource", "easygl.vert.glsl", "984dfc26c35cda88b9712650f46331069a65ed169681ce85c328a0aec89f7676", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kEasyGlFragmentSource", "easygl.frag.glsl", "b07750c45141d19e040be3e646d19145228d621b01e111805fa4a06b257dce4d", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kVulkanVertexSpirV", "vulkan.vert.glsl", "39751115d431be524f1c638457282779a077c1a07bda0ec89571b896b9714a2f", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kVulkanVertexWgsl", "vulkan.vert.glsl", "39751115d431be524f1c638457282779a077c1a07bda0ec89571b896b9714a2f", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kVulkanFragmentSpirV", "vulkan.frag.glsl", "3a1c8f13648fd1eea6cb4fa17544939567b22845ad1cb201dd733cb0c2377c29", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kVulkanFragmentWgsl", "vulkan.frag.glsl", "3a1c8f13648fd1eea6cb4fa17544939567b22845ad1cb201dd733cb0c2377c29", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Examples::PortableTint

@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "clustered_light_compute";
-inline constexpr std::string_view kManifestSha256 = "1dbe20b88ed5e3bde7b2630e22c64fec0fab9fb0cbcbab6e44f40233621f8dde";
+inline constexpr std::string_view kManifestSha256 = "6861952d8010b118d540b86cf30fb448473581e64a790e35117dd1cb1dfc4434";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kAssignEsComputeSource =
     R"CNA_SHADER(#version 310 es
@@ -482,10 +486,360 @@ inline constexpr std::uint32_t kAssignVulkanComputeSpirV[] = {
 };
 inline constexpr std::size_t kAssignVulkanComputeSpirVByteSize = sizeof(kAssignVulkanComputeSpirV);
 
-inline constexpr std::array<PayloadProvenance, 3> kPayloads = {{
+inline constexpr std::string_view kAssignVulkanComputeWgsl =
+    R"CNA_SHADER(// assign.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct ClusteredLightParameters {
+    uGrid: vec4<i32>,
+    uOutput: vec4<i32>,
+    uDepth: vec4<f32>,
+}
+
+struct CnaMatrix {
+    uInverseProjection: array<f32>,
+}
+
+struct CnaLights {
+    uLights: array<vec4<f32>>,
+}
+
+struct CnaIndices {
+    uIndices: array<i32>,
+}
+
+struct CnaCounts {
+    uCounts: array<i32>,
+}
+
+@group(0) @binding(4) 
+var<uniform> unnamed: ClusteredLightParameters;
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(0) @binding(1) 
+var<storage> unnamed_1: CnaMatrix;
+@group(0) @binding(0) 
+var<storage> unnamed_2: CnaLights;
+@group(0) @binding(3) 
+var<storage, read_write> unnamed_3: CnaIndices;
+@group(0) @binding(2) 
+var<storage, read_write> unnamed_4: CnaCounts;
+
+fn cnaAtDistance_u0028_vf3_u003b_vf3_u003b_f1_u003b(atNear: ptr<function, vec3<f32>>, atFar: ptr<function, vec3<f32>>, distance: ptr<function, f32>) -> vec3<f32> {
+    var span: f32;
+    var t: f32;
+
+    let _e42 = (*atNear)[2u];
+    let _e44 = (*atFar)[2u];
+    span = (_e42 - _e44);
+    let _e46 = span;
+    if (abs(_e46) <= 0.000000001f) {
+        let _e49 = (*atNear);
+        return _e49;
+    }
+    let _e51 = (*atNear)[2u];
+    let _e52 = (*distance);
+    let _e54 = span;
+    t = ((_e51 + _e52) / _e54);
+    let _e57 = (*atNear)[0u];
+    let _e59 = (*atFar)[0u];
+    let _e61 = (*atNear)[0u];
+    let _e63 = t;
+    let _e67 = (*atNear)[1u];
+    let _e69 = (*atFar)[1u];
+    let _e71 = (*atNear)[1u];
+    let _e73 = t;
+    let _e76 = (*distance);
+    return vec3<f32>((_e57 + ((_e59 - _e61) * _e63)), (_e67 + ((_e69 - _e71) * _e73)), -(_e76));
+}
+
+fn cnaUnproject_u0028_mf44_u003b_f1_u003b_f1_u003b_f1_u003b(inverseProjection: ptr<function, mat4x4<f32>>, x: ptr<function, f32>, y: ptr<function, f32>, z: ptr<function, f32>) -> vec3<f32> {
+    var p: vec4<f32>;
+
+    let _e41 = (*inverseProjection);
+    let _e42 = (*x);
+    let _e43 = (*y);
+    let _e44 = (*z);
+    p = (_e41 * vec4<f32>(_e42, _e43, _e44, 1f));
+    let _e48 = p[3u];
+    if (abs(_e48) <= 0.000000001f) {
+        let _e51 = p;
+        return _e51.xyz;
+    }
+    let _e53 = p;
+    let _e56 = p[3u];
+    return (_e53.xyz / vec3(_e56));
+}
+
+fn cnaSliceDistance_u0028_i1_u003b(slice: ptr<function, i32>) -> f32 {
+    let _e37 = (*slice);
+    if (_e37 == 0i) {
+        let _e41 = unnamed.uDepth[0u];
+        return _e41;
+    }
+    let _e42 = (*slice);
+    let _e45 = unnamed.uGrid[2u];
+    if (_e42 == _e45) {
+        let _e49 = unnamed.uDepth[1u];
+        return _e49;
+    }
+    let _e52 = unnamed.uDepth[0u];
+    let _e55 = unnamed.uDepth[1u];
+    let _e58 = unnamed.uDepth[0u];
+    let _e60 = (*slice);
+    let _e64 = unnamed.uGrid[2u];
+    return (_e52 * pow((_e55 / _e58), (f32(_e60) / f32(_e64))));
+}
+
+fn main_1() {
+    var cluster: i32;
+    var x_1: i32;
+    var y_1: i32;
+    var slice_1: i32;
+    var inverseProjection_1: mat4x4<f32>;
+    var u0_: f32;
+    var u1_: f32;
+    var v0_: f32;
+    var v1_: f32;
+    var d0_: f32;
+    var param: i32;
+    var d1_: f32;
+    var param_1: i32;
+    var minimum: vec3<f32>;
+    var maximum: vec3<f32>;
+    var i: i32;
+    var u: f32;
+    var j: i32;
+    var v: f32;
+    var atNear_1: vec3<f32>;
+    var param_2: mat4x4<f32>;
+    var param_3: f32;
+    var param_4: f32;
+    var param_5: f32;
+    var atFar_1: vec3<f32>;
+    var param_6: mat4x4<f32>;
+    var param_7: f32;
+    var param_8: f32;
+    var param_9: f32;
+    var k: i32;
+    var p_1: vec3<f32>;
+    var param_10: vec3<f32>;
+    var param_11: vec3<f32>;
+    var param_12: f32;
+    var found: i32;
+    var light: i32;
+    var sphere: vec4<f32>;
+    var nearest: vec3<f32>;
+    var delta: vec3<f32>;
+
+    let _e76 = gl_GlobalInvocationID_1[0u];
+    cluster = bitcast<i32>(_e76);
+    let _e78 = cluster;
+    let _e81 = unnamed.uOutput[1u];
+    if (_e78 >= _e81) {
+        return;
+    }
+    let _e83 = cluster;
+    let _e86 = unnamed.uGrid[0u];
+    x_1 = (_e83 - (i32(floor((f32(_e83) / f32(_e86)))) * _e86));
+    let _e94 = cluster;
+    let _e97 = unnamed.uGrid[0u];
+    let _e98 = (_e94 / _e97);
+    let _e101 = unnamed.uGrid[1u];
+    y_1 = (_e98 - (i32(floor((f32(_e98) / f32(_e101)))) * _e101));
+    let _e109 = cluster;
+    let _e112 = unnamed.uGrid[0u];
+    let _e115 = unnamed.uGrid[1u];
+    slice_1 = (_e109 / (_e112 * _e115));
+    let _e120 = unnamed_1.uInverseProjection[0i];
+    let _e123 = unnamed_1.uInverseProjection[1i];
+    let _e126 = unnamed_1.uInverseProjection[2i];
+    let _e129 = unnamed_1.uInverseProjection[3i];
+    let _e132 = unnamed_1.uInverseProjection[4i];
+    let _e135 = unnamed_1.uInverseProjection[5i];
+    let _e138 = unnamed_1.uInverseProjection[6i];
+    let _e141 = unnamed_1.uInverseProjection[7i];
+    let _e144 = unnamed_1.uInverseProjection[8i];
+    let _e147 = unnamed_1.uInverseProjection[9i];
+    let _e150 = unnamed_1.uInverseProjection[10i];
+    let _e153 = unnamed_1.uInverseProjection[11i];
+    let _e156 = unnamed_1.uInverseProjection[12i];
+    let _e159 = unnamed_1.uInverseProjection[13i];
+    let _e162 = unnamed_1.uInverseProjection[14i];
+    let _e165 = unnamed_1.uInverseProjection[15i];
+    inverseProjection_1 = mat4x4<f32>(vec4<f32>(_e120, _e123, _e126, _e129), vec4<f32>(_e132, _e135, _e138, _e141), vec4<f32>(_e144, _e147, _e150, _e153), vec4<f32>(_e156, _e159, _e162, _e165));
+    let _e171 = x_1;
+    let _e176 = unnamed.uGrid[0u];
+    u0_ = (((2f * f32(_e171)) / f32(_e176)) - 1f);
+    let _e180 = x_1;
+    let _e186 = unnamed.uGrid[0u];
+    u1_ = (((2f * f32((_e180 + 1i))) / f32(_e186)) - 1f);
+    let _e190 = y_1;
+    let _e195 = unnamed.uGrid[1u];
+    v0_ = (((2f * f32(_e190)) / f32(_e195)) - 1f);
+    let _e199 = y_1;
+    let _e205 = unnamed.uGrid[1u];
+    v1_ = (((2f * f32((_e199 + 1i))) / f32(_e205)) - 1f);
+    let _e209 = slice_1;
+    param = _e209;
+    let _e210 = cnaSliceDistance_u0028_i1_u003b((&param));
+    d0_ = _e210;
+    let _e211 = slice_1;
+    param_1 = (_e211 + 1i);
+    let _e213 = cnaSliceDistance_u0028_i1_u003b((&param_1));
+    d1_ = _e213;
+    minimum = vec3<f32>(340282350000000000000000000000000000000f, 340282350000000000000000000000000000000f, 340282350000000000000000000000000000000f);
+    maximum = vec3<f32>(-340282350000000000000000000000000000000f, -340282350000000000000000000000000000000f, -340282350000000000000000000000000000000f);
+    i = 0i;
+    loop {
+        let _e214 = i;
+        if (_e214 < 2i) {
+            let _e216 = i;
+            let _e218 = u0_;
+            let _e219 = u1_;
+            u = select(_e219, _e218, (_e216 == 0i));
+            j = 0i;
+            loop {
+                let _e221 = j;
+                if (_e221 < 2i) {
+                    let _e223 = j;
+                    let _e225 = v0_;
+                    let _e226 = v1_;
+                    v = select(_e226, _e225, (_e223 == 0i));
+                    let _e228 = inverseProjection_1;
+                    param_2 = _e228;
+                    let _e229 = u;
+                    param_3 = _e229;
+                    let _e230 = v;
+                    param_4 = _e230;
+                    param_5 = 0f;
+                    let _e231 = cnaUnproject_u0028_mf44_u003b_f1_u003b_f1_u003b_f1_u003b((&param_2), (&param_3), (&param_4), (&param_5));
+                    atNear_1 = _e231;
+                    let _e232 = inverseProjection_1;
+                    param_6 = _e232;
+                    let _e233 = u;
+                    param_7 = _e233;
+                    let _e234 = v;
+                    param_8 = _e234;
+                    param_9 = 1f;
+                    let _e235 = cnaUnproject_u0028_mf44_u003b_f1_u003b_f1_u003b_f1_u003b((&param_6), (&param_7), (&param_8), (&param_9));
+                    atFar_1 = _e235;
+                    k = 0i;
+                    loop {
+                        let _e236 = k;
+                        if (_e236 < 2i) {
+                            let _e238 = k;
+                            let _e240 = d0_;
+                            let _e241 = d1_;
+                            let _e243 = atNear_1;
+                            param_10 = _e243;
+                            let _e244 = atFar_1;
+                            param_11 = _e244;
+                            param_12 = select(_e241, _e240, (_e238 == 0i));
+                            let _e245 = cnaAtDistance_u0028_vf3_u003b_vf3_u003b_f1_u003b((&param_10), (&param_11), (&param_12));
+                            p_1 = _e245;
+                            let _e246 = minimum;
+                            let _e247 = p_1;
+                            minimum = min(_e246, _e247);
+                            let _e249 = maximum;
+                            let _e250 = p_1;
+                            maximum = max(_e249, _e250);
+                            continue;
+                        } else {
+                            break;
+                        }
+                        continuing {
+                            let _e252 = k;
+                            k = (_e252 + 1i);
+                        }
+                    }
+                    continue;
+                } else {
+                    break;
+                }
+                continuing {
+                    let _e254 = j;
+                    j = (_e254 + 1i);
+                }
+            }
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e256 = i;
+            i = (_e256 + 1i);
+        }
+    }
+    found = 0i;
+    light = 0i;
+    loop {
+        let _e258 = light;
+        let _e261 = unnamed.uGrid[3u];
+        if (_e258 < _e261) {
+            let _e263 = light;
+            let _e266 = unnamed_2.uLights[_e263];
+            sphere = _e266;
+            let _e268 = sphere[3u];
+            if (_e268 <= 0f) {
+                continue;
+            }
+            let _e270 = sphere;
+            let _e272 = minimum;
+            let _e273 = maximum;
+            nearest = clamp(_e270.xyz, _e272, _e273);
+            let _e275 = sphere;
+            let _e277 = nearest;
+            delta = (_e275.xyz - _e277);
+            let _e279 = delta;
+            let _e280 = delta;
+            let _e283 = sphere[3u];
+            let _e285 = sphere[3u];
+            if (dot(_e279, _e280) > (_e283 * _e285)) {
+                continue;
+            }
+            let _e288 = found;
+            let _e291 = unnamed.uOutput[0u];
+            if (_e288 < _e291) {
+                let _e293 = cluster;
+                let _e296 = unnamed.uOutput[0u];
+                let _e298 = found;
+                let _e300 = light;
+                unnamed_3.uIndices[((_e293 * _e296) + _e298)] = _e300;
+            }
+            let _e303 = found;
+            found = (_e303 + 1i);
+            continue;
+        } else {
+            break;
+        }
+        continuing {
+            let _e305 = light;
+            light = (_e305 + 1i);
+        }
+    }
+    let _e307 = cluster;
+    let _e308 = found;
+    let _e311 = unnamed.uOutput[0u];
+    unnamed_4.uCounts[_e307] = min(_e308, _e311);
+    let _e315 = found;
+    let _e318 = unnamed.uOutput[0u];
+    if (_e315 > _e318) {
+        let _e322 = unnamed.uOutput[1u];
+        unnamed_4.uCounts[_e322] = 1i;
+    }
+    return;
+}
+
+@compute @workgroup_size(64, 1, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
     {"kAssignEsComputeSource", "assign.es.comp.glsl", "f1f8298b7f1beaaa75d600e6949c8b6ec44e47ececd263d912d5db12e4c932f9", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kAssignDesktopComputeSource", "assign.desktop.comp.glsl", "c9dd515eb0556afe2675fea8e1484a16c593fd0779637f1008db7a1c870343f9", "glsl", "glsl", "compute", "text", "main"},
     {"kAssignVulkanComputeSpirV", "assign.vulkan.comp.glsl", "b17aded514c16202149b935850a94e94bf69d5f394b7d41ccba9176851943147", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kAssignVulkanComputeWgsl", "assign.vulkan.comp.glsl", "b17aded514c16202149b935850a94e94bf69d5f394b7d41ccba9176851943147", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::ClusteredLightComputeGenerated

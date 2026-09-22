@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "transparency_test";
-inline constexpr std::string_view kManifestSha256 = "6e9746a29438fadf3bfd0a4ee315fc17ac03bf4c3191a3b50f61ce4d29c5345a";
+inline constexpr std::string_view kManifestSha256 = "1a895889f075d497e61d9f2e87842d02cef30ecefcaf986635698f6eb782d245";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kBasicEsVertexSource =
     R"CNA_SHADER(#version 300 es
@@ -208,6 +212,37 @@ inline constexpr std::uint32_t kBasicVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kBasicVulkanVertexSpirVByteSize = sizeof(kBasicVulkanVertexSpirV);
 
+inline constexpr std::string_view kBasicVulkanVertexWgsl =
+    R"CNA_SHADER(// basic.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> aPos_1: vec3<f32>;
+
+fn main_1() {
+    let _e7 = aPos_1;
+    let _e8 = _e7.xy;
+    let _e10 = aPos_1[2u];
+    unnamed.gl_Position = vec4<f32>(_e8.x, _e8.y, ((_e10 * 0.5f) + 0.5f), 1f);
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPos: vec3<f32>) -> @builtin(position) vec4<f32> {
+    aPos_1 = aPos;
+    main_1();
+    let _e5 = unnamed.gl_Position.y;
+    unnamed.gl_Position.y = -(_e5);
+    let _e7 = unnamed.gl_Position;
+    return _e7;
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kDirectVulkanVertexSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x0000002au, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -239,6 +274,46 @@ inline constexpr std::uint32_t kDirectVulkanVertexSpirV[] = {
     0x00000029u, 0x00000028u, 0x0000001au, 0x0003003eu, 0x00000024u, 0x00000029u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kDirectVulkanVertexSpirVByteSize = sizeof(kDirectVulkanVertexSpirV);
+
+inline constexpr std::string_view kDirectVulkanVertexWgsl =
+    R"CNA_SHADER(// direct.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: f32,
+}
+
+var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> aPos_1: vec3<f32>;
+var<private> PositionX: f32;
+
+fn main_1() {
+    let _e9 = aPos_1;
+    let _e10 = _e9.xy;
+    let _e12 = aPos_1[2u];
+    unnamed.gl_Position = vec4<f32>(_e10.x, _e10.y, ((_e12 * 0.5f) + 0.5f), 1f);
+    let _e20 = aPos_1[0u];
+    PositionX = ((_e20 * 0.5f) + 0.5f);
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPos: vec3<f32>) -> VertexOutput {
+    aPos_1 = aPos;
+    main_1();
+    let _e6 = unnamed.gl_Position.y;
+    unnamed.gl_Position.y = -(_e6);
+    let _e8 = unnamed.gl_Position;
+    let _e9 = PositionX;
+    return VertexOutput(_e8, _e9);
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kEmitterVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000043u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -285,6 +360,58 @@ inline constexpr std::uint32_t kEmitterVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kEmitterVulkanFragmentSpirVByteSize = sizeof(kEmitterVulkanFragmentSpirV);
 
+inline constexpr std::string_view kEmitterVulkanFragmentWgsl =
+    R"CNA_SHADER(// emitter.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uEffectParams: vec4<f32>,
+    uScalar: f32,
+}
+
+struct FragmentOutput {
+    @location(0) member: vec4<f32>,
+    @location(1) member_1: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> cnaOitAccumulation: vec4<f32>;
+var<private> cnaOitRevealage: vec4<f32>;
+
+fn main_1() {
+    var alpha: f32;
+    var z: f32;
+    var weight: f32;
+
+    let _e19 = pc.uEffectParams[3u];
+    alpha = _e19;
+    let _e21 = pc.uScalar;
+    z = clamp(_e21, 0f, 1f);
+    let _e23 = alpha;
+    let _e24 = z;
+    weight = (_e23 * clamp((0.03f / (0.00001f + pow(_e24, 4f))), 0.01f, 3000f));
+    let _e31 = pc.uEffectParams;
+    let _e33 = alpha;
+    let _e35 = weight;
+    let _e36 = ((_e31.xyz * _e33) * _e35);
+    let _e37 = alpha;
+    let _e38 = weight;
+    cnaOitAccumulation = vec4<f32>(_e36.x, _e36.y, _e36.z, (_e37 * _e38));
+    let _e44 = alpha;
+    cnaOitRevealage = vec4<f32>(log(max((1f - _e44), 0.0001f)), 0f, 0f, 0f);
+    return;
+}
+
+@fragment 
+fn main() -> FragmentOutput {
+    main_1();
+    let _e2 = cnaOitAccumulation;
+    let _e3 = cnaOitRevealage;
+    return FragmentOutput(_e2, _e3);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kFlatVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000014u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -305,6 +432,32 @@ inline constexpr std::uint32_t kFlatVulkanFragmentSpirV[] = {
     0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kFlatVulkanFragmentSpirVByteSize = sizeof(kFlatVulkanFragmentSpirV);
+
+inline constexpr std::string_view kFlatVulkanFragmentWgsl =
+    R"CNA_SHADER(// flat.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uEffectParams: vec4<f32>,
+}
+
+var<private> FragColor: vec4<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+
+fn main_1() {
+    let _e4 = pc.uEffectParams;
+    FragColor = _e4;
+    return;
+}
+
+@fragment 
+fn main() -> @location(0) vec4<f32> {
+    main_1();
+    let _e1 = FragColor;
+    return _e1;
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kWeightProbeVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000047u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -352,7 +505,52 @@ inline constexpr std::uint32_t kWeightProbeVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kWeightProbeVulkanFragmentSpirVByteSize = sizeof(kWeightProbeVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 15> kPayloads = {{
+inline constexpr std::string_view kWeightProbeVulkanFragmentWgsl =
+    R"CNA_SHADER(// weight_probe.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uEffectParams: vec4<f32>,
+}
+
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> PositionX_1: f32;
+var<private> FragColor: vec4<f32>;
+
+fn main_1() {
+    var depth: f32;
+    var z: f32;
+    var weight: f32;
+    var encoded: f32;
+
+    let _e25 = pc.uEffectParams[1u];
+    let _e28 = pc.uEffectParams[2u];
+    let _e29 = PositionX_1;
+    depth = mix(_e25, _e28, _e29);
+    let _e31 = depth;
+    let _e34 = pc.uEffectParams[3u];
+    z = clamp((_e31 / max(_e34, 0.0001f)), 0f, 1f);
+    let _e40 = pc.uEffectParams[0u];
+    let _e41 = z;
+    weight = (_e40 * clamp((0.03f / (0.00001f + pow(_e41, 4f))), 0.01f, 3000f));
+    let _e47 = weight;
+    encoded = (((log(_e47) / 2.302585f) + 2f) / 5.5f);
+    let _e52 = encoded;
+    FragColor = vec4<f32>(clamp(_e52, 0f, 1f), 0f, 0f, 1f);
+    return;
+}
+
+@fragment 
+fn main(@location(0) PositionX: f32) -> @location(0) vec4<f32> {
+    PositionX_1 = PositionX;
+    main_1();
+    let _e3 = FragColor;
+    return _e3;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 20> kPayloads = {{
     {"kBasicEsVertexSource", "basic.es.vert.glsl", "274ad658c2f3bc56f3586c802ae30779f9df41363afe823405f05586e2fc5d01", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kDirectEsVertexSource", "direct.es.vert.glsl", "122acc5d62965af6018af7ae1178348da89c8602815ec516e02f0293d0a0d23f", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kEmitterEsFragmentSource", "emitter.es.frag.glsl", "7d70cebf103026f9e4930dd87f8b44e0f86662a4e38cde1250f72d4ffc407b90", "glsl-es", "glsl-es", "fragment", "text", "main"},
@@ -364,10 +562,15 @@ inline constexpr std::array<PayloadProvenance, 15> kPayloads = {{
     {"kFlatDesktopFragmentSource", "flat.desktop.frag.glsl", "f0e3c81eda3d000bcf5d63230a1e4de5530eca958d59360d9e5f0136608d7efa", "glsl", "glsl", "fragment", "text", "main"},
     {"kWeightProbeDesktopFragmentSource", "weight_probe.desktop.frag.glsl", "26f21c36cc8d7b80138c3ed802d670f3c460a10e03bdfd7cbf855b5d3f2725ca", "glsl", "glsl", "fragment", "text", "main"},
     {"kBasicVulkanVertexSpirV", "basic.vulkan.vert.glsl", "776d5215c78990640065ef09013a993b20e4805f3071a57e68dcf67d0120d679", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kBasicVulkanVertexWgsl", "basic.vulkan.vert.glsl", "776d5215c78990640065ef09013a993b20e4805f3071a57e68dcf67d0120d679", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kDirectVulkanVertexSpirV", "direct.vulkan.vert.glsl", "f35a78121f7801b43e35571b17fba11d7cfe8f82eb3fb3c139c92cc12a45001a", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kDirectVulkanVertexWgsl", "direct.vulkan.vert.glsl", "f35a78121f7801b43e35571b17fba11d7cfe8f82eb3fb3c139c92cc12a45001a", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kEmitterVulkanFragmentSpirV", "emitter.vulkan.frag.glsl", "4f3a2984288cee6af3da9185499d9fd934830d6f0fdb81e2c24430ee818ab003", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kEmitterVulkanFragmentWgsl", "emitter.vulkan.frag.glsl", "4f3a2984288cee6af3da9185499d9fd934830d6f0fdb81e2c24430ee818ab003", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kFlatVulkanFragmentSpirV", "flat.vulkan.frag.glsl", "331c06008eeb349df23c17e43bad242bf7142a88d2c01f7c515afd4884b387e4", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kFlatVulkanFragmentWgsl", "flat.vulkan.frag.glsl", "331c06008eeb349df23c17e43bad242bf7142a88d2c01f7c515afd4884b387e4", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kWeightProbeVulkanFragmentSpirV", "weight_probe.vulkan.frag.glsl", "5e20a04820826693398482a6c714f7a7d4c2d223c35eac0fbe51d932aa5355b8", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kWeightProbeVulkanFragmentWgsl", "weight_probe.vulkan.frag.glsl", "5e20a04820826693398482a6c714f7a7d4c2d223c35eac0fbe51d932aa5355b8", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Tests::TransparencyGenerated
