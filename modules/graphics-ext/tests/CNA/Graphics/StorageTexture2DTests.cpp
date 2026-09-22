@@ -659,6 +659,11 @@ TEST(StorageTexture2DTest, ComputeBindingValidatesSlotDeviceAccessAndRendererAcc
             4, 4, 1, SurfaceFormat::Color, StorageTexture2DUsage::StorageRead));
     EXPECT_THROW(shader.bindStorageTexture(0, foreign, GraphicsImageAccess::ReadOnly),
                  std::invalid_argument);
+
+    // The recording renderer's state retains the bound native texture, which holds that same
+    // state: break the cycle as the retention test below does, or LeakSanitizer reports it
+    // (plans/plan_vulkan_modern_graphics.md VMG-0018).
+    view->state->retainedComputeTexture.reset();
 }
 
 TEST(StorageTexture2DTest, ComputeBindingRetainsNativeWorkWithoutRetainingPublicResource)
