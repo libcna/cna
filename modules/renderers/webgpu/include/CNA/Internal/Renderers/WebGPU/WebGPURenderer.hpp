@@ -2674,6 +2674,12 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-142: the custom-WGSL ShaderEffect bound by the currently-open `SpriteBatch.Begin`
         /// (set via `WebGPUSpriteBatchRenderer::SetCustomEffect`), captured into each queued sprite.
         WebGPUEffectRenderer* activeSpriteCustomEffect_ = nullptr;
+        /// WMG-0011: the same effect as its public `Effect`, because a sprite's uniforms are the
+        /// ones `Effect::Apply()` writes and only the public object can be asked for them. EasyGL
+        /// and Vulkan call it when the batch flushes; this renderer captures a sprite's uniform
+        /// block when the sprite is queued, so it calls it there instead -- one step earlier, and
+        /// per sprite rather than per batch, which is the stricter of the two readings.
+        Microsoft::Xna::Framework::Graphics::Effect* activeSpriteCustomEffectObject_ = nullptr;
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         /**
          * @brief plans/plan_webgpu.md WEBGPU-170: one sprite vertex of a compiled-effect batch.

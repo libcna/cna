@@ -3326,6 +3326,7 @@ namespace CNA::Internal::Renderers::WebGPU
             owner_->activeSpriteCompiledEffect_ = nullptr;
 #endif
             owner_->activeSpriteCustomEffect_ = nullptr;
+            owner_->activeSpriteCustomEffectObject_ = nullptr;
             return;
         }
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
@@ -3339,6 +3340,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 owner_->FlushCompiledSpriteBatchEXT();
             owner_->activeSpriteCompiledEffect_ = effect;
             owner_->activeSpriteCustomEffect_ = nullptr;
+            owner_->activeSpriteCustomEffectObject_ = nullptr;
             return;
         }
         owner_->FlushCompiledSpriteBatchEXT();
@@ -3351,6 +3353,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 "custom-WGSL ShaderEffect and a compiled Effect-Framework effect are supported for "
                 "SpriteBatch.");
         owner_->activeSpriteCustomEffect_ = effectRenderer;
+        owner_->activeSpriteCustomEffectObject_ = effect;
     }
 
     void WebGPUSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
@@ -6941,6 +6944,15 @@ namespace CNA::Internal::Renderers::WebGPU
             return;
         }
 #endif
+
+        // WMG-0011: an `Effect` writes its own parameters into its renderer in `Apply()`, and
+        // nothing else does: `CRTEffect::OnApply` is where `uCrtParams` is set at all. EasyGL and
+        // Vulkan call it as the batch flushes; this renderer copies a sprite's uniforms when the
+        // sprite is queued, so calling it there is what makes the copy carry the effect's own
+        // parameters instead of the zeroes it was constructed with. Without it a packaged
+        // post-process effect ran with every parameter at zero, which for CRT and DepthEffect is
+        // an exact copy of the input -- a pass that reported success and did nothing.
+        if (activeSpriteCustomEffectObject_ != nullptr) activeSpriteCustomEffectObject_->Apply();
 
         SpriteCommand command{};
         // REMED-GFX-167: the resolved view plus its keep-alive, never `&samplable` -- a SpriteBatch
