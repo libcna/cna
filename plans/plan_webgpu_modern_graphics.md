@@ -36,6 +36,8 @@ barriers, descriptor sets, queues or native handles (ADR 0001, `MOD-2202`), so n
 | WMG-0014 | Shadow reception in the stock lit families | 🟩 |
 | WMG-0015 | Packages and test language lists that had not caught up with WGSL | 🟩 |
 | WMG-0016 | `SupportsTexture3DSamplingEXT` answered false about something the renderer does | 🟩 |
+| WMG-0017 | The GPU timer measured its own overhead instead of the work | 🟩 |
+| WMG-0018 | The renderer's own 198 tests, and which failures are this workstream's | 🟩 |
 
 ---
 
@@ -383,6 +385,48 @@ it can. The full-suite log named it on every `ColorGradePass` construction — *
 tail of an OOM-killed run rather than in a failing assertion.
 
 All ten `ColorGradePassTest` cases pass and the line is gone from the log.
+
+## WMG-0017 — the GPU timer measured its own overhead
+
+`GpuTimerTest.MoreWorkTakesMoreGpuTime` was the one failure left in the engine-layer suite, and it
+was right: four full-screen draws read **0.2365 ms** and forty read **0.2006 ms** — ten times the
+fill coming back as no longer at all.
+
+A timestamp is only legal at a pass boundary in core WebGPU, so `WriteTimestampEXT` wrote one at the
+beginning of an *empty compute pass* on each side of the range. Nothing orders an empty compute pass
+against a graphics submission it shares no resource with, so the pair measured a fixed overhead
+rather than the work between them. This is exactly what the ledger had already recorded as "not
+measured, so not claimed" — the measurement, once made, disagreed with the implementation.
+
+The fix is the shape the Vulkan renderer already uses (`pendingTimestamps_`, ordered into the
+command stream): the timestamps ride the **real passes**. While a timer is open, every render pass
+carries its writes — the first pass after `Begin` writes index 0 at its beginning, and every pass
+writes index 1 at its end, so the last pass before `End` is the one that survives. A timer opened
+around no drawing still gets a real, near-zero pair from one empty pass rather than reading whatever
+the query set last held. One timer at a time, because a `WGPURenderPassDescriptor` carries exactly
+one set of timestamp writes; a second concurrent `Begin` keeps the empty-pass behaviour.
+
+Measured after: **4 draws 0.0219 ms, 40 draws 0.1570 ms** — 7.2x for ten times the fill.
+
+The same commit repairs what `WMG-0014` broke in `ValidateAllShadersEXT`: it compiled the seven
+shadow-receiving families *without* the appended shadow block, so it validated a program this
+renderer never builds and failed on the very functions that block defines.
+
+## WMG-0018 — the renderer's own 198 tests, and which failures are this workstream's
+
+`ctest -R '^WebGPU'` is 198 tests (142 `WebGPU_` example programs, 47 renderer gtests, 9 of them the
+WGSL-reflection tests added here). Eleven fail, and **none of the eleven is this workstream's** —
+each was measured failing on the base commit `c576b5d25` itself:
+
+| what | how it was established |
+|---|---|
+| `WebGPU_PointSamplingContract`, `WebGPU_DescriptorCapacityContract` | `plans/plan_webgpu.md` names them repeatedly as "the two long-standing XNA-pixel-centre-convention failures, A/B-proven unrelated during Wave 1" |
+| `WebGPUCompiledEffectTest.SharedBackendConformanceContract`, `WebGPUCompiledEffectDrawTest.AddressWSelectsADifferentVolumeSliceForEachMode`, `WebGPUCompiledEffectWgslDrawTest.SharedBackendConformanceContract` | the three failures in this workstream's own **pre-work baseline** of `CnaWebGPURendererTests` (56 tests, 3 failures) |
+| `WebGPU_ContextRecovery`, `WebGPU_RealWindowResize`, `WebGPU_SpriteBatch_SortMode`, `WebGPU_Viewport_Cardinality`, `WebGPU_Scissor_Cardinality`, `WebGPU_TextureFilterMipContract` | **measured**: the base commit's `modules/` and `tools/` were checked out in place, `cmake-build-webgpu` rebuilt, and all six failed there too — 0 of 6 passed |
+
+Two failures *were* this workstream's, and both are fixed rather than explained: `WebGPU_ShaderValidation`
+(see `WMG-0017`) and the six profile rows of `WMG-0005`, which stopped dying early and then ran on
+to a Reach refusal until the profile was requested where it can still be heard.
 
 ---
 
