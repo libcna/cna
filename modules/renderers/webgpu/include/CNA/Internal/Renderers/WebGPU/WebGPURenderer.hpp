@@ -5140,6 +5140,28 @@ namespace CNA::Internal::Renderers::WebGPU
             std::int32_t baseVertex = 0;
             std::uint64_t arrayStride = 0;                     ///< the bound vertex's byte stride
             std::vector<CustomEffectVertexAttr> attributes;    ///< derived from the VertexDeclaration
+
+            /// plans/plan_webgpu_modern_graphics.md WMG-0021: one per-instance stream of an
+            /// instanced `ShaderEffect` draw -- its records, its stride and its attributes.
+            struct InstanceStream
+            {
+                std::vector<std::uint8_t> data;   ///< One record per instance, divisor expanded.
+                std::uint64_t arrayStride = 0;
+                std::vector<CustomEffectVertexAttr> attributes;
+            };
+            /// WMG-0021: every bound per-instance stream, in slot order; empty on an ordinary draw.
+            ///
+            /// Attribute locations continue after the per-vertex declaration's element count and
+            /// then across the instance streams in order, which is EasyGL's convention
+            /// (`PerVertexLocationCount` plus each stream's own element count) and the one Vulkan
+            /// copied (`VULKAN-168`), so one shader source describes its inputs on all three
+            /// renderers. The InstanceFrequency divisor is expanded into one record per instance
+            /// at capture time, exactly as `CaptureStockVertexStreamsEXT` expands it for the stock
+            /// instanced family: wgpu-native v29.0.1.1's `WGPUVertexBufferLayout` carries a step
+            /// MODE but no step rate, so a divisor is a data-preparation question here.
+            std::vector<InstanceStream> instanceStreams;
+            /// How many instances to draw. 1 on an ordinary draw, which is the same command.
+            std::uint32_t instanceCount = 1;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::vector<std::uint8_t> uniforms;                ///< the effect's uniform block, by value
             WebGPUSampledTextureEXT texture;                   ///< captured unit-0 texture, if any
@@ -5285,11 +5307,35 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WebGPUSampledTextureEXT ResolveCompiledEffectTextureEXT(
             Microsoft::Xna::Framework::Graphics::Texture* texture) const;
 #endif
+        /// WMG-0021: uploads and binds one custom-effect draw's per-instance records, slot 1 up.
+        /// @param pass The open render pass.
+        /// @param command The queued draw.
+        /// @return The transient buffers to recycle after submission; empty when the draw has no
+        ///         per-instance stream and nothing was bound.
+        std::vector<WGPUBuffer> BindCustomEffectInstanceStreamsEXT(
+            WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command);
+        /// WMG-0021: builds one custom-effect draw's vertex buffer layouts -- the per-vertex
+        /// stream at slot 0 and, when the draw is instanced, the per-instance stream at slot 1.
+        /// @param command The queued draw.
+        /// @param consumed The vertex stage's sorted @location list, or null where the contract
+        ///        carries no reflection and every declared attribute is offered.
+        /// @param attributeStorage Receives each stream's attributes; must outlive @p layouts,
+        ///        which point into it.
+        /// @param layouts Receives one layout per bound stream, slot 0 first.
+        /// @throws System::NotSupportedException If the stage consumes a location no declaration
+        ///         supplies.
+        void BuildCustomEffectVertexLayoutsEXT(
+            const CustomEffectDrawCommand& command, const std::vector<std::uint32_t>* consumed,
+            std::vector<std::vector<WGPUVertexAttribute>>& attributeStorage,
+            std::vector<WGPUVertexBufferLayout>& layouts);
         /// WEBGPU-76: builds the deferred custom-effect command from a `DrawPrimitivesEx` /
         /// `DrawIndexedPrimitivesEx` call whose `params.customEffectRenderer` is set.
+        /// WMG-0021: and from `DrawInstancedPrimitivesEx`, which reaches it with an
+        /// @p instanceCount above one and, usually, a per-instance stream in @p params.
         void QueueCustomEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
-                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                   PrimitiveType primitive, int primitiveCount,
+                                   const GpuDrawParams& params, int instanceCount = 1);
         /// WEBGPU-76/86: replays one custom-effect command — builds/fetches its pipeline (keyed by
         /// the concrete pass state incl. `destination.colorAttachmentCount`, 1 for a single target
         /// and 2..4 for an MRT set) and issues the draw. The fragment must write `@location(0..N-1)`.

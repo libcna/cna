@@ -8265,12 +8265,115 @@ namespace CNA::Internal::Renderers::WebGPU
         return renderer;
     }
 
+    // plans/plan_webgpu_modern_graphics.md WMG-0021: the vertex buffer layouts of one custom-effect
+    // draw -- the per-vertex stream at slot 0 and every per-instance stream after it, each with
+    // WGPUVertexStepMode_Instance.
+    //
+    // Where the contract carries reflection (@p consumed non-null), only the attributes the vertex
+    // stage declares reach the pipeline, and a location the shader consumes that no declaration
+    // supplies is a refusal rather than an undefined read -- Vulkan's MOD-2237 rule, kept
+    // identical. An instance attribute counts as supplied; before WMG-0021 it could not, because
+    // there was no instance half to supply it from.
+    void WebGPURenderer::BuildCustomEffectVertexLayoutsEXT(
+        const CustomEffectDrawCommand& command, const std::vector<std::uint32_t>* consumed,
+        std::vector<std::vector<WGPUVertexAttribute>>& attributeStorage,
+        std::vector<WGPUVertexBufferLayout>& layouts)
+    {
+        const auto collect = [consumed](const std::vector<CustomEffectVertexAttr>& source) {
+            std::vector<WGPUVertexAttribute> out;
+            out.reserve(source.size());
+            for (const auto& a : source)
+            {
+                if (consumed != nullptr &&
+                    !std::binary_search(consumed->begin(), consumed->end(), a.shaderLocation))
+                    continue;
+                WGPUVertexAttribute attribute{};
+                attribute.format = a.format;
+                attribute.offset = a.offset;
+                attribute.shaderLocation = a.shaderLocation;
+                out.push_back(attribute);
+            }
+            return out;
+        };
+
+        attributeStorage.clear();
+        attributeStorage.reserve(1 + command.instanceStreams.size());
+        attributeStorage.push_back(collect(command.attributes));
+        for (const auto& stream : command.instanceStreams)
+            attributeStorage.push_back(collect(stream.attributes));
+
+        if (consumed != nullptr)
+        {
+            for (const std::uint32_t location : *consumed)
+            {
+                const bool supplied = std::any_of(
+                    attributeStorage.begin(), attributeStorage.end(),
+                    [location](const std::vector<WGPUVertexAttribute>& group) {
+                        return std::any_of(group.begin(), group.end(),
+                                           [location](const WGPUVertexAttribute& a) {
+                                               return a.shaderLocation == location;
+                                           });
+                    });
+                if (!supplied)
+                    throw System::NotSupportedException(
+                        "CNA WebGPU: this ShaderEffect's vertex stage consumes @location(" +
+                        std::to_string(location) +
+                        "), but the active vertex/instance declarations do not supply it");
+            }
+        }
+
+        layouts.clear();
+        layouts.reserve(attributeStorage.size());
+        WGPUVertexBufferLayout perVertex{};
+        perVertex.arrayStride = command.arrayStride;
+        perVertex.stepMode = WGPUVertexStepMode_Vertex;
+        perVertex.attributeCount = attributeStorage[0].size();
+        perVertex.attributes = attributeStorage[0].data();
+        layouts.push_back(perVertex);
+
+        for (std::size_t i = 0; i < command.instanceStreams.size(); ++i)
+        {
+            const auto& stream = command.instanceStreams[i];
+            if (stream.arrayStride == 0 || attributeStorage[i + 1].empty()) continue;
+            WGPUVertexBufferLayout perInstance{};
+            perInstance.arrayStride = stream.arrayStride;
+            perInstance.stepMode = WGPUVertexStepMode_Instance;
+            perInstance.attributeCount = attributeStorage[i + 1].size();
+            perInstance.attributes = attributeStorage[i + 1].data();
+            layouts.push_back(perInstance);
+        }
+    }
+
+    // WMG-0021: uploads and binds one draw's per-instance records, slot 1 upwards, and returns
+    // the transient buffers to recycle after submission. Empty when the draw has no instance
+    // stream, which is every ordinary draw.
+    std::vector<WGPUBuffer> WebGPURenderer::BindCustomEffectInstanceStreamsEXT(
+        WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command)
+    {
+        std::vector<WGPUBuffer> buffers;
+        std::uint32_t slot = 1;
+        for (const auto& stream : command.instanceStreams)
+        {
+            if (stream.data.empty() || stream.arrayStride == 0) continue;
+            WGPUBufferDescriptor descriptor{};
+            descriptor.label = StringView("CNA WebGPU ShaderEffect InstanceBuffer");
+            descriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            descriptor.size = (stream.data.size() + 3u) & ~std::size_t{3u};
+            WGPUBuffer buffer = AcquireTransientBuffer(descriptor.usage, descriptor.size);
+            wgpuQueueWriteBuffer(queue_, buffer, 0, stream.data.data(), stream.data.size());
+            wgpuRenderPassEncoderSetVertexBuffer(pass, slot, buffer, 0, stream.data.size());
+            buffers.push_back(buffer);
+            ++slot;
+        }
+        return buffers;
+    }
+
     void WebGPURenderer::QueueCustomEffectDraw(const IVertexBufferRenderer& vb,
                                                const IIndexBufferRenderer* ib,
                                                const Matrix& world, const Matrix& view,
                                                const Matrix& projection,
                                                PrimitiveType primitive, int primitiveCount,
-                                               const GpuDrawParams& params)
+                                               const GpuDrawParams& params, int instanceCount)
     {
         auto* effect = static_cast<WebGPUEffectRenderer*>(params.customEffectRenderer);
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
@@ -8341,6 +8444,71 @@ namespace CNA::Internal::Renderers::WebGPU
             attr.offset = static_cast<std::uint64_t>(elements[i].getOffsetProperty());
             attr.shaderLocation = static_cast<std::uint32_t>(i);
             command.attributes.push_back(attr);
+        }
+
+        // WMG-0021: every bound per-instance stream, in slot order. Their attribute locations
+        // continue after the per-vertex declaration's element count and then across the streams --
+        // EasyGL's convention (PerVertexLocationCount) and the one Vulkan copied (VULKAN-168) --
+        // so a single shader source describes its inputs on all three renderers.
+        command.instanceCount = static_cast<std::uint32_t>(std::max(1, instanceCount));
+        auto nextLocation = static_cast<std::uint32_t>(elements.size());
+        for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+        {
+            const GpuVertexStreamBinding& binding =
+                params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+            if (binding.instanceFrequency <= 0 || binding.buffer == nullptr) continue;
+
+            const auto& instVb = static_cast<const WebGPUVertexBufferRenderer&>(*binding.buffer);
+            const std::size_t instStride = instVb.Stride();
+            if (instStride == 0) continue;
+
+            CustomEffectDrawCommand::InstanceStream stream;
+            stream.arrayStride = static_cast<std::uint64_t>(instStride);
+
+            const auto& instElements = instVb.Declaration().GetElements();
+            stream.attributes.reserve(instElements.size());
+            for (std::size_t i = 0; i < instElements.size(); ++i)
+            {
+                CustomEffectVertexAttr attr;
+                attr.format =
+                    WebGPUVertexFormatFromVEF(instElements[i].getVertexElementFormatProperty());
+                attr.offset = static_cast<std::uint64_t>(instElements[i].getOffsetProperty());
+                attr.shaderLocation = nextLocation + static_cast<std::uint32_t>(i);
+                stream.attributes.push_back(attr);
+            }
+            nextLocation += static_cast<std::uint32_t>(instElements.size());
+
+            // The divisor, expanded into one record per instance. wgpu-native v29.0.1.1's
+            // WGPUVertexBufferLayout carries a step MODE and no step RATE, so an InstanceFrequency
+            // above one is a data-preparation question here -- the same answer WEBGPU-172 gives
+            // for the stock instanced family, and the reason CaptureStockVertexStreamsEXT exists.
+            const int frequency = std::max(1, binding.instanceFrequency);
+            const auto& instShadow = instVb.ShadowData();
+            const auto firstRecord = static_cast<std::size_t>(std::max(0, binding.vertexOffset));
+            stream.data.reserve(static_cast<std::size_t>(command.instanceCount) * instStride);
+            for (std::uint32_t drawn = 0; drawn < command.instanceCount; ++drawn)
+            {
+                const std::size_t record =
+                    firstRecord +
+                    static_cast<std::size_t>(params.firstInstance + static_cast<int>(drawn)) /
+                        static_cast<std::size_t>(frequency);
+                const std::size_t at = record * instStride;
+                if (at + instStride <= instShadow.size())
+                {
+                    stream.data.insert(stream.data.end(),
+                                       instShadow.begin() + static_cast<std::ptrdiff_t>(at),
+                                       instShadow.begin() +
+                                           static_cast<std::ptrdiff_t>(at + instStride));
+                }
+                else
+                {
+                    // A range the shared layer validates before dispatch
+                    // (ValidateInstanceStreamRanges); reached only through a hand-built
+                    // GpuDrawParams. Zeroes rather than a read past the shadow copy's end.
+                    stream.data.resize(stream.data.size() + instStride, 0u);
+                }
+            }
+            command.instanceStreams.push_back(std::move(stream));
         }
 
         command.topology = ToTopology(primitive);
@@ -8455,6 +8623,15 @@ namespace CNA::Internal::Renderers::WebGPU
         for (const auto& a : command.attributes)
             key = mix(key, (static_cast<std::uint64_t>(a.format) << 40) ^
                            (a.offset << 8) ^ a.shaderLocation);
+        // WMG-0021: the instance half is part of the pipeline's identity here too -- an instanced
+        // draw and an otherwise identical non-instanced one must not share a cached pipeline.
+        for (const auto& stream : command.instanceStreams)
+        {
+            key = mix(key, stream.arrayStride);
+            for (const auto& a : stream.attributes)
+                key = mix(key, (static_cast<std::uint64_t>(a.format) << 44) ^
+                               (a.offset << 12) ^ (a.shaderLocation + 1u));
+        }
 
         WGPURenderPipeline pipe = nullptr;
         if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
@@ -8463,21 +8640,14 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         else
         {
-            std::vector<WGPUVertexAttribute> attributes;
-            attributes.reserve(command.attributes.size());
-            for (const auto& a : command.attributes)
-            {
-                WGPUVertexAttribute wa{};
-                wa.format = a.format;
-                wa.offset = a.offset;
-                wa.shaderLocation = a.shaderLocation;
-                attributes.push_back(wa);
-            }
-            WGPUVertexBufferLayout vertexBufferLayout{};
-            vertexBufferLayout.arrayStride = command.arrayStride;
-            vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-            vertexBufferLayout.attributeCount = attributes.size();
-            vertexBufferLayout.attributes = attributes.data();
+            // WMG-0021: the per-vertex stream and, when the draw is instanced, the per-instance
+            // stream at slot 1. The legacy contract carries no reflection, so unlike the
+            // descriptor path every declared attribute is offered and the module decides.
+            // The legacy contract carries no reflection, so a null `consumed` offers every
+            // declared attribute and lets the module decide.
+            std::vector<std::vector<WGPUVertexAttribute>> attributeStorage;
+            std::vector<WGPUVertexBufferLayout> vertexLayouts;
+            BuildCustomEffectVertexLayoutsEXT(command, nullptr, attributeStorage, vertexLayouts);
 
             // WEBGPU-86 MRT: one WGPUColorTargetState per bound attachment (1 or 2..4), each with
             // this slot's format and the same blend/write state. The custom WGSL fragment must write
@@ -8506,8 +8676,8 @@ namespace CNA::Internal::Renderers::WebGPU
             pipeline.layout = effect->pipelineLayout_;
             pipeline.vertex.module = effect->vertexModule_;
             pipeline.vertex.entryPoint = StringView("vs_main");
-            pipeline.vertex.bufferCount = 1;
-            pipeline.vertex.buffers = &vertexBufferLayout;
+            pipeline.vertex.bufferCount = vertexLayouts.size();
+            pipeline.vertex.buffers = vertexLayouts.data();
             pipeline.primitive.topology = command.topology;
             pipeline.primitive.stripIndexFormat = RequiredStripIndexFormat(command);
             pipeline.primitive.frontFace = WGPUFrontFace_CCW;
@@ -8566,6 +8736,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WMG-0021: slot 1 up, the per-instance records this draw expanded at queue time.
+        const std::vector<WGPUBuffer> instanceBuffers =
+            BindCustomEffectInstanceStreamsEXT(pass, command);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -8573,14 +8746,16 @@ namespace CNA::Internal::Renderers::WebGPU
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1, command.firstIndex, command.baseVertex, 0);
+                    pass, command.indexCount, command.instanceCount, command.firstIndex,
+                    command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
+        for (WGPUBuffer buffer : instanceBuffers) pendingBufferReleases_.push_back(buffer);
 
         pendingBindGroupReleases_.push_back(bindGroup);
         pendingBufferReleases_.push_back(uniformBuffer);
@@ -8672,6 +8847,17 @@ namespace CNA::Internal::Renderers::WebGPU
         for (const auto& a : command.attributes)
             key = mix(key, (static_cast<std::uint64_t>(a.format) << 40) ^ (a.offset << 8) ^
                                a.shaderLocation);
+        // WMG-0021: the instance half is part of the pipeline's identity -- each stream's stride
+        // and attributes are another WGPUVertexBufferLayout. Without this an instanced draw and an
+        // otherwise identical non-instanced one would share one cached pipeline, and whichever
+        // built it first would decide whether the instance streams were bound at all.
+        for (const auto& stream : command.instanceStreams)
+        {
+            key = mix(key, stream.arrayStride);
+            for (const auto& a : stream.attributes)
+                key = mix(key, (static_cast<std::uint64_t>(a.format) << 44) ^ (a.offset << 12) ^
+                                   (a.shaderLocation + 1u));
+        }
 
         WGPURenderPipeline pipe = nullptr;
         if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
@@ -8680,37 +8866,12 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         else
         {
-            // Only the attributes the vertex stage declares: a WebGPU pipeline may carry extra
-            // ones, but a location the shader consumes and the declaration does not supply is a
-            // refusal rather than an undefined read -- Vulkan's MOD-2237 rule, kept identical.
-            std::vector<WGPUVertexAttribute> attributes;
-            for (const auto& a : command.attributes)
-            {
-                if (!std::binary_search(effect->VertexInputLocationsEXT().begin(),
-                                        effect->VertexInputLocationsEXT().end(), a.shaderLocation))
-                    continue;
-                WGPUVertexAttribute attribute{};
-                attribute.format = a.format;
-                attribute.offset = a.offset;
-                attribute.shaderLocation = a.shaderLocation;
-                attributes.push_back(attribute);
-            }
-            for (const std::uint32_t location : effect->VertexInputLocationsEXT())
-            {
-                const bool supplied = std::any_of(
-                    attributes.begin(), attributes.end(),
-                    [location](const WGPUVertexAttribute& a) { return a.shaderLocation == location; });
-                if (!supplied)
-                    throw System::NotSupportedException(
-                        "CNA WebGPU: this ShaderEffect's vertex stage consumes @location(" +
-                        std::to_string(location) +
-                        "), but the active VertexDeclaration does not supply it");
-            }
-            WGPUVertexBufferLayout vertexLayout{};
-            vertexLayout.arrayStride = command.arrayStride;
-            vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
-            vertexLayout.attributeCount = attributes.size();
-            vertexLayout.attributes = attributes.data();
+            // WMG-0021: the per-vertex stream, and every per-instance stream after it when the
+            // draw is instanced. The MOD-2237 supplied-location rule lives in the builder.
+            std::vector<std::vector<WGPUVertexAttribute>> attributeStorage;
+            std::vector<WGPUVertexBufferLayout> vertexLayouts;
+            BuildCustomEffectVertexLayoutsEXT(command, &effect->VertexInputLocationsEXT(),
+                                              attributeStorage, vertexLayouts);
 
             std::array<WGPUColorTargetState, 4> targets{};
             std::array<WGPUBlendState, 4> blendStates{};
@@ -8736,8 +8897,8 @@ namespace CNA::Internal::Renderers::WebGPU
             pipeline.layout = effect->ProgramLayoutEXT()->PipelineLayout();
             pipeline.vertex.module = effect->vertexModule_;
             pipeline.vertex.entryPoint = StringView(effect->VertexEntryPointEXT().c_str());
-            pipeline.vertex.bufferCount = 1;
-            pipeline.vertex.buffers = &vertexLayout;
+            pipeline.vertex.bufferCount = vertexLayouts.size();
+            pipeline.vertex.buffers = vertexLayouts.data();
             pipeline.primitive.topology = command.topology;
             pipeline.primitive.stripIndexFormat = RequiredStripIndexFormat(command);
             pipeline.primitive.frontFace = WGPUFrontFace_CCW;
@@ -8777,20 +8938,24 @@ namespace CNA::Internal::Renderers::WebGPU
         for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
             wgpuRenderPassEncoderSetBindGroup(pass, g, groups[g], 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WMG-0021: slot 1 up, the per-instance records this draw expanded at queue time.
+        const std::vector<WGPUBuffer> instanceBuffers =
+            BindCustomEffectInstanceStreamsEXT(pass, command);
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer =
                 CreateAndBindDeferredIndexBuffer(pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, command.firstIndex,
-                                                 command.baseVertex, 0);
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
+                                                 command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
+        for (WGPUBuffer buffer : instanceBuffers) pendingBufferReleases_.push_back(buffer);
         state.boundPipeline = nullptr;
         for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
             pendingBindGroupReleases_.push_back(groups[g]);
@@ -12091,6 +12256,21 @@ namespace CNA::Internal::Renderers::WebGPU
             return;
         }
 #endif
+        // plans/plan_webgpu_modern_graphics.md WMG-0021: a bound custom WGSL ShaderEffect owns the
+        // whole draw, exactly as it does in DrawPrimitivesEx and DrawIndexedPrimitivesEx. Without
+        // this branch an instanced draw through a ShaderEffect fell into the stock instanced3d
+        // family below and was rendered with CNA's own shader instead of the game's -- a silent
+        // wrong-shader result rather than a refusal, and the one case the two ordinary routes
+        // already handled. It sits before the instance-stream search because a ShaderEffect draw
+        // with no per-instance stream is still an instanced draw (CNA::Graphics::ParticleSystem is
+        // exactly that: a storage buffer, a ShaderEffect and an instance COUNT), and the fallback
+        // below would have flattened it to a single instance.
+        if (params.customEffectRenderer != nullptr)
+        {
+            QueueCustomEffectDraw(vb, &ib, world, view, projection, primitive, primitiveCount,
+                                  params, instanceCount);
+            return;
+        }
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
