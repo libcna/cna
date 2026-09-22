@@ -1466,6 +1466,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         if(CNA_CNAEXT)
+            # plans/plan_street.md STREET-0005: an engine-layer effect whose world matrix changes
+            # every draw (a shadow caster, the depth/normal prepass) used to copy its whole uniform
+            # block into a fresh VkBuffer per draw. 1500 prepass draws placed by their world
+            # matrix alone must each land in their own cell, and retire no buffer per draw.
+            cna_vulkan_test(cna_test_vulkan_engine_matrix_arena
+                            vulkan_engine_matrix_arena_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_EngineMatrixArena
+                COMMAND cna_test_vulkan_engine_matrix_arena
+                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
             # plans/plan_modern.md MOD-2243: raw physical-device limits/usage combinations must
             # agree with array factory decisions, and native image/view records must retire and
             # survive device-first teardown without holding dead Vulkan handles.

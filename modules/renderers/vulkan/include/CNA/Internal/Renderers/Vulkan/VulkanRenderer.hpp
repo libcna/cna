@@ -1125,6 +1125,12 @@ namespace CNA::Internal::Renderers::Vulkan
         bool                  arraysDirty_     = false;
         VkBuffer              uniformBuffer_   = VK_NULL_HANDLE;
         VkDeviceMemory        uniformMemory_   = VK_NULL_HANDLE;
+        /// plans/plan_street.md STREET-0005: the engine matrices (binding 19) live in the
+        /// renderer's shared engine-matrix arena, not in `uniformBuffer_`: a caster sets `uWorld`
+        /// per draw, and copying the whole array block into a fresh VkBuffer for each draw made
+        /// every draw a device-memory allocation. The chunk serial says which arena chunk the
+        /// current set names; a set naming a chunk that has since been retired is rebuilt.
+        std::uint64_t         engineMatrixSerial_ = 0;
         /// VULKAN-252: fills `arrayBlock_`/`arrayOffsets_` on first use and refuses by name if the
         /// device cannot hold the block. Separate from the buffer so the sizes are known before
         /// any allocation happens.
@@ -6375,6 +6381,24 @@ namespace CNA::Internal::Renderers::Vulkan
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers(VkDeviceSize requiredVertexBytes, VkDeviceSize requiredIndexBytes);
+        /// plans/plan_street.md STREET-0005: one chunk of the engine-matrix arena every
+        /// ShaderEffect's binding 19 is suballocated from.
+        struct EngineMatrixChunkEXT {
+            VkBuffer       buffer = VK_NULL_HANDLE;
+            VkDeviceMemory memory = VK_NULL_HANDLE;
+            std::uint8_t*  mapped = nullptr;
+            VkDeviceSize   size   = 0;
+            VkDeviceSize   cursor = 0;
+        };
+        EngineMatrixChunkEXT engineMatrixChunk_{};
+        /// Incremented whenever a full chunk is retired and a fresh one takes its place.
+        std::uint64_t        engineMatrixChunkSerial_ = 0;
+        /// Copies @p bytes into the current engine-matrix chunk -- retiring a full one on the
+        /// usual frame fence and starting another -- and says where they went.
+        VkDeviceSize SuballocateEngineMatricesEXT(const void* data, VkDeviceSize bytes,
+                                                  VkBuffer& buffer);
+        /// Retires the current chunk (device teardown).
+        void RetireEngineMatrixChunkEXT();
         void GrowFrame3DArenaEXT(VkDeviceSize requiredBytes, VkDeviceSize& capacity,
                                  VkBuffer& buffer, VkDeviceMemory& memory, void*& mapped,
                                  VkBufferUsageFlags usage);

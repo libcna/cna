@@ -4033,6 +4033,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // including the handles the live-resource ReleaseVulkanResources() calls above just retired,
         // and any retired MRT proxy -- BEFORE descriptorPool_ is destroyed below, since retired
         // descriptor sets are freed from that pool.
+        RetireEngineMatrixChunkEXT();
         ProcessRetiredResources(true);
         // MSAA color buffer.
         CleanupMsaaColorResources();
@@ -6595,7 +6596,8 @@ namespace CNA::Internal::Renderers::Vulkan
             const std::size_t base = static_cast<std::size_t>(
                 engineMatrixOffset_ / sizeof(float)) + static_cast<std::size_t>(engineMatrix * 16);
             std::memcpy(arrayBlock_.data() + base, matrix, 64);
-            arraysDirty_ = true;
+            // Only the set is rebuilt: the matrices are suballocated from the engine-matrix
+            // arena when it is, and the array buffer stays as it is (STREET-0005).
             boundSetDirty_ = true;
         }
     }
@@ -6795,7 +6797,8 @@ namespace CNA::Internal::Renderers::Vulkan
             owner_->NoteSampledTextureEXT(
                 segment, boundTextures_[static_cast<std::size_t>(u)]);
         }
-        if (!boundSetDirty_ && boundSet_ != VK_NULL_HANDLE && boundSetSamplers_ == wantSamplers)
+        if (!boundSetDirty_ && boundSet_ != VK_NULL_HANDLE && boundSetSamplers_ == wantSamplers
+            && engineMatrixSerial_ == owner_->engineMatrixChunkSerial_)
             return boundSet_;
 
         EnsureBoundTextureLayoutEXT();
@@ -6925,8 +6928,18 @@ namespace CNA::Internal::Renderers::Vulkan
             w.pBufferInfo     = &bufInfos[static_cast<std::size_t>(i)];
         }
         auto& engineInfo = bufInfos[static_cast<std::size_t>(kEffectArrayBindingCount)];
-        engineInfo = {uniformBuffer_, engineMatrixOffset_,
-                      static_cast<VkDeviceSize>(kEffectEngineMatrixCount) * 16u * sizeof(float)};
+        {
+            // STREET-0005: from the shared arena, every time the set is built, so a set only ever
+            // names the chunk that was current when it was made (see engineMatrixSerial_).
+            constexpr VkDeviceSize engineBytes =
+                static_cast<VkDeviceSize>(kEffectEngineMatrixCount) * 16u * sizeof(float);
+            VkBuffer engineBuffer = VK_NULL_HANDLE;
+            const VkDeviceSize engineOffset = owner_->SuballocateEngineMatricesEXT(
+                arrayBlock_.data() + engineMatrixOffset_ / sizeof(float), engineBytes,
+                engineBuffer);
+            engineInfo = {engineBuffer, engineOffset, engineBytes};
+            engineMatrixSerial_ = owner_->engineMatrixChunkSerial_;
+        }
         auto& engineWrite = writes[static_cast<std::size_t>(kEffectEngineMatrixBinding)];
         engineWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         engineWrite.dstSet = set;
@@ -9162,6 +9175,47 @@ namespace CNA::Internal::Renderers::Vulkan
         VkLifetimeTraceEXT("arena.grow       frame=%u required=%llu capacity=%llu",
                            currentFrame_, static_cast<unsigned long long>(requiredBytes),
                            static_cast<unsigned long long>(capacity));
+    }
+
+    VkDeviceSize VulkanRenderer::SuballocateEngineMatricesEXT(const void* data, VkDeviceSize bytes,
+                                                              VkBuffer& buffer)
+    {
+        const VkDeviceSize align =
+            std::max<VkDeviceSize>(16u, GetDeviceLimitsEXT().minUniformBufferOffsetAlignment);
+        const VkDeviceSize at = (engineMatrixChunk_.cursor + align - 1) / align * align;
+        if (engineMatrixChunk_.buffer == VK_NULL_HANDLE || at + bytes > engineMatrixChunk_.size) {
+            // A full chunk leaves on the frame fence like any retired buffer: every set naming it
+            // was built in this generation or earlier, and a set that outlives it is rebuilt
+            // first because its serial no longer matches.
+            RetireEngineMatrixChunkEXT();
+            constexpr VkDeviceSize kChunkBytes = 4u * 1024u * 1024u;
+            void* mapped = nullptr;
+            CreateBuffer(std::max(kChunkBytes, bytes), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         engineMatrixChunk_.buffer, engineMatrixChunk_.memory, &mapped);
+            engineMatrixChunk_.mapped = static_cast<std::uint8_t*>(mapped);
+            engineMatrixChunk_.size   = std::max(kChunkBytes, bytes);
+            engineMatrixChunk_.cursor = 0;
+            ++engineMatrixChunkSerial_;
+            return SuballocateEngineMatricesEXT(data, bytes, buffer);
+        }
+        std::memcpy(engineMatrixChunk_.mapped + at, data, static_cast<std::size_t>(bytes));
+        engineMatrixChunk_.cursor = at + bytes;
+        buffer = engineMatrixChunk_.buffer;
+        return at;
+    }
+
+    void VulkanRenderer::RetireEngineMatrixChunkEXT()
+    {
+        if (engineMatrixChunk_.buffer == VK_NULL_HANDLE) return;
+        RetiredResources r;
+        r.buffers.push_back(engineMatrixChunk_.buffer);
+        if (engineMatrixChunk_.memory != VK_NULL_HANDLE) {
+            vkUnmapMemory(device_, engineMatrixChunk_.memory);
+            r.memories.push_back(engineMatrixChunk_.memory);
+        }
+        RetireResources(std::move(r));
+        engineMatrixChunk_ = EngineMatrixChunkEXT{};
     }
 
     void VulkanRenderer::GrowDynamicUboRingEXT(std::size_t requiredDraws, uint32_t stride,

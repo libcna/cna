@@ -17,6 +17,7 @@ are fixed here, on the layer they belong to, with a regression test.
 | STREET-0002 | `CascadedShadowMap` could not create a High atlas under any profile | ✅ |
 | STREET-0003 | Vulkan: the first 3D draw refused -- the lazily created default white could not get a descriptor set | ✅ |
 | STREET-0004 | Vulkan: a frame with more stock draws than a uniform ring holds read past the buffer and lost the device | ✅ |
+| STREET-0005 | Vulkan: an engine-layer effect allocated device memory on every draw (shadow pass 14.8 s a frame) | ✅ |
 
 ---
 
@@ -99,6 +100,25 @@ this slot is grown before any command names it; every descriptor set of that fam
 replaced by the same growth. **Test:** `Vulkan_UniformRingGrowth` -- one frame of 1500 PbrEffect and
 100 SkinnedPbrEffect draws, each lit only by its own emissive factor in its own cell: 1500/1500 and
 100/100 with the layer silent; the old renderer draws 512/1500 and 8/100 and reports the VUID above.
+
+## STREET-0005 — an engine-layer effect allocated device memory on every draw
+
+**Symptom.** cna-street on Vulkan ran at 0.3 fps: `shadow 14773 ms` a frame for 925 caster draws, and
+the 29-probe reflection bake took 592 s (7 s on EasyGL). Every sampled stack was in
+`VulkanEffectRenderer::GetOrCreateBoundTextureSetEXT` -> `CreateBuffer` -> the driver's VA allocator.
+
+**Root cause.** The engine-layer programs (shadow casters, the depth/normal prepass) read their
+matrices from binding 19. `SetUniformMat4("uWorld")` -- once per caster draw -- marked the effect's
+whole uniform-array block dirty, and the next draw copied all ~9 KB of it into a freshly created
+VkBuffer with its own VkDeviceMemory: one `vkAllocateMemory` and one retired buffer per draw.
+
+**Fix.** The engine matrices (384 bytes) are suballocated from a renderer-wide arena of 4 MiB chunks
+each time an effect's set is built; the array buffer is recreated only when an array really changes.
+A full chunk is retired on the usual frame fence; an effect remembers which chunk its set names and
+rebuilds the set once that chunk is no longer current, so no set can outlive the chunk it names.
+Measured on cna-street: 23.8 fps (shadow 37 ms), probe bake 20 s. **Test:**
+`Vulkan_EngineMatrixArena` -- 1500 prepass draws placed only by `uWorld` all land in their own cells
+and retire 0 buffers; the old renderer retires 1499.
 
 ## cna-street's own defects (fixed in cna-street)
 
