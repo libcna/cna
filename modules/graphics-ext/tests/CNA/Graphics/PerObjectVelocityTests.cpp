@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cmath>
@@ -121,7 +122,7 @@ int BrightPixels(const std::vector<Color>& pixels, const int threshold)
 
 TEST(PerObjectVelocityTest, VelocityIsOffByDefaultAndCostsNothing)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     EXPECT_FALSE(prepass.isVelocityEnabledEXT());
     EXPECT_EQ(prepass.getVelocityTextureEXT(), nullptr)
@@ -134,7 +135,7 @@ TEST(PerObjectVelocityTest, VelocityIsOffByDefaultAndCostsNothing)
 
 TEST(PerObjectVelocityTest, TurningItOnAddsATargetAndOnlyThenAPass)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     const bool mrt = prepass.isUsingMultipleRenderTargets();
     const int before = prepass.getPassCount();
@@ -157,7 +158,7 @@ TEST(PerObjectVelocityTest, TurningItOnAddsATargetAndOnlyThenAPass)
 
 TEST(PerObjectVelocityTest, ChangingItWhileAPassIsOpenIsRefused)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     if (!prepass.isSupported(device)) GTEST_SKIP() << "no prepass on this renderer";
 
@@ -170,7 +171,7 @@ TEST(PerObjectVelocityTest, AStationaryObjectUnderAStationaryCameraHasNoVelocity
 {
     // The control, and the one that would catch a sign error, a transposed matrix or a stale
     // uniform: nothing moved, so every covered texel must decode to zero.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     if (!prepass.isSupported(device)) GTEST_SKIP() << "no prepass on this renderer";
     prepass.setVelocityEnabledEXT(true);
@@ -198,7 +199,7 @@ TEST(PerObjectVelocityTest, AStationaryObjectUnderAStationaryCameraHasNoVelocity
 
 TEST(PerObjectVelocityTest, AnObjectThatMovedRightRecordsAVelocityToTheRight)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     if (!prepass.isSupported(device)) GTEST_SKIP() << "no prepass on this renderer";
     prepass.setVelocityEnabledEXT(true);
@@ -229,7 +230,7 @@ TEST(PerObjectVelocityTest, AnObjectThatMovedRightRecordsAVelocityToTheRight)
 TEST(PerObjectVelocityTest, TheVelocityGrowsWithTheDistanceTravelled)
 {
     // A single displacement could be matched by a constant; two cannot.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     if (!prepass.isSupported(device)) GTEST_SKIP() << "no prepass on this renderer";
     prepass.setVelocityEnabledEXT(true);
@@ -259,7 +260,7 @@ TEST(PerObjectVelocityTest, MotionBlurSmearsAMovingObjectUnderAStationaryCamera)
     // The sentence `docs/cnaext-engine-layer.md` has said the layer could not deliver: a car
     // crossing a static shot. The camera is identical in both frames, so the camera-reprojection
     // path contributes nothing and any smear is the object's.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DepthNormalPrepass prepass(device, kSize, kSize);
     if (!prepass.isSupported(device)) GTEST_SKIP() << "no prepass on this renderer";
     MotionBlurPass blur(device);

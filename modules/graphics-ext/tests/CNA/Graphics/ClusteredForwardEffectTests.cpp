@@ -269,7 +269,7 @@ TEST(ClusteredForwardEffectTest, PackagedEsSourceRetainsEveryPublicGlslFragment)
 
 TEST(ClusteredForwardEffectTest, AnUnuploadedBufferIsRefused)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     ClusteredLightBuffer buffer(gd);
     EXPECT_THROW(effect.begin(Matrix::getIdentityProperty(), View(), Projection(), Vector3::Zero,
@@ -279,7 +279,7 @@ TEST(ClusteredForwardEffectTest, AnUnuploadedBufferIsRefused)
 
 TEST(ClusteredForwardEffectTest, TheSettingsRoundTripAndNonsenseIsClamped)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
 
     effect.setBaseColor(Vector3(0.2f, 0.4f, 0.6f));
@@ -307,7 +307,7 @@ TEST(ClusteredForwardEffectTest, TheSettingsRoundTripAndNonsenseIsClamped)
 
 TEST(ClusteredForwardEffectTest, OneLightLightsTheWallWhereItIs)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -337,7 +337,7 @@ TEST(ClusteredForwardEffectTest, ALightNowhereNearTheWallLeavesItDark)
 {
     // The counterpart, and the one that would still pass if the shader ignored the cluster list and
     // lit everything: a light behind the camera reaches no cluster the wall occupies.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -360,7 +360,7 @@ TEST(ClusteredForwardEffectTest, TwoHundredAndFiftySixLightsRender)
     // The acceptance criterion for the section. Not a performance claim -- a correctness one: the
     // light set's maximum, the assignment, the upload and the shader's loop all have to agree at
     // the top of their range.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -390,7 +390,7 @@ TEST(ClusteredForwardEffectTest, TheShadedValueMatchesTheCpuModel)
     // The strongest claim here: not "there is light" but "this much light". The wall's centre is a
     // known world point with a known normal, one light is placed on the axis, and the pixel is
     // compared against ClusteredForwardEffect::contribution -- the CPU mirror of the same shader.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -443,7 +443,7 @@ AreaLightEXT WallLight(const float halfWidth)
 
 TEST(ClusteredForwardEffectTest, AnAreaLightLightsTheWallWithNoPunctualLightsAtAll)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -470,7 +470,7 @@ TEST(ClusteredForwardEffectTest, AnAreaLightLightsTheWallWithNoPunctualLightsAtA
 
 TEST(ClusteredForwardEffectTest, AnInvalidAreaLightClearsTheSlotRatherThanBeingStored)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     AreaLightBrdfTable table(gd, 8, 32);
 
@@ -489,7 +489,7 @@ TEST(ClusteredForwardEffectTest, TheAreaLightsShadedValueMatchesTheCpuModel)
     // The same claim as for the punctual lights, on the half of the shading that is exact: the
     // wall's centre is a known point, and what the shader puts there has to be the number
     // AreaLightShading::contribution computes for it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -525,7 +525,7 @@ TEST(ClusteredForwardEffectTest, TheHighlightHasTheLightsShapeOnASmoothSurface)
     // The property no punctual light can produce. A small bright rectangle on a smooth wall leaves
     // a bright patch with an edge; the same light on a rough wall leaves a gradient. Measured as
     // the contrast between the frame's centre and its corner.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -560,7 +560,7 @@ TEST(ClusteredForwardEffectTest, AreaLightAndTransmissionUseIndependentTextures)
     // The portable Vulkan path has four explicit 2D slots, so its clustered lists live in storage
     // buffers and these two optional images must remain independent. Testing them separately
     // would not catch both aliases landing on one descriptor.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -653,7 +653,7 @@ TEST(ClusteredForwardEffectTest, AZeroClearcoatIsExactlyTheUncoatedResult)
 
 TEST(ClusteredForwardEffectTest, TheClearcoatSettingsReachTheShader)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -772,7 +772,7 @@ TEST(ClusteredForwardEffectTest, SheenKeepsItsOwnColour)
 
 TEST(ClusteredForwardEffectTest, TheSheenSettingsReachTheShader)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -839,7 +839,7 @@ TEST(ClusteredForwardEffectTest, ATransmissiveMaterialWithoutAnOpaqueFrameIsRefu
     // Refused, not approximated. Without the copy the surface would come back opaque, which is not
     // a slightly wrong glass -- it is the absence of one, and it would look like the extension was
     // never implemented.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
 
     const ClusteredLightGrid grid = MakeGrid();
@@ -873,7 +873,7 @@ TEST(ClusteredForwardEffectTest, ATransmissiveMaterialWithoutAnOpaqueFrameIsRefu
 
 TEST(ClusteredForwardEffectTest, TheIndexOfRefractionRefusesToGoBelowAVacuum)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     EXPECT_FLOAT_EQ(effect.getIor(), 1.5f) << "glass is the default";
     effect.setIor(1.33f);
@@ -884,7 +884,7 @@ TEST(ClusteredForwardEffectTest, TheIndexOfRefractionRefusesToGoBelowAVacuum)
 
 TEST(ClusteredForwardEffectTest, ATransmissiveWallShowsWhatIsBehindIt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -922,7 +922,7 @@ TEST(ClusteredForwardEffectTest, ATransmissiveWallShowsWhatIsBehindIt)
 
 TEST(ClusteredForwardEffectTest, AThickVolumeAbsorbsWhatPassesThroughIt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -1032,7 +1032,7 @@ TEST(ClusteredForwardEffectTest, ABlackSubsurfaceColourIsExactlyTheOrdinaryResul
 
 TEST(ClusteredForwardEffectTest, TheSubsurfaceSettingsReachTheShader)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -1082,7 +1082,7 @@ LightProbeEXT AmbientProbe(const float brightness)
 
 TEST(ClusteredForwardEffectTest, AProbeReplacesTheFlatAmbientAndNothingElse)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -1116,7 +1116,7 @@ TEST(ClusteredForwardEffectTest, AVolumeLightsAnObjectAtItsOwnPosition)
     // The volume is sampled at the world matrix's translation, so two draws of the same geometry at
     // two places in the volume are lit differently. That is the whole point of a probe grid, and it
     // is what a single global environment cannot do.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -1187,7 +1187,7 @@ TEST(ClusteredForwardEffectTest, AVolumeLightsAnObjectAtItsOwnPosition)
 TEST(ClusteredForwardEffectTest, AProbeAndAVolumeAreMutuallyExclusive)
 {
     // Two sources of the same term would leave the answer depending on the order they were set in.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
 
     LightProbeVolumeEXT volume(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f)),

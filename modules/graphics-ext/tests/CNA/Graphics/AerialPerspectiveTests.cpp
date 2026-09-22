@@ -118,7 +118,7 @@ Color CentrePixel(RenderTarget2D& target)
 
 TEST(AerialPerspectiveTest, ItNamesItselfAndItsSettingsRoundTrip)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AerialPerspectivePass pass(gd);
     EXPECT_EQ(pass.getName(), "AerialPerspective");
 
@@ -134,7 +134,7 @@ TEST(AerialPerspectiveTest, ItNamesItselfAndItsSettingsRoundTrip)
 
 TEST(AerialPerspectiveTest, TurbidityBelowOneIsClampedBecauseTheModelHasNoAirBelowIt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AerialPerspectivePass pass(gd);
     pass.setTurbidity(0.0f);
     EXPECT_FLOAT_EQ(pass.getTurbidity(), 1.0f);
@@ -192,7 +192,7 @@ TEST(AerialPerspectiveTest, TheShaderAgreesWithTheCpuTwinOnAirMass)
 {
     // The house pattern. `cnaAerialAirMass` and `airMassForDistance` are two statements of one
     // rule, and the only comparison that proves them equal is on the GPU.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
@@ -272,7 +272,7 @@ void main() {
 
 TEST(AerialPerspectiveTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNamed)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -290,7 +290,7 @@ TEST(AerialPerspectiveTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNam
 
 TEST(AerialPerspectiveTest, WithoutCameraMatricesThePassRefuses)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     auto scene = MakeFlatScene(gd, 200);
@@ -311,7 +311,7 @@ TEST(AerialPerspectiveTest, NearGeometryIsUntouchedAndDistantGeometryIsNot)
 {
     // The shape of the whole effect in one comparison. At a hundred metres there is essentially no
     // air in the way and the surface must arrive as it was drawn; at twenty kilometres it must not.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -348,7 +348,7 @@ TEST(AerialPerspectiveTest, TheSkyItselfIsLeftAloneBecauseItAlreadyCarriesTheAtm
 {
     // The seam where geometry meets sky is where a double-count shows first, and it shows as a
     // visible edge along every silhouette rather than as a wrong colour.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -372,7 +372,7 @@ TEST(AerialPerspectiveTest, LookingUpCrossesLessAirOnTheSameScreenSideOnEveryBac
     // capped by the atmosphere above it while the lower ray still crosses many columns of air, so
     // transmittance alone must leave the upper row brighter. Reversing the Vulkan texture-UV to
     // camera-NDC bridge reverses this inequality while every centre-pixel assertion still passes.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -414,7 +414,7 @@ TEST(AerialPerspectiveTest, FarEnoughAwayBlueIsReplacedByTheSkyItself)
     // surfaces converge to the same pixel, and that pixel is the sky's own colour.
     //
     // In **blue**. Red is a separate case below, and the difference between the two is the effect.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -493,7 +493,7 @@ TEST(AerialPerspectiveTest, RedSurvivesTheWholeAtmosphereAndThatIsTheEffect)
 
 TEST(AerialPerspectiveTest, HazierAirTakesMoreOfADistantSurface)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -524,7 +524,7 @@ TEST(AerialPerspectiveTest, TheScaleHeightIsWhereAGamesWorldScaleEnters)
 {
     // A game whose visible world is a few hundred units gets no atmosphere at all from the real
     // scale height, and the fix is this one number rather than a hidden multiplier.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 

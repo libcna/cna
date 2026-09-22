@@ -131,7 +131,7 @@ TEST(MotionBlurTest, AStationaryCameraLeavesTheFrameAlone)
     // The anti-vacuity anchor for everything below: with the two cameras identical the velocity is
     // zero everywhere, and a pass that blurred anyway would be reacting to something other than
     // motion.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
@@ -156,7 +156,7 @@ TEST(MotionBlurTest, APanningCameraSmearsAlongThePan)
 {
     // The claim the pass exists for. The camera slid sideways, so vertical stripes -- which are
     // pure horizontal contrast -- lose it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
@@ -182,7 +182,7 @@ TEST(MotionBlurTest, TheFirstFrameHasNoHistoryAndIsLeftAlone)
 {
     // A pass that used the identity matrix as "the previous frame" would blur the opening frame of
     // every scene along an arbitrary direction, which looks like a one-frame glitch on every cut.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
@@ -208,7 +208,7 @@ TEST(MotionBlurTest, TheMaxDistanceCapsWhatOneSlowFrameCanDo)
 {
     // A single long frame makes every velocity enormous. The cap is what keeps a stutter from
     // smearing the whole image, so it has to bite on a movement far larger than a normal one.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
@@ -238,7 +238,7 @@ TEST(MotionBlurTest, AStoredVelocityOverridesAStationaryCameraOnlyWhereItWasWrit
     // This isolates the pass's optional binding from DepthNormalPrepass. A portable blur shader can
     // therefore prove unit/binding 2 and the inverted coverage flag even on a renderer whose
     // geometry prepass is still source-only.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable motion-blur shader package";
@@ -271,7 +271,7 @@ TEST(MotionBlurTest, AStoredVelocityOverridesAStationaryCameraOnlyWhereItWasWrit
 
 TEST(MotionBlurTest, WithoutDepthOrACameraTheFrameIsPassedThrough)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -287,7 +287,7 @@ TEST(MotionBlurTest, WithoutDepthOrACameraTheFrameIsPassedThrough)
 
 TEST(MotionBlurTest, TheSettingsAreClampedAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     MotionBlurPass pass(gd);
     EXPECT_EQ(pass.getName(), "MotionBlur");
     EXPECT_FLOAT_EQ(pass.getStrength(), 0.0f) << "the effect must be off by default";

@@ -555,7 +555,7 @@ TEST(ShaderPackageEXTTest, BindingsAreUniquePerStageAndConsistentAcrossStages)
 
 TEST(ShaderPackageSelectionEXTTest, StablePreferenceIgnoresDeclarationOrderAndOwnsSelectedCode)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     std::vector<ShaderCodeEXT> variants;
     const auto add = [&variants](const CNA::ShaderLanguageEXT language,
                                  const CNA::ShaderStageEXT stage,
@@ -631,7 +631,7 @@ TEST(ShaderPackageSelectionEXTTest, StablePreferenceIgnoresDeclarationOrderAndOw
 
 TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     constexpr std::array preference = {
         CNA::ShaderLanguageEXT::SpirV,
         CNA::ShaderLanguageEXT::Dxil,
@@ -682,7 +682,7 @@ TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
 
 TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChecked)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
                                  CNA::ShaderLanguageEXT::GlslDesktop,
@@ -719,7 +719,7 @@ TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChec
 
 TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRoute)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
                                  CNA::ShaderLanguageEXT::GlslDesktop,
@@ -756,7 +756,7 @@ TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRo
 
 TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackageStages)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     const ShaderCodeEXT vertex(
         CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
         "main", "effect.vert", "source");
@@ -773,14 +773,14 @@ TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackage
 
 TEST(ShaderPackageOverloadTest, LegacyShaderEffectReportsNoExplicitSelectedLanguage)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ShaderEffect effect(device, kVertex, kFragment);
     EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
 }
 
 TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVariantExists)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT unsupported = CNA::ShaderLanguageEXT::Unknown;
     for (const auto candidate : {CNA::ShaderLanguageEXT::GlslDesktop,
                                  CNA::ShaderLanguageEXT::GlslEs,
@@ -829,7 +829,7 @@ TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVarian
 
 TEST(ShaderEffectFactoryTest, TheSameNameIsCompiledOnceAndHandedBackAfter)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShaderEffectFactory factory(gd);
     EXPECT_EQ(factory.getCompileCount(), 0u);
     EXPECT_FALSE(factory.contains("Pass.copy"));
@@ -847,7 +847,7 @@ TEST(ShaderEffectFactoryTest, TheSameNameIsCompiledOnceAndHandedBackAfter)
 
 TEST(ShaderEffectFactoryTest, DistinctNamesAreDistinctPrograms)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShaderEffectFactory factory(gd);
 
     ShaderEffect* copy   = factory.acquire("Pass.copy", kVertex, kFragment);
@@ -862,7 +862,7 @@ TEST(ShaderEffectFactoryTest, TheNameIsTheKeyAndTheSourceIsNotConsulted)
     // surprise: hashing two kilobytes of GLSL to discover it is the same GLSL is work to avoid
     // work. A name must therefore mean one shader, and reusing it with different source is a bug
     // in the caller -- one this test pins the behaviour of rather than pretends cannot happen.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShaderEffectFactory factory(gd);
 
     ShaderEffect* first = factory.acquire("Pass.copy", kVertex, kFragment);
@@ -873,7 +873,7 @@ TEST(ShaderEffectFactoryTest, TheNameIsTheKeyAndTheSourceIsNotConsulted)
 
 TEST(ShaderEffectFactoryTest, AnEmptyNameIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShaderEffectFactory factory(gd);
     EXPECT_THROW((void)factory.acquire("", kVertex, kFragment), std::invalid_argument);
 }
@@ -883,7 +883,7 @@ TEST(ShaderEffectFactoryTest, AFailedCompileIsStillReturnedRatherThanNull)
     // Returning null would give every caller a second failure mode to handle, when ShaderEffect
     // already reports this one through IsEffectValid(). The cache also keeps it, so a pass asking
     // repeatedly does not recompile a shader that will not compile.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShaderEffectFactory factory(gd);
 
     ShaderEffect* broken = factory.acquire("Pass.broken", kVertex, kBroken);
@@ -894,7 +894,7 @@ TEST(ShaderEffectFactoryTest, AFailedCompileIsStillReturnedRatherThanNull)
 
 TEST(ShaderEffectFactoryTest, ClearReleasesEverything)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShaderEffectFactory factory(gd);
     factory.acquire("Pass.copy", kVertex, kFragment);
     factory.acquire("Pass.invert", kVertex, kFragment);
@@ -915,7 +915,7 @@ TEST(ShaderEffectFactoryTest, ClearReleasesEverything)
 
 TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!CnaTest::EngineLayer::RunsShaderSource(gd))
         GTEST_SKIP() << "this renderer compiles no shader source, so there is no success to see";
 
@@ -933,7 +933,7 @@ TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
 
 TEST(ShaderDiagnosticsTest, ABrokenShaderCarriesTheCompilerLog)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!CnaTest::EngineLayer::RunsShaderSource(gd))
         GTEST_SKIP() << "this renderer compiles no shader source, so nothing can fail to compile";
 
@@ -945,7 +945,7 @@ TEST(ShaderDiagnosticsTest, ABrokenShaderCarriesTheCompilerLog)
 
 TEST(ShaderDiagnosticsTest, TheFailureIsReportedOnceAndNamesThePass)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!CnaTest::EngineLayer::RunsShaderSource(gd))
         GTEST_SKIP() << "this renderer compiles no shader source";
 
@@ -962,7 +962,7 @@ TEST(ShaderDiagnosticsTest, TheFailureIsReportedOnceAndNamesThePass)
 TEST(ShaderDiagnosticsTest, ANullEffectIsAFailureAndNotACrash)
 {
     // The state on a renderer that accepts no custom effect at all: the pass never built one.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     bool logged = false;
     EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "NoEffect", nullptr, logged));
     EXPECT_TRUE(logged);
@@ -973,7 +973,7 @@ TEST(ShaderDiagnosticsTest, ItDoesNotThrowWhateverTheRenderer)
     // The deviation from MOD-219's proposed "throws", asserted so it is not reintroduced. Three
     // renderers report CustomEffects true and never compile GLSL source, so throwing on a failed
     // compile would turn a documented capability boundary into a crash on all three.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     bool logged = false;
     EXPECT_NO_THROW({
         ShaderEffect effect(gd, kVertex, kBroken);
@@ -992,7 +992,7 @@ TEST(SamplerRequirementTest, BloomStillProducesItsSpreadWithItsOwnSamplerState)
     // correctly by inheritance. The point of stating it is that a change to that default can no
     // longer degrade bloom silently -- so what this test protects is that the explicit request
     // behaves as the inherited one did.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     CNA::Graphics::BloomPass pass(gd);

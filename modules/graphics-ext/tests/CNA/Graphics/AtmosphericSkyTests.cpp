@@ -131,7 +131,7 @@ TEST(AtmosphericSkyTest, DegenerateDirectionsDoNotProduceNaNs)
 
 TEST(AtmosphericSkyTest, ItDrawsASkyRatherThanAFlatColour)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AtmosphericSky sky(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -173,7 +173,7 @@ TEST(AtmosphericSkyTest, ItDrawsASkyRatherThanAFlatColour)
 
 TEST(AtmosphericSkyTest, ThePackagedShaderMatchesTheCpuModelAndKeepsCameraY)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -235,7 +235,7 @@ TEST(AtmosphericSkyTest, ThePackagedShaderMatchesTheCpuModelAndKeepsCameraY)
 
 TEST(AtmosphericSkyTest, AnInvalidSizeIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AtmosphericSky sky(gd);
     const Matrix identity = Matrix::getIdentityProperty();
     EXPECT_THROW(sky.draw(identity, identity, 0, 4), std::invalid_argument);
@@ -244,7 +244,7 @@ TEST(AtmosphericSkyTest, AnInvalidSizeIsRejected)
 
 TEST(AtmosphericSkyTest, TheSettingsRoundTripAndNonsenseIsIgnored)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AtmosphericSky sky(gd);
 
     sky.setSunDirection(Vector3(0.0f, -2.0f, 0.0f));

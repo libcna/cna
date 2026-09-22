@@ -176,7 +176,7 @@ TEST(CubeLutTest, AnIndexOutsideTheTableThrows)
 
 TEST(CubeLutTest, TheStripItBuildsIsTheOneTheGradePassAccepts)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const CubeLut lut = CubeLut::parse(IndexTable(8));
     auto strip = lut.createStripTexture(gd);
 
@@ -196,7 +196,7 @@ TEST(CubeLutTest, TheStripHoldsEachEntryWhereTheShaderLooksForIt)
     // The strip's layout in one assertion: x carries the blue slice and the red index within it,
     // y carries green. Read back rather than argued, because the shader's addressing and this
     // writer's addressing are two separate pieces of arithmetic that have to agree.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     constexpr int size = 4;
     const CubeLut lut = CubeLut::parse(IndexTable(size));
     auto strip = lut.createStripTexture(gd);
@@ -221,7 +221,7 @@ TEST(CubeLutTest, TheStripHoldsEachEntryWhereTheShaderLooksForIt)
 
 TEST(CubeLutTest, TheVolumeItBuildsIsACubeOfTheTablesSize)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer has no volume textures, so there is nothing to build";
 

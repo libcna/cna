@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <functional>
 #include <string>
@@ -51,7 +52,7 @@ TEST(PbrMaterialExtensionsTest, TheDefaultSetChangesNothing)
 
 TEST(PbrMaterialExtensionsTest, TheSheenFieldsRoundTripAndAreValidated)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D colour(gd, 1, 1);
     Texture2D roughness(gd, 1, 1);
 
@@ -84,7 +85,7 @@ TEST(PbrMaterialExtensionsTest, TheSheenFieldsRoundTripAndAreValidated)
 
 TEST(PbrMaterialExtensionsTest, EveryFieldRoundTripsAndIsValidated)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D strength(gd, 1, 1);
     Texture2D roughness(gd, 1, 1);
     Texture2D normal(gd, 1, 1);
@@ -118,7 +119,7 @@ TEST(PbrMaterialExtensionsTest, EveryFieldRoundTripsAndIsValidated)
 
 TEST(PbrMaterialExtensionsTest, TheTransmissionAndVolumeFieldsRoundTripAndAreValidated)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D transmission(gd, 1, 1);
     Texture2D thickness(gd, 1, 1);
 
@@ -165,7 +166,7 @@ TEST(PbrMaterialExtensionsTest, TheTransmissionAndVolumeFieldsRoundTripAndAreVal
 
 TEST(PbrMaterialExtensionsTest, TheIridescenceFieldsRoundTripAndAreValidated)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D strength(gd, 1, 1);
     Texture2D thickness(gd, 1, 1);
 
@@ -205,7 +206,7 @@ TEST(PbrMaterialExtensionsTest, TheIridescenceFieldsRoundTripAndAreValidated)
 
 TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D first(gd, 1, 1);
     Texture2D second(gd, 1, 1);
 
@@ -304,7 +305,7 @@ TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
 
 TEST(PbrMaterialExtensionsTest, EqualSetsHashEqually)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D texture(gd, 1, 1);
 
     PbrMaterialExtensions a;
@@ -354,7 +355,7 @@ TEST(PbrMaterialExtensionsTest, EqualSetsHashEqually)
 
 TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D texture(gd, 1, 1);
 
     PbrMaterialExtensions extensions;
@@ -488,7 +489,7 @@ PbrMaterialExtensions FullyPopulated(Texture2D& first, Texture2D& second)
 
 TEST(PbrMaterialExtensionsTest, EveryFieldParticipatesInEqualityAndInTheHash)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D first(gd, 1, 1);
     Texture2D second(gd, 1, 1);
 
@@ -507,7 +508,7 @@ TEST(PbrMaterialExtensionsTest, EveryFieldParticipatesInEqualityAndInTheHash)
 
 TEST(PbrMaterialExtensionsTest, CopyingCarriesEveryField)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D first(gd, 1, 1);
     Texture2D second(gd, 1, 1);
 

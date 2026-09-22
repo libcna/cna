@@ -185,7 +185,7 @@ float RowMean(const std::vector<Color>& pixels, const int row)
 
 TEST(ContactShadowPassTest, ItNamesItself)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ContactShadowPass pass(gd);
     EXPECT_EQ(pass.getName(), "ContactShadow");
 }
@@ -194,7 +194,7 @@ TEST(ContactShadowPassTest, TheDefaultRayIsShort)
 {
     // Not a style point. A long ray is a bad shadow map: noisier, more expensive, and wrong
     // wherever the occluder leaves the screen. The default has to say what the pass is for.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ContactShadowPass pass(gd);
     EXPECT_LE(pass.getMaxDistance(), 0.5f);
     EXPECT_GT(pass.getMaxDistance(), 0.0f);
@@ -206,7 +206,7 @@ TEST(ContactShadowPassTest, TheDefaultRayIsShort)
 
 TEST(ContactShadowPassTest, EverySettingRoundTrips)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ContactShadowPass pass(gd);
 
     pass.setLightDirection(Vector3(0.0f, -1.0f, 0.5f));
@@ -227,7 +227,7 @@ TEST(ContactShadowPassTest, TheLightDirectionIsNotNormalizedOnAssignment)
 {
     // The same courtesy DirectionalLightEXT extends: a caller may write a convenient (-1, -1, -1)
     // and read back what they wrote.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ContactShadowPass pass(gd);
     pass.setLightDirection(Vector3(-1.0f, -1.0f, -1.0f));
     EXPECT_FLOAT_EQ(pass.getLightDirection().X, -1.0f);
@@ -264,7 +264,7 @@ TEST(ContactShadowPassTest, TheShaderAgreesWithTheCpuTwinOnEveryCase)
 {
     // The house pattern: the predicate is written twice and the two are compared where one of them
     // actually runs. A C++ twin nothing checks against the GPU is a second opinion, not a proof.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
@@ -383,7 +383,7 @@ TEST(ContactShadowPassTest, CombiningClampsRatherThanTrustingItsInputs)
 
 TEST(ContactShadowPassTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNamed)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -403,7 +403,7 @@ TEST(ContactShadowPassTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNam
 
 TEST(ContactShadowPassTest, WithoutAFarPlaneTheStoredDepthHasNoScaleAndThePassRefuses)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     auto scene = MakeFlatScene(gd, 200);
@@ -422,7 +422,7 @@ TEST(ContactShadowPassTest, WithoutAFarPlaneTheStoredDepthHasNoScaleAndThePassRe
 
 TEST(ContactShadowPassTest, WithoutAViewMatrixTheLightDirectionCannotBePlacedAndThePassRefuses)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     auto scene = MakeFlatScene(gd, 200);
@@ -441,7 +441,7 @@ TEST(ContactShadowPassTest, WithoutAViewMatrixTheLightDirectionCannotBePlacedAnd
 
 TEST(ContactShadowPassTest, ARunThatSucceedsNamesNoReason)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     auto scene = MakeFlatScene(gd, 200);
@@ -465,7 +465,7 @@ TEST(ContactShadowPassTest, TheWallBesideTheObjectDarkensAndTheWallBeyondTheRayD
     // light's direction -- loses its light, and the floor further away than the ray reaches keeps
     // it. A shadow map cannot make that distinction at any resolution a frame can afford, because
     // the distance involved is smaller than one of its texels.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -502,7 +502,7 @@ TEST(ContactShadowPassTest, AVerticalRayMarchesTowardTheSameScreenSideOnEveryBac
     // pass every image assertion. This is its ninety-degree rotation through a render target: the
     // ray travels toward low rows (+Y in the XNA camera), darkening the near wall but not the far
     // one. It guards the explicit texture-UV/camera-NDC bridge in the Vulkan payload.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -530,7 +530,7 @@ TEST(ContactShadowPassTest, AVerticalRayMarchesTowardTheSameScreenSideOnEveryBac
 
 TEST(ContactShadowPassTest, TheObjectItselfDoesNotShadowItself)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -553,7 +553,7 @@ TEST(ContactShadowPassTest, TheObjectItselfDoesNotShadowItself)
 
 TEST(ContactShadowPassTest, TheIntensityScalesHowMuchLightAHitRemoves)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -579,7 +579,7 @@ TEST(ContactShadowPassTest, AShortenedRayGivesUpTheContactItCanNoLongerReach)
 {
     // The cost dial stated as behaviour: the ray length is the shadow's length, so shortening it
     // does not make the shadow softer or dimmer -- it makes it end sooner.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -616,7 +616,7 @@ TEST(ContactShadowPassTest, AThicknessTooThinForTheGapLosesTheShadowEntirely)
     // in front of the wall; a thickness of 5 cm means the ray is judged to have passed *behind* it,
     // so the contact this pass exists for disappears. Nothing about the depth image says which
     // reading is right -- that is the boundary, and it is a setting rather than a fix.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -652,7 +652,7 @@ TEST(ContactShadowPassTest, APixelAlreadyBlackFromTheShadowMapStaysBlack)
     // The composition the screen-space pass actually performs: it multiplies into an image that
     // already carries the shadow map's term. A pixel the map put at zero is at zero afterwards --
     // there is no second darkening to apply and no way to go below it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -678,7 +678,7 @@ TEST(ContactShadowPassTest, TheDarkeningIsAProductOfTheImageItIsGiven)
     // Stated as a ratio rather than as an absolute: the same contact over a half-lit wall removes
     // the same *fraction*, which is what makes multiplying into an already-shadowed image the
     // right composition rather than a convenience.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 

@@ -142,7 +142,7 @@ TEST(SsaoFromRealPrepassTest, ThePrepassWritesARangeOfDepthsRatherThanOneValue)
     // Before asking what SSAO does with the image, establish that the image describes a scene. A
     // depth buffer that is one value everywhere -- all far, all near, all cleared -- makes every
     // later question meaningless, and it is the first thing to rule out.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -180,7 +180,7 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
     // The bisection. The synthetic SSAO tests feed a `Texture2D`; a pipeline feeds a
     // `RenderTarget2D`. If the identical *values* occlude through one and not the other, the fault
     // is in how the pass reads a render target rather than in the estimator.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -260,7 +260,7 @@ TEST(SsaoFromRealPrepassTest, ThePrepassesOwnDepthTargetOccludes)
     // of the two encodings. So the question this file asks is no longer "which format" but the one
     // that was underneath it the whole time -- does SSAO occlude from what the prepass actually
     // wrote?
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 

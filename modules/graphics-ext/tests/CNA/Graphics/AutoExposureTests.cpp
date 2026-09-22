@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -34,7 +35,7 @@ namespace {
     class AutoExposureTest : public ::testing::Test
     {
     protected:
-        GraphicsDevice gd;
+        CnaTest::EngineLayer::HiDefDevice gd;
 
         [[nodiscard]] bool supported() const
         {

@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/NotSupportedException.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -175,7 +176,7 @@ int CpuVisibleCount(const std::vector<GpuCullableInstance>& instances)
 
 TEST(GpuInstanceCullerTest, AnUnsupportedDeviceSaysWhichRequirementIsMissing)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (culler.isSupported())
     {
@@ -192,7 +193,7 @@ TEST(GpuInstanceCullerTest, AnUnsupportedDeviceSaysWhichRequirementIsMissing)
 
 TEST(GpuInstanceCullerTest, TheSurvivingCountMatchesTheCpuCuller)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 
@@ -211,7 +212,7 @@ TEST(GpuInstanceCullerTest, TheSurvivingCountMatchesTheCpuCuller)
 
 TEST(GpuInstanceCullerTest, EachSurvivorIsDrawnOnceAndTheRestAreNot)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 
@@ -250,7 +251,7 @@ TEST(GpuInstanceCullerTest, ACameraLookingAwaySeesNothingAndDrawsNothing)
     // The other end of the range, and the case a compacting culler can get wrong on its own: the
     // command's instance count starts at zero every cull, so a stale count from the previous frame
     // would show up here as a frame that still had geometry in it.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 
@@ -268,7 +269,7 @@ TEST(GpuInstanceCullerTest, ACameraLookingAwaySeesNothingAndDrawsNothing)
 
 TEST(GpuInstanceCullerTest, TheCullRefusesArgumentsThatCannotDescribeADraw)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 
@@ -280,7 +281,7 @@ TEST(GpuInstanceCullerTest, TheCullRefusesArgumentsThatCannotDescribeADraw)
 
 TEST(GpuInstanceCullerTest, DrawingBeforeCullingIsRefused)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 
@@ -290,7 +291,7 @@ TEST(GpuInstanceCullerTest, DrawingBeforeCullingIsRefused)
 
 TEST(GpuInstanceCullerTest, AnEmptySceneIsAcceptedRatherThanRefused)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 

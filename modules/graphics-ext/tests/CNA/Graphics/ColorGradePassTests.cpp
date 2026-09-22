@@ -123,7 +123,7 @@ TEST(ColorGradeTest, OnlyASquareStripDescribesATable)
 
 TEST(ColorGradeTest, AMalformedTableIsRefusedByNameRatherThanSampled)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
 
     Texture2D notAStrip(gd, kSize, kSize);
@@ -140,7 +140,7 @@ TEST(ColorGradeTest, AMalformedTableIsRefusedByNameRatherThanSampled)
 
 TEST(ColorGradeTest, TheIdentityTableIsValidatedAtItsOwnEnds)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW((void)ColorGradePass::createIdentityLut(gd, 1), std::invalid_argument);
     EXPECT_THROW((void)ColorGradePass::createIdentityLut(gd, 0), std::invalid_argument);
     EXPECT_THROW((void)ColorGradePass::createIdentityLut(gd, -4), std::invalid_argument);
@@ -157,7 +157,7 @@ TEST(ColorGradeTest, AnIdentityTableReproducesTheFrame)
     // The dullest test here and the one that catches the most. A strip lookup is off-by-half-a-texel
     // arithmetic throughout, and every mistake in it produces a frame that still looks like a frame
     // -- slightly washed, slightly shifted, entirely plausible. Only an exact identity catches it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
@@ -195,7 +195,7 @@ TEST(ColorGradeTest, ATableThatSwapsChannelsSwapsThem)
     // The counterpart to the identity: proof that the lookup is being read at all, and read in the
     // right order. A strip indexed with red and blue exchanged reproduces the frame just as
     // convincingly as the identity does, and this is what separates them.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
@@ -217,7 +217,7 @@ TEST(ColorGradeTest, ATableThatSwapsChannelsSwapsThem)
 
 TEST(ColorGradeTest, StrengthMixesBetweenTheOriginalAndTheGrade)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
@@ -246,7 +246,7 @@ TEST(ColorGradeTest, StrengthMixesBetweenTheOriginalAndTheGrade)
 
 TEST(ColorGradeTest, WithoutATableTheFrameIsPassedThroughUnchanged)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -264,7 +264,7 @@ TEST(ColorGradeTest, WithoutATableTheFrameIsPassedThroughUnchanged)
 
 TEST(ColorGradeTest, TheSettingsBagWinsOverThePassLocalStrength)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
@@ -290,7 +290,7 @@ TEST(ColorGradeTest, TheSettingsBagWinsOverThePassLocalStrength)
 
 TEST(ColorGradeTest, ApplyingDoesNotLeakItsLutSamplerState)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable colour-grade shader";
@@ -317,7 +317,7 @@ TEST(ColorGradeTest, ApplyingDoesNotLeakItsLutSamplerState)
 
 TEST(ColorGradeTest, TheStrengthIsClampedAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
 
     EXPECT_EQ(pass.getName(), "ColorGrade");

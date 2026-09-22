@@ -83,7 +83,7 @@ std::vector<Color> ReadTarget(RenderTarget2D& target)
 
 TEST(RenderTargetPoolTest, TheSameShapeIsHandedOutAgainRatherThanReallocated)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderTargetPool pool(gd);
 
     RenderTarget2D* first  = pool.acquire(16, 16, SurfaceFormat::Color, DepthFormat::None);
@@ -95,7 +95,7 @@ TEST(RenderTargetPoolTest, TheSameShapeIsHandedOutAgainRatherThanReallocated)
 
 TEST(RenderTargetPoolTest, EverySignificantDifferenceProducesADifferentTarget)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderTargetPool pool(gd);
 
     RenderTarget2D* base   = pool.acquire(16, 16, SurfaceFormat::Color, DepthFormat::None, 0);
@@ -112,7 +112,7 @@ TEST(RenderTargetPoolTest, EverySignificantDifferenceProducesADifferentTarget)
 
 TEST(RenderTargetPoolTest, ResetReleasesEverything)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderTargetPool pool(gd);
     (void)pool.acquire(16, 16, SurfaceFormat::Color, DepthFormat::None);
     ASSERT_GT(pool.getEstimatedBytes(), 0u);
@@ -125,7 +125,7 @@ TEST(RenderTargetPoolTest, ResetReleasesEverything)
 
 TEST(RenderTargetPoolTest, ANonPositiveSizeIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderTargetPool pool(gd);
 
     EXPECT_THROW((void)pool.acquire(0, 16, SurfaceFormat::Color, DepthFormat::None),
@@ -138,7 +138,7 @@ TEST(RenderTargetPoolTest, ANonPositiveSizeIsRejected)
 
 TEST(PostProcessChainTest, PassesRunInInsertionOrder)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     std::vector<RecordingPass::Invocation> log;
     RecordingPass first("first", &log);
     RecordingPass second("second", &log);
@@ -164,7 +164,7 @@ TEST(PostProcessChainTest, PassesRunInInsertionOrder)
 
 TEST(PostProcessChainTest, EachPassReadsWhatThePreviousOneWroteAndNeverItsOwnTarget)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     std::vector<RecordingPass::Invocation> log;
     RecordingPass first("first", &log);
     RecordingPass second("second", &log);
@@ -198,7 +198,7 @@ TEST(PostProcessChainTest, EachPassReadsWhatThePreviousOneWroteAndNeverItsOwnTar
 
 TEST(PostProcessChainTest, IntermediateTargetsAreReusedAcrossFrames)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     std::vector<RecordingPass::Invocation> log;
     RecordingPass first("first", &log);
     RecordingPass second("second", &log);
@@ -224,7 +224,7 @@ TEST(PostProcessChainTest, IntermediateTargetsAreReusedAcrossFrames)
 
 TEST(PostProcessChainTest, AnEmptyChainStillProducesTheImage)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     PostProcessChain chain(gd);
 
@@ -250,7 +250,7 @@ TEST(PostProcessChainTest, AnEmptyChainStillProducesTheImage)
 
 TEST(PostProcessChainTest, AMissingSourceOrSizeIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     PostProcessChain chain(gd);
     RenderTarget2D source(gd, kSize, kSize);
 
@@ -266,7 +266,7 @@ TEST(PostProcessChainTest, AMissingSourceOrSizeIsRejected)
 
 TEST(PostProcessChainTest, OwnedAndBorrowedPassesRunTogether)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     std::vector<RecordingPass::Invocation> log;
     RecordingPass borrowed("borrowed", &log);
 
@@ -298,7 +298,7 @@ TEST(PostProcessChainTest, OwnedAndBorrowedPassesRunTogether)
 
 TEST(BlitPassTest, ThePassNamesItselfStablyAndByReference)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const BlitPass blit(gd);
 
     EXPECT_EQ(blit.getName(), "Blit");
@@ -312,7 +312,7 @@ TEST(BlitPassTest, TheCopyIsSupportedOnEveryRenderer)
     // Unconditionally true, and that is the claim worth pinning: a plain copy needs no capability,
     // so a chain can always fall back to it. If this ever starts depending on the device, whatever
     // relied on the copy always being available needs to be revisited.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const BlitPass blit(gd);
 
     EXPECT_TRUE(blit.isSupported(gd));
@@ -322,7 +322,7 @@ TEST(BlitPassTest, TheCopyIsSupportedOnEveryRenderer)
 
 TEST(BlitPassTest, ACopyReproducesItsSourceExactly)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     RenderTarget2D source(gd, kSize, kSize);
     RenderTarget2D destination(gd, kSize, kSize);
@@ -353,7 +353,7 @@ TEST(BlitPassTest, AChainOfCopiesIsStillTheIdentity)
     // Three real passes through two ping-ponged intermediates. Any mistake in the alternation --
     // a pass reading its own destination, the wrong final target, a flipped coordinate -- shows up
     // here as pixels that differ from the input.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     RenderTarget2D source(gd, kSize, kSize);
     RenderTarget2D destination(gd, kSize, kSize);
@@ -386,7 +386,7 @@ TEST(BlitPassTest, AnHdrChainKeepsItsIntermediatesInFloat)
 {
     // The clamp that would be invisible: a Color intermediate between two float passes destroys
     // exactly the values the HDR pipeline exists to carry, and every pixel still looks plausible.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
         GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
 

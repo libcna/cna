@@ -74,7 +74,7 @@ TEST(RenderPipelineTest, AnInertPipelineNeverAllocatesASceneTarget)
 {
     // MOD-708. With nothing enabled there is nothing an off-screen target would enable, so the
     // frame goes straight to the back buffer -- and the memory estimate proves no target was made.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 
@@ -89,7 +89,7 @@ TEST(RenderPipelineTest, AnInertPipelineNeverAllocatesASceneTarget)
 
 TEST(RenderPipelineTest, EnablingAnythingSwitchesToTheSceneTarget)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -106,7 +106,7 @@ TEST(RenderPipelineTest, EnablingAnythingSwitchesToTheSceneTarget)
 
 TEST(RenderPipelineTest, HdrPicksTheBestSceneFormatTheRendererActuallyHas)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -126,7 +126,7 @@ TEST(RenderPipelineTest, HdrPicksTheBestSceneFormatTheRendererActuallyHas)
 
 TEST(RenderPipelineTest, TheSceneTargetIsNotVisibleOutsideAFrame)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -141,7 +141,7 @@ TEST(RenderPipelineTest, TheSceneTargetIsNotVisibleOutsideAFrame)
 
 TEST(RenderPipelineTest, UserPassesRunAfterTheBuiltInOnes)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -161,7 +161,7 @@ TEST(RenderPipelineTest, UserPassesRunAfterTheBuiltInOnes)
 TEST(RenderPipelineTest, AUserPassAloneIsEnoughToRunAFrameThroughTheChain)
 {
     // A game that wants only its own effect should not have to enable HDR to get one.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -179,7 +179,7 @@ TEST(RenderPipelineTest, AUserPassAloneIsEnoughToRunAFrameThroughTheChain)
 
 TEST(RenderPipelineTest, ClearingUserPassesReturnsThePipelineToInert)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 
@@ -196,7 +196,7 @@ TEST(RenderPipelineTest, ClearingUserPassesReturnsThePipelineToInert)
 
 TEST(RenderPipelineTest, SettingsChangesTakeEffectOnTheNextFrame)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -214,7 +214,7 @@ TEST(RenderPipelineTest, SettingsChangesTakeEffectOnTheNextFrame)
 
 TEST(RenderPipelineTest, BothMisusesAreRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
 
     // begin() before any size is known.
@@ -230,7 +230,7 @@ TEST(RenderPipelineTest, BothMisusesAreRejected)
 
 TEST(RenderPipelineTest, ANonPositiveSizeIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
 
     EXPECT_THROW(pipeline.resize(0, kHeight), std::invalid_argument);
@@ -240,7 +240,7 @@ TEST(RenderPipelineTest, ANonPositiveSizeIsRejected)
 TEST(RenderPipelineTest, RepeatedResizesStayBounded)
 {
     // A resized game must not keep paying for every size it has ever been.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
@@ -258,7 +258,7 @@ TEST(RenderPipelineTest, RepeatedResizesStayBounded)
 
 TEST(RenderPipelineTest, ManyFramesDoNotAccumulateTargets)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -282,7 +282,7 @@ TEST(RenderPipelineTest, AnInertPipelineProducesTheSameFrameAsNoPipelineAtAll)
 {
     // D8, and the reason the short circuit exists: wrapping a game in an unconfigured pipeline
     // must not change one pixel of its output.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 
@@ -301,7 +301,7 @@ TEST(RenderPipelineTest, SsaoRunsOnlyWhenItsInputsAreSupplied)
     // The pipeline cannot produce depth and normals itself -- that means drawing the game's
     // geometry a second time with a different effect, which only the game can do. Enabling SSAO
     // without them is a misconfiguration that must still render a frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -319,7 +319,7 @@ TEST(RenderPipelineTest, TheFixedPassOrderIsSsaoThenBloomThenTonemapThenFxaa)
     // Each position is a decision with a reason: SSAO shades the scene before anything measures
     // its brightness, bloom's threshold reads scene-referred values, tonemapping is the boundary
     // to display-referred colour, and FXAA finds edges in displayed pixels.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -347,7 +347,7 @@ TEST(RenderPipelineTest, SsrSitsBetweenSsaoAndBloom)
     // tonemapper**, for the reason bloom is -- a reflection carries scene-referred colour, and
     // mixing it in after the range has been compressed makes a reflected highlight
     // indistinguishable from a reflected white wall.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -372,7 +372,7 @@ TEST(RenderPipelineTest, TheCameraHistoryAdvancesOncePerFrameAndNotPerSetCamera)
     // Advancing it in setCamera would make a game that sets the camera twice in a frame -- or once
     // every other frame -- compare against a camera nothing was ever drawn with, and the blur would
     // be wrong in a way no single frame could reveal.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -406,7 +406,7 @@ TEST(RenderPipelineTest, DepthOfFieldSitsBeforeBloomBecauseItBelongsToTheLens)
     // plans/plan_modern.md MOD-2011. An out-of-focus highlight should bloom as the spread circle it
     // became, not as the point it was. Blooming first and blurring the glow afterwards is wrong in
     // the same way tonemapping before bloom would be, so the lens runs first.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -424,7 +424,7 @@ TEST(RenderPipelineTest, DepthOfFieldSitsBeforeBloomBecauseItBelongsToTheLens)
 
 TEST(RenderPipelineTest, DepthOfFieldAloneIsEnoughToNeedASceneTarget)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -444,7 +444,7 @@ TEST(RenderPipelineTest, SsrAloneIsEnoughToNeedASceneTarget)
 {
     // A pass that reads the frame cannot run against the back buffer, so enabling it must take the
     // pipeline out of its inert short circuit -- the same claim every other pass has.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -466,7 +466,7 @@ TEST(RenderPipelineTest, TheCameraIsValidatedAndReachesTheScreenSpacePasses)
     // SSR does, and gets it from here. The range is validated at the setter rather than at the
     // frame, because the failure it prevents -- reconstructing positions of NaN from a depth
     // normalised by a zero far plane -- produces a frame that renders and is silently wrong.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
 
     const Matrix view = Matrix::CreateLookAt(Microsoft::Xna::Framework::Vector3::Zero,
@@ -491,7 +491,7 @@ TEST(RenderPipelineTest, TheShadowPassRunsBeforeTheSceneTargetIsBound)
     // Ordering is the whole assertion. ShadowMap::end() restores the back buffer, so a shadow pass
     // running after the scene target was bound would unbind it and send the frame to the screen --
     // a mistake whose symptom is post-processing silently doing nothing.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -523,7 +523,7 @@ TEST(RenderPipelineTest, TheShadowPassRunsBeforeTheSceneTargetIsBound)
 TEST(RenderPipelineTest, EachMissingIngredientLeavesTheShadowPassUnrun)
 {
     // Three separate reasons not to run one, and the app can tell them apart from what it set.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     CNA::Graphics::ShadowMap shadowMap(gd, CNA::Graphics::ShadowQuality::Low);
@@ -561,7 +561,7 @@ TEST(RenderPipelineTest, AShadowPassAloneDoesNotForceASceneTarget)
 {
     // Shadows and post-processing are independent: a game that wants shadows and no HDR must not
     // start paying for an off-screen target it has no use for.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
@@ -588,7 +588,7 @@ TEST(RenderPipelineTest, TheSkyIsDrawnInsideBeginAndReportsItself)
 {
     // MOD-1104. The ordering matters and is the reason didSkyboxDraw() exists: an app cannot see
     // from outside whether the sky went in before its geometry or not at all.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
@@ -626,7 +626,7 @@ TEST(RenderPipelineTest, ASkyAloneDoesNotForceASceneTarget)
 {
     // A game that wants a sky and no post-processing must not start paying for an off-screen
     // target: the sky goes straight to the back buffer, exactly like the rest of that frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 

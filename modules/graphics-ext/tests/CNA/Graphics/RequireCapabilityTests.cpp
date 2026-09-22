@@ -15,6 +15,7 @@
 #include "CNA/Graphics/RequireCapability.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <algorithm>
 #include <string>
@@ -54,7 +55,7 @@ constexpr GraphicsCapability kEveryCapability[] = {
 
 TEST(RequireCapabilityTest, ASupportedCapabilityReturnsWithoutThrowing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     // Whatever this renderer is, it supports something; check the quiet path on everything it has.
     // Asserting on a fixed capability would make this test about the renderer, not the helper.
     int checked = 0;
@@ -76,7 +77,7 @@ TEST(RequireCapabilityTest, ASupportedCapabilityReturnsWithoutThrowing)
 
 TEST(RequireCapabilityTest, AnUnsupportedCapabilityThrowsWithTheRenderersOwnName)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     // Find something this renderer does not have, so the test works on every renderer rather than
     // on the one it was written against.
     bool foundOne = false;

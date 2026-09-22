@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -54,7 +55,7 @@ namespace {
     class TrianglePart : public ::testing::Test
     {
     protected:
-        GraphicsDevice gd;
+        CnaTest::EngineLayer::HiDefDevice gd;
         std::unique_ptr<VertexBuffer> vertices;
         std::unique_ptr<IndexBuffer> indices;
         std::unique_ptr<ModelMeshPart> part;

@@ -106,7 +106,7 @@ TEST(LightShaftTest, PixelsOnTheClearPathToTheLightBrighten)
 {
     // The path from a pixel to the light passes through the bright region near it, so what the walk
     // gathers piles up. A pixel with nothing bright on its path gathers nothing.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightShaftPass pass(gd);
     if (!pass.isSupported(gd)) GTEST_SKIP() << "this renderer has no usable light-shaft shader";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -140,7 +140,7 @@ TEST(LightShaftTest, AnOccluderLeavesItsShapeInTheShafts)
     // The claim that separates a shaft from a glow. A pixel whose path to the light is blocked by
     // the bar gathers nothing across it, so it stays darker than a neighbour at the same distance
     // whose path is clear. The absence is the effect.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightShaftPass pass(gd);
     if (!pass.isSupported(gd)) GTEST_SKIP() << "this renderer has no usable light-shaft shader";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -182,7 +182,7 @@ TEST(LightShaftTest, ALightWellOffScreenStopsContributing)
     // A light past the edge still throws shafts inward, and the effect has to fade with how far
     // outside it is. A hard border test would switch the whole effect off in one frame as the sun
     // leaves the view, which is the giveaway this avoids.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightShaftPass pass(gd);
     if (!pass.isSupported(gd)) GTEST_SKIP() << "this renderer has no usable light-shaft shader";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -213,7 +213,7 @@ TEST(LightShaftTest, ALightWellOffScreenStopsContributing)
 
 TEST(LightShaftTest, ZeroIntensityLeavesTheFrameAlone)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightShaftPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -229,7 +229,7 @@ TEST(LightShaftTest, ZeroIntensityLeavesTheFrameAlone)
 
 TEST(LightShaftTest, TheSettingsRoundTripAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightShaftPass pass(gd);
     EXPECT_EQ(pass.getName(), "LightShafts");
     EXPECT_EQ(LightShaftPass::kStepCount, 24);

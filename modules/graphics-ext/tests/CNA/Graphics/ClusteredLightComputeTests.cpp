@@ -88,7 +88,7 @@ TEST(ClusteredLightComputeTest, ADeviceWithoutComputeStillProducesAnAssignment)
 {
     // The fallback is the point of this one: whatever the device, assign() has to leave a usable
     // result behind, because a frame with no lights sorted is worse than a frame sorted slowly.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     const ClusteredLightGrid grid = MakeGrid();
 
@@ -110,14 +110,14 @@ TEST(ClusteredLightComputeTest, ADeviceWithoutComputeStillProducesAnAssignment)
 
 TEST(ClusteredLightComputeTest, ANonPositiveStrideIsRefused)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW(ClusteredLightCompute(gd, 0), std::invalid_argument);
     EXPECT_THROW(ClusteredLightCompute(gd, -4), std::invalid_argument);
 }
 
 TEST(ClusteredLightComputeTest, OneLightSortsIdenticallyOnBothPaths)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 
@@ -127,7 +127,7 @@ TEST(ClusteredLightComputeTest, OneLightSortsIdenticallyOnBothPaths)
 
 TEST(ClusteredLightComputeTest, ManyScatteredLightsSortIdenticallyOnBothPaths)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 
@@ -148,7 +148,7 @@ TEST(ClusteredLightComputeTest, LightsOutsideTheFrustumSortIdenticallyOnBothPath
 {
     // The CPU path narrows by depth before it starts and the GPU path does not narrow at all, so
     // the four ways a light can be outside the frustum are exactly where the two could part company.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 
@@ -164,7 +164,7 @@ TEST(ClusteredLightComputeTest, LightsOutsideTheFrustumSortIdenticallyOnBothPath
 
 TEST(ClusteredLightComputeTest, AZeroRadiusLightIsSkippedOnBothPaths)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 
@@ -176,7 +176,7 @@ TEST(ClusteredLightComputeTest, AZeroRadiusLightIsSkippedOnBothPaths)
 
 TEST(ClusteredLightComputeTest, NoLightsAtAllSortsIdenticallyOnBothPaths)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 
@@ -187,7 +187,7 @@ TEST(ClusteredLightComputeTest, AClusterPastTheStrideIsReportedRatherThanTruncat
 {
     // A GPU cannot grow an array, so the per-cluster capacity is fixed and overflow is possible.
     // What must not happen is that it passes unnoticed: the count is a number a game can act on.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd, 4);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 
@@ -206,7 +206,7 @@ TEST(ClusteredLightComputeTest, AClusterPastTheStrideIsReportedRatherThanTruncat
 
 TEST(ClusteredLightComputeTest, TooManyLightsIsRefusedOnTheGpuPathToo)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightCompute compute(gd);
     CNA_SKIP_WITHOUT_CLUSTER_COMPUTE(compute);
 

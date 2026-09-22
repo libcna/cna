@@ -72,7 +72,7 @@ namespace {
 
 TEST(CRTEffectTest, DefaultParametersAreModerate)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     EXPECT_FLOAT_EQ(fx.getScanlineIntensity(), 0.3f);
@@ -99,7 +99,7 @@ TEST(CRTEffectTest, DefaultParametersAreModerate)
 
 TEST(CRTEffectTest, SetScanlineIntensityRoundTripsAndClamps)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     fx.setScanlineIntensity(0.6f);
@@ -114,7 +114,7 @@ TEST(CRTEffectTest, SetScanlineIntensityRoundTripsAndClamps)
 
 TEST(CRTEffectTest, SetCurvatureRoundTripsAndClamps)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     fx.setCurvature(0.5f);
@@ -129,7 +129,7 @@ TEST(CRTEffectTest, SetCurvatureRoundTripsAndClamps)
 
 TEST(CRTEffectTest, SetVignetteIntensityRoundTripsAndClamps)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     fx.setVignetteIntensity(0.7f);
@@ -144,7 +144,7 @@ TEST(CRTEffectTest, SetVignetteIntensityRoundTripsAndClamps)
 
 TEST(CRTEffectTest, SetMaskIntensityRoundTripsAndClamps)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     fx.setMaskIntensity(0.9f);
@@ -159,7 +159,7 @@ TEST(CRTEffectTest, SetMaskIntensityRoundTripsAndClamps)
 
 TEST(CRTEffectTest, SetMaskTypeRoundTripsForEveryType)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     const CRTMaskType maskTypes[] = {
@@ -177,7 +177,7 @@ TEST(CRTEffectTest, SetMaskTypeRoundTripsForEveryType)
 
 TEST(CRTEffectTest, ApplyDoesNotCrashWithoutARenderer)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     fx.setMaskType(CRTMaskType::ShadowMask);
@@ -186,7 +186,7 @@ TEST(CRTEffectTest, ApplyDoesNotCrashWithoutARenderer)
 
 TEST(CRTEffectTest, GetTypeNameReturnsCnaGraphicsCRTEffect)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
 
     EXPECT_EQ(fx.GetTypeName(), "CNA.Graphics.CRTEffect");
@@ -194,7 +194,7 @@ TEST(CRTEffectTest, GetTypeNameReturnsCnaGraphicsCRTEffect)
 
 TEST(CRTEffectTest, CloneReturnsIndependentCRTEffectWithSameParameters)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     fx.setScanlineIntensity(0.5f);
     fx.setCurvature(0.2f);
@@ -222,7 +222,7 @@ TEST(CRTEffectTest, CloneReturnsIndependentCRTEffectWithSameParameters)
 
 TEST(CRTEffectTest, DisabledParametersCopyTheSourceExactly)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     CNA_REQUIRE_PORTABLE_CRT(gd, fx);
     fx.setScanlineIntensity(0.0f);
@@ -239,7 +239,7 @@ TEST(CRTEffectTest, DisabledParametersCopyTheSourceExactly)
 
 TEST(CRTEffectTest, ScanlinesAlternateInEasyGlScreenOrder)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     CNA_REQUIRE_PORTABLE_CRT(gd, fx);
     fx.setScanlineIntensity(0.5f);
@@ -257,7 +257,7 @@ TEST(CRTEffectTest, ScanlinesAlternateInEasyGlScreenOrder)
 
 TEST(CRTEffectTest, ApertureGrilleSelectsRedGreenBlueColumns)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     CNA_REQUIRE_PORTABLE_CRT(gd, fx);
     fx.setScanlineIntensity(0.0f);
@@ -281,7 +281,7 @@ TEST(CRTEffectTest, ApertureGrilleSelectsRedGreenBlueColumns)
 
 TEST(CRTEffectTest, ShadowMaskStaggersItsTriadByPhysicalRowGroup)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     CNA_REQUIRE_PORTABLE_CRT(gd, fx);
     fx.setScanlineIntensity(0.0f);
@@ -300,7 +300,7 @@ TEST(CRTEffectTest, ShadowMaskStaggersItsTriadByPhysicalRowGroup)
 
 TEST(CRTEffectTest, CurvatureClipsCornersButKeepsTheCentre)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     CNA_REQUIRE_PORTABLE_CRT(gd, fx);
     fx.setScanlineIntensity(0.0f);
@@ -317,7 +317,7 @@ TEST(CRTEffectTest, CurvatureClipsCornersButKeepsTheCentre)
 
 TEST(CRTEffectTest, VignetteDarkensCornersMoreThanTheCentre)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CRTEffect fx(gd);
     CNA_REQUIRE_PORTABLE_CRT(gd, fx);
     fx.setScanlineIntensity(0.0f);

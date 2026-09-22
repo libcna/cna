@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cstdint>
@@ -340,7 +341,7 @@ TEST(Texture2DArrayDescriptorTest, RejectsEveryIntrinsicInvalidShapeBeforeADevic
 
 TEST(Texture2DArrayTest, LiveConstructionRequiresTheWholePublishedDeviceContract)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     const Texture2DArrayDescriptor descriptor(
         4, 4, 2, 1, SurfaceFormat::Color, Texture2DArrayUsage::Sampled);
     const std::size_t baseline = device.GetTrackedResourceCount();
@@ -373,7 +374,7 @@ TEST(Texture2DArrayTest, LiveConstructionRequiresTheWholePublishedDeviceContract
 
 TEST(Texture2DArrayTest, ValidatesLiveLimitsAndFormatUsageBeforeRendererCreation)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = std::make_unique<TextureArrayContractRenderer>(nativeDestructions);
     TextureArrayContractRenderer* const rendererView = renderer.get();
@@ -424,7 +425,7 @@ TEST(Texture2DArrayTest, ValidatesLiveLimitsAndFormatUsageBeforeRendererCreation
 
 TEST(Texture2DArrayTest, TransfersPreserveLayerMipRectangleAndExactBytes)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = std::make_unique<TextureArrayContractRenderer>(nativeDestructions);
     TextureArrayContractRenderer* const rendererView = renderer.get();
@@ -470,7 +471,7 @@ TEST(Texture2DArrayTest, TransfersPreserveLayerMipRectangleAndExactBytes)
 
 TEST(Texture2DArrayTest, TransferValidationRejectsInvalidRangesBeforeTheRenderer)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = std::make_unique<TextureArrayContractRenderer>(nativeDestructions);
     TextureArrayContractRenderer* const rendererView = renderer.get();
@@ -512,7 +513,7 @@ TEST(Texture2DArrayTest, TransferValidationRejectsInvalidRangesBeforeTheRenderer
 
 TEST(Texture2DArrayTest, CompressedTransfersCountBlocksAndPermitOddMipEdges)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = std::make_unique<TextureArrayContractRenderer>(nativeDestructions);
     TextureArrayContractRenderer* const rendererView = renderer.get();
@@ -547,7 +548,7 @@ TEST(Texture2DArrayTest, CompressedTransfersCountBlocksAndPermitOddMipEdges)
 
 TEST(Texture2DArrayTest, ShaderBindingRetainsOnlyTheInternalRecordAndCanBeCleared)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = std::make_unique<TextureArrayContractRenderer>(nativeDestructions);
     TextureArrayContractRenderer* const rendererView = renderer.get();
@@ -581,7 +582,7 @@ TEST(Texture2DArrayTest, ShaderBindingRetainsOnlyTheInternalRecordAndCanBeCleare
 
 TEST(Texture2DArrayTest, TracksDisposesAndReleasesItsInternalRecordInDeviceOrder)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = std::make_unique<TextureArrayContractRenderer>(nativeDestructions);
     TextureArrayContractRenderer* const rendererView = renderer.get();

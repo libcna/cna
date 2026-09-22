@@ -86,7 +86,7 @@ TEST(DebugDrawTest, ABoxIsTwelveEdgesJoiningItsEightCorners)
 {
     // The strong form: not "twelve lines were emitted" but "the twelve lines are exactly the box's
     // edges". A helper that emitted twelve arbitrary segments would pass the count and fail this.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -121,7 +121,7 @@ TEST(DebugDrawTest, ABoxIsTwelveEdgesJoiningItsEightCorners)
 TEST(DebugDrawTest, EveryBoxEdgeRunsAlongExactlyOneAxis)
 {
     // A diagonal would satisfy the corner-count test above by joining the wrong pair.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.addBox(BoundingBox(Vector3(-1.0f, -2.0f, -3.0f), Vector3(4.0f, 5.0f, 6.0f)),
@@ -142,7 +142,7 @@ TEST(DebugDrawTest, EveryBoxEdgeRunsAlongExactlyOneAxis)
 
 TEST(DebugDrawTest, AFrustumIsTwelveEdgesJoiningItsEightCorners)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -165,7 +165,7 @@ TEST(DebugDrawTest, ASphereIsThreeRingsAndEveryPointIsOnIt)
 {
     // Three rings rather than a mesh: a wireframe ball is unreadable at any line count a debug
     // helper can afford. What must hold is that every vertex is on the sphere's surface.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -187,7 +187,7 @@ TEST(DebugDrawTest, ASphereIsThreeRingsAndEveryPointIsOnIt)
 
 TEST(DebugDrawTest, TheSegmentCountIsClampedRatherThanTrusted)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
 
     debug.begin(View(), Projection());
@@ -201,7 +201,7 @@ TEST(DebugDrawTest, TheSegmentCountIsClampedRatherThanTrusted)
 
 TEST(DebugDrawTest, ABoundingSphereOverloadUsesItsOwnCentreAndRadius)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.addSphere(BoundingSphere(Vector3(5.0f, 0.0f, 0.0f), 3.0f), Color::Red, 8);
@@ -217,7 +217,7 @@ TEST(DebugDrawTest, ABoundingSphereOverloadUsesItsOwnCentreAndRadius)
 
 TEST(DebugDrawTest, ACrossIsThreeAxisAlignedArms)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.addCross(Vector3(1.0f, 1.0f, 1.0f), 0.5f, Color::White);
@@ -232,7 +232,7 @@ TEST(DebugDrawTest, ACrossIsThreeAxisAlignedArms)
 
 TEST(DebugDrawTest, TheColourIsCarriedOnEveryVertex)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.addLine(Vector3::Zero, Vector3::One, Color(10, 20, 30, 255));
@@ -251,7 +251,7 @@ TEST(DebugDrawTest, SubmissionsGoToTheListTheModeSelectedWhenTheyWereMade)
 {
     // Per submission, not per batch: the two modes answer different questions in one frame, and a
     // helper that made it a batch-wide setting would need two batches to ask both.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -270,7 +270,7 @@ TEST(DebugDrawTest, SubmissionsGoToTheListTheModeSelectedWhenTheyWereMade)
 
 TEST(DebugDrawTest, TheModeResetsWithEachBatch)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.setDepthTested(false);
@@ -280,7 +280,7 @@ TEST(DebugDrawTest, TheModeResetsWithEachBatch)
 
 TEST(DebugDrawTest, BeginForgetsWhateverTheLastBatchHeld)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.addBox(BoundingBox(Vector3::Zero, Vector3::One), Color::Red);
@@ -290,7 +290,7 @@ TEST(DebugDrawTest, BeginForgetsWhateverTheLastBatchHeld)
 
 TEST(DebugDrawTest, ClearForgetsTheShapesAndLeavesTheBatchOpen)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
     debug.addBox(BoundingBox(Vector3::Zero, Vector3::One), Color::Red);
@@ -304,7 +304,7 @@ TEST(DebugDrawTest, ClearForgetsTheShapesAndLeavesTheBatchOpen)
 
 TEST(DebugDrawTest, TheBatchIsEmptyAfterItIsDrawn)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D target(gd, 64, 64);
@@ -325,7 +325,7 @@ TEST(DebugDrawTest, TheBatchIsEmptyAfterItIsDrawn)
 
 TEST(DebugDrawTest, EndingWithoutABatchOpenDoesNothing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     EXPECT_NO_THROW(debug.end());
     EXPECT_NO_THROW(debug.end());
@@ -336,7 +336,7 @@ TEST(DebugDrawTest, AnOverlayShapeSurvivesGeometryInFrontOfIt)
     // MOD-2162's actual claim, on the GPU: a line behind a solid wall is invisible depth-tested and
     // visible as an overlay. This is what makes the mode worth having -- finding the gizmo that
     // turned out to be inside the floor.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 

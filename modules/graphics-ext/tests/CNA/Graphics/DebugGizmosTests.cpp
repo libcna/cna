@@ -88,7 +88,7 @@ TEST(DebugGizmosTest, APointLightsSphereHasItsRange)
 {
     // The sphere is the whole claim a point light makes -- beyond Range it contributes nothing --
     // and Range is the number most often set to something that turns out not to cover the room.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -115,7 +115,7 @@ TEST(DebugGizmosTest, ASpotLightsConeReachesItsRangeAtItsOuterAngle)
     // The cone's base radius is range * tan(outer angle) and its centre is range along the axis.
     // Getting either wrong draws a plausible cone in the wrong place, which is the one failure a
     // debug helper cannot afford -- nobody checks a debug view against anything.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -153,7 +153,7 @@ TEST(DebugGizmosTest, ADegenerateSpotDirectionDoesNotProduceNaNs)
 {
     // normalize(vec3(0)) is NaN and every comparison against NaN is false, so a degenerate
     // direction would draw a gizmo made entirely of nothing, with no error to point at.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -174,7 +174,7 @@ TEST(DebugGizmosTest, ADirectionalArrowPointsTheWayTheLightTravels)
 {
     // The convention matters: DirectionalLightEXT::Direction is where the light *goes*, not where
     // it comes from, and an arrow drawn the other way would be a plausible picture of a wrong fact.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -198,7 +198,7 @@ TEST(DebugGizmosTest, AProbeVolumeGetsItsBoundsAndAMarkerAtEveryProbe)
     // The spacing is the point: irradiance is interpolated between probes, so a grid coarser than
     // the geometry inside it leaks light through walls, and the grid is the only way to see that
     // before it happens.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -224,7 +224,7 @@ TEST(DebugGizmosTest, EachDepthSliceGetsOneBoxAndTheyGrowWithDistance)
     // The slices and not the tiles: a 16 by 8 grid over 24 slices is 3072 boxes, which is a thicket
     // rather than a picture. What the slices show is that the slicing is *exponential* -- the near
     // ones are thin and the far ones enormous -- which is the property the whole scheme rests on.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -263,7 +263,7 @@ TEST(DebugGizmosTest, AGridWithNoProjectionDrawsNothingRatherThanThrowing)
 {
     // A debug helper that throws is worse than one that draws nothing: it takes the frame down at
     // exactly the moment somebody is trying to see what is wrong with it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
     debug.begin(View(), Projection());
 
@@ -278,7 +278,7 @@ TEST(DebugGizmosTest, TheSliceBoxesArePlacedByTheViewMatrixTheyAreGiven)
 {
     // The grid's bounds are in view space, so a wrong or missing transform puts every slice at the
     // origin -- a picture that looks like a working gizmo describing a broken grid.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DebugDraw debug(gd);
 
     ClusteredLightGrid grid(2, 2, 3);
@@ -306,7 +306,7 @@ TEST(DebugGizmosTest, EachCascadeGetsTheFrustumItsMatrixDescribes)
     // What a cascade set actually decided, which is otherwise invisible: how much world each level
     // covers and how much they overlap. A cascade fitted far larger than its split needs is
     // resolution thrown away and looks like nothing at all in the rendered frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 3);
     if (!cascades.isSupported())
         GTEST_SKIP() << "this renderer cannot run cascaded shadow maps";
@@ -336,7 +336,7 @@ TEST(DebugGizmosTest, LaterCascadesCoverMoreWorldThanEarlierOnes)
     // The property the whole cascade scheme exists for, made visible: each level trades resolution
     // for reach. A set where the volumes came out the same size is one whose split lambda did
     // nothing, and nothing in a rendered frame says so.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 3);
     if (!cascades.isSupported())
         GTEST_SKIP() << "this renderer cannot run cascaded shadow maps";

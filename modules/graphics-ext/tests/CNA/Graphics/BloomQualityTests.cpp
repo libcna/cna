@@ -176,7 +176,7 @@ TEST(BloomPyramidTest, MoreLevelsReachFurtherFromTheSource)
     // The property progressive upsampling exists to give. A single composite of the smallest level
     // would produce a glow whose *reach* barely changed with the level count, because the wide,
     // flat smallest level would dominate every configuration.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     BloomPass probe(gd);
@@ -205,7 +205,7 @@ TEST(BloomPyramidTest, EveryLevelContributesRatherThanOnlyTheSmallest)
 {
     // The other half of the same property, measured as total energy rather than reach: a pyramid
     // that composited only its smallest level would lose the tight core the large levels carry.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     BloomPass probe(gd);
@@ -232,7 +232,7 @@ TEST(BloomPyramidTest, TheGlowIsSymmetricAboutTheSource)
 {
     // A pyramid whose upsample is offset by half a texel drifts the halo to one side -- an error
     // that looks like a lighting choice rather than a bug.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     BloomPass probe(gd);

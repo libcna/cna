@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <vector>
 
@@ -78,7 +79,7 @@ int CountIntermediateTones(const std::vector<Color>& pixels)
 
 TEST(FxaaPassTest, AHardEdgeGainsIntermediateTones)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FxaaPass fxaa(gd);
     if (!fxaa.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -104,7 +105,7 @@ TEST(FxaaPassTest, AHardEdgeGainsIntermediateTones)
 TEST(FxaaPassTest, AFlatFieldIsLeftAlone)
 {
     // The other half of the contract: an edge filter that also softens flat areas is a blur.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FxaaPass fxaa(gd);
     if (!fxaa.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -134,7 +135,7 @@ TEST(FxaaPassTest, AThresholdAboveEveryContrastDisablesTheFilter)
 {
     // Proves the threshold is really consulted: set it beyond any contrast the image contains and
     // the edge must survive untouched.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FxaaPass fxaa(gd);
     if (!fxaa.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -156,7 +157,7 @@ TEST(FxaaPassTest, AThresholdAboveEveryContrastDisablesTheFilter)
 
 TEST(FxaaPassTest, TheThresholdRoundTripsAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FxaaPass fxaa(gd);
 
     EXPECT_FLOAT_EQ(fxaa.getEdgeThreshold(), 0.125f);

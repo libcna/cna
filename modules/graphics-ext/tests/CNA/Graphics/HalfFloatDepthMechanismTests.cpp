@@ -265,7 +265,7 @@ TEST(HalfFloatDepthMechanismTest, TheSameSceneOccludesInOneEncodingAndNotTheOthe
 {
     // The measurement that drove the format change, rebuilt so it can be taken apart. Both prepasses
     // see the same geometry through the same camera; only the storage differs.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     if (!CanBuildTheFailingShape(gd))
         GTEST_SKIP() << "the failing shape needs a half-float render target, a readable one, and a "
@@ -332,7 +332,7 @@ TEST(HalfFloatDepthMechanismTest, TheSameValuesInAnotherFormatOccludeNormally)
     // The bisection that separates *values* from *format*. Take the half-float image, repack it into
     // the packed layout without touching a number, and run the estimator on the result. Occlusion
     // appears, so the half-float image held usable depth all along.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     if (!CanBuildTheFailingShape(gd)) GTEST_SKIP() << "the failing shape cannot be built here";
 
@@ -479,7 +479,7 @@ TEST(HalfFloatDepthMechanismTest, TheSkyEarlyReturnIsWhatBreaksTheHalfFloatPath)
     // The answer, taken on the shader the layer actually ships rather than on a replica of it. The
     // only difference between the two programs is that one has `SsaoPass`'s sky early-out and the
     // other has it cut out of the emitted string.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     if (!CanBuildTheFailingShape(gd)) GTEST_SKIP() << "the failing shape cannot be built here";
 
@@ -557,7 +557,7 @@ TEST(HalfFloatDepthMechanismTest, TheBindingAndTheComparisonAreBothSound)
     // of the estimator is not around it. A silently-failed bind would look exactly like a format
     // that samples wrongly, and a comparison that failed here would be a simpler explanation than
     // the one this file arrived at.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     if (!CanBuildTheFailingShape(gd)) GTEST_SKIP() << "the failing shape cannot be built here";
 

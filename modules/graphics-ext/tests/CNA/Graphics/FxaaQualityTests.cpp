@@ -11,6 +11,7 @@
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "EngineTestSupport.hpp"
 
 namespace {
 
@@ -59,7 +60,7 @@ TEST(FxaaQualityTest, ThePassDefaultIsTheMediumPreset)
 {
     // The pass's own default and the Medium preset must be the same number, or applying Medium
     // would silently change a game that had never touched the setting.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const FxaaPass pass(gd);
     EXPECT_FLOAT_EQ(pass.getEdgeThreshold(),
                     FxaaPass::edgeThresholdForQuality(RenderQuality::Medium));
@@ -91,7 +92,7 @@ TEST(FxaaQualityTest, TheSettingsBagOverridesThePassLocalDefault)
     // Every other pass reads its parameters from the settings when one is supplied; FXAA did not
     // until MOD-604, which meant a pipeline that applied a quality preset was silently overruled
     // by whatever the pass itself had been constructed with.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FxaaPass pass(gd);
     pass.setEdgeThreshold(0.5f);
     EXPECT_FLOAT_EQ(pass.getEdgeThreshold(), 0.5f);

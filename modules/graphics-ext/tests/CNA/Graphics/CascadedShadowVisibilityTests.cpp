@@ -217,7 +217,7 @@ int GroundPixelCount(const Frame& frame)
 class CascadedShadowVisibilityTest : public ::testing::Test
 {
 protected:
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
 
     void SetUp() override
     {

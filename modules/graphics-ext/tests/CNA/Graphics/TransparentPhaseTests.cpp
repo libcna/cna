@@ -116,7 +116,7 @@ TEST(TransparentPhaseTest, ARegisteredDrawIsIgnoredWhileTheModeIsNone)
 {
     // The opt-in promise, and it is asserted the strong way: the frame with a transparent draw
     // registered and the mode left alone must be the *same pixels* as the frame without one.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(device);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);
 
@@ -150,7 +150,7 @@ TEST(TransparentPhaseTest, ARegisteredDrawIsIgnoredWhileTheModeIsNone)
 
 TEST(TransparentPhaseTest, TheSortedPhaseReachesTheFrame)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(device);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);
 
@@ -183,7 +183,7 @@ TEST(TransparentPhaseTest, DepthIsTestedAndNotWritten)
     // every transparent surface behind it, which looks like missing geometry rather than like a
     // state mistake. Two quads at different depths, the near one drawn first -- if depth were
     // written, the far one would be rejected and the frame would show only the near colour.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(device);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);
 
@@ -215,7 +215,7 @@ TEST(TransparentPhaseTest, TheOrderIndependentPathKeepsTheOpaqueFrame)
     // and binds it again to resolve, and a DiscardContents target throws the whole opaque frame
     // away on that second bind. The right half of the frame has no transparency on it at all, so
     // it is exactly the opaque background -- and that is what this reads.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(device);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);
 

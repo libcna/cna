@@ -152,7 +152,7 @@ TEST(HeightFogTest, DegenerateConfigurationsAnswerZero)
 
 TEST(HeightFogTest, TheFurtherHalfOfTheFrameIsFoggedMore)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     HeightFogPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable height-fog shader package";
@@ -180,7 +180,7 @@ TEST(HeightFogTest, TheFurtherHalfOfTheFrameIsFoggedMore)
 
 TEST(HeightFogTest, RaisingTheCameraAboveTheLayerReducesFog)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     HeightFogPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable height-fog shader package";
@@ -210,7 +210,7 @@ TEST(HeightFogTest, RaisingTheCameraAboveTheLayerReducesFog)
 
 TEST(HeightFogTest, ZeroDensityLeavesTheFrameAlone)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     HeightFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -228,7 +228,7 @@ TEST(HeightFogTest, ZeroDensityLeavesTheFrameAlone)
 
 TEST(HeightFogTest, WithoutDepthOrACameraTheFrameIsPassedThrough)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     HeightFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -244,7 +244,7 @@ TEST(HeightFogTest, WithoutDepthOrACameraTheFrameIsPassedThrough)
 
 TEST(HeightFogTest, TheSettingsRoundTripAndNonsenseIsIgnored)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     HeightFogPass pass(gd);
     EXPECT_EQ(pass.getName(), "HeightFog");
     EXPECT_FLOAT_EQ(pass.getDensity(), 0.0f) << "the effect must be off by default";
