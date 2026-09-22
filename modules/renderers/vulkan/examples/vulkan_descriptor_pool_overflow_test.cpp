@@ -33,6 +33,11 @@
 //      that replaced the silent white substitution, and the only way to see it is to inject past
 //      the chained pool's own first allocation.
 //   D  The validation layer stayed silent.
+//   E  (plans/plan_street.md STREET-0003) The renderer's own white 1x1 is created lazily, on the
+//      first 3D draw, and its descriptor set used to come from the base pool alone: in a real
+//      scene (cna-street) that pool was already full, and the first draw threw "the default white
+//      texture's descriptor set could not be allocated". Run before any 3D draw, while the white
+//      does not exist yet, with the allocation failure injected into exactly that set: it must chain.
 //
 // Each texture is 1x1 and its colour encodes its index, so a substituted resource cannot be
 // mistaken for a correct one: white is not a colour any of them holds.
@@ -45,7 +50,11 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -146,6 +155,53 @@ protected:
                       + std::to_string(markerColor.getRProperty()) + ","
                       + std::to_string(markerColor.getGProperty()) + ","
                       + std::to_string(markerColor.getBProperty()) + ")");
+        }
+
+        // ---- Leg E: the lazily created default white chains like any other texture's set ----
+        // Before any 3D draw, so the white does not exist yet (leg A draws sprites only):
+        // DrawPrimitivesEx's first allocation is the white's own set, which is exactly where the
+        // one injected failure lands. After leg A, because a pool chained here would absorb A's.
+        {
+            const std::size_t poolsBefore = Renderer().GetTexSamplerDescriptorPoolCountEXT();
+            const Color vertexColor(40, 200, 90, 255);
+            const Vector3 tl(-1.0f, 1.0f, 0.0f), bl(-1.0f, -1.0f, 0.0f);
+            const Vector3 br(1.0f, -1.0f, 0.0f), tr(1.0f, 1.0f, 0.0f);
+            const VertexPositionColor quad[6] = {
+                {tl, vertexColor}, {bl, vertexColor}, {br, vertexColor},
+                {tl, vertexColor}, {br, vertexColor}, {tr, vertexColor},
+            };
+            std::string how = "drew";
+            Color got(0, 0, 0, 0);
+            VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(1);
+            try {
+                BasicEffect fx(dev);
+                fx.VertexColorEnabled = true;
+                dev.Clear(Color(0, 0, 0, 255));
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                fx.Apply();
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+                const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+                dev.GetBackBufferData(&centre, &got, 0, 1);
+            } catch (const std::exception& e) {
+                how = e.what();
+            }
+            VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(0);
+            const std::size_t poolsAfter = Renderer().GetTexSamplerDescriptorPoolCountEXT();
+            // Not a pool count: leg A has already chained a pool, and the injected failure lands
+            // on that newest pool, after which the base one serves. What tells the old code from
+            // the new is the refusal it raised allocating from the base pool alone.
+            check(how == "drew",
+                  "E the first 3D draw's default white chains past a full pool",
+                  how + "; " + std::to_string(poolsBefore) + " -> " + std::to_string(poolsAfter)
+                      + " pool(s)");
+            check(got.getRProperty() == vertexColor.getRProperty()
+                      && got.getGProperty() == vertexColor.getGProperty()
+                      && got.getBProperty() == vertexColor.getBProperty(),
+                  "E that draw reached the back buffer",
+                  "(" + std::to_string(got.getRProperty()) + ","
+                      + std::to_string(got.getGProperty()) + ","
+                      + std::to_string(got.getBProperty()) + ")");
         }
 
         const std::size_t poolsBefore = Renderer().GetTexSamplerDescriptorPoolCountEXT();

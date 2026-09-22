@@ -9389,20 +9389,14 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vkCreateImageView(dev, &vci, nullptr, &defaultWhiteArrayView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (default white 2D array) failed");
 
-        // Descriptor set.
-        VkDescriptorSetAllocateInfo dsAI{};
-        dsAI.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        dsAI.descriptorPool     = descriptorPool_;
-        dsAI.descriptorSetCount = 1;
-        dsAI.pSetLayouts        = &descriptorSetLayout_;
-        // VULKAN-391: this site did not even LOOK at the result. VULKAN-390's mutation probe
-        // showed what that costs -- `defaultWhiteDescSet_` stays VK_NULL_HANDLE, the three 3D draw
-        // routes bind it, and the process segfaults with the layer reporting
-        // `pDescriptorSets[0] (VK_NULL_HANDLE)`. Refused by name instead.
-        if (AllocateOneDescriptorSet(dev, dsAI, defaultWhiteDescSet_) != VK_SUCCESS)
-            throw std::runtime_error(
-                "The Vulkan renderer: the default white texture's descriptor set could not be "
-                "allocated. Refused rather than binding a null descriptor set.");
+        // Descriptor set. Through the same chaining allocator every texture's set comes from
+        // (plans/plan_street.md STREET-0003): the white texture is created on the first draw that
+        // needs it, which in a real scene is after hundreds of textures have filled the base pool,
+        // and allocating from that pool alone refused the draw. VULKAN-391: a failure is refused
+        // by name (AllocateTexSamplerDescSetEXT throws), never left as a null set the three 3D
+        // draw routes would bind.
+        VkDescriptorPool whitePool = VK_NULL_HANDLE;
+        AllocateTexSamplerDescSetEXT(defaultWhiteDescSet_, whitePool);
 
         VkDescriptorImageInfo di{};
         di.sampler     = defaultSampler_;

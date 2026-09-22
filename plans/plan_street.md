@@ -15,6 +15,7 @@ are fixed here, on the layer they belong to, with a regression test.
 |---|---|---|
 | STREET-0001 | Consuming CNA with `add_subdirectory()` failed at configure (test display policy) | ✅ |
 | STREET-0002 | `CascadedShadowMap` could not create a High atlas under any profile | ✅ |
+| STREET-0003 | Vulkan: the first 3D draw refused -- the lazily created default white could not get a descriptor set | ✅ |
 
 ---
 
@@ -57,6 +58,23 @@ really does rather than to XNA's portability ceiling. `CNA::Internal::EngineLaye
 keeps the XNA ceiling. **Test:** `CascadedShadowMapTest.AnAtlasWiderThanTheHiDefCeilingIsStillAllocated`
 (three and four High cascades allocate; a plain 6144-wide `RenderTarget2D` still throws) — passes on
 Vulkan (RADV) and OPENGLES3, fails without the fix.
+
+## STREET-0003 — the default white texture could not get a descriptor set
+
+**Symptom.** On Vulkan, the first reflection-probe capture failed with `the default white texture's
+descriptor set could not be allocated`; the exception left a cascade pass open and the application
+died at the next `CascadedShadowMap::update`.
+
+**Root cause.** `EnsureDefaultWhiteTexture()` creates the renderer's white 1x1 lazily, on the first
+3D draw that needs it, and allocated its set from the base `descriptorPool_` alone. Every texture's
+set comes from the same pool through `AllocateTexSamplerDescSetEXT`, which chains a fresh pool when
+one is full (VULKAN-390); the white did not. In a real scene the white is first needed after hundreds
+of textures and dozens of ShaderEffect bound sets have used the base pool.
+
+**Fix.** The white's set comes from the same chaining allocator (a hard failure still refuses by
+name, VULKAN-391). **Test:** `Vulkan_DescriptorPoolOverflow` leg E injects the allocation failure
+into exactly the white's set (the first allocation `DrawPrimitivesEx` makes) and requires the draw
+to succeed and reach the back buffer; the old code fails it with cna-street's exact message.
 
 ## cna-street's own defects (fixed in cna-street)
 
