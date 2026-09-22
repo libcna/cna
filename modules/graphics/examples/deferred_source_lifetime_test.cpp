@@ -109,6 +109,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdint>
@@ -1200,6 +1202,12 @@ public:
     explicit DeferredSourceLifetimeTest(std::string onlyLeg) : onlyLeg_(std::move(onlyLeg))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_gpu_test_isolation.md GTI-0009: GetBackBufferData is HiDef-only (XNA's rule,
+        // SOFTWARE-213) and GraphicsDeviceManager defaults to Reach, so under Reach every backbuffer
+        // leg of this test was skipped as "oracle unavailable" while the test still passed. Ask for
+        // HiDef wherever the adapter offers it; an adapter that does not keeps its recorded boundary.
+        if (GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         // Leg J1's subject is a MULTISAMPLED source, and on renderers that tie render-target MSAA to

@@ -37,6 +37,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdint>
@@ -584,6 +586,12 @@ public:
         else if (onlyLeg_ == "D65") { startW = 65; startH = 17; }
         else if (onlyLeg_ == "E1") { startW = 64; startH = 32; }
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_gpu_test_isolation.md GTI-0009: GetBackBufferData is HiDef-only (XNA's rule,
+        // SOFTWARE-213) and GraphicsDeviceManager defaults to Reach, so under Reach every backbuffer
+        // leg of this test was skipped as "oracle unavailable" while the test still passed. Ask for
+        // HiDef wherever the adapter offers it; an adapter that does not keeps its recorded boundary.
+        if (GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(startW);
         gdm_->setPreferredBackBufferHeightProperty(startH);
     }
