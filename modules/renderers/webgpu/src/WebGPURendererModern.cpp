@@ -1106,4 +1106,150 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         }
     }
 
+    // ---- WMG-0014: shadow reception for the stock lit families ----------------------------------
+
+    void WebGPURenderer::EnsureShadowResourcesEXT()
+    {
+        if (shadowBindGroupLayout_ != nullptr || device_ == nullptr) return;
+        std::array<WGPUBindGroupLayoutEntry, 7> entries{};
+        entries[0].binding = 0;
+        entries[0].visibility = WGPUShaderStage_Fragment;
+        entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        entries[0].buffer.minBindingSize = sizeof(WebGPUShadowStateEXT::uniforms);
+        const auto sampler = [&entries](const std::uint32_t binding) {
+            entries[binding].binding = binding;
+            entries[binding].visibility = WGPUShaderStage_Fragment;
+            entries[binding].sampler.type = WGPUSamplerBindingType_Filtering;
+        };
+        const auto texture = [&entries](const std::uint32_t binding,
+                                        const WGPUTextureViewDimension dimension) {
+            entries[binding].binding = binding;
+            entries[binding].visibility = WGPUShaderStage_Fragment;
+            entries[binding].texture.sampleType = WGPUTextureSampleType_Float;
+            entries[binding].texture.viewDimension = dimension;
+        };
+        sampler(1); texture(2, WGPUTextureViewDimension_2D);
+        sampler(3); texture(4, WGPUTextureViewDimension_Cube);
+        sampler(5); texture(6, WGPUTextureViewDimension_2D);
+        WGPUBindGroupLayoutDescriptor descriptor{};
+        descriptor.label = Label("CNA WebGPU Shadow BindGroupLayout");
+        descriptor.entryCount = entries.size();
+        descriptor.entries = entries.data();
+        shadowBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &descriptor);
+        if (shadowBindGroupLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create the shadow bind-group layout");
+    }
+
+    WebGPURenderer::WebGPUShadowStateEXT WebGPURenderer::CaptureShadowStateEXT(
+        const GpuDrawParams& params)
+    {
+        WebGPUShadowStateEXT state;
+        const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+        const int cascadeCount =
+            haveDirectional && params.cascadeCount > 0 ? std::min(params.cascadeCount, 4) : 0;
+        const int punctualKind =
+            params.punctualKind >= 1 && params.punctualKind <= 2 ? params.punctualKind : 0;
+        const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+        const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+        // The same float-for-float block the Vulkan renderer fills, so the two renderers answer a
+        // shadow query from identical numbers rather than from two readings of one description.
+        float* out = state.uniforms.data();
+        std::copy_n(params.lightViewProjColMajor, 16, out);
+        std::copy_n(params.cascadeMatricesColMajor, 64, out + 16);
+        std::copy_n(params.punctualViewProjColMajor, 16, out + 80);
+        out[96] = haveDirectional ? 1.0f : 0.0f;
+        out[97] = params.shadowDepthBias;
+        out[98] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+        out[99] = static_cast<float>(cascadeCount);
+        const int shadowWidth = haveDirectional ? params.shadowMap->GetWidth() : 1;
+        const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+        out[100] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+        out[101] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+        out[102] = params.cascadeBlendBand;
+        out[103] = params.cascadeDebugTint ? 1.0f : 0.0f;
+        std::copy_n(params.cascadeSplits, 4, out + 104);
+        std::copy_n(params.cascadeViewZRow, 4, out + 108);
+        std::copy_n(params.punctualPosition, 3, out + 112);
+        out[115] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+        std::copy_n(params.punctualDirection, 3, out + 116);
+        out[119] = static_cast<float>(punctualKind);
+        std::copy_n(params.punctualDiffuse, 3, out + 120);
+        out[123] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+        out[124] = params.punctualCosInner;
+        out[125] = params.punctualCosOuter;
+        out[126] = params.punctualShadowBias;
+        const int spotWidth = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+        const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+        out[127] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+        out[128] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+
+        // REMED-GFX-167's rule: resolve to a VALUE here, at the public draw call, while the
+        // resource is unambiguously alive, so the queued command never dereferences a wrapper.
+        const auto sampled2D = [](const ITextureRenderer* texture) {
+            const auto* samplable =
+                texture != nullptr ? dynamic_cast<const IWebGPUSamplable*>(texture) : nullptr;
+            return samplable != nullptr ? samplable->Sampled() : WebGPUSampledTextureEXT{};
+        };
+        if (haveDirectional) state.map = sampled2D(params.shadowMap);
+        if (havePoint)
+        {
+            const auto* cube = dynamic_cast<const IWebGPUCubeSamplable*>(params.punctualShadowCube);
+            if (cube != nullptr) state.cube = cube->SampledCube();
+        }
+        if (haveSpot) state.spot = sampled2D(params.punctualShadowMap);
+        for (std::size_t i = 0; i < state.samplers.size(); ++i)
+            state.samplers[i] = slotSamplers_[7 + i];
+        return state;
+    }
+
+    WGPUBindGroup WebGPURenderer::CreateShadowBindGroupEXT(const WebGPUShadowStateEXT& state,
+                                                           std::vector<WGPUBuffer>& transient)
+    {
+        EnsureShadowResourcesEXT();
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.label = Label("CNA WebGPU Shadow UBO");
+        bufferDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = sizeof(state.uniforms);
+        WGPUBuffer buffer = AcquireTransientBuffer(bufferDescriptor.usage, bufferDescriptor.size);
+        wgpuQueueWriteBuffer(queue_, buffer, 0, state.uniforms.data(), sizeof(state.uniforms));
+        transient.push_back(buffer);
+
+        // A pipeline statically uses every binding its layout declares, so an absent map binds a
+        // 1x1 white texture rather than nothing. White reads as "nothing occludes", which is what
+        // the parameter block already says when the shadow is off.
+        const WebGPUSampledTextureEXT white2D =
+            NeutralTextureForDimensionEXT(WGPUTextureViewDimension_2D);
+        const WebGPUSampledTextureEXT whiteCube =
+            NeutralTextureForDimensionEXT(WGPUTextureViewDimension_Cube);
+
+        std::array<WGPUBindGroupEntry, 7> entries{};
+        entries[0].binding = 0;
+        entries[0].buffer = buffer;
+        entries[0].size = sizeof(state.uniforms);
+        const auto bindSampler = [&](const std::uint32_t binding, const std::size_t slot,
+                                     const char* label) {
+            const SlotSamplerState& s = state.samplers[slot];
+            entries[binding].binding = binding;
+            entries[binding].sampler = GetOrCreateSlotSampler(s.filter, s.addressU, s.addressV,
+                                                              s.addressW, s.maxMipLevel,
+                                                              s.maxAnisotropy, label);
+        };
+        bindSampler(1, 0, "ShadowMap");
+        entries[2].binding = 2;
+        entries[2].textureView = state.map ? state.map.View() : white2D.View();
+        bindSampler(3, 1, "PunctualCube");
+        entries[4].binding = 4;
+        entries[4].textureView = state.cube ? state.cube.View() : whiteCube.View();
+        bindSampler(5, 2, "PunctualMap");
+        entries[6].binding = 6;
+        entries[6].textureView = state.spot ? state.spot.View() : white2D.View();
+
+        WGPUBindGroupDescriptor descriptor{};
+        descriptor.label = Label("CNA WebGPU Shadow BindGroup");
+        descriptor.layout = shadowBindGroupLayout_;
+        descriptor.entryCount = entries.size();
+        descriptor.entries = entries.data();
+        return wgpuDeviceCreateBindGroup(device_, &descriptor);
+    }
 }

@@ -5495,11 +5495,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // block (light1/light2, emissive, world, eye position, per-light specular, material
         // specular, normal matrix) filled by FillLitLightUniforms(). Group 1 (sampler + texture)
         // is texturedBindGroupLayout_, reused unchanged.
-        static constexpr const char* shaderSource = webgpu_shaders::kLitTextured;
+        // WMG-0014: shadow reception is appended rather than spliced -- WGSL module-scope
+        // declarations may appear in any order, so one block serves every family that receives
+        // shadows, exactly as Vulkan's shadow_sampling.glsl is included into each of its own.
+        const std::string shaderSource =
+            std::string(webgpu_shaders::kLitTextured) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-        wgsl.code = StringView(shaderSource);
+        wgsl.code = StringView(shaderSource.c_str());
         WGPUShaderModuleDescriptor shaderDescriptor{};
         shaderDescriptor.label = StringView("CNA WebGPU LitTextured3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
@@ -5514,11 +5518,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // unchanged, just consuming the interpolated value instead of recomputing it per fragment.
         // Same UBO/binding layout as the per-pixel-lit shader (reuses litBindGroupLayout_/
         // litPipelineLayout_ unchanged below), so only a new shader module is needed here.
-        static constexpr const char* vertexLitShaderSource = webgpu_shaders::kLitTexturedVertexLit;
+        // WMG-0014: the vertex-lit sibling shares this family's pipeline layout, so it declares
+        // the same group 2 even though its Gouraud path does not sample a shadow map -- exactly as
+        // Vulkan's lit_textured3d_vertexlit shares set 1 without including shadow_sampling.glsl.
+        const std::string vertexLitShaderSource =
+            std::string(webgpu_shaders::kLitTexturedVertexLit) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL vertexLitWgsl{};
         vertexLitWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-        vertexLitWgsl.code = StringView(vertexLitShaderSource);
+        vertexLitWgsl.code = StringView(vertexLitShaderSource.c_str());
         WGPUShaderModuleDescriptor vertexLitShaderDescriptor{};
         vertexLitShaderDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexLit WGSL");
         vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
@@ -5540,7 +5548,9 @@ namespace CNA::Internal::Renderers::WebGPU
         bindLayoutDescriptor.entries = layoutEntries.data();
         litBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
 
-        std::array<WGPUBindGroupLayout, 2> groupLayouts{litBindGroupLayout_, texturedBindGroupLayout_};
+        EnsureShadowResourcesEXT();
+        std::array<WGPUBindGroupLayout, 3> groupLayouts{
+            litBindGroupLayout_, texturedBindGroupLayout_, shadowBindGroupLayout_};
         WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
         pipelineLayoutDescriptor.label = StringView("CNA WebGPU LitTextured3D PipelineLayout");
         pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
@@ -12450,6 +12460,10 @@ namespace CNA::Internal::Renderers::WebGPU
         texBindDescriptor.entries = texEntries.data();
         WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
+        // WMG-0014: group 2, this draw's own shadow reception.
+        std::vector<WGPUBuffer> shadowTransient;
+        WGPUBindGroup shadowBindGroup = CreateShadowBindGroupEXT(command.shadow, shadowTransient);
+
         WGPURenderPipeline pipe = command.preferVertexLit
             ? GetOrCreatePipelineLitTextured3DVertexLit(
                                                          command.topology,
@@ -12480,6 +12494,7 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
         // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
         // declaration does not name; a no-op when every input came from the record.
@@ -12506,6 +12521,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBindGroupReleases_.push_back(shadowBindGroup);
+        for (WGPUBuffer buffer : shadowTransient) pendingBufferReleases_.push_back(buffer);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
@@ -12574,7 +12591,16 @@ namespace CNA::Internal::Renderers::WebGPU
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // Task 1105: XNA's real BasicEffect.PreferPerPixelLighting default is false (per-vertex),
         // matching every other renderer's own dispatch condition for this flag.
-        command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+        // WMG-0014: and not while a shadow map is attached. The Gouraud sibling computes its
+        // lighting in the vertex stage, where a per-pixel shadow lookup has nowhere to go, so a
+        // shadowed draw takes the per-pixel path whatever PreferPerPixelLighting says -- the same
+        // rule Vulkan applies, so "the default per-vertex lighting still receives a shadow" means
+        // the same thing on both.
+        command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
+                                  !(params.shadowsEnabled && params.shadowMap != nullptr);
+        // WMG-0014: this draw's shadow reception, captured here for the same reason its pipeline
+        // state is -- a shadow map bound after the draw but before the flush is not this draw's.
+        command.shadow = CaptureShadowStateEXT(params);
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
@@ -13274,8 +13300,11 @@ namespace
 
         // plans/plan_gltf.md GLTF-465: two modules from one marked source -- the stride-48 record has no
         // colour element, and WGSL rejects a vertex input with no matching attribute.
-        const std::string bareWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, false, 4);
-        const std::string colorWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, true, 4);
+        // WMG-0014: shadow reception, appended (WGSL declarations are order-independent).
+        const std::string bareWgsl =
+            ExpandPbrVertexColourWgslEXT(shaderSource, false, 4) + webgpu_shaders::kShadowSampling;
+        const std::string colorWgsl =
+            ExpandPbrVertexColourWgslEXT(shaderSource, true, 4) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -13337,7 +13366,9 @@ namespace
         texLayoutDescriptor.entries = texEntries.data();
         pbrBindGroupLayout1_ = wgpuDeviceCreateBindGroupLayout(device_, &texLayoutDescriptor);
 
-        std::array<WGPUBindGroupLayout, 2> groupLayouts{pbrBindGroupLayout0_, pbrBindGroupLayout1_};
+        EnsureShadowResourcesEXT();  // WMG-0014: group 2, shared with every lit family.
+        std::array<WGPUBindGroupLayout, 3> groupLayouts{
+            pbrBindGroupLayout0_, pbrBindGroupLayout1_, shadowBindGroupLayout_};
         WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
         pipelineLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D PipelineLayout");
         pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
@@ -13567,6 +13598,9 @@ namespace
             ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
+        // WMG-0014: this draw's shadow reception, captured at its public call for the same
+        // reason its pipeline state is.
+        command.shadow = CaptureShadowStateEXT(params);
         pbrDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Pbr, pbrDrawCommands_.size() - 1);
@@ -13677,7 +13711,11 @@ namespace
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        // WMG-0014: group 2, this draw's own shadow reception.
+        std::vector<WGPUBuffer> shadowTransient;
+        WGPUBindGroup shadowBindGroup = CreateShadowBindGroupEXT(command.shadow, shadowTransient);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
         if (command.indexed && !command.indexData.empty())
@@ -13698,6 +13736,8 @@ namespace
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBindGroupReleases_.push_back(shadowBindGroup);
+        for (WGPUBuffer buffer : shadowTransient) pendingBufferReleases_.push_back(buffer);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(factorsUniformBuffer);
@@ -13754,11 +13794,14 @@ namespace
         // Fog (WEBGPU-148): the primary Uniforms block carries the fog tail (fogColor/fogVector,
         // WEBGPU-145); each skinned shader computes fogFactor from the SKINNED view-space position
         // (matching FNA SkinnedEffect and Vulkan's skinned3d.vert.glsl) and applies ApplyFog last.
-        static constexpr const char* shaderSource = webgpu_shaders::kSkinned;
+        // WMG-0014: shadow reception, appended to every module of this family so they
+        // share one pipeline layout.
+        const std::string shaderSource =
+            std::string(webgpu_shaders::kSkinned) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-        wgsl.code = StringView(shaderSource);
+        wgsl.code = StringView(shaderSource.c_str());
         WGPUShaderModuleDescriptor shaderDescriptor{};
         shaderDescriptor.label = StringView("CNA WebGPU Skinned3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
@@ -13774,11 +13817,14 @@ namespace
         // FINAL combined diffuse+specular output, applied AFTER the specular add -- matches the
         // EasyGL reference exactly (a real ordering bug was once found and fixed there: applying
         // the gate to the diffuse term alone lets an unmodulated specular highlight leak through).
-        static constexpr const char* colorShaderSource = webgpu_shaders::kSkinnedColor;
+        // WMG-0014: shadow reception, appended to every module of this family so they
+        // share one pipeline layout.
+        const std::string colorShaderSource =
+            std::string(webgpu_shaders::kSkinnedColor) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL colorWgsl{};
         colorWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-        colorWgsl.code = StringView(colorShaderSource);
+        colorWgsl.code = StringView(colorShaderSource.c_str());
         WGPUShaderModuleDescriptor colorShaderDescriptor{};
         colorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexColor WGSL");
         colorShaderDescriptor.nextInChain = &colorWgsl.chain;
@@ -13789,22 +13835,28 @@ namespace
         // applied to EnsureSkinnedVertexLitProgram()'s GLSL shader, selected when
         // params.skinned && params.lightingEnabled && !params.preferPerPixelLighting (XNA's own
         // SkinnedEffect.PreferPerPixelLighting==false default, matching every other renderer).
-        static constexpr const char* vertexLitShaderSource = webgpu_shaders::kSkinnedVertexLit;
+        // WMG-0014: shadow reception, appended to every module of this family so they
+        // share one pipeline layout.
+        const std::string vertexLitShaderSource =
+            std::string(webgpu_shaders::kSkinnedVertexLit) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL vertexLitWgsl{};
         vertexLitWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-        vertexLitWgsl.code = StringView(vertexLitShaderSource);
+        vertexLitWgsl.code = StringView(vertexLitShaderSource.c_str());
         WGPUShaderModuleDescriptor vertexLitShaderDescriptor{};
         vertexLitShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit WGSL");
         vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
         skinnedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
 
         // Vertex-lit + vertex-colour combo (stride 56).
-        static constexpr const char* vertexLitColorShaderSource = webgpu_shaders::kSkinnedVertexLitColor;
+        // WMG-0014: shadow reception, appended to every module of this family so they
+        // share one pipeline layout.
+        const std::string vertexLitColorShaderSource =
+            std::string(webgpu_shaders::kSkinnedVertexLitColor) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL vertexLitColorWgsl{};
         vertexLitColorWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-        vertexLitColorWgsl.code = StringView(vertexLitColorShaderSource);
+        vertexLitColorWgsl.code = StringView(vertexLitColorShaderSource.c_str());
         WGPUShaderModuleDescriptor vertexLitColorShaderDescriptor{};
         vertexLitColorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit VertexColor WGSL");
         vertexLitColorShaderDescriptor.nextInChain = &vertexLitColorWgsl.chain;
@@ -13830,7 +13882,9 @@ namespace
         bindLayoutDescriptor.entries = layoutEntries.data();
         skinnedBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
 
-        std::array<WGPUBindGroupLayout, 2> groupLayouts{skinnedBindGroupLayout_, texturedBindGroupLayout_};
+        EnsureShadowResourcesEXT();  // WMG-0014
+        std::array<WGPUBindGroupLayout, 3> groupLayouts{
+            skinnedBindGroupLayout_, texturedBindGroupLayout_, shadowBindGroupLayout_};
         WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
         pipelineLayoutDescriptor.label = StringView("CNA WebGPU Skinned3D PipelineLayout");
         pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
@@ -14117,7 +14171,13 @@ namespace
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // Real XNA's SkinnedEffect.PreferPerPixelLighting default is false (per-vertex), matching
         // every other renderer's own dispatch condition for this flag (Task 1102b).
-        command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+        // WMG-0014: and not while a shadow map is attached. The Gouraud sibling computes its
+        // lighting in the vertex stage, where a per-pixel shadow lookup has nowhere to go, so a
+        // shadowed draw takes the per-pixel path whatever PreferPerPixelLighting says -- the same
+        // rule Vulkan applies, so "the default per-vertex lighting still receives a shadow" means
+        // the same thing on both.
+        command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
+                                  !(params.shadowsEnabled && params.shadowMap != nullptr);
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
@@ -14149,6 +14209,9 @@ namespace
             ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
+        // WMG-0014: this draw's shadow reception, captured at its public call for the same
+        // reason its pipeline state is.
+        command.shadow = CaptureShadowStateEXT(params);
         skinnedDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Skinned, skinnedDrawCommands_.size() - 1);
@@ -14243,7 +14306,11 @@ namespace
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        // WMG-0014: group 2, this draw's own shadow reception.
+        std::vector<WGPUBuffer> shadowTransient;
+        WGPUBindGroup shadowBindGroup = CreateShadowBindGroupEXT(command.shadow, shadowTransient);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
         if (command.indexed && !command.indexData.empty())
@@ -14264,6 +14331,8 @@ namespace
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBindGroupReleases_.push_back(shadowBindGroup);
+        for (WGPUBuffer buffer : shadowTransient) pendingBufferReleases_.push_back(buffer);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(skinningUniformBuffer);
@@ -14319,8 +14388,11 @@ namespace
 
         // plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin. Location 6 is the first free vertex
         // input here, because the skinned record already uses 0..5.
-        const std::string bareWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, false, 6);
-        const std::string colorWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, true, 6);
+        // WMG-0014: shadow reception, appended (WGSL declarations are order-independent).
+        const std::string bareWgsl =
+            ExpandPbrVertexColourWgslEXT(shaderSource, false, 6) + webgpu_shaders::kShadowSampling;
+        const std::string colorWgsl =
+            ExpandPbrVertexColourWgslEXT(shaderSource, true, 6) + webgpu_shaders::kShadowSampling;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -14366,7 +14438,9 @@ namespace
         uboLayoutDescriptor.entries = uboEntries.data();
         skinnedPbrBindGroupLayout0_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
 
-        std::array<WGPUBindGroupLayout, 2> groupLayouts{skinnedPbrBindGroupLayout0_, pbrBindGroupLayout1_};
+        EnsureShadowResourcesEXT();  // WMG-0014
+        std::array<WGPUBindGroupLayout, 3> groupLayouts{
+            skinnedPbrBindGroupLayout0_, pbrBindGroupLayout1_, shadowBindGroupLayout_};
         WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
         pipelineLayoutDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D PipelineLayout");
         pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
@@ -14571,6 +14645,9 @@ namespace
             ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
+        // WMG-0014: this draw's shadow reception, captured at its public call for the same
+        // reason its pipeline state is.
+        command.shadow = CaptureShadowStateEXT(params);
         skinnedPbrDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::SkinnedPbr, skinnedPbrDrawCommands_.size() - 1);
@@ -14691,7 +14768,11 @@ namespace
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        // WMG-0014: group 2, this draw's own shadow reception.
+        std::vector<WGPUBuffer> shadowTransient;
+        WGPUBindGroup shadowBindGroup = CreateShadowBindGroupEXT(command.shadow, shadowTransient);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
         if (command.indexed && !command.indexData.empty())
@@ -14712,6 +14793,8 @@ namespace
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBindGroupReleases_.push_back(shadowBindGroup);
+        for (WGPUBuffer buffer : shadowTransient) pendingBufferReleases_.push_back(buffer);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(factorsUniformBuffer);

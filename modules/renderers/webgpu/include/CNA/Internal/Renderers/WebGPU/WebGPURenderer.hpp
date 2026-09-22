@@ -1994,6 +1994,18 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /** @brief WMG: WGSL at vertex, fragment and compute; nothing else. @copydoc IGraphicsRenderer::SupportsShaderLanguageEXT */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+        /**
+         * @brief WMG-0014: this renderer's lit shaders really do sample a shadow map.
+         *
+         * True for the same four families Vulkan answers for -- BasicEffect, SkinnedEffect,
+         * PbrEffect and SkinnedPbrEffect -- through the group-2 block every one of their fragment
+         * programs carries. Not a promise about the other families: an unlit or vertex-lit draw
+         * accepts the shadow state and ignores it, exactly as everywhere else.
+         *
+         * @return True while a device exists.
+         */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return device_ != nullptr; }
+
         /** @brief WMG: compute is core WebGPU. @return True. */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override { return device_ != nullptr; }
         /**
@@ -3850,6 +3862,25 @@ namespace CNA::Internal::Renderers::WebGPU
         // already falls back to DrawColoredPrimitives, so this also unblocks simple (unlit,
         // untextured) Model/BasicEffect draws going through that fallback.
         /**
+         * @brief plans/plan_webgpu_modern_graphics.md WMG-0014: one draw's shadow reception.
+         *
+         * Captured at the public draw call like every other piece of per-draw state, so a shadow
+         * map bound after the draw but before the flush cannot change what an already-queued draw
+         * receives. The float block is the `CnaShadowParams` uniform of `kShadowSampling`, laid out
+         * float for float as the Vulkan renderer lays out its own.
+         */
+        struct WebGPUShadowStateEXT
+        {
+            /// 132 floats = 528 bytes: three matrices, then nine vec4 of parameters.
+            std::array<float, 132> uniforms{};
+            WebGPUSampledTextureEXT map{};   ///< Directional map or cascade atlas; white when off.
+            WebGPUSampledTextureEXT cube{};  ///< Point-light cube; white when off.
+            WebGPUSampledTextureEXT spot{};  ///< Spot map; white when off.
+            /// Sampler slots 7, 8 and 9 as they stood at the draw, in that order.
+            std::array<SlotSamplerState, 3> samplers{};
+        };
+
+        /**
          * @brief plans/plan_webgpu_modern_graphics.md WMG-0013: a queued draw's indirect arguments.
          *
          * Empty on every ordinary draw, which is what @ref enabled being false means. When it is
@@ -4084,6 +4115,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// WMG-0014: this draw's shadow reception, captured at its public call.
+            WebGPUShadowStateEXT shadow{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -4655,6 +4688,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // shaders; alpha coverage stays in this PBR shader for glTF MASK draws.
         struct PbrDrawCommand
         {
+            /// WMG-0014: this draw's shadow reception, captured at its public call.
+            WebGPUShadowStateEXT shadow{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
@@ -4771,6 +4806,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // always-pass default).
         struct SkinnedDrawCommand
         {
+            /// WMG-0014: this draw's shadow reception, captured at its public call.
+            WebGPUShadowStateEXT shadow{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
@@ -4861,6 +4898,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
         struct SkinnedPbrDrawCommand
         {
+            /// WMG-0014: this draw's shadow reception, captured at its public call.
+            WebGPUShadowStateEXT shadow{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
@@ -5130,6 +5169,32 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param destination The pass's attachments.
          * @param state The replay bookkeeping.
          */
+        /**
+         * @brief WMG-0014: creates the shared group-2 shadow bind-group layout, once.
+         *
+         * Every family that receives shadows binds the same layout, exactly as Vulkan's set 1 is
+         * the same for every family, so one shader block and one layout serve all of them.
+         */
+        void EnsureShadowResourcesEXT();
+        /**
+         * @brief WMG-0014: captures this draw's shadow reception from its GpuDrawParams.
+         * @param params The draw description.
+         * @return The state the queued command carries.
+         */
+        [[nodiscard]] WebGPUShadowStateEXT CaptureShadowStateEXT(
+            const CNA::Internal::Renderers::GpuDrawParams& params);
+        /**
+         * @brief WMG-0014: builds one draw's group-2 bind group.
+         * @param state The captured state.
+         * @param transient Receives the uniform buffer to recycle after submission.
+         * @return The bind group; never null once the device exists.
+         */
+        [[nodiscard]] WGPUBindGroup CreateShadowBindGroupEXT(
+            const WebGPUShadowStateEXT& state, std::vector<WGPUBuffer>& transient);
+        /// WMG-0014: group 2 of every shadow-receiving pipeline: the params block, and the
+        /// directional, point and spot maps each with the sampler its slot carried.
+        WGPUBindGroupLayout shadowBindGroupLayout_ = nullptr;
+
         /**
          * @brief WMG-0013: issues this draw as an indirect one, or says it is not one.
          *

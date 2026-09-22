@@ -185,6 +185,189 @@ struct VertexOutput {
     // Position+Normal mesh -- leaves that input on the shared neutral (0,0,0,1) record, and
     // u.light0DiffuseVertexColor.w / u.light0DirTexture.w are 0, so vc is white and the sample is
     // white: every existing lit draw is byte-identical.
+    /**
+     * @brief plans/plan_webgpu_modern_graphics.md WMG-0014: directional, cascaded, point and spot
+     *        shadow reception, appended to every lit fragment program that receives shadows.
+     *
+     * The WGSL twin of the Vulkan renderer's `shadow_sampling.glsl`, function for function and
+     * constant for constant, so the two renderers answer a shadow query the same way. Group 2 is
+     * deliberately identical for every family that includes it; groups 0 and 1 stay the family's
+     * own uniform and material bundles. A module's declarations may appear in any order in WGSL,
+     * so this is concatenated onto a shader's source rather than spliced into it.
+     *
+     * The atlas is read with its `v` flipped, exactly as on Vulkan and unlike EasyGL. The caster
+     * writes `gl_Position.y = -lightSpace.y` for Vulkan's clip space, and naga's SPIR-V frontend
+     * negates `y` again in the entry point it generates -- which is how a Vulkan-authored shader
+     * lands correctly in WebGPU's opposite clip space. The two negations leave the rasterised
+     * atlas in the same orientation as Vulkan's, so it is read the same way.
+     *
+     * `textureSampleLevel` rather than `textureSample`: every tap here sits inside a loop with a
+     * `continue` and behind early returns, which is non-uniform control flow, and WGSL forbids an
+     * implicit-derivative sample there. The shadow atlas has one level, so asking for level 0 is
+     * the same tap without the restriction.
+     */
+    inline constexpr char kShadowSampling[] = R"WGSL(
+struct CnaShadowParams {
+    lightViewProj: mat4x4f,
+    cascadeMatrices: array<mat4x4f, 4>,
+    punctualViewProj: mat4x4f,
+    // x = enabled, y = depth bias, z = PCF radius, w = cascade count.
+    directional: vec4f,
+    // xy = directional texel size, z = cascade blend band, w = debug tint enabled.
+    shadowTexelBlendDebug: vec4f,
+    cascadeSplits: vec4f,
+    cascadeViewZ: vec4f,
+    // xyz = position, w = range.
+    punctualPositionRange: vec4f,
+    // xyz = direction, w = kind (0 none, 1 point, 2 spot).
+    punctualDirectionKind: vec4f,
+    // xyz = diffuse colour, w = a matching shadow texture is attached.
+    punctualDiffuseHasShadow: vec4f,
+    // x/y = inner/outer cone cosine, z = shadow bias, w = spot texel X.
+    punctualConeBiasTexelX: vec4f,
+    // x = spot texel Y.
+    punctualTexelYPad: vec4f,
+};
+@group(2) @binding(0) var<uniform> cnaShadow: CnaShadowParams;
+// Three samplers rather than one shared: the Vulkan renderer reads these three maps through
+// sampler slots 7, 8 and 9, and a shadow map filtered differently from the one Vulkan used would
+// answer a PCF tap differently -- which is the whole measurement these shaders exist to make.
+@group(2) @binding(1) var cnaShadowSampler: sampler;
+@group(2) @binding(2) var cnaShadowMap: texture_2d<f32>;
+@group(2) @binding(3) var cnaPunctualCubeSampler: sampler;
+@group(2) @binding(4) var cnaPunctualCube: texture_cube<f32>;
+@group(2) @binding(5) var cnaPunctualMapSampler: sampler;
+@group(2) @binding(6) var cnaPunctualMap: texture_2d<f32>;
+
+fn cnaShadowTap(uv: vec3f, uvMin: vec2f, uvMax: vec2f) -> f32 {
+    if (uv.z > 1.0) { return 1.0; }
+    var lit = 0.0;
+    var taps = 0.0;
+    for (var y = -2; y <= 2; y = y + 1) {
+        for (var x = -2; x <= 2; x = x + 1) {
+            let ring = max(abs(f32(x)), abs(f32(y)));
+            if (ring > cnaShadow.directional.z + 0.5) { continue; }
+            let at = clamp(uv.xy + vec2f(f32(x), f32(y)) * cnaShadow.shadowTexelBlendDebug.xy,
+                           uvMin, uvMax);
+            let occluder = textureSampleLevel(cnaShadowMap, cnaShadowSampler,
+                                              vec2f(at.x, 1.0 - at.y), 0.0).r;
+            lit += select(0.0, 1.0, uv.z - cnaShadow.directional.y <= occluder);
+            taps += 1.0;
+        }
+    }
+    return lit / max(taps, 1.0);
+}
+
+fn cnaCascadeSplit(index: i32) -> f32 {
+    let i = clamp(index, 0, 3);
+    return cnaShadow.cascadeSplits[u32(i)];
+}
+
+fn cnaCascadeLookup(worldPos: vec3f, index: i32, count: f32) -> f32 {
+    let i = clamp(index, 0, 3);
+    let atlas = cnaShadow.cascadeMatrices[u32(i)] * vec4f(worldPos, 1.0);
+    let uv = atlas.xyz / atlas.w;
+    let slice = 1.0 / count;
+    let x0 = f32(i) * slice;
+    if (uv.x < x0 || uv.x > x0 + slice || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+    let uvMin = vec2f(x0 + cnaShadow.shadowTexelBlendDebug.x,
+                      cnaShadow.shadowTexelBlendDebug.y);
+    let uvMax = vec2f(x0 + slice - cnaShadow.shadowTexelBlendDebug.x,
+                      1.0 - cnaShadow.shadowTexelBlendDebug.y);
+    return cnaShadowTap(uv, uvMin, uvMax);
+}
+
+fn cnaSelectCascade(viewDepth: f32, count: f32) -> i32 {
+    var chosen = i32(count) - 1;
+    for (var i = 0; i < 4; i = i + 1) {
+        if (f32(i) >= count) { break; }
+        if (viewDepth <= cnaCascadeSplit(i)) { chosen = i; break; }
+    }
+    return chosen;
+}
+
+fn cnaShadowFactor(worldPos: vec3f) -> f32 {
+    if (cnaShadow.directional.x < 0.5) { return 1.0; }
+    if (cnaShadow.directional.w < 0.5) {
+        let lightSpace = cnaShadow.lightViewProj * vec4f(worldPos, 1.0);
+        let uv = lightSpace.xyz / lightSpace.w * 0.5 + 0.5;
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+        return cnaShadowTap(uv, vec2f(0.0), vec2f(1.0));
+    }
+    let viewDepth = -dot(vec4f(worldPos, 1.0), cnaShadow.cascadeViewZ);
+    let index = cnaSelectCascade(viewDepth, cnaShadow.directional.w);
+    var factor = cnaCascadeLookup(worldPos, index, cnaShadow.directional.w);
+    let split = cnaCascadeSplit(index);
+    if (cnaShadow.shadowTexelBlendDebug.z > 0.0 &&
+        f32(index + 1) < cnaShadow.directional.w &&
+        viewDepth > split - cnaShadow.shadowTexelBlendDebug.z) {
+        let t = clamp((viewDepth - (split - cnaShadow.shadowTexelBlendDebug.z)) /
+                      cnaShadow.shadowTexelBlendDebug.z, 0.0, 1.0);
+        factor = mix(factor, cnaCascadeLookup(worldPos, index + 1, cnaShadow.directional.w), t);
+    }
+    return factor;
+}
+
+fn cnaCascadeDebugTint(worldPos: vec3f) -> vec3f {
+    if (cnaShadow.shadowTexelBlendDebug.w < 0.5 ||
+        cnaShadow.directional.x < 0.5 || cnaShadow.directional.w < 0.5) {
+        return vec3f(1.0);
+    }
+    let viewDepth = -dot(vec4f(worldPos, 1.0), cnaShadow.cascadeViewZ);
+    let index = cnaSelectCascade(viewDepth, cnaShadow.directional.w);
+    if (index == 0) { return vec3f(1.0, 0.6, 0.6); }
+    if (index == 1) { return vec3f(0.6, 1.0, 0.6); }
+    if (index == 2) { return vec3f(0.6, 0.6, 1.0); }
+    return vec3f(1.0, 1.0, 0.6);
+}
+
+fn cnaPunctualShadow(worldPos: vec3f, toLight: vec3f, distanceToLight: f32) -> f32 {
+    if (cnaShadow.punctualDiffuseHasShadow.w < 0.5) { return 1.0; }
+    let here = clamp(distanceToLight / cnaShadow.punctualPositionRange.w, 0.0, 1.0);
+    if (cnaShadow.punctualDirectionKind.w < 1.5) {
+        let occluder = textureSampleLevel(cnaPunctualCube, cnaPunctualCubeSampler, -toLight, 0.0).r;
+        return select(0.0, 1.0, here - cnaShadow.punctualConeBiasTexelX.z <= occluder);
+    }
+    let clip = cnaShadow.punctualViewProj * vec4f(worldPos, 1.0);
+    if (clip.w <= 0.0) { return 1.0; }
+    let uv = clip.xyz / clip.w * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+    var lit = 0.0;
+    let texel = vec2f(cnaShadow.punctualConeBiasTexelX.w, cnaShadow.punctualTexelYPad.x);
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let at = clamp(uv.xy + vec2f(f32(x), f32(y)) * texel, vec2f(0.0), vec2f(1.0));
+            let occluder = textureSampleLevel(cnaPunctualMap, cnaPunctualMapSampler, at, 0.0).r;
+            lit += select(0.0, 1.0, here - cnaShadow.punctualConeBiasTexelX.z <= occluder);
+        }
+    }
+    return lit / 9.0;
+}
+
+fn cnaPunctualLight(worldPos: vec3f, normal: vec3f) -> vec3f {
+    if (cnaShadow.punctualDirectionKind.w < 0.5) { return vec3f(0.0); }
+    let offset = cnaShadow.punctualPositionRange.xyz - worldPos;
+    let distanceToLight = length(offset);
+    if (distanceToLight > cnaShadow.punctualPositionRange.w || distanceToLight < 1e-5) {
+        return vec3f(0.0);
+    }
+    let toLight = offset / distanceToLight;
+    let t = distanceToLight / cnaShadow.punctualPositionRange.w;
+    let window = clamp(1.0 - t * t * t * t, 0.0, 1.0);
+    var attenuation = window * window / (1.0 + distanceToLight * distanceToLight);
+    if (cnaShadow.punctualDirectionKind.w > 1.5) {
+        let cosAngle = dot(normalize(cnaShadow.punctualDirectionKind.xyz), -toLight);
+        let cone = clamp((cosAngle - cnaShadow.punctualConeBiasTexelX.y) /
+                         max(cnaShadow.punctualConeBiasTexelX.x -
+                             cnaShadow.punctualConeBiasTexelX.y, 1e-4), 0.0, 1.0);
+        attenuation = attenuation * cone * cone;
+    }
+    let ndotl = max(dot(normal, toLight), 0.0);
+    return cnaShadow.punctualDiffuseHasShadow.xyz * ndotl * attenuation *
+           cnaPunctualShadow(worldPos, toLight, distanceToLight);
+}
+)WGSL";
+
     inline constexpr char kLitTextured[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -276,15 +459,23 @@ struct VertexOutput {
     let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
     let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
-    let lightSum = u.ambientLighting.xyz + ndotl0 * u.light0DiffuseVertexColor.xyz
-                   + ndotl1 * lp.light1Diffuse.xyz + ndotl2 * lp.light2Diffuse.xyz;
+    // WMG-0014: the directional shadow scales the three directional lights' diffuse and the
+    // specular that follows from them, exactly as on EasyGL and Vulkan; the ambient term and the
+    // punctual light are outside it -- the punctual light carries its own shadow.
+    let shadow = cnaShadowFactor(input.worldPos);
+    let lightSum = u.ambientLighting.xyz
+                   + (ndotl0 * u.light0DiffuseVertexColor.xyz
+                      + ndotl1 * lp.light1Diffuse.xyz
+                      + ndotl2 * lp.light2Diffuse.xyz) * shadow
+                   + cnaPunctualLight(input.worldPos, n);
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
     let specularRgb = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
-                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz * shadow;
     let lit = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     var color = vec4f(lit, u.diffuseColor.a) * sampled * vc;
+    color = vec4f(color.rgb * cnaCascadeDebugTint(input.worldPos), color.a);
     color = vec4f(color.rgb + specularRgb * color.a, color.a);
     // WEBGPU-149: FNA ApplyFog last, after lighting+specular; mix(FogColor*color.a, rgb, keep).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
@@ -1017,6 +1208,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, f90, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
+    // WMG-0014: the three directional lights are shadowed together; the punctual light brings its
+    // own shadow and is added after, scaled by albedo as the diffuse lobe is.
+    lo = lo * cnaShadowFactor(input.worldPos);
+    lo = lo + cnaPunctualLight(input.worldPos, finalNormal) * albedo;
 
     let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
@@ -1025,7 +1220,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
     let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
-    let linearRgb = ambient + lo + emissive;
+    let linearRgb = (ambient + lo + emissive) * cnaCascadeDebugTint(input.worldPos);
     let outputRgb = select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5);
     return vec4f(outputRgb, alpha);
 }
@@ -1154,16 +1349,21 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
     let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
-    let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
-                  + ndotl2 * lp.light2Diffuse.xyz;
+    // WMG-0014: the directional shadow scales the three directional lights and the specular that
+    // follows from them; the punctual light is outside it and carries its own.
+    let shadow = cnaShadowFactor(input.worldPos);
+    let lightSum = (ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
+                  + ndotl2 * lp.light2Diffuse.xyz) * shadow
+                  + cnaPunctualLight(input.worldPos, n);
     let litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
     let specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
-                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz * shadow;
     let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
+    color = vec4f(color.rgb * cnaCascadeDebugTint(input.worldPos), color.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
@@ -1278,18 +1478,23 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
     let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
-    let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
-                  + ndotl2 * lp.light2Diffuse.xyz;
+    // WMG-0014: the directional shadow scales the three directional lights and the specular that
+    // follows from them; the punctual light is outside it and carries its own.
+    let shadow = cnaShadowFactor(input.worldPos);
+    let lightSum = (ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
+                  + ndotl2 * lp.light2Diffuse.xyz) * shadow
+                  + cnaPunctualLight(input.worldPos, n);
     let litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
     let specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
-                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz * shadow;
     let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
+    color = vec4f(color.rgb * cnaCascadeDebugTint(input.worldPos), color.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
     color = vec4f(color.rgb * vc.rgb, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
@@ -1779,6 +1984,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, f90, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
+    // WMG-0014: the three directional lights are shadowed together; the punctual light brings its
+    // own shadow and is added after, scaled by albedo as the diffuse lobe is.
+    lo = lo * cnaShadowFactor(input.worldPos);
+    lo = lo + cnaPunctualLight(input.worldPos, finalNormal) * albedo;
 
     let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
@@ -1787,7 +1996,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
     let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
-    let linearRgb = ambient + lo + emissive;
+    let linearRgb = (ambient + lo + emissive) * cnaCascadeDebugTint(input.worldPos);
     let outputRgb = select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5);
     return vec4f(outputRgb, alpha);
 }
