@@ -195,7 +195,7 @@ class WebGpuBrowserCompiledEffectTest : public Game
         device.SetRenderTarget(&target);
         device.Clear(kBackground);
         ResetState(device);
-        effect.getTechniquesProperty()[0].getPassesProperty()[passIndex].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[passIndex]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0,
                                   2, declaration);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -362,7 +362,7 @@ public:
                 Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
                 Configure(effect, Vector4(1.0f, 0.0f, 1.0f, 1.0f));
                 const int passes =
-                    effect.getTechniquesProperty()[0].getPassesProperty().getCountProperty();
+                    effect.getTechniquesProperty()[0]->getPassesProperty().getCountProperty();
                 QuadVertex quad[6];
                 FillQuad(quad);
                 pass0Pixel_ = DrawQuadAndRead(device, effect, 0, quad, PositionDeclaration());

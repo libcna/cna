@@ -482,7 +482,7 @@ TEST(WebGPUCompiledEffectDrawTest, LodBiasAppliesToTheSamplersOwnRegisterRatherT
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                   static_cast<const void*>(ramp), 0, 2, declaration);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -590,11 +590,11 @@ TEST(WebGPUCompiledEffectDrawTest, LodBiasIsCapturedWithTheDeferredDrawRatherTha
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
 
-    unbiasedEffect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    unbiasedEffect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     device.DrawUserPrimitives(PrimitiveType::TriangleList,
                               static_cast<const void*>(left), 0, 2, declaration);
     // The mutation: this Apply() overwrites the sampler state a replay-time read would find.
-    biasedEffect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    biasedEffect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     device.DrawUserPrimitives(PrimitiveType::TriangleList,
                               static_cast<const void*>(right), 0, 2, declaration);
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -680,7 +680,7 @@ TEST(WebGPUCompiledEffectDrawTest, AddressWSelectsADifferentVolumeSliceForEachMo
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                   static_cast<const void*>(quad), 0, 2, declaration);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
