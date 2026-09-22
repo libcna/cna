@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cstdint>
@@ -82,7 +83,7 @@ TEST(GltfMaterialBridgeTest, AnUnconfiguredImportGivesTheDefaultMaterial)
 
 TEST(GltfMaterialBridgeTest, EveryDecodedValueReachesTheMaterial)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D baseColor(gd, 2, 2);
     Texture2D normal(gd, 2, 2);
     Texture2D specularColor(gd, 2, 2);
@@ -142,7 +143,7 @@ TEST(GltfMaterialBridgeTest, EveryDecodedValueReachesTheMaterial)
 TEST(GltfMaterialBridgeTest, TheImportedMaterialSurvivesTheEffectRoundTrip)
 {
     // The two halves of Phase 13 composed: import to a material, apply it, read it back.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     StandInMaterialOut source;
     source.baseColorFactor = Vector4(0.2f, 0.4f, 0.6f, 0.8f);
     source.emissiveFactor = Vector3(3.0f, 1.0f, 0.5f);
@@ -194,7 +195,7 @@ TEST(GltfMaterialBridgeTest, AFileDeclaringNoExtensionsGivesANeutralSet)
 
 TEST(GltfMaterialBridgeTest, EveryDecodedExtensionValueReachesTheSet)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     Texture2D clearcoat(gd, 1, 1), clearcoatRoughness(gd, 1, 1), clearcoatNormal(gd, 1, 1);
     Texture2D sheenColor(gd, 1, 1), sheenRoughness(gd, 1, 1);
     Texture2D transmission(gd, 1, 1), thickness(gd, 1, 1);

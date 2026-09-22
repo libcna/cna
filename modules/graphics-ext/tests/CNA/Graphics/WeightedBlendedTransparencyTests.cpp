@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <algorithm>
@@ -140,7 +141,7 @@ TEST(WeightedBlendedTransparencyTest, TheShaderAndTheCpuWeightAgree)
 {
     // MOD-2107. Written twice, so compared on the GPU rather than read side by side -- the pattern
     // Phase 20 named after six rows hit it, every one of which produced a plausible frame.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     WeightedBlendedTransparency oit(device, kSize, kSize);
     if (!oit.isSupported()) GTEST_SKIP() << oit.getUnsupportedReason();
 
@@ -195,7 +196,7 @@ TEST(WeightedBlendedTransparencyTest, TheAccumulationGlslDeclaresWhatAShaderNeed
 
 TEST(WeightedBlendedTransparencyTest, EveryMisuseIsRejected)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     EXPECT_THROW(WeightedBlendedTransparency(device, 0, kSize), std::invalid_argument);
     EXPECT_THROW(WeightedBlendedTransparency(device, kSize, -4), std::invalid_argument);
 
@@ -225,7 +226,7 @@ TEST(WeightedBlendedTransparencyTest, EveryMisuseIsRejected)
 // where the resolve is absent. build-probe (HEADLESS with CNA_CNAEXT=ON) is that arm.
 TEST(WeightedBlendedTransparencyTest, TheBracketIsSymmetricOnEveryRenderer)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     WeightedBlendedTransparency oit(device, kSize, kSize);
 
     // A state the pass does not use, set before the bracket, so "end() restored what begin()
@@ -266,7 +267,7 @@ TEST(WeightedBlendedTransparencyTest, AFrameWithNothingTransparentInItIsUntouche
     // The resolve discards where nothing was accumulated, so a pipeline can leave this pass in the
     // chain unconditionally. Exact, not near: a pass that perturbs untouched pixels cannot be left
     // in a chain at all.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     WeightedBlendedTransparency oit(device, kSize, kSize);
     if (!oit.isSupported()) GTEST_SKIP() << oit.getUnsupportedReason();
 
@@ -338,7 +339,7 @@ std::vector<Color> BlendInOrder(GraphicsDevice& device, ShaderEffect& blender,
 
 TEST(WeightedBlendedTransparencyTest, TheSameSurfacesInEitherOrderProduceTheSameFrame)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     WeightedBlendedTransparency oit(device, kSize, kSize);
     if (!oit.isSupported()) GTEST_SKIP() << oit.getUnsupportedReason();
     const auto emitter = MakeEmitter(device);
@@ -397,7 +398,7 @@ TEST(WeightedBlendedTransparencyTest, TheNearerSurfaceDominatesTheComposite)
     // Order independence alone would be satisfied by averaging the two surfaces equally, which is
     // not transparency. The depth weight is what makes the near one count for more, so the same
     // pair swapped in *depth* must change the frame even though swapping them in order does not.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     WeightedBlendedTransparency oit(device, kSize, kSize);
     if (!oit.isSupported()) GTEST_SKIP() << oit.getUnsupportedReason();
     const auto emitter = MakeEmitter(device);

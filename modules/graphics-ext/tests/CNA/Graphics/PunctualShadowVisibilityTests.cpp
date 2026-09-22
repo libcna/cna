@@ -149,7 +149,7 @@ void DrawGround(GraphicsDevice& device, BasicEffect& effect, RenderTarget2D& tar
 class PunctualShadowVisibilityTest : public ::testing::Test
 {
 protected:
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
 
     void SetUp() override
     {

@@ -19,6 +19,11 @@ Task IDs: `GTI-0001`, `GTI-0002`, … . No renderer behaviour changes here.
 | GTI-0003 | The SOFTWARE-213 HiDef fix carried to WebGPU (32 tests) and SDL_GPU (3) | ✅ |
 | GTI-0004 | Seven Vulkan tests failed, not skipped, in builds that run without validation | ✅ |
 | GTI-0005 | Correction: two VKPAR "zero validation messages" claims were measured with validation off | ✅ |
+| GTI-0006 | The Wayland half of the live-desktop hole: libwayland's implicit `wayland-0`; a deterministic policy test and a tree-level isolation check | ✅ |
+| GTI-0007 | A generic guard for tests that die on, or skip because of, a graphics-profile refusal | ✅ |
+| GTI-0008 | `run_gpu_tests_private.sh --exec`: one command in the same private environment; cleanup and exit-status evidence | ✅ |
+| GTI-0009 | Eight shared render-target, lifetime and winding tests passed with their back-buffer legs skipped on Reach | ✅ |
+| GTI-0010 | The WebGPU and SDL_GPU tests GTI-0003 only compiled, run on real hardware | ✅ (3 real failures recorded, not fixed) |
 
 ---
 
@@ -133,3 +138,158 @@ report flags `error,warn,info`, logged to stdout), on private displays only:
 So the conclusion holds, now with the measurement behind it. Two limits remain as stated: this is the
 layer's default set, not synchronization validation, and the Wayland demo ran on the private Weston
 rather than on the live GNOME session — which is exactly where it should run.
+
+---
+
+## Second pass (2026-09-22), opened with `plans/plan_vulkan_modern_graphics.md`
+
+The owner's brief for the modern-Vulkan workstream restated this plan's goals as its Workstream A.
+GTI-0001–0005 were already in `next` (`33105f3ae`); the rows below are what that re-check found still
+open. Base: `origin/next` = `7791f8fc7`, branch `vulkan-modern-graphics`. Host: AMD Radeon 780M, RADV
+PHOENIX, Mesa 25.0.7, Vulkan 1.4.305 loader, `VK_LAYER_KHRONOS_validation` from the system package.
+
+### GTI-0006 — the Wayland half of the live-desktop hole
+
+GTI-0001 closed the X display. It did not close Wayland: **libwayland, asked to connect with no
+`WAYLAND_DISPLAY` at all, does not fail — it connects to `$XDG_RUNTIME_DIR/wayland-0`**, and on this
+machine that is the owner's GNOME session (`/run/user/1000/wayland-0` exists). Any GPU test in a
+`CNA_PLATFORM=WAYLAND` tree, or any SDL build whose video driver picks Wayland, run from a shell whose
+`WAYLAND_DISPLAY` is unset, opens its window on the live desktop. (This agent's shell happened to carry
+`WAYLAND_DISPLAY=` *empty*, which fails to connect; `env -u WAYLAND_DISPLAY` or another harness does not.)
+
+Measured first, privately, with a fake socket (a Python listener bound to `wayland-0` inside a scratch
+`XDG_RUNTIME_DIR`) and `wl_display_connect(NULL)` through ctypes:
+
+| `WAYLAND_DISPLAY` | connects | fake `wayland-0` accepted |
+|---|---|---|
+| unset | yes | **yes** — the hole |
+| empty string | no | no |
+| `wayland-0` (explicit) | yes | yes — an explicit choice, like an inherited `DISPLAY` |
+
+**The fix** needs no conditional ctest cannot express: `ENVIRONMENT_MODIFICATION
+"WAYLAND_DISPLAY=string_append:"` turns *unset* into *empty* and leaves an exported value untouched
+(checked with a no-compile probe project in `build-probe/gti-envmod`, removed: unset → `''`, empty →
+`''`, `wayland-7` → `wayland-7`). Every test carries it:
+
+* `cmake/TestDisplayPolicy.cmake`'s deferred directory walk (the one GTI-0001 added) now also appends
+  the guard to every configure-time test, writing back only the property it changed;
+* `cmake/UnitTests.cmake` passes it through `gtest_discover_tests(PROPERTIES …)` for the discovered
+  `CnaTests` cases, which are in no directory's `TESTS` at configure time;
+* not on Windows (`CNA_TEST_WAYLAND_GUARD_APPLIES`), which has neither X nor Wayland.
+
+The decisions moved into pure functions, `cmake/TestDisplayPolicyRules.cmake`, so they can be tested:
+**`CnaTestDisplayPolicy`** runs them in `cmake -P` script mode — every spelling of display 0 (`:0`,
+`:0.1`, `unix:0`, `localhost:0`, `127.0.0.1:0.0`, `/tmp/.X11-unix/X0`) counts as the live desktop, the
+opt-in keeps it, private displays are kept, the empty `DISPLAY=` entry is dropped, the guard is added
+once and never on Windows. **`CnaTestDisplayIsolation`** (`scripts/check_test_display_isolation.py`)
+checks what ctest would actually run (`--show-only=json-v1`): no live `DISPLAY` without the opt-in, no
+forced `wayland-0`, no leftover empty `DISPLAY=`, and the guard on every test.
+
+**Evidence.**
+
+* `CnaTestDisplayPolicy`, `CnaTestDisplayIsolation` pass in `cmake-build-cnaext` (586 tests checked)
+  and `cmake-build-vulkan`; the configure prints "586 / 532 configure-time tests never fall back to the
+  default Wayland socket".
+* Negative control for the checker: on `cmake-build-multi`, not reconfigured since before GTI-0001,
+  it reports 9,637 problems in 9,634 tests.
+* Negative control for the guard, live and safe (a fake `wayland-0` in a scratch runtime directory, so
+  even a broken guard could reach only the fake): `Vulkan_Orientation_Calibration` in the native-Wayland
+  tree, `env -u WAYLAND_DISPLAY -u DISPLAY`, through **ctest: 0 connections**, the test skipped
+  ("no usable … display"); the **same binary run directly: 1 connection** — the hole is real and the
+  guard is what closes it.
+
+Not changed: an inherited, explicitly exported `DISPLAY=:0` or `WAYLAND_DISPLAY=wayland-0` (the
+owner's own terminal) is still honoured, exactly as GTI-0001 decided for X. Renderer example tests
+still inherit the caller's session bus; `CnaTests` and the private runner both point it at nothing.
+
+### GTI-0007 — a guard for tests that never reach their assertions
+
+`tools/platform/profile_dead_tests.py` reads ctest's own record of a run
+(`Testing/Temporary/LastTest.log`) and names every test that
+
+* **failed** with one of CNA's Reach-profile refusal messages in its output (`DEAD-ON-PROFILE`) —
+  wording taken from every throw site in `modules/graphics/src/Xna`; HiDef's own ceilings are not
+  listed, exceeding them is a real limit;
+* **skipped** with such a refusal in its skip line (`SKIPPED-ON-PROFILE`) — ctest writes an exit 77
+  as "Test Passed." in that log, so a skip is only visible through its reason;
+* **passed** while reporting a leg "unavailable" because of `NotSupportedException`
+  (`WARN-LEG-UNAVAILABLE`, a warning: legitimate on a renderer that does not rasterize).
+
+`run_gpu_tests_private.sh` runs it after every ctest run whose log is newer than the run's start, and
+keeps ctest's exit status. `CnaProfileDeadTestClassifier` is its self-test (a failed and a skipped
+refusal and a NotSupported leg found; a passing refusal test, a HiDef limit and a genuine capability
+skip not). It is a classifier, not a framework: a flagged test is a test defect until shown otherwise
+and is not a renderer result either way.
+
+**It found what it was written for, the same day.** On the modern-Vulkan baseline it named
+`CNAEXT_ShadowReceiver`, `CNAEXT_ClusteredLights` and `CNAEXT_GpuDriven` (dead on
+`GetBackBufferData`), and after the skip-line rule, the 17 CNAEXT examples that had been skipping on
+the same refusal — `plans/plan_vulkan_modern_graphics.md` VMG-0004. The warning rule found the
+GTI-0009 legs.
+
+### GTI-0008 — the runner runs one command too
+
+`run_gpu_tests_private.sh --exec <command…>` runs one command — a test binary with a gtest filter, a
+demo, a stress run — in exactly the private environment a ctest run gets (headless Weston, rootful
+Xwayland with DRI3, private `XDG_RUNTIME_DIR`, no session bus). Measured: inside, `DISPLAY=:2`,
+`WAYLAND_DISPLAY=cna-weston-…`, `xdpyinfo` reports DRI3, `vulkaninfo` lists AMD Radeon 780M (RADV
+PHOENIX) and llvmpipe; a command's exit status 3 comes back as 3; afterwards no Weston, shell client
+or Xwayland of the run remains (process table compared before/after, the owner's own `Xwayland` and
+`dbus-daemon` untouched). The whole-suite runs of this pass (below and in the VMG plan) show the same
+before/after equality.
+
+### GTI-0009 — eight shared tests passed with dead legs
+
+The modern-Vulkan baseline (`plans/plan_vulkan_modern_graphics.md` VMG-0001) showed `[SKIP] … backbuffer
+oracle unavailable on VULKAN (NotSupportedException) -- boundary recorded` inside **passing** tests.
+These shared sources catch the exception, record a "boundary" and go on: under the default Reach
+profile `GetBackBufferData` throws (SOFTWARE-213), so their back-buffer legs never ran on any renderer.
+
+`rendertarget_first_use`, `rendertarget_producer_consumer` (three registrations: plain, MSAA,
+SyncVal), `rendertarget_backbuffer_consumer`, `frontface_winding`, then — found by GTI-0007's warning
+rule — `bound_target_lifetime`, `deferred_source_lifetime`, `backbuffer_first_read` and
+`rendertarget_sampling_orientation` now ask for HiDef **where the adapter offers it**
+(`GraphicsAdapter::IsProfileSupported(HiDef)`, so Direct3D 9 on a Reach-only adapter keeps its
+recorded boundary rather than failing to create a device).
+
+**Evidence (RADV, private runner):** all ten registrations pass with the legs live — e.g. 95 PASS
+lines in `Vulkan_FrontFaceWinding`, 90 in `Vulkan_RenderTarget_BackbufferConsumer`; no
+`WARN-LEG-UNAVAILABLE` left in the classic run for them. `Vulkan_SpriteBatch3DOrder` still records one
+unavailable oracle for a different, non-profile reason ("the render target must be resolved before
+it…"); it already requests HiDef and is left as it is.
+
+### GTI-0010 — the WebGPU and SDL_GPU tests, run
+
+GTI-0003 had compiled the 35 fixes and not run them. Two throwaway probe trees
+(`build-probe/gti-webgpu`: `WEBGPU` default, pinned `~/deps/wgpu-native-v29.0.1.1`, Debug, `libcna.so`;
+`build-probe/gti-sdlgpu`: `SDL_GPU` default; each built only the tests in question — 1.3 GB and 1.2 GB,
+both removed after this row) and the private runner:
+
+| Suite | Tests | Passed | Failed | Died/skipped on the profile |
+|---|---|---|---|---|
+| WebGPU (the 31 native ones; the 32nd is Emscripten-only) | 31 | **29** | 2 | 0 |
+| SDL_GPU | 3 | **2** | 1 | 0 |
+
+Rerun with `VK_DRIVER_FILES` pinned to the RADV ICD only: identical, so the adapter is the Radeon.
+**The three failures are real and are left for those renderers' own workstreams, not fixed here:**
+
+* `WebGPU_Scissor_Cardinality` — `ArgumentException`: "The scissor rectangle must fit inside the active
+  render surface". The shared scissor-range validation refuses what this test sets; test contract or
+  renderer, to be decided there.
+* `WebGPU_RealWindowResize` — "the platform resize never arrived" on the private rootful Xwayland,
+  which has no window manager; environment-sensitive, needs a WM-backed private server to judge.
+* `SdlGpu_BackbufferFormat` — "Cannot clear depth or stencil because the device does not have an
+  active depth or stencil buffer": the test clears depth on a `DepthFormat::None` device, which the
+  shared XNA-rule validation refuses.
+
+### Second-pass result
+
+* Automated tests default to no live display, **and** no longer fall back to the live Wayland
+  compositor; both are pinned by tests.
+* The private runner is proven for Wayland (native-Wayland Vulkan tree: 380/381 `Vulkan_*`) and X11
+  (`cmake-build-vulkan` over SDL3's x11 driver on the private rootful Xwayland: 369/370), all on RADV,
+  with no leftover processes.
+* Dead-test coverage: the WebGPU/SDL_GPU fixes run (31/31, 3/3 reach their checks), eight shared
+  sources' dead legs revived, and a guard that names the whole class after every private run.
+* Build trees: `cmake-build-cnaext` 2.5 GB, `cmake-build-vulkan` 5.4 GB (unchanged), both on
+  `libcna.so`; the two probe trees removed.

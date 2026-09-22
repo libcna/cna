@@ -110,7 +110,7 @@ TEST(EnvironmentProcessorTest, AMarkedPanoramaLandsOnTheExpectedFaces)
 {
     // A panorama whose colour encodes its own direction, so a misplaced face is a wrong colour
     // rather than a subtly wrong image. Red rises with longitude, green with latitude.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
@@ -159,7 +159,7 @@ TEST(EnvironmentProcessorTest, AConstantPanoramaGivesAConstantCube)
 {
     // The energy check a conversion cannot fail quietly: if every direction is the same colour,
     // every texel of every face must be that colour. A sampling bug shows up as an edge or a seam.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
@@ -183,7 +183,7 @@ TEST(EnvironmentProcessorTest, AConstantPanoramaGivesAConstantCube)
 
 TEST(EnvironmentProcessorTest, TheInputsAreValidated)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     Texture2D panorama(gd, 8, 4);
 
@@ -297,7 +297,7 @@ TEST(EnvironmentProcessorTest, AConstantEnvironmentHasTheSameConstantIrradiance)
     // MOD-1202's energy check. If every direction carries the same radiance, a matte surface
     // facing anywhere receives exactly that -- so the cosine convolution must return its input.
     // Any weighting error shows up here as a uniform shift, which no picture would reveal.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     auto environment = MakeConstantCube(gd, 8, Color(120, 60, 200, 255));
@@ -324,7 +324,7 @@ TEST(EnvironmentProcessorTest, MoreIrradianceSamplesConvergeTowardTheAnalyticRes
 {
     // MOD-1203: the quality setting has to actually buy something. A directional environment --
     // one bright face -- is where a coarse sweep is visibly off and a finer one is not.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
@@ -356,7 +356,7 @@ TEST(EnvironmentProcessorTest, PrefilteringKeepsMipZeroSharpAndFlattensTheLast)
     // MOD-1204, asserted as the two ends the row names. Mip 0 is roughness 0, so it must reproduce
     // its input; the last mip is roughness 1, so a directional environment must have spread across
     // it. Between them is the ramp the shader indexes by roughness.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     CNA_SKIP_WITHOUT_CUBE_MIP_STORAGE(gd);
@@ -401,7 +401,7 @@ TEST(EnvironmentProcessorTest, TheBrdfLutMatchesACpuReferenceAtSampledPoints)
     // this pins the *plumbing* -- the axis order, the texel-centre convention, the channel each
     // term lands in -- rather than the physics. Getting the two axes the wrong way round produces
     // a plausible table that makes every rough surface behave like a smooth one.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
 
     constexpr int kSize = 32;
@@ -435,7 +435,7 @@ TEST(EnvironmentProcessorTest, TheBrdfLutMatchesACpuReferenceAtSampledPoints)
 
 TEST(EnvironmentProcessorTest, TheGeneratorsValidateTheirInputs)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     auto environment = MakeConstantCube(gd, 4, Color::White);
@@ -457,7 +457,7 @@ TEST(EnvironmentProcessorTest, GenerationCostIsLoadTimeWork)
     // survive any machine this runs on. It exists to print the three numbers, so the claim in the
     // docs that these are generated once at load and never per frame is something a reader can
     // reproduce rather than take on trust.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     CNA_SKIP_WITHOUT_CUBE_MIP_STORAGE(gd);

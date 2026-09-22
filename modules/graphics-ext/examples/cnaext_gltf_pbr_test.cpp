@@ -59,6 +59,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
@@ -155,8 +157,12 @@ protected:
         auto& device = getGraphicsDeviceProperty();
 
         const bool has3D      = device.SupportsCapability(GraphicsCapability::ThreeD);
+        // plans/plan_vulkan_modern_graphics.md VMG-0008: the one engine shader this program needs
+        // is the shadow caster, which ships SPIR-V as well as GLSL (MOD-2237); PBR, IBL and the
+        // receiver are stock-effect paths. The renderer-wide ExecutesShaderEffectSourceEXT() --
+        // false on Vulkan, which runs no GLSL source -- skipped a program Vulkan can run.
         const bool hasEffects = device.SupportsCapability(GraphicsCapability::CustomEffects) &&
-                                device.ExecutesShaderEffectSourceEXT();
+                                ShadowMap(device, CNA::Graphics::ShadowQuality::Low).isSupported();
         const bool hasShadows = device.SupportsShadowSamplingEXT();
         const bool hasIbl     = device.SupportsImageBasedLightingEXT();
         if (!has3D || !hasEffects || !hasShadows || !hasIbl)
@@ -164,7 +170,7 @@ protected:
             std::printf("SKIP: this renderer is missing%s%s%s%s -- a documented capability "
                         "boundary, not a defect\n",
                         has3D ? "" : " 3D rasterization,",
-                        hasEffects ? "" : " shader-source execution,",
+                        hasEffects ? "" : " a shading shadow caster,",
                         hasShadows ? "" : " shadow sampling,",
                         hasIbl ? "" : " image-based lighting,");
             std::exit(77);
@@ -314,6 +320,13 @@ public:
                 corpus_ = argv[++i];
 
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_modern_graphics.md VMG-0004: the engine layer is HiDef work -- float and
+        // multiple render targets, and the back-buffer readback every check here reads -- while the
+        // manager defaults to Reach, where GetBackBufferData is refused (SOFTWARE-213). Under Reach
+        // this program skipped or aborted before its first check on every renderer.
+        if (Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(
+                Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kFrame);
         gdm_->setPreferredBackBufferHeightProperty(kFrame);
     }

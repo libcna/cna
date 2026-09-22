@@ -113,7 +113,7 @@ Color CentrePixel(RenderTarget2D& target)
 class SkyboxTest : public ::testing::Test
 {
 protected:
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
 };
 
 // =====================================================================================

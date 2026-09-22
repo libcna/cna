@@ -296,7 +296,7 @@ TEST(CascadedShadowMapTest, TheAtlasIsOneTargetWideEnoughForEveryCascade)
 {
     // MOD-907's decision, visible in the allocation: one RenderTarget2D, cascades side by side.
     // A texture array would need a concept CNA's renderer interface does not have.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 3);
 
     EXPECT_EQ(cascades.getCascadeCount(), 3);
@@ -311,7 +311,7 @@ TEST(CascadedShadowMapTest, EachCascadeGetsAFullQualityMapRatherThanAShareOfOne)
     // Worth pinning because the opposite is the tempting implementation: splitting one map's
     // resolution between the cascades would make "High with 4 cascades" quietly worse than "High"
     // everywhere, which is the reverse of what the setting promises.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap two(gd, ShadowQuality::Low, 2);
     CascadedShadowMap four(gd, ShadowQuality::Low, 4);
     EXPECT_EQ(two.getCascadeSize(), four.getCascadeSize());
@@ -319,7 +319,7 @@ TEST(CascadedShadowMapTest, EachCascadeGetsAFullQualityMapRatherThanAShareOfOne)
 
 TEST(CascadedShadowMapTest, TheCascadeCountIsBounded)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW(CascadedShadowMap(gd, ShadowQuality::Low, 1), std::invalid_argument);
     EXPECT_THROW(CascadedShadowMap(gd, ShadowQuality::Low, 5), std::invalid_argument);
     EXPECT_NO_THROW(CascadedShadowMap(gd, ShadowQuality::Low, 2));
@@ -328,7 +328,7 @@ TEST(CascadedShadowMapTest, TheCascadeCountIsBounded)
 
 TEST(CascadedShadowMapTest, UpdateFillsEveryCascadeAndTheSplitsAscend)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 4);
     cascades.update(Sun(), Matrix::getIdentityProperty(), CameraProjection());
 
@@ -349,7 +349,7 @@ TEST(CascadedShadowMapTest, EachCascadeMapsIntoItsOwnSliceOfTheAtlas)
 {
     // The property that makes an atlas work at all: cascade i's matrix has to land in the i-th
     // horizontal slice and nowhere else, or two cascades sample each other's texels.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     constexpr int kCount = 4;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, kCount);
     cascades.update(Sun(), Matrix::getIdentityProperty(), CameraProjection());
@@ -373,7 +373,7 @@ TEST(CascadedShadowMapTest, EachCascadeMapsIntoItsOwnSliceOfTheAtlas)
 
 TEST(CascadedShadowMapTest, EveryMisuseIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 2);
 
@@ -397,7 +397,7 @@ TEST(CascadedShadowMapTest, TheCascadeChosenForADepthIsTheOneThatCoversIt)
     // MOD-905's rule, on the CPU where it can be checked against hand-picked depths. The shader
     // mirrors it; getting the boundary wrong there shows up as a thin band of wrong-resolution
     // shadow at each split, which reads as an art problem rather than an off-by-one.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 3);
     cascades.setSplitLambda(0.0f);   // uniform, so the boundaries are 34, 67, 100
     cascades.update(Sun(), Matrix::getIdentityProperty(), CameraProjection());
@@ -418,7 +418,7 @@ TEST(CascadedShadowMapTest, TheCascadeChosenForADepthIsTheOneThatCoversIt)
 
 TEST(CascadedShadowMapTest, TheSplitLambdaRoundTripsAndIsClamped)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 3);
 
     EXPECT_NEAR(cascades.getSplitLambda(), 0.75f, 1e-6f);
@@ -430,7 +430,7 @@ TEST(CascadedShadowMapTest, TheSplitLambdaRoundTripsAndIsClamped)
 
 TEST(CascadedShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 2);
 

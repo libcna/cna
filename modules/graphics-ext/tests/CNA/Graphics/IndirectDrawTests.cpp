@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -123,7 +124,7 @@ TEST(IndirectDrawTest, TheCommandBarrierIsItsOwnBitAndIsPartOfAll)
 
 TEST(IndirectDrawTest, ARendererWithoutTheCapabilityRefusesByName)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (device.SupportsCapability(GraphicsCapability::IndirectDraw))
         GTEST_SKIP() << "this renderer does support indirect drawing";
     if (!device.SupportsCapability(GraphicsCapability::ComputeShaders))
@@ -137,7 +138,7 @@ TEST(IndirectDrawTest, ARendererWithoutTheCapabilityRefusesByName)
 
 TEST(IndirectDrawTest, TheArgumentRangeIsCheckedEvenThoughTheCountsCannotBe)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
     StorageBuffer arguments(device, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
@@ -165,7 +166,7 @@ TEST(IndirectDrawTest, TheArgumentRangeIsCheckedEvenThoughTheCountsCannotBe)
 
 TEST(IndirectDrawTest, ADrawWithNothingBoundStillRefusesBeforeTheGpuSeesIt)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
     StorageBuffer arguments(device, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
@@ -177,7 +178,7 @@ TEST(IndirectDrawTest, ADrawWithNothingBoundStillRefusesBeforeTheGpuSeesIt)
 
 TEST(IndirectDrawTest, TheCountsReallyComeFromTheBuffer)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
     const auto triangle = CoveringTriangle();
@@ -235,7 +236,7 @@ TEST(IndirectDrawTest, TheArgumentsCanSitAtAnOffsetInsideTheBuffer)
 {
     // What makes one buffer able to hold a whole frame's worth of draws, which is the shape
     // MOD-2091 needs: the offset selects which command this draw runs.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
     const auto triangle = CoveringTriangle();
@@ -271,7 +272,7 @@ TEST(IndirectDrawTest, TheIndexedRouteReadsItsOwnFiveWordCommand)
 {
     // The indexed command is one word longer and its counts mean index elements rather than
     // vertices, so it gets its own case rather than being assumed to follow from the other.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
     const auto triangle = CoveringTriangle();
@@ -315,7 +316,7 @@ TEST(IndirectDrawTest, TheIndexedRouteReadsItsOwnFiveWordCommand)
 
 TEST(IndirectDrawTest, TheIndexedRouteRefusesWithoutAnIndexBuffer)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
     const auto triangle = CoveringTriangle();

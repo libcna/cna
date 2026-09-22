@@ -45,7 +45,7 @@ using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 
 TEST(ScopedRenderTargetTest, TheTargetIsRestoredOnTheNormalPath)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D outer(gd, 8, 8);
@@ -67,7 +67,7 @@ TEST(ScopedRenderTargetTest, TheTargetIsRestoredWhenTheScopeIsLeftByAThrow)
 {
     // The reason this class exists. Without it the destination stays bound after a failed draw and
     // everything rendered afterwards goes into it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D outer(gd, 8, 8);
@@ -89,7 +89,7 @@ TEST(ScopedRenderTargetTest, TheTargetIsRestoredWhenTheScopeIsLeftByAThrow)
 
 TEST(ScopedRenderTargetTest, ANullDestinationBindsTheBackBufferAndStillRestores)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D outer(gd, 8, 8);
@@ -104,7 +104,7 @@ TEST(ScopedRenderTargetTest, ANullDestinationBindsTheBackBufferAndStillRestores)
 
 TEST(ScopedRenderTargetTest, NestedScopesUnwindInOrder)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D a(gd, 8, 8);
@@ -127,7 +127,7 @@ TEST(ScopedRenderTargetTest, NestedScopesUnwindInOrder)
 
 TEST(ScopedRenderTargetTest, ThePreviousBindingIsRecordedWhereTheRendererReportsIt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D target(gd, 4, 4);
@@ -174,7 +174,7 @@ private:
 
 TEST(PostProcessFallbackTest, AnUnsupportedPassCopiesItsInputRatherThanThrowing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     RenderTarget2D source(gd, 4, 4);
@@ -211,7 +211,7 @@ TEST(PostProcessFallbackTest, TheDefaultSupportAnswerIsTheTwoPartQuestion)
     // MOD-1699 restated as a test: `CustomEffects` alone is not the answer. SOFTWARE and HEADLESS
     // accept a shader source and render with their own fixed path, so a pass that trusted the
     // capability would report success and produce nothing.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
 
     class DefaultPass : public CNA::Graphics::PostProcessPass
     {
@@ -232,7 +232,7 @@ TEST(PostProcessFallbackTest, TheDefaultSupportAnswerIsTheTwoPartQuestion)
 TEST(PostProcessFallbackTest, AnUnsupportedPassLeavesNoRenderTargetBound)
 {
     // The two halves of this file meeting: falling back must not leak the binding either.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderTarget2D source(gd, 4, 4);

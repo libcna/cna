@@ -7,7 +7,9 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
@@ -21,6 +23,30 @@
 #include <vector>
 
 namespace CnaTest::EngineLayer {
+
+    /**
+     * @brief The standalone device every engine-layer test runs on: the headless one, at HiDef.
+     *
+     * plans/plan_vulkan_modern_graphics.md VMG-0005. `GraphicsDevice()` -- the CNAEXT standalone
+     * constructor -- asks for `GraphicsProfile::Reach`, and since SOFTWARE-213/217 CNA enforces
+     * Reach the way XNA does: 2048-texel textures, no volume textures, one render target, no
+     * back-buffer readback. The engine layer is HiDef work by construction (4096 shadow atlases,
+     * 3D LUTs, multiple and float render targets), so under Reach a third of this suite failed or
+     * skipped on every renderer before reaching what it tests. This is the same device on the
+     * profile the layer is written for; it changes nothing else about construction.
+     */
+    class HiDefDevice : public Microsoft::Xna::Framework::Graphics::GraphicsDevice
+    {
+    public:
+        /** @brief Creates the headless standalone device with the HiDef profile. */
+        HiDefDevice()
+            : Microsoft::Xna::Framework::Graphics::GraphicsDevice(
+                  Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+                  Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+                  Microsoft::Xna::Framework::Graphics::PresentationParameters())
+        {
+        }
+    };
 
     /**
      * @brief One texel of a depth image, in whatever encoding the prepass currently uses.
@@ -282,8 +308,8 @@ namespace CnaTest::EngineLayer {
             // Both, in here. Constructing one and calling that a pass would answer "can this
             // process have a device at all", which every renderer answers yes to -- the question
             // is whether a *second* one may exist beside the first.
-            Microsoft::Xna::Framework::Graphics::GraphicsDevice first;
-            Microsoft::Xna::Framework::Graphics::GraphicsDevice second;
+            HiDefDevice first;
+            HiDefDevice second;
             return true;
         }
         catch (...)

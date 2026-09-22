@@ -169,6 +169,31 @@ namespace CNA::Graphics {
         const int startIndex     = part_->getStartIndexProperty();
         const int vertexOffset   = part_->getVertexOffsetProperty();
 
+        // plans/plan_vulkan_modern_graphics.md VMG-0009: the draw borrows the device's vertex and
+        // index bindings and gives them back. It used to leave its own instance and tint streams
+        // bound, so the next frame's setInstances() uploaded into a buffer still set on the device
+        // -- which XNA refuses ("The vertex buffer resource is in use") -- and every frame after the
+        // first threw. Restored on every exit, a throwing draw included.
+        struct BindingRestore
+        {
+            GraphicsDevice& device;
+            std::vector<VertexBufferBinding> vertices;
+            const Microsoft::Xna::Framework::Graphics::IndexBuffer* indices;
+            ~BindingRestore()
+            {
+                // Best effort, and never a throw out of a destructor: a binding the caller disposed
+                // meanwhile cannot be restored, and the device then keeps what it could take back.
+                try
+                {
+                    device.SetVertexBuffers(vertices);
+                    device.setIndicesProperty(indices);
+                }
+                catch (...)
+                {
+                }
+            }
+        } restore{device_, device_.GetVertexBuffers(), device_.getIndicesProperty()};
+
         device_.setIndicesProperty(part_->getIndexBufferProperty());
 
         if (isInstancingSupported())

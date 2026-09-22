@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <memory>
@@ -197,7 +198,7 @@ TEST(DecalPassTest, TheBoxTestIsAvailableWithoutAGpu)
 
 TEST(DecalPassTest, TheSettingsRoundTripAndAreClamped)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
 
     pass.setOpacity(0.25f);
@@ -221,7 +222,7 @@ TEST(DecalPassTest, TheSettingsRoundTripAndAreClamped)
 
 TEST(DecalPassTest, DrawingRefusesWhatItCannotDraw)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     const auto decal = WhiteDecal(device);
 
@@ -234,7 +235,7 @@ TEST(DecalPassTest, WithNoPrepassDepthNothingIsPainted)
 {
     // The pass never invents a surface: with no depth there is nothing to project onto, and the
     // honest result is an untouched frame rather than a full-screen wash.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 
@@ -253,7 +254,7 @@ TEST(DecalPassTest, WithNoPrepassDepthNothingIsPainted)
 
 TEST(DecalPassTest, ADecalLandsOnTheSurfaceUnderItAndNotOnTheOneBehind)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 
@@ -266,7 +267,7 @@ TEST(DecalPassTest, ADecalLandsOnTheSurfaceUnderItAndNotOnTheOneBehind)
 
 TEST(DecalPassTest, TheDecalImageKeepsItsLocalVerticalAxisOnEveryBackend)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer cannot select the decal package";
 
@@ -292,7 +293,7 @@ TEST(DecalPassTest, TheDecalImageKeepsItsLocalVerticalAxisOnEveryBackend)
 
 TEST(DecalPassTest, TintAndOpacityReachTheNonPremultipliedBlend)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer cannot select the decal package";
 
@@ -316,7 +317,7 @@ TEST(DecalPassTest, ADecalWhoseBoxReachesNeitherSurfacePaintsNothing)
     // The control for the case above: the same scene and the same decal, moved so its box lies
     // between the two surfaces. A pass that painted whatever was in front of it would still paint
     // the near quad here.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 
@@ -330,7 +331,7 @@ TEST(DecalPassTest, ADecalWhoseBoxReachesNeitherSurfacePaintsNothing)
 
 TEST(DecalPassTest, TheSlopeTestDropsASurfaceTheDecalOnlyGrazes)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 
@@ -352,7 +353,7 @@ TEST(DecalPassTest, TheSlopeTestDropsASurfaceTheDecalOnlyGrazes)
 
 TEST(DecalPassTest, ZeroOpacityLeavesTheFrameAlone)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     DecalPass pass(device);
     if (!pass.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 

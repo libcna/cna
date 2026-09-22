@@ -43,6 +43,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -55,6 +56,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -89,6 +91,7 @@ using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
@@ -241,7 +244,7 @@ void ConfigureLighting(BasicEffect& effect)
 class ShadowVisibilityTest : public ::testing::Test
 {
 protected:
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
 
     void SetUp() override
     {
@@ -397,6 +400,18 @@ struct GpuSkinnedVertex
 };
 static_assert(sizeof(GpuSkinnedVertex) == 52, "the skinned program requires a stride of 52");
 
+/// plans/plan_vulkan_modern_graphics.md VMG-0016. SkinnedEffect has no TextureEnabled switch: it
+/// always samples its texture, and an unbound texture samples as opaque black -- XNA's rule, measured
+/// through the real XNA runtime (plans/plan_graphics_shared_cleanup.md). An untextured skinned mesh
+/// therefore renders black, and a test that wants to see its lighting binds white, as a game must.
+std::unique_ptr<Texture2D> WhiteTexture(GraphicsDevice& device)
+{
+    auto white = std::make_unique<Texture2D>(device, 1, 1);
+    const Color texel = Color::White;
+    white->SetData(&texel, 1);
+    return white;
+}
+
 VertexDeclaration SkinnedVertexDeclaration()
 {
     return VertexDeclaration(52, {
@@ -483,6 +498,8 @@ TEST_F(ShadowVisibilityTest, SkinnedEffectReceivesTheShadow)
                           DepthFormat::Depth24);
 
     SkinnedEffect effect(device);
+    const auto white = WhiteTexture(device);
+    effect.setTextureProperty(white.get());
     effect.SetBoneTransforms(std::vector<Matrix>(1, Matrix::getIdentityProperty()));
     effect.setWeightsPerVertexProperty(1);
     effect.setPreferPerPixelLightingProperty(true);
@@ -1027,6 +1044,8 @@ TEST_F(ShadowVisibilityTest, ASkinnedMeshShadowsItself)
     meshBuffer.SetDataRaw(mesh.data(), 12, static_cast<int>(sizeof(GpuSkinnedVertex)));
 
     SkinnedEffect effect(device);
+    const auto white = WhiteTexture(device);
+    effect.setTextureProperty(white.get());
     effect.SetBoneTransforms(bones);
     effect.setWeightsPerVertexProperty(1);
     effect.setPreferPerPixelLightingProperty(true);

@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -414,7 +415,7 @@ TEST(StorageBufferDescriptorTest, RetainsEveryFieldAndComposesEveryFlag)
 
 TEST(BaseInstanceDrawTest, AnUnsupportedRendererRefusesBeforeInspectingDrawBindings)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
         device, MakeRenderer(destructions));
@@ -447,7 +448,7 @@ TEST(StorageBufferDescriptorTest, RejectsEveryIntrinsicInvalidDescription)
 
 TEST(StorageBufferTest, DescriptorConstructionValidatesLimitAndForwardsExactIntent)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -480,7 +481,7 @@ TEST(StorageBufferTest, DescriptorConstructionValidatesLimitAndForwardsExactInte
 
 TEST(StorageBufferTest, IndirectOnlyConstructionIsIndependentOfComputeAndStorageLimits)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -519,7 +520,7 @@ TEST(StorageBufferTest, IndirectOnlyConstructionIsIndependentOfComputeAndStorage
 
 TEST(StorageBufferTest, LegacyDefaultAndExplicitRangesPreserveExactBytes)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -552,7 +553,7 @@ TEST(StorageBufferTest, LegacyDefaultAndExplicitRangesPreserveExactBytes)
 
 TEST(StorageBufferTest, CpuIntentUsageAndOverflowSafeRangesRefuseBeforeRendererWork)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -598,8 +599,8 @@ TEST(StorageBufferTest, CpuIntentUsageAndOverflowSafeRangesRefuseBeforeRendererW
 
 TEST(StorageBufferTest, CopyRefusesForeignDeviceAndRendererTransferFailure)
 {
-    GraphicsDevice first;
-    GraphicsDevice second;
+    CnaTest::EngineLayer::HiDefDevice first;
+    CnaTest::EngineLayer::HiDefDevice second;
     int firstDestructions = 0;
     int secondDestructions = 0;
     auto firstRenderer = MakeRenderer(firstDestructions);
@@ -624,7 +625,7 @@ TEST(StorageBufferTest, CopyRefusesForeignDeviceAndRendererTransferFailure)
 
 TEST(StorageBufferTest, TracksDisposesAndReleasesItsRendererRecordInDeviceOrder)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
         device, MakeRenderer(nativeDestructions));
@@ -666,7 +667,7 @@ TEST(StorageBufferTest, TracksDisposesAndReleasesItsRendererRecordInDeviceOrder)
 
 TEST(StorageBufferTest, TypedViewChecksSizeAndForwardsExplicitIntent)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
         device, MakeRenderer(destructions));
@@ -687,7 +688,7 @@ TEST(StorageBufferTest, TypedViewChecksSizeAndForwardsExplicitIntent)
 
 TEST(ConstantBufferTest, TypedViewAlignsUsesSharedStorageAndZeroesEveryPaddingByte)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -729,7 +730,7 @@ TEST(ConstantBufferTest, TypedViewAlignsUsesSharedStorageAndZeroesEveryPaddingBy
 
 TEST(ConstantBufferTest, RawAndTypedConstructionValidateNativeRangeAndAlignment)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -767,7 +768,7 @@ TEST(ConstantBufferTest, RawAndTypedConstructionValidateNativeRangeAndAlignment)
 
 TEST(ConstantBufferTest, ComputeBindingValidatesBothOverloadsAndBackendAcceptance)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -802,7 +803,7 @@ TEST(ConstantBufferTest, ComputeBindingValidatesBothOverloadsAndBackendAcceptanc
     EXPECT_THROW(shader.bindConstantBuffer(0, raw),
                  System::ObjectDisposedException);
 
-    GraphicsDevice other;
+    CnaTest::EngineLayer::HiDefDevice other;
     int otherDestructions = 0;
     CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
         other, MakeRenderer(otherDestructions));
@@ -818,7 +819,7 @@ TEST(ConstantBufferTest, RendererNeutralBindingDefaultRefusesExplicitly)
 
 TEST(ConstantBufferTest, PackageSelectionRefusesAnUnpublishedUniformRange)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     renderer->maximumUniformBytes = 0;
@@ -842,7 +843,7 @@ TEST(ConstantBufferTest, PackageSelectionRefusesAnUnpublishedUniformRange)
 
 TEST(StorageBufferTest, ComputeBindingRequiresLiveSameDeviceStorageUsage)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int destructions = 0;
     auto renderer = MakeRenderer(destructions);
     StorageBufferContractRenderer* const view = renderer.get();
@@ -865,7 +866,7 @@ TEST(StorageBufferTest, ComputeBindingRequiresLiveSameDeviceStorageUsage)
     EXPECT_THROW(shader.bindStorageBuffer(0, transferOnly),
                  System::ObjectDisposedException);
 
-    GraphicsDevice other;
+    CnaTest::EngineLayer::HiDefDevice other;
     int otherDestructions = 0;
     CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
         other, MakeRenderer(otherDestructions));

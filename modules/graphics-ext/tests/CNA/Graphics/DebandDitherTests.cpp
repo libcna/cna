@@ -113,7 +113,7 @@ double ColumnDeviation(const std::vector<Color>& pixels, const int column)
 
 TEST(DebandDitherTest, ItIsOffByDefaultAndTheSettingsRoundTrip)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     TonemapPass pass(gd);
     EXPECT_FALSE(pass.isDebandEnabled());
     EXPECT_FLOAT_EQ(pass.getDebandStrength(), 1.0f);
@@ -130,7 +130,7 @@ TEST(DebandDitherTest, ItIsOffByDefaultAndTheSettingsRoundTrip)
 
 TEST(DebandDitherTest, AFrameThatDidNotAskForItIsUnchangedToTheBit)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -157,7 +157,7 @@ TEST(DebandDitherTest, ADitheredRampCarriesMoreValuesThanTheTargetHasSteps)
     // six output values, so undithered the frame is six flat bands with hard edges between them.
     // Dither cannot add information the source did not have -- what it does is stop the error from
     // aligning, so a column's *mean* tracks the value that was there.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -191,7 +191,7 @@ TEST(DebandDitherTest, TheDitherIsZeroMeanSoAFlatAreaKeepsItsValue)
 {
     // The other half, and the one that makes dither acceptable at all: it must not change what the
     // image *is*. A noise with a bias would shift every flat surface in the frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -224,7 +224,7 @@ TEST(DebandDitherTest, TheNoiseIsNoLargerThanTheStepItIsHiding)
     // A dither that overshoots is just grain. One output step is the whole budget, and the
     // triangular distribution spends it as a spread of about 0.4 of a step rather than as a
     // uniform 0.5 either way.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -254,7 +254,7 @@ TEST(DebandDitherTest, TheAmplitudeIsUniformInOutputSpaceBecauseTheDitherFollows
     // at the display large in the shadows and almost invisible in the highlights -- the opposite of
     // what is wanted, since the shadows are where the banding is. Applied after, the spread at a
     // dark patch and at a bright one is the same number.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 

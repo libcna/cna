@@ -87,7 +87,7 @@ TEST(ChromaticAberrationTest, TheCentreIsUntouchedAndTheCornersFringe)
     // component -- a single edge down the middle of the frame is the one place the effect cannot
     // show itself, and testing there measures nothing. Stripes give the sampler something to
     // separate at every radius.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ChromaticAberrationPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no executable chromatic-aberration shader variant";
@@ -127,7 +127,7 @@ TEST(ChromaticAberrationTest, TheCentreIsUntouchedAndTheCornersFringe)
 
 TEST(ChromaticAberrationTest, ZeroStrengthLeavesTheFrameAlone)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ChromaticAberrationPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -150,7 +150,7 @@ TEST(ChromaticAberrationTest, ZeroStrengthLeavesTheFrameAlone)
 
 TEST(ChromaticAberrationTest, TheStrengthIsClampedAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ChromaticAberrationPass pass(gd);
     EXPECT_EQ(pass.getName(), "ChromaticAberration");
     EXPECT_FLOAT_EQ(pass.getStrength(), 0.0f) << "the effect must be off by default";
@@ -168,7 +168,7 @@ TEST(FilmGrainTest, TheGrainIsDeterministicForAGivenTime)
 {
     // A rendered sequence has to be reproducible, and a pass seeded by anything but its inputs is
     // not. Two applications at the same time must agree exactly.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FilmGrainPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no executable film-grain shader variant";
@@ -203,7 +203,7 @@ TEST(FilmGrainTest, TheMidtonesCarryMoreGrainThanTheBlacks)
 {
     // What separates grain from noise. Real grain is buried in blacks and invisible in blown
     // highlights; uniform noise across the range reads as a broken sensor.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FilmGrainPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no executable film-grain shader variant";
@@ -245,7 +245,7 @@ TEST(FilmGrainTest, TheMidtonesCarryMoreGrainThanTheBlacks)
 
 TEST(FilmGrainTest, ZeroIntensityLeavesTheFrameAlone)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FilmGrainPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -262,7 +262,7 @@ TEST(FilmGrainTest, ZeroIntensityLeavesTheFrameAlone)
 
 TEST(FilmGrainTest, TheIntensityIsClampedAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     FilmGrainPass pass(gd);
     EXPECT_EQ(pass.getName(), "FilmGrain");
     EXPECT_FLOAT_EQ(pass.getIntensity(), 0.0f) << "the effect must be off by default";
@@ -281,7 +281,7 @@ TEST(LensFlareTest, TheGhostsLandOnTheOppositeSideOfTheCentre)
     // The one property that makes flare read as a lens rather than as a smear. A bright spot in one
     // corner throws its reflections through the optical axis and into the opposite corner; a pass
     // that stepped the other way would pile the ghosts on top of the light that made them.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LensFlarePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no executable lens-flare shader variant";
@@ -327,7 +327,7 @@ TEST(LensFlareTest, AFrameBelowTheThresholdIsUnchanged)
 {
     // The threshold is what separates a light from a bright wall. Without it every white surface in
     // the frame throws ghosts and the image turns to soup.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LensFlarePass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no executable lens-flare shader variant";
@@ -348,7 +348,7 @@ TEST(LensFlareTest, AFrameBelowTheThresholdIsUnchanged)
 
 TEST(LensFlareTest, ZeroIntensityLeavesTheFrameAlone)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LensFlarePass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -368,7 +368,7 @@ TEST(LensFlareTest, ZeroIntensityLeavesTheFrameAlone)
 
 TEST(LensFlareTest, TheSettingsRoundTripAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LensFlarePass pass(gd);
     EXPECT_EQ(pass.getName(), "LensFlare");
     EXPECT_FLOAT_EQ(pass.getIntensity(), 0.0f) << "the effect must be off by default";

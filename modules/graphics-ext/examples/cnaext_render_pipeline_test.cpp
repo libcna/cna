@@ -22,9 +22,12 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = SKIP.
 
+#include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
+#include "CNA/Graphics/TonemapPass.hpp"
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Platform/PlatformException.hpp"
@@ -41,6 +44,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -124,9 +129,9 @@ class PipelineShowcase : public Game
     {
         std::vector<Color> pixels(static_cast<std::size_t>(kFrame) * kFrame, Color::Transparent);
         try { device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size())); }
-        catch (...)
+        catch (const std::exception& e)
         {
-            std::printf("SKIP: this renderer has no readable back buffer\n");
+            std::printf("SKIP: this renderer has no readable back buffer (%s)\n", e.what());
             std::exit(77);
         }
         return pixels;
@@ -276,8 +281,16 @@ protected:
         // the capability alone passes here and then fails the bloom check three lines later, which
         // is exactly what it did the first time this program was run on SOFTWARE (plans/plan_modern.md
         // MOD-1699).
+        //
+        // plans/plan_vulkan_modern_graphics.md VMG-0008: the question is whether THESE passes shade,
+        // and since MOD-2218/2239a/2239f bloom, tonemap and FXAA ship SPIR-V as well as GLSL, so
+        // Vulkan runs them without executing any GLSL source. Asking the renderer-wide
+        // ExecutesShaderEffectSourceEXT() here skipped the whole shaded half of this program on a
+        // renderer that shades it; each pass's own isSupported() is the answer the pipeline uses.
         const bool runsShaders = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
-                              && device.ExecutesShaderEffectSourceEXT();
+                              && CNA::Graphics::BloomPass(device).isSupported(device)
+                              && CNA::Graphics::TonemapPass(device).isSupported(device)
+                              && CNA::Graphics::FxaaPass(device).isSupported(device);
         if (!runsShaders)
         {
             // Not simply a skip: the chain must still *run* the passes on these renderers, and that
@@ -403,6 +416,13 @@ public:
     explicit PipelineShowcase(bool benchmark) : benchmark_(benchmark)
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_modern_graphics.md VMG-0004: the engine layer is HiDef work -- float and
+        // multiple render targets, and the back-buffer readback every check here reads -- while the
+        // manager defaults to Reach, where GetBackBufferData is refused (SOFTWARE-213). Under Reach
+        // this program skipped or aborted before its first check on every renderer.
+        if (Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(
+                Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kFrame);
         gdm_->setPreferredBackBufferHeightProperty(kFrame);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

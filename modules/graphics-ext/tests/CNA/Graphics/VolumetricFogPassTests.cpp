@@ -143,7 +143,7 @@ void FillShadowMap(GraphicsDevice& gd, ShadowMap& shadowMap, const Vector3& sunD
 
 TEST(VolumetricFogTest, TheMediumScattersLightIntoTheFrame)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -174,7 +174,7 @@ TEST(VolumetricFogTest, AShadowMapDarkensTheMediumItBlocks)
     // The whole point of the pass. Same scene, same density, same light -- the only change is
     // whether the medium is told what stands between it and the sun. Without the map the fog is
     // lit everywhere the light points, which is a haze; with it, the lid's shadow is in the air.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -213,7 +213,7 @@ TEST(VolumetricFogTest, LookingTowardsTheLightScattersMoreThanLookingAway)
 {
     // Forward-biased scattering, and the one cue that separates airlight from a grey wash. Asserted
     // through the anisotropy setting rather than by moving the camera, so nothing else changes.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -245,7 +245,7 @@ TEST(VolumetricFogTest, LookingTowardsTheLightScattersMoreThanLookingAway)
 
 TEST(VolumetricFogTest, ThePackagedVolumeKeepsTheCameraYDirection)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -295,7 +295,7 @@ TEST(VolumetricFogTest, ThePackagedVolumeKeepsTheCameraYDirection)
 
 TEST(VolumetricFogTest, ZeroDensityLeavesTheFrameAlone)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -313,7 +313,7 @@ TEST(VolumetricFogTest, ZeroDensityLeavesTheFrameAlone)
 
 TEST(VolumetricFogTest, WithoutDepthOrACameraTheFrameIsPassedThrough)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -329,7 +329,7 @@ TEST(VolumetricFogTest, WithoutDepthOrACameraTheFrameIsPassedThrough)
 
 TEST(VolumetricFogTest, TheSettingsAreClampedAndTheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     VolumetricFogPass pass(gd);
     EXPECT_EQ(pass.getName(), "VolumetricFog");
     EXPECT_FLOAT_EQ(pass.getDensity(), 0.0f) << "the effect must be off by default";

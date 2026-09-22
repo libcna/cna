@@ -45,7 +45,7 @@ TEST(GpuTimerTest, AnUnsupportedTimerSaysSoAndSaysWhy)
 {
     // The property that matters most, because it is the one a caller acts on. An unsupported timer
     // that quietly returned zero would read as "this pass is free".
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     GpuTimer timer(gd);
 
     std::printf("    GPU timer supported: %s%s%s\n", timer.isSupported() ? "yes" : "no",
@@ -67,7 +67,7 @@ TEST(GpuTimerTest, AnUnsupportedTimerSaysSoAndSaysWhy)
 TEST(GpuTimerTest, AnUnsupportedTimerIsInertRatherThanFatal)
 {
     // A pipeline that measures itself must run the same on a renderer that cannot be measured.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     GpuTimer timer(gd);
     if (timer.isSupported()) GTEST_SKIP() << "this renderer has a GPU timer; see the cases below";
 
@@ -85,7 +85,7 @@ TEST(GpuTimerTest, AnUnsupportedTimerNeverInventsANumber)
     // The whole reason a CPU fallback is not offered. A timer that fell back to a wall clock would
     // return a plausible number here and it would be the time the driver took to accept the work --
     // exactly the quantity GPU timing exists to see past.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     GpuTimer timer(gd);
     if (timer.isSupported()) GTEST_SKIP() << "this renderer has a GPU timer";
 
@@ -105,7 +105,7 @@ TEST(GpuTimerTest, AnUnsupportedTimerNeverInventsANumber)
 
 TEST(GpuTimerTest, AClosedRangeEventuallyReportsANonNegativeTime)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     GpuTimer timer(gd);
     if (!timer.isSupported())
         GTEST_SKIP() << timer.getUnsupportedReason();
@@ -141,7 +141,7 @@ TEST(GpuTimerTest, AClosedRangeEventuallyReportsANonNegativeTime)
 
 TEST(GpuTimerTest, PollingBeforeTheGpuFinishesReturnsFalseRatherThanBlocking)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     GpuTimer timer(gd);
     if (!timer.isSupported()) GTEST_SKIP() << timer.getUnsupportedReason();
 
@@ -159,7 +159,7 @@ TEST(GpuTimerTest, MoreWorkTakesMoreGpuTime)
     // against a hundred and the hundred came back *faster*: a driver is free to collapse repeated
     // full-target clears with nothing between them into one, and llvmpipe does. A workload the
     // driver can optimise away measures the optimiser.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     GpuTimer timer(gd);
     if (!timer.isSupported()) GTEST_SKIP() << timer.getUnsupportedReason();
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);

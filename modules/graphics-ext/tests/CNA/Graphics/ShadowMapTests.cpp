@@ -190,7 +190,7 @@ TEST(ShadowMapTest, ADegenerateSceneDoesNotProduceNaNs)
 
 TEST(ShadowMapTest, TheMapIsCreatedAtTheQualitySizeWithACasterEffect)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShadowMap shadowMap(gd, ShadowQuality::Low);
 
     EXPECT_EQ(shadowMap.getSize(), 512);
@@ -201,7 +201,7 @@ TEST(ShadowMapTest, TheMapIsCreatedAtTheQualitySizeWithACasterEffect)
 
 TEST(ShadowMapTest, BeginComputesTheLightMatrixAndEndRestoresTheBackBuffer)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
 
@@ -222,7 +222,7 @@ TEST(ShadowMapTest, BeginComputesTheLightMatrixAndEndRestoresTheBackBuffer)
 
 TEST(ShadowMapTest, BothMisusesAreRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
     DirectionalLightEXT sun;
@@ -239,7 +239,7 @@ TEST(ShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
     // MOD-811 / D1. The object constructs on every renderer, and the two calls that make up a
     // pass work on every renderer. What changes is whether anything is drawn -- and on a renderer
     // that cannot, `isSupported()` says so and there is no caster effect to hand out.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
 
@@ -264,7 +264,7 @@ TEST(ShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 
 TEST(ShadowMapTest, TheDepthBiasRoundTrips)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ShadowMap shadowMap(gd, ShadowQuality::Medium);
 
     shadowMap.setDepthBias(0.01f);
@@ -276,7 +276,7 @@ TEST(ShadowMapTest, AnEmptyShadowPassLeavesTheMapMeaningNothingIsOccluded)
     // Cleared to white, i.e. "infinitely far". Clearing to black would make every unwritten texel
     // the nearest possible occluder and put the whole scene in shadow wherever no caster was drawn
     // -- a full-screen artefact from a one-line mistake.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
     DirectionalLightEXT sun;

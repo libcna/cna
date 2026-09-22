@@ -198,7 +198,7 @@ TEST(DepthOfFieldTest, TheFocusedHalfKeepsItsDetailAndTheOtherLosesIt)
 {
     // The claim the pass exists for, and it is read from the frame rather than assumed: with the
     // lens on the near half, the near checkerboard keeps its contrast and the far one loses it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
@@ -236,7 +236,7 @@ TEST(DepthOfFieldTest, MovingTheFocusMovesWhichHalfIsSharp)
     // The anti-vacuity partner of the test above. If the frame came back with the near half sharp
     // whatever the settings said -- because the pass did nothing, or because the depth image was
     // being misread -- this fails.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
@@ -274,7 +274,7 @@ TEST(DepthOfFieldTest, AFocusedSubjectDoesNotSmearIntoTheBlurredHalf)
     // half's colour across the boundary, and the sharp half visibly bleeds into the soft one -- the
     // giveaway of a naive implementation. The test looks at the blurred rows *immediately* past the
     // step and asks whether they still look like their own half.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
@@ -316,7 +316,7 @@ TEST(DepthOfFieldTest, TheShaderMatchesTheCpuReference)
     // debug output, by using `maxRadius` as a probe: it caps whatever the shader computed, so
     // raising it stops changing the frame at exactly the point where it passes the shader's own
     // radius. If that point is where the CPU formula says it is, the two agree.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
@@ -364,7 +364,7 @@ TEST(DepthOfFieldTest, TheSettingsBagWinsOverThePassLocalDefaults)
 {
     // Every pass in this layer honours the bag in preference to its own fields, so a pipeline that
     // applied a preset is not overruled by a default nobody set.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer has no usable depth-of-field shader package";
@@ -395,7 +395,7 @@ TEST(DepthOfFieldTest, TheSettingsBagWinsOverThePassLocalDefaults)
 
 TEST(DepthOfFieldTest, TheSettingsRoundTripAndNonsenseIsIgnored)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
 
     EXPECT_GT(pass.getFocusDistance(), 0.0f);
@@ -429,7 +429,7 @@ TEST(DepthOfFieldTest, TheSettingsRoundTripAndNonsenseIsIgnored)
 
 TEST(DepthOfFieldTest, WithoutDepthTheFrameIsPassedThroughUnchanged)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -450,7 +450,7 @@ TEST(DepthOfFieldTest, WithoutACameraTheFrameIsPassedThroughUnchanged)
 {
     // The far plane is what turns a normalised depth back into metres, so without it the optics
     // have no distances to work with. Copying through beats guessing a lens.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -470,7 +470,7 @@ TEST(DepthOfFieldTest, WithoutACameraTheFrameIsPassedThroughUnchanged)
 
 TEST(DepthOfFieldTest, TheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthOfFieldPass pass(gd);
     EXPECT_EQ(pass.getName(), "DepthOfField");
 }

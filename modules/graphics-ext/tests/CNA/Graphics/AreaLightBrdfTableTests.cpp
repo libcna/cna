@@ -152,7 +152,7 @@ TEST(AreaLightBrdfTableTest, ANonPositiveSampleCountIsRefused)
 
 TEST(AreaLightBrdfTableTest, TheTextureHoldsWhatTheRoutineComputes)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const int size = 16;
     AreaLightBrdfTable table(gd, size, 128);
 
@@ -186,7 +186,7 @@ TEST(AreaLightBrdfTableTest, TheTextureHoldsWhatTheRoutineComputes)
 
 TEST(AreaLightBrdfTableTest, ANonPositiveTableSizeIsRefused)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW(AreaLightBrdfTable(gd, 0, 32), std::invalid_argument);
     EXPECT_THROW(AreaLightBrdfTable(gd, 16, 0), std::invalid_argument);
 }
@@ -197,7 +197,7 @@ TEST(AreaLightBrdfTableTest, GeneratingTheDefaultTableIsCheapEnoughToDoAtLoad)
     // seconds. A replacement that also cost seconds would not be a replacement, so the cost is a
     // number rather than an assurance. The bound is generous -- this runs on a shared machine --
     // and it is still three orders of magnitude below what a Nelder-Mead fit would take.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AreaLightBrdfTable table(gd);
     EXPECT_EQ(table.getSize(), AreaLightBrdfTable::kDefaultSize);
     EXPECT_LT(table.getGenerationMilliseconds(), 500.0)

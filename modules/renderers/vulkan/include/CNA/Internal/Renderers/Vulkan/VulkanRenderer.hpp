@@ -21,6 +21,7 @@
 #include <string>
 #include <utility>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <stdexcept>
 
@@ -4686,6 +4687,10 @@ namespace CNA::Internal::Renderers::Vulkan
             uint32_t colorCount = 1;
             int32_t depthFormat = static_cast<int32_t>(VK_FORMAT_UNDEFINED);
             uint32_t samples = static_cast<uint32_t>(VK_SAMPLE_COUNT_1_BIT);
+            /// plans/plan_vulkan_modern_graphics.md VMG-0014: 0 the normal MRT pass, 1 the head of a
+            /// bind cycle a modern command split (normal loads, every attachment stored), 2 its
+            /// continuation (every attachment loaded and stored).
+            uint32_t splitRole = 0;
             bool operator==(const RTPassKey&) const noexcept = default;
         };
         struct RTPassKeyHash {
@@ -4694,6 +4699,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 std::size_t h = std::hash<uint32_t>{}(k.colorCount);
                 h ^= std::hash<int32_t>{}(k.depthFormat) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(k.samples) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(k.splitRole) + (h << 6) + (h >> 2);
                 for (const int32_t format : k.colorFormats)
                     h ^= std::hash<int32_t>{}(format) + (h << 6) + (h >> 2);
                 return h;
@@ -4701,6 +4707,11 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassByDepthFmt_;
         std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassLoadByDepthFmt_;
+        /// VMG-0014: the discard variants' "store everything" siblings, used only for the head pass
+        /// of a bind cycle a compute/transfer command split -- the continuation must find the
+        /// depth (and MSAA samples) the discard variant would otherwise throw away at pass end.
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassStoreAllByDepthFmt_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassMsaaStoreAllByDepthFmt_;
         std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash>
             rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
         /// REMED-GFX-141: the MSAA render pass's missing LOAD variant. Its multisample colour
@@ -5703,6 +5714,11 @@ namespace CNA::Internal::Renderers::Vulkan
             const VulkanStorageBufferRenderer* targetBuffer = nullptr,
             VulkanResourceIntent hostIntent = VulkanResourceIntent::CpuRead);
         void SplitRenderPassForModernCommandEXT();
+        /// VMG-0014: render-target segments whose native pass must store every attachment because a
+        /// modern command split their bind cycle after them, and those that continue a split cycle
+        /// and must load. Cleared once a full frame has recorded every pending segment.
+        std::unordered_set<uint64_t> splitStoreSegmentsEXT_;
+        std::unordered_set<uint64_t> splitLoadSegmentsEXT_;
         struct NativeResourceUsageEXT
         {
             VkPipelineStageFlags stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -5990,7 +6006,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // too (they differ only in loadOp/initialLayout, which compatibility ignores), so callers
         // that only need a pipeline's *reference* render pass should always pass false.
         VkRenderPass GetOrCreateRTRenderPass(VkFormat colorFmt, VkFormat depthFmt,
-                                             bool discardContents);
+                                             bool discardContents, bool storeAll = false);
         // Task 911: MSAA counterpart. REMED-GFX-141 gave it the LOAD_OP_LOAD variant it never had:
         // `discardContents` false keeps the multisample colour attachment's own samples across
         // passes (LOAD/STORE, COLOR_ATTACHMENT_OPTIMAL in and out) instead of clearing them and
@@ -5998,7 +6014,24 @@ namespace CNA::Internal::Renderers::Vulkan
         // same pipelines serve both.
         VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat colorFmt, VkFormat depthFmt,
                                                  bool discardContents,
-                                                 VkSampleCountFlagBits samples);
+                                                 VkSampleCountFlagBits samples,
+                                                 bool storeAll = false);
+        /**
+         * @brief plans/plan_vulkan_modern_graphics.md VMG-0014: the native pass for one piece of a
+         *        render-target bind cycle that a compute/transfer command split.
+         *
+         * A modern command cannot be recorded inside a render pass, so it ends the target's pass and
+         * the rest of the bind cycle gets another. That second pass is not a new bind: XNA discards a
+         * DiscardContents target when it is SET, and a dispatch sets nothing (ADR 0001, one observable
+         * order). The head of such a cycle keeps its normal load action but stores every attachment;
+         * every continuation loads and stores every attachment. Both are render-pass-compatible with
+         * the source's normal pass (they differ only in load/store operations and layouts).
+         *
+         * @param rt           The target the segment renders into.
+         * @param continuation True for a pass after a split, false for the head before the first.
+         * @return The compatible render pass to begin for that piece.
+         */
+        VkRenderPass SplitRenderPassEXT(VulkanRTSource& rt, bool continuation);
         /**
          * @brief plan_vulkan.md VULKAN-216: the sample count `msaa == true` currently denotes.
          *
@@ -6317,7 +6350,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                  VkBufferUsageFlags usage);
         VkRenderPass GetOrCreateMRTRenderPass(const std::vector<VkFormat>& colorFormats,
                                               VkSampleCountFlagBits sampleCount,
-                                              VkFormat depthFormat);
+                                              VkFormat depthFormat, uint32_t splitRole = 0);
         // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses every
         // colour format, the sample count and binding 0's depth format; single-target draws reuse
         // compatible backbuffer passes or an exact-format RT pass.

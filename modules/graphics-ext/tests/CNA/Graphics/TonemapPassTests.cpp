@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <cmath>
 #include <vector>
@@ -157,7 +158,7 @@ TEST(TonemapPassTest, TheOperatorsDisagreeWithEachOther)
 
 TEST(TonemapPassTest, TheShaderMatchesTheCpuReferenceForEveryOperator)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     TonemapPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -194,7 +195,7 @@ TEST(TonemapPassTest, TheShaderMatchesTheCpuReferenceForEveryOperator)
 
 TEST(TonemapPassTest, TheShaderHonoursExposureFromSettings)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     TonemapPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -220,7 +221,7 @@ TEST(TonemapPassTest, AnLdrSourceIsLegalAndModeNoneLeavesItAlone)
 {
     // The HDR-off pipeline runs this pass over a Color target; it must be a faithful copy there,
     // or turning HDR off would change the image.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     TonemapPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -253,7 +254,7 @@ TEST(TonemapPassTest, AnLdrSourceIsLegalAndModeNoneLeavesItAlone)
 TEST(TonemapPassTest, ThePassIsUsableWithoutSettings)
 {
     // D9: a pass works standalone. Without a settings bag it uses its own values.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     TonemapPass pass(gd);
 
     pass.setMode(TonemappingMode::Aces);

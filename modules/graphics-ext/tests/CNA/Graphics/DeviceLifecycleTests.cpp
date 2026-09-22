@@ -60,7 +60,7 @@ TEST(DeviceLossTest, EverySubsystemSurvivesAResetAndRendersAgain)
     // The row asks for "a correct frame for every subsystem" after a loss. Constructed together
     // rather than one at a time, because the failure this guards against is a *shared* one: they
     // all hold render targets from the same device, and a reset invalidates every one at once.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -120,7 +120,7 @@ TEST(DeviceLossTest, RepeatedResetsDoNotAccumulate)
 {
     // A reset that leaked its old targets would grow without ever failing -- the frames keep
     // rendering, and only a long-running game would notice.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -144,7 +144,7 @@ TEST(DeviceLossTest, AResetBetweenBeginAndEndIsIgnoredRatherThanObeyed)
     // A reset cannot really arrive mid-frame in a single-threaded pipeline, but if it did, dropping
     // the bound target would be worse than keeping a stale one until end(). Asserted because the
     // handler's guard is a one-line `if` that is easy to remove as dead code.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -167,8 +167,8 @@ TEST(MultiDeviceTest, TwoPipelinesOnTwoDevicesDoNotShareState)
     // Each pipeline must hold its own targets. Sharing would show up as one pipeline's frame
     // appearing in the other's window, which nothing in a unit test can see -- but the memory
     // estimates can: two pipelines each holding their own targets sum, they do not coincide.
-    GraphicsDevice first;
-    GraphicsDevice second;
+    CnaTest::EngineLayer::HiDefDevice first;
+    CnaTest::EngineLayer::HiDefDevice second;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(first);
 
     RenderPipeline firstPipeline(first);
@@ -194,8 +194,8 @@ TEST(MultiDeviceTest, AResetOnOneDeviceDoesNotDisturbTheOther)
     CNA_SKIP_WITHOUT_A_SECOND_DEVICE();
     // The subscription is per device (MOD-715). If it were global -- or if the handler did not
     // check which device raised -- one window losing its context would drop the other's targets.
-    GraphicsDevice first;
-    GraphicsDevice second;
+    CnaTest::EngineLayer::HiDefDevice first;
+    CnaTest::EngineLayer::HiDefDevice second;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(first);
 
     RenderPipeline firstPipeline(first);
@@ -222,8 +222,8 @@ TEST(MultiDeviceTest, APipelineOutlivingItsSiblingIsFine)
     CNA_SKIP_WITHOUT_A_SECOND_DEVICE();
     // Destroying one pipeline must not disturb the other's subscription, which is the failure a
     // shared or static handler list would produce.
-    GraphicsDevice first;
-    GraphicsDevice second;
+    CnaTest::EngineLayer::HiDefDevice first;
+    CnaTest::EngineLayer::HiDefDevice second;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(first);
 
     RenderPipeline survivor(second);

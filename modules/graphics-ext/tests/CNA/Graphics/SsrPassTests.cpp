@@ -237,7 +237,7 @@ TEST(SsrPassTest, ATiltedSurfaceReflectsTheColourItsRayReaches)
     // The central claim of the pass: the reflected ray leaves the tilted plane travelling up the
     // screen, passes over the near red band, and the pixel it started from takes that colour.
     // Without a working march the pixel keeps the plane's own black.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -266,7 +266,7 @@ TEST(SsrPassTest, ZeroIntensityReproducesTheSceneExactly)
 {
     // The anti-vacuity check for the test above: the same scene with the reflection turned off must
     // come back byte-identical to the source, so the hit above is the pass and not the setup.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -296,7 +296,7 @@ TEST(SsrPassTest, APlaneDoesNotReflectItself)
     // The physical claim: a ray leaving a plane travels away from it and can never come back to it,
     // so a floor with nothing above it reflects nothing. The depth image here is the plane's own,
     // computed from the normal supplied with it, so the scene is one a camera could actually see.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -329,7 +329,7 @@ TEST(SsrPassTest, MismatchedDepthAndNormalsDoNotFabricateAReflection)
     // behind its own plane by a few ULPs a step; half of those differences are positive, the pixel
     // reports a hit on itself, and every mirror shows its own colour -- which looks like a working
     // reflection until you notice it never shows anything else. The depth bias is what rejects it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -367,7 +367,7 @@ TEST(SsrPassTest, TheDepthBiasIsWhatSeparatesASelfHitFromARealOne)
     // Stated as a value rather than as a picture: a bias larger than the whole scene's depth range
     // rejects every hit, so the frame comes back unreflected. That is the direct evidence that the
     // bias is in the comparison and doing the work the test above depends on.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -398,7 +398,7 @@ TEST(SsrPassTest, ASurfaceFacingTheCameraReflectsNothing)
     // projected such a point anyway would mirror it through the origin and report a confident hit
     // on whatever happened to be there -- reflections appearing on flat walls facing the camera is
     // the classic symptom.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -427,7 +427,7 @@ TEST(SsrPassTest, TheClearedFarPlaneIsNotReflective)
     // zero until `MOD-2009` measured the clear -- which made the sky a surface at the camera with a
     // reflection marched out of it. Both spellings are checked now, and this is the one that would
     // have shipped broken.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -453,7 +453,7 @@ TEST(SsrPassTest, AZeroDepthIsAlsoNotReflective)
 {
     // The other spelling: a renderer that clears its depth target to black. Reconstructing a
     // position from zero puts the surface at the eye, and every ray from there hits immediately.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -482,7 +482,7 @@ TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
     // overshoots the edge it crossed and halving the step *moves* the whole reflection instead of
     // sharpening it -- reflected edges stair-step, and the pattern changes with the step count. With
     // it, both marches converge on the same crossing and answer with the same colour.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -524,7 +524,7 @@ TEST(SsrPassTest, RoughnessSpreadsTheReflectionAndSmoothnessDoesNot)
     // edge, so a spread reflection gathers the black outside the band and comes back darker, while
     // a mirror takes the band's colour exactly. Measured as brightness because that is what mixing
     // across a hard edge *is* -- there is no second thing a 32-pixel frame could show.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -561,7 +561,7 @@ TEST(SsrPassTest, ASurfaceWithNoRoughnessSuppliedReflectsSharply)
     // The default the prepass writes is 0, not glTF's fully-rough 1, and this is why: an app that
     // never calls `setRoughness` must get the sharp reflection it got before roughness existed
     // rather than a silently blurred frame it has no way to explain.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthNormalPrepass prepass(gd, 8, 8);
     EXPECT_FLOAT_EQ(prepass.getRoughness(), 0.0f);
     prepass.setRoughness(0.6f);
@@ -580,7 +580,7 @@ TEST(SsrPassTest, ABackFacingSurfaceIsNotReflected)
     // ray then arrives at the band's *back*, and reflecting the colour of a surface the mirror
     // cannot see puts the far side of an object into the reflection -- a wrong image that looks
     // entirely plausible, which is why it needs asserting rather than eyeballing.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -610,7 +610,7 @@ TEST(SsrPassTest, ARayPassingWellBehindASurfaceIsNotAHit)
     // where a surface is and nothing about how deep the object behind it goes; a thickness smaller
     // than the gap means the ray flew well past the band rather than into it, and reflecting it
     // would put a foreground object into a mirror that is looking somewhere else entirely.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -641,7 +641,7 @@ TEST(SsrPassTest, AReflectionEndingNearTheBorderFadesRatherThanStopping)
     // absolute: the same reflection, with the fade band wide enough to reach it, comes back
     // measurably weaker than with the fade off. Without it the reflection stops along a hard line
     // down the edge of the screen, which is the usual giveaway of the technique.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -678,7 +678,7 @@ TEST(SsrPassTest, WithoutDepthAndNormalsTheFrameIsPassedThroughUnchanged)
 {
     // The same contract SsaoPass has: a game that enables SSR and never runs the prepass gets its
     // frame, not an exception and not a black screen.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -700,7 +700,7 @@ TEST(SsrPassTest, WithoutDepthAndNormalsTheFrameIsPassedThroughUnchanged)
 TEST(SsrPassTest, DepthWithoutNormalsIsAlsoTheFallback)
 {
     // Half the inputs is not half a reflection: without normals there is no ray to march.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -722,7 +722,7 @@ TEST(SsrPassTest, DepthWithoutNormalsIsAlsoTheFallback)
 
 TEST(SsrPassTest, TheSettingsRoundTripAndNonsenseIsIgnored)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
 
     EXPECT_GT(pass.getMaxDistance(), 0.0f);
@@ -770,7 +770,7 @@ TEST(SsrPassTest, AnAbsurdStepCountIsClampedOnUseRatherThanRejected)
 {
     // Clamped where it is used, matching BloomPass's iteration count: a settings bag restored from
     // a file should not throw, and a pass that silently marched 100000 steps would hang the frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -792,7 +792,7 @@ TEST(SsrPassTest, AnAbsurdStepCountIsClampedOnUseRatherThanRejected)
 
 TEST(SsrPassTest, TheNameIsStable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     EXPECT_EQ(pass.getName(), "SSR");
 }
@@ -805,7 +805,7 @@ TEST(SsrPassTest, SupportAnswersAboutTheRendererAndNotAboutTheFrame)
     // opposite for SSAO until this task, which matters: a game that gates its prepass on
     // `isSupported()` gets true and then wonders why the effect does nothing. Pinned here so the
     // sentence and the code cannot drift apart again.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -836,7 +836,7 @@ TEST(SsrPassTest, AFrameWithNoCameraIsCopiedThroughRatherThanGuessedAt)
     // leaves the far plane at zero, and a pass that carried on would reflect the scene through an
     // invented lens -- a frame that renders and is wrong, which is worse than one that renders
     // unchanged.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the SSR shader package";
@@ -866,7 +866,7 @@ TEST(SsrPassTest, SupportAsksTheTwoPartQuestion)
     // MOD-1699/MOD-2239m: CustomEffects alone means the renderer accepts an effect. The pass also
     // needs one complete language variant from its package; it does not require runtime execution
     // of source text when a renderer can select the checked-in SPIR-V payload instead.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
 
     const auto supportsPair = [&gd](const CNA::ShaderLanguageEXT language) {

@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <vector>
 
@@ -107,7 +108,7 @@ TEST(BloomPassTest, ZeroIntensityReproducesTheSceneExactly)
 {
     // The strongest available statement that the composite keeps the scene intact: with the bloom
     // term multiplied by zero, every pixel must survive unchanged.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -140,7 +141,7 @@ TEST(BloomPassTest, ABrightSpotSpreadsIntoPixelsThatWereBlack)
 {
     // The effect's whole purpose, stated as a measurement: a pixel far from the highlight was
     // exactly zero before the pass and must not be after it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -176,7 +177,7 @@ TEST(BloomPassTest, AnUploadedTopHighlightKeepsItsGlowAtTheTop)
     // The scene texture is top-down while every generated bloom level is a render target. A
     // two-sampler composite that assumes both GL textures have the same row order mirrors only
     // the glow, an error the centred fixtures cannot reveal.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -214,7 +215,7 @@ TEST(BloomPassTest, AnUploadedTopHighlightKeepsItsGlowAtTheTop)
 
 TEST(BloomPassTest, AHigherIntensityProducesMoreGlow)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -248,7 +249,7 @@ TEST(BloomPassTest, AHigherIntensityProducesMoreGlow)
 
 TEST(BloomPassTest, IntermediateTargetsAreReusedAcrossFrames)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -278,7 +279,7 @@ TEST(BloomPassTest, IntermediateTargetsAreReusedAcrossFrames)
 
 TEST(BloomPassTest, AnAbsurdIterationCountIsClampedRatherThanRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -302,7 +303,7 @@ TEST(BloomPassTest, AnAbsurdIterationCountIsClampedRatherThanRejected)
 
 TEST(BloomPassTest, ThePassIsUsableWithoutSettings)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
 
     bloom.setThreshold(0.75f);
@@ -317,7 +318,7 @@ TEST(BloomPassTest, ThePassIsUsableWithoutSettings)
 
 TEST(BloomPassTest, AnHdrSourceKeepsItsHighlightsThroughTheChain)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     BloomPass bloom(gd);
     if (!bloom.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";

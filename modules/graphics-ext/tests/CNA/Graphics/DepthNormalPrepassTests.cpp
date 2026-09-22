@@ -179,7 +179,7 @@ TEST(DepthPackingTest, TheSharedGlslDeclaresWhatConsumersInclude)
 
 TEST(DepthNormalPrepassTest, ItValidatesItsSizeAndItsCameraRange)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW(DepthNormalPrepass(gd, 0, 8), std::invalid_argument);
     EXPECT_THROW(DepthNormalPrepass(gd, 8, -1), std::invalid_argument);
 
@@ -198,7 +198,7 @@ TEST(DepthNormalPrepassTest, ThePassCountFollowsWhatTheRendererWillActuallyBind)
     // throws from SetRenderTargets. The prepass now probes the bind once at construction and falls
     // back to two passes, so what this must check is the *binding*, not the promise -- and checking
     // the promise would fail on exactly the renderer the fallback exists for.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
 
     const bool claimed = gd.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets);
@@ -213,7 +213,7 @@ TEST(DepthNormalPrepassTest, BothTexturesExistWhateverTheRenderer)
 {
     // They exist even where the effect cannot compile: a consumer holding null textures would have
     // to handle a second failure mode on top of isSupported().
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
     EXPECT_NE(prepass.getDepthTexture(), nullptr);
     EXPECT_NE(prepass.getNormalTexture(), nullptr);
@@ -228,14 +228,14 @@ TEST(DepthNormalPrepassTest, TheDepthFormatIsSingleSourcedAndTheInstanceAgreesWi
     // answer decides it: six passes decode this prepass's depth, and every one of them asks
     // `usesPackedDepthEXT`. A prepass whose instance disagreed with that static answer would
     // silently hand those passes an image in the encoding they are not decoding.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
     EXPECT_EQ(prepass.isDepthPacked(), DepthNormalPrepass::usesPackedDepthEXT(gd));
 }
 
 TEST(DepthNormalPrepassTest, EveryMisuseIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
@@ -253,7 +253,7 @@ TEST(DepthNormalPrepassTest, EveryMisuseIsRejected)
 
 TEST(DepthNormalPrepassTest, EveryPassCanBeOpenedAndClosed)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
@@ -266,7 +266,7 @@ TEST(DepthNormalPrepassTest, EveryPassCanBeOpenedAndClosed)
 
 TEST(DepthNormalPrepassTest, ResizingIsANoOpWhenTheSizeIsUnchanged)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     DepthNormalPrepass prepass(gd, kSize, kSize);
     const void* before = prepass.getDepthTexture();
     prepass.resize(kSize, kSize);
@@ -282,7 +282,7 @@ TEST(DepthNormalPrepassTest, TheSkinnedEffectIsASecondProgramNotTheSameOne)
 {
     // MOD-503. A skinned mesh drawn with the rigid effect lands in the depth buffer in its bind
     // pose, so it occludes the wrong part of the screen -- which looks like the AO being wrong.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the prepass shaders";
@@ -296,7 +296,7 @@ TEST(DepthNormalPrepassTest, TheSkinnedEffectIsASecondProgramNotTheSameOne)
 
 TEST(DepthNormalPrepassTest, TheSkinnedEffectWritesThePosedMeshRatherThanItsBindPose)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))
@@ -365,7 +365,7 @@ TEST(DepthNormalPrepassTest, TheSkinnedEffectWritesThePosedMeshRatherThanItsBind
 
 TEST(DepthNormalPrepassTest, RoughnessChangedInsideThePassReachesTheNormalTarget)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))
@@ -409,7 +409,7 @@ TEST(DepthNormalPrepassTest, RoughnessChangedInsideThePassReachesTheNormalTarget
 
 TEST(DepthNormalPrepassTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
     if (prepass.isSupported(gd))
     {
@@ -429,7 +429,7 @@ TEST(DepthNormalPrepassTest, AnEmptyPrepassLeavesDepthAtTheFarPlane)
     // The clear convention, and it is the one that matters: white means "nothing here, infinitely
     // far". Clearing to black would make every empty pixel the nearest possible occluder and SSAO
     // would darken the whole frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);

@@ -21,3 +21,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 tools/shader_package/generate_shader_package.p
 Use `--check` for a write-free reproducibility gate. It exits 77 when shaderc is unavailable, so an
 ordinary CNA build and CNA applications have no shaderc or DXC dependency. Compilers are offline
 authoring tools only; CNA runtime targets never load or link them.
+
+## Optimization level
+
+SPIR-V is compiled at shaderc's `performance` level unless the manifest says otherwise, and every
+package that predates the field keeps that default byte for byte. `performance` drops `OpName` and
+`OpMemberName`. Vulkan's `ComputeShader::setUniform` binds a scalar by its push-constant **member
+name**, so a package whose compute program uses named scalar uniforms declares
+`"optimization": "zero"`, which keeps the names; the chosen level is recorded in the header as
+`kCompilerOptimization` (`plans/plan_vulkan_modern_graphics.md` VMG-0012). The engine layer's own
+packages avoid named scalars instead (constant buffers, packed vectors), which is equally portable.

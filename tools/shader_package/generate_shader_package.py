@@ -26,7 +26,13 @@ SPIRV_MAGIC = 0x07230203
 SHADERC_TARGET_ENV_VULKAN = 0
 SHADERC_ENV_VERSION_VULKAN_1_0 = 1 << 22
 SHADERC_SPIRV_VERSION_1_0 = 0x010000
+SHADERC_OPTIMIZATION_ZERO = 0
 SHADERC_OPTIMIZATION_PERFORMANCE = 2
+# plans/plan_vulkan_modern_graphics.md VMG-0012: "performance" (the default, and what every package
+# before this one uses) drops OpName/OpMemberName, and Vulkan's ComputeShader::setUniform binds a
+# scalar by its push-constant member NAME -- so a package that uses named scalar uniforms says
+# "zero", which keeps the names. Recorded in the header like every other compiler option.
+OPTIMIZATION_LEVELS = {"performance": SHADERC_OPTIMIZATION_PERFORMANCE, "zero": SHADERC_OPTIMIZATION_ZERO}
 
 
 class ToolchainUnavailable(RuntimeError):
@@ -73,6 +79,9 @@ def load_manifest(path: Path) -> tuple[dict[str, Any], bytes, list[Payload]]:
         raise ValueError("manifest 'namespace' is not a valid C++ namespace")
     if not isinstance(package, str) or not IDENTIFIER.fullmatch(package):
         raise ValueError("manifest 'package' is not a valid identifier")
+    optimization = manifest.get("optimization", "performance")
+    if optimization not in OPTIMIZATION_LEVELS:
+        raise ValueError("manifest 'optimization' must be one of: " + ", ".join(sorted(OPTIMIZATION_LEVELS)))
     if (preprocessor_guard is not None and
             (not isinstance(preprocessor_guard, str) or
              not IDENTIFIER.fullmatch(preprocessor_guard))):
@@ -183,7 +192,7 @@ def configure_shaderc(library: ctypes.CDLL) -> None:
 
 
 class ShadercCompiler:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, optimization: str = "performance"):
         try:
             self.library = ctypes.CDLL(str(path))
         except OSError as error:
@@ -195,7 +204,7 @@ class ShadercCompiler:
             self.close()
             raise RuntimeError("shaderc failed to allocate a compiler or options object")
         self.library.shaderc_compile_options_set_optimization_level(
-            self.options, SHADERC_OPTIMIZATION_PERFORMANCE)
+            self.options, OPTIMIZATION_LEVELS[optimization])
         self.library.shaderc_compile_options_set_target_env(
             self.options, SHADERC_TARGET_ENV_VULKAN, SHADERC_ENV_VERSION_VULKAN_1_0)
         self.library.shaderc_compile_options_set_target_spirv(
@@ -261,7 +270,7 @@ def generate(manifest: dict[str, Any], manifest_raw: bytes, payloads: list[Paylo
     compiler: ShadercCompiler | None = None
     if any(payload.output_format == "spirv" for payload in payloads):
         assert library_path is not None
-        compiler = ShadercCompiler(library_path)
+        compiler = ShadercCompiler(library_path, manifest.get("optimization", "performance"))
         try:
             toolchain = compiler.toolchain(library_path)
             for payload in payloads:
@@ -310,7 +319,7 @@ def generate(manifest: dict[str, Any], manifest_raw: bytes, payloads: list[Paylo
             f"inline constexpr std::uint32_t kCompilerSpirVVersion = 0x{toolchain.spirv_version:08x}u;",
             f"inline constexpr std::uint32_t kCompilerSpirVRevision = {toolchain.spirv_revision}u;",
             'inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";',
-            'inline constexpr std::string_view kCompilerOptimization = "performance";',
+            f'inline constexpr std::string_view kCompilerOptimization = "{manifest.get("optimization", "performance")}";',
         ])
     else:
         lines.extend([

@@ -81,7 +81,7 @@ std::unique_ptr<Texture2D> WhiteTexture(GraphicsDevice& device)
 
 TEST(ParticleSystemTest, ACapacityThatCannotHoldAParticleIsRefused)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     EXPECT_THROW(ParticleSystem(device, 0), std::invalid_argument);
     EXPECT_THROW(ParticleSystem(device, -8), std::invalid_argument);
 }
@@ -104,7 +104,7 @@ TEST(ParticleSystemTest, TheHashIsInRangeAndDependsOnItsSeed)
 
 TEST(ParticleSystemTest, TheEmissionRateAndLifetimeDecideHowManyAreInFlight)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 256);
 
     ParticleEmitterSettings settings = QuietSettings();
@@ -130,7 +130,7 @@ TEST(ParticleSystemTest, ResetStaggersAgesAcrossOneLifetime)
 {
     // A system whose particles all start at age zero emits one puff and then nothing for a whole
     // lifetime, which is the single most visible way to get this wrong.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 64);
     system.setSettings(QuietSettings());
     system.reset();
@@ -194,7 +194,7 @@ TEST(ParticleSystemTest, AParticleThatOutlivesItsLifetimeIsBornAgainAtTheEmitter
 
 TEST(ParticleSystemTest, TheGpuSimulationAgreesWithTheCpuOne)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 128);
     if (!system.getUnsupportedReason().empty())
         GTEST_SKIP() << system.getUnsupportedReason();
@@ -239,7 +239,7 @@ TEST(ParticleSystemTest, TheGpuSimulationAgreesWithTheCpuOne)
 
 TEST(ParticleSystemTest, AZeroEmissionDirectionUsesTheSameFallbackAxisOnGpuAndCpu)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 16);
     if (!system.getUnsupportedReason().empty())
         GTEST_SKIP() << system.getUnsupportedReason();
@@ -281,7 +281,7 @@ TEST(ParticleSystemTest, AZeroEmissionDirectionUsesTheSameFallbackAxisOnGpuAndCp
 TEST(ParticleSystemTest, PinningTheSimulationToTheCpuCarriesTheParticlesAcross)
 {
     // The fallback has to be runnable on a device that does not need it, or nothing ever runs it.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 64);
     system.setSettings(QuietSettings());
     system.reset();
@@ -308,7 +308,7 @@ TEST(ParticleSystemTest, PinningTheSimulationToTheCpuCarriesTheParticlesAcross)
 
 TEST(ParticleSystemTest, TheCpuPathDrawsTheSameParticlesTheGpuPathWouldHave)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 128);
     ParticleEmitterSettings settings = QuietSettings();
     settings.Gravity = Vector3(0.0f, 0.0f, 0.0f);
@@ -345,7 +345,7 @@ TEST(ParticleSystemTest, TheCpuPathDrawsTheSameParticlesTheGpuPathWouldHave)
 
 TEST(ParticleSystemTest, SoftnessDefaultsToOffAndIsClamped)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 32);
     EXPECT_FLOAT_EQ(system.getSoftnessEXT(), 0.0f)
         << "a game that never asked for soft particles must get the hard edges it had";
@@ -361,7 +361,7 @@ TEST(ParticleSystemTest, AParticleTouchingGeometryFadesAndOneInFrontOfItDoesNot)
     // same particles, the same camera, the same texture, and only the distance between them and
     // the surface behind them changes. A draw that ignored the depth image would produce the same
     // brightness twice.
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 64);
     if (!system.getUnsupportedReason().empty()) GTEST_SKIP() << system.getUnsupportedReason();
 
@@ -435,7 +435,7 @@ TEST(ParticleSystemTest, AParticleTouchingGeometryFadesAndOneInFrontOfItDoesNot)
 
 TEST(ParticleSystemTest, DrawingRefusesWithoutATexture)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 32);
     system.setSettings(QuietSettings());
     EXPECT_THROW(system.draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(), nullptr),
@@ -444,7 +444,7 @@ TEST(ParticleSystemTest, DrawingRefusesWithoutATexture)
 
 TEST(ParticleSystemTest, ARateOfZeroDrawsNothingAtAll)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 32);
     ParticleEmitterSettings settings = QuietSettings();
     settings.EmissionRate = 0.0f;
@@ -464,7 +464,7 @@ TEST(ParticleSystemTest, ARateOfZeroDrawsNothingAtAll)
 
 TEST(ParticleSystemTest, TheParticlesReachTheFrame)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     ParticleSystem system(device, 128);
     ParticleEmitterSettings settings = QuietSettings();
     settings.Gravity = Vector3(0.0f, 0.0f, 0.0f);

@@ -55,14 +55,14 @@ Vector3 ForwardOf(const Matrix& view)
 
 TEST(LightProbeBakerTest, ANonPositiveFaceSizeIsRefused)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW(LightProbeBaker(gd, 0), std::invalid_argument);
     EXPECT_THROW(LightProbeBaker(gd, -8), std::invalid_argument);
 }
 
 TEST(LightProbeBakerTest, ThePlanesAreValidatedAndTheDefaultsAreUsable)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 8);
     EXPECT_EQ(baker.getFaceSize(), 8);
     EXPECT_EQ(LightProbeBaker::getFaceCount(), 6);
@@ -113,7 +113,7 @@ TEST(LightProbeBakerTest, ASceneLitFromOneDirectionBakesAProbeThatKnowsWhichOne)
     // The test that pins the view matrices against the direction reconstruction. Each face in turn
     // is the only one drawn white; the baked probe's brightest normal has to be the direction that
     // face was looking. A mirrored or rotated face passes every smoothness check and fails this.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 16);
     CNA_SKIP_WITHOUT_CAPTURE(baker);
 
@@ -141,7 +141,7 @@ TEST(LightProbeBakerTest, ASceneWhiteInEveryDirectionBakesAUniformProbe)
     // The energy half. Every face white is a uniform environment of radiance 1, which delivers
     // exactly pi to every normal -- the same number MOD-2080's projection is pinned against, now
     // reached through six rendered faces instead of a cube.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 16);
     CNA_SKIP_WITHOUT_CAPTURE(baker);
 
@@ -160,7 +160,7 @@ TEST(LightProbeBakerTest, ASceneWhiteInEveryDirectionBakesAUniformProbe)
 
 TEST(LightProbeBakerTest, ADrawThatRendersNothingBakesADarkProbe)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 8);
     CNA_SKIP_WITHOUT_CAPTURE(baker);
 
@@ -173,7 +173,7 @@ TEST(LightProbeBakerTest, BakingAVolumeFillsEveryProbeAtItsOwnPosition)
 {
     // Each probe is captured from where the grid says it stands, and the draw is told where that
     // is through the view matrix -- so a scene that varies with position bakes a volume that does.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 8);
     CNA_SKIP_WITHOUT_CAPTURE(baker);
 
@@ -202,7 +202,7 @@ TEST(LightProbeBakerTest, BakingAVolumeFillsEveryProbeAtItsOwnPosition)
 
 TEST(LightProbeBakerTest, BakingVisibilityFillsTheMomentsTheLeakTestReads)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 8);
     CNA_SKIP_WITHOUT_CAPTURE(baker);
     baker.setPlanes(0.05f, 100.0f);
@@ -232,7 +232,7 @@ TEST(LightProbeBakerTest, BakingLightKeepsVisibilityAndTheOtherWayRound)
 {
     // The two passes are independent and either may be run without the other, so neither may
     // discard what the other left behind.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, 8);
     CNA_SKIP_WITHOUT_CAPTURE(baker);
 
@@ -258,7 +258,7 @@ TEST(LightProbeBakerTest, TheCostOfAProbeGridIsAStatedNumber)
     // the memory a probe occupies, and the time the *layer* spends capturing one. The second is
     // measured with a draw that does nothing, so what it reports is the capture and the projection
     // rather than somebody's scene -- a real bake adds six scene draws per probe on top.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     LightProbeBaker baker(gd, LightProbeBaker::kDefaultFaceSize);
 
     const std::size_t probeBytes = sizeof(LightProbeEXT);

@@ -1190,6 +1190,8 @@ short form a reader needs before opening it.
 | Clip space is `[0, 1]`, EasyGL's is `[-1, 1]` | Vulkan's own convention; see the depth-range section, which also names who owns the half EasyGL does not cover. |
 | Set numbering for a custom effect's textures | Set 0 is the `SpriteBatch` texture, set 1 the effect's own. EasyGL's unit 0 *is* the sprite texture. Both are internally consistent; the shader is renderer-specific anyway. |
 | Array uniforms hold **72** elements | A fixed uniform-buffer block, where EasyGL's array is whatever length the GLSL declares. 72 is XNA's own `SkinnedEffect.MaxBones`; past it this renderer refuses by name rather than truncating. |
+| A stock `PbrEffect` record must supply a `Tangent` input (or be the stride-48/60 record) | Vulkan refuses a shader input no vertex element feeds rather than read an unbound attribute (`VULKAN-148`); EasyGL draws a tangent-less record through GL's generic-attribute default. The documented PBR record is `VertexPositionNormalTangentTexture` (`plans/plan_vulkan_modern_graphics.md` VMG-B1). |
+| Compute `setUniform` needs the push-constant member **names** in the SPIR-V | Scalars bind by `OpMemberName`. A package built with `tools/shader_package` keeps them with `"optimization": "zero"` (VMG-0012); the default `performance` level strips them, so the engine's own packages pass parameters in constant buffers or packed vectors instead. |
 
 **Differences where this renderer does more:**
 
@@ -1206,6 +1208,23 @@ short form a reader needs before opening it.
 supplies the portable skybox without changing Vulkan's shader dialect.
 `ExecutesShaderEffectSourceEXT()` stays false because the renderer executes packaged SPIR-V, not
 caller-provided source text. Indirect execution is the additional device-gated path described above.
+
+**Modern API on real hardware (`plans/plan_vulkan_modern_graphics.md`).** Re-measured on the
+Radeon 780M (RADV) through the private runner, on native Wayland and native X11 without SDL: the
+engine layer's shared suite, all 35 CNAEXT example oracles and the renderer-neutral
+`ModernGpuConformance` suite run on Vulkan with 0 validation messages, and synchronization validation
+over them found one renderer hazard — an MRT pass's depth transition unordered against the previous
+pass's depth writes — fixed in `GetOrCreateMRTRenderPass` (VMG-0013).
+
+**A compute dispatch inside a bind cycle resumes it; it does not restart it (VMG-0014).** Compute and
+transfer commands cannot be recorded inside a render pass, so a modern command issued while a target is
+bound ends the native pass and a new one begins after it. The segment that closes stores every
+attachment, and the one that opens loads them. For all three render-target families this is a variant of
+the target's own pass that differs only in load/store operations and layouts, so the framebuffer and
+pipelines are reused. Before this change the continuation re-entered the target's ordinary pass, which
+for a `DiscardContents` target cleared colour and depth and so erased every draw issued before the
+dispatch. `ModernGpuConformance.ClassicDrawingIsUnchangedByInterleavedCompute` holds it for single-sample,
+`PreserveContents`, MSAA and MRT targets.
 
 ---
 

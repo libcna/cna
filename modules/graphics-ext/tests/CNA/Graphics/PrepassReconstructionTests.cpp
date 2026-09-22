@@ -156,7 +156,7 @@ void main() {
 
 TEST(PrepassReconstructionTest, TheReconstructedPositionIsWhereTheGeometryWasDrawn)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
@@ -203,7 +203,7 @@ TEST(PrepassReconstructionTest, TheUnwrittenSkyReadsAsTheFarPlaneAndNotAsTheEye)
     // clears depth to **white**, so an empty pixel decodes to 1.0 -- the far plane. A pass that
     // tests for "nothing here" by comparing against zero therefore treats the sky as a surface at
     // the eye and marches from it. `SsrPass` had exactly that bug until this test was written.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);

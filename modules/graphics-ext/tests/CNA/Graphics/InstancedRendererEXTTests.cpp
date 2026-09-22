@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -54,7 +55,7 @@ namespace {
     class TrianglePart : public ::testing::Test
     {
     protected:
-        GraphicsDevice gd;
+        CnaTest::EngineLayer::HiDefDevice gd;
         std::unique_ptr<VertexBuffer> vertices;
         std::unique_ptr<IndexBuffer> indices;
         std::unique_ptr<ModelMeshPart> part;
@@ -212,6 +213,32 @@ TEST_F(TrianglePart, OneDrawCallForEveryInstanceOrAnExplicitRefusal)
         EXPECT_EQ(renderer.getLastDrawCallCount(), 100);
         EXPECT_FALSE(renderer.didLastDrawInstance());
     }
+}
+
+TEST_F(TrianglePart, EveryFrameCanUploadAgainAndTheCallersBindingsComeBack)
+{
+    // plans/plan_vulkan_modern_graphics.md VMG-0009. A draw that left its instance stream bound
+    // made the next frame's setInstances() upload into a buffer still set on the device, which XNA
+    // refuses ("The vertex buffer resource is in use") -- so a second frame threw on every renderer
+    // that instances. The caller's own vertex and index bindings must also survive the draw.
+    InstancedRendererEXT renderer(gd, part.get());
+    renderer.setFallbackEnabled(true);
+    BasicEffect effect(gd);
+    effect.setLightingEnabledProperty(false);
+    effect.VertexColorEnabled = true;
+
+    gd.SetVertexBuffer(vertices.get());
+    gd.setIndicesProperty(nullptr);
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        ASSERT_NO_THROW(renderer.setInstances(Grid(4 + frame))) << "frame " << frame;
+        ASSERT_NO_THROW(renderer.draw(effect)) << "frame " << frame;
+    }
+
+    const auto bindings = gd.GetVertexBuffers();
+    ASSERT_EQ(bindings.size(), 1u);
+    EXPECT_EQ(bindings[0].getVertexBufferProperty(), vertices.get());
+    EXPECT_EQ(gd.getIndicesProperty(), nullptr);
 }
 
 TEST_F(TrianglePart, TheFallbackRestoresTheEffectsOwnWorldMatrix)

@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <vector>
@@ -75,7 +76,7 @@ void main() {
 
 TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         GTEST_SKIP() << "this renderer does not support compute shaders";
     if (!gd.SupportsShaderLanguageEXT(

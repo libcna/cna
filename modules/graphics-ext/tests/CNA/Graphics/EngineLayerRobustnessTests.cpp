@@ -44,7 +44,7 @@ namespace {
 
 TEST(EngineLayerRobustnessTest, AbsurdSizesAreEitherRenderedOrRefusedByRule)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
@@ -69,7 +69,7 @@ TEST(EngineLayerRobustnessTest, ResizingEveryFrameDoesNotAccumulate)
 {
     // A window being dragged produces a new size every frame. The pipeline must drop the targets it
     // is no longer using rather than keep one per size it has ever seen.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
@@ -96,7 +96,7 @@ TEST(EngineLayerRobustnessTest, EverySettingCanBeFlippedBetweenFrames)
 {
     // The settings menu case: nothing here has an order it must be changed in, and no combination
     // may throw. The pipeline reads the settings fresh each frame precisely so this is true.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(128, 128);
@@ -130,7 +130,7 @@ TEST(EngineLayerRobustnessTest, EverySettingCanBeFlippedBetweenFrames)
 
 TEST(EngineLayerRobustnessTest, AFrameCanBeOpenedAndClosedRepeatedlyWithoutDrift)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
@@ -154,7 +154,7 @@ TEST(EngineLayerRobustnessTest, AFrameCanBeOpenedAndClosedRepeatedlyWithoutDrift
 
 TEST(EngineLayerRobustnessTest, DegenerateInputsToTheHelpersAreRefusedNotUndefined)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
 
     // A shadow map takes a quality rather than a size, so there is no absurd size to pass -- the
     // enumeration is the validation. Every value of it must construct, including the disabled one.

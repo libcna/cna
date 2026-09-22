@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <string>
 
@@ -50,7 +51,7 @@ namespace {
     class PbrMaterialTest : public ::testing::Test
     {
     protected:
-        GraphicsDevice gd;
+        CnaTest::EngineLayer::HiDefDevice gd;
         Texture2D albedo{gd, 2, 2};
         Texture2D normal{gd, 2, 2};
         Texture2D metallicRoughness{gd, 2, 2};

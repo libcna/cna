@@ -42,6 +42,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -263,9 +265,9 @@ class IblExample : public Game
         device.Clear(Color::Black);
         DrawQuad(device, effect);
         try { device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size())); }
-        catch (const System::NotSupportedException&)
+        catch (const System::NotSupportedException& e)
         {
-            std::printf("SKIP: this renderer has no readable back buffer\n");
+            std::printf("SKIP: this renderer has no readable back buffer (%s)\n", e.what());
             std::exit(77);
         }
         return pixels;
@@ -277,9 +279,9 @@ class IblExample : public Game
         device.Clear(Color::Black);
         DrawSkinnedQuad(device, effect);
         try { device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size())); }
-        catch (const System::NotSupportedException&)
+        catch (const System::NotSupportedException& e)
         {
-            std::printf("SKIP: this renderer has no readable back buffer\n");
+            std::printf("SKIP: this renderer has no readable back buffer (%s)\n", e.what());
             std::exit(77);
         }
         return pixels;
@@ -483,6 +485,13 @@ public:
     explicit IblExample(bool benchmark) : benchmark_(benchmark)
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_modern_graphics.md VMG-0004: the engine layer is HiDef work -- float and
+        // multiple render targets, and the back-buffer readback every check here reads -- while the
+        // manager defaults to Reach, where GetBackBufferData is refused (SOFTWARE-213). Under Reach
+        // this program skipped or aborted before its first check on every renderer.
+        if (Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(
+                Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kFrame);
         gdm_->setPreferredBackBufferHeightProperty(kFrame);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

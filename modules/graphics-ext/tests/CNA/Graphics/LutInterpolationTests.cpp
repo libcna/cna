@@ -180,7 +180,7 @@ TEST(LutInterpolationTest, TrilinearIsTheDefaultAndTheSettingRoundTrips)
 {
     // The default is what every frame graded before this existed, so it stays where it was; the
     // measurement below is what makes changing it an informed decision rather than a preference.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ColorGradePass pass(gd);
     EXPECT_EQ(pass.getInterpolation(), LutInterpolation::Trilinear);
     pass.setInterpolation(LutInterpolation::Tetrahedral);
@@ -189,7 +189,7 @@ TEST(LutInterpolationTest, TrilinearIsTheDefaultAndTheSettingRoundTrips)
 
 TEST(LutInterpolationTest, AVolumeThatIsNotACubeIsRefused)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer has no volume textures";
     Texture3D slab(gd, 8, 8, 4, false, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
@@ -205,7 +205,7 @@ TEST(LutInterpolationTest, TetrahedralKeepsANeutralNeutralAndTrilinearDoesNot)
     // corner, so tetrahedral computes it from two neutral entries and it stays neutral exactly.
     // Trilinear mixes in the six coloured corners around it, so the grey comes back tinted -- and
     // because the tint varies smoothly with brightness, it reads as a grading decision.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -241,7 +241,7 @@ TEST(LutInterpolationTest, TetrahedralIsTheMoreAccurateOfTheTwoAgainstTheExactGr
     // The general claim, which is weaker than the neutral one and worth stating separately: over
     // coloured inputs neither is exact, and the interesting question is which is closer to the
     // grade the table was built from.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -276,7 +276,7 @@ TEST(LutInterpolationTest, BothAgreeExactlyOnTheTablesOwnEntries)
     // The other half of the story, and the reason a difference between them is easy to dismiss: at
     // every value the table actually holds there is nothing to interpolate and the two are the same
     // number. A test that only sampled grid points would find them identical.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -315,7 +315,7 @@ TEST(LutInterpolationTest, TheVolumeLayoutGivesTheSameAnswerAsTheStrip)
 {
     // Two layouts of one table, and the addressing arithmetic is different in each. They must
     // agree, or one of them is reading somebody else's entry.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))

@@ -57,21 +57,21 @@ constexpr int kSize = 8;
 
 TEST(EffectPassTest, ANameIsRequiredBecauseAPipelineReportsIt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EXPECT_THROW(EffectPass(gd, nullptr, ""), std::invalid_argument);
     EXPECT_NO_THROW(EffectPass(gd, nullptr, "Named"));
 }
 
 TEST(EffectPassTest, TheNameIsWhatWasGiven)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const EffectPass pass(gd, nullptr, "Depth");
     EXPECT_EQ(pass.getName(), "Depth");
 }
 
 TEST(EffectPassTest, ABorrowedEffectIsHeldWithoutBeingOwned)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
         GTEST_SKIP() << "this renderer accepts no custom effect to borrow";
 
@@ -85,7 +85,7 @@ TEST(EffectPassTest, ABorrowedEffectIsHeldWithoutBeingOwned)
 
 TEST(EffectPassTest, AnOwnedEffectIsHeldAndReleasedWhenReplaced)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
         GTEST_SKIP() << "this renderer accepts no custom effect";
 
@@ -101,7 +101,7 @@ TEST(EffectPassTest, AnOwnedEffectIsHeldAndReleasedWhenReplaced)
 
 TEST(EffectPassTest, APassWithNoEffectIsNotSupportedAndCopiesInstead)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     EffectPass pass(gd, nullptr, "Empty");
@@ -131,7 +131,7 @@ TEST(EffectPassTest, SupportIsTheCustomEffectsQuestionNotTheShaderSourceOne)
     // whatever Effect it was handed; a stock or compiled effect is real work on a renderer that
     // never compiles GLSL source, so asking ExecutesShaderEffectSourceEXT here would refuse a pass
     // that would have worked.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
         GTEST_SKIP() << "this renderer accepts no custom effect";
 
@@ -145,7 +145,7 @@ TEST(EffectPassTest, TheAdaptedEffectReallyReachesTheDraw)
     // MOD-231's actual question: is the adaptation real, or does the effect quietly not apply?
     // DepthEffect at its coarsest mode has to change a mid-grey; a pass that dropped the effect
     // would return the source unchanged.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!CnaTest::EngineLayer::RunsShaderSource(gd))
         GTEST_SKIP() << "this renderer does not run shader source, so the effect would be accepted "
@@ -174,7 +174,7 @@ TEST(EffectPassTest, TheAdaptedEffectReallyReachesTheDraw)
 TEST(EffectPassTest, AnAdaptedEffectRunsInsideAChain)
 {
     // The whole reason for the adapter: these effects predate the chain and must now sit in it.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
         GTEST_SKIP() << "this renderer accepts no custom effects";
@@ -219,7 +219,7 @@ TEST(EffectPassTest, AnAdaptedEffectRunsInsideAChain)
 
 TEST(AsciiPassTest, ItHasItsOwnNameAndOwnsItsEffect)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AsciiPass pass(gd);
     EXPECT_EQ(pass.getName(), "Ascii");
     // Reachable so a chain author can set the cell size; owned so they need not keep it alive.
@@ -234,14 +234,14 @@ TEST(AsciiPassTest, SupportIsProbedRatherThanRead)
 {
     // There is no capability for "GetData works on a texture", which is what this effect needs, so
     // the pass asks by doing. Whatever the answer, it must be an answer and not an exception.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const AsciiPass pass(gd);
     EXPECT_NO_THROW((void)pass.isSupported(gd));
 }
 
 TEST(AsciiPassTest, ItValidatesItsInputs)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     AsciiPass pass(gd);
 
     PostProcessContext context;
@@ -258,7 +258,7 @@ TEST(AsciiPassTest, ItValidatesItsInputs)
 
 TEST(AsciiPassTest, ItQuantisesTheSourceIntoTheDestination)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     AsciiPass pass(gd);

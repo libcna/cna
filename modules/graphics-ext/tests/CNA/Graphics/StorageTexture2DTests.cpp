@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cstdint>
@@ -363,7 +364,7 @@ TEST(StorageTexture2DDescriptorTest, RejectsEveryIntrinsicInvalidDescription)
 
 TEST(StorageTexture2DTest, LiveConstructionRequiresTheWholePublishedDeviceContract)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     const StorageTexture2DDescriptor descriptor(
         4, 4, 1, SurfaceFormat::Color, StorageTexture2DUsage::StorageWrite);
     const std::size_t baseline = device.GetTrackedResourceCount();
@@ -392,7 +393,7 @@ TEST(StorageTexture2DTest, LiveConstructionRequiresTheWholePublishedDeviceContra
 
 TEST(StorageTexture2DTest, ValidatesLimitsAndFormatUsageBeforeRendererCreation)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     StorageTextureContractRenderer* const view = renderer.get();
@@ -446,7 +447,7 @@ TEST(StorageTexture2DTest, ValidatesLimitsAndFormatUsageBeforeRendererCreation)
 
 TEST(StorageTexture2DTest, TransfersPreserveMipRectangleAndExactBytes)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     StorageTextureContractRenderer* const view = renderer.get();
@@ -485,7 +486,7 @@ TEST(StorageTexture2DTest, TransfersPreserveMipRectangleAndExactBytes)
 
 TEST(StorageTexture2DTest, TransferValidationRefusesInvalidAndUndeclaredAccess)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     StorageTextureContractRenderer* const view = renderer.get();
@@ -523,7 +524,7 @@ TEST(StorageTexture2DTest, TransferValidationRefusesInvalidAndUndeclaredAccess)
 
 TEST(StorageTexture2DTest, CompressedTransferValidationCountsBlocksAndOddEdges)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     StorageTextureContractRenderer* const view = renderer.get();
@@ -552,7 +553,7 @@ TEST(StorageTexture2DTest, CompressedTransferValidationCountsBlocksAndOddEdges)
 
 TEST(StorageTexture2DTest, TracksDisposesAndReleasesItsRendererRecordInDeviceOrder)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer::ReplaceRenderer(
@@ -606,7 +607,7 @@ TEST(StorageTexture2DTest, TracksDisposesAndReleasesItsRendererRecordInDeviceOrd
 
 TEST(StorageTexture2DTest, ComputeBindingValidatesSlotDeviceAccessAndRendererAcceptance)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     StorageTextureContractRenderer* const view = renderer.get();
@@ -648,7 +649,7 @@ TEST(StorageTexture2DTest, ComputeBindingValidatesSlotDeviceAccessAndRendererAcc
     EXPECT_THROW(shader.bindStorageTexture(0, readOnly, GraphicsImageAccess::ReadOnly),
                  System::ObjectDisposedException);
 
-    GraphicsDevice otherDevice;
+    CnaTest::EngineLayer::HiDefDevice otherDevice;
     int otherDestructions = 0;
     auto otherRenderer = MakeRenderer(otherDestructions);
     CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer::ReplaceRenderer(
@@ -658,11 +659,16 @@ TEST(StorageTexture2DTest, ComputeBindingValidatesSlotDeviceAccessAndRendererAcc
             4, 4, 1, SurfaceFormat::Color, StorageTexture2DUsage::StorageRead));
     EXPECT_THROW(shader.bindStorageTexture(0, foreign, GraphicsImageAccess::ReadOnly),
                  std::invalid_argument);
+
+    // The recording renderer's state retains the bound native texture, which holds that same
+    // state: break the cycle as the retention test below does, or LeakSanitizer reports it
+    // (plans/plan_vulkan_modern_graphics.md VMG-0018).
+    view->state->retainedComputeTexture.reset();
 }
 
 TEST(StorageTexture2DTest, ComputeBindingRetainsNativeWorkWithoutRetainingPublicResource)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     int nativeDestructions = 0;
     auto renderer = MakeRenderer(nativeDestructions);
     StorageTextureContractRenderer* const view = renderer.get();

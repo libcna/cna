@@ -89,7 +89,7 @@ TEST(SsaoPassTest, EverySampleLiesInTheHemisphereAboveTheSurface)
 {
     // A sample with negative Z is below the surface -- it would count geometry behind the wall as
     // occluding the wall, which darkens flat surfaces for no reason.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
 
     ASSERT_FALSE(pass.getKernel().empty());
@@ -105,7 +105,7 @@ TEST(SsaoPassTest, TheKernelIsBiasedTowardTheOrigin)
 {
     // Contact shadows come from nearby geometry. An evenly spread kernel washes them into a
     // uniform grey, which reads as "the image got darker" rather than as occlusion.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
 
     const auto& kernel = pass.getKernel();
@@ -130,7 +130,7 @@ TEST(SsaoPassTest, TheKernelIsDeterministic)
 {
     // Two passes must produce the same image. A randomly seeded kernel would make every golden
     // comparison and every visual regression check meaningless.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass first(gd);
     SsaoPass second(gd);
 
@@ -149,7 +149,7 @@ TEST(SsaoPassTest, AFlatSurfaceIsLeftUnoccluded)
 {
     // The failure this catches is the common one: a bias or hemisphere error that darkens every
     // flat surface, which looks like "SSAO is working" until you notice the whole scene is grey.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -187,7 +187,7 @@ TEST(SsaoPassTest, TheClearedSkyIsNotDarkenedBesideASilhouette)
     // property of the estimator resting on a coincidence of two unrelated guards, so it is asserted
     // here rather than left to be rediscovered -- `SsrPass` had no equivalent second guard and did
     // ship the corresponding bug until this task measured the clear.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -236,7 +236,7 @@ TEST(SsaoPassTest, TheClearedSkyIsNotDarkenedBesideASilhouette)
 
 TEST(SsaoPassTest, ADepthDiscontinuityDarkensTheSurfaceBesideIt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -275,7 +275,7 @@ TEST(SsaoPassTest, ADepthDiscontinuityDarkensTheSurfaceBesideIt)
 
 TEST(SsaoPassTest, AHigherIntensityDarkensMore)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -321,7 +321,7 @@ TEST(SsaoPassTest, WithoutDepthAndNormalsTheFrameIsPassedThroughUnchanged)
 {
     // A pipeline that enables SSAO without running a prepass is misconfigured, not broken: it
     // should render an unoccluded frame rather than throw or produce a black screen.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
     if (!pass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run custom effects";
@@ -347,7 +347,7 @@ TEST(SsaoPassTest, WithoutDepthAndNormalsTheFrameIsPassedThroughUnchanged)
 
 TEST(SsaoPassTest, SettingsRoundTripAndSampleCountsAreClampedOnUse)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
 
     pass.setRadius(1.5f);

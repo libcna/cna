@@ -212,6 +212,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(ConstantBufferShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
+        # plans/plan_vulkan_modern_graphics.md VMG-0012: the renderer-neutral conformance programs.
+        add_test(NAME ModernConformanceShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/shaders/modern_conformance/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/ModernConformanceShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ModernConformanceShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         add_test(NAME GpuInstanceCullerShaderPackageReproducibility
             COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
                 "${Python3_EXECUTABLE}"
@@ -659,4 +671,44 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(CnaRendererRetired_${_cna_case_name}
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
+
+    # plans/plan_gpu_test_isolation.md GTI-0006: no automated test may reach the owner's live
+    # desktop by default. CnaTestDisplayPolicy runs the policy's decisions (which X displays are the
+    # live desktop, the opt-in, the Wayland guard) in script mode; CnaTestDisplayIsolation checks this
+    # tree's actual registrations -- what ctest would run -- so a registration that bypasses the
+    # policy is caught as well as a regression inside it.
+    add_test(NAME CnaTestDisplayPolicy
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_TEST_DISPLAY_RULES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestDisplayPolicyRules.cmake
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/TestDisplayPolicyCase.cmake)
+    set_tests_properties(CnaTestDisplayPolicy PROPERTIES LABELS "configuration")
+    if(Python3_Interpreter_FOUND AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+        add_test(NAME CnaTestDisplayIsolation
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_test_display_isolation.py"
+                --ctest "${CMAKE_CTEST_COMMAND}" --build-dir "${CMAKE_BINARY_DIR}"
+                --wayland-guard-applies ${CNA_TEST_WAYLAND_GUARD_APPLIES})
+        set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
+    endif()
+    # plans/plan_vulkan_modern_graphics.md VMG-0007: every SPIR-V module the tree ships -- the Vulkan
+    # renderer's own shaders and every generated shader package -- validated by spirv-val against
+    # the Vulkan 1.1 environment VulkanRenderer creates. An offline gate like the package
+    # reproducibility tests: it exits 77 where spirv-val is not installed.
+    if(Python3_Interpreter_FOUND AND "VULKAN" IN_LIST CNA_RENDERER_IDENTITIES)
+        add_test(NAME SpirvPayloadValidation
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/vulkan/validate_spirv_payloads.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules" "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+        set_tests_properties(SpirvPayloadValidation PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "vulkan;shader;configuration")
+    endif()
+    # plans/plan_gpu_test_isolation.md GTI-0007: the classifier the private GPU runner applies to
+    # every run, which names tests that died on a graphics-profile refusal before their first check.
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CnaProfileDeadTestClassifier
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/profile_dead_tests.py" --self-test)
+        set_tests_properties(CnaProfileDeadTestClassifier PROPERTIES LABELS "configuration")
+    endif()
 endif()

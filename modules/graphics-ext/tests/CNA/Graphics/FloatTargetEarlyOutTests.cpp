@@ -174,7 +174,7 @@ TEST(FloatTargetEarlyOutTest, FxaaStillFiltersOnEveryFormatTheLayerRendersInto)
     // The live question. If FXAA's early-out misfires on the HDR scene target the way SSAO's did on
     // a half-float depth image, then every HDR frame in this layer is unfiltered and nothing says
     // so -- an anti-aliasing pass that quietly does nothing looks like an anti-aliasing pass.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
@@ -294,7 +294,7 @@ TEST(FloatTargetEarlyOutTest, TheGuardAndLoopShapeOnItsOwnDoesNotReproduceIt)
     // So there is no "do not write a guard before a sampling loop on a float target" to follow. The
     // one thing that reproduces every time is the shipped estimator over a real half-float prepass
     // depth image, and the layer's answer stays what `MOD-2035` made it: pack depth, everywhere.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);

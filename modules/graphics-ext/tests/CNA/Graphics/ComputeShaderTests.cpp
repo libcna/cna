@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -63,7 +64,7 @@ namespace {
     class ComputeTest : public ::testing::Test
     {
     protected:
-        GraphicsDevice gd;
+        CnaTest::EngineLayer::HiDefDevice gd;
 
         [[nodiscard]] bool supported() const
         {
@@ -554,7 +555,7 @@ TEST_F(ComputeTest, TextureInteropRejectsDisposedForeignAndInvalidAccessBeforeBa
         shader.bindImage(0, live, static_cast<GraphicsImageAccess>(999)),
         std::invalid_argument);
 
-    GraphicsDevice foreignDevice;
+    CnaTest::EngineLayer::HiDefDevice foreignDevice;
     Texture2D foreign(foreignDevice, 1, 1);
     EXPECT_THROW(shader.bindTexture(0, "uSource", foreign), std::invalid_argument);
     EXPECT_THROW(

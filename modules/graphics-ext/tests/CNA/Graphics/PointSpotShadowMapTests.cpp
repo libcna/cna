@@ -154,7 +154,7 @@ TEST(CubeShadowMapTest, TheFaceSizeIsCappedWhateverTheQualityAsks)
 
 TEST(CubeShadowMapTest, TheCubeIsAllocatedAndTheLightRoundTrips)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     // plans/plan_modern.md MOD-1612: some renderers refuse a RenderTargetCube outright -- LLGL's
     // validated OpenGL path throws from the constructor -- so the cube cannot even be built there.
     CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
@@ -177,7 +177,7 @@ TEST(CubeShadowMapTest, TheCubeIsAllocatedAndTheLightRoundTrips)
 
 TEST(CubeShadowMapTest, EveryMisuseIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     CubeShadowMap cube(gd, ShadowQuality::Low);
     PointLightEXT light;
@@ -203,7 +203,7 @@ TEST(CubeShadowMapTest, EveryMisuseIsRejected)
 
 TEST(CubeShadowMapTest, EveryFaceCanBeOpenedAndClosed)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     CubeShadowMap cube(gd, ShadowQuality::Low);
     PointLightEXT light;
@@ -279,7 +279,7 @@ TEST(SpotShadowMapTest, TheProjectionCoversTheWholeConeAndNotHalfOfIt)
 TEST(SpotShadowMapTest, TheMapIsAllocatedAtTheFullQualitySize)
 {
     // Not the cube's capped table: there is one map here, not six.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpotShadowMap spot(gd, ShadowQuality::High);
     EXPECT_EQ(spot.getSize(), ShadowMap::sizeForQuality(ShadowQuality::High));
     EXPECT_NE(spot.getShadowTexture(), nullptr);
@@ -288,7 +288,7 @@ TEST(SpotShadowMapTest, TheMapIsAllocatedAtTheFullQualitySize)
 
 TEST(SpotShadowMapTest, BeginComputesTheMatrixAndEndRestoresTheBackBuffer)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     SpotShadowMap spot(gd, ShadowQuality::Low);
 
@@ -313,7 +313,7 @@ TEST(SpotShadowMapTest, BeginComputesTheMatrixAndEndRestoresTheBackBuffer)
 
 TEST(SpotShadowMapTest, EveryMisuseIsRejected)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     SpotShadowMap spot(gd, ShadowQuality::Low);
     SpotLightEXT light;
@@ -339,7 +339,7 @@ TEST(SpotShadowMapTest, EveryMisuseIsRejected)
 
 TEST(SpotShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     // Same reason as CubeShadowMapTest above: this case asserts about the spot *and* the cube, and
     // a renderer that refuses a RenderTargetCube cannot construct half of it.

@@ -144,7 +144,7 @@ TEST(LightProbeEXTTest, AUniformEnvironmentProjectsToAUniformProbe)
     // pi times that grey to every normal. This is where the solid-angle weighting is pinned -- with
     // equal weights the total comes out wrong, and with the wrong basis normalisation it comes out
     // right in one direction and wrong in the others.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     const Color grey(128, 128, 128, 255);
@@ -169,7 +169,7 @@ TEST(LightProbeEXTTest, TheBrightestNormalPointsAtTheBrightestFace)
     // The directional half. Five faces black and one white: the normal facing the lit face has to
     // receive the most, and the one facing away the least. A sign error on a linear basis function
     // swaps exactly those two and changes nothing else.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     const Color black(0, 0, 0, 255);
@@ -203,7 +203,7 @@ TEST(LightProbeEXTTest, TheBrightestNormalPointsAtTheBrightestFace)
 
 TEST(LightProbeEXTTest, ANullEnvironmentIsRefused)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     EnvironmentProcessor processor(gd);
     EXPECT_THROW((void)processor.generateProbe(nullptr), std::invalid_argument);
 }
@@ -213,7 +213,7 @@ TEST(LightProbeEXTTest, ProbesFromDifferentEnvironmentsAddLinearly)
     // The property a probe *volume* depends on and nothing else here would catch: the projection is
     // linear, so the average of two probes' coefficients is the projection of the average of their
     // light. Without that, interpolating between neighbours would be meaningless.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     const Color black(0, 0, 0, 255);

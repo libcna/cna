@@ -64,7 +64,7 @@ void RunFrame(RenderPipeline& pipeline)
 
 TEST(PassEnableFlagTest, EverythingOffRunsNoPassesAtAll)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -87,7 +87,7 @@ TEST(PassEnableFlagTest, EachFlagAddsExactlyOnePass)
 {
     // Counted one flag at a time, so a pass that is added twice -- or a flag that quietly enables a
     // second pass -- shows up as an arithmetic mismatch rather than as a slower frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -118,7 +118,7 @@ TEST(PassEnableFlagTest, HdrAddsTheTonemapperEvenWithoutAnOperator)
     // Not an off-by-one: an HDR scene target holds values above 1.0 and something has to bring them
     // down before the back buffer, so enabling HDR enables the tonemap pass whatever the operator
     // is set to. Without this the frame would simply clamp, which is the failure Phase 1 measured.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -140,7 +140,7 @@ TEST(PassEnableFlagTest, ADisabledPassIsNeverAskedToRun)
     // is run twice; what changes between the runs is only whether the built-in passes are on.
     // The user pass must run both times, and its count is the proof that "skipped" means skipped
     // rather than "ran with its effect disabled".
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -176,7 +176,7 @@ TEST(PassEnableFlagTest, TheFlagsTakeEffectOnTheNextFrameWithoutRebuildingAnythi
     // A quality preset flips several flags between frames. If that needed the pipeline rebuilt, a
     // settings menu would stutter; the chain is rebuilt from the flags each frame instead, which is
     // cheap because the passes themselves are long-lived.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);

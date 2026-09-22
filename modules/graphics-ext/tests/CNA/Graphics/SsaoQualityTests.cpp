@@ -46,7 +46,7 @@ TEST(SsaoQualityTest, EachPresetMapsToItsDocumentedSampleCount)
 
 TEST(SsaoQualityTest, ThePresetsAreOrderedAndAcceptedByThePass)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
 
     int previous = 0;
@@ -86,7 +86,7 @@ TEST(SsaoQualityTest, ApplyingThePresetSetsBothSubsystems)
 
 TEST(SsaoHalfResolutionTest, ItIsOffByDefaultAndRoundTrips)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SsaoPass pass(gd);
     EXPECT_FALSE(pass.isHalfResolution())
         << "half resolution must be opt-in: it costs thin contact shadows their definition";
@@ -101,7 +101,7 @@ TEST(SsaoHalfResolutionTest, BothPathsProduceOcclusionRatherThanOnlyTheFullOne)
     // The failure this catches is a half-resolution path that silently produces nothing -- a
     // mis-sized target, a noise scale that lands outside the buffer -- which would look like AO
     // simply being weak rather than like the option being broken.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     SsaoPass pass(gd);

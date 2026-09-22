@@ -10,7 +10,7 @@
 //
 // Check A -- this renderer has a GPU timer query, or the program SKIPs.
 // Check B -- every pass in the chain reports a sample, not just the first.
-// Check C -- the GPU total and the CPU wall clock have the same scale here. The wall clock also
+// Check C -- the GPU total lies inside the CPU wall clock and on its unit scale. The wall clock also
 //            includes fixed submission/read-back work outside the timestamp ranges, so this is a
 //            coarse conversion/scope check rather than a performance threshold.
 //
@@ -36,6 +36,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -184,12 +186,21 @@ class GpuTimingExample : public Game
                   "every pass in the chain reports a sample, not just the first");
             // This rejects a gross timestamp-unit or range error without turning one machine's
             // performance ratio into an API contract. The CPU interval includes submission and
-            // the forced read-back outside all four GPU ranges. That fixed work was negligible
-            // when this chain took roughly 47 ms, but is about one fifth of today's 9 ms chain.
+            // the forced read-back outside all four GPU ranges.
+            //
+            // plans/plan_vulkan_modern_graphics.md VMG-0010: the old 0.70-1.30 band was that ratio.
+            // It held on llvmpipe, where the "GPU" is the CPU and a 47 ms chain swamps the fixed
+            // cost; on a real Radeon the same chain is 0.6 ms of GPU inside a 4 ms wall clock
+            // (EasyGL: 0.5 in 2.0), and Vulkan and EasyGL agree pass by pass within ~20 %. What the
+            // timestamps can be held to on every machine is physics and units: the GPU ranges lie
+            // inside the wall-clock interval, so the total cannot exceed it beyond timer jitter,
+            // and a unit slip (ns read as us, or a period off by 1000) moves it by three orders of
+            // magnitude -- well outside a hundredfold floor.
             const double ratio = cpuMs > 0.0 ? gpuTotal / cpuMs : 0.0;
             std::printf("    GPU/CPU ratio %.3f\n", ratio);
-            check(ratio > 0.70 && ratio < 1.30,
-                  "the timestamp total and the forced-readback wall clock have the same scale");
+            check(ratio > 0.01 && ratio < 1.30,
+                  "the timestamp total lies inside the forced-readback wall clock, on the same "
+                  "unit scale");
         }
     }
 
@@ -228,6 +239,13 @@ public:
     explicit GpuTimingExample(const bool benchmark) : benchmark_(benchmark)
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_modern_graphics.md VMG-0004: the engine layer is HiDef work -- float and
+        // multiple render targets, and the back-buffer readback every check here reads -- while the
+        // manager defaults to Reach, where GetBackBufferData is refused (SOFTWARE-213). Under Reach
+        // this program skipped or aborted before its first check on every renderer.
+        if (Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(
+                Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(256);
         gdm_->setPreferredBackBufferHeightProperty(256);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

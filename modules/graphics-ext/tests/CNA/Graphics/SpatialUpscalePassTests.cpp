@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <cmath>
 #include <memory>
@@ -141,7 +142,7 @@ TEST(SpatialUpscalePassTest, TheIdentityScaleIsRecognisedByName)
 
 TEST(SpatialUpscalePassTest, TheDefaultsAreAnAdaptiveUpsampleAndAModerateSharpen)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const SpatialUpscalePass pass(gd);
     EXPECT_TRUE(pass.isEdgeAdaptive());
     EXPECT_GT(pass.getSharpness(), 0.0f);
@@ -150,7 +151,7 @@ TEST(SpatialUpscalePassTest, TheDefaultsAreAnAdaptiveUpsampleAndAModerateSharpen
 
 TEST(SpatialUpscalePassTest, SharpnessIsClampedAndBothSettingsRoundTrip)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpatialUpscalePass pass(gd);
 
     pass.setSharpness(0.25f);
@@ -168,7 +169,7 @@ TEST(SpatialUpscalePassTest, SharpnessIsClampedAndBothSettingsRoundTrip)
 
 TEST(SpatialUpscalePassTest, DrawingRefusesTheArgumentsItCannotUse)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpatialUpscalePass pass(gd);
     Texture2D source(gd, 4, 4);
 
@@ -181,7 +182,7 @@ TEST(SpatialUpscalePassTest, DrawingRefusesTheArgumentsItCannotUse)
 
 TEST(SpatialUpscalePassTest, AOneToOneScaleCopiesThroughPixelForPixel)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpatialUpscalePass pass(gd);
     if (!pass.isSupported())
         GTEST_SKIP() << "this renderer does not execute effect source";
@@ -202,7 +203,7 @@ TEST(SpatialUpscalePassTest, AOneToOneScaleCopiesThroughPixelForPixel)
 
 TEST(SpatialUpscalePassTest, TheAdaptivePathStraightensAnEdgeTheBilinearOneLeavesStepped)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpatialUpscalePass pass(gd);
     if (!pass.isSupported())
         GTEST_SKIP() << "this renderer does not execute effect source";
@@ -227,7 +228,7 @@ TEST(SpatialUpscalePassTest, TheAdaptivePathStraightensAnEdgeTheBilinearOneLeave
 
 TEST(SpatialUpscalePassTest, TheSharpenNeverLeavesTheToneRangeItSharpenedFrom)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpatialUpscalePass pass(gd);
     if (!pass.isSupported())
         GTEST_SKIP() << "this renderer does not execute effect source";
@@ -249,7 +250,7 @@ TEST(SpatialUpscalePassTest, TheSharpenNeverLeavesTheToneRangeItSharpenedFrom)
 
 TEST(SpatialUpscalePassTest, SharpeningIsWhatChangesWhenSharpnessChanges)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     SpatialUpscalePass pass(gd);
     if (!pass.isSupported())
         GTEST_SKIP() << "this renderer does not execute effect source";

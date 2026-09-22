@@ -34,6 +34,10 @@
 
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
+#include "CNA/Graphics/TonemapPass.hpp"
+#include "CNA/Graphics/SsaoPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
+#include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
 #include "CNA/Graphics/FrustumCullerEXT.hpp"
 #include "CNA/Graphics/InstancedRendererEXT.hpp"
@@ -74,7 +78,10 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -212,6 +219,39 @@ namespace
         return out;
     }
 
+    /// The PBR hero draw's record: position, normal, tangent (w = handedness), uv -- the stride-48
+    /// layout PbrEffect is documented with (misc/CNAEXT.md §3.1).
+    struct PbrVertex
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u, v;
+    };
+    static_assert(sizeof(PbrVertex) == 48, "the documented PBR record is 48 bytes");
+
+    /// plans/plan_vulkan_modern_graphics.md VMG-0011: the same box with a tangent per vertex.
+    /// Vulkan's stock PBR pipeline refuses a record that supplies no Tangent input rather than read
+    /// an unbound attribute (VULKAN-148); EasyGL draws the tangent-less record through GL's
+    /// generic-attribute default. No normal map is bound here, so any unit tangent perpendicular to
+    /// the face gives the same picture on both.
+    std::vector<PbrVertex> PbrBox(const std::vector<VertexPositionNormalTexture>& box)
+    {
+        std::vector<PbrVertex> out;
+        out.reserve(box.size());
+        for (const auto& v : box)
+        {
+            const bool vertical = v.Normal.Y > 0.5f || v.Normal.Y < -0.5f ||
+                                  v.Normal.Z > 0.5f || v.Normal.Z < -0.5f;
+            const Vector3 t = vertical ? Vector3(1.0f, 0.0f, 0.0f) : Vector3(0.0f, 0.0f, 1.0f);
+            out.push_back(PbrVertex{v.Position.X, v.Position.Y, v.Position.Z,
+                                    v.Normal.X, v.Normal.Y, v.Normal.Z,
+                                    t.X, t.Y, t.Z, 1.0f,
+                                    v.TextureCoordinate.X, v.TextureCoordinate.Y});
+        }
+        return out;
+    }
+
     std::vector<VertexPositionNormalTexture> Ground()
     {
         std::vector<VertexPositionNormalTexture> out;
@@ -328,8 +368,16 @@ protected:
         // thing, the EXT query says it does it. This program needs all of them, so it names which
         // one is missing rather than reporting a generic skip.
         const bool has3D      = device.SupportsCapability(GraphicsCapability::ThreeD);
+        // plans/plan_vulkan_modern_graphics.md VMG-0011: "effects" means the engine passes this
+        // program drives actually shade. They ship SPIR-V as well as GLSL (MOD-2218..2239l), so the
+        // renderer-wide ExecutesShaderEffectSourceEXT() -- false on Vulkan, which runs no GLSL
+        // source -- skipped a program Vulkan can run. Each pass's own isSupported() is the answer.
         const bool hasEffects = device.SupportsCapability(GraphicsCapability::CustomEffects) &&
-                                device.ExecutesShaderEffectSourceEXT();
+                                CNA::Graphics::BloomPass(device).isSupported(device) &&
+                                CNA::Graphics::TonemapPass(device).isSupported(device) &&
+                                CNA::Graphics::FxaaPass(device).isSupported(device) &&
+                                CNA::Graphics::SsaoPass(device).isSupported(device) &&
+                                DepthNormalPrepass(device, kFrame, kFrame).isSupported(device);
         const bool hasShadows = device.SupportsShadowSamplingEXT();
         const bool hasIbl     = device.SupportsImageBasedLightingEXT();
         if (!has3D || !hasEffects || !hasShadows || !hasIbl)
@@ -337,7 +385,7 @@ protected:
             std::printf("SKIP: this renderer is missing%s%s%s%s -- a documented capability "
                         "boundary, not a defect\n",
                         has3D ? "" : " 3D rasterization,",
-                        hasEffects ? "" : " shader-source execution,",
+                        hasEffects ? "" : " a shading engine pass,",
                         hasShadows ? "" : " shadow sampling,",
                         hasIbl ? "" : " image-based lighting,");
             std::exit(77);
@@ -345,6 +393,7 @@ protected:
 
         const auto ground = Ground();
         const auto box    = Box(Vector3(0.0f, kBoxCentre, 0.0f), kBoxHalf);
+        const auto boxPbr = PbrBox(box);
         const BoundingBox sceneBounds(Vector3(-kGroundHalf, -1.0f, -kGroundHalf),
                                       Vector3(kGroundHalf, kBoxCentre + kBoxHalf + 1.0f,
                                               kGroundHalf));
@@ -435,7 +484,8 @@ protected:
             boxEffect.setEmissiveFactorProperty(Vector3(1.1f, 0.85f, 0.35f));
             boxEffect.setImageBasedLightEXT(environment);
             boxEffect.Apply();
-            device.DrawUserPrimitives(PrimitiveType::TriangleList, box.data(), 0, 12);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, boxPbr.data(), 0, 12,
+                                      VertexPositionNormalTangentTexture::getVertexDeclarationStatic());
 
             // The geometry-throughput half: a field of cubes, frustum-culled and LOD-selected, and
             // whatever survives is drawn in one instanced call.
@@ -501,6 +551,23 @@ protected:
             device.DrawUserPrimitives(PrimitiveType::TriangleList, box.data(), 0, 12);
         };
 
+        // plans/plan_vulkan_modern_graphics.md VMG-0011: the shadow pass's callback, which
+        // RenderPipeline::setShadowScene documents as "must draw only geometry". This used to pass
+        // drawScene(), whose Apply() calls replaced the caster program with the scene's own effects
+        // -- so the map was filled with the ground's shaded colour, and the ground's receiver
+        // sampled the very map it was being drawn into. Vulkan's validation layer names that as a
+        // shadow map read in COLOR_ATTACHMENT_OPTIMAL inside its own pass; GL did it silently. The
+        // same mistake MOD-2035 fixed for the prepass below, fixed the same way.
+        auto drawCasterGeometry = [&] {
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+            shadowMap.applyCaster();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, ground.data(), 0, 2);
+            shadowMap.applyCaster();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, box.data(), 0, 12);
+        };
+
         auto renderVariant = [&](bool wantPipeline) {
             if (!wantPipeline)
             {
@@ -525,7 +592,7 @@ protected:
                     pipeline.setDepthNormalInputs(prepass.getDepthTexture(),
                                                   prepass.getNormalTexture());
                 }
-                pipeline.setShadowScene(&shadowMap, sun, sceneBounds, drawScene);
+                pipeline.setShadowScene(&shadowMap, sun, sceneBounds, drawCasterGeometry);
                 pipeline.setSkybox(skyAttached ? &skybox : nullptr);
                 pipeline.setSkyboxCamera(View(), Projection());
                 pipeline.begin(Color::Black);
@@ -636,10 +703,17 @@ protected:
         settings.setTonemappingMode(TonemappingMode::None);
         const Frame noTonemap = renderVariant(true);
         const int clippedOff = ClippedPixels(noTonemap);
-        std::printf("    fully clipped pixels: ACES %d, no tonemapping %d\n", clippedOn,
-                    clippedOff);
-        check(clippedOn <= clippedOff,
-              "ACES still compresses the highlights the untonemapped frame clips");
+        // plans/plan_vulkan_modern_graphics.md VMG-0011: at this exposure neither frame clips a
+        // single pixel, so "clipped with ACES <= clipped without" held as 0 <= 0 whether or not the
+        // tonemapper ran. The operator must also visibly change the frame for the check to mean
+        // anything.
+        const int toneChanged = DarkenedPixels(noTonemap, everything, 2) +
+                                DarkenedPixels(everything, noTonemap, 2);
+        std::printf("    fully clipped pixels: ACES %d, no tonemapping %d; %d pixels changed by "
+                    "ACES\n", clippedOn, clippedOff, toneChanged);
+        check(clippedOn <= clippedOff && toneChanged > static_cast<int>(everything.size()) / 20,
+              "ACES still compresses the highlights the untonemapped frame clips, and changes the "
+              "frame");
         SaveIfAsked(device, "no_tonemap");
         settings.setTonemappingMode(TonemappingMode::Aces);
 
@@ -684,6 +758,13 @@ public:
                 screenshotDir_ = argv[++i];
 
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_vulkan_modern_graphics.md VMG-0004: the engine layer is HiDef work -- float and
+        // multiple render targets, and the back-buffer readback every check here reads -- while the
+        // manager defaults to Reach, where GetBackBufferData is refused (SOFTWARE-213). Under Reach
+        // this program skipped or aborted before its first check on every renderer.
+        if (Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(
+                Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef))
+            gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kFrame);
         gdm_->setPreferredBackBufferHeightProperty(kFrame);
     }

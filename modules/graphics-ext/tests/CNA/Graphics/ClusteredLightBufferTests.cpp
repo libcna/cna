@@ -186,7 +186,7 @@ Color RenderProbe(GraphicsDevice& gd, ShaderEffect& effect, const ClusteredLight
 
 TEST(ClusteredLightBufferTest, NothingIsBoundBeforeAnUpload)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightBuffer buffer(gd);
     EXPECT_FALSE(buffer.isUploaded());
     EXPECT_EQ(buffer.getLightCount(), 0);
@@ -200,7 +200,7 @@ TEST(ClusteredLightBufferTest, AMismatchedTrioIsRefused)
     // The three inputs describe one frame between them, and nothing in their types says so. An
     // assignment made from a different light set would light the wrong objects with the wrong
     // lamps and never fail, so the count agreement is checked where they meet.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightBuffer buffer(gd);
     const ClusteredLightGrid grid = MakeGrid();
 
@@ -224,7 +224,7 @@ TEST(ClusteredLightBufferTest, AMismatchedTrioIsRefused)
 
 TEST(ClusteredLightBufferTest, TheCountsSurviveTheUpload)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightBuffer buffer(gd);
     const ClusteredLightGrid grid = MakeGrid();
 
@@ -247,7 +247,7 @@ TEST(ClusteredLightBufferTest, AnEmptySetUploadsWithoutAZeroSizedTexture)
 {
     // A frame with no lights is ordinary, and a zero-by-zero texture is not creatable. The buffer
     // has to round up to one row rather than refuse the frame.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredLightBuffer buffer(gd);
     const ClusteredLightGrid grid = MakeGrid();
     const ClusteredLightSetEXT lights;
@@ -263,7 +263,7 @@ TEST(ClusteredLightBufferTest, AnEmptySetUploadsWithoutAZeroSizedTexture)
 
 TEST(ClusteredLightBufferTest, TheShaderReadsBackEveryFieldOfEveryLight)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -318,7 +318,7 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
     // The probe shader paints white on agreement, so a test that only ever asks for agreement
     // cannot tell "it matched" from "the shader always paints white". This asks for the wrong
     // answer on purpose.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -351,7 +351,7 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
 
 TEST(ClusteredLightBufferTest, TheShaderWalksTheSameClusterListTheCpuBuilt)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);

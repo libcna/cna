@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cmath>
@@ -80,7 +81,7 @@ TEST(HdrDisplayOutputTest, TheColorSpaceOrdinalsAreTheOnesTheShaderBranchesOn)
 
 TEST(HdrDisplayOutputTest, TheSwapChainAnswersSrgbAndSaysSoRatherThanPretending)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     EXPECT_EQ(device.GetDisplayColorSpaceEXT(), DisplayColorSpace::Srgb);
     EXPECT_TRUE(device.SupportsDisplayColorSpaceEXT(DisplayColorSpace::Srgb));
     EXPECT_TRUE(device.SetDisplayColorSpaceEXT(DisplayColorSpace::Srgb));
@@ -147,7 +148,7 @@ TEST(HdrDisplayOutputTest, TheRollOffApproachesThePeakWithoutReachingIt)
 
 TEST(HdrDisplayOutputTest, TheSettingsRoundTripAndKeepPeakAbovePaperWhite)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     HdrDisplayOutput output(device);
     EXPECT_EQ(output.getColorSpace(), DisplayColorSpace::Srgb);
 
@@ -180,7 +181,7 @@ TEST(HdrDisplayOutputTest, InSrgbTheEncodeIsTheIdentity)
 
 TEST(HdrDisplayOutputTest, DrawingRefusesWhatItCannotEncode)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     HdrDisplayOutput output(device);
     const auto source = MakeSource(device, SourceTexels());
     EXPECT_THROW(output.draw(nullptr, nullptr, kSize, kSize), std::invalid_argument);
@@ -190,7 +191,7 @@ TEST(HdrDisplayOutputTest, DrawingRefusesWhatItCannotEncode)
 
 TEST(HdrDisplayOutputTest, SdrOutputIsTheFrameThePipelineAlreadyProduced)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     HdrDisplayOutput output(device);
     if (!output.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 
@@ -207,7 +208,7 @@ TEST(HdrDisplayOutputTest, SdrOutputIsTheFrameThePipelineAlreadyProduced)
 
 TEST(HdrDisplayOutputTest, TheShaderAndTheCpuEncodeAgreeInEveryHdrSpace)
 {
-    GraphicsDevice device;
+    CnaTest::EngineLayer::HiDefDevice device;
     HdrDisplayOutput output(device);
     if (!output.isSupported()) GTEST_SKIP() << "this renderer does not execute effect source";
 

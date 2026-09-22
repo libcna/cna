@@ -74,7 +74,7 @@ private:
 
 TEST(PipelineExceptionSafetyTest, AThrowingPassLeavesNoTargetBoundAndTheNextFrameRendersNormally)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -114,7 +114,7 @@ TEST(PipelineExceptionSafetyTest, AFailedFrameDoesNotLeaveTheFrameOpen)
     // The other half of recovery: if end() threw with frameOpen_ still set, the next begin() would
     // refuse and the pipeline would be permanently unusable -- the same trap CubeShadowMap and
     // ShadowMap both had at their own begin().
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -135,7 +135,7 @@ TEST(PipelineExceptionSafetyTest, AFailedFrameDoesNotLeaveTheFrameOpen)
 
 TEST(PipelineStatisticsTest, EverythingIsZeroBeforeTheFirstFrame)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     const RenderPipeline pipeline(gd);
     const auto statistics = pipeline.getStatistics();
     EXPECT_EQ(statistics.passesRun, 0);
@@ -146,7 +146,7 @@ TEST(PipelineStatisticsTest, EverythingIsZeroBeforeTheFirstFrame)
 
 TEST(PipelineStatisticsTest, AnInertFrameReportsNoWorkAtAll)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -170,7 +170,7 @@ TEST(PipelineStatisticsTest, AnInertFrameReportsNoWorkAtAll)
 
 TEST(PipelineStatisticsTest, TheCountsFollowWhatWasEnabled)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -197,7 +197,7 @@ TEST(PipelineStatisticsTest, TheSnapshotIsAValueAndDoesNotChangeUnderTheCaller)
 {
     // A POD rather than accessors, so a caller can keep last frame's numbers to compare with this
     // frame's. That only works if the snapshot is a copy.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -382,7 +382,7 @@ TEST(SettingsSerializationTest, AnEmptyStringChangesNothing)
 
 TEST(PipelineDeviceResetTest, ReleasingResourcesDropsTheTargetsAndTheNextFrameRebuildsThem)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -411,7 +411,7 @@ TEST(PipelineDeviceResetTest, ReleasingMidFrameIsRefused)
 {
     // Releasing the scene target while it is bound is the exact situation this exists to avoid, so
     // it is refused rather than done quietly.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -427,7 +427,7 @@ TEST(PipelineDeviceResetTest, TheDeviceResetEventReachesThePipeline)
 {
     // The wiring, checked by raising the event the device itself raises. Without this the pipeline
     // would have to be told about a reset by the game, which no game would remember to do.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
@@ -447,7 +447,7 @@ TEST(PipelineDeviceResetTest, APipelineDestroyedBeforeItsDeviceUnsubscribes)
     // The handler captures `this`, and a device outliving a pipeline is the normal case since Game
     // owns the device. Without the Remove in the destructor this raise would call into freed
     // memory -- which ASan would catch and an ordinary run would not.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     {
         RenderPipeline pipeline(gd);
         pipeline.resize(kWidth, kHeight);

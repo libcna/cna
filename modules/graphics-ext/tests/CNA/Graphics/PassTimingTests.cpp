@@ -92,7 +92,7 @@ void RunFrames(PostProcessChain& chain, const PostProcessContext& context, const
 
 TEST(PassTimingTest, TimingIsOffByDefaultAndReportsNothing)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     PostProcessChain chain(gd);
     EXPECT_FALSE(chain.isGpuTimingEnabled());
     EXPECT_TRUE(chain.getPassTimings().empty());
@@ -102,7 +102,7 @@ TEST(PassTimingTest, TurningItOnWhereThereIsNoTimerIsAcceptedAndDoesNothing)
 {
     // The distinction the whole design turns on: an empty list, not a list of zeroes. A caller has
     // to be able to tell "not measured here" from "this pass took no time".
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     {
         GpuTimer probe(gd);
@@ -125,7 +125,7 @@ TEST(PassTimingTest, TurningItOnWhereThereIsNoTimerIsAcceptedAndDoesNothing)
 
 TEST(PassTimingTest, EachPassReportsItsOwnNameAndItsOwnTime)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     {
         GpuTimer probe(gd);
@@ -164,7 +164,7 @@ TEST(PassTimingTest, EachPassReportsItsOwnNameAndItsOwnTime)
 TEST(PassTimingTest, TimingDoesNotChangeTheFrame)
 {
     // The claim a caller has to be able to rely on before switching it on in a real build.
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -190,7 +190,7 @@ TEST(PassTimingTest, TimingDoesNotChangeTheFrame)
 
 TEST(PassTimingTest, SwitchingItOffForgetsWhatItMeasured)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     auto scene = MakeScene(gd);
@@ -210,7 +210,7 @@ TEST(PassTimingTest, SwitchingItOffForgetsWhatItMeasured)
 
 TEST(PassTimingTest, AnEmptyChainReportsNoTimings)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     auto scene = MakeScene(gd);
@@ -226,7 +226,7 @@ TEST(PassTimingTest, AnEmptyChainReportsNoTimings)
 
 TEST(PassTimingTest, ThePipelineSurfacesTheChainsTimings)
 {
-    GraphicsDevice gd;
+    CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
 
     RenderPipeline pipeline(gd);
