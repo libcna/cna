@@ -22,9 +22,12 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = SKIP.
 
+#include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
+#include "CNA/Graphics/TonemapPass.hpp"
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Platform/PlatformException.hpp"
@@ -278,8 +281,16 @@ protected:
         // the capability alone passes here and then fails the bloom check three lines later, which
         // is exactly what it did the first time this program was run on SOFTWARE (plans/plan_modern.md
         // MOD-1699).
+        //
+        // plans/plan_vulkan_modern_graphics.md VMG-0008: the question is whether THESE passes shade,
+        // and since MOD-2218/2239a/2239f bloom, tonemap and FXAA ship SPIR-V as well as GLSL, so
+        // Vulkan runs them without executing any GLSL source. Asking the renderer-wide
+        // ExecutesShaderEffectSourceEXT() here skipped the whole shaded half of this program on a
+        // renderer that shades it; each pass's own isSupported() is the answer the pipeline uses.
         const bool runsShaders = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
-                              && device.ExecutesShaderEffectSourceEXT();
+                              && CNA::Graphics::BloomPass(device).isSupported(device)
+                              && CNA::Graphics::TonemapPass(device).isSupported(device)
+                              && CNA::Graphics::FxaaPass(device).isSupported(device);
         if (!runsShaders)
         {
             // Not simply a skip: the chain must still *run* the passes on these renderers, and that

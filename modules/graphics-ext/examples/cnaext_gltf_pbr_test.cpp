@@ -157,8 +157,12 @@ protected:
         auto& device = getGraphicsDeviceProperty();
 
         const bool has3D      = device.SupportsCapability(GraphicsCapability::ThreeD);
+        // plans/plan_vulkan_modern_graphics.md VMG-0008: the one engine shader this program needs
+        // is the shadow caster, which ships SPIR-V as well as GLSL (MOD-2237); PBR, IBL and the
+        // receiver are stock-effect paths. The renderer-wide ExecutesShaderEffectSourceEXT() --
+        // false on Vulkan, which runs no GLSL source -- skipped a program Vulkan can run.
         const bool hasEffects = device.SupportsCapability(GraphicsCapability::CustomEffects) &&
-                                device.ExecutesShaderEffectSourceEXT();
+                                ShadowMap(device, CNA::Graphics::ShadowQuality::Low).isSupported();
         const bool hasShadows = device.SupportsShadowSamplingEXT();
         const bool hasIbl     = device.SupportsImageBasedLightingEXT();
         if (!has3D || !hasEffects || !hasShadows || !hasIbl)
@@ -166,7 +170,7 @@ protected:
             std::printf("SKIP: this renderer is missing%s%s%s%s -- a documented capability "
                         "boundary, not a defect\n",
                         has3D ? "" : " 3D rasterization,",
-                        hasEffects ? "" : " shader-source execution,",
+                        hasEffects ? "" : " a shading shadow caster,",
                         hasShadows ? "" : " shadow sampling,",
                         hasIbl ? "" : " image-based lighting,");
             std::exit(77);
