@@ -104,6 +104,23 @@ which must instead match XNA 4.0 exactly.
   **Above the floor**, nothing in this layer may *require* a higher profile without a capability to
   ask about first; that is what keeps ES 3.00 a floor rather than a fiction.
 
+- **The device is HiDef.** `plans/plan_vulkan_modern_graphics.md` `VMG-0004`/`VMG-0005`. Everything
+  here is HiDef work — float and multiple render targets, 4096-texel shadow atlases, 3D LUTs, back-buffer
+  readback — and CNA enforces XNA's Reach profile the way XNA does (2048-texel textures, no volume
+  textures, one render target, no `GetBackBufferData`). A `GraphicsDeviceManager` defaults to Reach and
+  so does the CNAEXT standalone `GraphicsDevice()`, so a game using this layer asks for
+  `GraphicsProfile::HiDef` (where `GraphicsAdapter::IsProfileSupported` offers it). Under Reach the
+  subsystems refuse or fall back; they do not crash. The layer's own tests run on
+  `CnaTest::EngineLayer::HiDefDevice` for this reason.
+- **Filtering float sources: the renderer's fact, not XNA's rule.** `VMG-0006`. XNA's `VerifyCanDraw`
+  makes `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`
+  point-filter-only, and CNA enforces that for every XNA draw (SOFTWARE-217). This layer's own draws —
+  everything through `FullscreenPass` — open `CNA::Internal::EngineLayerFloatFilteringScope`, inside
+  which a filtered read of those formats is allowed exactly when the live renderer filters the format
+  (its per-format `Filterable` fact, or `HalfFloatTextureLinearFiltering` for the half formats). A
+  format the renderer cannot filter is read with `PointClamp` instead. A game's own SpriteBatch or effect
+  draw of a float texture still gets XNA's `NotSupportedException` unless it samples with Point.
+
 ## Float render targets: formats, and what each one means
 
 `plans/plan_modern.md` `MOD-109`–`MOD-111`, `MOD-140`. The HDR pipeline rests entirely on one question —
@@ -171,10 +188,11 @@ wherever the format does. Blending into `Single` and `Vector2` is **renderer- an
 GL requires `EXT_float_blend` for 32-bit float blending, and a single-channel target has no alpha to
 blend with in the first place.
 
-CNA does not enforce this at run time, matching XNA's own laxity: a blend state that a driver cannot
-honour is silently ignored by the driver rather than reported. So the rule is a rule for callers, not
-a check — the engine layer's own passes blend only into `HdrBlendable`/`HalfVector4` targets, and a
-pass that needs a `Single` accumulation buffer writes it with blending off.
+Since SOFTWARE-217 CNA enforces this the way Microsoft XNA 4.0 does: actual blending, or a colour-write
+mask other than `All`, into `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2` or
+`HalfVector4` is refused at the draw; `HdrBlendable` is the deliberately blendable one. The engine
+layer's own passes blend only into `HdrBlendable` targets, and a pass that needs a `Single`
+accumulation buffer writes it with blending off.
 
 ### Per-renderer status
 
