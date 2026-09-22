@@ -2006,6 +2006,23 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return device_ != nullptr; }
 
+        /**
+         * @brief WMG-0016: this renderer really does sample a `Texture3D` from a shader.
+         *
+         * The descriptor binding contract carries volumes at group 1 bindings 8..11 with their
+         * samplers at `binding + 32`, and the generated WGSL declares them as `texture_3d<f32>`;
+         * `BindTexture3D` is what fills them. Left at the interface default until now, which made
+         * `ShaderPackageEXT::selectFor` judge every package with a `SampledTexture3D` requirement
+         * unusable here -- `ColorGradePass`'s volume LUT route was created and then silently
+         * copied its input through, which is the outcome the honesty queries exist to prevent.
+         *
+         * @return True while a device exists.
+         */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override
+        {
+            return device_ != nullptr;
+        }
+
         /** @brief WMG: compute is core WebGPU. @return True. */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override { return device_ != nullptr; }
         /**
