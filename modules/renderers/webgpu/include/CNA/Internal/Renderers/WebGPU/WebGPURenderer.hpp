@@ -2021,6 +2021,61 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         /**
+         * @brief plans/plan_webgpu_modern_graphics.md WMG-0020: inserts a GPU debug label.
+         *
+         * Queued into the ordered stream rather than emitted here, for the reason every other
+         * public graphics command in this renderer is: nothing is recorded until the bind cycle
+         * flushes, so a label emitted at the call would land outside the command stream it is
+         * meant to name. VulkanRenderer queues a degenerate draw record for the same reason.
+         *
+         * @param marker The label. Null or empty inserts nothing.
+         */
+        void SetStringMarkerEXT(const char* marker) override;
+
+        /**
+         * @brief WMG-0020: whether this renderer can emit debug labels at all.
+         *
+         * Core WebGPU has `insertDebugMarker`/`pushDebugGroup`/`popDebugGroup` on every encoder,
+         * so the answer is the device's existence -- unlike Vulkan, where it is whether
+         * `VK_EXT_debug_utils` was available. Named after
+         * `VulkanRenderer::SupportsDebugUtilsLabelsEXT()` so a test can ask both the same way.
+         *
+         * @return True while a device exists.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDebugUtilsLabelsEXT() const noexcept
+        {
+            return device_ != nullptr;
+        }
+
+        /**
+         * @brief WMG-0020: how many `SetStringMarkerEXT` labels this renderer has emitted.
+         * @return The running count since construction.
+         */
+        CNAEXT [[nodiscard]] int GetRecordedDebugMarkerCountEXT() const noexcept
+        {
+            return recordedDebugMarkerCountEXT_;
+        }
+
+        /**
+         * @brief WMG-0020: how many debug groups this renderer has opened.
+         * @return The running count since construction.
+         */
+        CNAEXT [[nodiscard]] int GetRecordedDebugRegionBeginCountEXT() const noexcept
+        {
+            return recordedDebugRegionBeginCountEXT_;
+        }
+
+        /**
+         * @brief WMG-0020: how many debug groups this renderer has closed.
+         * @return The running count since construction; equal to the begin count once the
+         *         frame is recorded, which is what makes the pairing testable.
+         */
+        CNAEXT [[nodiscard]] int GetRecordedDebugRegionEndCountEXT() const noexcept
+        {
+            return recordedDebugRegionEndCountEXT_;
+        }
+
+        /**
          * @brief WMG-0016: this renderer really does sample a `Texture3D` from a shader.
          *
          * The descriptor binding contract carries volumes at group 1 bindings 8..11 with their
@@ -2497,7 +2552,13 @@ namespace CNA::Internal::Renderers::WebGPU
         enum class OrderedKind : std::uint8_t
         {
             Draw,
-            Clear
+            Clear,
+            /// plans/plan_webgpu_modern_graphics.md WMG-0020: a `SetStringMarkerEXT` label, which
+            /// addresses @ref markerCommands_ and whose @ref DrawOrderEntry::family is not read.
+            /// A marker has a public position among the draws exactly as an ordered Clear does,
+            /// but unlike a Clear it is not observable in the pixels, so it never opens a pass of
+            /// its own -- it rides whichever segment it landed in.
+            Marker
         };
 
         struct DrawOrderEntry
@@ -2520,6 +2581,15 @@ namespace CNA::Internal::Renderers::WebGPU
             /// Trailing with a default, so the same three-field aggregate inits stay valid.
             WebGPUOcclusionQueryRenderer* occlusionQuery = nullptr;
         };
+
+        /**
+         * @brief WMG-0020: the labels of this bind cycle's `SetStringMarkerEXT` calls, in order.
+         *
+         * Stored here rather than in the ordered entry because a `DrawOrderEntry` is a small
+         * trivially-copyable record that the stream sorts and erases; a std::string in it would
+         * make every one of those operations allocate.
+         */
+        std::vector<std::string> markerCommands_;
 
         /**
          * @brief REMED-GFX-156: one public GraphicsDevice.Clear() and the aspects it named.
@@ -5282,6 +5352,13 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WMG-0022: group 3 of both PBR pipelines: the params block, the irradiance and
         /// prefiltered cubes and the BRDF table, each with the sampler its slot carried.
         WGPUBindGroupLayout iblBindGroupLayout_ = nullptr;
+        /// WMG-0020: labels emitted, groups opened and groups closed, so a test can measure that
+        /// the labels really reached the command stream and that the groups are balanced. The
+        /// counter shape VulkanRenderer already uses (`recordedDebugMarkerCountEXT_` and its two
+        /// region siblings), because the only marker test in the tree reads it that way.
+        int recordedDebugMarkerCountEXT_ = 0;
+        int recordedDebugRegionBeginCountEXT_ = 0;
+        int recordedDebugRegionEndCountEXT_ = 0;
         /**
          * @brief WMG-0017: the query set of the GPU timer that is currently open, or null.
          *

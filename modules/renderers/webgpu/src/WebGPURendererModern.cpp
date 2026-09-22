@@ -639,11 +639,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         WGPUComputePassDescriptor passDescriptor{};
         passDescriptor.label = Label("CNA WebGPU compute pass");
         WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, &passDescriptor);
+        // WMG-0020: the compute half of the same grouping the render passes carry, so a capture
+        // attributes a dispatch to CNA rather than leaving it loose beside the draws.
+        wgpuComputePassEncoderPushDebugGroup(pass, Label("CNA compute dispatch"));
+        ++recordedDebugRegionBeginCountEXT_;
         wgpuComputePassEncoderSetPipeline(pass, dispatch.pipeline);
         for (std::uint32_t g = 0; g < groups.size(); ++g)
             wgpuComputePassEncoderSetBindGroup(pass, g, groups[g], 0, nullptr);
         wgpuComputePassEncoderDispatchWorkgroups(pass, dispatch.groups[0], dispatch.groups[1],
                                                  dispatch.groups[2]);
+        wgpuComputePassEncoderPopDebugGroup(pass);
+        ++recordedDebugRegionEndCountEXT_;
         wgpuComputePassEncoderEnd(pass);
         wgpuComputePassEncoderRelease(pass);
         SubmitModernEncoderEXT(encoder, std::move(transient), std::move(groups));

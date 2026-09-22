@@ -464,6 +464,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu_modern_graphics.md WMG-0020: GPU debug labels. SetStringMarkerEXT reaches
+    # the command stream as an ordered entry, and the debug groups the renderer opens around its
+    # own render and compute passes are balanced.
+    cna_webgpu_test(cna_test_webgpu_debug_marker webgpu_debug_marker_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DebugMarker COMMAND cna_test_webgpu_debug_marker
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-84: real GPU occlusion queries -- the same quad reads back 0 samples behind an occluder
     # and a full target of samples in front, with two independent per-slot query results.
     cna_webgpu_test(cna_test_webgpu_occlusion_query webgpu_occlusion_query_test.cpp)

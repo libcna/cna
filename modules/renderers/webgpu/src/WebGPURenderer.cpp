@@ -7472,6 +7472,24 @@ namespace CNA::Internal::Renderers::WebGPU
                                             OrderedKind::Clear});
     }
 
+    void WebGPURenderer::SetStringMarkerEXT(const char* marker)
+    {
+        // plans/plan_webgpu_modern_graphics.md WMG-0020. An empty label is nothing to name, and
+        // WebGPU would reject it; VulkanRenderer::SetStringMarkerEXT drops it the same way.
+        if (marker == nullptr || marker[0] == '\0') return;
+        if (TraceDrawOrder())
+        {
+            std::fprintf(stderr, "[wgpu-order] enqueue #%zu marker=\"%s\"\n",
+                         drawOrder_.size(), marker);
+        }
+        markerCommands_.emplace_back(marker);
+        drawOrder_.push_back(DrawOrderEntry{DrawFamily::Sprite,
+                                            static_cast<std::uint32_t>(markerCommands_.size() - 1),
+                                            static_cast<std::uint32_t>(drawOrder_.size()),
+                                            OrderedKind::Marker});
+        framePending_ = true;
+    }
+
     void WebGPURenderer::DiscardQueuedSprites()
     {
         spriteCommands_.clear();
@@ -7483,6 +7501,8 @@ namespace CNA::Internal::Renderers::WebGPU
         drawOrder_.erase(std::remove_if(drawOrder_.begin(), drawOrder_.end(),
                                         [](const DrawOrderEntry& e)
                                         {
+                                            // WMG-0020: a Marker entry leaves `family` at its
+                                            // default too, so the `kind` test guards it as well.
                                             return e.kind == OrderedKind::Draw &&
                                                    e.family == DrawFamily::Sprite;
                                         }),
@@ -7528,6 +7548,10 @@ namespace CNA::Internal::Renderers::WebGPU
                 }
                 continue;
             }
+            // WMG-0020: a Marker is not observable in the pixels, so unlike a Clear it never
+            // forces a boundary -- it simply extends the segment it landed in, and is emitted
+            // inline at replay. A marker before any draw starts the segment, which is what keeps
+            // a label that names the whole pass inside that pass.
             if (segments.back().entryCount == 0)
                 segments.back().firstEntry = i;
             segments.back().entryCount = i + 1 - segments.back().firstEntry;
@@ -7669,7 +7693,20 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuRenderPassEncoderSetStencilReference(pass,
                                                      static_cast<std::uint32_t>(referenceStencil_));
 
+            // WMG-0020: a debug group naming this pass, so a capture shows the segment's draws
+            // and its labels grouped under the destination that produced them -- the role
+            // VulkanRenderer's own beginDebugRegion/endDebugRegion lambdas play. Opened after the
+            // pass state above so the group contains the draws rather than the setup, and closed
+            // before End(), which WebGPU requires: a pass encoder's group stack must be empty.
+            const std::string passLabel =
+                std::string("CNA ") + destination.traceName + " pass " + std::to_string(s);
+            wgpuRenderPassEncoderPushDebugGroup(pass, StringView(passLabel.c_str()));
+            ++recordedDebugRegionBeginCountEXT_;
+
             ReplayDrawsInOrder(pass, destination, segment.firstEntry, segment.entryCount);
+
+            wgpuRenderPassEncoderPopDebugGroup(pass);
+            ++recordedDebugRegionEndCountEXT_;
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);
         }
@@ -7705,6 +7742,7 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingDrawsUseModernResourcesEXT_ = false;
         drawOrder_.clear();
         clearCommands_.clear();
+        markerCommands_.clear();  // WMG-0020: per bind cycle, exactly as the clears are.
         spriteCommands_.clear();
         coloredDrawCommands_.clear();
         texturedDrawCommands_.clear();
@@ -9832,6 +9870,19 @@ namespace CNA::Internal::Renderers::WebGPU
                              destination.traceName, issued, entry.order, DrawFamilyName(entry.family),
                              entry.index);
             }
+            // WMG-0020: a label rides the pass it landed in, at its own public position among
+            // the draws. It is not a draw, so it is emitted before the counters below and does
+            // not advance either of them -- nativeDrawIssueCount_ is what WEBGPU-115 measures a
+            // refused draw's "nothing reached the GPU" with, and a label is not something that
+            // reached the GPU as work.
+            if (entry.kind == OrderedKind::Marker)
+            {
+                wgpuRenderPassEncoderInsertDebugMarker(
+                    pass, StringView(markerCommands_[i].c_str()));
+                ++recordedDebugMarkerCountEXT_;
+                continue;
+            }
+
             // REMED-GFX-172, trace only: both positions the multi-texture sampler trace reports.
             state.publicOrder = entry.order;
             state.replayPosition = issued;
