@@ -155,7 +155,7 @@ namespace CNA::Graphics {
         }
 
         effect_->Apply();
-        if (effect_->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV)
+        if (CNA::UsesDescriptorBindingContractEXT(effect_->GetSelectedShaderLanguageEXT()))
         {
             const bool transmits = extensions_ != nullptr && extensions_->isTransmissionEnabled();
             if (transmits && opaqueFrame_ == nullptr)
