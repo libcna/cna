@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -105,6 +106,30 @@ namespace CnaTest::EngineLayer {
     {
         return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
             && device.ExecutesShaderEffectSourceEXT();
+    }
+
+    /**
+     * @brief Whether this renderer runs shader source written as the GLSL text a test types inline.
+     *
+     * @ref RunsShaderSource answers whether the source handed to `ShaderEffect` determines the
+     * pixels; it says nothing about which language that source must be written in. The two
+     * questions were the same while every renderer that ran source ran GLSL -- Vulkan answers no
+     * to both, because it takes SPIR-V -- and they came apart with WebGPU, which genuinely runs
+     * the source it is given and requires WGSL. A test that types GLSL into a `ShaderEffect` is
+     * then asking a question that renderer cannot be asked; it is not observing a defect in it.
+     * Such a test asks this instead, and a test that hands over a shader package asks
+     * @ref RunsShaderSource as before.
+     *
+     * @param device The device to probe.
+     * @return True when inline GLSL source is what the renderer compiles and runs.
+     */
+    [[nodiscard]] inline bool RunsGlslShaderSource(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
+    {
+        using CNA::Internal::Renderers::ShaderDialectEXT;
+        const ShaderDialectEXT dialect = device.GetShaderDialectEXT();
+        return RunsShaderSource(device)
+            && (dialect == ShaderDialectEXT::GlslEs || dialect == ShaderDialectEXT::GlslDesktop);
     }
 
     /**
@@ -362,6 +387,20 @@ namespace CnaTest::EngineLayer {
         if (!::CnaTest::EngineLayer::RunsShaderSource(device))                                     \
             GTEST_SKIP() << "this renderer does not run custom shader source, so the effect this "  \
                             "test depends on would be accepted and then ignored";                  \
+    } while (false)
+
+    /**
+     * @brief Skips the current test when the renderer will not run inline GLSL shader source.
+     *
+     * The guard for a test that types a GLSL shader into a `ShaderEffect` rather than handing
+     * over a shader package: see @ref RunsGlslShaderSource for why running source and running
+     * *this* source are two questions.
+     */
+#define CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(device)                                               \
+    do {                                                                                           \
+        if (!::CnaTest::EngineLayer::RunsGlslShaderSource(device))                                 \
+            GTEST_SKIP() << "this renderer does not compile the inline GLSL this test writes, so " \
+                            "the effect it depends on would never run";                            \
     } while (false)
 
     /** @brief Skips the current test when the renderer cannot bind an offscreen render target. */

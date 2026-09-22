@@ -255,7 +255,7 @@ Spread ReadDepth(GraphicsDevice& gd, DepthNormalPrepass& prepass)
 bool CanBuildTheFailingShape(GraphicsDevice& gd)
 {
     return CnaTest::EngineLayer::CanReadRenderTargets(gd)
-        && CnaTest::EngineLayer::RunsShaderSource(gd)
+        && CnaTest::EngineLayer::RunsGlslShaderSource(gd)
         && gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle);
 }
 

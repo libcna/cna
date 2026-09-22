@@ -168,7 +168,7 @@ Verdict Compare(GraphicsDevice& gd, const Microsoft::Xna::Framework::Graphics::D
 TEST(HalfFloatDepthSamplingTest, TheLayerDoesNotDependOnSamplingHalfFloatDepthInALoop)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    if (!CnaTest::EngineLayer::RunsShaderSource(gd))
+    if (!CnaTest::EngineLayer::RunsGlslShaderSource(gd))
         GTEST_SKIP() << "this renderer does not execute effect source";
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle))
         GTEST_SKIP() << "no half-float render target to compare against";

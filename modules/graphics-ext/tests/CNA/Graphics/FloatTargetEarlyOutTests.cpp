@@ -177,7 +177,7 @@ TEST(FloatTargetEarlyOutTest, FxaaStillFiltersOnEveryFormatTheLayerRendersInto)
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
 
     struct Candidate { const char* name; SurfaceFormat format; };
     const Candidate candidates[] = {
@@ -297,7 +297,7 @@ TEST(FloatTargetEarlyOutTest, TheGuardAndLoopShapeOnItsOwnDoesNotReproduceIt)
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
 
     // A deterministic spread of offsets, in the +Z hemisphere like SSAO's own.
     std::vector<float> kernel;

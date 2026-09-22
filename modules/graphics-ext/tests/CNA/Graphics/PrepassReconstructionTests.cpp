@@ -159,7 +159,7 @@ TEST(PrepassReconstructionTest, TheReconstructedPositionIsWhereTheGeometryWasDra
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))
@@ -206,7 +206,7 @@ TEST(PrepassReconstructionTest, TheUnwrittenSkyReadsAsTheFarPlaneAndNotAsTheEye)
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))

@@ -916,7 +916,7 @@ TEST(ShaderEffectFactoryTest, ClearReleasesEverything)
 TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    if (!CnaTest::EngineLayer::RunsShaderSource(gd))
+    if (!CnaTest::EngineLayer::RunsGlslShaderSource(gd))
         GTEST_SKIP() << "this renderer compiles no shader source, so there is no success to see";
 
     ShaderEffect effect(gd, kVertex, kFragment);
