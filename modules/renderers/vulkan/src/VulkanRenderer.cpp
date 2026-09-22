@@ -5490,15 +5490,28 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-144: see CreateRenderPass(). COLOR_ATTACHMENT_OUTPUT must lead this mask so that
         // vkCmdBeginRenderPass's automatic initialLayout transition is ordered after the acquire
         // semaphore, which SubmitFrame waits at exactly that stage. Identical at all six sites.
+        //
+        // plans/plan_vulkan_modern_graphics.md VMG-0013: the depth half, which the single-target
+        // render-target passes above already carry and this one did not. The depth attachment's
+        // UNDEFINED -> DEPTH_STENCIL_ATTACHMENT_OPTIMAL transition (and its CLEAR) is a write, and
+        // a depth image is routinely shared by consecutive passes -- the depth/normal prepass runs
+        // its MRT pass right after one on the same depth buffer. Without the previous pass's
+        // fragment-test writes in the source scope, synchronization validation reported
+        // WRITE_AFTER_WRITE on attachment 2 at every such vkCmdBeginRenderPass.
         deps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-                                  VK_PIPELINE_STAGE_TRANSFER_BIT;
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                                   VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
         deps[1].srcSubpass      = 0;
         deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
