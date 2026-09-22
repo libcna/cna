@@ -429,6 +429,25 @@ Two failures *were* this workstream's, and both are fixed rather than explained:
 (see `WMG-0017`) and the six profile rows of `WMG-0005`, which stopped dying early and then ran on
 to a Reach refusal until the profile was requested where it can still be heard.
 
+Three parity fixtures also fail, and they are not this workstream's either:
+
+* `WebGPU_Parity_dual_texture_terms` fails only its **null-texture** claims — *"null Texture samples
+  XNA opaque black: mean=(200,180,120) expected=(0,0,0)"*. Microsoft XNA reads an unbound
+  stock-effect texture as opaque black, and the Vulkan renderer implements exactly that
+  (`VulkanRenderer.cpp`, "default opaque black 2D"). **WebGPU has no such handling at all** — the
+  string does not appear in its source — so the fixture has failed since that rule reached the
+  fixture (`e05b3d0f0`, 2026-09-13, an ancestor of this workstream's base). It is a real WebGPU
+  gap, recorded here rather than claimed, and it is a *classic*-API gap, outside this workstream.
+* `WebGPU_Parity_compressed_cube` is the fixture whose oracle is a BC cube against an RGBA8 cube
+  within one renderer, and `TextureCubeTest.SetDataCompressedBytesUploadsRequestedFaceMip` is a
+  failure in this workstream's own pre-work classic baseline — the same compressed-cube gap.
+* `WebGPU_Parity_backbuffer_msaa` was measured the same way, and so were the other two: the base
+  commit's `modules/` and `tools/` checked out in place, `cmake-build-webgpu` rebuilt, **0 of 3
+  passed there**.
+
+So **all fourteen** failures in `ctest -R '^WebGPU'` are pre-existing, each established by
+measurement or by the project's own record, and none by assertion.
+
 ---
 
 ## What this workstream did not do
