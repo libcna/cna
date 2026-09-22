@@ -32,7 +32,9 @@ barriers, descriptor sets, queues or native handles (ADR 0001, `MOD-2202`), so n
 | WMG-0010 | Engine defect: two sites asked the language when they meant the contract | 🟩 |
 | WMG-0011 | WebGPU defect: a sprite custom effect was never applied | 🟩 |
 | WMG-0012 | Test-side: a test that types GLSL asks whether this renderer runs GLSL | 🟩 |
-| WMG-0013 | Indirect draws | 🟨 |
+| WMG-0013 | Indirect draws | 🟩 |
+| WMG-0014 | Shadow reception in the stock lit families | 🟩 |
+| WMG-0015 | Packages and test language lists that had not caught up with WGSL | 🟩 |
 
 ---
 
@@ -282,3 +284,85 @@ Both renderer-neutral: on VULKAN and OPENGLES3 every one of these tests keeps th
 | 4 | `VolumetricFogTest` cannot select both of its packages |
 | 3 | `EffectPassTest` / `ShaderPackageSelectionEXTTest` language-list expectations |
 | 27 | skipped on Vulkan too (the inline-GLSL probes of WMG-0012 and the shared capability skips) |
+
+## WMG-0013 — indirect draws
+
+`SupportsIndirectDrawEXT` was false, so twelve tests declined to run: six in `IndirectDrawTest` and
+six in `GpuInstanceCullerTest`, whose whole point is a draw whose counts were produced by compute
+and never came back to the CPU.
+
+The route is the one Vulkan takes, and it is short here because every `Queue*Draw` already snapshots
+the **complete** vertex and index window rather than the primitive count's worth. So the draw is
+queued through the ordinary path with a legal zero primitive count — purely to capture this call's
+effect, declaration, pipeline state, viewport and scissor — and the argument buffer is then attached
+to the single command that produced. At replay the family's own draw call becomes
+`drawIndirect`/`drawIndexedIndirect`, and the command's CPU counts are not read at all.
+
+What that shifts, and where it is handled: a zero vertex count is every family's "nothing to draw"
+signal, so each of those ten guards now asks whether this is an indirect draw before believing it.
+The argument buffer's `StorageBuffer` record is retained by `shared_ptr` for the life of the command,
+so a `Dispose()` between the public call and the flush cannot leave a freed `WGPUBuffer` in a queued
+draw. Refused by name: a compiled (FX) effect, a wireframe draw (its route rewrites a draw's own
+triangles into line segments at queue time, and an indirect draw's triangles are not known then), a
+buffer not declared with `IndirectArguments` usage, and a buffer belonging to another device.
+
+`SupportsIndirectDrawEXT` answers from the device: `drawIndirect` is core WebGPU, but a non-zero
+`firstInstance` in an argument block needs the optional `IndirectFirstInstance` feature, which the
+modern API's argument structs carry, so the answer is whether the device was created with it.
+
+Measured: `CnaGraphicsExtTests` on WEBGPU 879 → **890** passes, 82 → **71** skips, 0 failures. The
+twelfth test, `ARendererWithoutTheCapabilityRefusesByName`, correctly skips on a renderer that now
+has the capability, exactly as it does on Vulkan and EasyGL.
+
+## WMG-0014 — shadow reception in the stock lit families
+
+`SupportsShadowSamplingEXT` was false, and 31 tests skipped on it. The four families Vulkan answers
+for now answer here: `BasicEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect`.
+
+`webgpu_shaders::kShadowSampling` is the WGSL twin of the Vulkan renderer's `shadow_sampling.glsl`,
+function for function and constant for constant, at **group 2** — which every stock family had free,
+and which is deliberately identical across families exactly as Vulkan's set 1 is. WGSL module-scope
+declarations may appear in any order, so it is appended to a shader's source rather than spliced
+into it. The uniform block is the same 132 floats the Vulkan renderer fills, filled by the same
+arithmetic, so the two renderers answer a shadow query from identical numbers rather than from two
+readings of one description.
+
+Three things this needed that are particular to WebGPU:
+
+- **`textureSampleLevel`, not `textureSample`.** Every tap sits inside a loop with a `continue` and
+  behind early returns — non-uniform control flow, where WGSL forbids an implicit-derivative sample.
+  The atlas has one level, so level 0 is the same tap without the restriction.
+- **The atlas is read `v`-flipped, as on Vulkan and unlike EasyGL.** The caster writes
+  `gl_Position.y = -lightSpace.y` for Vulkan's clip space, and naga's SPIR-V frontend negates `y`
+  again in the entry point it generates — which is exactly how a Vulkan-authored shader lands
+  correctly in WebGPU's opposite clip space. Two negations leave the rasterised atlas in Vulkan's
+  orientation, so it is read Vulkan's way.
+- **A draw with a shadow map takes the per-pixel path** whatever `PreferPerPixelLighting` says. The
+  Gouraud sibling computes its lighting in the vertex stage, where a per-pixel shadow lookup has
+  nowhere to go. Vulkan has this rule already (`VulkanRenderer.cpp`, `d.preferVertexLit`); without
+  it here, `ShadowsSurviveTheDefaultPerVertexLighting` and eleven others failed with no shadow at
+  all — the most useful single failure of this task, because it named the defect exactly.
+
+A 1×1 white texture stands in for an absent map, because a pipeline statically uses every binding
+its layout declares; white reads as "nothing occludes", which is what the parameter block already
+says when the shadow is off.
+
+Measured: `CnaGraphicsExtTests` on WEBGPU 890 → **921** passes, 71 → **40** skips, 0 failures. All
+17 `ShadowVisibilityTest`, 7 `CascadedShadowVisibilityTest` and 7 `PunctualShadowVisibilityTest`
+cases pass.
+
+## WMG-0015 — packages and language lists that had not caught up with WGSL
+
+Four more places named the languages that existed when they were written:
+
+- `VolumetricFogPass`'s package helper took a SPIR-V fragment and no WGSL one, so a WGSL renderer
+  could select the vertex stage and not the fragment — the package was unusable and
+  `isSupported()` was false, skipping four tests.
+- `PortableTintShaderPackage` and `TransparencyExampleShaderPackage` offered GLSL ES and SPIR-V only.
+  Both also indexed `kPayloads` by position, and regenerating the packages had shifted those
+  positions — the labels were reading the wrong provenance row. Fixed with the WGSL variants.
+- `ComputeShaderTests`' two packages offered GLSL ES and SPIR-V compute only (five tests), and
+  `EffectPassTest` / `ShaderPackageSelectionEXTTest` enumerated languages to decide whether a
+  renderer had anything to run (three tests).
+
+All renderer-neutral: nothing an existing renderer selects changes.
