@@ -366,3 +366,52 @@ Four more places named the languages that existed when they were written:
   renderer had anything to run (three tests).
 
 All renderer-neutral: nothing an existing renderer selects changes.
+
+---
+
+## What this workstream did not do
+
+Recorded here rather than left for a reader to discover by running the suite.
+
+**Not implemented, and answering a truthful `false`:**
+
+* **Image-based lighting.** `SupportsImageBasedLightingEXT()` is false: the WGSL PBR program has no
+  IBL path, so an irradiance cube, a prefiltered specular cube and a BRDF LUT set on an effect are
+  accepted and ignored — the documented convention, not silence. Vulkan and EasyGL answer true.
+* **Debug markers.** `SetStringMarkerEXT` is not wired to
+  `wgpuRenderPassEncoderInsertDebugMarker`/`PushDebugGroup`.
+* **GPU timers end to end.** `CreateGpuTimerEXT` is implemented and the query set, the two empty
+  compute passes and the async map/poll are in place, but the workstream never measured a timing
+  against a known-duration dispatch, so the number it returns is not yet evidence of anything.
+* **Instance streams for a descriptor-contract effect.** An engine-layer `ShaderEffect` draw takes
+  the single-stream route; a split per-instance stream is refused by name, as it was at base.
+
+**Not measured, so not claimed:**
+
+* **Sanitizers.** No ASan/UBSan/LSan build of this renderer was made or run.
+* **The SDL-free configuration.** `CNA_ENABLE_SDL=OFF` with `CNA_PLATFORM=WAYLAND` or `X11` was not
+  configured, so no `ldd`/`readelf` evidence exists that a modern WebGPU binary links no SDL. The
+  tree used here links SDL3 because MojoShader (the classic compiled-effect route) resolves it.
+* **The native X11 path.** Everything here ran on CNA's Wayland backend inside the private
+  compositor. The X11 backend was not exercised with WebGPU.
+* **The browser/Emscripten path.** The WGSL the packages now carry was never compiled under
+  `emdawnwebgpu`; only the native wgpu-native route was run.
+* **Stress and long-run stability.** The existing `webgpu_resource_lifetime_stress_test` was not
+  extended to the modern resources, and no long-running soak was done.
+
+**Found and deliberately not fixed, because it is outside this renderer:**
+
+* `D3D9SpriteBatch.cpp:388`, `D3D11SpriteBatch.cpp:469`, `D3D12SpriteBatch.cpp:579` still use the
+  pre-`SOFTWARE-255` `.` spelling of `EffectPassCollection::operator[]`, exactly as the WebGPU sites
+  did before `WMG-0001`. Those are Windows renderers and were not built or touched here.
+* `vulkan_mrt_mip_finalization_test.cpp` and `vulkan_cube_face_readback_dependency_test.cpp` both
+  `#error` unless `CNA_RENDERER_VULKAN` is defined, which in a multi-renderer tree is only the
+  **default** renderer's macro. So in `cmake-build-webgpu` (default WEBGPU, Vulkan compiled in) they
+  fail to compile. They are registered by CMake without a default-renderer condition; every other
+  target in that tree builds. Pre-existing, unrelated to this workstream, and a Vulkan-examples
+  CMake question rather than a WebGPU one.
+
+**A trap worth recording for the next session:** compiling a large translation unit while the
+private-compositor test run is live got the test process OOM-killed part-way through
+`DepthNormalPrepassTest` — silently, with nothing in the log but `Killed`. Build, then test; never
+both.
