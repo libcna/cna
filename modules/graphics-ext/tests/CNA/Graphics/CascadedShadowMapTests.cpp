@@ -22,7 +22,9 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -39,6 +41,7 @@ using Microsoft::Xna::Framework::MathHelper;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 
 constexpr float kNear = 1.0f;
 constexpr float kFar  = 100.0f;
@@ -304,6 +307,28 @@ TEST(CascadedShadowMapTest, TheAtlasIsOneTargetWideEnoughForEveryCascade)
     ASSERT_NE(cascades.getShadowTexture(), nullptr);
     EXPECT_EQ(cascades.getShadowTexture()->getWidthProperty(), cascades.getCascadeSize() * 3);
     EXPECT_EQ(cascades.getShadowTexture()->getHeightProperty(), cascades.getCascadeSize());
+}
+
+TEST(CascadedShadowMapTest, AnAtlasWiderThanTheHiDefCeilingIsStillAllocated)
+{
+    // Three High cascades side by side are 6144 texels wide and four are 8192 -- past XNA's HiDef
+    // ceiling of 4096. The atlas is an engine-layer resource, held to what the renderer really
+    // allocates (EngineLayerTextureSizeScope); every test above used Low, which is how the
+    // enforced XNA ceiling came to refuse every High atlas without a test noticing.
+    CnaTest::EngineLayer::HiDefDevice gd;
+    const int size = ShadowMap::sizeForQuality(ShadowQuality::High);
+    if (gd.GetMaxTextureDimension() < size * 4)
+        GTEST_SKIP() << "the renderer allocates at most " << gd.GetMaxTextureDimension();
+
+    CascadedShadowMap three(gd, ShadowQuality::High, 3);
+    ASSERT_NE(three.getShadowTexture(), nullptr);
+    EXPECT_EQ(three.getShadowTexture()->getWidthProperty(), size * 3);
+    CascadedShadowMap four(gd, ShadowQuality::High, 4);
+    ASSERT_NE(four.getShadowTexture(), nullptr);
+    EXPECT_EQ(four.getShadowTexture()->getWidthProperty(), size * 4);
+
+    // The exemption is the atlas's alone: a game's own render target keeps XNA's ceiling.
+    EXPECT_THROW((void)RenderTarget2D(gd, size * 3, size), System::NotSupportedException);
 }
 
 TEST(CascadedShadowMapTest, EachCascadeGetsAFullQualityMapRatherThanAShareOfOne)

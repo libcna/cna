@@ -61,6 +61,7 @@ namespace CNA::Internal
     class StorageBufferGraphicsDeviceTestPeer;
     class GraphicsDevicePlatformWindowTestPeer;
     class EngineLayerFloatFilteringScope;
+    class EngineLayerTextureSizeScope;
 }
 
 namespace Microsoft::Xna::Framework
@@ -1872,6 +1873,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /// Open CNA::Internal::EngineLayerFloatFilteringScope instances (VMG-0006); zero for every
         /// ordinary XNA draw, which then keeps XNA's point-filter-only rule for float formats.
         int engineLayerFloatFilteringDepth_ = 0;
+        /// Open CNA::Internal::EngineLayerTextureSizeScope instances; zero for every ordinary XNA
+        /// render target, which then keeps XNA's profile ceiling on its edge length.
+        int engineLayerTextureSizeDepth_ = 0;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
         /// plans/plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
@@ -2270,6 +2274,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // filter a float/half source the live renderer can filter, which XNA's VerifyCanDraw
         // refuses for XNA draws (SOFTWARE-217). The scope is the only way to open that exemption.
         friend class CNA::Internal::EngineLayerFloatFilteringScope;
+        // The engine layer's own render targets (a cascade atlas) may exceed XNA's profile ceiling
+        // up to what the renderer allocates; the scope is the only way to open that exemption.
+        friend class CNA::Internal::EngineLayerTextureSizeScope;
         // plans/plan_x11.md X11-0104. GraphicsDevicePlatformWindowTests reproduces what
         // GameWindow.ClientSizeChanged runs -- a viewport refresh driven from the frame's event
         // pump -- and GameWindow is a friend above precisely because that call is internal. The

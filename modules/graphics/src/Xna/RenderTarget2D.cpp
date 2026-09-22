@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Graphics/EngineLayerTextureSize.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #if CNA_DIAGNOSTICS_LEVEL >= 1
 #include "CNA/Internal/Graphics/DiagnosticResource.hpp"
@@ -70,8 +71,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // exception with a renderer-specific failure.
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
-        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
+        const int maxSize = CNA::Internal::EngineLayerTextureSizeScope::MaxRenderTargetSize(device);
         if (width > maxSize || height > maxSize)
         {
             throw System::NotSupportedException(

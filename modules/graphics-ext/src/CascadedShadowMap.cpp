@@ -6,6 +6,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
+#include "CNA/Internal/Graphics/EngineLayerTextureSize.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -189,10 +190,16 @@ namespace CNA::Graphics {
         // target, and DiscardContents means exactly what it says: binding it for cascade 1 throws
         // away cascade 0. The symptom is an atlas holding only whichever cascade was drawn last,
         // which still renders and still looks like a shadow map.
-        atlas_ = std::make_unique<RenderTarget2D>(device, cascadeSize_ * cascadeCount_,
-                                                   cascadeSize_, false, format,
-                                                   DepthFormat::Depth24, 0,
-                                                   RenderTargetUsage::PreserveContents);
+        //
+        // Side by side, the atlas is wider than XNA's HiDef ceiling of 4096 from three High
+        // cascades up; it is an engine-layer resource, held to what the renderer really allocates.
+        {
+            CNA::Internal::EngineLayerTextureSizeScope engineAllocation(device);
+            atlas_ = std::make_unique<RenderTarget2D>(device, cascadeSize_ * cascadeCount_,
+                                                       cascadeSize_, false, format,
+                                                       DepthFormat::Depth24, 0,
+                                                       RenderTargetUsage::PreserveContents);
+        }
 
         const bool canRaster  = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
         const ShaderPackageEXT casterPackage =
