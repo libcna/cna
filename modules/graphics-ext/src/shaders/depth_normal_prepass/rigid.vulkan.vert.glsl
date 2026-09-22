@@ -30,6 +30,12 @@ void main()
     vec4 view = uView * world;
     gl_Position = uProjection * view;
     vCurrentClip = gl_Position;
+    // plans/plan_street.md STREET-0006: the Vulkan renderer's convention for every 3D vertex
+    // program (pbr3d.vert.glsl, REMED-GFX-011) -- D3D-style clip space into Vulkan's, whose Y
+    // points down. Without it the prepass images were the scene mirrored top to bottom, so SSAO
+    // and every depth consumer read the wrong texel, and the mirrored winding culled front faces.
+    // After vCurrentClip, which stays in the convention the velocity output is defined in.
+    gl_Position.y = -gl_Position.y;
     vPreviousClip = uPreviousViewProjection * (uPreviousWorld * vec4(aPosition, 1.0));
     vViewNormal = normalize(mat3(uView) * mat3(uWorld) * aNormal);
     vViewDepth = clamp(-view.z / uPrepassScalars[0], 0.0, 1.0);

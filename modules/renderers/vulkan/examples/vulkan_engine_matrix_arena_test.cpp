@@ -12,9 +12,13 @@
 // 1500 prepass draws in one frame, each placed in its own 4x4 cell of a 256x256 target by
 // its `uWorld` engine matrix alone:
 //
-//   A  every cell was written -- each draw really used its own world matrix
+//   A  every cell holds the +X normal the quad writes, and a cell no draw reached does not --
+//      each draw really used its own world matrix
 //   B  the frame retired at most a handful of buffers, not one per draw
 //   C  the validation layer stayed silent
+//   D  (STREET-0006) the prepass lands where a stock effect draws the same geometry: the prepass
+//      images used to be the scene mirrored top to bottom on Vulkan, which a test reading back
+//      only the prepass cannot see
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = skipped (no prepass on this device).
 
@@ -25,8 +29,10 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
@@ -34,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
@@ -134,27 +141,69 @@ protected:
         prepass.getNormalTexture()->GetData(normals.data(), static_cast<int>(normals.size()));
         const std::uint64_t retiredAfter = Renderer().GetRetiredBufferCountEXT();
 
-        // Anything never drawn over is the cleared value; the last row of cells is never drawn.
-        const Color cleared = normals[static_cast<std::size_t>(kSize - 2) * kSize + kSize - 2];
+        // The quads face +X, which the prepass encodes as (1, 0.5, 0.5); what it clears to is
+        // nothing like that.
+        const auto written = [&](int x, int y) {
+            const Color c = normals[static_cast<std::size_t>(y) * kSize + x];
+            return c.getRProperty() > 200 && c.getGProperty() > 100 && c.getGProperty() < 160
+                && c.getBProperty() > 100 && c.getBProperty() < 160;
+        };
+        const auto centre = [](int cell, int& x, int& y) {
+            x = (cell % kColumns) * kCell + kCell / 2;
+            y = (cell / kColumns) * kCell + kCell / 2;
+        };
         int missing = 0;
         int firstMissing = -1;
         for (int i = 0; i < kDraws; ++i) {
-            const int x = (i % kColumns) * kCell + kCell / 2;
-            const int y = (i / kColumns) * kCell + kCell / 2;
-            if (normals[static_cast<std::size_t>(y) * kSize + x] == cleared) {
+            int x = 0, y = 0;
+            centre(i, x, y);
+            if (!written(x, y)) {
                 if (firstMissing < 0) firstMissing = i;
                 ++missing;
             }
         }
-        check(missing == 0, "A every draw landed in its own cell",
+        int lx = 0, ly = 0;
+        centre(kColumns * kColumns - 1, lx, ly);   // the last cell; no draw reaches it
+        check(missing == 0 && !written(lx, ly), "A every draw landed in its own cell",
               std::to_string(kDraws - missing) + "/" + std::to_string(kDraws) + " cells written"
                   + (firstMissing >= 0 ? "; first missing draw " + std::to_string(firstMissing)
-                                       : std::string()));
+                                       : std::string())
+                  + (written(lx, ly) ? "; the undrawn last cell is written too" : ""));
 
         const std::uint64_t retired = retiredAfter - retiredBefore;
         check(retired < 16, "B the per-draw world matrix did not cost a buffer per draw",
               std::to_string(retired) + " buffer(s) retired over "
                   + std::to_string(kDraws * prepass.getPassCount()) + " draws");
+
+        {
+            // The same first quad through BasicEffect into an ordinary render target.
+            RenderTarget2D stock(dev, kSize, kSize, false, SurfaceFormat::Color,
+                                 DepthFormat::Depth24);
+            dev.SetRenderTarget(&stock);
+            dev.Clear(Color(0, 0, 0, 255));
+            BasicEffect fx(dev);
+            fx.setWorldProperty(CellWorld(0));
+            fx.setViewProperty(view);
+            fx.setProjectionProperty(projection);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.SetVertexBuffer(&vb);
+            fx.Apply();
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetRenderTarget(nullptr);
+            std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize);
+            stock.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            int x = 0, y = 0;
+            centre(0, x, y);
+            const bool stockHere =
+                pixels[static_cast<std::size_t>(y) * kSize + x].getRProperty() > 128;
+            const bool stockMirrored =
+                pixels[static_cast<std::size_t>(kSize - 1 - y) * kSize + x].getRProperty() > 128;
+            check(stockHere && !stockMirrored && written(x, y),
+                  "D the prepass and a stock effect put the same quad in the same place",
+                  std::string("stock ") + (stockHere ? "at" : "not at") + " row "
+                      + std::to_string(y) + (stockMirrored ? " (and mirrored)" : "")
+                      + ", prepass " + (written(x, y) ? "at" : "not at") + " it");
+        }
 
         const auto& messages = Renderer().GetValidationMessagesEXT();
         check(messages.empty(), "C no validation messages",

@@ -60,7 +60,11 @@ void main()
             break;
 
         vec3 samplePosition = tbn * uSsaoKernel[i];
-        vec2 sampleUv = TexCoord + samplePosition.xy * uSsaoScalars[0];
+        // plans/plan_street.md STREET-0006: the kernel is in view space, whose Y points up, and a
+        // Vulkan render target's texture coordinates run down from its top row -- the GL variant
+        // gets the same sign from GL's bottom-up storage. Only the prepass being stored mirrored
+        // made the unnegated offset look right, while the result landed mirrored on the scene.
+        vec2 sampleUv = TexCoord + vec2(samplePosition.x, -samplePosition.y) * uSsaoScalars[0];
         float sampleDepth = cnaDecodeLinearDepth(textureLod(texture1, sampleUv, 0.0));
         if (sampleDepth <= 0.0)
             continue;

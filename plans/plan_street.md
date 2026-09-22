@@ -18,6 +18,7 @@ are fixed here, on the layer they belong to, with a regression test.
 | STREET-0003 | Vulkan: the first 3D draw refused -- the lazily created default white could not get a descriptor set | ✅ |
 | STREET-0004 | Vulkan: a frame with more stock draws than a uniform ring holds read past the buffer and lost the device | ✅ |
 | STREET-0005 | Vulkan: an engine-layer effect allocated device memory on every draw (shadow pass 14.8 s a frame) | ✅ |
+| STREET-0006 | Vulkan: the depth/normal prepass was the scene mirrored top to bottom; SSAO darkened mirrored geometry | ✅ |
 
 ---
 
@@ -119,6 +120,37 @@ rebuilds the set once that chunk is no longer current, so no set can outlive the
 Measured on cna-street: 23.8 fps (shadow 37 ms), probe bake 20 s. **Test:**
 `Vulkan_EngineMatrixArena` -- 1500 prepass draws placed only by `uWorld` all land in their own cells
 and retire 0 buffers; the old renderer retires 1499.
+
+## STREET-0006 — the Vulkan prepass was mirrored, and SSAO leaned on it
+
+**Symptom.** cna-street on Vulkan showed a translucent ghost of the city over itself: roofs doubled
+from above the junction, dark rectangles with vertical stripes on the asphalt, a pillar's outline
+across a pedestrian's shirt. `--no-ssao` (which also skips the prepass) removed all of it.
+
+**Root cause.** Every stock 3D vertex program in the Vulkan renderer ends with
+`gl_Position.y = -gl_Position.y` (REMED-GFX-011): it takes D3D-style clip space into Vulkan's, and
+the pipelines' `frontFace` (clockwise) assumes it. The engine layer's SPIR-V prepass programs
+(`depth_normal_prepass/{rigid,skinned}.vulkan.vert.glsl`) did not, so the depth, normal and velocity
+images were the scene mirrored top to bottom, with mirrored winding. The SSAO estimate only ever
+compares the prepass with itself, and its kernel offsets view-space Y straight into texture Y -- which
+agrees with GL's bottom-up storage, and so also with the mirrored image -- so it "worked", and its
+result was composed mirrored over the scene. The consumers that combine the prepass with the scene
+(aerial perspective, contact shadows, SSR, decals) are written for top-down storage and were wrong
+against a real prepass. `CNAEXT_Showcase` passed on both counts: it counts darkened pixels.
+Measured: a quad drawn by BasicEffect at the top of a target and the same quad drawn by the prepass
+landed at opposite ends.
+
+**Fix.** The two prepass programs flip like every other 3D program, after `vCurrentClip` so the
+velocity output keeps its convention; the Vulkan SSAO estimate negates the kernel's Y when it turns
+it into a texture offset, the one place it assumed bottom-up storage. SPIR-V regenerated with
+`tools/shader_package/generate_shader_package.py` (only the three payloads changed). Showcase's
+SSAO darkening on Vulkan is now 4954/942/38 pixels at >=2/8/20 against EasyGL's 4762/882/45
+(before the SSAO half of the fix: 47215/23503/13018 -- the count Showcase fails on). **Test:**
+`Vulkan_EngineMatrixArena` check D draws the same quad with BasicEffect and the prepass and requires
+the same place, and check A now reads the prepass's own encoded normal rather than "not the value
+at one corner" (which the mirrored image satisfied). Both fail on the old shaders. Not changed:
+the Vulkan motion-blur camera path reconstructs clip space from `TexCoord` as if Y pointed up;
+cna-street does not use motion blur.
 
 ## cna-street's own defects (fixed in cna-street)
 
