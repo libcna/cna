@@ -35,6 +35,7 @@ barriers, descriptor sets, queues or native handles (ADR 0001, `MOD-2202`), so n
 | WMG-0013 | Indirect draws | 🟩 |
 | WMG-0014 | Shadow reception in the stock lit families | 🟩 |
 | WMG-0015 | Packages and test language lists that had not caught up with WGSL | 🟩 |
+| WMG-0016 | `SupportsTexture3DSamplingEXT` answered false about something the renderer does | 🟩 |
 
 ---
 
@@ -366,6 +367,22 @@ Four more places named the languages that existed when they were written:
   renderer had anything to run (three tests).
 
 All renderer-neutral: nothing an existing renderer selects changes.
+
+## WMG-0016 — a query that answered "no" about something the renderer does
+
+`SupportsTexture3DSamplingEXT()` was left at the interface default, `false`, while this renderer
+binds volumes at group 1 bindings 8..11 with their samplers at `binding + 32`, declares them as
+`texture_3d<f32>` in the generated WGSL, and fills them from `BindTexture3D`.
+
+`ShaderPackageEXT::selectFor` judges any package carrying a `SampledTexture3D` binding requirement
+unusable when that feature is absent, so `ColorGradePass`'s volume-LUT effect was never created, the
+pass copied its input through, and it reported success. That is the `MOD-1699` failure mode reached
+from the other direction: not a renderer claiming something it cannot do, but one denying something
+it can. The full-suite log named it on every `ColorGradePass` construction — *"ColorGradePass
+(volume): its shader did not compile on the WEBGPU renderer"* — which is how it was found, in the
+tail of an OOM-killed run rather than in a failing assertion.
+
+All ten `ColorGradePassTest` cases pass and the line is gone from the log.
 
 ---
 
