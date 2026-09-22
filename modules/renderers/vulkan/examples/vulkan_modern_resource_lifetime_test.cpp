@@ -412,7 +412,7 @@ class VulkanModernResourceLifetimeTest final : public Game
         auto ordinaryPublic = std::make_unique<Texture2D>(
             device, 1, 1, false, SurfaceFormat::Color);
         const std::array<std::uint8_t, 4> ordinaryBytes{1, 2, 3, 255};
-        ordinaryPublic->SetDataRGBA(ordinaryBytes.data(), 4);
+        ordinaryPublic->SetDataRGBA(ordinaryBytes.data(), 1);
         auto ordinary = std::dynamic_pointer_cast<VulkanTextureRenderer>(
             ordinaryPublic->GetRenderer().shared_from_this());
         if (ordinary == nullptr || !ordinary->IsStorageImageCapableEXT())

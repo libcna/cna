@@ -20001,7 +20001,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 d.baseVertex = static_cast<int32_t>(params.baseVertex);
             }
             d.ibData.resize(indexBytes);
-            std::memcpy(d.ibData.data(), indexData, indexBytes);
+            // VMG-0017: an indirect draw queues no CPU-side indices (see DrawPrimitivesEx).
+            if (indexBytes != 0)
+                std::memcpy(d.ibData.data(), indexData, indexBytes);
             d.drawCount = drawCount;
         } else {
             if (packsVertexStreams)
@@ -20011,10 +20013,12 @@ namespace CNA::Internal::Renderers::Vulkan
             else
             {
                 d.vbData.resize(drawCount * stride);
-                std::memcpy(d.vbData.data(),
-                            static_cast<const uint8_t*>(vb.GetMappedPtr()) +
-                                params.vertexStart * stride,
-                            drawCount * stride);
+                // VMG-0017: an indirect draw's CPU-side vertex count is zero.
+                if (!d.vbData.empty())
+                    std::memcpy(d.vbData.data(),
+                                static_cast<const uint8_t*>(vb.GetMappedPtr()) +
+                                    params.vertexStart * stride,
+                                drawCount * stride);
             }
             d.drawCount = drawCount;
         }
@@ -20569,10 +20573,13 @@ namespace CNA::Internal::Renderers::Vulkan
         else
         {
             d.vbData.resize(drawCount * stride);
-            std::memcpy(d.vbData.data(),
-                        static_cast<const uint8_t*>(vb.GetMappedPtr()) +
-                            params.vertexStart * stride,
-                        drawCount * stride);
+            // VMG-0017: an indirect draw's CPU-side count is zero, and memcpy's pointers must be
+            // valid even for zero bytes -- which an empty vector's data() need not be.
+            if (!d.vbData.empty())
+                std::memcpy(d.vbData.data(),
+                            static_cast<const uint8_t*>(vb.GetMappedPtr()) +
+                                params.vertexStart * stride,
+                            drawCount * stride);
         }
 
         d.topology       = ToVkTopology(primitive);
@@ -20812,8 +20819,10 @@ namespace CNA::Internal::Renderers::Vulkan
             d.baseVertex = static_cast<int32_t>(params.baseVertex);
         }
         d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
-        std::memcpy(d.ibData.data(), selectedIndices,
-                    static_cast<std::size_t>(indexCount) * indexSize);
+        // VMG-0017: see DrawPrimitivesEx -- an indirect draw queues no CPU-side indices.
+        if (!d.ibData.empty())
+            std::memcpy(d.ibData.data(), selectedIndices,
+                        static_cast<std::size_t>(indexCount) * indexSize);
         d.topology      = ToVkTopology(primitive);
         d.drawCount     = indexCount;
         d.depthTest     = depthTestEnabled_;
@@ -21332,8 +21341,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (ib != nullptr)
         {
             d.ibData.resize(static_cast<std::size_t>(drawCount) * indexSize);
-            std::memcpy(d.ibData.data(), selectedIndices,
-                        static_cast<std::size_t>(drawCount) * indexSize);
+            if (!d.ibData.empty())
+                std::memcpy(d.ibData.data(), selectedIndices,
+                            static_cast<std::size_t>(drawCount) * indexSize);
         }
 
         // Copy per-instance data: one destination record per instance, exactly as before -- only

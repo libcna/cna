@@ -36,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <memory>
@@ -160,11 +161,15 @@ TEST(SsaoFromRealPrepassTest, ThePrepassWritesARangeOfDepthsRatherThanOneValue)
     std::vector<int> seen(256, 0);
     for (const Color& pixel : depth)
     {
-        const int v = static_cast<int>(std::lround(255.0f * DepthNormalPrepass::unpackDepth(
-            static_cast<float>(pixel.getRProperty()) / 255.0f,
-            static_cast<float>(pixel.getGProperty()) / 255.0f,
-            static_cast<float>(pixel.getBProperty()) / 255.0f,
-            static_cast<float>(pixel.getAProperty()) / 255.0f)));
+        // A cleared (all-ones) pixel decodes to 1 + 1/255 + ..., just past the far plane; clamp so
+        // it lands in the far bucket instead of indexing past `seen` (VMG-0017).
+        const int v = std::clamp(
+            static_cast<int>(std::lround(255.0f * DepthNormalPrepass::unpackDepth(
+                static_cast<float>(pixel.getRProperty()) / 255.0f,
+                static_cast<float>(pixel.getGProperty()) / 255.0f,
+                static_cast<float>(pixel.getBProperty()) / 255.0f,
+                static_cast<float>(pixel.getAProperty()) / 255.0f))),
+            0, 255);
         lowest = std::min(lowest, v);
         highest = std::max(highest, v);
         if (seen[v]++ == 0) ++distinct;

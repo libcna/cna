@@ -523,7 +523,7 @@ protected:
             auto ordinaryBridge = std::make_unique<Texture2D>(
                 dev, 1, 1, false, SurfaceFormat::Color);
             const std::array<std::uint8_t, 4> ordinaryInitial{32, 64, 192, 255};
-            ordinaryBridge->SetDataRGBA(ordinaryInitial.data(), 4);
+            ordinaryBridge->SetDataRGBA(ordinaryInitial.data(), 1);
             auto* ordinaryNative = dynamic_cast<
                 CNA::Internal::Renderers::Vulkan::VulkanTextureRenderer*>(
                     &ordinaryBridge->GetRenderer());
@@ -554,7 +554,7 @@ protected:
             const std::uint64_t orderedOneTimeBefore =
                 Renderer().GetOneTimeCommandCountEXT();
             imageProgram.dispatch(1);
-            ordinaryBridge->SetDataRGBA(overwrite.data(), 4);
+            ordinaryBridge->SetDataRGBA(overwrite.data(), 1);
             const bool orderedQueuedWithoutWait =
                 Renderer().GetOneTimeCommandCountEXT() == orderedOneTimeBefore;
             const Color overwriteResult = DrawOrdinary(dev, *ordinaryBridge);
