@@ -38,6 +38,7 @@ void main()
               + uBones[int(aBoneIndices.w)] * aBoneWeights.w;
     vec4 lightSpace = matrices.uLightViewProjection * matrices.uWorld * skin
                     * vec4(aPosition, 1.0);
-    gl_Position = lightSpace;
+    // STREET-0007: Vulkan clip space, as directional.vulkan.vert.glsl explains.
+    gl_Position = vec4(lightSpace.x, -lightSpace.y, lightSpace.z, lightSpace.w);
     vDistance = lightSpace.z / lightSpace.w * 0.5 + 0.5;
 }

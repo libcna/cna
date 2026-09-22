@@ -1476,6 +1476,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                 COMMAND cna_test_vulkan_engine_matrix_arena
                 TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+            # plans/plan_street.md STREET-0007: the directional shadow casters' winding was mirrored
+            # against the pipelines' clockwise front face, so back-face culling kept the faces that
+            # face away from the light. A box drawn into cascade 0 with CullCounterClockwise must
+            # leave its top face's depth where the receiver reads it.
+            cna_vulkan_test(cna_test_vulkan_shadow_caster_winding
+                            vulkan_shadow_caster_winding_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ShadowCasterWinding
+                COMMAND cna_test_vulkan_shadow_caster_winding
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
             # plans/plan_modern.md MOD-2243: raw physical-device limits/usage combinations must
             # agree with array factory decisions, and native image/view records must retire and
             # survive device-first teardown without holding dead Vulkan handles.

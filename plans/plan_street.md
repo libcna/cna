@@ -19,6 +19,7 @@ are fixed here, on the layer they belong to, with a regression test.
 | STREET-0004 | Vulkan: a frame with more stock draws than a uniform ring holds read past the buffer and lost the device | ✅ |
 | STREET-0005 | Vulkan: an engine-layer effect allocated device memory on every draw (shadow pass 14.8 s a frame) | ✅ |
 | STREET-0006 | Vulkan: the depth/normal prepass was the scene mirrored top to bottom; SSAO darkened mirrored geometry | ✅ |
+| STREET-0007 | Vulkan: directional shadow casters had mirrored winding; back-face culling kept the faces turned from the light | ✅ |
 
 ---
 
@@ -151,6 +152,29 @@ the same place, and check A now reads the prepass's own encoded normal rather th
 at one corner" (which the mirrored image satisfied). Both fail on the old shaders. Not changed:
 the Vulkan motion-blur camera path reconstructs clip space from `TexCoord` as if Y pointed up;
 cna-street does not use motion blur.
+
+## STREET-0007 — directional shadow casters culled the faces that face the light
+
+**Symptom.** With STREET-0006 fixed, cna-street's shadows still disagreed with EasyGL's: the road lit
+where EasyGL has it in a building's shadow, a tree's shadow on a facade EasyGL does not have. The
+dumped cascade atlases (`--dump-shadow`) showed it plainly: EasyGL's held roofs and the ground,
+Vulkan's held walls and building undersides, and no ground at all.
+
+**Root cause.** The same convention as STREET-0006. `shadow_caster/{directional,skinned}.vulkan.vert.glsl`
+deliberately did not flip Y ("flipping here would mirror the stored caster relative to the receiver
+lookup") -- true of the image, but the winding was then mirrored against the pipelines' clockwise
+front face, so a caster drawn with `CullCounterClockwise` (cna-street's, and XNA's default) culled
+every face that faces the light and stored the ones that face away.
+
+**Fix.** The directional and skinned casters flip Y like every other Vulkan 3D program, and the
+stock receiver (`modules/renderers/vulkan/src/shaders/shadow_sampling.glsl`, `CnaShadowTap`) reads the
+map top-down to match. Punctual (spot/cube) shadows have their own caster and lookup and are
+unchanged. SPIR-V regenerated (`generate_shader_package.py`, `compile_shaders.py`: only the casters
+and the fragment programs that include the sampling code changed). **Test:** `Vulkan_ShadowCasterWinding`
+-- a closed XNA-wound box lit from above, drawn into cascade 0 with `CullCounterClockwise`: the map
+must hold its top face (A, whichever way up) at the texel the receiver reads (C). Old shaders: the
+bottom face, at the mirrored texel. All 414 other `Vulkan_*`/`CNAEXT_*` tests unchanged (the two
+failures, `CNAEXT_NoPosixSetenv` and `Vulkan_DrawRangeValidation`, predate this branch).
 
 ## cna-street's own defects (fixed in cna-street)
 

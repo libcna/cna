@@ -40,7 +40,9 @@ float CnaShadowTap(vec3 uv, vec2 uvMin, vec2 uvMax) {
             vec2 at = clamp(
                 uv.xy + vec2(float(x), float(y)) * cnaShadow.shadowTexelBlendDebug.xy,
                 uvMin, uvMax);
-            float occluder = texture(uCnaShadowMap, at).r;
+            // plans/plan_street.md STREET-0007: the directional casters write the map in Vulkan's
+            // clip space (top row first), so the XNA-convention atlas coordinate is read flipped.
+            float occluder = texture(uCnaShadowMap, vec2(at.x, 1.0 - at.y)).r;
             lit += (uv.z - cnaShadow.directional.y <= occluder) ? 1.0 : 0.0;
             taps += 1.0;
         }
