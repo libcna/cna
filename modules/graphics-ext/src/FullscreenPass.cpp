@@ -4,6 +4,7 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Internal/Graphics/EngineLayerFloatFiltering.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -14,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 #include <stdexcept>
 
@@ -67,8 +69,28 @@ namespace CNA::Graphics {
         // is a source of results that look almost right.
         // A null sampler means the device default, which is what every pass wanted before
         // MOD-220 and still wants unless it says otherwise.
+        //
+        // plans/plan_vulkan_modern_graphics.md VMG-0006: that default -- and a pass's explicit
+        // linear request -- filters, and XNA refuses a filtered read of a float or half-float
+        // source (SOFTWARE-217). Inside the engine-layer scope below such a read is permitted where
+        // the renderer really filters the format; where it does not, the pass reads the source
+        // with point sampling, which is exact for the same-size passes and the documented
+        // degradation for resampling ones, instead of throwing.
+        SamplerState* effective = sampler;
+        const auto format = source->getFormatProperty();
+        const bool filters = (effective == nullptr) ||
+            effective->getFilterProperty() != Microsoft::Xna::Framework::Graphics::TextureFilter::Point;
+        if (filters && CNA::Internal::EngineLayerFloatFilteringScope::IsPointFilterOnlyFormat(format) &&
+            !CNA::Internal::EngineLayerFloatFilteringScope::RendererFiltersFormat(device_, format))
+        {
+            // The const_cast is forced by the XNA-shaped API (see BloomPass): SamplerState's stock
+            // objects are static const and SpriteBatch::Begin takes a non-const pointer.
+            effective = const_cast<SamplerState*>(&SamplerState::PointClamp);
+        }
+
+        CNA::Internal::EngineLayerFloatFilteringScope engineDraw(device_);
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
-                            sampler, nullptr, nullptr, effect);
+                            effective, nullptr, nullptr, effect);
         spriteBatch_->Draw(*source, Rectangle(0, 0, width, height), Color::White);
         spriteBatch_->End();
     }

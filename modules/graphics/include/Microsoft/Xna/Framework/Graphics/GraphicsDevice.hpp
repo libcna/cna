@@ -60,6 +60,7 @@ namespace CNA::Internal
     class StorageTexture2DGraphicsDeviceTestPeer;
     class StorageBufferGraphicsDeviceTestPeer;
     class GraphicsDevicePlatformWindowTestPeer;
+    class EngineLayerFloatFilteringScope;
 }
 
 namespace Microsoft::Xna::Framework
@@ -1868,6 +1869,9 @@ namespace Microsoft::Xna::Framework::Graphics
         bool contextRecoveryEnabled_ = true;
         GraphicsAdapter* adapter_;
         GraphicsProfile graphicsProfile_;
+        /// Open CNA::Internal::EngineLayerFloatFilteringScope instances (VMG-0006); zero for every
+        /// ordinary XNA draw, which then keeps XNA's point-filter-only rule for float formats.
+        int engineLayerFloatFilteringDepth_ = 0;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
         /// plans/plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
@@ -2262,6 +2266,10 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class CNA::Internal::Texture2DArrayGraphicsDeviceTestPeer;
         friend class CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer;
         friend class CNA::Internal::StorageBufferGraphicsDeviceTestPeer;
+        // plans/plan_vulkan_modern_graphics.md VMG-0006: the CNAEXT engine layer's own draws may
+        // filter a float/half source the live renderer can filter, which XNA's VerifyCanDraw
+        // refuses for XNA draws (SOFTWARE-217). The scope is the only way to open that exemption.
+        friend class CNA::Internal::EngineLayerFloatFilteringScope;
         // plans/plan_x11.md X11-0104. GraphicsDevicePlatformWindowTests reproduces what
         // GameWindow.ClientSizeChanged runs -- a viewport refresh driven from the frame's event
         // pump -- and GameWindow is a friend above precisely because that call is internal. The

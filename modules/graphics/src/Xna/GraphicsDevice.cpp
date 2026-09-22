@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Graphics/EngineLayerFloatFiltering.hpp"
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -3540,7 +3541,9 @@ namespace Microsoft::Xna::Framework::Graphics
         setLegacy(CNA::RendererFeature::Float16RenderTargets,
                   CNA::GraphicsCapability::HalfFloatRenderTargets);
         setLegacy(CNA::RendererFeature::Float16TextureLinearFiltering,
-                  CNA::GraphicsCapability::HalfFloatTextureLinearFiltering);
+                  CNA::GraphicsCapability::HalfFloatTextureLinearFiltering,
+                  "The renderer's fact, which the CNA::Graphics engine layer's own passes use. An XNA "
+                  "draw still gets XNA's point-filter-only rule for these formats.");
         setLegacy(CNA::RendererFeature::ComputeShaders,
                   CNA::GraphicsCapability::ComputeShaders);
         profile.SetFeature(
@@ -4643,12 +4646,19 @@ namespace Microsoft::Xna::Framework::Graphics
         // permit filtered sampling; six of those formats also do not permit blending or masked
         // color writes. Keeping the guard shared makes ordinary draws and SpriteBatch use the same
         // rules and prevents capable CPU/GL backends from silently offering behavior XNA rejects.
-        const auto validateFilteredTexture = [](const SurfaceFormat format, const int slot,
-                                                const SamplerStateCollection& samplers)
+        //
+        // plans/plan_vulkan_modern_graphics.md VMG-0006: the one exception is a draw the CNAEXT
+        // engine layer issues inside a CNA::Internal::EngineLayerFloatFilteringScope, and only for
+        // a format the live renderer reports it can filter. The engine layer is not XNA code; its
+        // passes are written for hardware-filtered HDR intermediates and query the same fact.
+        const auto validateFilteredTexture = [this](const SurfaceFormat format, const int slot,
+                                                    const SamplerStateCollection& samplers)
         {
             if (slot >= 0 && slot < samplers.ActiveSamplerCount() &&
                 IsPointFilterOnlyFormat(format) &&
-                samplers[slot].getFilterProperty() != TextureFilter::Point)
+                samplers[slot].getFilterProperty() != TextureFilter::Point &&
+                !(engineLayerFloatFilteringDepth_ > 0 &&
+                  CNA::Internal::EngineLayerFloatFilteringScope::RendererFiltersFormat(*this, format)))
             {
                 throw System::NotSupportedException(
                     "The active GraphicsProfile does not support filtering SurfaceFormat " +
