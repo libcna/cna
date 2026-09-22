@@ -947,9 +947,75 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
                                            WGPUBuffer resolveBuffer, WGPUBuffer readbackBuffer)
     {
         if (deviceLost_) throw std::runtime_error("CNA WebGPU: the device is lost; a timer is refused");
+        // WMG-0017: the work before Begin is not this timer's, and the work before End is, so both
+        // ends flush first -- Begin so the earlier passes close while no timer is open, End so the
+        // measured passes close while it still is.
         FlushPendingDrawsForModernEXT();
+        if (index == 0)
+        {
+            // The start of a range: from here every real pass carries this timer's writes, which
+            // is where the measurement actually comes from. Only one timer can do that at a time
+            // (one WGPUPassTimestampWrites per pass), so a second concurrent Begin keeps the
+            // empty-pass behaviour below rather than stealing the first timer's passes.
+            if (timerQuerySetEXT_ == nullptr)
+            {
+                timerQuerySetEXT_ = querySet;
+                timerWriteBeginEXT_ = true;
+                timerWrotePassEXT_ = false;
+                return;
+            }
+        }
+        else if (timerQuerySetEXT_ == querySet)
+        {
+            const bool wrote = timerWrotePassEXT_;
+            timerQuerySetEXT_ = nullptr;
+            timerWriteBeginEXT_ = false;
+            timerWrotePassEXT_ = false;
+            if (wrote)
+            {
+                // Both timestamps are already in the query set, written by the passes themselves.
+                // All that is left is to make them readable.
+                WGPUCommandEncoder resolveEncoder = BeginModernEncoderEXT("CNA WebGPU timestamp");
+                if (resolveBuffer != nullptr)
+                {
+                    wgpuCommandEncoderResolveQuerySet(resolveEncoder, querySet, 0, 2,
+                                                      resolveBuffer, 0);
+                    if (readbackBuffer != nullptr)
+                        wgpuCommandEncoderCopyBufferToBuffer(resolveEncoder, resolveBuffer, 0,
+                                                             readbackBuffer, 0,
+                                                             2 * sizeof(std::uint64_t));
+                }
+                SubmitModernEncoderEXT(resolveEncoder, {}, {});
+                return;
+            }
+            // Nothing was drawn between Begin and End. Both ends are written here, so the pair is
+            // a real (near-zero) interval rather than two stale values.
+            WGPUPassTimestampWrites empty = WGPU_PASS_TIMESTAMP_WRITES_INIT;
+            empty.querySet = querySet;
+            empty.beginningOfPassWriteIndex = 0;
+            empty.endOfPassWriteIndex = 1;
+            WGPUComputePassDescriptor emptyDescriptor{};
+            emptyDescriptor.label = Label("CNA WebGPU timestamp");
+            emptyDescriptor.timestampWrites = &empty;
+            WGPUCommandEncoder emptyEncoder = BeginModernEncoderEXT("CNA WebGPU timestamp");
+            WGPUComputePassEncoder emptyPass =
+                wgpuCommandEncoderBeginComputePass(emptyEncoder, &emptyDescriptor);
+            wgpuComputePassEncoderEnd(emptyPass);
+            wgpuComputePassEncoderRelease(emptyPass);
+            if (resolveBuffer != nullptr)
+            {
+                wgpuCommandEncoderResolveQuerySet(emptyEncoder, querySet, 0, 2, resolveBuffer, 0);
+                if (readbackBuffer != nullptr)
+                    wgpuCommandEncoderCopyBufferToBuffer(emptyEncoder, resolveBuffer, 0,
+                                                         readbackBuffer, 0,
+                                                         2 * sizeof(std::uint64_t));
+            }
+            SubmitModernEncoderEXT(emptyEncoder, {}, {});
+            return;
+        }
+        // The fallback both ends share: a timestamp is an empty compute pass that records one.
         // Core WebGPU writes timestamps only at pass boundaries (encoder-level writes are a
-        // wgpu-native extension), so a timestamp is an empty compute pass that records one.
+        // wgpu-native extension).
         WGPUPassTimestampWrites writes = WGPU_PASS_TIMESTAMP_WRITES_INIT;
         writes.querySet = querySet;
         writes.beginningOfPassWriteIndex = index;

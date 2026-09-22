@@ -5211,6 +5211,22 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WMG-0014: group 2 of every shadow-receiving pipeline: the params block, and the
         /// directional, point and spot maps each with the sampler its slot carried.
         WGPUBindGroupLayout shadowBindGroupLayout_ = nullptr;
+        /**
+         * @brief WMG-0017: the query set of the GPU timer that is currently open, or null.
+         *
+         * While it is set, every real render pass writes this timer's end timestamp at its own end
+         * (and the first one after `Begin` writes the start at its beginning), so the pair brackets
+         * the work rather than measuring the gap between two passes of this renderer's own making.
+         * One timer at a time: a second concurrent `Begin` falls back to the empty-pass write,
+         * because a WGPURenderPassDescriptor carries exactly one set of timestamp writes.
+         */
+        WGPUQuerySet timerQuerySetEXT_ = nullptr;
+        /// WMG-0017: true until a pass has written the open timer's start timestamp.
+        bool timerWriteBeginEXT_ = false;
+        /// WMG-0017: whether any real pass carried this timer's writes; false means `End` must
+        /// fall back to an empty pass, so a timer opened around no drawing still reads zero
+        /// rather than reading whatever the query set last held.
+        bool timerWrotePassEXT_ = false;
 
         /**
          * @brief WMG-0013: issues this draw as an indirect one, or says it is not one.

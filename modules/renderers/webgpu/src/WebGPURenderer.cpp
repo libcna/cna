@@ -7649,6 +7649,25 @@ namespace CNA::Internal::Renderers::WebGPU
             // query set. occlusionQuerySet_ is null until the first OcclusionQuery is created, so a
             // frame with none leaves this at the default null -- the pass is created exactly as before.
             passDescriptor.occlusionQuerySet = occlusionQuerySet_;
+            // plans/plan_webgpu_modern_graphics.md WMG-0017: an open GPU timer brackets the work it
+            // was opened around by writing its timestamps at the boundaries of the REAL passes,
+            // which is the only place core WebGPU allows a timestamp. Two empty compute passes
+            // around the work measured a fixed overhead instead -- nothing orders an empty pass
+            // against a graphics submission it shares no resource with, so ten times the fill read
+            // back as no longer at all. The end index is rewritten by every pass while the timer is
+            // open, so the last one before End() is the one that survives, which is the interval
+            // the caller asked for.
+            WGPUPassTimestampWrites timerWrites = WGPU_PASS_TIMESTAMP_WRITES_INIT;
+            if (timerQuerySetEXT_ != nullptr)
+            {
+                timerWrites.querySet = timerQuerySetEXT_;
+                timerWrites.beginningOfPassWriteIndex =
+                    timerWriteBeginEXT_ ? 0u : WGPU_QUERY_SET_INDEX_UNDEFINED;
+                timerWrites.endOfPassWriteIndex = 1u;
+                passDescriptor.timestampWrites = &timerWrites;
+                timerWriteBeginEXT_ = false;
+                timerWrotePassEXT_ = true;
+            }
             WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
 
             if (trace)
@@ -13267,16 +13286,39 @@ namespace
             }
         };
 
+        // plans/plan_webgpu_modern_graphics.md WMG-0014: a family that receives shadows is compiled
+        // with kShadowSampling appended, so it is VALIDATED that way too -- validating the bare
+        // source would compile a program this renderer never builds, and would fail on the very
+        // functions the appended block defines.
+        const auto withShadows = [](const char* source) {
+            return std::string(source) + webgpu_shaders::kShadowSampling;
+        };
+        const auto receivesShadows = [](const std::string_view label) {
+            return label == "LitTextured3D" || label == "LitTextured3D VertexLit"
+                || label.rfind("Skinned3D", 0) == 0;
+        };
         for (const webgpu_shaders::ShaderEntry& entry : webgpu_shaders::kDirectShaders)
-            validate(entry.label, entry.source);
+        {
+            if (receivesShadows(entry.label))
+                validate(entry.label, withShadows(entry.source).c_str());
+            else
+                validate(entry.label, entry.source);
+        }
 
         // Pbr / SkinnedPbr are marked templates -> validate their two expanded variants each
-        // (the same expansion the Create*Resources paths compile).
-        validate("Pbr3D", ExpandPbrVertexColourWgslEXT(webgpu_shaders::kPbr, false, 4).c_str());
-        validate("Pbr3D VertexColor", ExpandPbrVertexColourWgslEXT(webgpu_shaders::kPbr, true, 4).c_str());
-        validate("SkinnedPbr3D", ExpandPbrVertexColourWgslEXT(webgpu_shaders::kSkinnedPbr, false, 6).c_str());
+        // (the same expansion the Create*Resources paths compile), shadow block included.
+        validate("Pbr3D",
+                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kPbr, false, 4)
+                  + webgpu_shaders::kShadowSampling).c_str());
+        validate("Pbr3D VertexColor",
+                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kPbr, true, 4)
+                  + webgpu_shaders::kShadowSampling).c_str());
+        validate("SkinnedPbr3D",
+                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kSkinnedPbr, false, 6)
+                  + webgpu_shaders::kShadowSampling).c_str());
         validate("SkinnedPbr3D VertexColor",
-                 ExpandPbrVertexColourWgslEXT(webgpu_shaders::kSkinnedPbr, true, 6).c_str());
+                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kSkinnedPbr, true, 6)
+                  + webgpu_shaders::kShadowSampling).c_str());
         return failures;
     }
 
