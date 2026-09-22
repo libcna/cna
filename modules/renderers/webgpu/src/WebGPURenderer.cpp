@@ -8793,13 +8793,145 @@ namespace CNA::Internal::Renderers::WebGPU
         return WebGPUSampledTextureEXT{view, sampledKeepAlive_};
     }
 
-#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-    // ---- plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework draws --------------
-    //
-    // A compiled sampler can name any of the three public texture kinds, and dynamic_cast needs
-    // each complete type to sort them apart.
+    // plans/plan_webgpu_modern_graphics.md WMG-0024: OUTSIDE the compiled-effect block below.
+    // A descriptor-contract sprite is a ShaderEffect concern (WMG-0011), not a compiled-effect
+    // one, and this definition had drifted inside that block while its only call site -- in
+    // IssueSprite -- stayed unguarded. With CNA_WEBGPU_COMPILED_EFFECTS=OFF the call survived
+    // and the definition did not, so libcna.so carried an undefined symbol that nothing
+    // resolved until the first sprite drawn through a ShaderEffect. Nothing had built that
+    // configuration before the SDL-free trees of this task.
+    void WebGPURenderer::IssueDescriptorSpriteEXT(WGPURenderPassEncoder pass,
+                                                  const SpriteCommand& command,
+                                                  WGPUTextureFormat targetFormat,
+                                                  std::uint32_t targetSampleCount,
+                                                  ReplayState& state)
+    {
+        WebGPUEffectRenderer* effect = command.customEffect;
+        if (effect == nullptr || !effect->IsValid() || command.descriptor == nullptr) return;
+        const int colorCount = std::max(1, replayColorAttachmentCount_);
 
-    // ---- the two draw routes --------------------------------------------------------------------
+        // The sprite's own six vertices in the layout the generated fullscreen vertex program
+        // declares: position in PIXELS (it divides by the viewport size the scalar block carries),
+        // texture coordinates and colour.
+        constexpr std::uint64_t kSpriteVertexBytes = 6 * 8 * sizeof(float);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(
+            static_cast<WGPUBufferUsage>(WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst),
+            kSpriteVertexBytes);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.descriptor->spriteVertices.data(),
+                             kSpriteVertexBytes);
+
+        auto mix = [](std::uint64_t h, std::uint64_t v) {
+            return (h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)));
+        };
+        std::uint64_t key = mix(0x53505249544544ull /* "SPRITED" */,
+                                static_cast<std::uint64_t>(targetFormat));
+        key = mix(key, targetSampleCount);
+        key = mix(key, static_cast<std::uint64_t>(colorCount));
+        key = mix(key, command.blend.blendEnabled ? 1u : 0u);
+        key = mix(key, static_cast<std::uint64_t>(command.blend.colorSrc) |
+                       (static_cast<std::uint64_t>(command.blend.colorDst) << 8) |
+                       (static_cast<std::uint64_t>(command.blend.alphaSrc) << 16) |
+                       (static_cast<std::uint64_t>(command.blend.alphaDst) << 24) |
+                       (static_cast<std::uint64_t>(command.blend.colorFunc) << 32) |
+                       (static_cast<std::uint64_t>(command.blend.alphaFunc) << 40));
+        key = mix(key, static_cast<std::uint64_t>(command.blend.colorWriteMask & 0xF));
+        key = mix(key, static_cast<std::uint64_t>(replayDepthFormat_));
+
+        WGPURenderPipeline pipe = nullptr;
+        if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
+        {
+            pipe = it->second;
+        }
+        else
+        {
+            std::array<WGPUVertexAttribute, 3> attributes{};
+            attributes[0].format = WGPUVertexFormat_Float32x2;
+            attributes[0].offset = 0;
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].offset = 2 * sizeof(float);
+            attributes[1].shaderLocation = 1;
+            attributes[2].format = WGPUVertexFormat_Float32x4;
+            attributes[2].offset = 4 * sizeof(float);
+            attributes[2].shaderLocation = 2;
+            WGPUVertexBufferLayout vertexLayout{};
+            vertexLayout.arrayStride = 8 * sizeof(float);
+            vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
+            vertexLayout.attributeCount = attributes.size();
+            vertexLayout.attributes = attributes.data();
+
+            std::array<WGPUColorTargetState, 4> targets{};
+            const int builtCount = InitStockColorTargetsEXT(targets);
+            targets[0].format = targetFormat;
+            targets[0].writeMask =
+                static_cast<WGPUColorWriteMask>(command.blend.colorWriteMask & 0xF);
+            WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+            const BlendKeyParams blendParams{command.blend.colorSrc, command.blend.colorDst,
+                                             command.blend.alphaSrc, command.blend.alphaDst,
+                                             command.blend.colorFunc, command.blend.alphaFunc};
+            FillWGPUBlendState(blendState, blendParams);
+            targets[0].blend = command.blend.blendEnabled ? &blendState : nullptr;
+
+            WGPUFragmentState fragment{};
+            fragment.module = effect->fragmentModule_;
+            fragment.entryPoint = StringView(effect->FragmentEntryPointEXT().c_str());
+            fragment.targetCount = static_cast<std::size_t>(builtCount);
+            fragment.targets = targets.data();
+
+            WGPURenderPipelineDescriptor pipeline{};
+            pipeline.label = StringView("CNA WebGPU SpriteBatch ShaderEffect Pipeline (descriptor)");
+            pipeline.layout = effect->ProgramLayoutEXT()->PipelineLayout();
+            pipeline.vertex.module = effect->vertexModule_;
+            pipeline.vertex.entryPoint = StringView(effect->VertexEntryPointEXT().c_str());
+            pipeline.vertex.bufferCount = 1;
+            pipeline.vertex.buffers = &vertexLayout;
+            pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+            pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+            pipeline.primitive.cullMode = WGPUCullMode_None;
+            pipeline.multisample.count = targetSampleCount;
+            pipeline.multisample.mask = command.blend.multiSampleMask;
+            pipeline.multisample.alphaToCoverageEnabled = false;
+            pipeline.fragment = &fragment;
+
+            WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+            depthStencil.format = replayDepthFormat_;
+            depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
+            depthStencil.depthCompare = WGPUCompareFunction_Always;
+            pipeline.depthStencil =
+                replayDepthFormat_ != WGPUTextureFormat_Undefined ? &depthStencil : nullptr;
+
+            pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+            if (pipe == nullptr)
+                throw std::runtime_error(
+                    "CNA WebGPU: failed to create a descriptor-contract sprite pipeline");
+            effect->pipelineCache_[key] = pipe;
+        }
+
+        std::vector<WGPUBuffer> transient;
+        const std::array<WGPUBindGroup, 4> groups =
+            BuildDescriptorEffectBindGroupsEXT(*effect, *command.descriptor, transient);
+
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        state.boundPipeline = pipe;
+        state.spriteVerticesBound = false;
+        const WGPUColor blendConstant{command.blend.blendFactorR, command.blend.blendFactorG,
+                                      command.blend.blendFactorB, command.blend.blendFactorA};
+        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+        state.blendConstantIsPassDefault = false;
+        ApplyDrawViewport(pass, command.viewport);
+        ApplyDrawScissor(pass, command.scissor);
+        for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
+            wgpuRenderPassEncoderSetBindGroup(pass, g, groups[g], 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, kSpriteVertexBytes);
+        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+
+        for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
+            pendingBindGroupReleases_.push_back(groups[g]);
+        for (WGPUBuffer buffer : transient) pendingBufferReleases_.push_back(buffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
+        ++nativeDrawIssueCount_;
+    }
+
 
     void WebGPURenderer::IssueDescriptorEffectDrawEXT(WGPURenderPassEncoder pass,
                                                       const CustomEffectDrawCommand& command,
@@ -8964,138 +9096,6 @@ namespace CNA::Internal::Renderers::WebGPU
         ++nativeDrawIssueCount_;
     }
 
-    void WebGPURenderer::IssueDescriptorSpriteEXT(WGPURenderPassEncoder pass,
-                                                  const SpriteCommand& command,
-                                                  WGPUTextureFormat targetFormat,
-                                                  std::uint32_t targetSampleCount,
-                                                  ReplayState& state)
-    {
-        WebGPUEffectRenderer* effect = command.customEffect;
-        if (effect == nullptr || !effect->IsValid() || command.descriptor == nullptr) return;
-        const int colorCount = std::max(1, replayColorAttachmentCount_);
-
-        // The sprite's own six vertices in the layout the generated fullscreen vertex program
-        // declares: position in PIXELS (it divides by the viewport size the scalar block carries),
-        // texture coordinates and colour.
-        constexpr std::uint64_t kSpriteVertexBytes = 6 * 8 * sizeof(float);
-        WGPUBuffer vertexBuffer = AcquireTransientBuffer(
-            static_cast<WGPUBufferUsage>(WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst),
-            kSpriteVertexBytes);
-        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.descriptor->spriteVertices.data(),
-                             kSpriteVertexBytes);
-
-        auto mix = [](std::uint64_t h, std::uint64_t v) {
-            return (h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)));
-        };
-        std::uint64_t key = mix(0x53505249544544ull /* "SPRITED" */,
-                                static_cast<std::uint64_t>(targetFormat));
-        key = mix(key, targetSampleCount);
-        key = mix(key, static_cast<std::uint64_t>(colorCount));
-        key = mix(key, command.blend.blendEnabled ? 1u : 0u);
-        key = mix(key, static_cast<std::uint64_t>(command.blend.colorSrc) |
-                       (static_cast<std::uint64_t>(command.blend.colorDst) << 8) |
-                       (static_cast<std::uint64_t>(command.blend.alphaSrc) << 16) |
-                       (static_cast<std::uint64_t>(command.blend.alphaDst) << 24) |
-                       (static_cast<std::uint64_t>(command.blend.colorFunc) << 32) |
-                       (static_cast<std::uint64_t>(command.blend.alphaFunc) << 40));
-        key = mix(key, static_cast<std::uint64_t>(command.blend.colorWriteMask & 0xF));
-        key = mix(key, static_cast<std::uint64_t>(replayDepthFormat_));
-
-        WGPURenderPipeline pipe = nullptr;
-        if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
-        {
-            pipe = it->second;
-        }
-        else
-        {
-            std::array<WGPUVertexAttribute, 3> attributes{};
-            attributes[0].format = WGPUVertexFormat_Float32x2;
-            attributes[0].offset = 0;
-            attributes[0].shaderLocation = 0;
-            attributes[1].format = WGPUVertexFormat_Float32x2;
-            attributes[1].offset = 2 * sizeof(float);
-            attributes[1].shaderLocation = 1;
-            attributes[2].format = WGPUVertexFormat_Float32x4;
-            attributes[2].offset = 4 * sizeof(float);
-            attributes[2].shaderLocation = 2;
-            WGPUVertexBufferLayout vertexLayout{};
-            vertexLayout.arrayStride = 8 * sizeof(float);
-            vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
-            vertexLayout.attributeCount = attributes.size();
-            vertexLayout.attributes = attributes.data();
-
-            std::array<WGPUColorTargetState, 4> targets{};
-            const int builtCount = InitStockColorTargetsEXT(targets);
-            targets[0].format = targetFormat;
-            targets[0].writeMask =
-                static_cast<WGPUColorWriteMask>(command.blend.colorWriteMask & 0xF);
-            WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-            const BlendKeyParams blendParams{command.blend.colorSrc, command.blend.colorDst,
-                                             command.blend.alphaSrc, command.blend.alphaDst,
-                                             command.blend.colorFunc, command.blend.alphaFunc};
-            FillWGPUBlendState(blendState, blendParams);
-            targets[0].blend = command.blend.blendEnabled ? &blendState : nullptr;
-
-            WGPUFragmentState fragment{};
-            fragment.module = effect->fragmentModule_;
-            fragment.entryPoint = StringView(effect->FragmentEntryPointEXT().c_str());
-            fragment.targetCount = static_cast<std::size_t>(builtCount);
-            fragment.targets = targets.data();
-
-            WGPURenderPipelineDescriptor pipeline{};
-            pipeline.label = StringView("CNA WebGPU SpriteBatch ShaderEffect Pipeline (descriptor)");
-            pipeline.layout = effect->ProgramLayoutEXT()->PipelineLayout();
-            pipeline.vertex.module = effect->vertexModule_;
-            pipeline.vertex.entryPoint = StringView(effect->VertexEntryPointEXT().c_str());
-            pipeline.vertex.bufferCount = 1;
-            pipeline.vertex.buffers = &vertexLayout;
-            pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-            pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-            pipeline.primitive.cullMode = WGPUCullMode_None;
-            pipeline.multisample.count = targetSampleCount;
-            pipeline.multisample.mask = command.blend.multiSampleMask;
-            pipeline.multisample.alphaToCoverageEnabled = false;
-            pipeline.fragment = &fragment;
-
-            WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-            depthStencil.format = replayDepthFormat_;
-            depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
-            depthStencil.depthCompare = WGPUCompareFunction_Always;
-            pipeline.depthStencil =
-                replayDepthFormat_ != WGPUTextureFormat_Undefined ? &depthStencil : nullptr;
-
-            pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-            if (pipe == nullptr)
-                throw std::runtime_error(
-                    "CNA WebGPU: failed to create a descriptor-contract sprite pipeline");
-            effect->pipelineCache_[key] = pipe;
-        }
-
-        std::vector<WGPUBuffer> transient;
-        const std::array<WGPUBindGroup, 4> groups =
-            BuildDescriptorEffectBindGroupsEXT(*effect, *command.descriptor, transient);
-
-        wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        state.boundPipeline = pipe;
-        state.spriteVerticesBound = false;
-        const WGPUColor blendConstant{command.blend.blendFactorR, command.blend.blendFactorG,
-                                      command.blend.blendFactorB, command.blend.blendFactorA};
-        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
-        state.blendConstantIsPassDefault = false;
-        ApplyDrawViewport(pass, command.viewport);
-        ApplyDrawScissor(pass, command.scissor);
-        for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
-            wgpuRenderPassEncoderSetBindGroup(pass, g, groups[g], 0, nullptr);
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, kSpriteVertexBytes);
-        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-
-        for (std::uint32_t g = 0; g < effect->ProgramLayoutEXT()->GroupCount(); ++g)
-            pendingBindGroupReleases_.push_back(groups[g]);
-        for (WGPUBuffer buffer : transient) pendingBufferReleases_.push_back(buffer);
-        pendingBufferReleases_.push_back(vertexBuffer);
-        ++nativeDrawIssueCount_;
-    }
-
     WGPUTextureView WebGPUTextureRenderer::StorageViewEXT() const
     {
         if (!storageCapable_ || texture_ == nullptr) return nullptr;
@@ -9125,6 +9125,19 @@ namespace CNA::Internal::Renderers::WebGPU
         return WebGPUSampledTextureEXT{view, storageKeepAlive_};
     }
 
+    // plans/plan_webgpu_modern_graphics.md WMG-0024: the compiled-effect block starts HERE, not
+    // above IssueDescriptorEffectDrawEXT. That function and IssueDescriptorSpriteEXT are
+    // descriptor-contract ShaderEffect draws (WMG-0008/0009/0011); they had drifted inside this
+    // block while their call sites stayed unguarded, so CNA_WEBGPU_COMPILED_EFFECTS=OFF built a
+    // libcna.so with two undefined symbols that nothing resolved until the first ShaderEffect
+    // draw. No tree had built that configuration before the SDL-free ones of this task.
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+    // ---- plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework draws --------------
+    //
+    // A compiled sampler can name any of the three public texture kinds, and dynamic_cast needs
+    // each complete type to sort them apart.
+
+    // ---- the two draw routes --------------------------------------------------------------------
     WebGPUMojoShaderContextEXT* WebGPURenderer::GetMojoShaderContextEXT()
     {
         if (mojoShaderContext_ == nullptr)

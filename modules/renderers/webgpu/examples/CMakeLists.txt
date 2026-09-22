@@ -349,7 +349,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_srgb_transfer
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
-    target_link_libraries(cna_test_webgpu_pbr_srgb_transfer PRIVATE SDL3::SDL3)
+    # plans/plan_webgpu_modern_graphics.md WMG-0024: guarded, because CNA_ENABLE_SDL=OFF is a
+    # configuration that has to exist -- these two borrow an EasyGL source that reaches for SDL3
+    # itself, and an unconditional link failed the whole CONFIGURE of an SDL-free tree.
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(cna_test_webgpu_pbr_srgb_transfer PRIVATE SDL3::SDL3)
+    endif()
     cna_register_renderer_test(NAME WebGPU_Pbr_SrgbTransfer COMMAND cna_test_webgpu_pbr_srgb_transfer
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -357,7 +362,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # repeated on both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_fresnel_factors
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
-    target_link_libraries(cna_test_webgpu_pbr_fresnel_factors PRIVATE SDL3::SDL3)
+    if(TARGET SDL3::SDL3)  # WMG-0024, as above
+        target_link_libraries(cna_test_webgpu_pbr_fresnel_factors PRIVATE SDL3::SDL3)
+    endif()
     cna_register_renderer_test(NAME WebGPU_Pbr_FresnelFactors COMMAND cna_test_webgpu_pbr_fresnel_factors
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
