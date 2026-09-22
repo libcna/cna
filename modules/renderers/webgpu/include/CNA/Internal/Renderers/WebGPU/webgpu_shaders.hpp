@@ -1014,6 +1014,60 @@ struct VSOut {
 }
 )WGSL";
 
+    /**
+     * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: image-based lighting for the two PBR
+     * families, appended to their source exactly as @ref kShadowSampling is.
+     *
+     * The split-sum equation is transliterated function for function from the Vulkan renderer's
+     * `CnaIblAmbient` (`modules/renderers/vulkan/src/shaders/pbr3d.frag.glsl`) and EasyGL's
+     * `cnaIblAmbient` (`EasyGLRenderer::CnaGlIblDecl`), so the three renderers answer an IBL query
+     * from one equation rather than from three readings of one description. The mip for a given
+     * roughness is `roughness * (mipCount - 1)` -- `CNA::Graphics::EnvironmentProcessor::
+     * mipForRoughness`, which is the formula `GpuDrawParams::iblPrefilteredMipCount` documents.
+     *
+     * At **group 3**, which the stock PBR pipeline layouts had free; the shadow block owns group 2
+     * and the PBR families own groups 0 and 1. WGSL module-scope declarations may appear in any
+     * order, so this is appended to a shader's source rather than spliced into it.
+     *
+     * `textureSampleLevel` rather than `textureSample` for the prefiltered cube, for two reasons
+     * at once: the roughness LOD is the whole point, and the tap sits behind this function's early
+     * return, where WGSL forbids an implicit-derivative sample.
+     *
+     * Three samplers rather than one, matching Vulkan's `PbrSlotSamplersRawEXT()` and EasyGL's
+     * texture units: these three resources are read through XNA sampler slots 10, 11 and 12, and a
+     * prefiltered cube filtered differently from the one Vulkan used would answer a roughness ramp
+     * differently.
+     */
+    inline constexpr char kIblSampling[] = R"WGSL(
+struct CnaIblParams {
+    // x = enabled, y = prefiltered mip count, z = intensity.
+    params: vec4f,
+};
+@group(3) @binding(0) var<uniform> cnaIbl: CnaIblParams;
+@group(3) @binding(1) var cnaIblIrradianceSampler: sampler;
+@group(3) @binding(2) var cnaIblIrradiance: texture_cube<f32>;
+@group(3) @binding(3) var cnaIblSpecularSampler: sampler;
+@group(3) @binding(4) var cnaIblSpecular: texture_cube<f32>;
+@group(3) @binding(5) var cnaIblBrdfSampler: sampler;
+@group(3) @binding(6) var cnaIblBrdfLut: texture_2d<f32>;
+
+fn cnaIblAmbient(n: vec3f, v: vec3f, albedo: vec3f, f0: vec3f, roughness: f32,
+                 metallic: f32, occlusion: f32) -> vec3f {
+    if (cnaIbl.params.x < 0.5) { return vec3f(0.0); }
+    let nDotV = clamp(dot(n, v), 1e-4, 1.0);
+    let ks = f0 + (max(vec3f(1.0 - roughness), f0) - f0) * pow(1.0 - nDotV, 5.0);
+    let kd = (1.0 - ks) * (1.0 - metallic);
+    let diffuse = textureSampleLevel(cnaIblIrradiance, cnaIblIrradianceSampler, n, 0.0).rgb
+                * albedo * kd;
+    let r = reflect(-v, n);
+    let lod = roughness * max(cnaIbl.params.y - 1.0, 0.0);
+    let prefiltered = textureSampleLevel(cnaIblSpecular, cnaIblSpecularSampler, r, lod).rgb;
+    let ab = textureSampleLevel(cnaIblBrdfLut, cnaIblBrdfSampler, vec2f(nDotV, roughness), 0.0).rg;
+    let specular = prefiltered * (ks * ab.x + ab.y);
+    return (diffuse + specular) * cnaIbl.params.z * occlusion;
+}
+)WGSL";
+
     inline constexpr char kPbr[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -1215,7 +1269,11 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 
     let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
-    let ambient = u.ambientLighting.xyz * albedo * occlusion;
+    // WMG-0022: a SUM, not a branch -- PbrEffect/SkinnedPbrEffect zero `ambientColor` whenever a
+    // valid ImageBasedLightEXT is bound (MOD-1226), so exactly one of these two terms is non-zero.
+    // Occlusion multiplies the ambient/IBL term only, never `lo` (MOD-1227).
+    let ambient = u.ambientLighting.xyz * albedo * occlusion
+                + cnaIblAmbient(finalNormal, eye, albedo, f0, roughness, metallic, occlusion);
     let emissiveSample = textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u)).rgb;
     let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
     let emissive = lp.emissiveColor.xyz * emissiveLinear;
@@ -1991,7 +2049,11 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 
     let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
-    let ambient = u.ambientLighting.xyz * albedo * occlusion;
+    // WMG-0022: a SUM, not a branch -- PbrEffect/SkinnedPbrEffect zero `ambientColor` whenever a
+    // valid ImageBasedLightEXT is bound (MOD-1226), so exactly one of these two terms is non-zero.
+    // Occlusion multiplies the ambient/IBL term only, never `lo` (MOD-1227).
+    let ambient = u.ambientLighting.xyz * albedo * occlusion
+                + cnaIblAmbient(finalNormal, eye, albedo, f0, roughness, metallic, occlusion);
     let emissiveSample = textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u)).rgb;
     let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
     let emissive = lp.emissiveColor.xyz * emissiveLinear;

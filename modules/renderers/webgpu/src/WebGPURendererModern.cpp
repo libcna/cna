@@ -1318,4 +1318,125 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         descriptor.entries = entries.data();
         return wgpuDeviceCreateBindGroup(device_, &descriptor);
     }
+
+    // ---- WMG-0022: image-based lighting for the two PBR families -------------------------------
+
+    void WebGPURenderer::EnsureIblResourcesEXT()
+    {
+        if (iblBindGroupLayout_ != nullptr || device_ == nullptr) return;
+        std::array<WGPUBindGroupLayoutEntry, 7> entries{};
+        entries[0].binding = 0;
+        entries[0].visibility = WGPUShaderStage_Fragment;
+        entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        entries[0].buffer.minBindingSize = sizeof(WebGPUIblStateEXT::uniforms);
+        const auto sampler = [&entries](const std::uint32_t binding) {
+            entries[binding].binding = binding;
+            entries[binding].visibility = WGPUShaderStage_Fragment;
+            entries[binding].sampler.type = WGPUSamplerBindingType_Filtering;
+        };
+        const auto texture = [&entries](const std::uint32_t binding,
+                                        const WGPUTextureViewDimension dimension) {
+            entries[binding].binding = binding;
+            entries[binding].visibility = WGPUShaderStage_Fragment;
+            entries[binding].texture.sampleType = WGPUTextureSampleType_Float;
+            entries[binding].texture.viewDimension = dimension;
+        };
+        sampler(1); texture(2, WGPUTextureViewDimension_Cube);
+        sampler(3); texture(4, WGPUTextureViewDimension_Cube);
+        sampler(5); texture(6, WGPUTextureViewDimension_2D);
+        WGPUBindGroupLayoutDescriptor descriptor{};
+        descriptor.label = Label("CNA WebGPU Ibl BindGroupLayout");
+        descriptor.entryCount = entries.size();
+        descriptor.entries = entries.data();
+        iblBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &descriptor);
+        if (iblBindGroupLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create the IBL bind-group layout");
+    }
+
+    WebGPURenderer::WebGPUIblStateEXT WebGPURenderer::CaptureIblStateEXT(
+        const GpuDrawParams& params)
+    {
+        WebGPUIblStateEXT state;
+
+        // REMED-GFX-167's rule, as CaptureShadowStateEXT above states it: resolve to a VALUE here,
+        // at the public draw call, while the resources are unambiguously alive.
+        const auto* irradiance = params.iblIrradiance != nullptr
+            ? dynamic_cast<const IWebGPUCubeSamplable*>(params.iblIrradiance) : nullptr;
+        const auto* specular = params.iblPrefilteredSpecular != nullptr
+            ? dynamic_cast<const IWebGPUCubeSamplable*>(params.iblPrefilteredSpecular) : nullptr;
+        const auto* brdf = params.iblBrdfLut != nullptr
+            ? dynamic_cast<const IWebGPUSamplable*>(params.iblBrdfLut) : nullptr;
+
+        // The same condition VulkanRenderer::FillPbrUboData applies: the flag alone is not enough,
+        // because a bundle missing any one of its three products cannot be evaluated at all.
+        const bool haveIbl = params.iblEnabled && irradiance != nullptr && specular != nullptr &&
+                             brdf != nullptr;
+        if (haveIbl)
+        {
+            state.irradiance = irradiance->SampledCube();
+            state.specular = specular->SampledCube();
+            state.brdfLut = brdf->Sampled();
+        }
+        state.uniforms[0] = haveIbl ? 1.0f : 0.0f;
+        state.uniforms[1] = static_cast<float>(
+            params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1);
+        state.uniforms[2] = params.iblIntensity;
+        state.uniforms[3] = 0.0f;
+        // Slots 10, 11 and 12, which is where VulkanRenderer::PbrSlotSamplersRawEXT() and EasyGL's
+        // texture units read these three from (MOD-1225).
+        for (std::size_t i = 0; i < state.samplers.size(); ++i)
+            state.samplers[i] = slotSamplers_[10 + i];
+        return state;
+    }
+
+    WGPUBindGroup WebGPURenderer::CreateIblBindGroupEXT(const WebGPUIblStateEXT& state,
+                                                        std::vector<WGPUBuffer>& transient)
+    {
+        EnsureIblResourcesEXT();
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.label = Label("CNA WebGPU Ibl UBO");
+        bufferDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = sizeof(state.uniforms);
+        WGPUBuffer buffer = AcquireTransientBuffer(bufferDescriptor.usage, bufferDescriptor.size);
+        wgpuQueueWriteBuffer(queue_, buffer, 0, state.uniforms.data(), sizeof(state.uniforms));
+        transient.push_back(buffer);
+
+        // A pipeline statically uses every binding its layout declares, so a draw with no
+        // environment binds 1x1 white rather than nothing. What it samples does not matter --
+        // `cnaIblAmbient` returns before its first tap when the enabled flag is zero -- but the
+        // binding must exist and must have the declared dimension.
+        const WebGPUSampledTextureEXT white2D =
+            NeutralTextureForDimensionEXT(WGPUTextureViewDimension_2D);
+        const WebGPUSampledTextureEXT whiteCube =
+            NeutralTextureForDimensionEXT(WGPUTextureViewDimension_Cube);
+
+        std::array<WGPUBindGroupEntry, 7> entries{};
+        entries[0].binding = 0;
+        entries[0].buffer = buffer;
+        entries[0].size = sizeof(state.uniforms);
+        const auto bindSampler = [&](const std::uint32_t binding, const std::size_t slot,
+                                     const char* label) {
+            const SlotSamplerState& s = state.samplers[slot];
+            entries[binding].binding = binding;
+            entries[binding].sampler = GetOrCreateSlotSampler(s.filter, s.addressU, s.addressV,
+                                                              s.addressW, s.maxMipLevel,
+                                                              s.maxAnisotropy, label);
+        };
+        bindSampler(1, 0, "IblIrradiance");
+        entries[2].binding = 2;
+        entries[2].textureView = state.irradiance ? state.irradiance.View() : whiteCube.View();
+        bindSampler(3, 1, "IblPrefilteredSpecular");
+        entries[4].binding = 4;
+        entries[4].textureView = state.specular ? state.specular.View() : whiteCube.View();
+        bindSampler(5, 2, "IblBrdfLut");
+        entries[6].binding = 6;
+        entries[6].textureView = state.brdfLut ? state.brdfLut.View() : white2D.View();
+
+        WGPUBindGroupDescriptor descriptor{};
+        descriptor.label = Label("CNA WebGPU Ibl BindGroup");
+        descriptor.layout = iblBindGroupLayout_;
+        descriptor.entryCount = entries.size();
+        descriptor.entries = entries.data();
+        return wgpuDeviceCreateBindGroup(device_, &descriptor);
+    }
 }

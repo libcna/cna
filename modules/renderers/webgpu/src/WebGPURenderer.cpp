@@ -13278,19 +13278,17 @@ namespace
         }
 
         // Pbr / SkinnedPbr are marked templates -> validate their two expanded variants each
-        // (the same expansion the Create*Resources paths compile), shadow block included.
-        validate("Pbr3D",
-                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kPbr, false, 4)
-                  + webgpu_shaders::kShadowSampling).c_str());
-        validate("Pbr3D VertexColor",
-                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kPbr, true, 4)
-                  + webgpu_shaders::kShadowSampling).c_str());
-        validate("SkinnedPbr3D",
-                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kSkinnedPbr, false, 6)
-                  + webgpu_shaders::kShadowSampling).c_str());
+        // (the same expansion the Create*Resources paths compile), shadow block included -- and
+        // WMG-0022's IBL block, which both PBR families now carry for the same reason.
+        const auto expandedPbr = [](const char* source, const bool colored, const int location) {
+            return ExpandPbrVertexColourWgslEXT(source, colored, location)
+                 + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
+        };
+        validate("Pbr3D", expandedPbr(webgpu_shaders::kPbr, false, 4).c_str());
+        validate("Pbr3D VertexColor", expandedPbr(webgpu_shaders::kPbr, true, 4).c_str());
+        validate("SkinnedPbr3D", expandedPbr(webgpu_shaders::kSkinnedPbr, false, 6).c_str());
         validate("SkinnedPbr3D VertexColor",
-                 (ExpandPbrVertexColourWgslEXT(webgpu_shaders::kSkinnedPbr, true, 6)
-                  + webgpu_shaders::kShadowSampling).c_str());
+                 expandedPbr(webgpu_shaders::kSkinnedPbr, true, 6).c_str());
         return failures;
     }
 
@@ -13316,9 +13314,11 @@ namespace
         // colour element, and WGSL rejects a vertex input with no matching attribute.
         // WMG-0014: shadow reception, appended (WGSL declarations are order-independent).
         const std::string bareWgsl =
-            ExpandPbrVertexColourWgslEXT(shaderSource, false, 4) + webgpu_shaders::kShadowSampling;
+            ExpandPbrVertexColourWgslEXT(shaderSource, false, 4) + webgpu_shaders::kShadowSampling
+            + webgpu_shaders::kIblSampling;
         const std::string colorWgsl =
-            ExpandPbrVertexColourWgslEXT(shaderSource, true, 4) + webgpu_shaders::kShadowSampling;
+            ExpandPbrVertexColourWgslEXT(shaderSource, true, 4) + webgpu_shaders::kShadowSampling
+            + webgpu_shaders::kIblSampling;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -13381,8 +13381,10 @@ namespace
         pbrBindGroupLayout1_ = wgpuDeviceCreateBindGroupLayout(device_, &texLayoutDescriptor);
 
         EnsureShadowResourcesEXT();  // WMG-0014: group 2, shared with every lit family.
-        std::array<WGPUBindGroupLayout, 3> groupLayouts{
-            pbrBindGroupLayout0_, pbrBindGroupLayout1_, shadowBindGroupLayout_};
+        EnsureIblResourcesEXT();     // WMG-0022: group 3, shared by both PBR families.
+        std::array<WGPUBindGroupLayout, 4> groupLayouts{
+            pbrBindGroupLayout0_, pbrBindGroupLayout1_, shadowBindGroupLayout_,
+            iblBindGroupLayout_};
         WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
         pipelineLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D PipelineLayout");
         pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
@@ -13668,6 +13670,8 @@ namespace
         // WMG-0014: this draw's shadow reception, captured at its public call for the same
         // reason its pipeline state is.
         command.shadow = CaptureShadowStateEXT(params);
+        // WMG-0022: and this draw's image-based lighting, for exactly the same reason.
+        command.ibl = CaptureIblStateEXT(params);
         pbrDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Pbr, pbrDrawCommands_.size() - 1);
@@ -13781,8 +13785,12 @@ namespace
         // WMG-0014: group 2, this draw's own shadow reception.
         std::vector<WGPUBuffer> shadowTransient;
         WGPUBindGroup shadowBindGroup = CreateShadowBindGroupEXT(command.shadow, shadowTransient);
+        // WMG-0022: group 3, this draw's own image-based lighting. Its uniform buffer is recycled
+        // with the shadow block's, which is the same submission's lifetime.
+        WGPUBindGroup iblBindGroup = CreateIblBindGroupEXT(command.ibl, shadowTransient);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 3, iblBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
         if (command.indexed && !command.indexData.empty())
@@ -13804,6 +13812,7 @@ namespace
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
         pendingBindGroupReleases_.push_back(shadowBindGroup);
+        pendingBindGroupReleases_.push_back(iblBindGroup);
         for (WGPUBuffer buffer : shadowTransient) pendingBufferReleases_.push_back(buffer);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);
@@ -14459,9 +14468,11 @@ namespace
         // input here, because the skinned record already uses 0..5.
         // WMG-0014: shadow reception, appended (WGSL declarations are order-independent).
         const std::string bareWgsl =
-            ExpandPbrVertexColourWgslEXT(shaderSource, false, 6) + webgpu_shaders::kShadowSampling;
+            ExpandPbrVertexColourWgslEXT(shaderSource, false, 6) + webgpu_shaders::kShadowSampling
+            + webgpu_shaders::kIblSampling;
         const std::string colorWgsl =
-            ExpandPbrVertexColourWgslEXT(shaderSource, true, 6) + webgpu_shaders::kShadowSampling;
+            ExpandPbrVertexColourWgslEXT(shaderSource, true, 6) + webgpu_shaders::kShadowSampling
+            + webgpu_shaders::kIblSampling;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -14508,8 +14519,10 @@ namespace
         skinnedPbrBindGroupLayout0_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
 
         EnsureShadowResourcesEXT();  // WMG-0014
-        std::array<WGPUBindGroupLayout, 3> groupLayouts{
-            skinnedPbrBindGroupLayout0_, pbrBindGroupLayout1_, shadowBindGroupLayout_};
+        EnsureIblResourcesEXT();     // WMG-0022
+        std::array<WGPUBindGroupLayout, 4> groupLayouts{
+            skinnedPbrBindGroupLayout0_, pbrBindGroupLayout1_, shadowBindGroupLayout_,
+            iblBindGroupLayout_};
         WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
         pipelineLayoutDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D PipelineLayout");
         pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
@@ -14717,6 +14730,8 @@ namespace
         // WMG-0014: this draw's shadow reception, captured at its public call for the same
         // reason its pipeline state is.
         command.shadow = CaptureShadowStateEXT(params);
+        // WMG-0022: and this draw's image-based lighting, for exactly the same reason.
+        command.ibl = CaptureIblStateEXT(params);
         skinnedPbrDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::SkinnedPbr, skinnedPbrDrawCommands_.size() - 1);
@@ -14840,8 +14855,12 @@ namespace
         // WMG-0014: group 2, this draw's own shadow reception.
         std::vector<WGPUBuffer> shadowTransient;
         WGPUBindGroup shadowBindGroup = CreateShadowBindGroupEXT(command.shadow, shadowTransient);
+        // WMG-0022: group 3, this draw's own image-based lighting. Its uniform buffer is recycled
+        // with the shadow block's, which is the same submission's lifetime.
+        WGPUBindGroup iblBindGroup = CreateIblBindGroupEXT(command.ibl, shadowTransient);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 3, iblBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
         if (command.indexed && !command.indexData.empty())
@@ -14863,6 +14882,7 @@ namespace
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
         pendingBindGroupReleases_.push_back(shadowBindGroup);
+        pendingBindGroupReleases_.push_back(iblBindGroup);
         for (WGPUBuffer buffer : shadowTransient) pendingBufferReleases_.push_back(buffer);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);

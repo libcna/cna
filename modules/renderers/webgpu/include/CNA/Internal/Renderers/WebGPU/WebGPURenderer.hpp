@@ -2007,6 +2007,20 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return device_ != nullptr; }
 
         /**
+         * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: this renderer's PBR programs
+         * really do consume an `ImageBasedLightEXT`.
+         *
+         * `kIblSampling` is appended to both PBR families and evaluates the same split-sum
+         * equation the Vulkan and EasyGL renderers evaluate, from the same three resources.
+         *
+         * @return True while a device exists.
+         */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override
+        {
+            return device_ != nullptr;
+        }
+
+        /**
          * @brief WMG-0016: this renderer really does sample a `Texture3D` from a shader.
          *
          * The descriptor binding contract carries volumes at group 1 bindings 8..11 with their
@@ -3898,6 +3912,26 @@ namespace CNA::Internal::Renderers::WebGPU
         };
 
         /**
+         * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: a queued PBR draw's image-based
+         * lighting, resolved to values at the public draw call.
+         *
+         * The same rule and the same shape as @ref WebGPUShadowStateEXT beside it: this renderer
+         * replays a draw later, so an environment set after the draw but before the flush cannot
+         * change what the already-queued draw receives. The four floats are the `CnaIblParams`
+         * uniform of `kIblSampling`, packed as the Vulkan renderer packs its own `iblParams`.
+         */
+        struct WebGPUIblStateEXT
+        {
+            /// x = enabled, y = prefiltered mip count, z = intensity, w = 0.
+            std::array<float, 4> uniforms{0.0f, 1.0f, 1.0f, 0.0f};
+            WebGPUSampledTextureEXT irradiance{};  ///< Diffuse cube; white when IBL is off.
+            WebGPUSampledTextureEXT specular{};    ///< Prefiltered cube; white when IBL is off.
+            WebGPUSampledTextureEXT brdfLut{};     ///< Scale/bias table; white when IBL is off.
+            /// Sampler slots 10, 11 and 12 as they stood at the draw, in that order.
+            std::array<SlotSamplerState, 3> samplers{};
+        };
+
+        /**
          * @brief plans/plan_webgpu_modern_graphics.md WMG-0013: a queued draw's indirect arguments.
          *
          * Empty on every ordinary draw, which is what @ref enabled being false means. When it is
@@ -4699,6 +4733,8 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
+            /// WMG-0022: this draw's image-based lighting, resolved at its public call.
+            WebGPUIblStateEXT ibl{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
@@ -4925,6 +4961,8 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
+            /// WMG-0022: this draw's image-based lighting, resolved at its public call.
+            WebGPUIblStateEXT ibl{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
@@ -5219,6 +5257,31 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WMG-0014: group 2 of every shadow-receiving pipeline: the params block, and the
         /// directional, point and spot maps each with the sampler its slot carried.
         WGPUBindGroupLayout shadowBindGroupLayout_ = nullptr;
+        /**
+         * @brief WMG-0022: creates the shared group-3 image-based-lighting bind-group layout, once.
+         *
+         * Both PBR families bind the same layout, for the reason `EnsureShadowResourcesEXT` states
+         * about group 2: one shader block and one layout serve every family that carries it.
+         */
+        void EnsureIblResourcesEXT();
+        /**
+         * @brief WMG-0022: captures this draw's image-based lighting from its GpuDrawParams.
+         * @param params The draw description.
+         * @return The state the queued command carries.
+         */
+        [[nodiscard]] WebGPUIblStateEXT CaptureIblStateEXT(
+            const CNA::Internal::Renderers::GpuDrawParams& params);
+        /**
+         * @brief WMG-0022: builds one draw's group-3 bind group.
+         * @param state The captured state.
+         * @param transient Receives the uniform buffer to recycle after submission.
+         * @return The bind group; never null once the device exists.
+         */
+        [[nodiscard]] WGPUBindGroup CreateIblBindGroupEXT(
+            const WebGPUIblStateEXT& state, std::vector<WGPUBuffer>& transient);
+        /// WMG-0022: group 3 of both PBR pipelines: the params block, the irradiance and
+        /// prefiltered cubes and the BRDF table, each with the sampler its slot carried.
+        WGPUBindGroupLayout iblBindGroupLayout_ = nullptr;
         /**
          * @brief WMG-0017: the query set of the GPU timer that is currently open, or null.
          *
