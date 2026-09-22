@@ -194,9 +194,11 @@ namespace
     // WGPURenderPassDescriptor has exactly one set of them. REMED-GFX-156 put Clear() into the same
     // ordered stream REMED-GFX-159 built for the eleven draw families and cuts that stream into one
     // native pass per observable Clear, so `orderedClear` is true here too.
+    // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
+    // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", true, true, true, true, true,
                                  true, true, false,
-                                 true, true, true, true, false, true, false};
+                                 true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
     // Rasterizes nothing and owns no readable colour: every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, false, false, true, false,

@@ -167,9 +167,11 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #elif defined(CNA_RENDERER_WEBGPU)
+    // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
+    // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
+                                 Support::Unsupported, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
