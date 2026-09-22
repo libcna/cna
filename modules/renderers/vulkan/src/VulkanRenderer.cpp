@@ -9164,6 +9164,39 @@ namespace CNA::Internal::Renderers::Vulkan
                            static_cast<unsigned long long>(capacity));
     }
 
+    void VulkanRenderer::GrowDynamicUboRingEXT(std::size_t requiredDraws, uint32_t stride,
+                                                uint32_t& capacityDraws, VkBuffer& buffer,
+                                                VkDeviceMemory& memory, void*& mapped,
+                                                uint32_t binding, VkDeviceSize range,
+                                                const std::vector<VkDescriptorSet>& sets)
+    {
+        if (buffer == VK_NULL_HANDLE || requiredDraws <= capacityDraws) return;
+        VkDeviceSize capacityBytes = static_cast<VkDeviceSize>(capacityDraws) * stride;
+        GrowFrame3DArenaEXT(static_cast<VkDeviceSize>(requiredDraws) * stride, capacityBytes,
+                            buffer, memory, mapped, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+        capacityDraws = static_cast<uint32_t>(
+            std::min<VkDeviceSize>(capacityBytes / stride, std::numeric_limits<uint32_t>::max()));
+
+        // Every set of this family for this frame slot names the old buffer. None is in use: the
+        // slot's fence has signalled (see GrowFrame3DArenaEXT), and sets are per frame slot.
+        const VkDescriptorBufferInfo info{ buffer, 0, range };
+        std::vector<VkWriteDescriptorSet> writes;
+        writes.reserve(sets.size());
+        for (VkDescriptorSet set : sets) {
+            VkWriteDescriptorSet write{};
+            write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet          = set;
+            write.dstBinding      = binding;
+            write.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+            write.descriptorCount = 1;
+            write.pBufferInfo     = &info;
+            writes.push_back(write);
+        }
+        if (!writes.empty())
+            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()), writes.data(),
+                                   0, nullptr);
+    }
+
     void VulkanRenderer::EnsureFrame3DBuffers(VkDeviceSize requiredVertexBytes,
                                                VkDeviceSize requiredIndexBytes)
     {
@@ -10026,6 +10059,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     dualTexFogUBO_[i], dualTexFogUBOMem_[i], &dualTexFogUBOPtr_[i]);
+                dualTexFogUBOCapacity_[i] = kDualTexFogUBOMaxDraws;
             }
         }
     }
@@ -10367,6 +10401,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     envMapUBO_[i], envMapUBOMem_[i], &envMapUBOPtr_[i]);
+                envMapUBOCapacity_[i] = kEnvMapUBOMaxDraws;
             }
         }
 
@@ -10582,6 +10617,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     shadowUBO_[i], shadowUBOMem_[i], &shadowUBOPtr_[i]);
+                shadowUBOCapacity_[i] = kShadowUBOMaxDraws;
             }
         }
     }
@@ -10880,6 +10916,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     litTexturedUBO_[i], litTexturedUBOMem_[i], &litTexturedUBOPtr_[i]);
+                litTexturedUBOCapacity_[i] = kLitTexturedUBOMaxDraws;
             }
         }
     }
@@ -11375,6 +11412,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     fogTex3DUBO_[i], fogTex3DUBOMem_[i], &fogTex3DUBOPtr_[i]);
+                fogTex3DUBOCapacity_[i] = kFogTex3DUBOMaxDraws;
             }
         }
     }
@@ -12541,6 +12579,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     skinnedUBO_[i], skinnedUBOMem_[i], &skinnedUBOPtr_[i]);
+                skinnedUBOCapacity_[i] = kSkinnedUBOMaxDraws;
             }
         }
         // Per-frame fog UBO ring buffers (Task 899).
@@ -12551,6 +12590,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     skinnedFogUBO_[i], skinnedFogUBOMem_[i], &skinnedFogUBOPtr_[i]);
+                skinnedFogUBOCapacity_[i] = kSkinnedFogUBOMaxDraws;
             }
         }
     }
@@ -13106,6 +13146,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     pbrUBO_[i], pbrUBOMem_[i], &pbrUBOPtr_[i]);
+                pbrUBOCapacity_[i] = kPbrUBOMaxDraws;
             }
         }
     }
@@ -13482,6 +13523,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     pbrSkinnedBoneUBO_[i], pbrSkinnedBoneUBOMem_[i], &pbrSkinnedBoneUBOPtr_[i]);
+                pbrSkinnedBoneUBOCapacity_[i] = kPbrSkinnedBoneUBOMaxDraws;
             }
         }
         const VkDeviceSize uboSize = kPbrSkinnedUBOStride * kPbrSkinnedUBOMaxDraws;
@@ -13491,6 +13533,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     pbrSkinnedUBO_[i], pbrSkinnedUBOMem_[i], &pbrSkinnedUBOPtr_[i]);
+                pbrSkinnedUBOCapacity_[i] = kPbrSkinnedUBOMaxDraws;
             }
         }
     }
@@ -14197,7 +14240,20 @@ namespace CNA::Internal::Renderers::Vulkan
         // command records a reference to its buffers; an overfull arena must never drop later
         // draws (large scenes otherwise lose buildings, vehicles and vegetation in draw order).
         VkDeviceSize requiredVB = 0, requiredIB = 0, requiredInstVB = 0;
-        std::size_t requiredLitDraws = 0;
+        // plans/plan_street.md STREET-0004: every stock family's per-draw uniforms come from a
+        // per-frame dynamic-uniform ring, and a ring that ran out used to skip the copy and bind
+        // the out-of-range offset anyway -- the GPU read past the buffer and the device was lost
+        // (cna-street: ~1200 draws a frame against 512 PBR slots, and 32 skinned ones). Each
+        // family's draws are counted here, mirroring the recording chain's precedence below, and
+        // its ring grows before any command names it. A family's sets are collected from its
+        // cache and from the draws themselves, so every set this record binds is repointed.
+        struct UboDemandEXT {
+            std::size_t draws = 0;
+            std::vector<VkDescriptorSet> sets;
+            void add(VkDescriptorSet set) { ++draws; if (set != VK_NULL_HANDLE) sets.push_back(set); }
+        };
+        UboDemandEXT dualTexFogDemand, envMapDemand, skinnedDemand, pbrSkinnedDemand, pbrDemand,
+                     litTexturedDemand, fogTex3DDemand, shadowDemand;
         const auto addArenaBytes = [](VkDeviceSize& used, VkDeviceSize bytes) {
             if (bytes > std::numeric_limits<VkDeviceSize>::max() - used)
                 throw std::overflow_error("CNA Vulkan: per-frame 3D geometry size overflow");
@@ -14214,11 +14270,83 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             if (draw.useInstanced)
                 addArenaBytes(requiredInstVB, static_cast<VkDeviceSize>(draw.instVbData.size()));
-            if (draw.useLitTextured && draw.litTexturedDescSet != VK_NULL_HANDLE)
-                ++requiredLitDraws;
         }
-        if (requiredLitDraws > kLitTexturedUBOMaxDraws)
-            throw std::runtime_error("CNA Vulkan: lit 3D draw count exceeds the per-frame uniform ring");
+        for (const auto& draw : pending3D_) {
+            if (rtOnly && !recordedByFlush(draw.rt.get(), draw.segment)) continue;
+            if (draw.useCustomEffect) {
+            }
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+            else if (draw.useCompiledEffect) {
+            }
+#endif
+            else if (draw.useAlphaTest) {
+            } else if (draw.useDualTexture) {
+                if (draw.dualTexDescSet != VK_NULL_HANDLE) dualTexFogDemand.add(draw.dualTexDescSet);
+            } else if (draw.useEnvMap) {
+                if (draw.envMapDescSet != VK_NULL_HANDLE) envMapDemand.add(draw.envMapDescSet);
+            } else if (draw.useSkinned) {
+                if (draw.skinnedDescSet != VK_NULL_HANDLE && !draw.boneMatrices.empty())
+                    skinnedDemand.add(draw.skinnedDescSet);
+            } else if (draw.usePbrSkinned) {
+                if (draw.pbrDescSet != VK_NULL_HANDLE && !draw.boneMatrices.empty())
+                    pbrSkinnedDemand.add(draw.pbrDescSet);
+            } else if (draw.usePbr) {
+                if (draw.pbrDescSet != VK_NULL_HANDLE) pbrDemand.add(draw.pbrDescSet);
+            } else if (draw.useLitTextured) {
+                if (draw.litTexturedDescSet != VK_NULL_HANDLE)
+                    litTexturedDemand.add(draw.litTexturedDescSet);
+            } else if (draw.useFogTex3D) {
+                if (draw.fogTex3DDescSet != VK_NULL_HANDLE) fogTex3DDemand.add(draw.fogTex3DDescSet);
+            }
+            if ((draw.usePbrSkinned || draw.usePbr || draw.useSkinned || draw.useLitTextured) &&
+                draw.shadowDescSet != VK_NULL_HANDLE)
+                shadowDemand.add(draw.shadowDescSet);
+        }
+        {
+            const uint32_t f = currentFrame_;
+            const auto withCache = [f](UboDemandEXT& demand, const auto& caches) {
+                for (const auto& entry : caches[f]) demand.sets.push_back(entry.second.set);
+                std::sort(demand.sets.begin(), demand.sets.end());
+                demand.sets.erase(std::unique(demand.sets.begin(), demand.sets.end()),
+                                  demand.sets.end());
+                return demand.draws;
+            };
+            GrowDynamicUboRingEXT(withCache(dualTexFogDemand, dualTexDescSets_), kDualTexFogUBOStride,
+                                  dualTexFogUBOCapacity_[f], dualTexFogUBO_[f], dualTexFogUBOMem_[f],
+                                  dualTexFogUBOPtr_[f], 2, 32, dualTexFogDemand.sets);
+            GrowDynamicUboRingEXT(withCache(envMapDemand, envMapDescSets_), kEnvMapUBOStride,
+                                  envMapUBOCapacity_[f], envMapUBO_[f], envMapUBOMem_[f],
+                                  envMapUBOPtr_[f], 2, 192, envMapDemand.sets);
+            const std::size_t skinnedDraws = withCache(skinnedDemand, skinnedDescSets_);
+            GrowDynamicUboRingEXT(skinnedDraws, kSkinnedUBOStride, skinnedUBOCapacity_[f],
+                                  skinnedUBO_[f], skinnedUBOMem_[f], skinnedUBOPtr_[f], 1,
+                                  kSkinnedUBOStride, skinnedDemand.sets);
+            GrowDynamicUboRingEXT(skinnedDraws, kSkinnedFogUBOStride, skinnedFogUBOCapacity_[f],
+                                  skinnedFogUBO_[f], skinnedFogUBOMem_[f], skinnedFogUBOPtr_[f], 2,
+                                  256, skinnedDemand.sets);
+            const std::size_t pbrSkinnedDraws = withCache(pbrSkinnedDemand, pbrSkinnedDescSets_);
+            GrowDynamicUboRingEXT(pbrSkinnedDraws, kPbrSkinnedBoneUBOStride,
+                                  pbrSkinnedBoneUBOCapacity_[f], pbrSkinnedBoneUBO_[f],
+                                  pbrSkinnedBoneUBOMem_[f], pbrSkinnedBoneUBOPtr_[f], 5,
+                                  kPbrSkinnedBoneUBOStride, pbrSkinnedDemand.sets);
+            GrowDynamicUboRingEXT(pbrSkinnedDraws, kPbrSkinnedUBOStride, pbrSkinnedUBOCapacity_[f],
+                                  pbrSkinnedUBO_[f], pbrSkinnedUBOMem_[f], pbrSkinnedUBOPtr_[f], 6,
+                                  sizeof(float) * 128, pbrSkinnedDemand.sets);
+            GrowDynamicUboRingEXT(withCache(pbrDemand, pbrDescSets_), kPbrUBOStride,
+                                  pbrUBOCapacity_[f], pbrUBO_[f], pbrUBOMem_[f], pbrUBOPtr_[f], 5,
+                                  sizeof(float) * 128, pbrDemand.sets);
+            GrowDynamicUboRingEXT(withCache(litTexturedDemand, litTexturedDescSets_),
+                                  kLitTexturedUBOStride, litTexturedUBOCapacity_[f],
+                                  litTexturedUBO_[f], litTexturedUBOMem_[f], litTexturedUBOPtr_[f],
+                                  1, 256, litTexturedDemand.sets);
+            GrowDynamicUboRingEXT(withCache(fogTex3DDemand, fogTex3DDescSets_), kFogTex3DUBOStride,
+                                  fogTex3DUBOCapacity_[f], fogTex3DUBO_[f], fogTex3DUBOMem_[f],
+                                  fogTex3DUBOPtr_[f], 1, 32, fogTex3DDemand.sets);
+            GrowDynamicUboRingEXT(withCache(shadowDemand, shadowDescSets_), kShadowUBOStride,
+                                  shadowUBOCapacity_[f], shadowUBO_[f], shadowUBOMem_[f],
+                                  shadowUBOPtr_[f], 3, sizeof(Pending3DDraw::shadowUboData),
+                                  shadowDemand.sets);
+        }
         if (requiredVB != 0) EnsureFrame3DBuffers(requiredVB, requiredIB);
         if (requiredInstVB != 0) EnsureFrame3DInstBuffers(requiredInstVB);
         VkCommandBufferBeginInfo bi{};
@@ -14935,7 +15063,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (draw.dualTexDescSet != VK_NULL_HANDLE && dualTexFogUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = dualTexFogUBOSlot++;
                         const uint32_t uboOff = slot * kDualTexFogUBOStride;
-                        if (uboOff + 32 <= kDualTexFogUBOStride * kDualTexFogUBOMaxDraws) {
+                        if (uboOff + 32 <= kDualTexFogUBOStride * dualTexFogUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(dualTexFogUBOPtr_[currentFrame_]) + uboOff,
                                         draw.dualTexFogUboData, 32);
                         }
@@ -14950,7 +15078,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (draw.envMapDescSet != VK_NULL_HANDLE && envMapUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = envMapUBOSlot++;
                         const uint32_t uboOff = slot * kEnvMapUBOStride;
-                        if (uboOff + 192 <= kEnvMapUBOStride * kEnvMapUBOMaxDraws) {
+                        if (uboOff + 192 <= kEnvMapUBOStride * envMapUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(envMapUBOPtr_[currentFrame_]) + uboOff,
                                         draw.envMapUboData, 192);
                         }
@@ -14966,7 +15094,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         && !draw.boneMatrices.empty()) {
                         const uint32_t boneSlot = skinnedUBOSlot++;
                         const uint32_t boneOff  = boneSlot * kSkinnedUBOStride;
-                        if (boneOff + kSkinnedUBOStride <= kSkinnedUBOStride * kSkinnedUBOMaxDraws) {
+                        if (boneOff + kSkinnedUBOStride <= kSkinnedUBOStride * skinnedUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(skinnedUBOPtr_[currentFrame_]) + boneOff,
                                         draw.boneMatrices.data(),
                                         draw.boneMatrices.size() * sizeof(float));
@@ -14980,7 +15108,7 @@ namespace CNA::Internal::Renderers::Vulkan
                             fogOff = fogSlot * kSkinnedFogUBOStride;
                             // REMED-GFX-008: 256 bytes now (64 floats — added emissiveColor vec4 at
                             // offset 240, filling the 256-byte stride exactly).
-                            if (fogOff + 256 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
+                            if (fogOff + 256 <= kSkinnedFogUBOStride * skinnedFogUBOCapacity_[currentFrame_]) {
                                 std::memcpy(static_cast<uint8_t*>(skinnedFogUBOPtr_[currentFrame_]) + fogOff,
                                             draw.skinnedFogUboData, 256);
                             }
@@ -14998,7 +15126,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         && pbrSkinnedUBOPtr_[currentFrame_] && !draw.boneMatrices.empty()) {
                         const uint32_t boneSlot = pbrSkinnedBoneUBOSlot++;
                         const uint32_t boneOff  = boneSlot * kPbrSkinnedBoneUBOStride;
-                        if (boneOff + kPbrSkinnedBoneUBOStride <= kPbrSkinnedBoneUBOStride * kPbrSkinnedBoneUBOMaxDraws) {
+                        if (boneOff + kPbrSkinnedBoneUBOStride <= kPbrSkinnedBoneUBOStride * pbrSkinnedBoneUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(pbrSkinnedBoneUBOPtr_[currentFrame_]) + boneOff,
                                         draw.boneMatrices.data(),
                                         draw.boneMatrices.size() * sizeof(float));
@@ -15007,7 +15135,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         uint32_t pbrOff = 0;
                         const uint32_t pbrSlot = pbrSkinnedUBOSlot++;
                         pbrOff = pbrSlot * kPbrSkinnedUBOStride;
-                        if (pbrOff + sizeof(draw.pbrUboData) <= kPbrSkinnedUBOStride * kPbrSkinnedUBOMaxDraws) {
+                        if (pbrOff + sizeof(draw.pbrUboData) <= kPbrSkinnedUBOStride * pbrSkinnedUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(pbrSkinnedUBOPtr_[currentFrame_]) + pbrOff,
                                         draw.pbrUboData, sizeof(draw.pbrUboData));
                         }
@@ -15023,7 +15151,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (draw.pbrDescSet != VK_NULL_HANDLE && pbrUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = pbrUBOSlot++;
                         const uint32_t uboOff = slot * kPbrUBOStride;
-                        if (uboOff + sizeof(draw.pbrUboData) <= kPbrUBOStride * kPbrUBOMaxDraws) {
+                        if (uboOff + sizeof(draw.pbrUboData) <= kPbrUBOStride * pbrUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(pbrUBOPtr_[currentFrame_]) + uboOff,
                                         draw.pbrUboData, sizeof(draw.pbrUboData));
                         }
@@ -15042,7 +15170,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (draw.litTexturedDescSet != VK_NULL_HANDLE && litTexturedUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = litTexturedUBOSlot++;
                         const uint32_t uboOff = slot * kLitTexturedUBOStride;
-                        if (uboOff + 256 <= kLitTexturedUBOStride * kLitTexturedUBOMaxDraws) {
+                        if (uboOff + 256 <= kLitTexturedUBOStride * litTexturedUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(litTexturedUBOPtr_[currentFrame_]) + uboOff,
                                         draw.litUboData, 256);
                         }
@@ -15061,7 +15189,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (draw.fogTex3DDescSet != VK_NULL_HANDLE && fogTex3DUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = fogTex3DUBOSlot++;
                         const uint32_t uboOff = slot * kFogTex3DUBOStride;
-                        if (uboOff + 32 <= kFogTex3DUBOStride * kFogTex3DUBOMaxDraws) {
+                        if (uboOff + 32 <= kFogTex3DUBOStride * fogTex3DUBOCapacity_[currentFrame_]) {
                             std::memcpy(static_cast<uint8_t*>(fogTex3DUBOPtr_[currentFrame_]) + uboOff,
                                         draw.fogTex3DUboData, 32);
                         }
@@ -15088,7 +15216,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     const uint32_t slot = shadowUBOSlot++;
                     const uint32_t shadowOff = slot * kShadowUBOStride;
                     if (shadowOff + sizeof(draw.shadowUboData) <=
-                        kShadowUBOStride * kShadowUBOMaxDraws) {
+                        kShadowUBOStride * shadowUBOCapacity_[currentFrame_]) {
                         std::memcpy(static_cast<uint8_t*>(shadowUBOPtr_[currentFrame_]) + shadowOff,
                                     draw.shadowUboData, sizeof(draw.shadowUboData));
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,

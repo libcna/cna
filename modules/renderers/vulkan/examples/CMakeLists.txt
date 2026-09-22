@@ -1672,6 +1672,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_descriptor_pool_overflow
             TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_street.md STREET-0004: every stock 3D family's per-draw uniforms come from a
+        # per-frame dynamic-uniform ring (512 PbrEffect blocks, 32 skinned palettes), and a ring
+        # that ran out bound an out-of-range offset -- the GPU read past the buffer and the device
+        # was lost. One frame of 1500 PbrEffect and 100 SkinnedPbrEffect draws, each lit only by
+        # its own emissive factor, must draw every cell in its own colour with the layer silent.
+        cna_vulkan_test(cna_test_vulkan_uniform_ring_growth
+                        vulkan_uniform_ring_growth_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_UniformRingGrowth
+            COMMAND cna_test_vulkan_uniform_ring_growth
+            TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-020 (F-07): SupportsCapability used to end in
         # `default: return true`, so the renderer answered true for six members GraphicsDevice
         # answers false, and for values that are not enumerators at all. Asks both seams the same

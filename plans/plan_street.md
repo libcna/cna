@@ -16,6 +16,7 @@ are fixed here, on the layer they belong to, with a regression test.
 | STREET-0001 | Consuming CNA with `add_subdirectory()` failed at configure (test display policy) | ✅ |
 | STREET-0002 | `CascadedShadowMap` could not create a High atlas under any profile | ✅ |
 | STREET-0003 | Vulkan: the first 3D draw refused -- the lazily created default white could not get a descriptor set | ✅ |
+| STREET-0004 | Vulkan: a frame with more stock draws than a uniform ring holds read past the buffer and lost the device | ✅ |
 
 ---
 
@@ -75,6 +76,29 @@ of textures and dozens of ShaderEffect bound sets have used the base pool.
 name, VULKAN-391). **Test:** `Vulkan_DescriptorPoolOverflow` leg E injects the allocation failure
 into exactly the white's set (the first allocation `DrawPrimitivesEx` makes) and requires the draw
 to succeed and reach the back buffer; the old code fails it with cna-street's exact message.
+
+## STREET-0004 — per-frame uniform rings overflowed into device loss
+
+**Symptom.** With STREET-0003 fixed, the probe bake lost the device (`VK_ERROR_DEVICE_LOST` from
+`vkQueueSubmit`) after the layer reported `VUID-vkCmdBindDescriptorSets-pDescriptorSets-01979`:
+`pDynamicOffsets[0] is 262144, which when added to the buffer descriptor's range (512) ... is greater
+than the size of the buffer (262144)`.
+
+**Root cause.** Every stock 3D family takes its per-draw uniforms from a per-frame dynamic-uniform
+ring of fixed size: 512 blocks for PbrEffect, 32 bone palettes for SkinnedEffect and
+SkinnedPbrEffect, 512 for the shadow receivers. Past the end the copy was skipped but the set was
+bound with the out-of-range offset anyway, so the GPU read past the buffer. Only the lit-textured
+family refused by name. cna-street draws ~1200 PBR batches and ~150 skinned figures a frame, and a
+probe face more.
+
+**Fix.** The rings grow the way the per-frame vertex arenas already do (`GrowFrame3DArenaEXT`): at
+the top of `RecordCommandBuffer`, when every draw is queued and the frame slot's fence has signalled,
+each family's draws are counted -- mirroring the recording chain's precedence -- and its ring for
+this slot is grown before any command names it; every descriptor set of that family for this slot
+(its cache plus the queued draws' own) is repointed at the new buffer. The lit-textured refusal is
+replaced by the same growth. **Test:** `Vulkan_UniformRingGrowth` -- one frame of 1500 PbrEffect and
+100 SkinnedPbrEffect draws, each lit only by its own emissive factor in its own cell: 1500/1500 and
+100/100 with the layer silent; the old renderer draws 512/1500 and 8/100 and reports the VUID above.
 
 ## cna-street's own defects (fixed in cna-street)
 

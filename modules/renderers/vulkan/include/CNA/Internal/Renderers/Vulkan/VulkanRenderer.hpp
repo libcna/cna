@@ -4972,6 +4972,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> dualTexFogUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> dualTexFogUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> dualTexFogUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kDualTexFogUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> dualTexFogUBOCapacity_ = {};
         // EnvironmentMapEffect resources
         VkDescriptorSetLayout descriptorSetLayoutEnvMap_   = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolEnvMap_        = VK_NULL_HANDLE;
@@ -4986,6 +4989,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> envMapUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> envMapUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> envMapUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kEnvMapUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> envMapUBOCapacity_ = {};
         // Default 1×1 white cube image for fallback when env map texture is null
         /// plan_vulkan.md VULKAN-254: the 1x1x1 white volume that fills a set-1 `sampler3D` binding
         /// nothing was bound to. A `sampler2D` filler cannot stand in for one: a descriptor's view
@@ -5015,6 +5021,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> litTexturedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> litTexturedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> litTexturedUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kLitTexturedUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> litTexturedUBOCapacity_ = {};
         // Task 899: BasicEffect fog bundle shared by colored3d (stride 16) / textured3d
         // (stride 20) / colored_textured3d (stride 24) -- all three read the same fully-packed
         // 128-byte FillExtPushConst() layout (zero spare bytes for fog), so fog is forwarded via
@@ -5035,6 +5044,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> fogTex3DUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> fogTex3DUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> fogTex3DUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kFogTex3DUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> fogTex3DUBOCapacity_ = {};
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         // --- Compiled XNA effects (plans/plan_fx.md FX-065) ---
         //
@@ -5107,6 +5119,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> skinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> skinnedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> skinnedUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kSkinnedUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> skinnedUBOCapacity_ = {};
         // Task 899: SkinnedEffect fog -- separate small dynamic UBO at binding=2 (BoneBlock@1
         // has zero spare capacity, so fog cannot be packed into it).
         static constexpr uint32_t kSkinnedFogUBOStride   = 256;
@@ -5114,6 +5129,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> skinnedFogUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> skinnedFogUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> skinnedFogUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kSkinnedFogUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> skinnedFogUBOCapacity_ = {};
         // plans/plan_vulkan.md VULKAN-234: Task 111's `pipelinesInstanced3D_` and its
         // `pipelineLayoutExt3D_` were here. An instanced draw takes its effect family's own
         // pipelines now -- binding 0 per-vertex, binding 1 per-instance at stride 64, in whichever
@@ -5138,6 +5156,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> pbrUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kPbrUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> pbrUBOCapacity_ = {};
 
         // SkinnedPbrEffect resources (PBR + skinning combo, stride 68, or stride 76 with the
         // importer-appended TextureCoordinate1 channel). Same 10 samplers as descriptorSetLayoutPbr_
@@ -5156,11 +5177,17 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedBoneUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedBoneUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedBoneUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kPbrSkinnedBoneUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> pbrSkinnedBoneUBOCapacity_ = {};
         static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 512-byte PbrParams block
         static constexpr uint32_t kPbrSkinnedUBOMaxDraws = 32;
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kPbrSkinnedUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> pbrSkinnedUBOCapacity_ = {};
 
         // MOD-2236: one set-1 shadow bundle shared by every stock family that EasyGL makes a
         // receiver (BasicEffect, SkinnedEffect, PbrEffect and SkinnedPbrEffect). Keeping it out of
@@ -5177,6 +5204,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> shadowUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> shadowUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> shadowUBOPtr_ = {};
+        /// Draws the ring of each frame slot holds; kShadowUBOMaxDraws until a frame needs more
+        /// (plans/plan_street.md STREET-0004).
+        std::array<uint32_t,       MaxFramesInFlight> shadowUBOCapacity_ = {};
 
         // Default 1×1 white texture used when DrawPrimitivesEx has no texture bound.
         VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
@@ -6348,6 +6378,13 @@ namespace CNA::Internal::Renderers::Vulkan
         void GrowFrame3DArenaEXT(VkDeviceSize requiredBytes, VkDeviceSize& capacity,
                                  VkBuffer& buffer, VkDeviceMemory& memory, void*& mapped,
                                  VkBufferUsageFlags usage);
+        /// plans/plan_street.md STREET-0004: grows one frame slot's dynamic-uniform ring to hold
+        /// @p requiredDraws blocks of @p stride bytes, and points @p binding of every descriptor
+        /// set in @p sets at the new buffer. A no-op when the ring already holds that many.
+        void GrowDynamicUboRingEXT(std::size_t requiredDraws, uint32_t stride,
+                                   uint32_t& capacityDraws, VkBuffer& buffer,
+                                   VkDeviceMemory& memory, void*& mapped, uint32_t binding,
+                                   VkDeviceSize range, const std::vector<VkDescriptorSet>& sets);
         VkRenderPass GetOrCreateMRTRenderPass(const std::vector<VkFormat>& colorFormats,
                                               VkSampleCountFlagBits sampleCount,
                                               VkFormat depthFormat, uint32_t splitRole = 0);
