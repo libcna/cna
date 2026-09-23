@@ -22,6 +22,12 @@ layout(set = 2, binding = 3) uniform sampler2D uEmissiveMap;
 layout(set = 2, binding = 4) uniform sampler2D uOcclusionMap;
 layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
 layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;
+// plans/plan_street_sdlgpu.md STREETS-0002: an ImageBasedLightEXT's three resources, after the
+// shadow maps at 7..9, read through GraphicsDevice.SamplerStates[10..12] as on Vulkan, EasyGL and
+// WebGPU. A draw with no environment binds neutral white here and iblParams.x switches the term off.
+layout(set = 2, binding = 10) uniform samplerCube uIblIrradiance;
+layout(set = 2, binding = 11) uniform samplerCube uIblSpecular;
+layout(set = 2, binding = 12) uniform sampler2D uIblBrdfLut;
 
 layout(set = 3, binding = 0) uniform PC {
     mat4  mvp;             // vertex-stage only, unused here
@@ -65,6 +71,11 @@ layout(set = 3, binding = 2) uniform PbrParams {
     // reception needs one, so the two vectors ride at the end of this block instead.
     vec4 lodBias0To3;
     vec4 lodBias4To7;
+    // STREETS-0002: x = enabled, y = prefiltered mip count, z = intensity -- Vulkan's iblParams.
+    vec4 iblParams;
+    // STREETS-0002: MipMapLevelOfDetailBias of sampler slots 10, 11 and 12, applied in the shader
+    // like every other slot's here, because this renderer's samplers are created without one.
+    vec4 iblLodBias;
 } pbrp;
 
 // SMG-0032: shadow reception, from the one shared snippet. The three maps follow the seven
@@ -119,6 +130,24 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
 vec3 safeNormalize(vec3 v) {
     float len2 = dot(v, v);
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
+}
+
+// STREETS-0002: the split-sum image-based term, Vulkan's CnaIblAmbient term for term. The mip for a
+// roughness is roughness * (mipCount - 1), which is EnvironmentProcessor::mipForRoughness.
+vec3 cnaIblAmbient(vec3 N, vec3 V, vec3 albedo, vec3 F0, float roughness,
+                   float metallic, float occlusion) {
+    if (pbrp.iblParams.x < 0.5) return vec3(0.0);
+    float NdotV = clamp(dot(N, V), 1e-4, 1.0);
+    vec3 kS = F0 + (max(vec3(1.0 - roughness), F0) - F0)
+                    * pow(1.0 - NdotV, 5.0);
+    vec3 kD = (1.0 - kS) * (1.0 - metallic);
+    vec3 diffuse = texture(uIblIrradiance, N, pbrp.iblLodBias.x).rgb * albedo * kD;
+    vec3 R = reflect(-V, N);
+    float lod = roughness * max(pbrp.iblParams.y - 1.0, 0.0);
+    vec3 prefiltered = textureLod(uIblSpecular, R, lod + pbrp.iblLodBias.y).rgb;
+    vec2 ab = texture(uIblBrdfLut, vec2(NdotV, roughness), pbrp.iblLodBias.z).rg;
+    vec3 specular = prefiltered * (kS * ab.x + ab.y);
+    return (diffuse + specular) * pbrp.iblParams.z * occlusion;
 }
 
 vec2 cnaPbrTransformUV(vec2 uv, int slot) {
@@ -187,7 +216,9 @@ void main() {
     float occlusionSample = texture(
         uOcclusionMap, cnaPbrTransformUV(fragUV, 4), pbrp.lodBias4To7.x).r;
     float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);
-    vec3 ambient = pc.ambientColor * albedo * occlusion;
+    // A sum, not a branch: PbrEffect already zeroes ambientColor when an environment is bound.
+    vec3 ambient = pc.ambientColor * albedo * occlusion
+                 + cnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion);
     vec3 emissiveSample = texture(
         uEmissiveMap, cnaPbrTransformUV(fragUV, 3), pbrp.lodBias0To3.w).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y);

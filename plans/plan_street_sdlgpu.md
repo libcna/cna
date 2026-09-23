@@ -34,6 +34,7 @@ Vulkan is the natural reference: same driver, same GPU.
 | ID | Task | Status |
 |---|---|---|
 | STREETS-0001 | SDL_GPU: every instanced stock draw took the position-only `instanced3d` module, whatever effect was applied | ✅ |
+| STREETS-0002 | SDL_GPU: no image-based lighting -- the street fell back to a flat hemisphere ambient | ✅ |
 
 ---
 
@@ -104,3 +105,43 @@ the next task.
 `SdlGpuSamplesBothKhrMaterialsSpecularTextures`, `EveryPbrShaderUsesTheGltfPackedTextureChannels`):
 their SDL_GPU evidence still quotes `samplerLodBias.slots…` and `fsInfo.num_samplers = 7`, which
 SMG-0032 renamed to `pbrp.lodBias…` and raised to 10.
+
+---
+
+## STREETS-0002 — no image-based lighting on SDL_GPU
+
+**Symptom.** With every prop fixed, the SDL_GPU frame was still visibly colder than Vulkan's:
+blue-grey facades in shade, shop windows showing their interiors instead of the sky, darker
+canopies. The street said why at start-up: `renderer has no image based lighting; falling back to
+a hemisphere ambient term`.
+
+**Root cause.** Not a street defect: `SupportsImageBasedLightingEXT()` was the interface default,
+`false`, and truthfully so -- SDL_GPU's PBR fragment stage had no environment term at all. The
+street asks exactly the right question and takes its documented fallback. `docs/cnaext-engine-layer.md`
+listed it as not implemented.
+
+**Fix.** The WebGPU route (`WMG-0022`), for the same equation:
+
+* `pbr3d.frag.glsl` gains `cnaIblAmbient`, Vulkan's `CnaIblAmbient` term for term (split-sum:
+  irradiance x `kD`, prefiltered specular at `roughness * (mipCount - 1)`, BRDF table), added to
+  the ambient line as a sum -- `PbrEffect` already zeroes `AmbientLightColor` when an environment is
+  bound (MOD-1226) -- and multiplied by occlusion only (MOD-1227). Both rigid and skinned PBR use
+  this fragment stage, so SkinnedPbrEffect gets it too.
+* The three resources sit at fragment samplers 10..12, after the shadow maps, read through
+  `GraphicsDevice.SamplerStates[10..12]` as on Vulkan, EasyGL and WebGPU. `PbrParams` gains
+  `iblParams` (enabled, mip count, intensity) and the three slots' LOD biases, applied in the shader
+  like every other slot here because this renderer's samplers carry none.
+* Resolved at the public draw, like every other map (REMED-GFX-152); a draw with no environment
+  binds neutral white and the term switches off, because a pipeline uses every sampler its shader
+  declares.
+* `SupportsImageBasedLightingEXT()` answers true while a device exists.
+
+**Tests.** `CNAEXT_ImageBasedLighting` **8/8**, white furnace included; `CNAEXT_GltfPbr` 5/5 and
+`CNAEXT_Showcase` 8/8 -- all three were **skipped** on SDL_GPU before and now run and pass. No
+modern `CnaGraphicsExtTests` skip was IBL-gated (every one of the 31 is inline GLSL ES, a GPU timer
+or a refusal path), so that suite stays 931 / 0 / 31. Classic `-R '^SdlGpu'`: the same 27 by
+name. `GltfRendererPbrFallbackPolicy`: the three pre-existing failures only.
+
+**The street after the fix:** 2-21 % of pixels differ from Vulkan (mean 0.5-4.8/255), from 44-99 %
+before STREETS-0001; the environment is baked (`environment baked -- peak radiance 1.445`) and the
+fallback message is gone.

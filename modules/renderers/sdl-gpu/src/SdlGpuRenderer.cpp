@@ -7373,7 +7373,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.entrypoint = "main";
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        fsInfo.num_samplers = 10;  // core five, specular strength and colour + SMG-0032's three maps
+        // Core five, specular strength and colour, SMG-0032's three shadow maps + STREETS-0002's
+        // irradiance, prefiltered specular and BRDF table.
+        fsInfo.num_samplers = 13;
         // PC, LitLightParams, PbrParams (which now ends with the sampler LOD biases) + CnaShadowParams.
         fsInfo.num_uniform_buffers = 4;
         resources.CreateShader(
@@ -8127,6 +8129,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressW = samplerSlots_[0].addressW;
         command.specularSampler = samplerSlots_[5];
         command.specularColorSampler = samplerSlots_[6];
+        // STREETS-0002: resolved now, like every other map (REMED-GFX-152), so an environment
+        // changed or disposed before the flush cannot reach an already-queued draw.
+        const bool haveIbl = params.iblEnabled && params.iblIrradiance != nullptr &&
+                             params.iblPrefilteredSpecular != nullptr && params.iblBrdfLut != nullptr;
+        if (haveIbl)
+        {
+            command.iblIrradiance =
+                ResolveSampledCubeEXT(params.iblIrradiance, "ImageBasedLightEXT.Irradiance");
+            command.iblPrefilteredSpecular = ResolveSampledCubeEXT(
+                params.iblPrefilteredSpecular, "ImageBasedLightEXT.PrefilteredSpecular");
+            command.iblBrdfLut =
+                ResolveSampledTextureEXT(params.iblBrdfLut, "ImageBasedLightEXT.BrdfLut");
+        }
+        command.iblSamplers = {samplerSlots_[10], samplerSlots_[11], samplerSlots_[12]};
+        command.iblParams = {
+            haveIbl ? 1.0f : 0.0f,
+            static_cast<float>(params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1),
+            params.iblIntensity, 0.0f};
 
         if (ib != nullptr)
         {
@@ -8976,7 +8996,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
         // SMG-0032: the stock sampler LOD biases ride at the end of PbrParams (lodBias0To3,
         // lodBias4To7), which frees fragment uniform slot 3 for the shadow parameter block.
-        std::array<float, 80> pbrBlock{};
+        std::array<float, 88> pbrBlock{};
         std::copy(command.pbrParams.begin(), command.pbrParams.end(), pbrBlock.begin());
         const std::array<float, 8> lodBiases{
             command.lodBias,
@@ -8987,6 +9007,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.specularSampler.lodBias,
             command.specularColorSampler.lodBias};
         std::copy(lodBiases.begin(), lodBiases.end(), pbrBlock.begin() + 72);
+        // STREETS-0002: iblParams, then the three IBL slots' LOD biases.
+        std::copy(command.iblParams.begin(), command.iblParams.end(), pbrBlock.begin() + 80);
+        for (std::size_t i = 0; i < command.iblSamplers.size(); ++i)
+            pbrBlock[84 + i] = command.iblSamplers[i].lodBias;
         SDL_PushGPUFragmentUniformData(cmd, 2, pbrBlock.data(), sizeof(pbrBlock));
 
         SDL_GPUBufferBinding vbBinding{};
@@ -9049,6 +9073,28 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBindings[6].sampler = specularColorSampler;
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 7);
         BindShadowReceptionEXT(pass, cmd, command.shadow, /*firstSampler=*/7);
+
+        // STREETS-0002: the environment at 10..12. A pipeline uses every sampler its shader
+        // declares, so a draw without one binds neutral white and iblParams.x turns the term off.
+        static constexpr std::array<const char*, 3> kIblLabels{
+            "Pbr3D.IblIrradiance", "Pbr3D.IblSpecular", "Pbr3D.IblBrdfLut"};
+        const std::array<SDL_GPUTexture*, 3> iblTextures{
+            command.iblIrradiance ? command.iblIrradiance.texture
+                                  : defaultWhiteCubeTexture_->Texture(),
+            command.iblPrefilteredSpecular ? command.iblPrefilteredSpecular.texture
+                                           : defaultWhiteCubeTexture_->Texture(),
+            command.iblBrdfLut ? command.iblBrdfLut.texture : defaultWhiteTexture_->Texture()};
+        std::array<SDL_GPUTextureSamplerBinding, 3> iblBindings{};
+        for (std::size_t i = 0; i < iblBindings.size(); ++i)
+        {
+            const SamplerSlotState& state = command.iblSamplers[i];
+            iblBindings[i].texture = iblTextures[i];
+            iblBindings[i].sampler = GetOrCreateSampler(
+                state.filter, state.addressU, state.addressV, state.maxAnisotropy, kIblLabels[i],
+                state.maxMipLevel, /*lodBias=*/0.0f, state.addressW);
+        }
+        SDL_BindGPUFragmentSamplers(pass, 10, iblBindings.data(),
+                                    static_cast<Uint32>(iblBindings.size()));
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {

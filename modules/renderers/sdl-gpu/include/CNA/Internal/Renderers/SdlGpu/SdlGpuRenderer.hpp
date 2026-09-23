@@ -2648,6 +2648,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressW = 1;
             SamplerSlotState specularSampler;       ///< GraphicsDevice.SamplerStates[5]
             SamplerSlotState specularColorSampler;  ///< GraphicsDevice.SamplerStates[6]
+            /// STREETS-0002: the ImageBasedLightEXT resources, null when the draw has none.
+            SdlGpuSampledTextureEXT iblIrradiance;
+            SdlGpuSampledTextureEXT iblPrefilteredSpecular;
+            SdlGpuSampledTextureEXT iblBrdfLut;
+            /// STREETS-0002: GraphicsDevice.SamplerStates[10..12], the slots those three read.
+            std::array<SamplerSlotState, 3> iblSamplers{};
+            /// STREETS-0002: x = enabled, y = prefiltered mip count, z = intensity.
+            std::array<float, 4> iblParams{};
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -2966,6 +2974,14 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return Always true: the receiving shaders are created with the renderer.
          */
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+
+        /**
+         * @brief plans/plan_street_sdlgpu.md STREETS-0002: the PBR shader really does consume an
+         *        `ImageBasedLightEXT` -- the split-sum term Vulkan, EasyGL and WebGPU evaluate.
+         *
+         * @return True while a device exists.
+         */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return device_ != nullptr; }
         /** @brief Creates a compute shader from a SPIR-V payload. @param computeSrc Module bytes.
          *  @return The shader, or null where compute is unavailable. */
         std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
