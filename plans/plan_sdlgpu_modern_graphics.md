@@ -406,3 +406,37 @@ every `cna_test_sdlgpu_*` executable stale.
 **Rule for every measurement run in this ledger from here on: `cmake --build cmake-build-sdlgpu`
 with no `--target`, then measure.** A targeted build is for compile-checking only. After the full
 build both tests pass, and the classic failure set is the baseline's again.
+
+### Measurement after SMG-0006…0014, whole tree rebuilt first (see SMG-0014)
+
+| suite | baseline | now |
+|---|---|---|
+| Modern `CnaGraphicsExtTests` | 682 / 21 / 259 | **834 / 52 / 76** of 962 |
+| Classic `-R '^SdlGpu'` | 202 / 27 | **202 / 27** of 229 |
+| CNAEXT examples `-L CnaExt` | 11 / 1 / 20 | **19 / 4 / 9** of 32 |
+| Dead / profile-aborted | 0 | 0 |
+| Build size | 657 MB | 660 MB |
+
+The classic failure set is **byte-identical to the baseline's** — no regression, nothing newly fixed.
+
+The three new example failures are `CNAEXT_Skybox`, `CNAEXT_ClusteredLights` and
+`CNAEXT_Transparency`; `CNAEXT_NoPosixSetenv` is the pre-existing one, which names `::unsetenv`
+call sites in `modules/platform/src/Wayland/` and belongs to the Wayland workstream.
+
+### The one structural gap the remaining failures share
+
+`SdlGpuRenderer::DrawPrimitivesEx` and `DrawIndexedPrimitivesEx` **ignore
+`params.customEffectRenderer` entirely** and fall through to `DispatchStockDrawEXT`, which picks a
+stock shader by vertex shape. The instanced path at least refuses by name
+("custom-effect instancing is not implemented"); the non-instanced one silently draws the geometry
+with a stock effect, which is why a skybox test reads 255 where it expects 0 — the sky was drawn,
+just not by the sky shader.
+
+A custom `ShaderEffect` on the SpriteBatch path works (that is what SMG-0006…0011 built); on a 3D
+draw it does not exist. That accounts for the bulk of the 52: `ClusteredForwardEffectTest` (15),
+`SkyboxRenderTest` (4), `PerObjectVelocityTest` (4), `DecalPassTest` (4) and others, plus all three
+new example failures.
+
+The work it needs is the shape `QueueCompiledEffectDraw`/`IssueCompiledEffectDraw` already has for
+MojoShader effects — a queued command carrying the effect's shaders, an arbitrary vertex
+declaration rather than the fixed `SpriteVertex` one, and a pipeline keyed on that declaration.
