@@ -34,7 +34,8 @@ CNA_GRAPHICS_RENDERER=WEBGPU $R --exec ./build/bin/cna-street --no-audio --no-ov
 | ID | Task | Status |
 |---|---|---|
 | STREETW-0001 | WebGPU: every instanced draw took the position-only `instanced3d` program, whatever effect was applied | ✅ |
-| STREETW-0002 | cna-street: the atmospheric sky is GLSL or SPIR-V only, so a WGSL renderer drew no sky | ⬜ |
+| STREETW-0002 | cna-street: the atmospheric sky was GLSL or SPIR-V only, so a WGSL renderer drew no sky | ✅ |
+| STREETW-0003 | WebGPU: the whole frame sits half a pixel off the other renderers' | 📏 measured, not fixed |
 
 ---
 
@@ -117,4 +118,46 @@ branch when it is true. WebGPU answers true — it executes shader *source* — 
 executes is WGSL (`GetShaderDialectEXT() == Wgsl`). The question the code means to ask is "which
 language", not "source or not".
 
-Status: open at the time of writing; see the row above for the current state.
+**Fix, in cna-street** (`6d45b96`): the branch asks `GetShaderDialectEXT()`, and the packaged
+variant covers everything that is not GLSL. The sky package gained a WGSL payload beside its SPIR-V
+one, generated from the same `sky.vulkan.*.glsl` sources by `tools/shader_package/generate_shader_package.py`
+(naga-cli 28.0.0 — 29.x needs rustc 1.87 and this machine has 1.85), so the three variants cannot
+drift apart. EasyGL and Vulkan take exactly the branches they took before, which their unchanged
+captures confirm.
+
+One trap: `ShaderCodeEXT` has a text constructor and a binary one, and WGSL is text. Handing the
+WGSL through the binary overload is refused at construction — "a binary payload requires a binary
+shader format" — which surfaces as a fatal exception out of `Game::Run()`, not as a shader error.
+
+---
+
+## STREETW-0003 — what still differs, and why it is not fixed here
+
+After `STREETW-0001` and `STREETW-0002` the 18 viewpoints differ from the OPENGL33 capture by
+8–32 % of pixels on WEBGPU, against 0.3–1.9 % on VULKAN. Measured, in order:
+
+* **Not noise.** Each renderer is deterministic: two captures of the same renderer differ by
+  0.00 %.
+* **Not tone.** Region means agree to within 1–5/255 and the difference is not monotonic in
+  brightness, so it is not a gamma, exposure or tone-map difference.
+* **Not sharpness.** The high-frequency detail energy of the same oblique facades, road and
+  canopy matches to three decimal places, so it is not filtering, anisotropy or mip selection.
+* **Not anti-aliasing.** `--preset medium` turns MSAA off in all three and the gap grows slightly
+  rather than closing.
+* **Not a pass.** With `--no-bloom --no-ssao --no-fog --no-shadows --no-ibl --no-light-shafts
+  --no-probes` it is still 26 %, so it is in the base opaque pass.
+* **It is a sub-pixel offset.** A search over sub-pixel shifts finds the WebGPU frame displaced by
+  about **half a pixel in both x and y**: aligning it drops the mean absolute difference from 4.64
+  to 3.32/255, and the difference map is exactly the texture detail and silhouettes of otherwise
+  identical geometry.
+
+That is this renderer's long-standing XNA-pixel-centre-convention gap, which
+[`plan_webgpu.md`](plan_webgpu.md) already records by name — `WebGPU_PointSamplingContract` and
+`WebGPU_DescriptorCapacityContract` are the two failures it has carried for months, and both are in
+the ten that fail on this branch with and without `STREETW-0001`.
+
+Not fixed here, deliberately: changing the pixel-centre convention moves every draw on the WebGPU
+renderer and rewrites the expectations of its whole test corpus. It wants a task of its own in
+`plan_webgpu.md`, with the owner's decision, rather than being changed as a side effect of a demo
+bring-up. What this row adds is the measurement: the gap is not confined to two contract tests, it
+displaces every frame the renderer produces.
