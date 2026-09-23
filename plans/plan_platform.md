@@ -84,11 +84,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1057** |
-| Files referencing SDL (all) | **256** |
-| Production files (`src/` + `include/`) referencing SDL | **60** |
-| …of which are renderer production files | **16** |
-| Test/example files referencing SDL | **196** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1091** |
+| Files referencing SDL (all) | **262** |
+| Production files (`src/` + `include/`) referencing SDL | **64** |
+| …of which are renderer production files | **20** |
+| Test/example files referencing SDL | **198** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -98,7 +98,7 @@ Production SDL surface per module (`src/` + `include/` only):
 |---|---:|---|
 | `modules/platform` | 36 | - |
 | `modules/audio` | 8 | audio device/stream, mixer, microphone |
-| `modules/renderers/*` | 16 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (4 families) |
+| `modules/renderers/*` | 20 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (4 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:

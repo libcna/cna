@@ -485,6 +485,10 @@
       "category": "renderer-integration-executable",
       "max_references": 10
     },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_storage_buffer_lifetime_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 23
+    },
     "modules/renderers/sdl-gpu/examples/sdlgpu_swapchain_recovery_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 15
@@ -494,6 +498,10 @@
       "max_references": 3
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_texture3d_validity_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_texture_defragment_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 1
     },

@@ -15,9 +15,28 @@ endif()
 # SDL is configured and installed into this directory at cmake-configure time.
 # The directory lives OUTSIDE any cmake build tree, so cmake --build --clean-first
 # (or deleting the build directory entirely) does NOT remove SDL artefacts.
-# SDL is built once and reused across all builds and build types.
-# To force a full SDL rebuild, delete this directory manually:
+# SDL is built once and reused across all builds and build types for as long as its build manifest
+# still matches: the content of the vendored source, the CNA patches applied on top of it, and its
+# configure arguments (cmake/SdlPrebuiltFingerprint.cmake). A change to any of those rebuilds it.
+# To force a full SDL rebuild anyway, delete this directory manually:
 #   rm -rf <the exact CNA_SDL_PREBUILT_ROOT reported by CMake>
+include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
+
+# Upstream SDL fixes carried on top of the vendored revision (third_party/SDL, pinned at
+# cbe3fbe9f367340dcd924de29c225c9f4ffea1f5), applied in this order to a staged copy of the source --
+# never to third_party/SDL itself. Each file is the upstream commit verbatim (`git format-patch`
+# output, named after the commit it is), so it can be dropped the day the pin moves past it.
+#
+#  f286e420afd3ccb0dedc7ec77eb09d4bd2e5e102  GPU: Refactor Vulkan barriers to fix defrag segfault
+#      The Vulkan defragmenter barriers the replacement texture before it has a container, and the
+#      barrier helper reads container->header.info.type: a null dereference on the first
+#      defragmentation of any texture allocation (plans/plan_sdlgpu_modern_graphics.md SMG-0034).
+#  86296ac8f01597076979630667472a846b04ce46  GPU: Set missing fields on Vulkan swapchain texture
+#      The upstream follow-up: swapchain textures are not made by CreateTexture, so without it the
+#      fields the refactor added are uninitialised on them.
+set(CNA_SDL3_PATCHES
+    "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch"
+    "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0002-vulkan-swapchain-barrier-fields-86296ac8.patch")
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
@@ -178,7 +197,8 @@ development packages may have been unavailable when this explicit/custom cache w
 SDL_VIDEODRIVER=wayland \
 therefore fails with 'wayland not available', and with no SDL_VIDEODRIVER set SDL falls back to \
 x11, so a Wayland session runs the game through Xwayland instead. For a native Wayland client, \
-install the packages and rebuild SDL -- the cache is rebuilt only when it is absent:
+install the packages and rebuild SDL -- the cache is rebuilt only when it is absent or its \
+build manifest changes, and a newly installed package changes neither:
   sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev
   rm -rf ${CNA_SDL_PREBUILT_ROOT}
 then reconfigure.")
@@ -284,70 +304,77 @@ function(cna_configure_vendored_sdl)
         set(_sdl_static OFF)
     endif()
 
-    # SDL is built using execute_process() at cmake-configure time.
-    # This runs only when the library is absent (first configure, or after manual
-    # deletion of CNA_SDL_PREBUILT_ROOT). cmake --build --clean-first never
-    # re-runs cmake configure, so SDL is guaranteed to survive a clean build.
-    if(NOT EXISTS "${_sdl3_lib}")
-        _cna_build_sdl_dep(
-            NAME     SDL3
-            SOURCE   "${_tp}/SDL"
-            BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL/build"
-            CMAKE_ARGS
-                -DSDL_SHARED=${_sdl_shared}
-                -DSDL_STATIC=${_sdl_static}
-                -DSDL_TESTS=OFF
-                -DSDL_EXAMPLES=OFF
-        )
+    # SDL is built using execute_process() at cmake-configure time, when the library is absent or
+    # its recorded build manifest no longer matches. cmake --build --clean-first never re-runs cmake
+    # configure, so SDL is guaranteed to survive a clean build.
+    #
+    # Every build tree on the machine shares this root, so two configures can reach this point at
+    # once; the lock makes the second wait for the first and then find its result current.
+    file(MAKE_DIRECTORY "${CNA_SDL_PREBUILT_ROOT}")
+    file(LOCK "${CNA_SDL_PREBUILT_ROOT}/.cna-prebuilt.lock" GUARD FUNCTION TIMEOUT 7200
+        RESULT_VARIABLE _cna_sdl_lock_result)
+    if(NOT _cna_sdl_lock_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA: could not lock ${CNA_SDL_PREBUILT_ROOT}: ${_cna_sdl_lock_result}")
     endif()
+    _cna_ensure_sdl_dep(
+        LIBRARY  "${_sdl3_lib}"
+        NAME     SDL3
+        SOURCE   "${_tp}/SDL"
+        PATCHES  ${CNA_SDL3_PATCHES}
+        BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL/build"
+        CMAKE_ARGS
+            -DSDL_SHARED=${_sdl_shared}
+            -DSDL_STATIC=${_sdl_static}
+            -DSDL_TESTS=OFF
+            -DSDL_EXAMPLES=OFF
+    )
 
-    if(NOT EXISTS "${_sdl_image_lib}")
-        _cna_build_sdl_dep(
-            NAME     SDL3_image
-            SOURCE   "${_tp}/SDL_image"
-            BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_image/build"
-            CMAKE_ARGS
-                "-DCMAKE_PREFIX_PATH=${_prefix}"
-                "-DSDL3_DIR=${_sdl3_cmake_dir}"
-                -DBUILD_SHARED_LIBS=${_sdl_shared}
-                -DSDLIMAGE_DEPS_SHARED=${_sdl_shared}
-                -DSDLIMAGE_INSTALL=ON
-                -DSDLIMAGE_VENDORED=ON
-                -DSDLIMAGE_TESTS=OFF
-                -DSDLIMAGE_SAMPLES=OFF
-                -DSDLIMAGE_AVIF=OFF
-                -DSDLIMAGE_JXL=OFF
-                -DSDLIMAGE_TIF=OFF
-                -DSDLIMAGE_WEBP=OFF
-                -DSDLIMAGE_PNG_LIBPNG=OFF
-        )
-    endif()
+    _cna_ensure_sdl_dep(
+        LIBRARY  "${_sdl_image_lib}"
+        NAME     SDL3_image
+        SOURCE   "${_tp}/SDL_image"
+        BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_image/build"
+        CMAKE_ARGS
+            "-DCMAKE_PREFIX_PATH=${_prefix}"
+            "-DSDL3_DIR=${_sdl3_cmake_dir}"
+            -DBUILD_SHARED_LIBS=${_sdl_shared}
+            -DSDLIMAGE_DEPS_SHARED=${_sdl_shared}
+            -DSDLIMAGE_INSTALL=ON
+            -DSDLIMAGE_VENDORED=ON
+            -DSDLIMAGE_TESTS=OFF
+            -DSDLIMAGE_SAMPLES=OFF
+            -DSDLIMAGE_AVIF=OFF
+            -DSDLIMAGE_JXL=OFF
+            -DSDLIMAGE_TIF=OFF
+            -DSDLIMAGE_WEBP=OFF
+            -DSDLIMAGE_PNG_LIBPNG=OFF
+    )
 
-    if(NOT EXISTS "${_sdl_mixer_lib}")
-        _cna_build_sdl_dep(
-            NAME     SDL3_mixer
-            SOURCE   "${_tp}/SDL_mixer"
-            BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_mixer/build"
-            CMAKE_ARGS
-                "-DCMAKE_PREFIX_PATH=${_prefix}"
-                "-DSDL3_DIR=${_sdl3_cmake_dir}"
-                -DBUILD_SHARED_LIBS=${_sdl_shared}
-                -DSDLMIXER_DEPS_SHARED=${_sdl_shared}
-                -DSDLMIXER_INSTALL=ON
-                -DSDLMIXER_VENDORED=ON
-                -DSDLMIXER_TESTS=OFF
-                -DSDLMIXER_EXAMPLES=OFF
-                -DSDLMIXER_GME=OFF
-                -DSDLMIXER_MOD_XMP=OFF
-                -DSDLMIXER_MP3_MPG123=OFF
-                -DSDLMIXER_MIDI_FLUIDSYNTH=OFF
-                -DSDLMIXER_OPUS=OFF
-                -DSDLMIXER_VORBIS_VORBISFILE=OFF
-                -DSDLMIXER_VORBIS_TREMOR=OFF
-                -DSDLMIXER_WAVPACK=OFF
-                -DSDLMIXER_FLAC_LIBFLAC=OFF
-        )
-    endif()
+    _cna_ensure_sdl_dep(
+        LIBRARY  "${_sdl_mixer_lib}"
+        NAME     SDL3_mixer
+        SOURCE   "${_tp}/SDL_mixer"
+        BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_mixer/build"
+        CMAKE_ARGS
+            "-DCMAKE_PREFIX_PATH=${_prefix}"
+            "-DSDL3_DIR=${_sdl3_cmake_dir}"
+            -DBUILD_SHARED_LIBS=${_sdl_shared}
+            -DSDLMIXER_DEPS_SHARED=${_sdl_shared}
+            -DSDLMIXER_INSTALL=ON
+            -DSDLMIXER_VENDORED=ON
+            -DSDLMIXER_TESTS=OFF
+            -DSDLMIXER_EXAMPLES=OFF
+            -DSDLMIXER_GME=OFF
+            -DSDLMIXER_MOD_XMP=OFF
+            -DSDLMIXER_MP3_MPG123=OFF
+            -DSDLMIXER_MIDI_FLUIDSYNTH=OFF
+            -DSDLMIXER_OPUS=OFF
+            -DSDLMIXER_VORBIS_VORBISFILE=OFF
+            -DSDLMIXER_VORBIS_TREMOR=OFF
+            -DSDLMIXER_WAVPACK=OFF
+            -DSDLMIXER_FLAC_LIBFLAC=OFF
+    )
 
     _cna_report_sdl_video_drivers()
 
@@ -381,10 +408,11 @@ function(cna_configure_vendored_sdl)
 endfunction()
 
 # ---------------------------------------------------------------------------
-# Internal helper: configure + build + install one SDL dependency.
+# Internal helper: reuse one SDL dependency's install when its build manifest still matches,
+# otherwise configure + build + install it from scratch.
 # ---------------------------------------------------------------------------
-function(_cna_build_sdl_dep)
-    cmake_parse_arguments(_A "" "NAME;SOURCE;BUILDDIR" "CMAKE_ARGS" ${ARGN})
+function(_cna_ensure_sdl_dep)
+    cmake_parse_arguments(_A "" "NAME;LIBRARY;SOURCE;BUILDDIR" "PATCHES;CMAKE_ARGS" ${ARGN})
 
     set(_prefix "${CNA_SDL_PREBUILT_ROOT}/install")
 
@@ -443,12 +471,54 @@ function(_cna_build_sdl_dep)
         endif()
     endif()
 
-    message(STATUS "CNA: Configuring ${_A_NAME} (one-time step)...")
+    # The manifest covers what decides the library's content. The compiler launcher is left out on
+    # purpose: ccache changes how long a build takes, never what it produces.
+    cna_sdl_build_manifest(_manifest
+        NAME    "${_A_NAME}"
+        SOURCE  "${_A_SOURCE}"
+        PATCHES ${_A_PATCHES}
+        ARGS    ${_base_args} ${_A_CMAKE_ARGS})
+    set(_stamp "${CNA_SDL_PREBUILT_ROOT}/${_A_NAME}.cna-build-manifest.txt")
+    string(SHA256 _manifest_id "${_manifest}")
+    string(SUBSTRING "${_manifest_id}" 0 16 _manifest_id)
+    cna_sdl_prebuilt_is_current(_current _reason
+        LIBRARY "${_A_LIBRARY}" STAMP "${_stamp}" MANIFEST "${_manifest}")
+    if(_current)
+        message(STATUS "CNA: ${_A_NAME} prebuilt is current (build manifest ${_manifest_id})")
+        return()
+    endif()
+    message(STATUS "CNA: (re)building ${_A_NAME} because ${_reason} (build manifest ${_manifest_id})")
+
+    # Start from nothing: a build directory configured from another source tree, or holding objects
+    # compiled from other sources, must not leak into this one. The stamp goes first, so a build
+    # interrupted from here on is retried by the next configure instead of being trusted.
+    file(REMOVE "${_stamp}")
+    file(REMOVE_RECURSE "${_A_BUILDDIR}")
+    set(_source "${_A_SOURCE}")
+    if(_A_PATCHES)
+        get_filename_component(_source "${_A_BUILDDIR}/../source" ABSOLUTE)
+        cna_sdl_stage_patched_source(
+            SOURCE "${_A_SOURCE}" DESTINATION "${_source}" PATCHES ${_A_PATCHES})
+    endif()
+
+    # Forward the parent's compiler launcher (ccache) so the one shared cache serves this build too.
+    # A launcher is itself a list (`cmake;-E;env;CCACHE_BASEDIR=...;ccache`), so its separators are
+    # escaped to keep it one argument.
+    set(_launcher_args "")
+    foreach(_lang IN ITEMS C CXX)
+        if(CMAKE_${_lang}_COMPILER_LAUNCHER)
+            string(REPLACE ";" "\\;" _launcher "${CMAKE_${_lang}_COMPILER_LAUNCHER}")
+            list(APPEND _launcher_args "-DCMAKE_${_lang}_COMPILER_LAUNCHER=${_launcher}")
+        endif()
+    endforeach()
+
+    message(STATUS "CNA: Configuring ${_A_NAME}...")
     execute_process(
         COMMAND ${CMAKE_COMMAND}
             ${_base_args}
             ${_A_CMAKE_ARGS}
-            -S "${_A_SOURCE}"
+            ${_launcher_args}
+            -S "${_source}"
             -B "${_A_BUILDDIR}"
         RESULT_VARIABLE _rc
     )
@@ -456,7 +526,7 @@ function(_cna_build_sdl_dep)
         message(FATAL_ERROR "CNA: ${_A_NAME} cmake configure failed (exit code ${_rc})")
     endif()
 
-    message(STATUS "CNA: Building ${_A_NAME} (one-time step)...")
+    message(STATUS "CNA: Building ${_A_NAME}...")
     execute_process(
         COMMAND ${CMAKE_COMMAND} --build "${_A_BUILDDIR}"
             --config Release
@@ -475,6 +545,10 @@ function(_cna_build_sdl_dep)
     if(_rc)
         message(FATAL_ERROR "CNA: ${_A_NAME} install failed (exit code ${_rc})")
     endif()
+    if(NOT EXISTS "${_A_LIBRARY}")
+        message(FATAL_ERROR "CNA: ${_A_NAME} installed, but ${_A_LIBRARY} is not there")
+    endif()
+    file(WRITE "${_stamp}" "${_manifest}")
 endfunction()
 
 # ---------------------------------------------------------------------------

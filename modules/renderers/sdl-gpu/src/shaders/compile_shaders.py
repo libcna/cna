@@ -135,6 +135,21 @@ def spv_to_cpp_array(name: str, spv: bytes) -> str:
     )
 
 
+# plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception is ONE piece of GLSL, the Vulkan
+# renderer's checked-in snippet, not a second copy maintained here. The including shader defines
+# CNA_SHADOW_* first to put the four resources where SDL_gpu's fixed set convention wants them;
+# every sampling, cascade, PCF and punctual formula is the shared file's.
+SHADOW_SAMPLING_GLSL = (Path(__file__).resolve().parent / ".." / ".." / ".." / "vulkan" / "src"
+                        / "shaders" / "shadow_sampling.glsl")
+
+
+def expand_local_includes(source: str) -> str:
+    marker = '#include "shadow_sampling.glsl"'
+    if marker not in source:
+        return source
+    return source.replace(marker, SHADOW_SAMPLING_GLSL.read_text())
+
+
 def main():
     script_dir = Path(__file__).parent
 
@@ -191,7 +206,7 @@ def main():
         if not glsl_path.exists():
             print(f"ERROR: {glsl_path} not found", file=sys.stderr)
             sys.exit(1)
-        source = glsl_path.read_text()
+        source = expand_local_includes(glsl_path.read_text())
         if defines:
             # plans/plan_gltf.md GLTF-465: variant defines are inserted after GLSL's mandatory #version
             # line, the same way the Vulkan renderer's own compile_shaders.py does it.

@@ -1561,6 +1561,16 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlOffFindPackage.cmake)
     set_tests_properties(CnaSdlOffFindsNoSdlPackage PROPERTIES LABELS "platform;configuration")
 
+    # plans/plan_sdlgpu_modern_graphics.md SMG-0039: the persistent vendored-SDL install is rebuilt
+    # when its source, its CNA patch series or its configure arguments change, never silently
+    # reused. Pure CMake, on a fixture.
+    add_test(NAME CnaSdlPrebuiltFingerprint
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSdlPrebuiltFingerprint
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlPrebuiltFingerprint.cmake)
+    set_tests_properties(CnaSdlPrebuiltFingerprint PROPERTIES LABELS "platform;configuration")
+
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*, CnaX11*) run. CnaTests by default. A build that compiles only
     # the platform module's tests -- CI's SDL-free X11 cell builds the focused

@@ -51,6 +51,17 @@ layout(set = 3, binding = 2) uniform SamplerLodBias {
     vec4 slots4To7;
 } samplerLodBias;
 
+// plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception, from the one shared snippet.
+// SDL_gpu numbers fragment samplers (set 2) and fragment uniform buffers (set 3) from zero, so the
+// three shadow maps follow uTexture (the same layout as lit_textured3d.frag.glsl) and the parameter block follows SamplerLodBias.
+#define CNA_SHADOW_SAMPLER_SET 2
+#define CNA_SHADOW_MAP_BINDING 1
+#define CNA_SHADOW_CUBE_BINDING 2
+#define CNA_SHADOW_SPOT_BINDING 3
+#define CNA_SHADOW_PARAMS_SET 3
+#define CNA_SHADOW_PARAMS_BINDING 3
+#include "shadow_sampling.glsl"
+
 vec3 safeNormalize(vec3 v) {
     float len2 = dot(v, v);
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
@@ -74,15 +85,19 @@ void main() {
             float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
             float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
             float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
-            vec3 lightSum = pc.ambientColor + NdotL0 * pc.light0Diffuse
-                            + NdotL1 * lp.light1Diffuse_pad.xyz + NdotL2 * lp.light2Diffuse_pad.xyz;
+            float shadow = CnaShadowFactor(fragWorldPos);
+            vec3 lightSum = pc.ambientColor
+                            + (NdotL0 * pc.light0Diffuse + NdotL1 * lp.light1Diffuse_pad.xyz
+                               + NdotL2 * lp.light2Diffuse_pad.xyz) * shadow
+                            + CnaPunctualLight(fragWorldPos, N);
             vec3 h0 = safeNormalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, lp.specularColorPower.w);
             vec3 h1 = safeNormalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, lp.specularColorPower.w);
             vec3 h2 = safeNormalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, lp.specularColorPower.w);
             vec3 specularRGB = (spec0 * lp.light0Specular_pad.xyz + spec1 * lp.light1Specular_pad.xyz
-                                + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz;
+                                + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz * shadow;
             vec3 lit = lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz;
             color = vec4(lit, fragTint.a) * tex;
+            color.rgb *= CnaCascadeDebugTint(fragWorldPos);
             color.rgb += specularRGB * color.a;
         }
     } else {
