@@ -98,6 +98,10 @@ namespace
     {
         ++totalCount;
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        // Flushed as it goes: under LeakSanitizer the process is torn down with `_exit`, which
+        // skips stdio's own flush -- so an unflushed result line is simply lost, and a run that
+        // did all its work looks indistinguishable from one that did none.
+        std::fflush(stdout);
         if (ok) ++passCount;
     }
 
@@ -185,6 +189,7 @@ protected:
                 threadsBefore = threadCount();
                 std::printf("    warm: RSS %zu KiB, %zu fds, %zu threads\n", rssBefore, fdBefore,
                             threadsBefore);
+                std::fflush(stdout);
             }
             try
             {
@@ -286,6 +291,7 @@ protected:
                     rssBefore, rssAfter,
                     static_cast<long long>(rssAfter) - static_cast<long long>(rssBefore), fdBefore,
                     fdAfter, threadsBefore, threadsAfter);
+        std::fflush(stdout);
 
         check(failure.empty() && completed == cycles + kWarmUp,
               "Check A: the whole run completed with no exception and no device loss");
@@ -296,7 +302,20 @@ protected:
         // the pipelines, samplers and transfer buffers each cycle also creates.
         const long long rssDelta =
             static_cast<long long>(rssAfter) - static_cast<long long>(rssBefore);
+#if defined(__SANITIZE_ADDRESS__)
+        // Under AddressSanitizer a freed allocation is QUARANTINED rather than returned, so RSS
+        // grows with the number of allocations whether or not anything leaked -- measured here at
+        // roughly 167 KiB per cycle, scaling linearly, while LeakSanitizer reports the same fixed
+        // 768 bytes at 50 cycles and at 500. Asserting an RSS ceiling in that build would be
+        // asserting the quarantine's size. LeakSanitizer is the leak check in this configuration;
+        // the ordinary build is where this ceiling means something.
+        std::printf("    (RSS ceiling not asserted under ASan: freed memory is quarantined, "
+                    "not returned; LeakSanitizer is the leak check here)\n");
+        std::fflush(stdout);
+        (void) rssDelta;
+#else
         check(rssDelta < 64 * 1024, "Check B: RSS did not grow beyond the allowance");
+#endif
         check(fdAfter <= fdBefore, "Check C: no file descriptor was leaked");
         check(threadsAfter <= threadsBefore, "Check D: no thread was leaked");
 
