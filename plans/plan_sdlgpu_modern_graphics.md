@@ -19,9 +19,10 @@ The companion documents that this workstream does **not** duplicate:
 |---|---|
 | Branch | `sdlgpu-modern-graphics` |
 | Baseline | `d6e9ff050` (`origin/next` at 2026-09-23) |
-| Modern `CnaGraphicsExtTests` | baseline **682 / 21 / 259** of 962 → SMG-0031 900 / 0 / 62 → **closeout 931 / 0 / 31** |
-| Classic `-R '^SdlGpu'` | baseline **202 / 27** of 229 → unchanged, same 27 by name |
-| CNAEXT examples `-L CnaExt` | baseline **11 / 1 / 20** of 32 → SMG-0031 23 / 1 / 8 → **closeout 26 / 2 / 4** (SMG-0034) |
+| Modern `CnaGraphicsExtTests` | baseline **682 / 21 / 259** of 962 → SMG-0031 900 / 0 / 62 → closeout 931 / 0 / 31 → **SMG-0042 931 / 0 / 31** |
+| Classic `-R '^SdlGpu'` | baseline **202 / 27** of 229 → **SMG-0042 204 / 27** of 231 (two new tests), same 27 by name |
+| CNAEXT examples `-L CnaExt` | baseline **11 / 1 / 20** of 32 → SMG-0031 23 / 1 / 8 → closeout 26 / 2 / 4 → **SMG-0042 27 / 1 / 4** |
+| SDL | vendored pin `cbe3fbe9f367` + upstream `f286e420`, `86296ac8` as build-time patches (SMG-0038) |
 
 ---
 
@@ -1067,3 +1068,355 @@ No shadow skip remains, and none of the 31 is a capability SDL_gpu could honestl
    shared vendored SDL, or updating it.
 2. **SMG-0035** — the 51 pre-existing `VkBuffer`-at-teardown validation messages in the
    storage-buffer suites.
+
+---
+
+# Dependency and lifetime closeout (SMG-0038 … SMG-0042)
+
+The shadow closeout (SMG-0037) handed back two open items: SDL's Vulkan defragmenter crash
+(SMG-0034) and 51 live-`VkBuffer` validation messages at device teardown (SMG-0035). This tranche
+closes both, and nothing else: no feature was added to the renderer.
+
+## SMG-0038 — the SDL defragmenter crash, fixed by the upstream commit
+
+### State verified before any change
+
+| | |
+|---|---|
+| CNA at start | `f6a2053959c16ed5689a6c9e7736843a46b5ae0a` (branch `sdlgpu-modern-graphics`), `origin/next` `d6e9ff050`, 15 commits ahead |
+| SDL gitlink | `third_party/SDL` → **`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** ("GPU: Validate that 2D textures don't have layers (#15535)", 2026-05-08) |
+| SDL on disk | **byte-identical to that commit**: every one of its 2 237 blobs matches upstream's tree `0e5fcd73` (checked blob by blob, the 14 SDL-gitignored files included). `third_party/SDL` has no `.git` of its own on this machine |
+| SDL reports | `3.5.0`, revision string `SDL-3.5.0-HEAD-HASH-NOTFOUND` -- which is why no version string is trusted below |
+| SDL_gpu backend | `vulkan`, logged at every renderer init |
+| GPU | AMD Radeon 780M (Phoenix1, `c3:00.0`), RADV `PHOENIX` |
+| Driver | Mesa `mesa-vulkan-drivers 25.0.7-2+deb13u1`, loader `libvulkan1 1.4.309.0-1` |
+| Display | private headless Weston + rootful Xwayland (`run_gpu_tests_private.sh`), never `:0`/`wayland-0` |
+
+### Reproduced
+
+`CNAEXT_PointShadow` under gdb, on the unmodified branch:
+
+```
+SIGSEGV  VULKAN_INTERNAL_TextureSubresourceMemoryBarrier.constprop.0.isra.0   rcx = 0
+         => cmpl $0x2,(%rcx)                      (SDL_GPU_TEXTURETYPE_3D == 2)
+#1       VULKAN_Submit
+#2       SdlGpuRenderer::EnsureFrameRendered
+#3       SdlGpuRenderer::ReadBackbuffer  <- GraphicsDevice::GetBackBufferData <- PointShadowExample::Draw
+```
+
+In the vendored source: the barrier helper reads `textureSubresource->parent->container->header.info.type`
+(`SDL_gpu_vulkan.c:2752`), and `VULKAN_INTERNAL_DefragmentMemory` barriers the replacement texture's
+subresources in its copy loop (`:11116` onward) but assigns `newTexture->container` only at
+`:11174`, after the loop. Not CNA code: every frame from `#0` to `#1` is SDL.
+
+### The upstream fix, and why it applies
+
+**`f286e420afd3ccb0dedc7ec77eb09d4bd2e5e102`** — "GPU: Refactor Vulkan barriers to fix defrag
+segfault (#15593)", 2026-05-15, `SDL_gpu_vulkan.c` only (+106 −53). Read against the vendored file:
+
+- it adds `levelCount`, `layerCount` and `type` to `VulkanTexture`, set in `CreateTexture`;
+- the 3D-texture `VK_KHR_maintenance9` workaround now reads `parent->type` -- **the exact
+  dereference that crashes here is removed**;
+- the defragmenter barriers the source and the new texture once each, with a whole-texture barrier
+  that reads only the texture itself, before the copy loop.
+
+Its parent is `c9bb41bd`; the only other change to this file between our pin and that parent is
+`76f8705c1` (a 5-line early return for swapchain transfers), so `git apply` places every one of the
+eleven hunks at a 5-line offset and nothing else.
+
+**One follow-up is required with it**, and was found by reading upstream's history of the file
+rather than by testing: **`86296ac8f01597076979630667472a846b04ce46`** — "GPU: Set missing fields on
+Vulkan swapchain texture (#15606)", the next day. Swapchain textures are built by hand in
+`CreateSwapchain` with `SDL_malloc` (not calloc), never through `CreateTexture`, so after
+`f286e420` alone their new `levelCount`/`layerCount`/`type` are **uninitialised** and every
+whole-texture barrier on a swapchain image reads garbage. Nothing later in upstream touches this
+code (`a2b27528`, `5538d524`, `7be59900`, `65360c9d`, `b49f81ff` are unrelated).
+
+Recorded, not acted on: upstream `main` still leaves those three fields zero for OpenXR swapchain
+textures (`SDL_gpu_vulkan.c` ~13 224, `SDL_calloc`). CNA creates no XR swapchain.
+
+### Patch, not pin move
+
+| option | delta | decision |
+|---|---|---|
+| move the pin to a revision containing `f286e420` | **53 commits, 127 files** between `cbe3fbe9` and the fix: Android, controllers (Steam, GameInput v3), SVE2 blitters, x11 mouse, RISC OS, wiki syncs | rejected: a large unrelated range for one fix, and 3.5 is a development line with no release to move to |
+| carry the upstream commits as build-time patches | 2 files, `SDL_gpu_vulkan.c` only | **taken** |
+
+`cmake/patches/sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch` and
+`…-0002-vulkan-swapchain-barrier-fields-86296ac8.patch` are the upstream `git format-patch` output,
+verbatim, named after the pin they apply to and the commit they are. `cmake/ThirdPartySDL.cmake`
+lists them (`CNA_SDL3_PATCHES`) with the upstream SHA and the reason for each. They are applied to a
+**staged copy** of the source (`<prebuilt>/SDL/source`), never to `third_party/SDL`, so a checkout
+stays pristine and a fresh clone reproduces the fix from tracked files alone. The day the pin moves
+past `86296ac8`, both files and the list entry go.
+
+### Proof that the rebuilt SDL is the one linked
+
+| | before | after |
+|---|---|---|
+| `libSDL3.so.0.5.0` SHA-256 | `ecc901f4…a409e707` (2026-08-23) | **`0c53d618…aef7b9980`** |
+| barrier symbol | `VULKAN_INTERNAL_TextureSubresourceMemoryBarrier.constprop.0.isra.0` | **`VULKAN_INTERNAL_TextureMemoryBarrier.isra.0`** -- upstream's new function |
+| staged `SDL_gpu_vulkan.c` blob | `b366f721` (= upstream at the pin) | **`f0871e5e`**, identical to a hand application of the two patches |
+| what the test binary loads | | `ldd cna_test_cnaext_pointshadow` → `.sdl-prebuilt-Linux-x86_64-wayland/install/lib/libSDL3.so.0` → SHA-256 `0c53d618…` |
+
+The build is reproducible: rebuilding the same manifest from scratch (below) gave the byte-identical
+`0c53d618…`.
+
+### Deterministic regression — `SdlGpu_TextureDefragment`
+
+`CNAEXT_PointShadow` reached the defragmenter by allocator accident. The new program reaches it on
+purpose through the public API, from SDL's own rule: small textures (< 2 MiB) share a 16 MiB block;
+disposing every other one gives the block more than one free region (SDL's definition of
+fragmented); a texture over 2 MiB then fits in no region, on which miss SDL marks every fragmented
+block; the next presenting submit defragments one. Three rounds, each followed by an exact readback
+of every surviving texture -- so the defragmenter's image copy is verified, not just survived.
+
+| SDL linked | result |
+|---|---|
+| pristine pin, built once into a throwaway `build-probe/` tree and injected with `LD_LIBRARY_PATH` (confirmed by `ldd`) | **segfault 5 of 5**, before round 1; gdb: `VULKAN_INTERNAL_TextureSubresourceMemoryBarrier` ← `VULKAN_Submit` ← `SdlGpuRenderer::EnsureFrameRendered` ← `GraphicsDevice::Present` -- the SMG-0034 crash |
+| patched | **4/4, 10 of 10 runs** |
+
+The throwaway unpatched build (58 MB) was deleted once measured.
+
+### No workaround in CNA
+
+Nothing in CNA changed for this: defragmentation stays enabled, `CNAEXT_PointShadow` stays a live
+example, no texture is kept alive and no device wait was added.
+
+## SMG-0039 — the shared SDL prebuilt can no longer hide a source or patch change
+
+**The hazard was real.** `cna_configure_vendored_sdl()` rebuilt SDL only `if(NOT EXISTS libSDL3)`.
+The install lives outside every build tree and every tree on the machine shares it, so adding the
+SMG-0038 patches -- or moving the submodule -- would have left the old library linked while the
+tree said otherwise: a green run proving nothing.
+
+**Now each dependency records a build manifest** (`<prebuilt>/<name>.cna-build-manifest.txt`,
+`cmake/SdlPrebuiltFingerprint.cmake`), and its install is reused only while the manifest computed at
+configure matches it exactly:
+
+```
+schema cna-sdl-prebuilt-manifest-v1
+name SDL3
+source-tree-sha256 b4aa0ea3…6ecf46                         (content of every file, .git excluded)
+patch sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch 2a2d26e0…040086cb
+patch sdl-cbe3fbe9-0002-vulkan-swapchain-barrier-fields-86296ac8.patch 3a469ba7…44fea93
+arg -DCMAKE_BUILD_TYPE=Release … arg -DSDL_EXAMPLES=OFF
+```
+
+Generic, not special-cased: SDL3_image and SDL3_mixer carry the same manifest (no patches). The
+source is **content**-hashed rather than trusted by revision, because this very checkout has no
+submodule `.git` and reports `HEAD-HASH-NOTFOUND`; all three trees hash in ~0.4 s per configure.
+The compiler launcher is deliberately outside the manifest (it changes speed, not bytes) and is now
+forwarded, so the sub-builds use the shared ccache. Any mismatch removes that dependency's build
+directory and rebuilds it; the stamp is written only after a verified install, so an interrupted
+build is retried. A `file(LOCK)` on the root serialises concurrent configures from other trees.
+
+**A trap found on the way:** the default prebuilt root is inside CNA's own checkout, and `git apply`
+run there resolves the patch against CNA's repository and **exits 0 having changed nothing**
+(reproduced in a two-line probe). Staging therefore confines git with `GIT_CEILING_DIRECTORIES`,
+and proves every application by the patch then applying in reverse.
+
+### Measured on the real shared prebuilt
+
+| step | what the configure did |
+|---|---|
+| first configure after the change | all three **rebuilt once** ("the install has no build manifest") -- SDL3 with both patches applied |
+| unchanged reconfigure | "SDL3 prebuilt is current (build manifest b2728357226cc004)" ×3, nothing built |
+| **negative control**: one comment line appended to patch 0002 | **SDL3 rebuilt** ("its source, patches or configuration changed", manifest `64eba66a…`); SDL3_image and SDL3_mixer correctly reused; 36/36 ccache hits |
+| patch restored | SDL3 rebuilt again to manifest `b2728357…`, library byte-identical `0c53d618…` |
+
+`CnaSdlPrebuiltFingerprint` (ctest, pure CMake, 0.15 s) pins the decision on a fixture: legacy
+stamp → rebuild; unchanged and recomputed → reuse; edited, added, reordered, dropped patch →
+rebuild; changed or added source file → rebuild; `.git` metadata → reuse; changed arguments →
+rebuild; missing library → rebuild; staging patches a copy inside an enclosing repository and leaves
+the source pristine; a non-applying patch is refused naming itself and leaves nothing staged. 14/14.
+
+## SMG-0040 — storage buffers released before the device, in every order
+
+### Reproduced
+
+Debug/ASan tree `build-probe/smg-sdlgpu-asan` (SDL_gpu debug mode on, Khronos validation active),
+`--gtest_filter=ClusteredForwardEffectTest.*:ParticleSystemTest.*:GpuInstanceCullerTest.*`, old
+code: **51** × `VUID-vkDestroyDevice-device-05137` ("Object Tracking - For VkDevice …, VkBuffer …
+has not been destroyed"), every object a `VkBuffer`: ClusteredForward **48 (3 in each of 16
+cases)**, ParticleSystem **2**, GpuInstanceCuller **1**. 57/57 tests pass regardless.
+
+### Root cause — not the suspected one
+
+SMG-0035's candidate (a buffer outliving its `GraphicsDevice`) was not what happened: in
+`ClusteredForwardEffectTests.cpp` the `ClusteredLightBuffer` holding the three buffers is a local,
+destroyed before the device, and `GraphicsDevice::Dispose` already disposes every tracked
+`StorageBuffer` before tearing the renderer down. The buffers had a **second owner: the renderer**.
+`BindStorageBufferForDrawEXT` stores `buffer.shared_from_this()` in `drawStorageKeepAliveEXT_`
+(SMG-0025), which is never cleared -- it is binding state, like a bound texture. `~SdlGpuRenderer`
+cleared the queued commands' keep-alives but not this member, so it was destroyed with the other
+members **after** `SDL_DestroyGPUDevice` and `device_ = nullptr`, and each record's destructor then
+found `owner_->Device() == nullptr` and skipped `SDL_ReleaseGPUBuffer`. Three bound buffers per
+clustered case; one each in the particle and culler cases.
+
+Two more of the same shape, found by reading rather than by a message: the exception paths of
+`DrawPrimitivesIndirectEXT`/`DrawIndexedPrimitivesIndirectEXT` reset the indirect arguments but not
+`pendingIndirectKeepAliveEXT_`; and a record held past its renderer by anyone at all would have
+dereferenced `owner_`, a destroyed renderer, in its destructor.
+
+### Ownership, before and after
+
+| | before | after |
+|---|---|---|
+| public `StorageBuffer` | tracked by `GraphicsDevice`, disposed before the renderer (unchanged) | unchanged |
+| renderer-side record | released its buffer in its destructor **iff the device still existed** | same, plus **registered** with its renderer (`storageBuffersEXT_`, the `compiledEffects_` convention) |
+| renderer's binding keep-alives | destroyed as members after `SDL_DestroyGPUDevice` | **dropped in `~SdlGpuRenderer` with the other queued state**, while the device is alive |
+| a record still alive at teardown | leaked its `VkBuffer`; later dereferenced a dead renderer | **released and detached** before `SDL_DestroyGPUDevice`: owns nothing native, refuses upload/readback/copy, destructor is a no-op |
+
+The renderer is single-threaded (the existing `compiledEffects_` registry takes no lock either), so
+the registry takes none. No wrapper keeps a renderer pointer after teardown.
+
+### Regression — `SdlGpu_StorageBufferLifetime`
+
+The resource hook (`SdlGpuTestHooksEXT`) gains a `StorageBuffer` kind, so native acquisitions and
+releases are **counted**, with the order against the device's release, in any build:
+
+| case | checks |
+|---|---|
+| normal order: upload, read back, drop, destroy renderer | released at once, once, before the device |
+| the defect: three bound buffers whose caller lets go first | survive the caller (a queued draw needs them); all 3 released at teardown, **before** `SDL_DestroyGPUDevice` |
+| five records outlive the renderer: read-write, read-only, constant, indirect, bound; uploaded and copied | all 5 released before the device; each then refuses upload, readback and copy, owns no native buffer; destroying them later releases nothing twice |
+| registry: 6 records, 3 destroyed early (first, middle, last) | 3 released at once; the 3 survivors exactly once at teardown |
+| public (CNAEXT): four `StorageBuffer` wrappers (uploaded, bound, constant, indirect) outlive their `GraphicsDevice` | all disposed by the device, all refuse with `ObjectDisposedException`, destroyed later safely |
+
+**20/20**, registered with the SDL_GPU tests' `FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-"`.
+
+### Result
+
+The same three suites in the same Debug tree after the fix: **0** validation messages (from 51),
+57/57, 0 ASan, 0 UBSan.
+
+**B9, other modern resources:** the whole modern suite under Debug validation (SMG-0041) prints no
+live-object message of any kind, so no other resource type showed the defect and none was changed.
+`SdlGpuStorageTexture2DRenderer` and `SdlGpuComputeShaderRenderer` have the same
+`owner_->Device() != nullptr` destructor shape; nothing holds either past its renderer today, so
+this is recorded rather than generalised.
+
+## SMG-0041 — final validation
+
+Release tree `cmake-build-sdlgpu` rebuilt whole once, immediately before these runs (41 s, ccache);
+Debug/ASan tree `build-probe/smg-sdlgpu-asan` (`CNA_SANITIZE=address,undefined`, O0, SDL_gpu debug
+mode and Khronos validation on -- "debug mode enabled" in every log). Every run: SDL_gpu backend
+`vulkan`, Radeon 780M / RADV, private Weston + Xwayland.
+
+### Conformance
+
+| suite | before (SMG-0037) | **now** |
+|---|---|---|
+| Modern `CnaGraphicsExtTests`, Release, 5 shards of 200 | 931 / 0 / 31 | **931 / 0 / 31** of 962 |
+| Modern, Debug + ASan/UBSan + validation, 9 shards of 120 | 931 / 0 / 31 | **931 / 0 / 31** |
+| Shadow suites (`ShadowVisibilityTest`, `CascadedShadowVisibilityTest`, `PunctualShadowVisibilityTest`) | 31 / 31 | **31 / 31 pass**, none skipped, in both runs |
+| Classic `-R '^SdlGpu'` | 202 / 27 of 229 | **204 / 27 of 231** -- the two new tests pass; the 27 failures **identical by name** to the recorded set (diffed) |
+| CNAEXT examples `-L CnaExt` | 26 / 2 / 4 of 32 | **27 / 1 / 4** of 32 -- `CNAEXT_PointShadow` now passes |
+| Dead / profile-aborted | 0 | **0** -- `profile_dead_tests.py` over the classic and example runs, and its refusal pattern over every modern shard log (Release and ASan) |
+
+The 31 modern skips are the SMG-0037 set, by suite: inline GLSL ES payloads 19 (Aerial 1,
+ClusteredLightBuffer 3, ComputeCulling 1, Compute 7, ContactShadow 1, FloatTargetEarlyOut 2,
+HalfFloatDepthSampling 1, PrepassReconstruction 2, ShaderDiagnostics 1) plus
+`HalfFloatDepthMechanismTest` 4; GPU timers 6 (`GpuTimerTest` 4, `PassTimingTest` 2); the refusal
+paths of capabilities this renderer has 2 (`IndirectDrawTest` 1, `ComputeTest` 1 of its 7 --
+`WithoutSupportBothWrappersRefuseByName`). No new skip cluster.
+
+The one remaining example failure is `CNAEXT_NoPosixSetenv` (Wayland workstream, unchanged); the 4
+skips are image-based lighting (`CNAEXT_ImageBasedLighting`, `CNAEXT_Showcase`, `CNAEXT_GltfPbr`)
+and the GPU timer (`CNAEXT_GpuTiming`).
+
+A classic failure measured rather than assumed: `SdlGpu_ConstructorExceptionSafety` aborts with
+`free(): double free detected in tcache 2`. It is one of the recorded 27, and the same binary built
+from the unmodified renderer sources (changes stashed, rebuilt from ccache) aborts identically --
+not introduced here, not investigated further.
+
+### PointShadow
+
+| run | result |
+|---|---|
+| Release, 20 consecutive runs (before and again after the final rebuild) | **20/20 and 20/20**, 4/4 checks each, no error/validation/segfault line |
+| Debug + ASan/UBSan + validation, 3 runs | **4/4 each**, 0 ASan, 0 UBSan, 0 validation messages |
+| as a ctest entry in the example run | Passed |
+
+### Sanitizers, leaks, validation
+
+| run (Debug tree) | ASan | UBSan | validation | LeakSanitizer |
+|---|---|---|---|---|
+| modern suite, 962 cases, 9 shards | 0 | 0 | **0** (was 51) | 768 B × each SDL_GPU device created (see below) |
+| `CNAEXT_PointShadow` ×3 | 0 | 0 | 0 | 768 B / 6 |
+| `SdlGpu_StorageBufferLifetime` (5 devices), 20/20 | 0 | 0 | 0 | 3840 B / 30 = 5 × 768 B / 6 |
+| `SdlGpu_TextureDefragment`, 4/4 | 0 | 0 | 0 | 768 B / 6 |
+| soak, 70 cycles | 0 | 0 | 0 | **768 B / 6** |
+| soak, 520 cycles | 0 | 0 | 0 | **768 B / 6** |
+
+**LeakSanitizer is unchanged by the SDL patch and by the lifetime fix, and does not grow with work.**
+Seven and a half times the soak's work reports byte-for-byte SMG-0029's 768 B in 6 allocations. The
+suite's larger per-shard totals (49 920 – 62 208 B) are the same constant times the devices each shard
+creates -- 62 208 B over 81 renderer inits, 55 296 over 72 -- 6 × 128 B per `SDL_GPUDevice`, every
+allocation a bare `realloc` from `<unknown module>` or from an address past `libcna.so`'s last
+segment (`0x12fd0320`): a library the Vulkan loader has already unloaded by exit. External, per
+device, not per cycle.
+
+### Soak, Release, 3000 cycles
+
+`cna_test_sdlgpu_modern_stress --cycles 3000` (shadows, storage buffers, indirect draws,
+create/destroy every cycle): **ran 3020 of 3020, 6/6 PASS**; RSS 109 760 → 113 000 KiB (**+3240**, the
+same non-scaling high-water as SMG-0035's +2780), fds **23 → 23**, threads **6 → 6**, no exception,
+no device loss, no error or validation line. Under ASan (70 and 520 cycles) fds 23 → 23, threads
+7 → 7.
+
+### Boundary gates
+
+`sdl_classify.py`, `renderer_sdl_audit.py`, `sdl_ratchet.py`, `hot_path_lint.py`,
+`nonproduction_sdl_audit.py` (two new entries, both `renderer-integration-executable`) and
+`check_renderer_identities.py` pass. `sdl_inventory.py --check` failed only because the two new test
+files raise its counts (260 → 262 files, 196 → 198 test/example files); `plans/plan_platform.md` is
+regenerated.
+
+### Reference renderers not re-run
+
+Nothing generic changed: no file under `modules/graphics/`, `modules/graphics-ext/` or another
+renderer family, and no existing test. The one change outside `modules/renderers/sdl-gpu/` that
+every configuration executes is `cmake/ThirdPartySDL.cmake`; the patch it applies touches only
+SDL's Vulkan GPU driver, and a second tree of a different configuration (the Debug/ASan one)
+configured against the same prebuilt reported "SDL3 prebuilt is current" -- other trees reuse the
+patched library, they do not rebuild it.
+
+### Build size
+
+| | before | after |
+|---|---|---|
+| `cmake-build-sdlgpu` | 662 MB | 662 MB |
+| `build-probe/smg-sdlgpu-asan` | 2.8 GB | 2.8 GB |
+| `.sdl-prebuilt-Linux-x86_64-wayland` (shared) | 66 MB | 122 MB -- the 56 MB staged, patched source is the difference |
+| disposable probes | -- | `build-probe/smg-sdl-unpatched` (58 MB) removed after use |
+
+## SMG-0042 — state handed back
+
+| suite | baseline `d6e9ff050` | SMG-0037 | **SMG-0042** |
+|---|---|---|---|
+| Modern `CnaGraphicsExtTests` | 682 / 21 / 259 | 931 / 0 / 31 | **931 / 0 / 31** |
+| Classic `-R '^SdlGpu'` | 202 / 27 | 202 / 27 | **204 / 27** (+2 new tests, same 27) |
+| CNAEXT examples | 11 / 1 / 20 | 26 / 2 / 4 | **27 / 1 / 4** |
+| Dead / profile-aborted | 0 | 0 | **0** |
+| ASan / UBSan | -- | 0 / 0 | **0 / 0** |
+| Validation at device teardown | -- | 51 live `VkBuffer` | **0** |
+| LeakSanitizer | -- | 768 B fixed | **768 B per device, fixed** |
+| Soak | -- | 3020, +2780 KiB | **3020, +3240 KiB, fds/threads flat** |
+
+Both SMG-0037 open items are closed: SMG-0034 by SMG-0038 (upstream `f286e420` + `86296ac8`),
+SMG-0035's validation messages by SMG-0040.
+
+### Remaining, all pre-existing and outside this branch's scope
+
+- GPU timers: SDL_gpu 3.5 has no query API (`GpuTimerTest`, `PassTimingTest`, `CNAEXT_GpuTiming`).
+- GLSL ES shader intake: not implemented; this renderer takes SPIR-V (23 modern skips).
+- Image-based lighting: not implemented (`SupportsImageBasedLightingEXT` false; 3 example skips).
+- `Texture2DArray`: not implemented.
+- The 27 classic failures, unchanged by name.
+- `CNAEXT_NoPosixSetenv`: the Wayland workstream's.
+- Recorded only: upstream SDL still leaves the new texture fields zero for OpenXR swapchains; and
+  `SdlGpuStorageTexture2DRenderer`/`SdlGpuComputeShaderRenderer` share the old
+  `owner_->Device() != nullptr` destructor shape, harmless while nothing holds them past their
+  renderer.
