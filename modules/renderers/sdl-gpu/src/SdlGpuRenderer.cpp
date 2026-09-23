@@ -9414,7 +9414,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::Pbr:
                 {
                     const PbrDrawCommand& c = pbrDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture
+                    // SMG-0033: no `c.texture` requirement. IssuePbrDraw binds neutral white for an
+                    // absent base-colour map (GLTF-465), so an untextured PbrEffect -- glTF's own
+                    // default material -- is a complete draw. The guard dropped it silently: the
+                    // frame kept its clear colour and nothing reported why.
+                    if (c.uploadedVertexBuffer != nullptr
                         && (!c.skinned || c.uploadedBoneTexture != nullptr) && c.target == target)
                         IssuePbrDraw(pass, cmd, c, colorFormat, sampleCount,
                                      depthStencilFormat, colorTargetCount, boundPipeline);
