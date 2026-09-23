@@ -162,6 +162,11 @@ public:
     SdlDisposedGuardsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plans/plan_pre_sdlgpu_closeout.md PSG-0008: GetBackBufferData is HiDef-only
+        // (SOFTWARE-213), so under the default Reach profile this aborted before its first
+        // check. GTI-0003 fixed three SDL_GPU tests this way and missed this shared one.
+        gdm_->setGraphicsProfileProperty(
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

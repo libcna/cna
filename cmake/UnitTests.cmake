@@ -324,6 +324,23 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
+    # plans/plan_pre_sdlgpu_closeout.md PSG-0007, the third instance of the same shape: the EasyGL
+    # suites under modules/renderers/easygl/tests/ include <metagl/metagl.hpp>, whose include root
+    # arrives with the easy-gl sibling checkout that only a GL identity adds. Configuring SDL_GPU
+    # therefore produced a CnaTests that could not compile, which is what blocked the SDL_GPU
+    # classic baseline this closeout exists to measure. Found by configuring SDL_GPU, exactly as
+    # WMG-0028's twin was found by configuring Vulkan.
+    set(_cna_gl_identities OPENGLES2 OPENGLES3 OPENGL33 OPENGL4 WEBGL1 WEBGL2)
+    set(_cna_have_gl_identity FALSE)
+    foreach(_cna_gl IN LISTS _cna_gl_identities)
+        if("${_cna_gl}" IN_LIST CNA_RENDERER_IDENTITIES)
+            set(_cna_have_gl_identity TRUE)
+        endif()
+    endforeach()
+    if(NOT _cna_have_gl_identity)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/EasyGL/.*\\.cpp$")
+    endif()
+
     # plans/plan_webgpu_modern_graphics.md WMG-0028, for exactly the reason the FNA3D entry above
     # states: the WGSL reflection suite (WMG-0007) lives under modules/renderers/webgpu/tests/ and
     # includes WebGPUWgslReflection.hpp, whose include root arrives with the WebGPU renderer

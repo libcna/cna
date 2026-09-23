@@ -22,6 +22,9 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
@@ -335,7 +338,14 @@ namespace
     class SdlGpuIndexedDrawRangeTest : public ::testing::Test
     {
     protected:
-        GraphicsDevice device;
+        // plans/plan_pre_sdlgpu_closeout.md PSG-0008: HiDef, because a default GraphicsDevice is
+        // Reach and Reach refuses thirty-two-bit index buffers outright --
+        // IndexedDrawHonorsOffsetsWithThirtyTwoBitIndices therefore threw before its first check
+        // and reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice device{
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+            Microsoft::Xna::Framework::Graphics::PresentationParameters{}};
 
         // plans/plan_runtimerenderer.md RTR-P9-5: this whole file used to sit behind
         // `#ifdef CNA_RENDERER_SDL_GPU`, so on every other renderer its 27 tests did not exist and
