@@ -313,9 +313,17 @@ protected:
             dev.setRasterizerStateProperty(solid);
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
-            const Color solidCentre = readPixel(dev, kSize / 2, kSize / 2);
+            // plans/plan_street_webgpu.md STREETW-0003: a quarter of the way in, NOT the quad's
+            // centre. The quad is two triangles sharing the tr-bl diagonal, and its centre pixel
+            // lies within one pixel of that diagonal -- so a centre probe measures whether the
+            // shared EDGE covers a pixel, not whether the interior is filled, and a sub-pixel
+            // change of raster position flips it. `WebGpuWireFrameContract` moved its own probe
+            // off the diagonal for exactly this reason; this leg had kept the centre.
+            const int probeX = kSize / 4;
+            const int probeY = kSize / 4;
+            const Color solidCentre = readPixel(dev, probeX, probeY);
             check(colorNear(solidCentre, Color::White),
-                  ("WEBGPU-153: Solid fills the quad's centre: got=" +
+                  ("WEBGPU-153: Solid fills the quad's interior: got=" +
                    ColorStr(solidCentre)).c_str());
 
             RasterizerState rs;
@@ -343,7 +351,7 @@ protected:
             // The two Clears are identical, so a centre that is still black is the interior the
             // wireframe did not fill rather than a draw that never happened -- and the Solid
             // control above is what rules the second reading out.
-            const Color wireCentre = readPixel(dev, kSize / 2, kSize / 2);
+            const Color wireCentre = readPixel(dev, probeX, probeY);
             check(colorNear(wireCentre, Color::Black),
                   ("WEBGPU-153: WireFrame leaves the quad's interior unfilled: got=" +
                    ColorStr(wireCentre)).c_str());
@@ -352,7 +360,7 @@ protected:
             dev.setRasterizerStateProperty(solid);
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
-            const Color recovered = readPixel(dev, kSize / 2, kSize / 2);
+            const Color recovered = readPixel(dev, probeX, probeY);
             check(colorNear(recovered, Color::White),
                   ("WEBGPU-153: Solid renders exactly after a WireFrame draw: got=" +
                    ColorStr(recovered)).c_str());

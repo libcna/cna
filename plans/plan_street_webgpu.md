@@ -35,7 +35,7 @@ CNA_GRAPHICS_RENDERER=WEBGPU $R --exec ./build/bin/cna-street --no-audio --no-ov
 |---|---|---|
 | STREETW-0001 | WebGPU: every instanced draw took the position-only `instanced3d` program, whatever effect was applied | ✅ |
 | STREETW-0002 | cna-street: the atmospheric sky was GLSL or SPIR-V only, so a WGSL renderer drew no sky | ✅ |
-| STREETW-0003 | WebGPU: the whole frame sits half a pixel off the other renderers' | 📏 measured, not fixed |
+| STREETW-0003 | WebGPU: the whole frame sat half a pixel off the other renderers' — XNA's pixel-centre convention was never applied | ✅ |
 
 ---
 
@@ -131,10 +131,10 @@ shader format" — which surfaces as a fatal exception out of `Game::Run()`, not
 
 ---
 
-## STREETW-0003 — what still differs, and why it is not fixed here
+## STREETW-0003 — the whole frame was half a pixel off
 
-After `STREETW-0001` and `STREETW-0002` the 18 viewpoints differ from the OPENGL33 capture by
-8–32 % of pixels on WEBGPU, against 0.3–1.9 % on VULKAN. Measured, in order:
+After `STREETW-0001` and `STREETW-0002` the 18 viewpoints differed from the OPENGL33 capture by
+8–32 % of pixels on WEBGPU, against 0.3–1.9 % on VULKAN. What that was, measured in order:
 
 * **Not noise.** Each renderer is deterministic: two captures of the same renderer differ by
   0.00 %.
@@ -151,13 +151,52 @@ After `STREETW-0001` and `STREETW-0002` the 18 viewpoints differ from the OPENGL
   to 3.32/255, and the difference map is exactly the texture detail and silhouettes of otherwise
   identical geometry.
 
-That is this renderer's long-standing XNA-pixel-centre-convention gap, which
-[`plan_webgpu.md`](plan_webgpu.md) already records by name — `WebGPU_PointSamplingContract` and
-`WebGPU_DescriptorCapacityContract` are the two failures it has carried for months, and both are in
-the ten that fail on this branch with and without `STREETW-0001`.
+**Root cause.** XNA rasterizes under Direct3D 9's convention, where a pixel's centre is the integer
+coordinate; WebGPU, OpenGL and Vulkan all put it at the half-integer. Every other CNA renderer
+compensates by moving filled geometry just under half a pixel right and down —
+`EasyGLRenderer`'s `xnaPixelCenter` matrix and `VulkanRenderer::XnaPixelCenterCorrectionEXT`. The
+WebGPU renderer had no such correction at all, on any route. This is the renderer's long-standing
+XNA-pixel-centre gap, which [`plan_webgpu.md`](plan_webgpu.md) already records by name:
+`WebGPU_PointSamplingContract` and `WebGPU_DescriptorCapacityContract` have carried it for months.
 
-Not fixed here, deliberately: changing the pixel-centre convention moves every draw on the WebGPU
-renderer and rewrites the expectations of its whole test corpus. It wants a task of its own in
-`plan_webgpu.md`, with the owner's decision, rather than being changed as a side effect of a demo
-bring-up. What this row adds is the measurement: the gap is not confined to two contract tests, it
-displaces every frame the renderer produces.
+**Fix.** `WebGPURenderer::XnaPixelCenterCorrectionEXT(PrimitiveType)`, Vulkan's field for field —
+the same 63/64 scale, the same filled-primitives-only rule (a line or a point has no fill rule, so
+the same shift only moves it off the pixels XNA lights), the same multisample exemption
+(REMED-GFX-235: at four samples the outer sample positions sit inside the correction's margin, so
+it starts *removing* coverage from the outermost row and column), and the same viewport resolution
+order — explicit `Viewport`, then the bound render target or cube face, then the surface. It is
+post-multiplied onto the WVP of all ten stock 3D families and onto the instanced route's
+view-projection. The signs are EasyGL's unchanged: WebGPU's clip space is y-up like OpenGL's and
+this renderer's stock WGSL negates nothing, so `+x/-y` is the same half-pixel shift down-and-right.
+
+**Two stated boundaries**, neither changed here:
+* The custom-`ShaderEffect` route is not corrected, because a custom program owns its own
+  transform — EasyGL does not correct one either.
+* The compiled-effect route is not corrected, which matches Vulkan (`VulkanCompiledEffect` has no
+  pixel-centre handling either). EasyGL corrects its own through MojoShader, so that difference
+  between the three predates this task and outlives it.
+* WebGPU exposes no sub-pixel-precision limit, so the guard EasyGL and Vulkan apply — lower the
+  scale on a device that cannot represent 63/64 below half — cannot be applied. 63/64 is both
+  renderers' own default and is used unconditionally here.
+
+**Measured.**
+* `WebGPU_PointSamplingContract`, failing for months, now **passes** (163/163). Its one failing leg
+  was `U2`, a 3D textured quad magnified 3×3 → 10×10, 19/100 pixels selecting the neighbouring
+  texel; every sprite leg already passed, which is what said the offset was in the 3D raster rather
+  than in the composite.
+* `WebGPU_DescriptorCapacityContract`, the other half of the recorded pair, passes too.
+* `ctest -L WebGPU`: **139/147**, against 137/147 before this row and the same 137 on the
+  unmodified branch. Two fixed, none broken.
+* cna-street viewpoint 13 against OPENGL33: **28.3 % → 9.0 %** of pixels differing, mean absolute
+  difference 7.69 → 2.84/255, and the sub-pixel search that found the offset now reports its
+  optimum at exactly (0, 0), symmetric in both axes.
+
+**One test changed, and why it is not a weakened expectation.** `WebGPU_GraphicsState`'s wireframe
+leg probed the quad's exact centre. That quad is two triangles sharing the `tr`–`bl` diagonal, and
+on a 64×64 target its centre pixel lies within one pixel of that diagonal — so the probe measured
+whether the shared EDGE covers a pixel, not whether the interior is filled, and any sub-pixel change
+of raster position flips it. The probe moved a quarter of the way in, where the interior genuinely
+is interior. This is the same correction `WebGpuWireFrameContract` had already made to its own probe
+for the same reason ("the oracle's probe is the shared TRIANGLE's centroid, and asserting it about a
+quad measures the quad's diagonal rather than its fill"); this example had kept the centre. The
+Solid control and the recovery check moved with it, so the leg is still a differential.

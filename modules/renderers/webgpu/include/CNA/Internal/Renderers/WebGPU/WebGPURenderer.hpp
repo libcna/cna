@@ -2904,6 +2904,21 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] WebGPUViewportSnapshot CaptureViewport() const noexcept;
         /**
+         * @brief plans/plan_street_webgpu.md STREETW-0003: XNA's pixel-centre correction, as a
+         *        clip-space translation to post-multiply onto a stock family's WVP.
+         *
+         * XNA rasterizes under Direct3D 9's convention, where a pixel's centre sits at the integer
+         * coordinate and the top-left fill rule decides the edge; WebGPU (like OpenGL and Vulkan)
+         * puts the centre at the half-integer. Every other CNA renderer compensates by moving the
+         * geometry just under half a pixel right and down -- `EasyGLRenderer`'s `xnaPixelCenter`
+         * and `VulkanRenderer::XnaPixelCenterCorrectionEXT`, which this mirrors field for field,
+         * including its scale, its multisample exemption and its filled-primitives-only rule.
+         *
+         * @param primitive The primitive topology this draw rasterizes.
+         * @return The correction, or the identity when this draw must not be corrected.
+         */
+        [[nodiscard]] Matrix XnaPixelCenterCorrectionEXT(PrimitiveType primitive) const;
+        /**
          * @brief REMED-GFX-116: starts a render pass's viewport bookkeeping.
          *
          * Sets the pass viewport to the whole target -- deliberately NOT to the live renderer
@@ -3602,6 +3617,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // this SAME value into their own WGPUMultisampleState.count. Only ever 1 or 4 -- see
         // PickSampleCount()'s own comment for why WebGPU has no wider range here, unlike Vulkan.
         int sampleCount_ = 1;
+        /// STREETW-0003: clip-space multiplier for XNA's slightly-less-than-half-pixel centre
+        /// correction, the same 63/64 EasyGL and Vulkan carry. It must stay strictly below half a
+        /// pixel: exactly half puts XNA's 1x1 triangles back on an excluded fill edge.
+        float xnaPixelCenterScale_ = 63.0f / 64.0f;
         // Cached result of Supports4xMsaa()'s own real device-capability probe: -1 = not probed
         // yet, 0 = unsupported, 1 = supported.
         /// WEBGPU-195: the probe's cached answer. Mutable because the probe is a

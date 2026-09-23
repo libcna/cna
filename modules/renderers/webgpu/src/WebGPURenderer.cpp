@@ -6123,7 +6123,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.envMapMaxMipLevel = slotSamplers_[1].maxMipLevel;  // WEBGPU-161
         command.envMapMaxAnisotropy = slotSamplers_[1].maxAnisotropy;
 
-        const Matrix mvp = world * view * projection;
+        const Matrix mvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillEnvMapTransform(command.transformUniforms, mvp, world);
         FillEnvMapParams(command.envMapUniforms, params);
         // WEBGPU-205: the environment-map family carries its own uniform block, so its bias tail is
@@ -10588,6 +10588,71 @@ namespace CNA::Internal::Renderers::WebGPU
     // command at the public draw call, and ApplyDrawViewport() is the only thing that turns a
     // captured value back into native pass state. No Render*Draws() may read viewportX_ and
     // friends -- that is precisely the "resolve at flush time" defect this replaces.
+    Matrix WebGPURenderer::XnaPixelCenterCorrectionEXT(const PrimitiveType primitive) const
+    {
+        // Filled primitives only, for VulkanRenderer::XnaPixelCenterCorrectionEXT's own reason:
+        // the correction compensates for Direct3D's top-left FILL rule by moving the pixel centre
+        // just inside the primitive, and a line or a point has no fill rule -- the same shift only
+        // moves it off the pixels XNA lights.
+        switch (primitive)
+        {
+            case PrimitiveType::TriangleList:
+            case PrimitiveType::TriangleStrip:
+                break;
+            default:
+                return Matrix::getIdentityProperty();
+        }
+
+        // The destination's own extent, resolved in the order the pass itself resolves it: an
+        // explicit Viewport wins, then the bound render target (2D, MRT slot 0, or a cube face),
+        // then the surface.
+        int viewportWidth = 0;
+        int viewportHeight = 0;
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0)
+        {
+            viewportWidth = viewportW_;
+            viewportHeight = viewportH_;
+        }
+        else if (currentRenderTarget_ != nullptr)
+        {
+            viewportWidth = currentRenderTarget_->GetWidth();
+            viewportHeight = currentRenderTarget_->GetHeight();
+        }
+        else if (currentRenderTargetCubeFace_ != nullptr)
+        {
+            viewportWidth = currentRenderTargetCubeFace_->GetSize();
+            viewportHeight = viewportWidth;  // a cube face is square by construction
+        }
+        else
+        {
+            viewportWidth = static_cast<int>(surfaceConfig_.width);
+            viewportHeight = static_cast<int>(surfaceConfig_.height);
+        }
+        if (viewportWidth <= 0 || viewportHeight <= 0)
+            return Matrix::getIdentityProperty();
+
+        // REMED-GFX-235's rule, for REMED-GFX-235's reason, and the reason both other renderers
+        // state: at one sample the correction decides which side of the fill edge the pixel CENTRE
+        // lands on and the sub-half-pixel margin keeps it covered; at four samples the outer
+        // sample positions sit a quarter of a pixel out, inside that margin, so the same
+        // translation starts REMOVING coverage from the outermost row and column.
+        const bool multisampledDestination =
+            currentRenderTarget_ != nullptr    ? currentRenderTarget_->GetMultiSampleCount() > 1
+            : currentRenderTargetCubeFace_ != nullptr
+                                               ? currentRenderTargetCubeFace_->GetMultiSampleCount() > 1
+                                               : sampleCount_ > 1;
+        if (multisampledDestination)
+            return Matrix::getIdentityProperty();
+
+        // XNA row-vector order: post-multiplying the WVP by this gives clip.xy += offset * clip.w.
+        // The signs are EasyGL's unchanged, and they transfer directly: WebGPU's clip space is
+        // y-up like OpenGL's, and this renderer's stock WGSL negates nothing, so +x/-y is the same
+        // half-pixel shift down-and-right on screen that EasyGL produces.
+        return Matrix::CreateTranslation(xnaPixelCenterScale_ / static_cast<float>(viewportWidth),
+                                         -xnaPixelCenterScale_ / static_cast<float>(viewportHeight),
+                                         0.0f);
+    }
+
     WebGPUViewportSnapshot WebGPURenderer::CaptureViewport() const noexcept
     {
         WebGPUViewportSnapshot snapshot;
@@ -12037,7 +12102,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.stencilRef = referenceStencil_;
         if (params != nullptr)
         {
-            const Matrix wvp = world * view * projection;
+            const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
             FillExtUniforms(command.uniforms, wvp, *params);
             // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
             command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -12045,7 +12110,8 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         else
         {
-            FillColoredUniforms(command.uniforms, world, view, projection);
+            FillColoredUniforms(command.uniforms, world, view,
+                                projection * XnaPixelCenterCorrectionEXT(primitive));
             // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
             command.uniforms[40] = slotSamplers_[0].lodBias;
             command.uniforms[41] = slotSamplers_[1].lodBias;
@@ -12449,7 +12515,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // [16..31]=diffuseColor+the same unused-here tail fields as colored3d.wgsl. FillExtUniforms()
         // is reused verbatim: it only cares that its first argument is SOME matrix to dump
         // column-major into [0..15], not specifically a WVP.
-        const Matrix vp = view * projection;
+        const Matrix vp = view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, vp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -12863,7 +12929,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // WMG-0014: this draw's shadow reception, captured here for the same reason its pipeline
         // state is -- a shadow map bound after the draw but before the flush is not this draw's.
         command.shadow = CaptureShadowStateEXT(params);
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -13066,7 +13132,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxMipLevel = slotSamplers_[0].maxMipLevel;  // WEBGPU-161
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillAlphaTestUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -13296,7 +13362,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.texture1AddressW = slotSamplers_[1].addressW;  // WEBGPU-160
         command.texture1MaxMipLevel = slotSamplers_[1].maxMipLevel;  // WEBGPU-161
         command.texture1MaxAnisotropy = slotSamplers_[1].maxAnisotropy;
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -13394,7 +13460,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxMipLevel = slotSamplers_[0].maxMipLevel;  // WEBGPU-161
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -14068,7 +14134,7 @@ namespace
             ? ResolveSamplable(params.pbrSpecularColorMap)
             : pbrDefaultWhiteTexture_->Sampled();
 
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -14709,7 +14775,7 @@ namespace
         // the same thing on both.
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
                                   !(params.shadowsEnabled && params.shadowMap != nullptr);
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
@@ -15148,7 +15214,7 @@ namespace
             ? ResolveSamplable(params.pbrSpecularColorMap)
             : pbrDefaultWhiteTexture_->Sampled();
 
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, wvp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
