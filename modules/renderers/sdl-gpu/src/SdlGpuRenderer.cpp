@@ -5585,11 +5585,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    std::shared_ptr<const SdlGpuRenderer::EffectUnitSamplersEXT>
+    SdlGpuRenderer::SnapshotEffectUnitSamplersEXT() const
+    {
+        auto snapshot = std::make_shared<EffectUnitSamplersEXT>();
+        std::copy_n(samplerSlots_.begin(), snapshot->size(), snapshot->begin());
+        return snapshot;
+    }
+
     void SdlGpuRenderer::BindCustomEffectSamplersEXT(
         SDL_GPURenderPass* pass,
         const std::vector<SpirvResourceBindingEXT>* samplers,
         const SdlGpuEffectTexturesEXT* textures,
-        SDL_GPUTexture* spriteTexture)
+        SDL_GPUTexture* spriteTexture,
+        SDL_GPUSampler* spriteSampler,
+        const EffectUnitSamplersEXT* unitSamplers)
     {
         if (samplers == nullptr || samplers->empty()) return;
         // SMG-0018: resolved by what the shader DECLARED, not by the compacted slot index. See
@@ -5597,35 +5607,56 @@ namespace CNA::Internal::Renderers::SdlGpu
         // accident.
         std::vector<SDL_GPUTextureSamplerBinding> bindings;
         bindings.reserve(samplers->size());
-        SDL_GPUSampler* sampler = AcquireComputeSamplerEXT();
         for (const SpirvResourceBindingEXT& declared : *samplers)
         {
             SDL_GPUTexture* texture = nullptr;
+            SDL_GPUSampler* sampler = nullptr;
             if (declared.originalSet != kEffectTextureSetEXT)
             {
                 texture = spriteTexture;
+                sampler = spriteSampler;
             }
-            else if (textures != nullptr)
+            else
             {
                 const std::uint32_t binding = declared.originalBinding;
-                if (binding >= kEffectVolumeBindingBaseEXT)
+                const std::uint32_t unit =
+                    binding >= kEffectVolumeBindingBaseEXT ? binding - kEffectVolumeBindingBaseEXT
+                    : binding >= kEffectCubeBindingBaseEXT ? binding - kEffectCubeBindingBaseEXT
+                                                           : binding;
+                if (textures != nullptr)
                 {
-                    const std::uint32_t unit = binding - kEffectVolumeBindingBaseEXT;
-                    if (unit < textures->textures3D.size())
-                        texture = textures->textures3D[unit].texture;
+                    if (binding >= kEffectVolumeBindingBaseEXT)
+                    {
+                        if (unit < textures->textures3D.size())
+                            texture = textures->textures3D[unit].texture;
+                    }
+                    else if (binding >= kEffectCubeBindingBaseEXT)
+                    {
+                        if (unit < textures->texturesCube.size())
+                            texture = textures->texturesCube[unit].texture;
+                    }
+                    else if (unit < textures->textures2D.size())
+                    {
+                        texture = textures->textures2D[unit].texture;
+                    }
                 }
-                else if (binding >= kEffectCubeBindingBaseEXT)
+                // STREETS-0004: unit N samples through SamplerStates[N], as in XNA and on Vulkan
+                // (VULKAN-166). A ShaderEffect applies no LOD bias of its own, so the state's
+                // bias rides on the native sampler. Unit 0 of a SpriteBatch draw is the batch's
+                // own sampler: SpriteBatch assigns SamplerStates[0] through its private channel,
+                // which never reaches samplerSlots_[0].
+                if (unit == 0 && spriteSampler != nullptr)
+                    sampler = spriteSampler;
+                else if (unitSamplers != nullptr && unit < unitSamplers->size())
                 {
-                    const std::uint32_t unit = binding - kEffectCubeBindingBaseEXT;
-                    if (unit < textures->texturesCube.size())
-                        texture = textures->texturesCube[unit].texture;
-                }
-                else if (binding < textures->textures2D.size())
-                {
-                    texture = textures->textures2D[binding].texture;
+                    const SamplerSlotState& state = (*unitSamplers)[unit];
+                    sampler = GetOrCreateSampler(state.filter, state.addressU, state.addressV,
+                                                 state.maxAnisotropy, "ShaderEffect",
+                                                 state.maxMipLevel, state.lodBias, state.addressW);
                 }
             }
             if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
+            if (sampler == nullptr) sampler = AcquireComputeSamplerEXT();
             SDL_GPUTextureSamplerBinding binding{};
             binding.texture = texture;
             binding.sampler = sampler;
@@ -5833,50 +5864,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         // the driver null.
         if (command.customEffectRequested && command.customFragmentSamplers != nullptr)
         {
-            // SMG-0016: resolved by what the shader DECLARED, not by the compacted slot index. The
-            // slot says where SDL expects the descriptor; the original (set, binding) says which
-            // texture belongs there, because CNA's portable shaders encode the kind and unit in
-            // the binding number (set 1: 0..3 2D, 4..7 cube, 8..11 volume; set 0 is the sprite's
-            // own). Indexing the caller's textures by slot is only ever right by accident: a
-            // sampler the shader compiler dead-strips shifts every later slot down one.
-            std::vector<SDL_GPUTextureSamplerBinding> bindings;
-            bindings.reserve(command.customFragmentSamplers->size());
-            for (const SpirvResourceBindingEXT& sampler : *command.customFragmentSamplers)
-            {
-                SDL_GPUTexture* texture = nullptr;
-                if (sampler.originalSet != kEffectTextureSetEXT)
-                {
-                    texture = command.texture.texture;  // the SpriteBatch's own, always set 0
-                }
-                else if (command.customTextures != nullptr)
-                {
-                    const std::uint32_t binding = sampler.originalBinding;
-                    const SdlGpuEffectTexturesEXT& bound = *command.customTextures;
-                    if (binding >= kEffectVolumeBindingBaseEXT)
-                    {
-                        const std::uint32_t unit = binding - kEffectVolumeBindingBaseEXT;
-                        if (unit < bound.textures3D.size()) texture = bound.textures3D[unit].texture;
-                    }
-                    else if (binding >= kEffectCubeBindingBaseEXT)
-                    {
-                        const std::uint32_t unit = binding - kEffectCubeBindingBaseEXT;
-                        if (unit < bound.texturesCube.size())
-                            texture = bound.texturesCube[unit].texture;
-                    }
-                    else if (binding < bound.textures2D.size())
-                    {
-                        texture = bound.textures2D[binding].texture;
-                    }
-                }
-                if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
-                SDL_GPUTextureSamplerBinding binding{};
-                binding.texture = texture;
-                binding.sampler = samplerBinding.sampler;
-                bindings.push_back(binding);
-            }
-            if (!bindings.empty())
-                SDL_BindGPUFragmentSamplers(
-                    pass, 0, bindings.data(), static_cast<Uint32>(bindings.size()));
+            // SMG-0016: resolved by what the shader DECLARED -- BindCustomEffectSamplersEXT, the
+            // 3D route's binder, so the two cannot resolve a unit differently. STREETS-0004: and
+            // each of the effect's own units through its own SamplerStates entry.
+            BindCustomEffectSamplersEXT(pass, command.customFragmentSamplers.get(),
+                                        command.customTextures.get(), command.texture.texture,
+                                        samplerBinding.sampler, command.customSamplers.get());
         }
         else
         {
@@ -6081,6 +6074,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // by the time this sprite is replayed, and the textures it had bound then are what
             // this draw must sample.
             command.customTextures = customEffect->SnapshotBoundTexturesEXT();
+            command.customSamplers = SnapshotEffectUnitSamplersEXT();
             command.customFragmentSamplerCount = customEffect->GetFragmentSamplerCountEXT();
             command.customFragmentSamplers = customEffect->SnapshotFragmentSamplersEXT();
             command.customUniformArrays = customEffect->SnapshotUniformArraysEXT();
@@ -10470,6 +10464,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.fragmentUniforms = effect.SnapshotFragmentUniformsEXT();
         command.fragmentSamplers = effect.SnapshotFragmentSamplersEXT();
         command.textures = effect.SnapshotBoundTexturesEXT();
+        command.unitSamplers = SnapshotEffectUnitSamplersEXT();
         command.fragmentStorageBuffers = effect.SnapshotFragmentStorageBuffersEXT();
         command.vertexStorageBuffers = effect.SnapshotVertexStorageBuffersEXT();
         command.storageBuffers = drawStorageNativeEXT_;
@@ -10537,7 +10532,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         PushCustomEffectUniformsEXT(cmd, command.fragmentUniforms.get(), command.uniforms,
                                     command.uniformArrays.get(), /*fragment=*/true);
         BindCustomEffectSamplersEXT(pass, command.fragmentSamplers.get(), command.textures.get(),
-                                    /*spriteTexture=*/nullptr);
+                                    /*spriteTexture=*/nullptr, /*spriteSampler=*/nullptr,
+                                    command.unitSamplers.get());
 
         // SMG-0020: the clustered-lighting path publishes its light list, cluster table and index
         // list through BindStorageBufferForDrawEXT at the bindings its shader declares. Indexed by

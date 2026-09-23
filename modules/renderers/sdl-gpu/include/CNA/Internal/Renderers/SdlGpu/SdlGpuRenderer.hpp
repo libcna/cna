@@ -1842,6 +1842,17 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressW = 1;
         };
 
+        /**
+         * @brief plans/plan_street_sdlgpu.md STREETS-0004: `GraphicsDevice.SamplerStates[0..3]` as a
+         *        custom effect's texture units saw them when its draw was queued.
+         *
+         * XNA samples texture unit N through `SamplerStates[N]`. The Vulkan renderer does
+         * (VULKAN-166); this one bound the SpriteBatch's sampler to every unit of a sprite effect
+         * and a nearest/clamp sampler to every unit of a 3D one. Captured at queue time, like
+         * every other sampler state here, because the draw replays at `Present()`.
+         */
+        using EffectUnitSamplersEXT = std::array<SamplerSlotState, kMaxCustomEffectSamplersEXT>;
+
         // plans/plan_sdlgpu_modern_graphics.md SMG-0032: one stock draw's shadow reception
         // (`GpuDrawParams`' single-map, cascade and punctual groups), captured when the draw is
         // queued -- a shadow map attached after the draw but before Present() is not this draw's.
@@ -1979,6 +1990,8 @@ namespace CNA::Internal::Renderers::SdlGpu
              * pass is applied.
              */
             std::shared_ptr<const SdlGpuEffectTexturesEXT> customTextures;
+            /** @brief STREETS-0004: SamplerStates[0..3] for the effect's own texture units. */
+            std::shared_ptr<const EffectUnitSamplersEXT> customSamplers;
             /** @brief SMG-0008: how many fragment samplers the effect's own module declared. */
             int customFragmentSamplerCount = 0;
             /** @brief SMG-0016: the fragment module's sampler resources, in SDL slot order. */
@@ -2142,6 +2155,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentSamplers;
             /** @brief The textures the effect had bound, by kind and unit. */
             std::shared_ptr<const SdlGpuEffectTexturesEXT> textures;
+            /** @brief STREETS-0004: SamplerStates[0..3] for those texture units. */
+            std::shared_ptr<const EffectUnitSamplersEXT> unitSamplers;
             /** @brief SMG-0020: storage buffers published for this draw, by declared binding. */
             std::vector<std::pair<int, SDL_GPUBuffer*>> storageBuffers;
             /** @brief Keeps those buffers alive until the frame that reads them is submitted. */
@@ -3785,12 +3800,22 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param samplers The module's sampler resources in SDL slot order, or null.
          * @param textures The effect's bound textures, by kind and unit, or null.
          * @param spriteTexture The SpriteBatch's own texture for a set-0 sampler; null for a 3D draw.
+         * @param spriteSampler The SpriteBatch's own sampler for that texture; null for a 3D draw.
+         * @param unitSamplers STREETS-0004: SamplerStates[0..3] captured with the draw, or null.
          */
         CNAEXT void BindCustomEffectSamplersEXT(
             SDL_GPURenderPass* pass,
             const std::vector<SpirvResourceBindingEXT>* samplers,
             const SdlGpuEffectTexturesEXT* textures,
-            SDL_GPUTexture* spriteTexture);
+            SDL_GPUTexture* spriteTexture,
+            SDL_GPUSampler* spriteSampler,
+            const EffectUnitSamplersEXT* unitSamplers);
+
+        /**
+         * @brief STREETS-0004: snapshots SamplerStates[0..3] for a custom effect's draw.
+         * @return The captured states, shared by every command queued with them.
+         */
+        [[nodiscard]] std::shared_ptr<const EffectUnitSamplersEXT> SnapshotEffectUnitSamplersEXT() const;
 
         CNAEXT void PushCustomEffectUniformsEXT(
             SDL_GPUCommandBuffer* cmd,

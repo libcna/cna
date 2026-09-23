@@ -42,6 +42,10 @@
 //   D  the two SamplerStates differ in the W axis and in nothing else.
 //   E  no validation message.
 //
+// plans/plan_street_sdlgpu.md STREETS-0004: compiled for the SDL GPU renderer too, with
+// CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION defined -- that renderer had the same defect, and legs
+// A-D use nothing but the XNA API. Only leg E, which reads the Vulkan validation layer, is left out.
+//
 // Exit code 0 = all PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -64,7 +68,9 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
+#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#endif
 
 #include <array>
 #include <cstddef>
@@ -76,7 +82,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
 using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+#endif
 
 // ---------------------------------------------------------------------------
 // Pre-compiled SPIR-V, from GLSL, through modules/renderers/vulkan/src/shaders/compile_shaders.py.
@@ -182,10 +190,12 @@ class VulkanShaderEffectPerUnitSamplerTest final : public Game
         ok ? ++pass_ : ++fail_;
     }
 
+#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
     VulkanRenderer& Renderer()
     {
         return *dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
     }
+#endif
 
     static std::string Text(const Color& c)
     {
@@ -247,7 +257,9 @@ protected:
         done = true;
 
         auto& dev = getGraphicsDeviceProperty();
+#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
         const std::size_t messagesBefore = Renderer().GetValidationMessagesEXT().size();
+#endif
 
         const std::string vert(reinterpret_cast<const char*>(kTwoUnitsVertSpv),
                                sizeof(kTwoUnitsVertSpv));
@@ -295,12 +307,14 @@ protected:
                   " (want " + Text(a) + "; anything else means the descriptor set outlived a "
                   "per-unit sampler change)");
 
+#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
         {
             const std::size_t after = Renderer().GetValidationMessagesEXT().size();
             check(!VulkanRenderer::IsValidationActiveEXT() || after == messagesBefore,
                   "E no validation message: " + std::to_string(messagesBefore) + " -> " +
                       std::to_string(after));
         }
+#endif
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);

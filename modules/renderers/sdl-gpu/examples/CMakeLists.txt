@@ -570,6 +570,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_instanced_stock_families
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # plans/plan_street_sdlgpu.md STREETS-0004: a ShaderEffect's texture unit u samples through
+    # SamplerStates[u]. Vulkan's VULKAN-166 witness, compiled again: legs A-D are XNA-only, and the
+    # define leaves out leg E, which reads the Vulkan validation layer.
+    cna_sdlgpu_test(cna_test_sdlgpu_shader_effect_per_unit_sampler
+        ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp)
+    target_compile_definitions(cna_test_sdlgpu_shader_effect_per_unit_sampler
+        PRIVATE CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
+    cna_register_renderer_test(NAME SdlGpu_ShaderEffect_PerUnitSampler
+        COMMAND cna_test_sdlgpu_shader_effect_per_unit_sampler
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
     # plans/plan_street_sdlgpu.md STREETS-0003: an engine-layer pass reads a half-float render
     # target through the linear filter it asked for. FullscreenPass exists only with CNAEXT.
     if(CNA_CNAEXT)

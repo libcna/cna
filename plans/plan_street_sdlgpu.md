@@ -36,6 +36,7 @@ Vulkan is the natural reference: same driver, same GPU.
 | STREETS-0001 | SDL_GPU: every instanced stock draw took the position-only `instanced3d` module, whatever effect was applied | ✅ |
 | STREETS-0002 | SDL_GPU: no image-based lighting -- the street fell back to a flat hemisphere ambient | ✅ |
 | STREETS-0003 | SDL_GPU: half-float textures reported unfilterable, so FXAA and bloom read the HDR scene with point sampling | ✅ |
+| STREETS-0004 | SDL_GPU: a ShaderEffect's texture units ignored `SamplerStates[unit]` -- SSAO's tiled noise was clamped | ✅ |
 
 ---
 
@@ -195,3 +196,61 @@ identically with the change stashed (a NormalizedByte4 BasicEffect expectation, 
 **The street after the fix:** 1.0-7.2 % of pixels differ from Vulkan at 17 of the 18 viewpoints
 (mean 0.3-2.0/255), and high-frequency energy matches (06: 4.82 vs 4.68; 13: 5.40 vs 5.33).
 `06-above-the-junction` stays at 18.9 % -- see the next task.
+
+---
+
+## STREETS-0004 — a ShaderEffect's texture units ignored their own sampler states
+
+**Symptom.** After STREETS-0003, `06-above-the-junction` still differed from Vulkan at 18.9 %, the
+rest at 1-7 %. A bisect over the street's optional passes, each capture taken on both renderers:
+
+| passes | pixels differing from Vulkan, 18 viewpoints |
+|---|---|
+| all optional passes off (`--no-ssao --no-light-shafts --no-probes --no-bloom --no-fog --no-clouds`) | **0.000 %** at 14 of 18, at most 0.23 % |
+| everything on except SSAO (`--no-ssao`) | **0.000 %** at 13 of 18, at most 0.23 % |
+
+So with IBL, instancing and filtering fixed the two renderers already agreed pixel for pixel, and
+SSAO was the whole remaining difference.
+
+**Root cause.** `SsaoPass` draws through `FullscreenPass` (a SpriteBatch with a `ShaderEffect`) and
+binds two more textures on the effect: the normals at unit 1 and a 4x4 rotation-noise texture at
+unit 2, which the shader tiles across the screen and so reads through `SamplerStates[2]`'s Wrap.
+In XNA texture unit N samples through `SamplerStates[N]`; the Vulkan renderer fixed exactly this in
+`VULKAN-166`. SDL_GPU's sprite route bound the **SpriteBatch's own sampler** (here `LinearClamp`) to
+every unit of the effect, so the noise was clamped to its edge texel almost everywhere and the
+occlusion kernel stopped rotating. Its 3D `ShaderEffect` route was worse: every unit got
+`AcquireComputeSamplerEXT()`, nearest/clamp, whatever the game had set.
+
+**Fix.** `GraphicsDevice.SamplerStates[0..3]` is captured with each custom-effect draw
+(`SnapshotEffectUnitSamplersEXT`, shared by every command queued with it) -- the draw replays at
+`Present()`, so it cannot read the live state -- and `BindCustomEffectSamplersEXT` binds unit N
+through state N, its LOD bias carried on the native sampler because a `ShaderEffect` applies none
+of its own. Unit 0 of a SpriteBatch draw keeps the batch's sampler: SpriteBatch assigns
+`SamplerStates[0]` through its private renderer channel, which never reaches `samplerSlots_[0]`.
+The sprite route now uses the same binder as the 3D route instead of its own copy, so the two
+cannot resolve a unit differently again.
+
+**Tests.** Vulkan's `VULKAN-166` witness is compiled again for this renderer
+(`SdlGpu_ShaderEffect_PerUnitSampler`): two 1x1x2 volumes sampled at W = 1.25 through two units
+whose states differ only in AddressW. Legs A-D are XNA-only; `CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION`
+leaves out leg E, which reads the Vulkan validation layer, and changes nothing when undefined.
+**A/B:** on the old renderer A and B fail with exactly the diagnosed shape -- "unit 0 read slice 0
+(Wrap), unit 1 read slice 0 (Wrap)", both units on the batch's sampler; with the fix 5/5.
+Classic `-R '^SdlGpu'` the same 27 by name, `-L CnaExt` 27/1/4, `CnaGraphicsExtTests` 931/0/31.
+
+## Result
+
+The street on SDL_GPU against the same street on Vulkan, same GPU and driver, all 18 viewpoints:
+
+| | pixels differing (> 8/255 in any channel) | mean difference |
+|---|---|---|
+| as found | 44 - 99 % | 15 - 80 /255 |
+| after STREETS-0001 (instancing) | 41 - 99 % | 7 - 22 /255 |
+| after STREETS-0002 (IBL) | 2.0 - 21.4 % | 0.5 - 4.8 /255 |
+| after STREETS-0003 (half-float filtering) | 1.0 - 18.9 % | 0.3 - 4.1 /255 |
+| after STREETS-0004 (per-unit samplers) | **0.000 - 0.005 %** | **0.00 /255** |
+
+The two renderers now produce the same picture. Nothing in cna-street needed changing: every
+defect was CNA's, and the street's own capability questions (`SupportsImageBasedLightingEXT`,
+`GetShaderDialectEXT`, `SupportsShadowSamplingEXT`) were asked correctly and answered wrongly or
+not at all.
