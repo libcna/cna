@@ -38,11 +38,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         constexpr std::uint32_t kDecorationBufferBlock = 3;
         constexpr std::uint32_t kDecorationArrayStride = 6;
         constexpr std::uint32_t kDecorationNonWritable = 24;
+        constexpr std::uint32_t kDecorationLocation = 30;
         constexpr std::uint32_t kDecorationBinding = 33;
         constexpr std::uint32_t kDecorationDescriptorSet = 34;
         constexpr std::uint32_t kDecorationOffset = 35;
 
         constexpr std::uint32_t kStorageClassUniformConstant = 0;
+        constexpr std::uint32_t kStorageClassInput = 1;
         constexpr std::uint32_t kStorageClassUniform = 2;
         constexpr std::uint32_t kStorageClassPushConstant = 9;
         constexpr std::uint32_t kStorageClassStorageBuffer = 12;
@@ -87,6 +89,27 @@ namespace CNA::Internal::Renderers::SdlGpu
                 || (opcode >= 48 && opcode <= 52)     // OpSpecConstantTrue .. OpSpecConstantOp
                 || opcode == kOpVariable
                 || opcode == kOpFunction;
+        }
+
+        constexpr std::uint32_t kOpTypeFloat = 22;
+        constexpr std::uint32_t kOpTypeVector = 23;
+        constexpr std::uint32_t kOpConstantComposite = 44;
+        constexpr std::uint32_t kOpStore = 62;
+        constexpr std::uint32_t kOpAccessChain = 65;
+        constexpr std::uint32_t kOpFMul = 133;
+        constexpr std::uint32_t kDecorationBuiltIn = 11;
+        constexpr std::uint32_t kBuiltInPosition = 0;
+        constexpr std::uint32_t kStorageClassOutput = 3;
+
+        [[nodiscard]] Instruction MakeInstruction(
+            const std::uint32_t opcode, const std::vector<std::uint32_t>& operands)
+        {
+            Instruction inst;
+            inst.opcode = opcode;
+            inst.words.push_back(
+                ((static_cast<std::uint32_t>(operands.size()) + 1u) << 16) | opcode);
+            for (const std::uint32_t word : operands) inst.words.push_back(word);
+            return inst;
         }
 
         /// The `SDL_gpu` category a resource falls into, once its type has been walked.
@@ -180,6 +203,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<std::uint32_t> variableOrder;
         std::map<std::uint32_t, std::uint32_t> declaredSet;
         std::map<std::uint32_t, std::uint32_t> declaredBinding;
+        std::map<std::uint32_t, std::uint32_t> declaredLocation;
 
         for (const Instruction& inst : instructions)
         {
@@ -261,6 +285,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                         else if (w[2] == kDecorationNonWritable) nonWritableTargets.insert(w[1]);
                         else if (w.size() >= 4 && w[2] == kDecorationDescriptorSet) declaredSet[w[1]] = w[3];
                         else if (w.size() >= 4 && w[2] == kDecorationBinding) declaredBinding[w[1]] = w[3];
+                        else if (w.size() >= 4 && w[2] == kDecorationLocation) declaredLocation[w[1]] = w[3];
                     }
                     break;
                 case kOpMemberDecorate:
@@ -294,6 +319,23 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             result.error = "SPIR-V module declares no vertex, fragment or compute entry point";
             return result;
+        }
+
+        // Vertex inputs, for a pipeline that has to match whatever layout the shader asked for.
+        if (result.stage == SpirvStageEXT::Vertex)
+        {
+            for (const std::uint32_t variable : variableOrder)
+            {
+                if (variableStorage[variable] != kStorageClassInput) continue;
+                const auto location = declaredLocation.find(variable);
+                if (location == declaredLocation.end()) continue;
+                result.vertexInputLocations.push_back(location->second);
+            }
+            std::sort(result.vertexInputLocations.begin(), result.vertexInputLocations.end());
+            result.vertexInputLocations.erase(
+                std::unique(result.vertexInputLocations.begin(),
+                            result.vertexInputLocations.end()),
+                result.vertexInputLocations.end());
         }
 
         // ---- pass 2: classify every descriptor-bound variable ------------------------------
@@ -503,6 +545,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         result.uniformBufferCount = countSlots(uniforms);
 
         // ---- pass 4: rewrite ---------------------------------------------------------------
+        std::uint32_t input3Bound = 0;
         std::set<std::uint32_t> pushConstantPointers;
         for (const auto& [pointer, storage] : pointerStorage)
             if (storage == kStorageClassPushConstant) pushConstantPointers.insert(pointer);
@@ -606,7 +649,151 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
         }
 
+        // ---- pass 5: cancel SDL_gpu's clip-space Y flip, for a vertex module ----------------
+        //
+        // SDL's own Vulkan backend negates the viewport height it is given
+        // (`SDL_gpu_vulkan.c`: `currentViewport.y = viewport->y + viewport->h;
+        // `currentViewport.height = -viewport->h;`), so clip space on SDL_gpu is Y-up. CNA's
+        // portable shaders are written to CNA's Vulkan renderer's convention, which is Y-down --
+        // that renderer passes a POSITIVE height precisely because its shaders emit NDC directly.
+        // A portable module therefore renders vertically mirrored here.
+        //
+        // This renderer's own stock sprite shader has always carried the matching negation by hand
+        // (`sprite2d.vert.glsl`: `gl_Position = vec4(ndc.x, -ndc.y, ...)`). A portable module
+        // cannot: it is shared with the renderers that must NOT negate. So the same negation is
+        // applied to the module here, which keeps one convention across every renderer and leaves
+        // the shared sources correct for all of them.
+        if (result.stage == SpirvStageEXT::Vertex)
+        {
+            // glslang writes gl_Position as member 0 of the gl_PerVertex block, reached by an
+            // OpAccessChain, not as a variable of its own -- so the BuiltIn decoration to look for
+            // is an OpMemberDecorate, and the thing to negate is the value stored THROUGH that
+            // chain. (A module that decorates a bare variable is handled too; some producers do.)
+            std::uint32_t positionStruct = 0;
+            std::uint32_t positionVariable = 0;
+            for (const Instruction& inst : rewritten)
+            {
+                const auto& w = inst.words;
+                if (inst.opcode == kOpMemberDecorate && w.size() >= 5
+                    && w[3] == kDecorationBuiltIn && w[4] == kBuiltInPosition && w[2] == 0)
+                    positionStruct = w[1];
+                else if (inst.opcode == kOpDecorate && w.size() >= 4
+                         && w[2] == kDecorationBuiltIn && w[3] == kBuiltInPosition)
+                    positionVariable = w[1];
+            }
+
+            // The Output variable whose pointee is that block.
+            if (positionStruct != 0)
+            {
+                for (const std::uint32_t variable : variableOrder)
+                {
+                    if (variableStorage[variable] != kStorageClassOutput) continue;
+                    const auto pointer = variableType.find(variable);
+                    if (pointer == variableType.end()) continue;
+                    const auto pointee = pointerPointee.find(pointer->second);
+                    if (pointee == pointerPointee.end() || pointee->second != positionStruct)
+                        continue;
+                    positionVariable = variable;
+                    break;
+                }
+            }
+
+            // Every pointer that names gl_Position: the access chains into member 0, plus the
+            // variable itself when it is decorated directly.
+            std::set<std::uint32_t> positionPointers;
+            std::uint32_t vectorType = 0;
+            if (positionVariable != 0 && positionStruct == 0)
+            {
+                positionPointers.insert(positionVariable);
+                const auto pointer = variableType.find(positionVariable);
+                if (pointer != variableType.end() && pointerPointee.count(pointer->second) != 0)
+                    vectorType = pointerPointee[pointer->second];
+            }
+            else if (positionVariable != 0)
+            {
+                for (const Instruction& inst : rewritten)
+                {
+                    const auto& w = inst.words;
+                    if (inst.opcode != kOpAccessChain || w.size() < 5) continue;
+                    if (w[3] != positionVariable) continue;
+                    const auto index = constantValue.find(w[4]);
+                    if (index == constantValue.end() || index->second != 0) continue;
+                    positionPointers.insert(w[2]);
+                    const auto pointee = pointerPointee.find(w[1]);
+                    if (pointee != pointerPointee.end()) vectorType = pointee->second;
+                }
+            }
+
+            if (!positionPointers.empty() && vectorType != 0)
+            {
+                std::uint32_t floatType = 0;
+                for (const Instruction& inst : rewritten)
+                    if (inst.opcode == kOpTypeVector && inst.words.size() >= 4
+                        && inst.words[1] == vectorType)
+                        floatType = inst.words[2];
+                if (floatType == 0)
+                {
+                    result.error = "SPIR-V vertex module's gl_Position is not a float vector";
+                    return result;
+                }
+
+                std::uint32_t bound = input[3];
+                const std::uint32_t one = bound++;
+                const std::uint32_t minusOne = bound++;
+                const std::uint32_t flip = bound++;
+                const float positive = 1.0f;
+                const float negative = -1.0f;
+                std::uint32_t positiveBits = 0;
+                std::uint32_t negativeBits = 0;
+                std::memcpy(&positiveBits, &positive, sizeof(positiveBits));
+                std::memcpy(&negativeBits, &negative, sizeof(negativeBits));
+
+                std::vector<Instruction> flipped;
+                flipped.reserve(rewritten.size() + 4);
+                bool constantsEmitted = false;
+                for (Instruction& inst : rewritten)
+                {
+                    if (!constantsEmitted && inst.opcode == kOpTypeVector
+                        && inst.words.size() >= 2 && inst.words[1] == vectorType)
+                    {
+                        flipped.push_back(inst);
+                        flipped.push_back(
+                            MakeInstruction(kOpConstant, {floatType, one, positiveBits}));
+                        flipped.push_back(
+                            MakeInstruction(kOpConstant, {floatType, minusOne, negativeBits}));
+                        flipped.push_back(MakeInstruction(
+                            kOpConstantComposite, {vectorType, flip, one, minusOne, one, one}));
+                        constantsEmitted = true;
+                        continue;
+                    }
+                    if (inst.opcode == kOpStore && inst.words.size() >= 3
+                        && positionPointers.count(inst.words[1]) != 0)
+                    {
+                        const std::uint32_t product = bound++;
+                        flipped.push_back(MakeInstruction(
+                            kOpFMul, {vectorType, product, inst.words[2], flip}));
+                        inst.words[2] = product;
+                        flipped.push_back(inst);
+                        result.changed = true;
+                        continue;
+                    }
+                    flipped.push_back(inst);
+                }
+
+                if (!constantsEmitted)
+                {
+                    result.error =
+                        "SPIR-V vertex module declares no gl_Position vector type to build its "
+                        "clip-space Y correction from";
+                    return result;
+                }
+                rewritten = std::move(flipped);
+                input3Bound = bound;
+            }
+        }
+
         std::vector<std::uint32_t> output(input.begin(), input.begin() + 5);
+        if (input3Bound != 0) output[3] = input3Bound;
         for (const Instruction& inst : rewritten)
             output.insert(output.end(), inst.words.begin(), inst.words.end());
         result.words = std::move(output);

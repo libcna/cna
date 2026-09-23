@@ -187,6 +187,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<SpirvUniformMemberEXT> uniformMembers;
         /** @brief Byte size of the first uniform block, or zero when there is none. */
         std::uint32_t uniformBlockBytes = 0;
+        /**
+         * @brief `location` of every vertex input the module declares, ascending.
+         *
+         * A 3D custom effect's vertex layout is whatever its own shader asks for, not the fixed
+         * sprite one -- so the pipeline's attribute list is built from these rather than assumed,
+         * and an element the shader does not consume is omitted instead of bound to nothing.
+         * Empty for a fragment or compute module.
+         */
+        std::vector<std::uint32_t> vertexInputLocations;
         /** @brief True when the module was changed; false means it already obeyed the layout. */
         bool changed = false;
         /** @brief Empty on success; otherwise the reason this module cannot be used. */

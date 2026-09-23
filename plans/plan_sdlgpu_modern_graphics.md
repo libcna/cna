@@ -440,3 +440,78 @@ new example failures.
 The work it needs is the shape `QueueCompiledEffectDraw`/`IssueCompiledEffectDraw` already has for
 MojoShader effects — a queued command carrying the effect's shaders, an arbitrary vertex
 declaration rather than the fixed `SpriteVertex` one, and a pipeline keyed on that declaration.
+
+### SMG-0016…0018 — the three sprite-path defects, found by triage rather than by guessing
+
+Twenty-seven failures across eleven post-process suites had **three** distinct causes, not one.
+Each is a renderer defect, and none of them is in the shared engine layer.
+
+#### SMG-0016 — clip space is Y-up on `SDL_gpu` and the portable shaders assume Y-down (18 failures)
+
+SDL's own Vulkan backend negates the viewport height it is handed
+(`third_party/SDL/src/gpu/vulkan/SDL_gpu_vulkan.c:7479-7480`:
+`currentViewport.y = viewport->y + viewport->h; currentViewport.height = -viewport->h;`), so clip
+space here is Y-up. CNA's **Vulkan** renderer passes a *positive* height precisely because its
+shaders emit NDC directly — "Positive height is deliberate: CNA flips Y in the vertex shader"
+(`VulkanRenderer.cpp:14486`). This renderer's own stock sprite shader has always carried the
+matching negation by hand (`sprite2d.vert.glsl:23`, whose comment records it was confirmed
+empirically).
+
+A portable module cannot carry it: the same source is shared with the renderers that must **not**
+negate. So the negation is applied to the module during the rewrite — one `OpFMul` by
+`vec4(1,-1,1,1)` before each store to `gl_Position`. That keeps one convention across every
+renderer and leaves the shared sources correct for all of them.
+
+The shape mattered: glslang writes `gl_Position` as member 0 of the `gl_PerVertex` block, reached
+by an `OpAccessChain`, **not** as a decorated variable of its own — verified by disassembling the
+shipped `kFullscreenVulkanVertexSpirV` before writing the pass. A first cut looked for
+`OpDecorate <var> BuiltIn Position`, found nothing, and silently changed no module at all.
+
+Proof it was a mirror and not a shader bug: for `HdrDisplayOutput`'s 8×8 gradient, output texel 0
+read input texel **56** — row 7 of 8, the exact vertical mirror — and `SpatialUpscale`'s diagonal
+gave `result[0] = texels[15*16+0]`. Suites asserting a left/right split passed throughout.
+
+#### SMG-0017 — the custom pipeline hardcoded alpha blending (3 failures)
+
+`GetOrCreatePipeline` set `SRC_ALPHA`/`ONE_MINUS_SRC_ALPHA` on every colour target unconditionally,
+consulting `renderState` only for write masks and depth bias — while the stock sprite pipeline
+derives all of it from the real state through `FillColorTargetDescriptions`. `FullscreenPass` begins
+every engine-layer pass with `BlendState::Opaque`.
+
+Harmless wherever fragment alpha is 1, and fatal where alpha means something else: the
+volumetric-fog build pass writes `alpha = density`, so a density of 0.08 scaled its own RGB by 0.08
+into an 8-bit target and quantised to zero — "the medium scattered no light into a black frame at
+all". The path now uses the same `FillColorTargetDescriptions` and the same `PipelineCacheKey` the
+stock pipelines use, so blend, write masks, cull, wireframe, bias and stencil are all part of the
+pipeline's identity rather than assumed constant.
+
+#### SMG-0018 — a custom effect's textures are resolved by declared binding, not by SDL slot (4 failures)
+
+CNA's portable shaders encode the texture kind and unit in the binding number, because they are
+written against the Vulkan renderer's descriptor layout
+(`VulkanRenderer.hpp:983-993`): set 1 holds the effect's own textures, `0..3` 2D at that unit,
+`4..7` cube at `binding-4`, `8..11` volume at `binding-8`; set 0 is the SpriteBatch's own texture,
+which is why `texture1` is always `set = 0`.
+
+Indexing the caller's textures by the **slot** `SDL_gpu` compacts them into is only ever right by
+accident. Three of CNA's own fragment shaders try to keep `texture1` alive with a multiply-by-zero
+that the optimiser folds away (`skybox.vulkan.frag.glsl:30`, `build.vulkan.frag.glsl:82`,
+`sky.vulkan.frag.glsl:78`), so the shader really declares one sampler, not two — and the skybox's
+`uEnvironment` landed at slot 0, where it was overwritten by the sprite's 1×1 white dummy texture
+and a 2D view was handed to a `samplerCube`. Every face read `(255,255,255)`.
+
+The three kinds now live in separate arrays too, since a cube at unit 1 and a 2D at unit 1 are
+different bindings in the shader and must not overwrite each other.
+
+### Progression
+
+| stage | pass | fail | skip |
+|---|---|---|---|
+| baseline | 682 | 21 | 259 |
+| SMG-0006…0011 shader intake | 801 | 55 | 106 |
+| SMG-0012…0014 compute and storage | 834 | 52 | 76 |
+| **SMG-0016…0018 sprite-path defects** | **851** | **25** | **86** |
+
+**Every one of the 25 remaining failures is the same single cause** — the missing 3D custom-effect
+path (`ClusteredForwardEffectTest` 15, `DecalPassTest` 6, `WeightedBlendedTransparencyTest` 3,
+`TransparentPhaseTest` 1).

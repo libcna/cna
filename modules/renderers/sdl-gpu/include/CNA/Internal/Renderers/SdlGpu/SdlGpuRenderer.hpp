@@ -222,13 +222,41 @@ namespace CNA::Internal::Renderers::SdlGpu
     inline constexpr std::uint32_t kMat4ArrayBindingEXT = 15;
 
     /**
-     * @brief Highest sampler unit a custom `ShaderEffect` may bind. CNAEXT.
+     * @brief Highest sampler unit a custom `ShaderEffect` may bind, per texture kind. CNAEXT.
      *
-     * plans/plan_sdlgpu_modern_graphics.md `SMG-0008`. Eight, because the widest fragment module
-     * in CNA's own engine layer declares three and the widest lit one declares six; the limit
-     * exists so a stray unit index cannot grow the per-effect table without bound.
+     * Four, matching `VulkanRenderer::kMaxEffectBoundTextures`, because that renderer's descriptor
+     * layout is the one CNA's portable shaders are written against.
      */
-    inline constexpr int kMaxCustomEffectSamplersEXT = 8;
+    inline constexpr int kMaxCustomEffectSamplersEXT = 4;
+
+    /**
+     * @brief Where a portable shader puts a custom effect's own bound textures. CNAEXT.
+     *
+     * plans/plan_sdlgpu_modern_graphics.md `SMG-0016`. This is **not** a choice this renderer gets
+     * to make: CNA's portable shader sources are written against the Vulkan renderer's descriptor
+     * convention, so the binding number in a shared `*.vulkan.frag.glsl` already encodes which
+     * kind of texture goes at which unit. Set 1 holds the effect's own textures, and within it:
+     *
+     * | binding | meaning |
+     * |---|---|
+     * | 0 .. 3 | 2D texture at unit `binding` |
+     * | 4 .. 7 | cube texture at unit `binding - 4` |
+     * | 8 .. 11 | volume texture at unit `binding - 8` |
+     *
+     * Set 0 is the SpriteBatch's own texture, which is why `texture1` is always `set = 0`.
+     *
+     * Reading the unit out of the binding is what makes the mapping correct rather than
+     * coincidental. The slot a resource ends up at in `SDL_gpu`'s compacted table is **not** the
+     * unit the caller bound: a sampler the shader compiler dead-strips (three of CNA's own shaders
+     * try to keep `texture1` alive with a multiply-by-zero that the optimiser folds away) shifts
+     * every later slot down, so slot-indexing silently reads the wrong texture.
+     */
+    inline constexpr std::uint32_t kEffectTextureSetEXT = 1;
+    /** @brief First binding in @ref kEffectTextureSetEXT holding a cube texture. CNAEXT. */
+    inline constexpr std::uint32_t kEffectCubeBindingBaseEXT = 4;
+    /** @brief First binding in @ref kEffectTextureSetEXT holding a volume texture. CNAEXT. */
+    inline constexpr std::uint32_t kEffectVolumeBindingBaseEXT = 8;
+
 
     /** @brief Number of distinct shaders acquired during transactional renderer construction. CNAEXT. */
     inline constexpr std::size_t SdlGpuConstructionShaderCountEXT =
@@ -315,6 +343,22 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /** @brief Whether a texture was actually resolved (an absent optional slot yields false). */
         [[nodiscard]] explicit operator bool() const noexcept { return texture != nullptr; }
+    };
+
+    /**
+     * @brief One custom effect's own bound textures, by kind and unit. CNAEXT.
+     *
+     * Three arrays rather than one, because a cube at unit 1 and a 2D at unit 1 are different
+     * bindings in the shader and must not overwrite each other.
+     */
+    struct SdlGpuEffectTexturesEXT
+    {
+        /** @brief 2D textures, indexed by unit. */
+        std::array<SdlGpuSampledTextureEXT, kMaxCustomEffectSamplersEXT> textures2D{};
+        /** @brief Cube textures, indexed by unit. */
+        std::array<SdlGpuSampledTextureEXT, kMaxCustomEffectSamplersEXT> texturesCube{};
+        /** @brief Volume textures, indexed by unit. */
+        std::array<SdlGpuSampledTextureEXT, kMaxCustomEffectSamplersEXT> textures3D{};
     };
 
     // The GPU handle of an ordinary uploaded texture (Texture2D, Texture3D, TextureCube) lives in this
@@ -1223,7 +1267,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * @return An immutable snapshot, rebuilt only when a bind has changed it since the last call.
          */
-        CNAEXT [[nodiscard]] std::shared_ptr<const std::vector<SdlGpuSampledTextureEXT>>
+        CNAEXT [[nodiscard]] std::shared_ptr<const SdlGpuEffectTexturesEXT>
         SnapshotBoundTexturesEXT() const;
 
         /** @brief How many fragment samplers the compiled module declared. CNAEXT. */
@@ -1248,6 +1292,13 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] std::shared_ptr<const SdlGpuUniformArrayBlockEXT>
         SnapshotUniformArraysEXT() const;
+
+        /**
+         * @brief The fragment stage's reflected SAMPLER resources, shared by queued draws. CNAEXT.
+         * @return Null when this effect took the GLSL route.
+         */
+        CNAEXT [[nodiscard]] std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
+        SnapshotFragmentSamplersEXT() const;
 
         /**
          * @brief The fragment stage's reflected uniform-buffer resources, shared by queued draws. CNAEXT.
@@ -1291,13 +1342,12 @@ namespace CNA::Internal::Renderers::SdlGpu
          * pipeline-static identity/state (REMED-GFX-051). Null if `CompileProgram()` did not
          * succeed. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(
-                                                                          const SdlGpuColorTargetFormatsEXT& colorFormats,
+                                                                          const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
-                                                                          const std::array<int, 4>& colorWriteMasks,
-                                                                          float depthBias,
-                                                                          float slopeScaleDepthBias);
+                                                                          const SDL_GPURasterizerState& rasterizerState,
+                                                                          std::size_t cacheKey);
         /** @brief Number of cached custom-effect pipelines. Test-only cache-identity
          * introspection for REMED-GFX-051. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetPipelineCacheSizeEXT() const
@@ -1320,9 +1370,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// SMG-0007: what each stage's SPIR-V declared, and where SDL_gpu now expects it.
         std::vector<SpirvResourceBindingEXT> vertexResourcesEXT_;
         std::vector<SpirvResourceBindingEXT> fragmentResourcesEXT_;
-        /// SMG-0008: textures bound per unit, and the snapshot queued draws share.
-        std::vector<SdlGpuSampledTextureEXT> boundTexturesEXT_;
-        mutable std::shared_ptr<const std::vector<SdlGpuSampledTextureEXT>> textureSnapshotEXT_;
+        /// SMG-0008/SMG-0016: textures bound per kind and unit, and the snapshot draws share.
+        SdlGpuEffectTexturesEXT boundTexturesEXT_;
+        mutable std::shared_ptr<const SdlGpuEffectTexturesEXT> textureSnapshotEXT_;
         int fragmentSamplerCountEXT_ = 0;
         /// SMG-0010: the four std140 arrays, and the snapshot queued draws share.
         SdlGpuUniformArrayBlockEXT uniformArraysEXT_;
@@ -1330,6 +1380,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         mutable std::shared_ptr<const SdlGpuUniformArrayBlockEXT> uniformArraySnapshotEXT_;
         mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> vertexUniformSnapshotEXT_;
         mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentUniformSnapshotEXT_;
+        mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentSamplerSnapshotEXT_;
     };
 
     /** @brief `SDL_gpu`-backed `SpriteBatch`. Queues quads; actual draws happen at Present() time. */
@@ -1824,9 +1875,11 @@ namespace CNA::Internal::Renderers::SdlGpu
              * FNA's `SpriteBatch.DrawPrimitives`, which assigns `Textures[0]` after the effect's
              * pass is applied.
              */
-            std::shared_ptr<const std::vector<SdlGpuSampledTextureEXT>> customTextures;
+            std::shared_ptr<const SdlGpuEffectTexturesEXT> customTextures;
             /** @brief SMG-0008: how many fragment samplers the effect's own module declared. */
             int customFragmentSamplerCount = 0;
+            /** @brief SMG-0016: the fragment module's sampler resources, in SDL slot order. */
+            std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> customFragmentSamplers;
             /** @brief SMG-0010: the std140 arrays this effect had set, or null if it set none. */
             std::shared_ptr<const SdlGpuUniformArrayBlockEXT> customUniformArrays;
             /** @brief SMG-0010: which uniform slot each declared vertex block occupies. */

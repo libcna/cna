@@ -5552,23 +5552,52 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Textures[0] after the effect's pass), the rest come from what the effect had bound, and
         // a slot the caller left empty falls back to the opaque white texture rather than reaching
         // the driver null.
-        if (command.customEffectRequested && command.customFragmentSamplerCount > 1)
+        if (command.customEffectRequested && command.customFragmentSamplers != nullptr)
         {
-            const int wanted =
-                std::min(command.customFragmentSamplerCount, kMaxCustomEffectSamplersEXT);
-            std::array<SDL_GPUTextureSamplerBinding, kMaxCustomEffectSamplersEXT> bindings{};
-            bindings[0] = samplerBinding;
-            for (int slot = 1; slot < wanted; ++slot)
+            // SMG-0016: resolved by what the shader DECLARED, not by the compacted slot index. The
+            // slot says where SDL expects the descriptor; the original (set, binding) says which
+            // texture belongs there, because CNA's portable shaders encode the kind and unit in
+            // the binding number (set 1: 0..3 2D, 4..7 cube, 8..11 volume; set 0 is the sprite's
+            // own). Indexing the caller's textures by slot is only ever right by accident: a
+            // sampler the shader compiler dead-strips shifts every later slot down one.
+            std::vector<SDL_GPUTextureSamplerBinding> bindings;
+            bindings.reserve(command.customFragmentSamplers->size());
+            for (const SpirvResourceBindingEXT& sampler : *command.customFragmentSamplers)
             {
                 SDL_GPUTexture* texture = nullptr;
-                if (command.customTextures != nullptr
-                    && static_cast<std::size_t>(slot) < command.customTextures->size())
-                    texture = (*command.customTextures)[static_cast<std::size_t>(slot)].texture;
+                if (sampler.originalSet != kEffectTextureSetEXT)
+                {
+                    texture = command.texture.texture;  // the SpriteBatch's own, always set 0
+                }
+                else if (command.customTextures != nullptr)
+                {
+                    const std::uint32_t binding = sampler.originalBinding;
+                    const SdlGpuEffectTexturesEXT& bound = *command.customTextures;
+                    if (binding >= kEffectVolumeBindingBaseEXT)
+                    {
+                        const std::uint32_t unit = binding - kEffectVolumeBindingBaseEXT;
+                        if (unit < bound.textures3D.size()) texture = bound.textures3D[unit].texture;
+                    }
+                    else if (binding >= kEffectCubeBindingBaseEXT)
+                    {
+                        const std::uint32_t unit = binding - kEffectCubeBindingBaseEXT;
+                        if (unit < bound.texturesCube.size())
+                            texture = bound.texturesCube[unit].texture;
+                    }
+                    else if (binding < bound.textures2D.size())
+                    {
+                        texture = bound.textures2D[binding].texture;
+                    }
+                }
                 if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
-                bindings[static_cast<std::size_t>(slot)].texture = texture;
-                bindings[static_cast<std::size_t>(slot)].sampler = samplerBinding.sampler;
+                SDL_GPUTextureSamplerBinding binding{};
+                binding.texture = texture;
+                binding.sampler = samplerBinding.sampler;
+                bindings.push_back(binding);
             }
-            SDL_BindGPUFragmentSamplers(pass, 0, bindings.data(), static_cast<Uint32>(wanted));
+            if (!bindings.empty())
+                SDL_BindGPUFragmentSamplers(
+                    pass, 0, bindings.data(), static_cast<Uint32>(bindings.size()));
         }
         else
         {
@@ -5747,17 +5776,34 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
 
             command.customEffectRequested = true;
+            // SMG-0017: built here, where the renderer's own state helpers are in scope, so a
+            // custom effect gets the same real BlendState / rasterizer treatment as a stock draw.
+            // Depth testing stays off: this is the SpriteBatch family, whose draws are ordered by
+            // the queue rather than by depth.
+            std::array<SDL_GPUColorTargetDescription, 4> customColorTargets{};
+            FillColorTargetDescriptions(customColorTargets, colorTargetCount, colorFormats,
+                                        command.renderState);
+            SDL_GPURasterizerState customRasterizer{};
+            customRasterizer.fill_mode = SDL_GPU_FILLMODE_FILL;
+            customRasterizer.cull_mode = SDL_GPU_CULLMODE_NONE;
+            customRasterizer.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+            FillDepthBiasState(customRasterizer, SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+                               depthStencilFormat, command.renderState.depthBias,
+                               command.renderState.slopeScaleDepthBias);
+            const std::size_t customKey = PipelineCacheKey(
+                SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, /*depthTest=*/false, /*depthWrite=*/false,
+                /*depthFunc=*/0, colorFormats, colorTargetCount, sampleCount, depthStencilFormat,
+                command.renderState);
             command.customPipeline = customEffect->GetOrCreatePipeline(
-                colorFormats, sampleCount, depthStencilFormat, colorTargetCount,
-                command.renderState.colorWriteMasks,
-                command.renderState.depthBias,
-                command.renderState.slopeScaleDepthBias);
+                customColorTargets, sampleCount, depthStencilFormat, colorTargetCount,
+                customRasterizer, customKey);
             command.customUniforms = customEffect->SnapshotUniforms();
             // SMG-0008: same by-value reasoning as customUniforms -- the effect object may be gone
             // by the time this sprite is replayed, and the textures it had bound then are what
             // this draw must sample.
             command.customTextures = customEffect->SnapshotBoundTexturesEXT();
             command.customFragmentSamplerCount = customEffect->GetFragmentSamplerCountEXT();
+            command.customFragmentSamplers = customEffect->SnapshotFragmentSamplersEXT();
             command.customUniformArrays = customEffect->SnapshotUniformArraysEXT();
             command.customVertexUniforms = customEffect->SnapshotVertexUniformsEXT();
             command.customFragmentUniforms = customEffect->SnapshotFragmentUniformsEXT();
@@ -11841,9 +11887,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuEffectRenderer::BindTexture(const int unit, ITextureRenderer* texture)
     {
         if (unit < 0 || unit >= kMaxCustomEffectSamplersEXT) return;
-        if (static_cast<int>(boundTexturesEXT_.size()) <= unit)
-            boundTexturesEXT_.resize(static_cast<std::size_t>(unit) + 1);
-        boundTexturesEXT_[static_cast<std::size_t>(unit)] =
+        boundTexturesEXT_.textures2D[static_cast<std::size_t>(unit)] =
             ResolveSampledTextureEXT(texture, "ShaderEffect.Texture");
         textureSnapshotEXT_.reset();
     }
@@ -11851,9 +11895,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuEffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
     {
         if (unit < 0 || unit >= kMaxCustomEffectSamplersEXT) return;
-        if (static_cast<int>(boundTexturesEXT_.size()) <= unit)
-            boundTexturesEXT_.resize(static_cast<std::size_t>(unit) + 1);
-        boundTexturesEXT_[static_cast<std::size_t>(unit)] =
+        boundTexturesEXT_.texturesCube[static_cast<std::size_t>(unit)] =
             ResolveSampledCubeEXT(texture, "ShaderEffect.TextureCube");
         textureSnapshotEXT_.reset();
     }
@@ -11861,20 +11903,37 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuEffectRenderer::BindTexture3D(const int unit, ITexture3DRenderer* texture)
     {
         if (unit < 0 || unit >= kMaxCustomEffectSamplersEXT) return;
-        if (static_cast<int>(boundTexturesEXT_.size()) <= unit)
-            boundTexturesEXT_.resize(static_cast<std::size_t>(unit) + 1);
-        boundTexturesEXT_[static_cast<std::size_t>(unit)] =
+        boundTexturesEXT_.textures3D[static_cast<std::size_t>(unit)] =
             ResolveSampledVolumeEXT(texture, "ShaderEffect.Texture3D");
         textureSnapshotEXT_.reset();
     }
 
-    std::shared_ptr<const std::vector<SdlGpuSampledTextureEXT>>
+    std::shared_ptr<const SdlGpuEffectTexturesEXT>
     SdlGpuEffectRenderer::SnapshotBoundTexturesEXT() const
     {
         if (textureSnapshotEXT_ == nullptr)
             textureSnapshotEXT_ =
-                std::make_shared<const std::vector<SdlGpuSampledTextureEXT>>(boundTexturesEXT_);
+                std::make_shared<const SdlGpuEffectTexturesEXT>(boundTexturesEXT_);
         return textureSnapshotEXT_;
+    }
+
+    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
+    SdlGpuEffectRenderer::SnapshotFragmentSamplersEXT() const
+    {
+        if (fragmentResourcesEXT_.empty()) return nullptr;
+        if (fragmentSamplerSnapshotEXT_ == nullptr)
+        {
+            auto samplers = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
+            for (const SpirvResourceBindingEXT& resource : fragmentResourcesEXT_)
+                if (resource.kind == SpirvResourceKindEXT::SampledTexture)
+                    samplers->push_back(resource);
+            std::sort(samplers->begin(), samplers->end(),
+                      [](const SpirvResourceBindingEXT& a, const SpirvResourceBindingEXT& b) {
+                          return a.slot < b.slot;
+                      });
+            fragmentSamplerSnapshotEXT_ = std::move(samplers);
+        }
+        return fragmentSamplerSnapshotEXT_;
     }
 
     namespace
@@ -12054,33 +12113,24 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuEffectRenderer::GetOrCreatePipeline(
-                                                                       const SdlGpuColorTargetFormatsEXT& colorFormats,
+                                                                       const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
                                                                        SDL_GPUSampleCount sampleCount,
                                                                        SDL_GPUTextureFormat depthStencilFormat,
                                                                        int colorTargetCount,
-                                                                       const std::array<int, 4>& colorWriteMasks,
-                                                                       float depthBias,
-                                                                       float slopeScaleDepthBias)
+                                                                       const SDL_GPURasterizerState& rasterizerState,
+                                                                       const std::size_t cacheKey)
     {
         if (!valid_)
             return nullptr;
         // SDLGPU-75: count plus every slot's format are immutable compatibility state. INVALID is a
         // real value meaning "no depth/stencil attachment", not a default format: REMED-GFX-097
         // proved that reusing a depth-backed pipeline in that pass violates Vulkan compatibility.
-        std::size_t key = 0;
-        key = HashCombine(key, static_cast<std::size_t>(SampleCountToInt(sampleCount)));
-        key = HashCombine(key, static_cast<std::size_t>(colorTargetCount));
-        for (int i = 0; i < colorTargetCount; ++i)
-            key = HashCombine(key, static_cast<std::size_t>(colorFormats[i]));
-        key = HashCombine(key, static_cast<std::size_t>(depthStencilFormat));
-        // Per-slot write masks are static pipeline state. Keep custom-effect reuse aligned with
-        // the same active attachment slots represented by this pipeline's target descriptions.
-        for (int i = 0; i < colorTargetCount; ++i)
-            key = HashCombine(key, static_cast<std::size_t>(colorWriteMasks[i] & 0xF));
-        key = HashDepthBias(
-            key, SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-            depthStencilFormat,
-            depthBias, slopeScaleDepthBias);
+        // SMG-0017: the caller builds the key with the same PipelineCacheKey the stock pipelines
+        // use, because it already covers blend, write masks, cull, wireframe, depth bias and
+        // stencil -- all pipeline-static, and all of which genuinely vary now that this path
+        // derives them from the real render state instead of hardcoding them. Without that an
+        // Opaque pass would reuse an alpha-blended pipeline.
+        const std::size_t key = cacheKey;
         const auto it = pipelines_.find(key);
         if (it != pipelines_.end())
             return it->second;
@@ -12101,25 +12151,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
         attrs[2].offset = offsetof(SdlGpuRenderer::SpriteVertex, r);
 
-        std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
-        for (int i = 0; i < colorTargetCount; ++i)
-        {
-            SDL_GPUColorTargetDescription& colorTarget = colorTargets[i];
-            colorTarget.format = colorFormats[i];
-            colorTarget.blend_state.enable_blend = true;
-            colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-            colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-            colorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-            colorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-            colorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-            colorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
-            const Uint8 mask = static_cast<Uint8>(colorWriteMasks[i] & 0xF);
-            if (mask != 0xF)
-            {
-                colorTarget.blend_state.enable_color_write_mask = true;
-                colorTarget.blend_state.color_write_mask = mask;
-            }
-        }
+        // SMG-0017: derived from the real BlendState, exactly as the stock sprite pipeline does.
+        // This used to hardcode SRC_ALPHA / ONE_MINUS_SRC_ALPHA on every target, which silently
+        // overrode `BlendState::Opaque` -- and `FullscreenPass` begins every engine-layer pass with
+        // Opaque. It is harmless for a pass whose fragment alpha is 1, and destroys one whose
+        // alpha means something else: the volumetric-fog build pass writes alpha = density, so a
+        // density of 0.08 scaled its own RGB by 0.08 into an 8-bit target and quantised to zero.
+
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = vertexShader_;
@@ -12129,16 +12167,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-        // Preserve this custom SpriteBatch family's established hardcoded fill/cull behavior;
-        // REMED-GFX-051 adds only the pipeline-static bias state common to every triangle family.
-        FillDepthBiasState(
-            pipelineInfo.rasterizer_state,
-            pipelineInfo.primitive_type,
-            depthStencilFormat,
-            depthBias, slopeScaleDepthBias);
+        pipelineInfo.rasterizer_state = rasterizerState;
         pipelineInfo.multisample_state.sample_count = sampleCount;
         pipelineInfo.depth_stencil_state.enable_depth_test = false;
         pipelineInfo.depth_stencil_state.enable_depth_write = false;
