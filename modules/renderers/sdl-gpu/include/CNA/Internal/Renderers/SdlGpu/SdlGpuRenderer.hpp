@@ -1841,6 +1841,22 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressW = 1;
         };
 
+        // plans/plan_sdlgpu_modern_graphics.md SMG-0032: one stock draw's shadow reception
+        // (`GpuDrawParams`' single-map, cascade and punctual groups), captured when the draw is
+        // queued -- a shadow map attached after the draw but before Present() is not this draw's.
+        // `uniforms` is the shared `CnaShadowParams` block of shadow_sampling.glsl, filled
+        // float-for-float as the Vulkan and WebGPU renderers fill it. The default is all zeros,
+        // which that block reads as "no directional shadow, no punctual light".
+        struct ShadowReceptionEXT
+        {
+            std::array<float, 132> uniforms{};
+            SdlGpuSampledTextureEXT map;   ///< directional map or cascade atlas; null = none
+            SdlGpuSampledTextureEXT cube;  ///< point light's distance cube; null = none
+            SdlGpuSampledTextureEXT spot;  ///< spot light's distance map; null = none
+            /// GraphicsDevice.SamplerStates[7], [8] and [9], the slots the reference renderers read.
+            std::array<SamplerSlotState, 3> samplers{};
+        };
+
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         /** @brief One resolved sampler binding, in ascending slot order. CNAEXT. */
         struct CompiledEffectSamplerBinding
@@ -2228,6 +2244,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
+            ShadowReceptionEXT shadow;  ///< SMG-0032
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
@@ -2515,6 +2532,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
             std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
+            ShadowReceptionEXT shadow;  ///< SMG-0032
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
@@ -2573,6 +2591,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
             std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
+            ShadowReceptionEXT shadow;  ///< SMG-0032
             bool skinned = false;
             /// plans/plan_gltf.md GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
             bool colored = false;
@@ -2908,6 +2927,16 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Whether this device can run compute. @return True when compute pipelines work here.
          */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /**
+         * @brief Whether the stock lit shaders sample the shadow state. SMG-0032.
+         *
+         * BasicEffect's lit route, SkinnedEffect (both vertex formats) and both PBR families sample
+         * the single map, the cascade atlas and the punctual maps through the same
+         * shadow_sampling.glsl the Vulkan renderer compiles.
+         *
+         * @return Always true: the receiving shaders are created with the renderer.
+         */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         /** @brief Creates a compute shader from a SPIR-V payload. @param computeSrc Module bytes.
          *  @return The shader, or null where compute is unavailable. */
         std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
@@ -3962,6 +3991,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         void DestroyPbrResources();
         void EnsureDefaultPbrTextures();
 
+        // plans/plan_sdlgpu_modern_graphics.md SMG-0032. Capture resolves the three maps and fills
+        // the parameter block at queue time; Bind pushes that block to fragment uniform slot 3 and
+        // binds the maps at `firstSampler`, +1 and +2, with neutral white standing in for an
+        // absent one (white reads as "nothing occludes", which the block already says).
+        [[nodiscard]] ShadowReceptionEXT CaptureShadowReceptionEXT(const GpuDrawParams& params);
+        void BindShadowReceptionEXT(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                    const ShadowReceptionEXT& shadow, Uint32 firstSampler);
+        void EnsureDefaultShadowCubeEXT();
+
         /**
          * @brief The 1x1 opaque white texture, creating it if this is its first use. CNAEXT.
          *
@@ -4439,6 +4477,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// SMG-0012: the one sampler compute's sampled-texture bindings use.
         SDL_GPUSampler* computeSamplerEXT_ = nullptr;
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
+        /// SMG-0032: the 1x1 white cube bound where a draw has no point-light shadow cube.
+        std::unique_ptr<SdlGpuTextureCubeRenderer> defaultWhiteCubeTexture_;
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         struct CompiledProgramLifetimeStateEXT

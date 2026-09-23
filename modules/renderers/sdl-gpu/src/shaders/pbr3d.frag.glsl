@@ -60,12 +60,22 @@ layout(set = 3, binding = 2) uniform PbrParams {
     vec4 specularFresnelInputs; // xyz=unclamped dielectric F0, w=specular factor
     vec4 textureTransformRows[10];
     vec4 specularTextureTransformRows[4];
+    // plans/plan_sdlgpu_modern_graphics.md SMG-0032: the stock sampler LOD biases used to be a
+    // fourth block of their own. SDL_gpu allows four uniform buffers per stage, and shadow
+    // reception needs one, so the two vectors ride at the end of this block instead.
+    vec4 lodBias0To3;
+    vec4 lodBias4To7;
 } pbrp;
 
-layout(set = 3, binding = 3) uniform SamplerLodBias {
-    vec4 slots0To3;
-    vec4 slots4To7;
-} samplerLodBias;
+// SMG-0032: shadow reception, from the one shared snippet. The three maps follow the seven
+// material samplers, and the parameter block takes the slot the LOD biases gave up.
+#define CNA_SHADOW_SAMPLER_SET 2
+#define CNA_SHADOW_MAP_BINDING 7
+#define CNA_SHADOW_CUBE_BINDING 8
+#define CNA_SHADOW_SPOT_BINDING 9
+#define CNA_SHADOW_PARAMS_SET 3
+#define CNA_SHADOW_PARAMS_BINDING 3
+#include "shadow_sampling.glsl"
 
 vec3 cnaSrgbToLinear(vec3 c) {
     vec3 lo = c / 12.92;
@@ -125,7 +135,7 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot) {
 
 void main() {
     vec4 baseColorTex = texture(
-        uTexture, cnaPbrTransformUV(fragUV, 0), samplerLodBias.slots0To3.x);
+        uTexture, cnaPbrTransformUV(fragUV, 0), pbrp.lodBias0To3.x);
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
     // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
     // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. The colour is
@@ -143,22 +153,22 @@ void main() {
     vec3 B = cross(N, T) * fragBitangentSign;
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture(
-        uNormalMap, cnaPbrTransformUV(fragUV, 1), samplerLodBias.slots0To3.y).rgb * 2.0 - 1.0;
+        uNormalMap, cnaPbrTransformUV(fragUV, 1), pbrp.lodBias0To3.y).rgb * 2.0 - 1.0;
     sampledNormal.xy *= pbrp.normalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
     vec4 mr = texture(
-        uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2), samplerLodBias.slots0To3.z);
+        uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2), pbrp.lodBias0To3.z);
     float roughness = clamp(mr.g * pbrp.roughnessFactor, 0.045, 1.0);
     float metallic  = clamp(mr.b * pbrp.metallicFactor, 0.0, 1.0);
 
     vec3 V = safeNormalize(lp.eyePos_pad.xyz - fragWorldPos);
     float specularWeight = pbrp.specularFresnelInputs.w
         * texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0),
-                  samplerLodBias.slots4To7.y).a;
+                  pbrp.lodBias4To7.y).a;
     vec3 specularColorTex = texture(
         uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1),
-        samplerLodBias.slots4To7.z).rgb;
+        pbrp.lodBias4To7.z).rgb;
     specularColorTex = mix(
         specularColorTex, cnaSrgbToLinear(specularColorTex), pbrp.srgbFlags.w);
     vec3 dielectricF0 = min(
@@ -170,17 +180,21 @@ void main() {
     Lo += PbrLight(finalNormal, V, safeNormalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light1Dir_pad.xyz), lp.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light2Dir_pad.xyz), lp.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
+    // The shadow reaches the direct term only; ambient and emission are not occluded by it.
+    Lo *= CnaShadowFactor(fragWorldPos);
+    Lo += CnaPunctualLight(fragWorldPos, finalNormal) * albedo;
 
     float occlusionSample = texture(
-        uOcclusionMap, cnaPbrTransformUV(fragUV, 4), samplerLodBias.slots4To7.x).r;
+        uOcclusionMap, cnaPbrTransformUV(fragUV, 4), pbrp.lodBias4To7.x).r;
     float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
     vec3 emissiveSample = texture(
-        uEmissiveMap, cnaPbrTransformUV(fragUV, 3), samplerLodBias.slots0To3.w).rgb;
+        uEmissiveMap, cnaPbrTransformUV(fragUV, 3), pbrp.lodBias0To3.w).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y);
     vec3 emissive = lp.emissiveColor_pad.xyz * emissiveSample;
 
     outColor = vec4(ambient + Lo + emissive, alpha);
+    outColor.rgb *= CnaCascadeDebugTint(fragWorldPos);
     // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
     vec3 fogLinear = mix(fragFog.rgb, cnaSrgbToLinear(fragFog.rgb), pbrp.srgbFlags.z);
     outColor.rgb = mix(fogLinear, outColor.rgb, fragFog.a);

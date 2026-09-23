@@ -2,12 +2,26 @@
 // Included into the per-pixel BasicEffect, SkinnedEffect and PBR fragment stages by
 // compile_shaders.py. Set 1 is deliberately identical for every family; set 0 remains the
 // family's material/lighting bundle.
+//
+// plans/plan_sdlgpu_modern_graphics.md SMG-0032: the SDL_GPU renderer includes this same file,
+// but SDL_gpu fixes its own descriptor sets (fragment samplers in set 2, fragment uniform buffers
+// in set 3, each numbered from zero), so an including shader may place the four resources by
+// defining these first. The defaults are this renderer's own layout and leave its SPIR-V
+// byte-identical.
+#ifndef CNA_SHADOW_SAMPLER_SET
+#define CNA_SHADOW_SAMPLER_SET 1
+#define CNA_SHADOW_MAP_BINDING 0
+#define CNA_SHADOW_CUBE_BINDING 1
+#define CNA_SHADOW_SPOT_BINDING 2
+#define CNA_SHADOW_PARAMS_SET 1
+#define CNA_SHADOW_PARAMS_BINDING 3
+#endif
 
-layout(set = 1, binding = 0) uniform sampler2D uCnaShadowMap;
-layout(set = 1, binding = 1) uniform samplerCube uCnaPunctualCube;
-layout(set = 1, binding = 2) uniform sampler2D uCnaPunctualMap;
+layout(set = CNA_SHADOW_SAMPLER_SET, binding = CNA_SHADOW_MAP_BINDING) uniform sampler2D uCnaShadowMap;
+layout(set = CNA_SHADOW_SAMPLER_SET, binding = CNA_SHADOW_CUBE_BINDING) uniform samplerCube uCnaPunctualCube;
+layout(set = CNA_SHADOW_SAMPLER_SET, binding = CNA_SHADOW_SPOT_BINDING) uniform sampler2D uCnaPunctualMap;
 
-layout(set = 1, binding = 3) uniform CnaShadowParams {
+layout(set = CNA_SHADOW_PARAMS_SET, binding = CNA_SHADOW_PARAMS_BINDING) uniform CnaShadowParams {
     mat4 lightViewProj;
     mat4 cascadeMatrices[4];
     mat4 punctualViewProj;

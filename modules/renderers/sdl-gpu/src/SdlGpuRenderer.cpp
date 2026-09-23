@@ -1622,7 +1622,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             // both stages without changing this established 56-float block: zero is XNA's default
             // per-vertex/Gouraud path, one requests the per-pixel path.
             out[16] = p.emissiveColor[0]; out[17] = p.emissiveColor[1]; out[18] = p.emissiveColor[2];
-            out[19] = p.preferPerPixelLighting ? 1.0f : 0.0f;
+            // plans/plan_sdlgpu_modern_graphics.md SMG-0032: a draw that receives a shadow takes the
+            // per-pixel path whatever PreferPerPixelLighting says. Gouraud lighting would evaluate
+            // the lookup at the corners and interpolate it, so a ground plane of two triangles
+            // would carry a gradient rather than a shadow. Vulkan, WebGPU and EasyGL apply the
+            // same rule, so "the default per-vertex lighting still receives a shadow" means the
+            // same thing on all four.
+            const bool receivesShadow = p.shadowsEnabled && p.shadowMap != nullptr;
+            out[19] = (p.preferPerPixelLighting || receivesShadow) ? 1.0f : 0.0f;
             for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi];
             out[36] = p.eyePositionWorld[0]; out[37] = p.eyePositionWorld[1]; out[38] = p.eyePositionWorld[2]; out[39] = 0.0f;
             out[40] = p.light0Specular[0]; out[41] = p.light0Specular[1]; out[42] = p.light0Specular[2]; out[43] = 0.0f;
@@ -6433,8 +6440,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.entrypoint = "main";
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        fsInfo.num_samplers = 1;
-        fsInfo.num_uniform_buffers = 3;  // PC, LitLightParams + stock sampler LOD biases
+        fsInfo.num_samplers = 4;  // texture + SMG-0032's shadow map, punctual cube, spot map
+        fsInfo.num_uniform_buffers = 4;  // PC, LitLightParams, sampler LOD biases + CnaShadowParams
         resources.CreateShader(
             ConstructionShader::LitTexturedFragment,
             SdlGpuFailurePointEXT::LitTexturedFragmentShaderCreation, fsInfo,
@@ -6644,6 +6651,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillLitLightUniforms(command.lightUniforms, params);
+        command.shadow = CaptureShadowReceptionEXT(params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "BasicEffect.Texture (lit)");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
@@ -7109,8 +7117,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         colFsInfo.entrypoint = "main";
         colFsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         colFsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        colFsInfo.num_samplers = 1;
-        colFsInfo.num_uniform_buffers = 3;  // PC, LitLightParams + stock sampler LOD biases
+        colFsInfo.num_samplers = 4;  // texture + SMG-0032's shadow map, punctual cube, spot map
+        colFsInfo.num_uniform_buffers = 4;  // PC, LitLightParams, sampler LOD biases + CnaShadowParams
         resources.CreateShader(
             ConstructionShader::SkinnedColoredFragment,
             SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, colFsInfo,
@@ -7303,8 +7311,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.entrypoint = "main";
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        fsInfo.num_samplers = 7;  // core five plus specular strength and colour
-        fsInfo.num_uniform_buffers = 4;  // PC, LitLightParams, PbrParams + sampler LOD biases
+        fsInfo.num_samplers = 10;  // core five, specular strength and colour + SMG-0032's three maps
+        // PC, LitLightParams, PbrParams (which now ends with the sampler LOD biases) + CnaShadowParams.
+        fsInfo.num_uniform_buffers = 4;
         resources.CreateShader(
             ConstructionShader::PbrFragment,
             SdlGpuFailurePointEXT::PbrFragmentShaderCreation, fsInfo,
@@ -7346,6 +7355,123 @@ namespace CNA::Internal::Renderers::SdlGpu
             NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
                                 SdlGpuResourceEventEXT::Released);
         }
+        if (defaultWhiteCubeTexture_ != nullptr)
+        {
+            defaultWhiteCubeTexture_.reset();
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Released);
+        }
+    }
+
+    // ---- plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception ---------------------
+
+    void SdlGpuRenderer::EnsureDefaultShadowCubeEXT()
+    {
+        if (defaultWhiteCubeTexture_ != nullptr)
+            return;
+        auto cube = std::make_unique<SdlGpuTextureCubeRenderer>(
+            *this, 1, /*mipMap=*/false,
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        const std::array<std::uint8_t, 4> white{255, 255, 255, 255};
+        for (int face = 0; face < 6 && std::getenv("SMGDBG_NOUPLOAD") == nullptr; ++face) // SMGDBG
+        {
+            if (!cube->SetData(face, 0, 0, 0, 1, 1, white.data(), static_cast<int>(white.size())))
+                throw std::runtime_error(
+                    "CNA SDL_GPU: could not upload the white cube a shadow-receiving draw binds "
+                    "when it has no point-light shadow cube");
+        }
+        defaultWhiteCubeTexture_ = std::move(cube);
+        NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                            SdlGpuResourceEventEXT::Acquired);
+    }
+
+    SdlGpuRenderer::ShadowReceptionEXT SdlGpuRenderer::CaptureShadowReceptionEXT(
+        const GpuDrawParams& params)
+    {
+        // Every receiving shader statically uses all three samplers, so the neutral textures have
+        // to exist before the replay binds them; creating them here keeps every allocation on the
+        // queueing side, where a failure still has a caller to report to.
+        EnsureDefaultPbrTextures();
+        EnsureDefaultShadowCubeEXT();
+
+        ShadowReceptionEXT shadow;
+        const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+        const int cascadeCount =
+            haveDirectional && params.cascadeCount > 0 ? std::min(params.cascadeCount, 4) : 0;
+        const int punctualKind =
+            params.punctualKind >= 1 && params.punctualKind <= 2 ? params.punctualKind : 0;
+        const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+        const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+        // The same float-for-float block the Vulkan and WebGPU renderers fill, read by the same
+        // shadow_sampling.glsl, so all three answer a shadow query from identical numbers.
+        float* out = shadow.uniforms.data();
+        std::copy_n(params.lightViewProjColMajor, 16, out);
+        std::copy_n(params.cascadeMatricesColMajor, 64, out + 16);
+        std::copy_n(params.punctualViewProjColMajor, 16, out + 80);
+        out[96] = haveDirectional ? 1.0f : 0.0f;
+        out[97] = params.shadowDepthBias;
+        out[98] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+        out[99] = static_cast<float>(cascadeCount);
+        const int shadowWidth = haveDirectional ? params.shadowMap->GetWidth() : 1;
+        const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+        out[100] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+        out[101] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+        out[102] = params.cascadeBlendBand;
+        out[103] = params.cascadeDebugTint ? 1.0f : 0.0f;
+        std::copy_n(params.cascadeSplits, 4, out + 104);
+        std::copy_n(params.cascadeViewZRow, 4, out + 108);
+        std::copy_n(params.punctualPosition, 3, out + 112);
+        out[115] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+        std::copy_n(params.punctualDirection, 3, out + 116);
+        out[119] = static_cast<float>(punctualKind);
+        std::copy_n(params.punctualDiffuse, 3, out + 120);
+        out[123] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+        out[124] = params.punctualCosInner;
+        out[125] = params.punctualCosOuter;
+        out[126] = params.punctualShadowBias;
+        const int spotWidth = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+        const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+        out[127] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+        out[128] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+
+        // REMED-GFX-152: resolved to a value now, while the public resource is certainly alive;
+        // the keep-alive it carries outlives a map destroyed before Present().
+        if (haveDirectional)
+            shadow.map = ResolveSampledTextureEXT(params.shadowMap, "ShadowMap (receiver)");
+        if (havePoint)
+            shadow.cube = ResolveSampledCubeEXT(params.punctualShadowCube,
+                                                "CubeShadowMap (receiver)");
+        if (haveSpot)
+            shadow.spot = ResolveSampledTextureEXT(params.punctualShadowMap,
+                                                   "SpotShadowMap (receiver)");
+        for (std::size_t i = 0; i < shadow.samplers.size(); ++i)
+            shadow.samplers[i] = samplerSlots_[7 + i];
+        return shadow;
+    }
+
+    void SdlGpuRenderer::BindShadowReceptionEXT(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                const ShadowReceptionEXT& shadow,
+                                                Uint32 firstSampler)
+    {
+        SDL_PushGPUFragmentUniformData(cmd, 3, shadow.uniforms.data(), sizeof(shadow.uniforms));
+        static constexpr std::array<const char*, 3> kLabels{
+            "Shadow.Map", "Shadow.PunctualCube", "Shadow.PunctualMap"};
+        const std::array<SDL_GPUTexture*, 3> textures{
+            shadow.map ? shadow.map.texture : defaultWhiteTexture_->Texture(),
+            shadow.cube ? shadow.cube.texture : defaultWhiteCubeTexture_->Texture(),
+            shadow.spot ? shadow.spot.texture : defaultWhiteTexture_->Texture()};
+        std::array<SDL_GPUTextureSamplerBinding, 3> bindings{};
+        for (std::size_t i = 0; i < bindings.size(); ++i)
+        {
+            const SamplerSlotState& state = shadow.samplers[i];
+            bindings[i].texture = textures[i];
+            bindings[i].sampler = GetOrCreateSampler(
+                state.filter, state.addressU, state.addressV, state.maxAnisotropy, kLabels[i],
+                state.maxMipLevel, /*lodBias=*/0.0f, state.addressW);
+        }
+        SDL_BindGPUFragmentSamplers(pass, firstSampler, bindings.data(),
+                                    static_cast<Uint32>(bindings.size()));
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelinePbr3D(
@@ -7807,6 +7933,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillSkinnedBoneUniforms(command.boneUniforms, params);
         FillSkinnedLightUniforms(command.lightUniforms, params);
+        command.shadow = CaptureShadowReceptionEXT(params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "SkinnedEffect.Texture");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
@@ -7889,6 +8016,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             FillSkinnedBoneUniforms(command.boneUniforms, params);
         }
         FillPbrParams(command.pbrParams, params);
+        command.shadow = CaptureShadowReceptionEXT(params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "PbrEffect.Texture");
         command.normalMap = ResolveSampledTextureEXT(params.pbrNormalMap, "PbrEffect.NormalMap");
         command.metallicRoughnessMap = ResolveSampledTextureEXT(params.pbrMetallicRoughnessMap, "PbrEffect.MetallicRoughnessMap");
@@ -8717,6 +8845,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    "Skinned3D", command.maxMipLevel,
                                                    /*lodBias=*/0.0f, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+        // Both fragment shaders a skinned draw can use place the three shadow maps at 1..3.
+        BindShadowReceptionEXT(pass, cmd, command.shadow, /*firstSampler=*/1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
@@ -8748,7 +8878,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
-        SDL_PushGPUFragmentUniformData(cmd, 2, command.pbrParams.data(), sizeof(command.pbrParams));
+        // SMG-0032: the stock sampler LOD biases ride at the end of PbrParams (lodBias0To3,
+        // lodBias4To7), which frees fragment uniform slot 3 for the shadow parameter block.
+        std::array<float, 80> pbrBlock{};
+        std::copy(command.pbrParams.begin(), command.pbrParams.end(), pbrBlock.begin());
         const std::array<float, 8> lodBiases{
             command.lodBias,
             command.lodBias,
@@ -8757,7 +8890,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.lodBias,
             command.specularSampler.lodBias,
             command.specularColorSampler.lodBias};
-        SDL_PushGPUFragmentUniformData(cmd, 3, lodBiases.data(), sizeof(lodBiases));
+        std::copy(lodBiases.begin(), lodBiases.end(), pbrBlock.begin() + 72);
+        SDL_PushGPUFragmentUniformData(cmd, 2, pbrBlock.data(), sizeof(pbrBlock));
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
@@ -8817,6 +8951,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             ? command.specularColorMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[6].sampler = specularColorSampler;
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 7);
+        BindShadowReceptionEXT(pass, cmd, command.shadow, /*firstSampler=*/7);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
@@ -9272,6 +9407,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    "LitTextured3D", command.maxMipLevel,
                                                    /*lodBias=*/0.0f, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+        BindShadowReceptionEXT(pass, cmd, command.shadow, /*firstSampler=*/1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
