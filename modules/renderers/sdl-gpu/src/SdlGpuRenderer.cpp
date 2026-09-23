@@ -5,6 +5,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
@@ -2621,6 +2622,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         return false;
     }
 
+    bool SdlGpuRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        if (device_ == nullptr) return false;
+        if (static_cast<CNA::ShaderLanguageEXT>(language) != CNA::ShaderLanguageEXT::SpirV)
+            return false;
+        switch (static_cast<CNA::ShaderStageEXT>(stage))
+        {
+            case CNA::ShaderStageEXT::Vertex:
+            case CNA::ShaderStageEXT::Fragment: return true;
+            // SMG-0009 fills this in; until the compute intake exists, claiming it would make a
+            // package select a variant this renderer would then refuse.
+            case CNA::ShaderStageEXT::Compute: return SupportsComputeShadersEXT();
+            case CNA::ShaderStageEXT::Unknown:
+            case CNA::ShaderStageEXT::Count: return false;
+        }
+        return false;
+    }
+
     std::string_view SdlGpuRenderer::GetAdditionalLimitationsTextEXT() const
     {
         return "SDL GPU supports all sixteen XNA vertex-stream bindings and four independently "
@@ -5196,6 +5215,48 @@ namespace CNA::Internal::Renderers::SdlGpu
     // kind in real chronological order. boundPipeline is passed by reference from the caller's own
     // single running variable, so this still skips a redundant rebind across consecutive
     // same-pipeline sprites (SDLGPU-42/43's own rationale, now also true across kind switches).
+    void SdlGpuRenderer::PushCustomEffectUniformsEXT(
+        SDL_GPUCommandBuffer* cmd,
+        const std::vector<SpirvResourceBindingEXT>* uniforms,
+        const std::array<float, 32>& perDrawBlock,
+        const SdlGpuUniformArrayBlockEXT* arrays,
+        const bool fragment)
+    {
+        if (uniforms == nullptr) return;
+        static const SdlGpuUniformArrayBlockEXT kEmptyArrays{};
+        const SdlGpuUniformArrayBlockEXT& source = arrays != nullptr ? *arrays : kEmptyArrays;
+
+        for (const SpirvResourceBindingEXT& uniform : *uniforms)
+        {
+            const void* data = perDrawBlock.data();
+            Uint32 size = static_cast<Uint32>(perDrawBlock.size() * sizeof(float));
+            switch (uniform.originalBinding)
+            {
+                case kFloatArrayBindingEXT:
+                    data = source.floats.data();
+                    size = static_cast<Uint32>(source.floats.size() * sizeof(float));
+                    break;
+                case kVec2ArrayBindingEXT:
+                    data = source.vec2s.data();
+                    size = static_cast<Uint32>(source.vec2s.size() * sizeof(float));
+                    break;
+                case kVec3ArrayBindingEXT:
+                    data = source.vec3s.data();
+                    size = static_cast<Uint32>(source.vec3s.size() * sizeof(float));
+                    break;
+                case kMat4ArrayBindingEXT:
+                    data = source.mat4s.data();
+                    size = static_cast<Uint32>(source.mat4s.size() * sizeof(float));
+                    break;
+                default: break;
+            }
+            if (fragment)
+                SDL_PushGPUFragmentUniformData(cmd, uniform.slot, data, size);
+            else
+                SDL_PushGPUVertexUniformData(cmd, uniform.slot, data, size);
+        }
+    }
+
     void SdlGpuRenderer::IssueSpriteDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                                 const SpriteCommand& command, std::size_t index,
                                                 const float* viewportSize, SDL_GPUTextureFormat colorFormat,
@@ -5220,8 +5281,25 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 32> uniforms = command.customUniforms;
             uniforms[0] = viewportSize[0];
             uniforms[1] = viewportSize[1];
-            SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
+            if (command.customVertexUniforms == nullptr && command.customFragmentUniforms == nullptr)
+            {
+                // The GLSL route: one fixed block per stage, at slot 0, as it has always been.
+                SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
+                SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
+            }
+            else
+            {
+                // SMG-0010: a reflected module says which slot holds what. Only the blocks the
+                // module actually declares are pushed -- pushing a slot the shader does not
+                // declare is what SDL asserts on, and leaving a declared one unpushed is what
+                // reaches the driver as an unwritten descriptor.
+                PushCustomEffectUniformsEXT(
+                    cmd, command.customVertexUniforms.get(), uniforms,
+                    command.customUniformArrays.get(), /*fragment=*/false);
+                PushCustomEffectUniformsEXT(
+                    cmd, command.customFragmentUniforms.get(), uniforms,
+                    command.customUniformArrays.get(), /*fragment=*/true);
+            }
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         else if (command.compiledEffect.vertexShader != nullptr)
@@ -5276,7 +5354,35 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    "SpriteBatch", command.maxMipLevel,
                                                    usesStockSpriteShader ? 0.0f : command.lodBias,
                                                    command.addressW);
-        SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+        // SMG-0008: a custom effect's module may declare more than the one sampler the stock
+        // sprite shader uses. SDL writes a descriptor for every sampler the shader declared, so
+        // each one has to be a real image: slot 0 stays the sprite's own texture (FNA assigns
+        // Textures[0] after the effect's pass), the rest come from what the effect had bound, and
+        // a slot the caller left empty falls back to the opaque white texture rather than reaching
+        // the driver null.
+        if (command.customEffectRequested && command.customFragmentSamplerCount > 1)
+        {
+            const int wanted =
+                std::min(command.customFragmentSamplerCount, kMaxCustomEffectSamplersEXT);
+            std::array<SDL_GPUTextureSamplerBinding, kMaxCustomEffectSamplersEXT> bindings{};
+            bindings[0] = samplerBinding;
+            for (int slot = 1; slot < wanted; ++slot)
+            {
+                SDL_GPUTexture* texture = nullptr;
+                if (command.customTextures != nullptr
+                    && static_cast<std::size_t>(slot) < command.customTextures->size())
+                    texture = (*command.customTextures)[static_cast<std::size_t>(slot)].texture;
+                if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
+                bindings[static_cast<std::size_t>(slot)].texture = texture;
+                bindings[static_cast<std::size_t>(slot)].sampler = samplerBinding.sampler;
+            }
+            SDL_BindGPUFragmentSamplers(pass, 0, bindings.data(), static_cast<Uint32>(wanted));
+        }
+        else
+        {
+            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+        }
 
         SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
     }
@@ -5456,6 +5562,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                 command.renderState.depthBias,
                 command.renderState.slopeScaleDepthBias);
             command.customUniforms = customEffect->SnapshotUniforms();
+            // SMG-0008: same by-value reasoning as customUniforms -- the effect object may be gone
+            // by the time this sprite is replayed, and the textures it had bound then are what
+            // this draw must sample.
+            command.customTextures = customEffect->SnapshotBoundTexturesEXT();
+            command.customFragmentSamplerCount = customEffect->GetFragmentSamplerCountEXT();
+            command.customUniformArrays = customEffect->SnapshotUniformArraysEXT();
+            command.customVertexUniforms = customEffect->SnapshotVertexUniformsEXT();
+            command.customFragmentUniforms = customEffect->SnapshotFragmentUniformsEXT();
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-071: the compiled-effect counterpart of the customEffect snapshot above --
@@ -6657,6 +6771,12 @@ namespace CNA::Internal::Renderers::SdlGpu
                 pipelineInfo,
                 "CNA SDL_GPU: failed to create skinned3d pipeline: ");
         return CacheGraphicsPipeline(cache, key, pipeline);
+    }
+
+    SDL_GPUTexture* SdlGpuRenderer::AcquireDefaultWhiteTextureEXT()
+    {
+        EnsureDefaultPbrTextures();
+        return defaultWhiteTexture_ != nullptr ? defaultWhiteTexture_->Texture() : nullptr;
     }
 
     void SdlGpuRenderer::EnsureDefaultPbrTextures()
@@ -11451,6 +11571,214 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     }
 
+    namespace
+    {
+        /// SMG-0007. Creates one stage's `SDL_GPUShader` from an already-remapped module, filling
+        /// the resource counts from what the module actually declares rather than from the fixed
+        /// one-sampler/one-uniform assumption the GLSL route could afford to make.
+        [[nodiscard]] SDL_GPUShader* CreateShaderFromRemappedSpirvEXT(
+            SDL_GPUDevice* device, const SpirvRemapResultEXT& remapped,
+            const SDL_GPUShaderStage stage, std::string& error)
+        {
+            SDL_GPUShaderCreateInfo info{};
+            info.code = reinterpret_cast<const Uint8*>(remapped.words.data());
+            info.code_size = remapped.words.size() * sizeof(std::uint32_t);
+            info.entrypoint = "main";
+            info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+            info.stage = stage;
+            info.num_samplers = remapped.samplerCount;
+            info.num_storage_textures = remapped.readOnlyStorageTextureCount;
+            info.num_storage_buffers = remapped.readOnlyStorageBufferCount;
+            info.num_uniform_buffers = remapped.uniformBufferCount;
+            SDL_GPUShader* shader = SDL_CreateGPUShader(device, &info);
+            if (shader == nullptr)
+                error = std::string("SDL_CreateGPUShader failed: ") + SDL_GetError();
+            return shader;
+        }
+    }
+
+    bool SdlGpuEffectRenderer::CompileSpirvProgramEXT(
+        const std::string& vertSpirv, const std::string& fragSpirv)
+    {
+        SpirvRemapResultEXT vertex = RemapSpirvForSdlGpuEXT(vertSpirv.data(), vertSpirv.size());
+        if (!vertex.error.empty())
+        {
+            compileError_ = "ShaderEffect vertex SPIR-V: " + vertex.error;
+            return false;
+        }
+        if (vertex.stage != SpirvStageEXT::Vertex)
+        {
+            compileError_ = "ShaderEffect vertex payload does not declare a vertex entry point";
+            return false;
+        }
+        SpirvRemapResultEXT fragment = RemapSpirvForSdlGpuEXT(fragSpirv.data(), fragSpirv.size());
+        if (!fragment.error.empty())
+        {
+            compileError_ = "ShaderEffect fragment SPIR-V: " + fragment.error;
+            return false;
+        }
+        if (fragment.stage != SpirvStageEXT::Fragment)
+        {
+            compileError_ = "ShaderEffect fragment payload does not declare a fragment entry point";
+            return false;
+        }
+
+        vertexShader_ = CreateShaderFromRemappedSpirvEXT(
+            owner_->Device(), vertex, SDL_GPU_SHADERSTAGE_VERTEX, compileError_);
+        if (vertexShader_ == nullptr)
+        {
+            compileError_ = "ShaderEffect vertex: " + compileError_;
+            return false;
+        }
+        fragmentShader_ = CreateShaderFromRemappedSpirvEXT(
+            owner_->Device(), fragment, SDL_GPU_SHADERSTAGE_FRAGMENT, compileError_);
+        if (fragmentShader_ == nullptr)
+        {
+            compileError_ = "ShaderEffect fragment: " + compileError_;
+            SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
+            vertexShader_ = nullptr;
+            return false;
+        }
+
+        vertexResourcesEXT_ = std::move(vertex.resources);
+        fragmentResourcesEXT_ = std::move(fragment.resources);
+        fragmentSamplerCountEXT_ = static_cast<int>(fragment.samplerCount);
+        valid_ = true;
+        return true;
+    }
+
+    void SdlGpuEffectRenderer::BindTexture(const int unit, ITextureRenderer* texture)
+    {
+        if (unit < 0 || unit >= kMaxCustomEffectSamplersEXT) return;
+        if (static_cast<int>(boundTexturesEXT_.size()) <= unit)
+            boundTexturesEXT_.resize(static_cast<std::size_t>(unit) + 1);
+        boundTexturesEXT_[static_cast<std::size_t>(unit)] =
+            ResolveSampledTextureEXT(texture, "ShaderEffect.Texture");
+        textureSnapshotEXT_.reset();
+    }
+
+    void SdlGpuEffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
+    {
+        if (unit < 0 || unit >= kMaxCustomEffectSamplersEXT) return;
+        if (static_cast<int>(boundTexturesEXT_.size()) <= unit)
+            boundTexturesEXT_.resize(static_cast<std::size_t>(unit) + 1);
+        boundTexturesEXT_[static_cast<std::size_t>(unit)] =
+            ResolveSampledCubeEXT(texture, "ShaderEffect.TextureCube");
+        textureSnapshotEXT_.reset();
+    }
+
+    void SdlGpuEffectRenderer::BindTexture3D(const int unit, ITexture3DRenderer* texture)
+    {
+        if (unit < 0 || unit >= kMaxCustomEffectSamplersEXT) return;
+        if (static_cast<int>(boundTexturesEXT_.size()) <= unit)
+            boundTexturesEXT_.resize(static_cast<std::size_t>(unit) + 1);
+        boundTexturesEXT_[static_cast<std::size_t>(unit)] =
+            ResolveSampledVolumeEXT(texture, "ShaderEffect.Texture3D");
+        textureSnapshotEXT_.reset();
+    }
+
+    std::shared_ptr<const std::vector<SdlGpuSampledTextureEXT>>
+    SdlGpuEffectRenderer::SnapshotBoundTexturesEXT() const
+    {
+        if (textureSnapshotEXT_ == nullptr)
+            textureSnapshotEXT_ =
+                std::make_shared<const std::vector<SdlGpuSampledTextureEXT>>(boundTexturesEXT_);
+        return textureSnapshotEXT_;
+    }
+
+    namespace
+    {
+        /// SMG-0010. Copies `count` elements of `elementFloats` floats each into a std140 array
+        /// whose elements are `strideFloats` apart. Writing element by element rather than one
+        /// memcpy is the whole point: std140 pads a `float`, `vec2` or `vec3` element out to
+        /// sixteen bytes, and the caller's data is tightly packed.
+        void WriteStd140ArrayEXT(float* destination, const std::size_t destinationFloats,
+                                 const float* values, const int count,
+                                 const int elementFloats, const int strideFloats)
+        {
+            if (values == nullptr || count <= 0) return;
+            const std::size_t writable = destinationFloats / static_cast<std::size_t>(strideFloats);
+            const std::size_t elements =
+                std::min(static_cast<std::size_t>(count), writable);
+            for (std::size_t element = 0; element < elements; ++element)
+                std::memcpy(destination + element * static_cast<std::size_t>(strideFloats),
+                            values + element * static_cast<std::size_t>(elementFloats),
+                            static_cast<std::size_t>(elementFloats) * sizeof(float));
+        }
+    }
+
+    void SdlGpuEffectRenderer::SetUniformFloatArray(const char*, const float* values, const int count)
+    {
+        WriteStd140ArrayEXT(uniformArraysEXT_.floats.data(), uniformArraysEXT_.floats.size(),
+                            values, count, 1, 4);
+        uniformArraysUsedEXT_ = true;
+        uniformArraySnapshotEXT_.reset();
+    }
+
+    void SdlGpuEffectRenderer::SetUniformVec2Array(const char*, const float* values, const int count)
+    {
+        WriteStd140ArrayEXT(uniformArraysEXT_.vec2s.data(), uniformArraysEXT_.vec2s.size(),
+                            values, count, 2, 4);
+        uniformArraysUsedEXT_ = true;
+        uniformArraySnapshotEXT_.reset();
+    }
+
+    void SdlGpuEffectRenderer::SetUniformVec3Array(const char*, const float* values, const int count)
+    {
+        WriteStd140ArrayEXT(uniformArraysEXT_.vec3s.data(), uniformArraysEXT_.vec3s.size(),
+                            values, count, 3, 4);
+        uniformArraysUsedEXT_ = true;
+        uniformArraySnapshotEXT_.reset();
+    }
+
+    void SdlGpuEffectRenderer::SetUniformMat4Array(const char*, const float* values, const int count)
+    {
+        WriteStd140ArrayEXT(uniformArraysEXT_.mat4s.data(), uniformArraysEXT_.mat4s.size(),
+                            values, count, 16, 16);
+        uniformArraysUsedEXT_ = true;
+        uniformArraySnapshotEXT_.reset();
+    }
+
+    std::shared_ptr<const SdlGpuUniformArrayBlockEXT>
+    SdlGpuEffectRenderer::SnapshotUniformArraysEXT() const
+    {
+        if (!uniformArraysUsedEXT_) return nullptr;
+        if (uniformArraySnapshotEXT_ == nullptr)
+            uniformArraySnapshotEXT_ =
+                std::make_shared<const SdlGpuUniformArrayBlockEXT>(uniformArraysEXT_);
+        return uniformArraySnapshotEXT_;
+    }
+
+    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
+    SdlGpuEffectRenderer::SnapshotFragmentUniformsEXT() const
+    {
+        if (fragmentResourcesEXT_.empty()) return nullptr;
+        if (fragmentUniformSnapshotEXT_ == nullptr)
+        {
+            auto uniforms = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
+            for (const SpirvResourceBindingEXT& resource : fragmentResourcesEXT_)
+                if (resource.kind == SpirvResourceKindEXT::UniformBuffer)
+                    uniforms->push_back(resource);
+            fragmentUniformSnapshotEXT_ = std::move(uniforms);
+        }
+        return fragmentUniformSnapshotEXT_;
+    }
+
+    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
+    SdlGpuEffectRenderer::SnapshotVertexUniformsEXT() const
+    {
+        if (vertexResourcesEXT_.empty()) return nullptr;
+        if (vertexUniformSnapshotEXT_ == nullptr)
+        {
+            auto uniforms = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
+            for (const SpirvResourceBindingEXT& resource : vertexResourcesEXT_)
+                if (resource.kind == SpirvResourceKindEXT::UniformBuffer)
+                    uniforms->push_back(resource);
+            vertexUniformSnapshotEXT_ = std::move(uniforms);
+        }
+        return vertexUniformSnapshotEXT_;
+    }
+
     SdlGpuEffectRenderer::~SdlGpuEffectRenderer()
     {
         for (auto& [key, pipeline] : pipelines_)
@@ -11463,11 +11791,25 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         compileError_.clear();
         valid_ = false;
+        vertexResourcesEXT_.clear();
+        fragmentResourcesEXT_.clear();
         for (auto& [key, pipeline] : pipelines_)
             owner_->QueueGraphicsPipelineRelease(pipeline);
         pipelines_.clear();
         if (fragmentShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), fragmentShader_); fragmentShader_ = nullptr; }
         if (vertexShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), vertexShader_); vertexShader_ = nullptr; }
+
+        // SMG-0007. A portable shader package hands over SPIR-V, which is the form this device
+        // already consumes -- so this route needs no runtime shader compiler at all and is
+        // available in every build, including the ones that deliberately have no libshaderc.
+        // What it does need is the descriptor translation in SdlGpuSpirvBindings: the payload is
+        // compiled from sources written against CNA's Vulkan renderer's descriptor convention,
+        // and SDL_gpu mandates its own.
+        if (LooksLikeSpirvEXT(vertSrc.data(), vertSrc.size())
+            || LooksLikeSpirvEXT(fragSrc.data(), fragSrc.size()))
+        {
+            return CompileSpirvProgramEXT(vertSrc, fragSrc);
+        }
 
 #if !defined(CNA_SDL_GPU_SHADER_EFFECTS)
         (void) vertSrc;
@@ -11821,6 +12163,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuEffectRenderer* customEffectRenderer = customEffect_
             ? dynamic_cast<SdlGpuEffectRenderer*>(customEffect_->GetEffectRendererPtr())
             : nullptr;
+        // plans/plan_sdlgpu_modern_graphics.md SMG-0011: apply the effect BEFORE its uniform state
+        // is snapshotted below. An `Effect` subclass publishes its parameters from `OnApply()` --
+        // that is what the XNA lifecycle is for, and it is where every CNAEXT stock effect writes
+        // its own (`CRTEffect::OnApply` sets `uCrtParams`). Every other renderer's SpriteBatch
+        // calls this; this one did not, so such an effect was queued with whatever its uniforms
+        // held before it was ever applied, which is all zeros. That was invisible while this
+        // renderer could not run a custom effect's source at all: the draw was skipped, so the
+        // uniforms it would have used never mattered.
+        if (customEffectRenderer != nullptr) customEffect_->Apply();
         // plans/plan_fx.md FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
         // compiled effect (resolved here), never both -- Effect::GetCompiledRuntimePtr() returns
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
