@@ -7920,7 +7920,16 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPUEffectRenderer::~WebGPUEffectRenderer()
     {
         // WEBGPU-182.
-        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
+        if (owner_ != nullptr)
+        {
+            // plans/plan_pre_sdlgpu_closeout.md PSG-0006: a queued sprite or custom-effect draw
+            // holds this object as a RAW pointer and the frame carrying it may not have flushed
+            // yet, so it must let go before the memory does. Without this the replay read a freed
+            // effect -- CNAEXT_LeakLoop's segfault, where `valid_` still read true from freed
+            // memory and the program layout read null.
+            owner_->ForgetEffectEXT(this);
+            owner_->CountUnrecoverableResourceEXT(-1);
+        }
         for (auto& [key, pipe] : pipelineCache_)
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         pipelineCache_.clear();

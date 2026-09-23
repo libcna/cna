@@ -960,6 +960,29 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         timerWrotePassEXT_ = false;
     }
 
+    void WebGPURenderer::ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept
+    {
+        // plans/plan_pre_sdlgpu_closeout.md PSG-0006. Both command kinds hold the effect as a raw
+        // pointer, so both have to let go of it here. Nulling is enough: every issue path already
+        // begins by refusing a command whose effect is null, so the draw becomes a no-op instead
+        // of a read of freed memory.
+        if (effect == nullptr) return;
+        for (SpriteCommand& sprite : spriteCommands_)
+        {
+            if (sprite.customEffect != effect) continue;
+            sprite.customEffect = nullptr;
+            sprite.descriptor.reset();
+            ++droppedDrawsForDestroyedEffectsEXT_;
+        }
+        for (CustomEffectDrawCommand& draw : customEffectDrawCommands_)
+        {
+            if (draw.effect != effect) continue;
+            draw.effect = nullptr;
+            draw.descriptor.reset();
+            ++droppedDrawsForDestroyedEffectsEXT_;
+        }
+    }
+
     void WebGPURenderer::WriteTimestampEXT(WGPUQuerySet querySet, std::uint32_t index,
                                            WGPUBuffer resolveBuffer, WGPUBuffer readbackBuffer)
     {

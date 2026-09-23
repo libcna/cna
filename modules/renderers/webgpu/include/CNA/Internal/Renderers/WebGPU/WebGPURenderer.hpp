@@ -5426,6 +5426,39 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param querySet The dying timer's query set; ignored unless it owns the open range.
          */
         CNAEXT void ForgetOpenGpuTimerEXT(WGPUQuerySet querySet) noexcept;
+
+        /**
+         * @brief plans/plan_pre_sdlgpu_closeout.md PSG-0006: drops every queued draw that still
+         * names a `ShaderEffect` renderer which is about to be destroyed.
+         *
+         * This renderer replays a frame later, and a queued sprite or custom-effect draw holds its
+         * effect as a RAW pointer. An application that disposes an `Effect` before the frame
+         * flushes therefore left the replay reading freed memory -- which is not theoretical: it
+         * is the `CNAEXT_LeakLoop` segfault, where the freed object's `valid_` still read true and
+         * its program layout read null, and the pipeline built from it dereferenced nothing.
+         *
+         * Dropping the draw is the honest answer rather than keeping the effect alive: the
+         * `keepAlive` route REMED-GFX-167 uses for textures needs shared ownership, and an
+         * `IEffectRenderer` is owned uniquely by its XNA `Effect`. A draw whose effect no longer
+         * exists cannot be honoured, so it is refused rather than guessed at, and counted so a
+         * game doing this can find out.
+         *
+         * @param effect The dying effect renderer.
+         */
+        CNAEXT void ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept;
+
+        /**
+         * @brief PSG-0006: how many queued draws were dropped because their effect was destroyed
+         *        before the frame carrying them was flushed.
+         * @return The running count since construction.
+         */
+        CNAEXT [[nodiscard]] int GetDroppedDrawsForDestroyedEffectsEXT() const noexcept
+        {
+            return droppedDrawsForDestroyedEffectsEXT_;
+        }
+    private:
+        int droppedDrawsForDestroyedEffectsEXT_ = 0;
+    public:
     private:
         /// WMG-0017: true until a pass has written the open timer's start timestamp.
         bool timerWriteBeginEXT_ = false;

@@ -471,6 +471,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_pre_sdlgpu_closeout.md PSG-0006: a queued draw whose ShaderEffect is disposed
+    # before the frame flushes -- the CNAEXT_LeakLoop use-after-free, as a deterministic case.
+    cna_webgpu_test(cna_test_webgpu_effect_outlived_by_draw webgpu_effect_outlived_by_draw_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_EffectOutlivedByDraw
+        COMMAND cna_test_webgpu_effect_outlived_by_draw
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plans/plan_webgpu_modern_graphics.md WMG-0027: a long run over the modern resources, whose
     # oracle is the renderer's own uncaptured-error count plus RSS/fd/thread deltas.
     cna_webgpu_test(cna_test_webgpu_modern_stress webgpu_modern_stress_test.cpp)
