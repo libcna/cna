@@ -2629,6 +2629,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         return false;
     }
 
+    void SdlGpuRenderer::SetStringMarkerEXT(const char* marker)
+    {
+        if (device_ == nullptr || marker == nullptr || *marker == '\0') return;
+        pendingDebugMarkersEXT_.emplace_back(marker);
+        ++recordedDebugMarkersEXT_;
+    }
+
     void SdlGpuRenderer::FlushPendingGpuWorkEXT()
     {
         if (device_ == nullptr) return;
@@ -2989,6 +2996,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (cmd == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         FrameCommandBufferOwner commandBuffer(cmd, testHooks_);
+
+        // SMG-0027: the labels this frame accumulated, emitted onto the command buffer that
+        // actually carries its work. A label outside a command buffer names nothing, and this
+        // renderer has none open while a game is calling SetStringMarkerEXT.
+        for (const std::string& marker : pendingDebugMarkersEXT_)
+            SDL_InsertGPUDebugLabel(cmd, marker.c_str());
+        pendingDebugMarkersEXT_.clear();
 
         try
         {

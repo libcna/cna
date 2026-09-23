@@ -2856,6 +2856,40 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return device_ != nullptr; }
 
+        /**
+         * @brief True: a shader here samples a volume texture. SMG-0026.
+         *
+         * `sampler3D` needs nothing special of the intake -- the descriptor translation classifies
+         * a sampled image by its type, not its dimension -- and `BindTexture3D` resolves a volume
+         * to the unit the portable shaders encode in binding `8 + unit`. What made this false was
+         * that no custom effect ran at all.
+         *
+         * @return True whenever this renderer has a device.
+         */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override
+        {
+            return device_ != nullptr;
+        }
+
+        /**
+         * @brief Names a point in the frame for a GPU debugger. SMG-0027.
+         *
+         * `SDL_InsertGPUDebugLabel` takes a command buffer, and this renderer has none open
+         * between frames -- draws are queued and replayed at `Present()`. The marker is therefore
+         * recorded with the queue and emitted during replay, which is also the only place it could
+         * mean anything: a label attached outside a command buffer names nothing.
+         *
+         * @param marker Null-terminated label; ignored when null or empty.
+         */
+        void SetStringMarkerEXT(const char* marker) override;
+
+        /** @brief How many markers this renderer has recorded. Test-only. CNAEXT. SMG-0027.
+         *  @return The count since construction. */
+        CNAEXT [[nodiscard]] std::size_t GetRecordedDebugMarkerCountEXT() const
+        {
+            return recordedDebugMarkersEXT_;
+        }
+
         // ---- modern (CNAEXT) compute and storage. SMG-0012 ----
 
         /**
@@ -4322,6 +4356,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUBuffer* pendingIndirectArgumentsEXT_ = nullptr;
         Uint32 pendingIndirectOffsetEXT_ = 0;
         std::shared_ptr<const void> pendingIndirectKeepAliveEXT_;
+        /// SMG-0027: debug labels queued this frame, and how many have ever been recorded.
+        std::vector<std::string> pendingDebugMarkersEXT_;
+        std::size_t recordedDebugMarkersEXT_ = 0;
         /// SMG-0020: storage buffers published for the draws that follow, by declared binding.
         std::vector<std::pair<int, SDL_GPUBuffer*>> drawStorageNativeEXT_;
         /// SMG-0025: one keep-alive per published buffer, in the same order.

@@ -640,3 +640,30 @@ is what a soak is for, and it earned its place on its first run.
 
 **Measured after the fix**, 220 cycles: RSS 101 052 → 101 116 KiB (**+64 KiB**), file descriptors
 23 → 23, threads 6 → 6, all five checks PASS.
+
+### SMG-0026, SMG-0027 — the last two truthful capabilities
+
+**`SupportsTexture3DSamplingEXT` → true.** `sampler3D` needs nothing special of the intake: the
+descriptor translation classifies a sampled image by its *type*, not its dimension, and
+`BindTexture3D` resolves a volume to the unit the portable shaders encode in binding `8 + unit`.
+What had made this false was that no custom effect ran at all.
+
+**`SetStringMarkerEXT` implemented.** `SDL_InsertGPUDebugLabel` takes a command buffer, and this
+renderer has none open while a game is calling the marker API — draws are queued and replayed at
+`Present()`. The label is therefore recorded with the queue and emitted onto the command buffer that
+actually carries the frame's work, which is also the only place it could mean anything.
+
+Neither changed the suite (900 / 0 / 62 before and after); both are now implemented rather than
+inherited refusals.
+
+### SMG-0028 — the 3000-cycle soak, measured
+
+```
+warm: RSS 101 220 KiB, 23 fds, 7 threads
+ran 3020 of 3020 cycles
+RSS 101 220 -> 101 236 KiB (+16), fds 23 -> 23, threads 7 -> 7
+5/5 PASS
+```
+
+Sixteen kilobytes over three thousand and twenty create-use-readback-destroy cycles, with no file
+descriptor and no thread gained.
