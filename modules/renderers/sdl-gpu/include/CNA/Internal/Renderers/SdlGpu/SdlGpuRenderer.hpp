@@ -30,11 +30,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderer;
     class SdlGpuRenderTargetRenderer;
     class SdlGpuRenderTargetCubeRenderer;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-    class SdlGpuCompiledEffect;
     class SdlGpuStorageBufferRenderer;
     class SdlGpuStorageTexture2DRenderer;
     class SdlGpuComputeShaderRenderer;
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+    class SdlGpuCompiledEffect;
 #endif
 
     /** @brief Stock-shader construction route selected for one SDL_gpu device. CNAEXT. */
@@ -302,7 +302,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         Sampler,
         DefaultTexture,
         /** @brief Process-wide SDL_shadercross compiler session. */
-        ShaderCross
+        ShaderCross,
+        /** @brief One CNAEXT storage buffer's native `SDL_GPUBuffer` (SMG-0040). */
+        StorageBuffer
     };
 
     /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. CNAEXT. */
@@ -4401,6 +4403,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<std::pair<int, SDL_GPUBuffer*>> drawStorageNativeEXT_;
         /// SMG-0025: one keep-alive per published buffer, in the same order.
         std::vector<std::shared_ptr<const void>> drawStorageKeepAliveEXT_;
+        /// SMG-0040: every live storage-buffer record made on this renderer. Whatever is still
+        /// here when the device goes is released and detached first (the compiledEffects_ rule).
+        std::vector<SdlGpuStorageBufferRenderer*> storageBuffersEXT_;
+        void RegisterStorageBufferEXT(SdlGpuStorageBufferRenderer* buffer);
+        void UnregisterStorageBufferEXT(SdlGpuStorageBufferRenderer* buffer);
+        void ReleaseStorageBuffersForRendererTeardownEXT();
 
         SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< POSITION0/TEXCOORD0 variant.
         SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< POSITION0/COLOR0/TEXCOORD0 variant.

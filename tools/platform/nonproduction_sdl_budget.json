@@ -485,6 +485,10 @@
       "category": "renderer-integration-executable",
       "max_references": 10
     },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_storage_buffer_lifetime_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 23
+    },
     "modules/renderers/sdl-gpu/examples/sdlgpu_swapchain_recovery_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 15

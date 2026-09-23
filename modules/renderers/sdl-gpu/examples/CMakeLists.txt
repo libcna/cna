@@ -119,6 +119,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # the other renderers' stress programs are.
     cna_sdlgpu_test(cna_test_sdlgpu_modern_stress sdlgpu_modern_stress_test.cpp)
 
+    # SMG-0040: no storage buffer's native SDL_GPUBuffer survives SDL_DestroyGPUDevice, in any
+    # destruction order -- counted through the renderer's resource hook, and in a Debug build also
+    # through the validation layer, whose live-object report fails the entry.
+    cna_sdlgpu_test(cna_test_sdlgpu_storage_buffer_lifetime sdlgpu_storage_buffer_lifetime_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_StorageBufferLifetime
+        COMMAND cna_test_sdlgpu_storage_buffer_lifetime
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_StorageBufferLifetime PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-;\\[FAIL\\]")
+
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
         target_compile_definitions(cna_test_sdlgpu_smoke PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)

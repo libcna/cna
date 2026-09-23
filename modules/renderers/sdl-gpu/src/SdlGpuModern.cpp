@@ -158,6 +158,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (buffer_ == nullptr)
             throw std::runtime_error(
                 std::string("CNA SDL_GPU: failed to create storage buffer: ") + SDL_GetError());
+        owner_->RegisterStorageBufferEXT(this);
+        owner_->NotifyResourceEvent(SdlGpuResourceKindEXT::StorageBuffer,
+                                    SdlGpuResourceEventEXT::Acquired);
         shadow_.assign(byteSize, 0);
         // A buffer whose contents are never written before a shader reads it is undefined storage
         // on every backend; zeroing it makes a partial SetDataRangeEXT merge into a known state
@@ -167,8 +170,26 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuStorageBufferRenderer::~SdlGpuStorageBufferRenderer()
     {
-        if (buffer_ != nullptr && owner_ != nullptr && owner_->Device() != nullptr)
+        if (owner_ == nullptr) return;
+        owner_->UnregisterStorageBufferEXT(this);
+        if (buffer_ != nullptr && owner_->Device() != nullptr)
+        {
             SDL_ReleaseGPUBuffer(owner_->Device(), buffer_);
+            owner_->NotifyResourceEvent(SdlGpuResourceKindEXT::StorageBuffer,
+                                        SdlGpuResourceEventEXT::Released);
+        }
+    }
+
+    void SdlGpuStorageBufferRenderer::ReleaseForRendererTeardownEXT() noexcept
+    {
+        if (owner_ != nullptr && buffer_ != nullptr && owner_->Device() != nullptr)
+        {
+            SDL_ReleaseGPUBuffer(owner_->Device(), buffer_);
+            owner_->NotifyResourceEvent(SdlGpuResourceKindEXT::StorageBuffer,
+                                        SdlGpuResourceEventEXT::Released);
+        }
+        buffer_ = nullptr;
+        owner_ = nullptr;
     }
 
     void SdlGpuStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
@@ -189,6 +210,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (data == nullptr && byteSize != 0) return false;
         if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset) return false;
         if (byteSize == 0) return true;
+        if (owner_ == nullptr) return false;
         std::memcpy(shadow_.data() + byteOffset, data, byteSize);
         return UploadBufferRange(owner_->Device(), buffer_, byteOffset, data, byteSize);
     }
@@ -199,6 +221,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (out == nullptr && byteSize != 0) return false;
         if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset) return false;
         if (byteSize == 0) return true;
+        if (owner_ == nullptr) return false;
         // Anything the GPU has been asked to write may still be queued in this renderer's deferred
         // frame; a readback that skipped it would report the state before the work rather than
         // after it.
@@ -214,7 +237,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::size_t destinationByteOffset, const std::size_t byteSize)
     {
         auto* target = dynamic_cast<SdlGpuStorageBufferRenderer*>(&destination);
-        if (target == nullptr || target->owner_ != owner_) return false;
+        if (target == nullptr || owner_ == nullptr || target->owner_ != owner_) return false;
         if (sourceByteOffset > byteSize_ || byteSize > byteSize_ - sourceByteOffset) return false;
         if (destinationByteOffset > target->byteSize_
             || byteSize > target->byteSize_ - destinationByteOffset)
@@ -243,8 +266,33 @@ namespace CNA::Internal::Renderers::SdlGpu
     bool SdlGpuStorageBufferRenderer::RefreshShadowFromGpuEXT() const
     {
         if (byteSize_ == 0) return true;
+        if (owner_ == nullptr) return false;
         owner_->FlushPendingGpuWorkEXT();
         return DownloadBufferRange(owner_->Device(), buffer_, 0, shadow_.data(), byteSize_);
+    }
+
+    // SMG-0040: the renderer is single-threaded, like the compiledEffects_ registry this mirrors,
+    // so the list takes no lock.
+    void SdlGpuRenderer::RegisterStorageBufferEXT(SdlGpuStorageBufferRenderer* buffer)
+    {
+        storageBuffersEXT_.push_back(buffer);
+    }
+
+    void SdlGpuRenderer::UnregisterStorageBufferEXT(SdlGpuStorageBufferRenderer* buffer)
+    {
+        storageBuffersEXT_.erase(
+            std::remove(storageBuffersEXT_.begin(), storageBuffersEXT_.end(), buffer),
+            storageBuffersEXT_.end());
+    }
+
+    void SdlGpuRenderer::ReleaseStorageBuffersForRendererTeardownEXT()
+    {
+        // Moved out first: a detached record no longer unregisters, but nothing here may rely on
+        // that while iterating.
+        const std::vector<SdlGpuStorageBufferRenderer*> survivors = std::move(storageBuffersEXT_);
+        storageBuffersEXT_.clear();
+        for (SdlGpuStorageBufferRenderer* buffer : survivors)
+            buffer->ReleaseForRendererTeardownEXT();
     }
 
     // ---- SdlGpuStorageTexture2DRenderer -----------------------------------------------------

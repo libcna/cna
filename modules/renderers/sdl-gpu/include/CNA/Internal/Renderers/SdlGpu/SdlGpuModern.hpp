@@ -65,7 +65,12 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         SdlGpuStorageBufferRenderer(SdlGpuRenderer& owner, std::size_t byteSize,
                                     std::uint32_t usage, std::uint32_t cpuAccess);
-        /** @brief Releases the native buffer through the renderer's deferred-release queue. */
+        /**
+         * @brief Releases the native buffer, unless renderer teardown already did.
+         *
+         * A record the renderer tore down first (ReleaseForRendererTeardownEXT) is detached and
+         * owns nothing native any more, so its destruction touches neither SDL nor the renderer.
+         */
         ~SdlGpuStorageBufferRenderer() override;
 
         SdlGpuStorageBufferRenderer(const SdlGpuStorageBufferRenderer&) = delete;
@@ -103,6 +108,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         /** @brief Refreshes the shadow copy from the GPU. CNAEXT. @return False if readback failed. */
         CNAEXT bool RefreshShadowFromGpuEXT() const;
+
+        /**
+         * @brief Releases the native buffer and detaches from the renderer. CNAEXT.
+         *
+         * Called by the owning renderer for every record still alive when it destroys its
+         * `SDL_GPUDevice` (SMG-0040): a buffer must not survive the device it was made on, and a
+         * record that outlives the renderer must not address it again. Afterwards every operation
+         * refuses and the destructor is a no-op.
+         */
+        CNAEXT void ReleaseForRendererTeardownEXT() noexcept;
 
     private:
         SdlGpuRenderer* owner_ = nullptr;

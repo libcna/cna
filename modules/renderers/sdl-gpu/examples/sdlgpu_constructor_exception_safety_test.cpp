@@ -28,7 +28,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr std::size_t kResourceKindCount = 8;
+    constexpr std::size_t kResourceKindCount = 9;
 
     struct ResourceTracker
     {

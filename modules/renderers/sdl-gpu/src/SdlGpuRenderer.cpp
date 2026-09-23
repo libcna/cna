@@ -2521,6 +2521,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         spriteCommands_.clear();
         passSegments_.clear();
         drawOrder_.clear();
+        // SMG-0040: the draw-binding state holds storage-buffer records too, and as members they
+        // would otherwise be destroyed after SDL_DestroyGPUDevice below -- when a record can no
+        // longer release its VkBuffer (VUID-vkDestroyDevice-device-05137). Dropped here, a record
+        // whose last owner was this binding releases normally while the device is alive.
+        drawStorageNativeEXT_.clear();
+        drawStorageKeepAliveEXT_.clear();
+        pendingIndirectArgumentsEXT_ = nullptr;
+        pendingIndirectKeepAliveEXT_.reset();
         DestroyPbrResources();
         DestroySkinnedResources();
         DestroyInstancedResources();
@@ -2567,6 +2575,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
         if (backbufferProxy_ != nullptr)
             SDL_ReleaseGPUTexture(device_, backbufferProxy_);   // REMED-GFX-165 readback proxy
+        // SMG-0040: any storage-buffer record still alive -- held by a caller past its
+        // GraphicsDevice, or by anything else -- gives up its native buffer now and is detached,
+        // so it neither outlives the device nor addresses this renderer after it is gone.
+        ReleaseStorageBuffersForRendererTeardownEXT();
         if (device_ != nullptr)
         {
             if (windowClaimed_)
@@ -10393,6 +10405,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             pendingIndirectArgumentsEXT_ = nullptr;
             pendingIndirectOffsetEXT_ = 0;
+            pendingIndirectKeepAliveEXT_.reset();
             throw;
         }
         pendingIndirectArgumentsEXT_ = nullptr;
@@ -10425,6 +10438,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             pendingIndirectArgumentsEXT_ = nullptr;
             pendingIndirectOffsetEXT_ = 0;
+            pendingIndirectKeepAliveEXT_.reset();
             throw;
         }
         pendingIndirectArgumentsEXT_ = nullptr;
