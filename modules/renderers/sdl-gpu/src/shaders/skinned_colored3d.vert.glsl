@@ -81,13 +81,13 @@ void main() {
     if (weightsPerVertex >= 2.0) skinMat += loadBone(inBoneIndices.y) * inBoneWeights.y;
     if (weightsPerVertex >= 4.0) skinMat += loadBone(inBoneIndices.z) * inBoneWeights.z
                                           + loadBone(inBoneIndices.w) * inBoneWeights.w;
-    vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
+    vec4 skinnedPos = CNA_INSTANCE_POSITION(skinMat * vec4(inPos, 1.0));
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;
     // REMED-GFX-006: matches skinned3d.vert.glsl -- compose the bone-skin 3x3 with the outer world
     // normal matrix transpose(inverse(mat3(world))). The world factor was missing entirely (audit
     // Variant A); see skinned3d.vert.glsl for the full rationale.
-    mat3 skinNormalMatrix = transpose(inverse(mat3(lp.world)));
+    mat3 skinNormalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(skinNormalMatrix * (mat3(skinMat) * inNormal));
     fragWorldPos = (lp.world * skinnedPos).xyz;
     fragTint = pc.diffuseColor;

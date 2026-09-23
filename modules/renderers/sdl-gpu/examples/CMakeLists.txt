@@ -555,6 +555,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SkinnedPbrEffect COMMAND cna_test_sdlgpu_skinnedpbreffect
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # plans/plan_street_sdlgpu.md STREETS-0001: an instanced stock draw keeps its effect's family.
+    # Every instanced draw here used to take the position-only instanced3d module, so cna-street's
+    # instanced PbrEffect props were flat white silhouettes. The WebGPU renderer had the same
+    # defect (STREETW-0001/0004/0005) and its two witnesses use nothing but the XNA API, so they
+    # are compiled again here rather than copied.
+    cna_sdlgpu_test(cna_test_sdlgpu_instanced_pbr3d
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced_pbr3d_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_InstancedPbr3D COMMAND cna_test_sdlgpu_instanced_pbr3d
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    cna_sdlgpu_test(cna_test_sdlgpu_instanced_stock_families
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced_stock_families_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_InstancedStockFamilies
+        COMMAND cna_test_sdlgpu_instanced_stock_families
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
     # GLTF-213: exact PBR sRGB transfer witnesses on rigid and identity-skinned pipelines.
     cna_sdlgpu_test(cna_test_sdlgpu_pbr_srgb_transfer
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)

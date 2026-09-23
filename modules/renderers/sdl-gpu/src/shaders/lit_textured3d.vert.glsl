@@ -58,13 +58,13 @@ vec3 safeNormalize(vec3 v) {
 }
 
 void main() {
-    gl_Position = pc.mvp * vec4(inPos, 1.0);
+    gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     fragUV = inUV;
     // GLSL has a built-in inverse(), unlike WGSL -- no need for WebGPU's CPU-precomputed normal
     // matrix workaround; this mirrors VulkanRenderer's own lit_textured3d.vert.glsl exactly.
-    mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
+    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(normalMatrix * inNormal);
-    fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
+    fragWorldPos = (lp.world * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))).xyz;
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
     // XNA's default PreferPerPixelLighting=false evaluates the same Blinn-Phong expression once
     // per vertex and clamps its COLOR outputs before interpolation. The fragment stage selects
@@ -93,6 +93,6 @@ void main() {
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
-    float fogKeep = 1.0 - clamp(dot(vec4(inPos, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

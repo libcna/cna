@@ -150,6 +150,41 @@ def expand_local_includes(source: str) -> str:
     return source.replace(marker, SHADOW_SAMPLING_GLSL.read_text())
 
 
+# plans/plan_street_sdlgpu.md STREETS-0001: the per-instance world matrix, as an OPTIONAL input to
+# every stock 3D vertex shader -- the Vulkan renderer's VULKAN-227 prologue, same four columns at the
+# same locations 12..15. An instanced stock draw keeps its effect's family (its uniforms, samplers
+# and fragment stage) and differs only in the vertex module, which is the ordinary source compiled a
+# second time with CNA_INSTANCED. Without it, every instanced draw here took the position-only
+# instanced3d module whatever effect was applied, so every instanced PbrEffect prop was a flat
+# white silhouette.
+#
+# The NON-instanced expansion is textually the identity, so every ordinary module's SPIR-V is
+# byte-identical to what it was before -- checked by regenerating this header and diffing.
+_INSTANCE_PROLOGUE = """\
+#ifdef CNA_INSTANCED
+layout(location = 12) in vec4 aCnaInstCol0;
+layout(location = 13) in vec4 aCnaInstCol1;
+layout(location = 14) in vec4 aCnaInstCol2;
+layout(location = 15) in vec4 aCnaInstCol3;
+mat4 cnaInstanceMatrix() { return mat4(aCnaInstCol0, aCnaInstCol1, aCnaInstCol2, aCnaInstCol3); }
+#define CNA_INSTANCE_POSITION(p) (cnaInstanceMatrix() * (p))
+#define CNA_INSTANCE_WORLD(w) ((w) * cnaInstanceMatrix())
+#else
+#define CNA_INSTANCE_POSITION(p) (p)
+#define CNA_INSTANCE_WORLD(w) (w)
+#endif
+"""
+
+
+def with_instance_prologue(source: str) -> str:
+    """Insert the optional per-instance transform block after #version and any variant defines."""
+    lines = source.split("\n")
+    at = 1
+    while at < len(lines) and lines[at].startswith("#define "):
+        at += 1
+    return "\n".join(lines[:at]) + "\n" + _INSTANCE_PROLOGUE + "\n".join(lines[at:])
+
+
 def main():
     script_dir = Path(__file__).parent
 
@@ -158,7 +193,6 @@ def main():
         ("sprite2d.frag.glsl", FRAGMENT_SHADER, "kSprite2dFragSpv"),
         ("colored3d.vert.glsl", VERTEX_SHADER,   "kColored3dVertSpv"),
         ("colored3d.frag.glsl", FRAGMENT_SHADER, "kColored3dFragSpv"),
-        ("instanced3d.vert.glsl", VERTEX_SHADER, "kInstanced3dVertSpv"),
         ("textured3d.vert.glsl", VERTEX_SHADER,   "kTextured3dVertSpv"),
         ("textured3d.frag.glsl", FRAGMENT_SHADER, "kTextured3dFragSpv"),
         ("colored_textured3d.vert.glsl", VERTEX_SHADER, "kColoredTextured3dVertSpv"),
@@ -187,6 +221,29 @@ def main():
         ("pbr_skinned3d.vert.glsl", VERTEX_SHADER, "kPbrSkinned3dColorVertSpv", "CNA_PBR_VERTEX_COLOR"),
         # pbr_skinned3d's fragment stage reuses pbr3d.frag.glsl unchanged (byte-identical varying
         # interface and UBO layout) -- no separate pbr_skinned3d.frag.glsl needed.
+        # STREETS-0001: the instanced vertex modules, one per ordinary vertex module a stock family
+        # selects and not one more. Each pairs with its family's ordinary fragment stage unchanged.
+        ("colored3d.vert.glsl", VERTEX_SHADER, "kInstancedColored3dVertSpv", "CNA_INSTANCED"),
+        ("textured3d.vert.glsl", VERTEX_SHADER, "kInstancedTextured3dVertSpv", "CNA_INSTANCED"),
+        ("colored_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedColoredTextured3dVertSpv",
+         "CNA_INSTANCED"),
+        ("lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv", "CNA_INSTANCED"),
+        ("alpha_test3d.vert.glsl", VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv", "CNA_INSTANCED"),
+        ("alpha_test_colored3d.vert.glsl", VERTEX_SHADER, "kInstancedAlphaTestColored3dVertSpv",
+         "CNA_INSTANCED"),
+        ("dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv", "CNA_INSTANCED"),
+        ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedDualTextureColored3dVertSpv", "CNA_INSTANCED"),
+        ("env_map3d.vert.glsl", VERTEX_SHADER, "kInstancedEnvMap3dVertSpv", "CNA_INSTANCED"),
+        ("skinned3d.vert.glsl", VERTEX_SHADER, "kInstancedSkinned3dVertSpv", "CNA_INSTANCED"),
+        ("skinned_colored3d.vert.glsl", VERTEX_SHADER, "kInstancedSkinnedColored3dVertSpv",
+         "CNA_INSTANCED"),
+        ("pbr3d.vert.glsl", VERTEX_SHADER, "kInstancedPbr3dVertSpv", "CNA_INSTANCED"),
+        ("pbr3d.vert.glsl", VERTEX_SHADER, "kInstancedPbr3dColorVertSpv",
+         "CNA_PBR_VERTEX_COLOR", "CNA_INSTANCED"),
+        ("pbr_skinned3d.vert.glsl", VERTEX_SHADER, "kInstancedPbrSkinned3dVertSpv", "CNA_INSTANCED"),
+        ("pbr_skinned3d.vert.glsl", VERTEX_SHADER, "kInstancedPbrSkinned3dColorVertSpv",
+         "CNA_PBR_VERTEX_COLOR", "CNA_INSTANCED"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \
@@ -214,6 +271,8 @@ def main():
             source = (source[:version_end]
                       + "".join(f"#define {name} 1\n" for name in defines)
                       + source[version_end:])
+        if kind == VERTEX_SHADER:
+            source = with_instance_prologue(source)
         print(f"Compiling {filename} ...", end=" ", flush=True)
         spv = compile_glsl(source, kind, filename)
         print(f"OK ({len(spv)} bytes, {len(spv)//4} words)")

@@ -810,11 +810,13 @@ namespace
          "setM4(\"uWorld\", worldCol)",
          "gl_Position = uWorldViewProj * vec4(aPos, 1.0)",
          "gl_Position = uWorldViewProj * skinnedPos"},
+        // plans/plan_street_sdlgpu.md STREETS-0001: SDL_GPU compiles its PBR vertex shaders twice
+        // the same way now (VULKAN-232 below); same evidence, current spelling.
         {"sdl-gpu",
          "const Matrix wvp = ApplyXnaPixelCenter(world * view * projection)",
          "FillExtUniforms(command.uniforms, wvp, params)",
          "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
-         "gl_Position = pc.mvp * vec4(inPos, 1.0)",
+         "gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))",
          "gl_Position = pc.mvp * skinnedPos"},
         // plans/plan_vulkan.md VULKAN-232: the Vulkan PBR vertex shaders are compiled twice from
         // one source, and the per-instance transform is spelled CNA_INSTANCE_POSITION() -- the
@@ -2036,8 +2038,9 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         {"opengl4",
          "aTangent.w * cnaDirectionHandedness(mat3(uWorld))",
          "* cnaDirectionHandedness(mat3(skinMat))"},
+        // plans/plan_street_sdlgpu.md STREETS-0001: the VULKAN-232 reasoning below, on SDL_GPU.
         {"sdl-gpu",
-         "inTangent.w * cnaDirectionHandedness(mat3(lp.world))",
+         "inTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(lp.world)))",
          "* cnaDirectionHandedness(skinNormalMat)"},
         // plans/plan_vulkan.md VULKAN-232: the instance matrix is folded into World here, so the
         // determinant this evidence is about now covers a mirroring INSTANCE too --

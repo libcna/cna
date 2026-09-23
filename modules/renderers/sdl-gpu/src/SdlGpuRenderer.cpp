@@ -193,7 +193,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             DualTextureFragment,
             EnvMapVertex,
             EnvMapFragment,
-            InstancedVertex,
             SkinnedVertex,
             SkinnedColoredVertex,
             SkinnedColoredFragment,
@@ -234,7 +233,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation: return "dual-texture fragment shader creation";
                 case SdlGpuFailurePointEXT::EnvMapVertexShaderCreation: return "environment-map vertex shader creation";
                 case SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation: return "environment-map fragment shader creation";
-                case SdlGpuFailurePointEXT::InstancedVertexShaderCreation: return "instanced vertex shader creation";
                 case SdlGpuFailurePointEXT::SkinnedVertexShaderCreation: return "skinned vertex shader creation";
                 case SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation: return "skinned-colored vertex shader creation";
                 case SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation: return "skinned-colored fragment shader creation";
@@ -957,6 +955,62 @@ namespace CNA::Internal::Renderers::SdlGpu
                 pipelineKey,
                 static_cast<std::size_t>(
                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(layout)));
+        }
+
+        /// STREETS-0001: the shader locations of an instanced draw's four world-matrix columns --
+        /// the Vulkan renderer's VULKAN-227 locations, past every stock per-vertex input here.
+        constexpr int kInstanceColumnLocationEXT = 12;
+
+        /// STREETS-0001: a fixed-layout family's vertex input state -- its own slot-0 record, plus,
+        /// for an instanced draw, the per-instance matrix buffer at slot 1 feeding locations 12..15.
+        struct FixedVertexInputEXT
+        {
+            std::array<SDL_GPUVertexBufferDescription, 2> buffers{};
+            std::array<SDL_GPUVertexAttribute, 12> attributes{};
+            Uint32 bufferCount = 0;
+            Uint32 attributeCount = 0;
+        };
+
+        [[nodiscard]] FixedVertexInputEXT MakeFixedVertexInputEXT(
+            const SDL_GPUVertexBufferDescription& record, const SDL_GPUVertexAttribute* attributes,
+            Uint32 attributeCount, Uint32 instanceStride, const std::array<Uint32, 4>& columnOffsets)
+        {
+            FixedVertexInputEXT input;
+            input.buffers[0] = record;
+            input.bufferCount = 1;
+            for (Uint32 i = 0; i < attributeCount; ++i)
+                input.attributes[input.attributeCount++] = attributes[i];
+            if (instanceStride == 0)
+                return input;
+
+            SDL_GPUVertexBufferDescription& instances = input.buffers[input.bufferCount++];
+            instances.slot = 1;
+            instances.pitch = instanceStride;
+            instances.input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+            for (std::size_t column = 0; column < columnOffsets.size(); ++column)
+            {
+                SDL_GPUVertexAttribute& attribute = input.attributes[input.attributeCount++];
+                attribute.location = static_cast<Uint32>(kInstanceColumnLocationEXT + column);
+                attribute.buffer_slot = 1;
+                attribute.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+                attribute.offset = columnOffsets[column];
+            }
+            return input;
+        }
+
+        /// STREETS-0001: an instanced fixed-layout pipeline differs from the ordinary one only in
+        /// its vertex input, so that input is folded into the key. An ordinary key is unchanged.
+        [[nodiscard]] std::size_t FixedInstancePipelineKey(
+            std::size_t pipelineKey, Uint32 instanceStride,
+            const std::array<Uint32, 4>& columnOffsets)
+        {
+            if (instanceStride == 0)
+                return pipelineKey;
+            std::size_t key = HashCombine(pipelineKey, 0x1257a7ce5u);
+            key = HashCombine(key, instanceStride);
+            for (const Uint32 offset : columnOffsets)
+                key = HashCombine(key, offset);
+            return key;
         }
 
         struct PipelineDepthBias
@@ -1803,6 +1857,70 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
     }
 
+    /// The one place a stock SPIR-V module becomes an SDL_gpu shader: directly where the driver
+    /// takes SPIR-V, through SDL_shadercross where it does not. Construction and STREETS-0001's
+    /// on-demand instanced modules both go through it, so the two cannot take different routes.
+    static SDL_GPUShader* CreateSdlGpuShaderEXT(
+        SDL_GPUDevice* device, SDL_GPUShaderFormat shaderCrossFormats, bool forceShaderCross,
+        const SDL_GPUShaderCreateInfo& createInfo, const char* diagnostic)
+    {
+        const SdlGpuShaderCreationRouteEXT route = SelectSdlGpuShaderCreationRouteEXT(
+            SDL_GetGPUShaderFormats(device), shaderCrossFormats, forceShaderCross);
+        SDL_GPUShader* shader = nullptr;
+        if (route == SdlGpuShaderCreationRouteEXT::DirectSpirv)
+        {
+            shader = SDL_CreateGPUShader(device, &createInfo);
+        }
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        else if (route == SdlGpuShaderCreationRouteEXT::ShaderCross)
+        {
+            SDL_ShaderCross_SPIRV_Info crossInfo{};
+            crossInfo.bytecode = createInfo.code;
+            crossInfo.bytecode_size = createInfo.code_size;
+            crossInfo.entrypoint = createInfo.entrypoint;
+            crossInfo.shader_stage =
+                createInfo.stage == SDL_GPU_SHADERSTAGE_VERTEX
+                    ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX
+                    : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
+
+            SDL_ShaderCross_GraphicsShaderMetadata* metadata =
+                SDL_ShaderCross_ReflectGraphicsSPIRV(
+                    crossInfo.bytecode, crossInfo.bytecode_size, 0);
+            if (metadata == nullptr)
+                throw std::runtime_error(
+                    std::string(diagnostic) + "SDL_shadercross reflection failed: " +
+                    SDL_GetError());
+
+            const SDL_ShaderCross_GraphicsShaderResourceInfo& resources =
+                metadata->resource_info;
+            const bool layoutMatches =
+                resources.num_samplers == createInfo.num_samplers &&
+                resources.num_storage_textures == createInfo.num_storage_textures &&
+                resources.num_storage_buffers == createInfo.num_storage_buffers &&
+                resources.num_uniform_buffers == createInfo.num_uniform_buffers;
+            if (!layoutMatches)
+            {
+                SDL_free(metadata);
+                throw std::runtime_error(
+                    std::string(diagnostic) +
+                    "SDL_shadercross reflected a resource layout that differs from CNA's "
+                    "pipeline contract");
+            }
+
+            shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
+                device, &crossInfo, &resources, 0);
+            SDL_free(metadata);
+        }
+#endif
+        if (route == SdlGpuShaderCreationRouteEXT::Unsupported)
+            throw std::runtime_error(
+                std::string(diagnostic) +
+                "the active SDL_gpu driver accepts none of CNA's available shader formats");
+        if (shader == nullptr)
+            throw std::runtime_error(std::string(diagnostic) + SDL_GetError());
+        return shader;
+    }
+
     struct SdlGpuRenderer::ConstructionResources
     {
         SDL_Window* window = nullptr;  // Borrowed from the caller; never destroyed here.
@@ -1881,61 +1999,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     const char* diagnostic)
         {
             FailAt(failurePoint);
-            const SdlGpuShaderCreationRouteEXT route = SelectSdlGpuShaderCreationRouteEXT(
-                SDL_GetGPUShaderFormats(device), shaderCrossFormats,
-                hooks.forceShaderCrossCompilation);
-            SDL_GPUShader* shader = nullptr;
-            if (route == SdlGpuShaderCreationRouteEXT::DirectSpirv)
-            {
-                shader = SDL_CreateGPUShader(device, &createInfo);
-            }
-#if defined(CNA_SDL_GPU_SHADERCROSS)
-            else if (route == SdlGpuShaderCreationRouteEXT::ShaderCross)
-            {
-                SDL_ShaderCross_SPIRV_Info crossInfo{};
-                crossInfo.bytecode = createInfo.code;
-                crossInfo.bytecode_size = createInfo.code_size;
-                crossInfo.entrypoint = createInfo.entrypoint;
-                crossInfo.shader_stage =
-                    createInfo.stage == SDL_GPU_SHADERSTAGE_VERTEX
-                        ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX
-                        : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
-
-                SDL_ShaderCross_GraphicsShaderMetadata* metadata =
-                    SDL_ShaderCross_ReflectGraphicsSPIRV(
-                        crossInfo.bytecode, crossInfo.bytecode_size, 0);
-                if (metadata == nullptr)
-                    throw std::runtime_error(
-                        std::string(diagnostic) + "SDL_shadercross reflection failed: " +
-                        SDL_GetError());
-
-                const SDL_ShaderCross_GraphicsShaderResourceInfo& resources =
-                    metadata->resource_info;
-                const bool layoutMatches =
-                    resources.num_samplers == createInfo.num_samplers &&
-                    resources.num_storage_textures == createInfo.num_storage_textures &&
-                    resources.num_storage_buffers == createInfo.num_storage_buffers &&
-                    resources.num_uniform_buffers == createInfo.num_uniform_buffers;
-                if (!layoutMatches)
-                {
-                    SDL_free(metadata);
-                    throw std::runtime_error(
-                        std::string(diagnostic) +
-                        "SDL_shadercross reflected a resource layout that differs from CNA's "
-                        "pipeline contract");
-                }
-
-                shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
-                    device, &crossInfo, &resources, 0);
-                SDL_free(metadata);
-            }
-#endif
-            if (route == SdlGpuShaderCreationRouteEXT::Unsupported)
-                throw std::runtime_error(
-                    std::string(diagnostic) +
-                    "the active SDL_gpu driver accepts none of CNA's available shader formats");
-            if (shader == nullptr)
-                throw std::runtime_error(std::string(diagnostic) + SDL_GetError());
+            SDL_GPUShader* shader = CreateSdlGpuShaderEXT(
+                device, shaderCrossFormats, hooks.forceShaderCrossCompilation, createInfo,
+                diagnostic);
             shaders[static_cast<std::size_t>(slot)] = shader;
             NotifyResource(hooks, SdlGpuResourceKindEXT::Shader,
                            SdlGpuResourceEventEXT::Acquired);
@@ -1987,8 +2053,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                 shaders[static_cast<std::size_t>(ConstructionShader::DualTextureFragment)];
             owner.envMapVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::EnvMapVertex)];
             owner.envMapFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::EnvMapFragment)];
-            owner.instancedVertexShader_ =
-                shaders[static_cast<std::size_t>(ConstructionShader::InstancedVertex)];
             owner.skinnedVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SkinnedVertex)];
             owner.skinnedColoredVertexShader_ =
                 shaders[static_cast<std::size_t>(ConstructionShader::SkinnedColoredVertex)];
@@ -2020,7 +2084,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         CreateAlphaTestResources(resources);
         CreateDualTextureResources(resources);
         CreateEnvMapResources(resources);
-        CreateInstancedResources(resources);
         CreateSkinnedResources(resources);
         CreatePbrResources(resources);
     }
@@ -5615,10 +5678,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// letting each family decide. CNA's IndirectDrawArguments and IndirectDrawIndexedArguments
         /// are field-for-field SDL_GPUIndirectDrawCommand and SDL_GPUIndexedIndirectDrawCommand,
         /// so the bytes are handed over unchanged.
+        ///
+        /// STREETS-0001: an instance count of 0 means the command's own, so every stock family's
+        /// replay picks up an instanced draw without each call site having to pass it.
         template <typename CommandT>
         void IssueQueuedDrawEXT(SDL_GPURenderPass* pass, const CommandT& command,
-                                const bool indexed, const Uint32 instanceCount = 1)
+                                const bool indexed, Uint32 instanceCount = 0)
         {
+            if (instanceCount == 0)
+            {
+                if constexpr (requires { command.instanceCount; })
+                    instanceCount = command.instanceCount;
+                else
+                    instanceCount = 1;
+            }
             if (command.indirectArguments != nullptr)
             {
                 if (indexed)
@@ -6262,7 +6335,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = coloredVertexShader_;
+        pipelineInfo.vertex_shader = StockVertexShaderEXT(
+            IsInstancedStockLayoutEXT(vertexLayout), coloredVertexShader_, InstancedStockVertexShaderEXT::Colored);
         pipelineInfo.fragment_shader = coloredFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6361,7 +6435,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = texturedVertexShader_;
+        pipelineInfo.vertex_shader = StockVertexShaderEXT(
+            IsInstancedStockLayoutEXT(vertexLayout), texturedVertexShader_, InstancedStockVertexShaderEXT::Textured);
         pipelineInfo.fragment_shader = texturedFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6407,7 +6482,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = coloredTexturedVertexShader_;
+        pipelineInfo.vertex_shader = StockVertexShaderEXT(
+            IsInstancedStockLayoutEXT(vertexLayout), coloredTexturedVertexShader_,
+            InstancedStockVertexShaderEXT::ColoredTextured);
         pipelineInfo.fragment_shader = texturedFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6491,7 +6568,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = litTexturedVertexShader_;
+        pipelineInfo.vertex_shader = StockVertexShaderEXT(
+            IsInstancedStockLayoutEXT(vertexLayout), litTexturedVertexShader_, InstancedStockVertexShaderEXT::LitTextured);
         pipelineInfo.fragment_shader = litTexturedFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6528,9 +6606,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.vertexLayout = vertexLayout;
         const int vertexStart = params != nullptr ? params->vertexStart : 0;
         StockDrawVertexStreamsEXT streams;
-        CollectStockVertexStreamsEXT(sdlGpuVb, params, streams);
+        // STREETS-0001: an instanced layout also indexes the per-instance streams.
+        const bool instancedLayout = IsInstancedStockLayoutEXT(vertexLayout);
+        CollectStockVertexStreamsEXT(sdlGpuVb, params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
-                                     command.vertexData, command.extraVertexStreams);
+                                     command.vertexData, command.extraVertexStreams,
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+        command.instanceCount =
+            instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -6591,9 +6674,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         StockDrawVertexStreamsEXT streams;
-        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        // STREETS-0001: an instanced layout also indexes the per-instance streams.
+        const bool instancedLayout = IsInstancedStockLayoutEXT(vertexLayout);
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
-                                     command.vertexData, command.extraVertexStreams);
+                                     command.vertexData, command.extraVertexStreams,
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+        command.instanceCount =
+            instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -6651,9 +6739,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         StockDrawVertexStreamsEXT streams;
-        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        // STREETS-0001: an instanced layout also indexes the per-instance streams.
+        const bool instancedLayout = IsInstancedStockLayoutEXT(vertexLayout);
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
-                                     command.vertexData, command.extraVertexStreams);
+                                     command.vertexData, command.extraVertexStreams,
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+        command.instanceCount =
+            instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -6775,7 +6868,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         activeColorTargetFormats_, renderState);
 
             SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-            pipelineInfo.vertex_shader = alphaTestColoredVertexShader_;
+            pipelineInfo.vertex_shader = StockVertexShaderEXT(
+                IsInstancedStockLayoutEXT(vertexLayout), alphaTestColoredVertexShader_,
+                InstancedStockVertexShaderEXT::AlphaTestColored);
             pipelineInfo.fragment_shader = alphaTestFragmentShader_;
             pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
             pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6816,7 +6911,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = alphaTestVertexShader_;
+        pipelineInfo.vertex_shader = StockVertexShaderEXT(
+            IsInstancedStockLayoutEXT(vertexLayout), alphaTestVertexShader_, InstancedStockVertexShaderEXT::AlphaTest);
         pipelineInfo.fragment_shader = alphaTestFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6918,7 +7014,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = hasVertexColor ? dualTextureColoredVertexShader_ : dualTextureVertexShader_;
+        pipelineInfo.vertex_shader = hasVertexColor
+            ? StockVertexShaderEXT(IsInstancedStockLayoutEXT(vertexLayout),
+                                   dualTextureColoredVertexShader_, InstancedStockVertexShaderEXT::DualTextureColored)
+            : StockVertexShaderEXT(IsInstancedStockLayoutEXT(vertexLayout),
+                                   dualTextureVertexShader_, InstancedStockVertexShaderEXT::DualTexture);
         pipelineInfo.fragment_shader = dualTextureFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -6980,72 +7080,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         ReleaseShader(envMapVertexShader_);
     }
 
-    void SdlGpuRenderer::CreateInstancedResources(ConstructionResources& resources)
-    {
-        SDL_GPUShaderCreateInfo vsInfo{};
-        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kInstanced3dVertSpv);
-        vsInfo.code_size = Shaders::kInstanced3dVertSpv_size;
-        vsInfo.entrypoint = "main";
-        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 2;
-        resources.CreateShader(
-            ConstructionShader::InstancedVertex,
-            SdlGpuFailurePointEXT::InstancedVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create instanced3d vertex shader: ");
-    }
-
     void SdlGpuRenderer::DestroyInstancedResources()
     {
-        for (auto& [key, entry] : instancedPipelines_)
-            ReleaseGraphicsPipeline(entry.pipeline);
-        instancedPipelines_.clear();
-        ReleaseShader(instancedVertexShader_);
-    }
-
-    SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineInstanced3D(
-        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
-        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
-        const RenderStateSnapshot& renderState)
-    {
-        const std::size_t key = StockPipelineKey(
-            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
-                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
-            vertexLayout);
-        if (SDL_GPUGraphicsPipeline* cached =
-                FindCachedGraphicsPipeline(instancedPipelines_, key))
-            return cached;
-
-        SdlGpuStockVertexStateEXT vertexState;
-        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
-        std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
-        FillColorTargetDescriptions(colorTargets, colorTargetCount,
-                                    activeColorTargetFormats_, renderState);
-
-        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = instancedVertexShader_;
-        pipelineInfo.fragment_shader = coloredFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
-        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
-        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
-        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
-        pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState,
-                            topology, depthStencilFormat);
-        pipelineInfo.multisample_state.sample_count = sampleCount;
-        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite,
-                              depthFunc, renderState);
-        pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
-        pipelineInfo.target_info.num_color_targets = static_cast<Uint32>(colorTargetCount);
-        pipelineInfo.target_info.has_depth_stencil_target =
-            depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID;
-        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
-
-        SDL_GPUGraphicsPipeline* pipeline = CreateGraphicsPipeline(
-            pipelineInfo, "CNA SDL_GPU: failed to create instanced3d pipeline: ");
-        return CacheGraphicsPipeline(instancedPipelines_, key, pipeline);
+        // STREETS-0001: the instanced stock modules. Every pipeline built from one lives in its
+        // family's cache, which that family's Destroy*Resources releases.
+        for (SDL_GPUShader*& shader : instancedStockVertexShadersEXT_)
+            ReleaseShader(shader);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineEnvMap3D(
@@ -7070,7 +7110,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = envMapVertexShader_;
+        pipelineInfo.vertex_shader = StockVertexShaderEXT(
+            IsInstancedStockLayoutEXT(vertexLayout), envMapVertexShader_, InstancedStockVertexShaderEXT::EnvMap);
         pipelineInfo.fragment_shader = envMapFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
@@ -7153,12 +7194,14 @@ namespace CNA::Internal::Renderers::SdlGpu
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineSkinned3D(
         bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
+        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState,
+        const InstanceTransformStreamEXT& instance)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_, colorTargetCount,
-            sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = FixedInstancePipelineKey(
+            PipelineCacheKey(
+                topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
+                colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            instance.stride, instance.columnOffsets);
         auto& cache = hasVertexColor ? skinnedColoredPipelines_ : skinnedPipelines_;
         if (SDL_GPUGraphicsPipeline* cached =
                 FindCachedGraphicsPipeline(cache, key))
@@ -7186,15 +7229,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = hasVertexColor ? skinnedColoredVertexShader_ : skinnedVertexShader_;
+        const bool instanced = instance.stride != 0;
+        pipelineInfo.vertex_shader = hasVertexColor
+            ? StockVertexShaderEXT(instanced, skinnedColoredVertexShader_,
+                                   InstancedStockVertexShaderEXT::SkinnedColored)
+            : StockVertexShaderEXT(instanced, skinnedVertexShader_,
+                                   InstancedStockVertexShaderEXT::Skinned);
         // Stride 52 reuses litTexturedFragmentShader_ unchanged; stride 56 needs its own
         // fragment shader to multiply vertex color into the post-specular output (see
         // SkinnedDrawCommand's own doc comment).
         pipelineInfo.fragment_shader = hasVertexColor ? skinnedColoredFragmentShader_ : litTexturedFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = hasVertexColor ? 6 : 5;
+        const FixedVertexInputEXT input = MakeFixedVertexInputEXT(
+            vbDesc, attrs, hasVertexColor ? 6u : 5u, instance.stride, instance.columnOffsets);
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = input.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = input.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = input.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = input.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -7489,12 +7539,14 @@ namespace CNA::Internal::Renderers::SdlGpu
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelinePbr3D(
         bool skinned, bool colored, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
+        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState,
+        const InstanceTransformStreamEXT& instance)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_, colorTargetCount,
-            sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = FixedInstancePipelineKey(
+            PipelineCacheKey(
+                topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
+                colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            instance.stride, instance.columnOffsets);
         auto& cache = skinned ? (colored ? pbrSkinnedColorPipelines_ : pbrSkinnedPipelines_)
                               : (colored ? pbrColorPipelines_ : pbrPipelines_);
         if (SDL_GPUGraphicsPipeline* cached =
@@ -7536,15 +7588,23 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     activeColorTargetFormats_, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        using Instanced = InstancedStockVertexShaderEXT;
+        const bool instanced = instance.stride != 0;
         pipelineInfo.vertex_shader = skinned
-            ? (colored ? pbrSkinnedColorVertexShader_ : pbrSkinnedVertexShader_)
-            : (colored ? pbrColorVertexShader_ : pbrVertexShader_);
+            ? (colored ? StockVertexShaderEXT(instanced, pbrSkinnedColorVertexShader_,
+                                              Instanced::PbrSkinnedColor)
+                       : StockVertexShaderEXT(instanced, pbrSkinnedVertexShader_,
+                                              Instanced::PbrSkinned))
+            : (colored ? StockVertexShaderEXT(instanced, pbrColorVertexShader_, Instanced::PbrColor)
+                       : StockVertexShaderEXT(instanced, pbrVertexShader_, Instanced::Pbr));
         pipelineInfo.fragment_shader = pbrFragmentShader_;  // shared unchanged by both variants
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes =
-            skinned ? (colored ? 7u : 6u) : (colored ? 5u : 4u);
+        const FixedVertexInputEXT input = MakeFixedVertexInputEXT(
+            vbDesc, attrs, skinned ? (colored ? 7u : 6u) : (colored ? 5u : 4u),
+            instance.stride, instance.columnOffsets);
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = input.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = input.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = input.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = input.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -7580,9 +7640,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         StockDrawVertexStreamsEXT streams;
-        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        // STREETS-0001: an instanced layout also indexes the per-instance streams.
+        const bool instancedLayout = IsInstancedStockLayoutEXT(vertexLayout);
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
-                                     command.vertexData, command.extraVertexStreams);
+                                     command.vertexData, command.extraVertexStreams,
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+        command.instanceCount =
+            instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -7641,9 +7706,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         StockDrawVertexStreamsEXT streams;
-        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        // STREETS-0001: an instanced layout also indexes the per-instance streams.
+        const bool instancedLayout = IsInstancedStockLayoutEXT(vertexLayout);
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
-                                     command.vertexData, command.extraVertexStreams);
+                                     command.vertexData, command.extraVertexStreams,
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+        command.instanceCount =
+            instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -7712,9 +7782,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         StockDrawVertexStreamsEXT streams;
-        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        // STREETS-0001: an instanced layout also indexes the per-instance streams.
+        const bool instancedLayout = IsInstancedStockLayoutEXT(vertexLayout);
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
-                                     command.vertexData, command.extraVertexStreams);
+                                     command.vertexData, command.extraVertexStreams,
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+        command.instanceCount =
+            instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -7945,6 +8020,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillSkinnedBoneUniforms(command.boneUniforms, params);
         FillSkinnedLightUniforms(command.lightUniforms, params);
+        command.instanceStream =
+            CaptureInstanceTransformStreamEXT(sdlGpuVb, params, pendingInstanceCountEXT_);
+        command.instanceCount = static_cast<Uint32>(std::max(1, pendingInstanceCountEXT_));
         command.shadow = CaptureShadowReceptionEXT(params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "SkinnedEffect.Texture");
         command.textureFilter = samplerSlots_[0].filter;
@@ -8028,6 +8106,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             FillSkinnedBoneUniforms(command.boneUniforms, params);
         }
         FillPbrParams(command.pbrParams, params);
+        command.instanceStream =
+            CaptureInstanceTransformStreamEXT(sdlGpuVb, params, pendingInstanceCountEXT_);
+        command.instanceCount = static_cast<Uint32>(std::max(1, pendingInstanceCountEXT_));
         command.shadow = CaptureShadowReceptionEXT(params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "PbrEffect.Texture");
         command.normalMap = ResolveSampledTextureEXT(params.pbrNormalMap, "PbrEffect.NormalMap");
@@ -8821,7 +8902,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineSkinned3D(
             command.hasVertexColor, command.topology, command.depthTest, command.depthWrite,
-            command.depthFunc, colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
+            command.depthFunc, colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState,
+            command.instanceStream);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
@@ -8838,6 +8920,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindInstanceTransformStreamEXT(pass, command.instanceStream);
         SDL_GPUTextureSamplerBinding boneBinding{};
         boneBinding.texture = command.uploadedBoneTexture;
         boneBinding.sampler = GetOrCreateSampler(
@@ -8882,7 +8965,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelinePbr3D(
             command.skinned, command.colored, command.topology, command.depthTest, command.depthWrite,
-            command.depthFunc, colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
+            command.depthFunc, colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState,
+            command.instanceStream);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
@@ -8908,6 +8992,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindInstanceTransformStreamEXT(pass, command.instanceStream);
         // The unskinned pbrVertexShader_ declares no vertex samplers. The skinned variant reads
         // the same exact 288x1 RGBA32F bone palette as SkinnedEffect.
         if (command.skinned)
@@ -9010,46 +9095,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, bindings.data(), count);
     }
 
-    void SdlGpuRenderer::IssueInstancedDraw(
-        SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-        const InstancedDrawCommand& command, SDL_GPUTextureFormat colorFormat,
-        SDL_GPUSampleCount sampleCount, SDL_GPUTextureFormat depthStencilFormat,
-        int colorTargetCount, SDL_GPUGraphicsPipeline*& boundPipeline)
-    {
-        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineInstanced3D(
-            command.vertexLayout, command.topology, command.depthTest, command.depthWrite,
-            command.depthFunc, colorFormat, sampleCount, depthStencilFormat,
-            colorTargetCount, command.renderState);
-        if (pipeline != boundPipeline)
-        {
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            boundPipeline = pipeline;
-        }
-        SDL_SetGPUStencilReference(
-            pass, static_cast<Uint8>(command.renderState.stencilReference));
-        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-        SDL_PushGPUVertexUniformData(
-            cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
-                                  command.extraVertexStreams,
-                                  command.uploadedNeutralVertexBuffer,
-                                  command.vertexLayout);
-
-        SDL_GPUBufferBinding indexBinding{};
-        indexBinding.buffer = command.uploadedIndexBuffer;
-        SDL_BindGPUIndexBuffer(
-            pass, &indexBinding,
-            command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
-                            : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-        IssueQueuedDrawEXT(pass, command, /*indexed=*/true, command.instanceCount);
-    }
-
     void SdlGpuRenderer::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
         if (customEffect3DDrawCommands_.empty() &&
             coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
             alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
-            instancedDrawCommands_.empty() && skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
+            skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             && compiledEffectDrawCommands_.empty()
 #endif
@@ -9248,22 +9299,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
-        for (InstancedDrawCommand& command : instancedDrawCommands_)
-        {
-            if (command.vertexData.empty() || command.indexData.empty())
-                continue;
-            command.uploadedVertexBuffer = uploadOne(
-                command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
-            uploadExtraStreams(command);
-            uploadNeutralIfNeeded(command);
-            command.uploadedIndexBuffer = uploadOne(
-                command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
-        }
         for (SkinnedDrawCommand& command : skinnedDrawCommands_)
         {
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            command.instanceStream.uploadedBuffer =
+                uploadOne(command.instanceStream.data, SDL_GPU_BUFFERUSAGE_VERTEX);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
             command.uploadedBoneTexture = uploadBonePalette(command.boneUniforms);
@@ -9273,6 +9315,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            command.instanceStream.uploadedBuffer =
+                uploadOne(command.instanceStream.data, SDL_GPU_BUFFERUSAGE_VERTEX);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
             if (command.skinned)
@@ -9539,18 +9583,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
                 }
-                case DrawKind::Instanced:
-                {
-                    const InstancedDrawCommand& c = instancedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr &&
-                        c.uploadedIndexBuffer != nullptr && c.target == target)
-                    {
-                        IssueInstancedDraw(pass, cmd, c, colorFormat, sampleCount,
-                                           depthStencilFormat, colorTargetCount,
-                                           boundPipeline);
-                    }
-                    break;
-                }
                 case DrawKind::Skinned:
                 {
                     const SkinnedDrawCommand& c = skinnedDrawCommands_[ref.index];
@@ -9683,17 +9715,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) envMapDrawCommands_.clear();
-        for (InstancedDrawCommand& command : instancedDrawCommands_)
-        {
-            release(command.uploadedVertexBuffer);
-            releaseExtraStreams(command);
-            release(command.uploadedNeutralVertexBuffer);
-            release(command.uploadedIndexBuffer);
-        }
-        if (clearCommands) instancedDrawCommands_.clear();
         for (SkinnedDrawCommand& command : skinnedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.instanceStream.uploadedBuffer);
             release(command.uploadedIndexBuffer);
             releaseTexture(command.uploadedBoneTexture);
         }
@@ -9701,6 +9726,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (PbrDrawCommand& command : pbrDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.instanceStream.uploadedBuffer);
             release(command.uploadedIndexBuffer);
             releaseTexture(command.uploadedBoneTexture);
         }
@@ -10034,80 +10060,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         return resolved;
     }
 
-    CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
-    SdlGpuRenderer::ResolveInstancedVertexLayoutEXT(
-        const StockDrawVertexStreamsEXT& streams, bool hasVertexColor)
+    SdlGpuRenderer::InstanceColumnsEXT SdlGpuRenderer::FindInstanceColumnsEXT(
+        const StockDrawVertexStreamsEXT& streams)
     {
-        using namespace CNA::Internal::Graphics;
         using Microsoft::Xna::Framework::Graphics::VertexElement;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
-        namespace In = CNA::Internal::Graphics::StockVertexInputsEXT;
 
-        ResolvedStockVertexLayoutEXT resolved;
-        resolved.stride = streams.declarations[0].stride;
-        resolved.fromDeclaration = AnyStreamDeclaresEXT(
-            streams.declarations.data(), streams.count);
-
-        std::array<int, kMaxStockVertexStreamsEXT> resolvedIndexOfSource;
-        resolvedIndexOfSource.fill(-1);
-        const auto keep = [&](std::size_t source) {
-            if (resolvedIndexOfSource[source] < 0)
-            {
-                ResolvedStockStreamEXT& kept = resolved.streams[resolved.streamCount];
-                kept.sourceIndex = static_cast<int>(source);
-                kept.stride = streams.declarations[source].stride;
-                kept.instanceFrequency = streams.declarations[source].instanceFrequency;
-                resolvedIndexOfSource[source] = static_cast<int>(resolved.streamCount++);
-            }
-            return resolvedIndexOfSource[source];
-        };
-
-        const StockProgramInput perVertexInputs[2] = {In::kPos, In::kColor};
-        for (std::size_t location = 0; location < 2; ++location)
-        {
-            const StockProgramInput& input = perVertexInputs[location];
-            auto& attribute = resolved.attributes[resolved.count++];
-            attribute.usage = input.usage;
-            attribute.usageIndex = input.usageIndex;
-            attribute.shaderLocation = static_cast<int>(location);
-
-            const VertexElement* element = nullptr;
-            std::size_t source = 0;
-            for (; source < streams.count; ++source)
-            {
-                if (streams.sources[source].instanceFrequency > 0 ||
-                    streams.declarations[source].elements == nullptr)
-                    continue;
-                element = FindDeclaredSemanticEXT(*streams.declarations[source].elements,
-                                                  input.usage, input.usageIndex);
-                if (element != nullptr)
-                    break;
-            }
-            if (element != nullptr && (location == 0 || hasVertexColor))
-            {
-                if (element->getVertexElementFormatProperty() != input.format &&
-                    element->getVertexElementFormatProperty() != input.alternateFormat)
-                {
-                    throw System::NotSupportedException(
-                        "CNA SDL_GPU: the instanced stock program received an incompatible per-vertex format");
-                }
-                attribute.format = element->getVertexElementFormatProperty();
-                attribute.offset = element->getOffsetProperty();
-                attribute.streamIndex = keep(source);
-            }
-            else
-            {
-                if (location == 0)
-                {
-                    throw System::NotSupportedException(
-                        "CNA SDL_GPU: instanced stock effects require POSITION0 in a per-vertex stream");
-                }
-                attribute.format = NeutralFormatForStockInputEXT(input.format);
-                attribute.defaulted = true;
-                resolved.usesNeutralRecord = true;
-            }
-        }
-
+        InstanceColumnsEXT columns;
         int column = 0;
         for (std::size_t source = 0; source < streams.count; ++source)
         {
@@ -10116,32 +10075,246 @@ namespace CNA::Internal::Renderers::SdlGpu
                 continue;
             for (const VertexElement& element : *streams.declarations[source].elements)
             {
-                if (column >= 4)
+                if (column >= 4 || element.getVertexElementFormatProperty() != VertexElementFormat::Vector4)
                 {
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 matrix columns");
+                        "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 "
+                        "world-matrix columns");
                 }
-                if (element.getVertexElementFormatProperty() != VertexElementFormat::Vector4)
-                {
-                    throw System::NotSupportedException(
-                        "CNA SDL_GPU: instanced stock world-matrix columns must use Vector4 format");
-                }
-                auto& attribute = resolved.attributes[resolved.count++];
-                attribute.usage = element.getVertexElementUsageProperty();
-                attribute.usageIndex = element.getUsageIndexProperty();
-                attribute.format = element.getVertexElementFormatProperty();
-                attribute.offset = element.getOffsetProperty();
-                attribute.shaderLocation = 4 + column;
-                attribute.streamIndex = keep(source);
+                columns.source[static_cast<std::size_t>(column)] = source;
+                columns.offset[static_cast<std::size_t>(column)] = element.getOffsetProperty();
                 ++column;
             }
         }
         if (column != 4)
         {
             throw System::NotSupportedException(
-                "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 matrix columns");
+                "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 "
+                "world-matrix columns");
         }
-        return resolved;
+        return columns;
+    }
+
+    CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+    SdlGpuRenderer::InstanceStockVertexLayoutEXT(
+        const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params,
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& perVertex)
+    {
+        using namespace CNA::Internal::Graphics;
+
+        StockDrawVertexStreamsEXT all;
+        CollectStockVertexStreamsEXT(vb, &params, all, /*includePerInstance=*/true);
+        SynthesizeMissingStreamDeclarationsEXT(all);
+
+        // The family resolved its inputs against the per-vertex streams alone, which is the same
+        // list with the per-instance streams left out -- so its k-th stream is the k-th per-vertex
+        // stream here. Resolving against the full list instead would let a per-instance
+        // TEXCOORD1..4 matrix column answer a dual-texture draw's second UV set.
+        std::array<std::size_t, kMaxStockVertexStreamsEXT> fullIndexOfPerVertex{};
+        std::size_t perVertexCount = 0;
+        for (std::size_t i = 0; i < all.count; ++i)
+        {
+            if (all.sources[i].instanceFrequency == 0)
+                fullIndexOfPerVertex[perVertexCount++] = i;
+        }
+        if (perVertexCount == 0)
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: instanced stock effects require POSITION0 in a per-vertex stream");
+
+        ResolvedStockVertexLayoutEXT layout = perVertex;
+        for (std::size_t i = 0; i < layout.streamCount; ++i)
+        {
+            const auto perVertexIndex = static_cast<std::size_t>(layout.streams[i].sourceIndex);
+            if (perVertexIndex >= perVertexCount)
+                throw std::logic_error(
+                    "CNA SDL_GPU: a resolved stock stream is not one of the draw's per-vertex streams");
+            layout.streams[i].sourceIndex = static_cast<int>(fullIndexOfPerVertex[perVertexIndex]);
+        }
+
+        const InstanceColumnsEXT columns = FindInstanceColumnsEXT(all);
+        for (std::size_t column = 0; column < columns.source.size(); ++column)
+        {
+            if (layout.count >= layout.attributes.size())
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this stock effect's vertex inputs leave no room for the "
+                    "per-instance world matrix");
+            const std::size_t source = columns.source[column];
+            int streamIndex = -1;
+            for (std::size_t i = 0; i < layout.streamCount; ++i)
+            {
+                if (static_cast<std::size_t>(layout.streams[i].sourceIndex) == source)
+                    streamIndex = static_cast<int>(i);
+            }
+            if (streamIndex < 0)
+            {
+                ResolvedStockStreamEXT& kept = layout.streams[layout.streamCount];
+                kept.sourceIndex = static_cast<int>(source);
+                kept.stride = all.declarations[source].stride;
+                kept.instanceFrequency = all.declarations[source].instanceFrequency;
+                streamIndex = static_cast<int>(layout.streamCount++);
+            }
+            ResolvedStockAttributeEXT& attribute = layout.attributes[layout.count++];
+            attribute = ResolvedStockAttributeEXT{};
+            attribute.format = Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4;
+            attribute.offset = columns.offset[column];
+            attribute.shaderLocation = kInstanceColumnLocationEXT + static_cast<int>(column);
+            attribute.streamIndex = streamIndex;
+        }
+        return layout;
+    }
+
+    bool SdlGpuRenderer::IsInstancedStockLayoutEXT(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout) noexcept
+    {
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.attributes[i].shaderLocation >= kInstanceColumnLocationEXT)
+                return true;
+        }
+        return false;
+    }
+
+    SdlGpuRenderer::InstanceTransformStreamEXT SdlGpuRenderer::CaptureInstanceTransformStreamEXT(
+        const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params, const int instanceCount)
+    {
+        InstanceTransformStreamEXT captured;
+        if (instanceCount <= 0)
+            return captured;
+
+        StockDrawVertexStreamsEXT all;
+        CollectStockVertexStreamsEXT(vb, &params, all, /*includePerInstance=*/true);
+        SynthesizeMissingStreamDeclarationsEXT(all);
+        const InstanceColumnsEXT columns = FindInstanceColumnsEXT(all);
+        // These families bind exactly one per-instance buffer beside their fixed record. A matrix
+        // split across two instance streams would need a third buffer, and no stock caller does
+        // that -- refused rather than half-read.
+        for (const std::size_t source : columns.source)
+        {
+            if (source != columns.source[0])
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: SkinnedEffect and PbrEffect need all four per-instance "
+                    "world-matrix columns in one vertex stream");
+        }
+
+        const StockVertexStreamSourceEXT& source = all.sources[columns.source[0]];
+        const std::size_t recordBytes = static_cast<std::size_t>(std::max(1, source.stride));
+        const auto& shadow = source.buffer->ShadowData();
+        const std::size_t base =
+            static_cast<std::size_t>(std::max(0, source.vertexOffset)) * recordBytes;
+        captured.data.assign(static_cast<std::size_t>(instanceCount) * recordBytes, 0u);
+        for (int instance = 0; instance < instanceCount; ++instance)
+        {
+            const std::size_t offset = base +
+                static_cast<std::size_t>(instance / source.instanceFrequency) * recordBytes;
+            if (offset + recordBytes > shadow.size())
+                break;
+            std::memcpy(captured.data.data() + static_cast<std::size_t>(instance) * recordBytes,
+                        shadow.data() + offset, recordBytes);
+        }
+        captured.stride = static_cast<Uint32>(recordBytes);
+        for (std::size_t column = 0; column < columns.offset.size(); ++column)
+            captured.columnOffsets[column] = static_cast<Uint32>(columns.offset[column]);
+        return captured;
+    }
+
+    void SdlGpuRenderer::BindInstanceTransformStreamEXT(
+        SDL_GPURenderPass* pass, const InstanceTransformStreamEXT& instance)
+    {
+        if (instance.stride == 0)
+            return;
+        if (instance.uploadedBuffer == nullptr)
+            throw std::runtime_error(
+                "CNA SDL_GPU: an instanced draw's per-instance matrices were not uploaded");
+        SDL_GPUBufferBinding binding{};
+        binding.buffer = instance.uploadedBuffer;
+        SDL_BindGPUVertexBuffers(pass, 1, &binding, 1);
+    }
+
+    SDL_GPUShader* SdlGpuRenderer::StockVertexShaderEXT(
+        const bool instanced, SDL_GPUShader* ordinary, const InstancedStockVertexShaderEXT kind)
+    {
+        if (!instanced)
+            return ordinary;
+        SDL_GPUShader*& shader = instancedStockVertexShadersEXT_[static_cast<std::size_t>(kind)];
+        if (shader != nullptr)
+            return shader;
+
+        struct Module
+        {
+            const std::uint32_t* code;
+            std::size_t size;
+            Uint32 samplers;        ///< the ordinary module's own counts, unchanged
+            Uint32 uniformBuffers;
+        };
+        using Kind = InstancedStockVertexShaderEXT;
+        const Module module = [kind]() -> Module
+        {
+            switch (kind)
+            {
+                case Kind::Colored:
+                    return {Shaders::kInstancedColored3dVertSpv, Shaders::kInstancedColored3dVertSpv_size, 0, 2};
+                case Kind::Textured:
+                    return {Shaders::kInstancedTextured3dVertSpv, Shaders::kInstancedTextured3dVertSpv_size, 0, 2};
+                case Kind::ColoredTextured:
+                    return {Shaders::kInstancedColoredTextured3dVertSpv,
+                            Shaders::kInstancedColoredTextured3dVertSpv_size, 0, 2};
+                case Kind::LitTextured:
+                    return {Shaders::kInstancedLitTextured3dVertSpv,
+                            Shaders::kInstancedLitTextured3dVertSpv_size, 0, 3};
+                case Kind::AlphaTest:
+                    return {Shaders::kInstancedAlphaTest3dVertSpv, Shaders::kInstancedAlphaTest3dVertSpv_size, 0, 2};
+                case Kind::AlphaTestColored:
+                    return {Shaders::kInstancedAlphaTestColored3dVertSpv,
+                            Shaders::kInstancedAlphaTestColored3dVertSpv_size, 0, 2};
+                case Kind::DualTexture:
+                    return {Shaders::kInstancedDualTexture3dVertSpv,
+                            Shaders::kInstancedDualTexture3dVertSpv_size, 0, 2};
+                case Kind::DualTextureColored:
+                    return {Shaders::kInstancedDualTextureColored3dVertSpv,
+                            Shaders::kInstancedDualTextureColored3dVertSpv_size, 0, 2};
+                case Kind::EnvMap:
+                    return {Shaders::kInstancedEnvMap3dVertSpv, Shaders::kInstancedEnvMap3dVertSpv_size, 0, 3};
+                case Kind::Skinned:
+                    return {Shaders::kInstancedSkinned3dVertSpv, Shaders::kInstancedSkinned3dVertSpv_size, 1, 3};
+                case Kind::SkinnedColored:
+                    return {Shaders::kInstancedSkinnedColored3dVertSpv,
+                            Shaders::kInstancedSkinnedColored3dVertSpv_size, 1, 3};
+                case Kind::Pbr:
+                    return {Shaders::kInstancedPbr3dVertSpv, Shaders::kInstancedPbr3dVertSpv_size, 0, 3};
+                case Kind::PbrColor:
+                    return {Shaders::kInstancedPbr3dColorVertSpv, Shaders::kInstancedPbr3dColorVertSpv_size, 0, 3};
+                case Kind::PbrSkinned:
+                    return {Shaders::kInstancedPbrSkinned3dVertSpv,
+                            Shaders::kInstancedPbrSkinned3dVertSpv_size, 1, 3};
+                case Kind::PbrSkinnedColor:
+                    return {Shaders::kInstancedPbrSkinned3dColorVertSpv,
+                            Shaders::kInstancedPbrSkinned3dColorVertSpv_size, 1, 3};
+                case Kind::Count:
+                    break;
+            }
+            throw std::logic_error("CNA SDL_GPU: unknown instanced stock vertex module");
+        }();
+
+        SDL_GPUShaderCreateInfo info{};
+        info.code = reinterpret_cast<const Uint8*>(module.code);
+        info.code_size = module.size;
+        info.entrypoint = "main";
+        info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        info.num_samplers = module.samplers;
+        info.num_uniform_buffers = module.uniformBuffers;
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        const SDL_GPUShaderFormat shaderCrossFormats =
+            shaderCrossAcquired_ ? SDL_ShaderCross_GetSPIRVShaderFormats()
+                                 : static_cast<SDL_GPUShaderFormat>(0);
+#else
+        const SDL_GPUShaderFormat shaderCrossFormats = static_cast<SDL_GPUShaderFormat>(0);
+#endif
+        shader = CreateSdlGpuShaderEXT(
+            device_, shaderCrossFormats, testHooks_.forceShaderCrossCompilation, info,
+            "CNA SDL_GPU: failed to create an instanced stock vertex shader: ");
+        NotifyResourceEvent(SdlGpuResourceKindEXT::Shader, SdlGpuResourceEventEXT::Acquired);
+        return shader;
     }
 
     void SdlGpuRenderer::QueueCustomEffect3DDrawEXT(
@@ -10494,8 +10667,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: the selected stock effect cannot be matched to this VertexDeclaration");
         }
 
-        const auto layout = ResolveStockVertexLayoutForDrawEXT(
+        auto layout = ResolveStockVertexLayoutForDrawEXT(
             sdlGpuVb, streams.declarations.data(), streams.count, shape);
+        if (pendingInstanceCountEXT_ > 0)
+            layout = InstanceStockVertexLayoutEXT(sdlGpuVb, params, layout);
         switch (shape)
         {
             case StockVertexShapeEXT::Colored:
@@ -10630,23 +10805,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 
+        // plans/plan_street_sdlgpu.md STREETS-0001: an instanced stock draw keeps its effect's
+        // family. It used to take the position-only instanced3d module whatever effect was
+        // applied, so every instanced PbrEffect prop in cna-street was a flat white silhouette.
+        // The family is chosen by the same DispatchStockDrawEXT the ordinary route uses, so the
+        // two cannot disagree; only the vertex module and the per-instance matrix input differ.
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(ib);
         StockDrawVertexStreamsEXT streams;
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, true);
-        SynthesizeMissingStreamDeclarationsEXT(streams);
-
-        bool hasVertexColor = false;
-        for (std::size_t i = 0; i < streams.count && !hasVertexColor; ++i)
-        {
-            if (streams.sources[i].instanceFrequency > 0 ||
-                streams.declarations[i].elements == nullptr)
-                continue;
-            hasVertexColor = CNA::Internal::Graphics::FindDeclaredSemanticEXT(
-                *streams.declarations[i].elements,
-                Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color, 0) != nullptr;
-        }
-
         const int clampedInstanceCount = std::max(1, instanceCount);
         for (std::size_t i = 0; i < streams.count; ++i)
         {
@@ -10672,37 +10838,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
         }
 
-        InstancedDrawCommand command;
-        command.vertexLayout = ResolveInstancedVertexLayoutEXT(streams, hasVertexColor);
-        CaptureStockVertexStreamsEXT(command.vertexLayout, streams, 0,
-                                     command.vertexData, command.extraVertexStreams,
-                                     clampedInstanceCount);
-        command.indexData = sdlGpuIb.ShadowData();
-        command.index32 = sdlGpuIb.IsThirtyTwoBit();
-        command.instanceCount = static_cast<Uint32>(clampedInstanceCount);
-        command.topology = ToTopology(primitive);
-        command.depthTest = depthTestEnabled_;
-        command.depthWrite = depthWriteEnabled_;
-        command.depthFunc = depthCompareFunction_;
-        command.renderState = CaptureRenderState();
-        const NativeIndexedRange range = ResolveIndexedRange(
-            sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
-        command.indexCount = range.indexCount;
-        command.firstIndex = range.firstIndex;
-        command.vertexOffset = range.vertexOffset;
-        FillExtUniforms(
-            command.uniforms, ApplyXnaPixelCenter(world * view * projection), params);
-        FillFogUniforms(command.fogUniforms, params);
-        command.target = CurrentDrawTarget();
-
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
-
-        instancedDrawCommands_.push_back(std::move(command));
-        PushDrawOrder(DrawKind::Instanced, instancedDrawCommands_.size() - 1);
-        framePending_ = true;
+        struct PendingInstanceCount
+        {
+            int& count;
+            ~PendingInstanceCount() { count = 0; }
+        } pending{pendingInstanceCountEXT_};
+        pendingInstanceCountEXT_ = clampedInstanceCount;
+        DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
     // ---- SdlGpuSampledTextureState / texture resolution (REMED-GFX-152) ----

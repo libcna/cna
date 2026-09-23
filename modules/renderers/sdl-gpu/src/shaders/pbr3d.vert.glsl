@@ -64,7 +64,7 @@ float cnaDirectionHandedness(mat3 m) {
 }
 
 void main() {
-    gl_Position = pc.mvp * vec4(inPos, 1.0);
+    gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     fragUV = inUV;
     #ifdef CNA_PBR_VERTEX_COLOR
     fragColor0 = inColor;
@@ -73,17 +73,17 @@ void main() {
     #endif
     // GLSL has a built-in inverse(), matching lit_textured3d.vert.glsl's own normal-matrix
     // convention exactly (no CPU-precomputed normal matrix needed, unlike WebGPU's WGSL path).
-    mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
+    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(normalMatrix * inNormal);
     // Tangent transforms as a plain direction under mat3(World) (not the inverse-transpose
     // normalMatrix used for the normal) -- correct for uniform-scale World transforms, mirrors
     // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification exactly.
-    fragTangent = mat3(lp.world) * inTangent.xyz;
-    fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(lp.world));
-    fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
+    fragTangent = mat3(CNA_INSTANCE_WORLD(lp.world)) * inTangent.xyz;
+    fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(lp.world)));
+    fragWorldPos = (lp.world * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))).xyz;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
-    float fogKeep = 1.0 - clamp(dot(vec4(inPos, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

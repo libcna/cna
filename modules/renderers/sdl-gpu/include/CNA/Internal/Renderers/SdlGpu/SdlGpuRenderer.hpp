@@ -162,7 +162,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         DualTextureFragmentShaderCreation,
         EnvMapVertexShaderCreation,
         EnvMapFragmentShaderCreation,
-        InstancedVertexShaderCreation,
         SkinnedVertexShaderCreation,
         SkinnedColoredVertexShaderCreation,
         SkinnedColoredFragmentShaderCreation,
@@ -1717,7 +1716,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
         enum class DrawKind : Uint8
         {
-            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced,
+            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap,
             Skinned, Sprite, Pbr, CustomEffect3D
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             // plans/plan_fx.md FX-071: guarded like every other compiled-effect member in this header,
@@ -2031,6 +2030,53 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUBuffer* uploadedBuffer = nullptr;
         };
 
+        /**
+         * @brief plans/plan_street_sdlgpu.md STREETS-0001: the per-instance world matrix of an
+         *        instanced draw on a family whose vertex record is fixed (SkinnedEffect, PbrEffect).
+         *
+         * The declaration-resolved families carry the four matrix columns inside their resolved
+         * layout instead, at shader locations 12..15. These two families bind their own fixed
+         * record at slot 0, so the columns ride here as a second, per-instance buffer at slot 1
+         * feeding the same four locations. A zero stride means the draw is not instanced.
+         */
+        struct InstanceTransformStreamEXT
+        {
+            /** @brief One record per instance, already expanded by the stream's InstanceFrequency. */
+            std::vector<std::uint8_t> data;
+            /** @brief Bytes per record; 0 when the draw is not instanced. */
+            Uint32 stride = 0;
+            /** @brief Byte offset of each of the four matrix columns within a record. */
+            std::array<Uint32, 4> columnOffsets{};
+            /** @brief The per-frame upload of @ref data. */
+            SDL_GPUBuffer* uploadedBuffer = nullptr;
+        };
+
+        /**
+         * @brief STREETS-0001: the instanced vertex modules, one per ordinary stock vertex module.
+         *
+         * Each is the ordinary source compiled with `CNA_INSTANCED` and pairs with its family's
+         * ordinary fragment stage unchanged. Created on first use, not at construction.
+         */
+        enum class InstancedStockVertexShaderEXT : std::size_t
+        {
+            Colored,
+            Textured,
+            ColoredTextured,
+            LitTextured,
+            AlphaTest,
+            AlphaTestColored,
+            DualTexture,
+            DualTextureColored,
+            EnvMap,
+            Skinned,
+            SkinnedColored,
+            Pbr,
+            PbrColor,
+            PbrSkinned,
+            PbrSkinnedColor,
+            Count
+        };
+
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
         // Vertex/index data is shadow-copied at Draw-call time (see
         // SdlGpuVertexBufferRenderer::ShadowData()'s own rationale) and re-uploaded into a
@@ -2136,6 +2182,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2178,6 +2226,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2230,6 +2280,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2283,6 +2335,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2337,6 +2391,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2400,6 +2456,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2453,45 +2511,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        /** @brief One ordinary XNA indexed instanced draw captured for deferred replay. */
-        struct InstancedDrawCommand
-        {
-            std::vector<std::uint8_t> vertexData;
-            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
-            std::vector<std::uint8_t> indexData;
-            bool index32 = false;
-            Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;
-            Sint32 vertexOffset = 0;
-            Uint32 instanceCount = 1;
-            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
-            std::array<float, 32> uniforms{};
-            std::array<float, 8> fogUniforms{};
-            bool depthTest = false;
-            bool depthWrite = false;
-            int depthFunc = 3;
-            RenderStateSnapshot renderState;
-            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
-            DrawTarget target;
-            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
-            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
-            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
-        };
-
         // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34, SDLGPU-77) -- compatible semantic
         // declarations are captured into stride 52 (VertexPositionNormalTextureSkinned) or stride
         // 56 (the same layout plus a per-vertex Color, `hasVertexColor` selects it). In particular,
@@ -2517,6 +2536,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
+            /** @brief STREETS-0001: the per-instance world matrices, when instanced. */
+            InstanceTransformStreamEXT instanceStream;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -2576,6 +2599,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
+            Uint32 instanceCount = 1;
+            /** @brief STREETS-0001: the per-instance world matrices, when instanced. */
+            InstanceTransformStreamEXT instanceStream;
             /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
             SDL_GPUBuffer* indirectArguments = nullptr;
             /** @brief SMG-0023: byte offset of those arguments. */
@@ -3814,9 +3841,64 @@ namespace CNA::Internal::Renderers::SdlGpu
             const SdlGpuVertexBufferRenderer& vb,
             const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
             std::size_t streamCount, StockVertexShapeEXT shape) const;
+        /** @brief STREETS-0001: where an instanced draw's four world-matrix columns come from. */
+        struct InstanceColumnsEXT
+        {
+            /** @brief Index of the stream carrying each column, in the collected stream list. */
+            std::array<std::size_t, 4> source{};
+            /** @brief Byte offset of each column within its stream's record. */
+            std::array<int, 4> offset{};
+        };
+        /**
+         * @brief Finds the four per-instance Vector4 world-matrix columns of an instanced draw.
+         *
+         * @param streams The draw's streams, collected with the per-instance ones included.
+         * @return The columns, in declaration order across the per-instance streams.
+         * @throws System::NotSupportedException Unless exactly four Vector4 columns are declared.
+         */
+        [[nodiscard]] static InstanceColumnsEXT FindInstanceColumnsEXT(
+            const StockDrawVertexStreamsEXT& streams);
+        /**
+         * @brief Turns a family's ordinary resolved layout into its instanced one. STREETS-0001.
+         *
+         * @param vb The draw's vertex buffer.
+         * @param params The draw's parameters, whose per-instance stream carries the matrices.
+         * @param perVertex The layout resolved over the per-vertex streams alone.
+         * @return The same inputs re-indexed against the full stream list, plus the four matrix
+         *         columns at shader locations 12..15.
+         */
         [[nodiscard]] static CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
-        ResolveInstancedVertexLayoutEXT(const StockDrawVertexStreamsEXT& streams,
-                                        bool hasVertexColor);
+        InstanceStockVertexLayoutEXT(
+            const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& perVertex);
+        /**
+         * @brief Whether a resolved layout feeds the instanced vertex module. STREETS-0001.
+         *
+         * @param layout The resolved layout.
+         * @return True when it binds the per-instance matrix locations 12..15.
+         */
+        [[nodiscard]] static bool IsInstancedStockLayoutEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout) noexcept;
+        /**
+         * @brief Captures a fixed-layout family's per-instance matrices. STREETS-0001.
+         *
+         * @param vb The draw's vertex buffer.
+         * @param params The draw's parameters.
+         * @param instanceCount Instances to capture; 0 for an ordinary draw.
+         * @return The captured stream, or an empty one (stride 0) for an ordinary draw.
+         */
+        [[nodiscard]] static InstanceTransformStreamEXT CaptureInstanceTransformStreamEXT(
+            const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params, int instanceCount);
+        /**
+         * @brief The vertex module a stock pipeline uses: the ordinary one, or its instanced twin.
+         *
+         * @param instanced Whether the pipeline binds per-instance matrices.
+         * @param ordinary The family's ordinary vertex module.
+         * @param kind Which instanced module is the ordinary one's twin.
+         * @return The module to build the pipeline with.
+         */
+        [[nodiscard]] SDL_GPUShader* StockVertexShaderEXT(
+            bool instanced, SDL_GPUShader* ordinary, InstancedStockVertexShaderEXT kind);
         /**
          * @brief Queues one 3D draw shaded by a custom `ShaderEffect`. CNAEXT. SMG-0019.
          *
@@ -3848,6 +3930,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
             const Matrix& world, const Matrix& view, const Matrix& projection,
             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        /**
+         * @brief Binds a fixed-layout family's per-instance matrix buffer at slot 1. STREETS-0001.
+         *
+         * @param pass Render pass.
+         * @param instance The captured stream; nothing is bound when it is not instanced.
+         */
+        static void BindInstanceTransformStreamEXT(
+            SDL_GPURenderPass* pass, const InstanceTransformStreamEXT& instance);
         static void BindStockVertexBuffersEXT(
             SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
             const std::vector<CapturedStockVertexStreamEXT>& extraVertexStreams,
@@ -3951,21 +4041,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
-        static void CreateInstancedResources(ConstructionResources& resources);
+        /// STREETS-0001: releases the on-demand instanced stock vertex modules.
         void DestroyInstancedResources();
-        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineInstanced3D(
-            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
-            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
-            const RenderStateSnapshot& renderState);
-        void IssueInstancedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                const InstancedDrawCommand& command,
-                                SDL_GPUTextureFormat colorFormat,
-                                SDL_GPUSampleCount sampleCount,
-                                SDL_GPUTextureFormat depthStencilFormat,
-                                int colorTargetCount,
-                                SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
         // selects the stride-56 skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair
@@ -3975,7 +4052,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
             bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState,
+            const InstanceTransformStreamEXT& instance);
         void QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -4028,7 +4106,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
             bool skinned, bool colored, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState,
+            const InstanceTransformStreamEXT& instance);
         void QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -4396,6 +4475,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUBuffer* pendingIndirectArgumentsEXT_ = nullptr;
         Uint32 pendingIndirectOffsetEXT_ = 0;
         std::shared_ptr<const void> pendingIndirectKeepAliveEXT_;
+        /// STREETS-0001: the instance count of the instanced stock draw being queued right now, or
+        /// 0 for an ordinary one -- the pendingIndirectArgumentsEXT_ pattern, for the same reason.
+        int pendingInstanceCountEXT_ = 0;
+        /// STREETS-0001: the instanced vertex modules, created on first use.
+        std::array<SDL_GPUShader*, static_cast<std::size_t>(InstancedStockVertexShaderEXT::Count)>
+            instancedStockVertexShadersEXT_{};
         /// SMG-0027: debug labels queued this frame, and how many have ever been recorded.
         std::vector<std::string> pendingDebugMarkersEXT_;
         std::size_t recordedDebugMarkersEXT_ = 0;
@@ -4443,9 +4528,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         GraphicsPipelineCacheEXT envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
 
-        SDL_GPUShader* instancedVertexShader_ = nullptr;
-        GraphicsPipelineCacheEXT instancedPipelines_;
-        std::vector<InstancedDrawCommand> instancedDrawCommands_;
 
         // No dedicated fragment shader for stride 52 -- reuses litTexturedFragmentShader_ (see
         // SkinnedDrawCommand's own doc comment). Stride 56 (vertex color) uses its own dedicated

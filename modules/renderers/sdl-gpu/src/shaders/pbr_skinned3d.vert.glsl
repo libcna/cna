@@ -97,7 +97,7 @@ void main() {
     if (weightsPerVertex >= 2.0) skinMat += loadBone(inBoneIndices.y) * inBoneWeights.y;
     if (weightsPerVertex >= 4.0) skinMat += loadBone(inBoneIndices.z) * inBoneWeights.z
                                           + loadBone(inBoneIndices.w) * inBoneWeights.w;
-    vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
+    vec4 skinnedPos = CNA_INSTANCE_POSITION(skinMat * vec4(inPos, 1.0));
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;
     #ifdef CNA_PBR_VERTEX_COLOR
@@ -113,10 +113,10 @@ void main() {
     // (now-fixed) Vulkan sibling pbr3d_skinned.vert.glsl. The tangent stays on raw World: tangents
     // transform as directions, not as normals (glTF convention, unchanged).
     mat3 skinNormalMat = mat3(skinMat);
-    mat3 worldNormalMat = transpose(inverse(mat3(lp.world)));
+    mat3 worldNormalMat = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, inNormal));
-    fragTangent = mat3(lp.world) * (skinNormalMat * inTangent.xyz);
-    fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(lp.world))
+    fragTangent = mat3(CNA_INSTANCE_WORLD(lp.world)) * (skinNormalMat * inTangent.xyz);
+    fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(lp.world)))
                                    * cnaDirectionHandedness(skinNormalMat);
     fragWorldPos = (lp.world * skinnedPos).xyz;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
