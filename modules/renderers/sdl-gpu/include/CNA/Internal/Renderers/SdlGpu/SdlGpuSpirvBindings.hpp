@@ -117,6 +117,32 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool readOnly = true;
         /** @brief True when this entry is a `push_constant` block converted to a uniform buffer. */
         bool convertedFromPushConstant = false;
+        /**
+         * @brief True when a sampled image's texel type is an integer rather than a float.
+         *
+         * CNA's XNA textures are float-sampled everywhere, so a `usampler2D`/`isampler2D` cannot
+         * legally read one; the intake refuses it by name rather than letting the driver alias a
+         * float image to an integer descriptor.
+         */
+        bool integerSampled = false;
+    };
+
+    /**
+     * @brief One named member of a uniform block, with the byte offset the module gave it. CNAEXT.
+     *
+     * `ComputeShader::setUniform` binds a scalar by name, and on a SPIR-V renderer the only place
+     * that name exists is the module's own `OpMemberName`. A package compiled at shaderc's
+     * `performance` level has none -- that level drops `OpName`/`OpMemberName` -- which is why CNA's
+     * own compute packages that use named scalars declare `"optimization": "zero"`
+     * (`tools/shader_package/README.md`). A module without names is not broken; its scalars simply
+     * cannot be addressed by name, and the renderer says so rather than writing to offset zero.
+     */
+    struct SpirvUniformMemberEXT
+    {
+        /** @brief Member name exactly as the module spells it. */
+        std::string name;
+        /** @brief Byte offset within the block, from the module's `Offset` decoration. */
+        std::uint32_t byteOffset = 0;
     };
 
     /**
@@ -152,6 +178,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::uint32_t localSizeY = 0;
         /** @brief Compute workgroup Z. */
         std::uint32_t localSizeZ = 0;
+        /**
+         * @brief Named members of the FIRST uniform block, for name-addressed scalar uniforms.
+         *
+         * Empty when the module carries no member names, which is what an optimised package looks
+         * like. Byte size of that block, so a push can send exactly it, is @ref uniformBlockBytes.
+         */
+        std::vector<SpirvUniformMemberEXT> uniformMembers;
+        /** @brief Byte size of the first uniform block, or zero when there is none. */
+        std::uint32_t uniformBlockBytes = 0;
         /** @brief True when the module was changed; false means it already obeyed the layout. */
         bool changed = false;
         /** @brief Empty on success; otherwise the reason this module cannot be used. */

@@ -32,6 +32,9 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderTargetCubeRenderer;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
     class SdlGpuCompiledEffect;
+    class SdlGpuStorageBufferRenderer;
+    class SdlGpuStorageTexture2DRenderer;
+    class SdlGpuComputeShaderRenderer;
 #endif
 
     /** @brief Stock-shader construction route selected for one SDL_gpu device. CNAEXT. */
@@ -1466,6 +1469,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // QueueTextureRelease path render targets already used.
         friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectRenderer;
+        // SMG-0012: the modern resources need the deferred-release queues and the device.
+        friend class SdlGpuStorageBufferRenderer;
+        friend class SdlGpuStorageTexture2DRenderer;
+        friend class SdlGpuComputeShaderRenderer;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: 3D position, UV, RGBA color (36 bytes). */
         struct SpriteVertex
@@ -2483,6 +2490,91 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return device_ != nullptr; }
 
+        // ---- modern (CNAEXT) compute and storage. SMG-0012 ----
+
+        /**
+         * @brief Submits everything this renderer has queued but not yet handed to the GPU. CNAEXT.
+         *
+         * This renderer defers every draw to `Present()`, so "already issued" and "already
+         * submitted" are different states here in a way they are not on the reference renderers.
+         * Compute and readback both need the second one: a dispatch that reads a render target, or
+         * a `GetData` on a buffer a dispatch wrote, must not observe the state before that work.
+         * Submission order is execution order, so with this there is no barrier left to reason
+         * about.
+         */
+        CNAEXT void FlushPendingGpuWorkEXT();
+
+        /**
+         * @brief Whether this device can run compute. @return True when compute pipelines work here.
+         */
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /** @brief Creates a compute shader from a SPIR-V payload. @param computeSrc Module bytes.
+         *  @return The shader, or null where compute is unavailable. */
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+        /** @brief Creates a storage buffer with the default descriptor. @param byteSize Size.
+         *  @return The buffer, or null. */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
+        /** @brief Creates a storage texture. @param width Width. @param height Height.
+         *  @param mipLevelCount Levels. @param surfaceFormat Format ordinal. @param usage Usage mask.
+         *  @return The texture, or null when the format or usage is refused. */
+        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int width, int height, int mipLevelCount, int surfaceFormat,
+            std::uint32_t usage) override;
+        /** @brief Whether a compute shader may bind a storage image here. @return True with a device. */
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override
+        {
+            return SupportsComputeShadersEXT();
+        }
+        /** @brief Per-format usage support, asked of the device. @param surfaceFormat Ordinal.
+         *  @return Known and supported usage masks. */
+        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int surfaceFormat) const override;
+        /** @brief Storage images per stage. @return SDL_gpu's own eight read-write slots. */
+        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override
+        {
+            return device_ != nullptr ? 8 : 0;
+        }
+
+        /** @brief Creates a storage buffer. @param byteSize Size. @param usage Usage mask.
+         *  @param cpuAccess CPU-access mask. @return The buffer, or null when refused. */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
+        /** @brief Runs one dispatch. @param shader The compute shader. @param groupsX X workgroups.
+         *  @param groupsY Y. @param groupsZ Z. */
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
+                             int groupsZ) override;
+        /**
+         * @brief No-op, and deliberately so. @param barrierBits Ignored.
+         *
+         * `SDL_gpu` owns its own synchronisation: within a command buffer it inserts the barriers
+         * its resource-state tracking implies, and between command buffers submission order is
+         * execution order. There is no API to express a barrier through, and nothing for one to
+         * fix -- @ref FlushPendingGpuWorkEXT is where this renderer's ordering is actually made.
+         */
+        void MemoryBarrierEXT(int barrierBits) override { (void) barrierBits; }
+
+        /** @brief Largest workgroup count per axis. @param axis 0, 1 or 2. @return The limit. */
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+        /** @brief Largest workgroup size per axis. @param axis 0, 1 or 2. @return The limit. */
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+        /** @brief Largest total invocations per workgroup. @return The limit. */
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        /** @brief Largest storage buffer. @return The limit in bytes. */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+        /** @brief Largest uniform buffer. @return The limit in bytes. */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+        /** @brief Compute storage-buffer binding slots. @return The limit. */
+        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
+        /** @brief Sampled textures per stage. @return The limit. */
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+        /** @brief Colour attachments. @return Four, the XNA MRT ceiling this renderer implements. */
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override { return 4; }
+        /** @brief Storage-buffer offset alignment. @return The alignment in bytes. */
+        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
+        /** @brief Uniform-buffer offset alignment. @return The alignment in bytes. */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
+
         /** @brief Queues a color-only clear, consumed on the next render pass. */
         void Clear(float r, float g, float b, float a) override;
         /** @brief Renders any pending clear and presents the swapchain texture. */
@@ -3382,6 +3474,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return The native texture, or null if it could not be created.
          */
         CNAEXT [[nodiscard]] SDL_GPUTexture* AcquireDefaultWhiteTextureEXT();
+
+        /**
+         * @brief A plain point/clamp sampler for compute's sampled-texture bindings. CNAEXT.
+         *
+         * `SDL_BindGPUComputeSamplers` needs a sampler per binding, and the CNAEXT compute contract
+         * exposes no sampler state of its own -- `ComputeShader::bindTexture` names a unit and
+         * nothing else. Point and clamp is the one choice that reads exactly the texels a compute
+         * shader addressed, which is what every conformance case here checks.
+         *
+         * @return The cached sampler, created on first use, or null if it could not be created.
+         */
+        CNAEXT [[nodiscard]] SDL_GPUSampler* AcquireComputeSamplerEXT();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
             bool skinned, bool colored, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
@@ -3817,6 +3921,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // map decode (via the shader's rgb*2-1) to the unperturbed geometric normal (0,0,1).
         // Mirrors EasyGLRenderer::default_white_texture_/default_flat_normal_texture_.
         std::unique_ptr<SdlGpuTextureRenderer> defaultWhiteTexture_;
+        /// SMG-0012: the one sampler compute's sampled-texture bindings use.
+        SDL_GPUSampler* computeSamplerEXT_ = nullptr;
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)

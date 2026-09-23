@@ -326,3 +326,49 @@ effect they exercise could not run. They are the remaining work, and they cluste
 `ClusteredForwardEffectTest` (14, the lit path, which needs graphics-stage storage buffers),
 `DepthOfFieldTest` (5), `SkyboxRenderTest` (4), `DecalPassTest` (4), `PerObjectVelocityTest` (4),
 `VolumetricFogTest` (3), `WeightedBlendedTransparencyTest` (3), and singles elsewhere.
+
+### SMG-0012 — storage buffers, storage images and compute
+
+`modules/renderers/sdl-gpu/{include/…,src/}SdlGpuModern.{hpp,cpp}`, kept out of the
+twelve-thousand-line `SdlGpuRenderer.cpp` the way WebGPU keeps `WebGPUModern.*` out of its own.
+
+**The ordering rule this renderer needs and the reference renderers do not.** `SdlGpuRenderer`
+defers every draw to `Present()`, so "issued" and "submitted" are different states here. A dispatch
+that reads a render target, or a `GetData` on a buffer a dispatch wrote, must observe the state
+*after* that work — so compute and readback both call `FlushPendingGpuWorkEXT()` first, which is
+what the existing readback path already did before `GetData`. With that, SDL's own submission order
+gives `render -> compute -> render` and `compute write -> graphics read`, and no barrier is left to
+reason about. `MemoryBarrierEXT` is therefore a documented no-op rather than an unimplemented one:
+SDL_gpu inserts the barriers its resource-state tracking implies within a command buffer, and
+between command buffers submission order *is* execution order. There is no API to express one
+through and nothing for one to fix.
+
+**What `SDL_gpu` has no resource for.** There is no uniform *buffer* usage at all —
+`SDL_GPU_BUFFERUSAGE_*` is vertex, index, indirect and the four storage combinations, and uniform
+data reaches a shader only through `SDL_PushGPU*UniformData`. A `StorageBufferUsage::Constant`
+buffer is therefore pushed from the CPU shadow copy every buffer already keeps. That is SDL's model
+for a constant buffer, not an emulation of one.
+
+Also landed here:
+
+- **`GetSurfaceFormatUsageSupportEXT`** was never overridden, so the engine layer's
+  `StorageTexture2D` descriptor check could not find a single known-and-supported usage and refused
+  every storage image by name. It now answers from real `SDL_GPUTextureSupportsFormat` queries, per
+  usage, so a driver that supports reading but not writing a format is reported as exactly that.
+- **An integer sampler in a compute module is refused** before pipeline creation. The driver would
+  happily create a pipeline whose descriptor aliases a float image to an integer one and deliver
+  the wrong texels with nothing having failed. CNA's textures are float-sampled everywhere.
+- **Every sampler a compute module declares is bound**, falling back to the 1×1 white texture — the
+  same rule and the same reason as SMG-0008, and it was found the same way, as a segfault inside
+  the Vulkan driver the first time a compute shader sampled a texture.
+
+### Progression
+
+| stage | pass | fail | skip | of |
+|---|---|---|---|---|
+| baseline | 682 | 21 | 259 | 962 |
+| SMG-0006…0011 shader intake | 801 | 55 | 106 | 962 |
+| **SMG-0012 compute and storage** | **829** | **57** | **76** | 962 |
+
+Classic `-R '^SdlGpu'` stayed at 202 / 27 of 229 across the first tranche, with a byte-identical
+failure set.

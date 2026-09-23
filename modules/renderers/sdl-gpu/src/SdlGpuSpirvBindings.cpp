@@ -17,8 +17,10 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         constexpr std::uint32_t kMagic = 0x07230203u;
 
+        constexpr std::uint32_t kOpMemberName = 6;
         constexpr std::uint32_t kOpEntryPoint = 15;
         constexpr std::uint32_t kOpExecutionMode = 16;
+        constexpr std::uint32_t kOpTypeInt = 21;
         constexpr std::uint32_t kOpTypeImage = 25;
         constexpr std::uint32_t kOpTypeSampler = 26;
         constexpr std::uint32_t kOpTypeSampledImage = 27;
@@ -159,6 +161,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::map<std::uint32_t, std::uint32_t> arrayLengthId;    // %arr  -> length constant id
         std::map<std::uint32_t, std::uint32_t> constantValue;    // %const-> literal
         std::map<std::uint32_t, std::uint32_t> imageSampled;     // %img  -> Sampled operand
+        std::map<std::uint32_t, std::uint32_t> imageSampledType; // %img  -> sampled type id
+        std::set<std::uint32_t> integerScalarTypes;
+        std::map<std::uint32_t, std::uint32_t> sampledImageUnderlying; // %sampledImg -> %img
         std::set<std::uint32_t> sampledImageTypes;
         std::set<std::uint32_t> samplerTypes;
         std::set<std::uint32_t> structTypes;
@@ -168,6 +173,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // %struct -> how many members carry NonWritable, and how many members were decorated at all
         std::map<std::uint32_t, std::set<std::uint32_t>> nonWritableMembers;
         std::map<std::uint32_t, std::set<std::uint32_t>> decoratedMembers;
+        std::map<std::uint32_t, std::map<std::uint32_t, std::uint32_t>> memberOffsets;
+        std::map<std::uint32_t, std::map<std::uint32_t, std::string>> memberNames;
         std::map<std::uint32_t, std::uint32_t> variableType;     // %var  -> result type (%ptr)
         std::map<std::uint32_t, std::uint32_t> variableStorage;  // %var  -> storage class
         std::vector<std::uint32_t> variableOrder;
@@ -196,13 +203,24 @@ namespace CNA::Internal::Renderers::SdlGpu
                     }
                     break;
                 case kOpTypeImage:
-                    if (w.size() >= 8) imageSampled[w[1]] = w[7];
+                    if (w.size() >= 8)
+                    {
+                        imageSampled[w[1]] = w[7];
+                        imageSampledType[w[1]] = w[2];
+                    }
+                    break;
+                case kOpTypeInt:
+                    if (w.size() >= 2) integerScalarTypes.insert(w[1]);
                     break;
                 case kOpTypeSampler:
                     if (w.size() >= 2) samplerTypes.insert(w[1]);
                     break;
                 case kOpTypeSampledImage:
-                    if (w.size() >= 2) sampledImageTypes.insert(w[1]);
+                    if (w.size() >= 3)
+                    {
+                        sampledImageTypes.insert(w[1]);
+                        sampledImageUnderlying[w[1]] = w[2];
+                    }
                     break;
                 case kOpTypeArray:
                     if (w.size() >= 4)
@@ -250,6 +268,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                     {
                         decoratedMembers[w[1]].insert(w[2]);
                         if (w[3] == kDecorationNonWritable) nonWritableMembers[w[1]].insert(w[2]);
+                        if (w.size() >= 5 && w[3] == kDecorationOffset)
+                            memberOffsets[w[1]][w[2]] = w[4];
+                    }
+                    break;
+                case kOpMemberName:
+                    if (w.size() >= 4)
+                    {
+                        std::string name;
+                        for (std::size_t word = 3; word < w.size(); ++word)
+                            for (int byte = 0; byte < 4; ++byte)
+                            {
+                                const char c = static_cast<char>((w[word] >> (byte * 8)) & 0xFFu);
+                                if (c == '\0') { word = w.size(); break; }
+                                name.push_back(c);
+                            }
+                        if (!name.empty()) memberNames[w[1]][w[2]] = std::move(name);
                     }
                     break;
                 default: break;
@@ -268,6 +302,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::uint32_t variable = 0;
             Classified classified;
             bool fromPushConstant = false;
+            bool integerSampled = false;
             std::uint32_t originalSet = 0;
             std::uint32_t originalBinding = 0;
         };
@@ -326,6 +361,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (sampledImageTypes.count(base) != 0)
                 {
                     entry.classified.kind = SpirvResourceKindEXT::SampledTexture;
+                    const auto image = sampledImageUnderlying.find(base);
+                    if (image != sampledImageUnderlying.end())
+                    {
+                        const auto texel = imageSampledType.find(image->second);
+                        entry.integerSampled = texel != imageSampledType.end()
+                            && integerScalarTypes.count(texel->second) != 0;
+                    }
                 }
                 else if (imageSampled.count(base) != 0)
                 {
@@ -569,6 +611,31 @@ namespace CNA::Internal::Renderers::SdlGpu
             output.insert(output.end(), inst.words.begin(), inst.words.end());
         result.words = std::move(output);
 
+        // The first uniform block's named members, for name-addressed scalar uniforms. The block's
+        // byte size is its last member's offset plus that member's size, which is not knowable from
+        // the offsets alone -- so it is the last offset rounded up to sixteen, which is what std140
+        // does to the block as a whole and is never smaller than the block really is.
+        for (const Entry& entry : entries)
+        {
+            if (entry.classified.kind != SpirvResourceKindEXT::UniformBuffer) continue;
+            const std::uint32_t block = pointerPointee[variableType[entry.variable]];
+            const auto offsets = memberOffsets.find(block);
+            if (offsets == memberOffsets.end()) break;
+            const auto names = memberNames.find(block);
+            std::uint32_t highest = 0;
+            for (const auto& [member, byteOffset] : offsets->second)
+            {
+                highest = std::max(highest, byteOffset);
+                if (names == memberNames.end()) continue;
+                const auto named = names->second.find(member);
+                if (named == names->second.end()) continue;
+                result.uniformMembers.push_back(
+                    SpirvUniformMemberEXT{named->second, byteOffset});
+            }
+            result.uniformBlockBytes = ((highest + 16u) + 15u) & ~15u;
+            break;
+        }
+
         result.resources.reserve(entries.size());
         for (const Entry& entry : entries)
         {
@@ -582,6 +649,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             binding.arrayLength = entry.classified.arrayLength;
             binding.readOnly = entry.classified.readOnly;
             binding.convertedFromPushConstant = entry.fromPushConstant;
+            binding.integerSampled = entry.integerSampled;
             result.resources.push_back(binding);
         }
 

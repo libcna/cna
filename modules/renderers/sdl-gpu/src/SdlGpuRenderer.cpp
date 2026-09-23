@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuModern.hpp"
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
@@ -2487,6 +2488,12 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuRenderer::~SdlGpuRenderer()
     {
+        // SMG-0012: released before the device goes, like every other cached native object here.
+        if (computeSamplerEXT_ != nullptr && device_ != nullptr)
+        {
+            SDL_ReleaseGPUSampler(device_, computeSamplerEXT_);
+            computeSamplerEXT_ = nullptr;
+        }
         if (registeredForWindow_)
         {
             IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
@@ -2620,6 +2627,190 @@ namespace CNA::Internal::Renderers::SdlGpu
                 return false;
         }
         return false;
+    }
+
+    void SdlGpuRenderer::FlushPendingGpuWorkEXT()
+    {
+        if (device_ == nullptr) return;
+        (void) EnsureFrameRendered();
+    }
+
+    bool SdlGpuRenderer::SupportsComputeShadersEXT() const
+    {
+        // SDL_gpu's compute surface is core rather than optional -- every driver it will hand back
+        // implements SDL_CreateGPUComputePipeline and the compute pass. The device is the only
+        // real condition, and the SPIR-V intake the pipelines need is the same one the graphics
+        // stages already use.
+        return device_ != nullptr;
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> SdlGpuRenderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (device_ == nullptr) return nullptr;
+        auto shader = std::make_unique<SdlGpuComputeShaderRenderer>(*this);
+        if (!computeSrc.empty()) shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> SdlGpuRenderer::CreateStorageBuffer(
+        const std::size_t byteSize)
+    {
+        // The legacy entry point's descriptor: storage plus both transfer directions and both CPU
+        // directions, which is what IStorageBufferRenderer's own defaults document.
+        return CreateStorageBufferEXT(byteSize, 0x0Fu, 0x03u);
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> SdlGpuRenderer::CreateStorageBufferEXT(
+        const std::size_t byteSize, const std::uint32_t usage, const std::uint32_t cpuAccess)
+    {
+        if (device_ == nullptr || byteSize == 0) return nullptr;
+        try
+        {
+            return std::make_unique<SdlGpuStorageBufferRenderer>(
+                *this, byteSize, usage, cpuAccess);
+        }
+        catch (const std::exception&)
+        {
+            return nullptr;
+        }
+    }
+
+    std::unique_ptr<IStorageTexture2DRenderer> SdlGpuRenderer::CreateStorageTexture2DEXT(
+        const int width, const int height, const int mipLevelCount, const int surfaceFormat,
+        const std::uint32_t usage)
+    {
+        if (device_ == nullptr) return nullptr;
+        try
+        {
+            return std::make_unique<SdlGpuStorageTexture2DRenderer>(
+                *this, width, height, mipLevelCount, surfaceFormat, usage);
+        }
+        catch (const std::exception&)
+        {
+            return nullptr;
+        }
+    }
+
+    CNA::RendererFormatSupport SdlGpuRenderer::GetSurfaceFormatUsageSupportEXT(
+        const int surfaceFormat) const
+    {
+        CNA::RendererFormatSupport support;
+        if (device_ == nullptr) return support;
+
+        SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID;
+        int bytesPerTexel = 0;
+        if (!TranslateStorageImageFormatEXT(surfaceFormat, format, bytesPerTexel))
+        {
+            // Classified, and classified as unsupported: this format has no SDL_gpu storage-image
+            // equivalent at all, which is a different answer from "not asked".
+            support.knownUsages =
+                static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead)
+                | static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+            return support;
+        }
+
+        // Asked of the device rather than assumed. SDL answers per (format, type, usage), so each
+        // usage is its own query and a driver that supports reading but not writing a format is
+        // reported as exactly that.
+        const auto classify = [&](const CNA::RendererFormatUsage usage,
+                                  const SDL_GPUTextureUsageFlags flags) {
+            support.knownUsages |= static_cast<std::uint32_t>(usage);
+            if (SDL_GPUTextureSupportsFormat(device_, format, SDL_GPU_TEXTURETYPE_2D, flags))
+                support.supportedUsages |= static_cast<std::uint32_t>(usage);
+        };
+        classify(CNA::RendererFormatUsage::StorageRead,
+                 SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ);
+        classify(CNA::RendererFormatUsage::StorageWrite,
+                 SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE);
+        classify(CNA::RendererFormatUsage::Sampled, SDL_GPU_TEXTUREUSAGE_SAMPLER);
+        classify(CNA::RendererFormatUsage::TextureStorage, SDL_GPU_TEXTUREUSAGE_SAMPLER);
+        classify(CNA::RendererFormatUsage::RenderTarget, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
+
+        // Transfer and mip ownership are properties of the resource rather than of a usage flag
+        // SDL exposes: any texture this renderer creates can be uploaded to, downloaded from and
+        // allocated with levels.
+        const std::uint32_t resourceUsages =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferSource)
+            | static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferDestination)
+            | static_cast<std::uint32_t>(CNA::RendererFormatUsage::Mipmapped);
+        support.knownUsages |= resourceUsages;
+        support.supportedUsages |= resourceUsages;
+        return support;
+    }
+
+    SDL_GPUSampler* SdlGpuRenderer::AcquireComputeSamplerEXT()
+    {
+        if (device_ == nullptr) return nullptr;
+        if (computeSamplerEXT_ != nullptr) return computeSamplerEXT_;
+        SDL_GPUSamplerCreateInfo info{};
+        info.min_filter = SDL_GPU_FILTER_NEAREST;
+        info.mag_filter = SDL_GPU_FILTER_NEAREST;
+        info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+        info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        computeSamplerEXT_ = SDL_CreateGPUSampler(device_, &info);
+        return computeSamplerEXT_;
+    }
+
+    void SdlGpuRenderer::DispatchCompute(
+        IComputeShaderRenderer* shader, const int groupsX, const int groupsY, const int groupsZ)
+    {
+        auto* native = dynamic_cast<SdlGpuComputeShaderRenderer*>(shader);
+        if (native == nullptr) return;
+        native->DispatchEXT(groupsX, groupsY, groupsZ);
+    }
+
+    int SdlGpuRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const
+    {
+        if (device_ == nullptr || axis < 0 || axis > 2) return 0;
+        // SDL_gpu publishes no device limits of its own. These are the floors every Vulkan 1.0
+        // implementation guarantees (VkPhysicalDeviceLimits minimums), which is the largest number
+        // that is true without asking a driver SDL_gpu will not let us ask.
+        return axis == 2 ? 65535 : 65535;
+    }
+
+    int SdlGpuRenderer::GetMaxComputeWorkGroupSizeEXT(const int axis) const
+    {
+        if (device_ == nullptr || axis < 0 || axis > 2) return 0;
+        return axis == 2 ? 64 : 128;
+    }
+
+    int SdlGpuRenderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return device_ != nullptr ? 128 : 0;
+    }
+
+    std::uint64_t SdlGpuRenderer::GetMaxStorageBufferBytesEXT() const
+    {
+        return device_ != nullptr ? UINT64_C(134217728) : 0;
+    }
+
+    std::uint64_t SdlGpuRenderer::GetMaxUniformBufferBytesEXT() const
+    {
+        return device_ != nullptr ? UINT64_C(16384) : 0;
+    }
+
+    int SdlGpuRenderer::GetMaxComputeStorageBufferBindingsEXT() const
+    {
+        // SDL_gpu's own compute-pass surface: eight read-only plus eight read-write slots.
+        return device_ != nullptr ? 8 : 0;
+    }
+
+    int SdlGpuRenderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        return device_ != nullptr ? 16 : 0;
+    }
+
+    std::uint64_t SdlGpuRenderer::GetMinStorageBufferOffsetAlignmentEXT() const
+    {
+        return device_ != nullptr ? UINT64_C(256) : 0;
+    }
+
+    std::uint64_t SdlGpuRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        return device_ != nullptr ? UINT64_C(256) : 0;
     }
 
     bool SdlGpuRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
