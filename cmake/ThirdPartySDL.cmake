@@ -22,6 +22,21 @@ endif()
 #   rm -rf <the exact CNA_SDL_PREBUILT_ROOT reported by CMake>
 include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 
+# Upstream SDL fixes carried on top of the vendored revision (third_party/SDL, pinned at
+# cbe3fbe9f367340dcd924de29c225c9f4ffea1f5), applied in this order to a staged copy of the source --
+# never to third_party/SDL itself. Each file is the upstream commit verbatim (`git format-patch`
+# output, named after the commit it is), so it can be dropped the day the pin moves past it.
+#
+#  f286e420afd3ccb0dedc7ec77eb09d4bd2e5e102  GPU: Refactor Vulkan barriers to fix defrag segfault
+#      The Vulkan defragmenter barriers the replacement texture before it has a container, and the
+#      barrier helper reads container->header.info.type: a null dereference on the first
+#      defragmentation of any texture allocation (plans/plan_sdlgpu_modern_graphics.md SMG-0034).
+#  86296ac8f01597076979630667472a846b04ce46  GPU: Set missing fields on Vulkan swapchain texture
+#      The upstream follow-up: swapchain textures are not made by CreateTexture, so without it the
+#      fields the refactor added are uninitialised on them.
+set(CNA_SDL3_PATCHES
+    "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch"
+    "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0002-vulkan-swapchain-barrier-fields-86296ac8.patch")
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
@@ -306,6 +321,7 @@ function(cna_configure_vendored_sdl)
         LIBRARY  "${_sdl3_lib}"
         NAME     SDL3
         SOURCE   "${_tp}/SDL"
+        PATCHES  ${CNA_SDL3_PATCHES}
         BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL/build"
         CMAKE_ARGS
             -DSDL_SHARED=${_sdl_shared}
