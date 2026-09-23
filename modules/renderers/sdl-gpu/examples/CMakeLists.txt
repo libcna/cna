@@ -129,6 +129,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_StorageBufferLifetime PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-;\\[FAIL\\]")
 
+    # SMG-0038: forces SDL_gpu's Vulkan defragmenter over a texture allocation, three times, and
+    # reads the surviving textures back. The vendored SDL crashed here before its upstream fix.
+    cna_sdlgpu_test(cna_test_sdlgpu_texture_defragment sdlgpu_texture_defragment_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_TextureDefragment
+        COMMAND cna_test_sdlgpu_texture_defragment
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_TextureDefragment PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-;\\[FAIL\\]")
+
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
         target_compile_definitions(cna_test_sdlgpu_smoke PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)

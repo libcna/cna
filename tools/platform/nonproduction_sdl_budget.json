@@ -501,6 +501,10 @@
       "category": "renderer-integration-executable",
       "max_references": 1
     },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_texture_defragment_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
     "modules/renderers/sdl-gpu/examples/sdlgpu_texturecube_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 2
