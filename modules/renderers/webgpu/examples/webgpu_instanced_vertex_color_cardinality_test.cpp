@@ -295,10 +295,19 @@ namespace
             Check("four draws in one cycle still cost exactly 1 pass", alternating.passes == 1);
             Check("four draws in one cycle still cost exactly 1 submit", alternating.submits == 1);
 
+            // plans/plan_street_webgpu.md STREETW-0004: this leg's subject is that a DIFFERENT
+            // declaration gets a pipeline of its own rather than sharing one, and it still does --
+            // but it is no longer an Instanced3D pipeline. The stride-24 record names a texture
+            // coordinate, so the instanced route now hands it to the ColoredTextured3D family, the
+            // same family the ordinary route has always given it; Instanced3D keeps the
+            // position-only and position+colour shapes it exists for. Counted natively, because
+            // that is the count that does not depend on which family owns the draw.
             const Cost stride24 = measure("1 draw, stride 24 (cold)",
                                           [&] { cycle(vb24, 1, true, false); });
-            Check("a stride-24 declaration builds its OWN Instanced3D variant",
-                  stride24.instancedPipelines == 1);
+            Check("a stride-24 declaration builds its OWN pipeline",
+                  stride24.nativePipelines == 1);
+            Check("a stride-24 declaration is NOT drawn by the position-only Instanced3D family",
+                  stride24.instancedPipelines == 0);
 
             const Cost repeat = measure("repeat every sequence above", [&] {
                 cycle(vb16, 1, false, false);
@@ -313,8 +322,10 @@ namespace
             Check("repeating four cycles costs exactly four passes", repeat.passes == 4);
             Check("repeating four cycles costs exactly four submits", repeat.submits == 4);
 
-            Check("the whole run built exactly 2 Instanced3D variants",
-                  renderer.GetInstancedPipelineCacheSizeEXT() == 2);
+            // STREETW-0004: one, not two -- the stride-16 shape above. The stride-24 draw's
+            // pipeline lives in the ColoredTextured3D cache now, for the reason that leg states.
+            Check("the whole run built exactly 1 Instanced3D variant",
+                  renderer.GetInstancedPipelineCacheSizeEXT() == 1);
             Check("WebGPU validation stayed silent across the whole matrix",
                   renderer.GetUncapturedErrorCountEXT() == 0);
 

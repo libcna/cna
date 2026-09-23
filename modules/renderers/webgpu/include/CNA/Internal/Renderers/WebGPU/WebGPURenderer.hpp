@@ -1729,7 +1729,9 @@ namespace CNA::Internal::Renderers::WebGPU
         void DispatchStockDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount,
-                                  const GpuDrawParams& params, const char* route);
+                                  const GpuDrawParams& params, const char* route,
+                                  int instanceCount = 1,
+                                  const GpuVertexStreamBinding* instanceStream = nullptr);
         void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
@@ -3227,6 +3229,56 @@ namespace CNA::Internal::Renderers::WebGPU
         void BindExtraVertexStreamsEXT(WGPURenderPassEncoder pass, const char* label,
                                        const std::vector<CapturedVertexStreamEXT>& extra);
 
+        /**
+         * @brief plans/plan_street_webgpu.md STREETW-0004: one stock draw's per-instance world
+         *        matrices, already materialized to one 64-byte record per instance.
+         *
+         * Every stock family that can be drawn instanced carries one of these, so the capture, the
+         * native binding and the pipeline's extra vertex buffer are written once rather than eight
+         * times. `enabled` is its own field rather than `!records.empty()`, because it also selects
+         * the family's instanced shader module.
+         */
+        struct WebGPUInstanceStreamEXT
+        {
+            bool enabled = false;
+            std::uint32_t count = 1;
+            std::vector<std::uint8_t> records;
+        };
+
+        /// STREETW-0004: bytes one materialized per-instance world matrix occupies -- four
+        /// `Float32x4` columns, the layout every renderer's instanced path reads.
+        static constexpr std::size_t kInstanceRecordBytesEXT = 64u;
+
+        /**
+         * @brief STREETW-0004: materializes @p stream's records for @p instanceCount instances.
+         *
+         * WebGPU's Instance step mode has an implicit divisor of one and wgpu-native v29.0.1.1
+         * offers no step rate, so XNA's `InstanceFrequency` is honoured by repetition: instance i
+         * reads source record `VertexOffset + i / frequency`. Identical in intent to
+         * `CaptureStockVertexStreamsEXT`'s own per-instance arm.
+         *
+         * @param stream The draw's per-instance binding; null leaves @p out disabled.
+         * @param instanceCount Instances the draw will issue.
+         * @param familyName Family named in the refusal when the stream is not four Vector4 columns.
+         * @param out Receives the materialized records.
+         * @throws System::NotSupportedException If the stream is not the world-matrix shape.
+         */
+        void CaptureInstanceStreamEXT(const GpuVertexStreamBinding* stream, int instanceCount,
+                                      const char* familyName, WebGPUInstanceStreamEXT& out) const;
+
+        /**
+         * @brief STREETW-0004: uploads @p state and binds it at @p slot for the draw about to
+         *        issue.
+         *
+         * @param pass The open render pass.
+         * @param state The captured per-instance records; a disabled one binds nothing.
+         * @param slot Native vertex-buffer slot to bind at -- the one past the draw's own streams.
+         * @return The transient buffer to release after submission, or null when nothing was bound.
+         */
+        [[nodiscard]] WGPUBuffer BindInstanceStreamEXT(WGPURenderPassEncoder pass,
+                                                       const WebGPUInstanceStreamEXT& state,
+                                                       std::uint32_t slot);
+
         /// WEBGPU-155: the assembled native vertex state for one resolved layout. Two buffer slots:
         /// slot 0 is the draw's own vertex record, slot 1 the zero-stride neutral record that
         /// supplies any semantic the declaration does not name.
@@ -3244,11 +3296,49 @@ namespace CNA::Internal::Renderers::WebGPU
                        CNA::Internal::Graphics::kMaxStockVertexAttributes> recordAttributes{};
             std::array<WGPUVertexAttribute,
                        CNA::Internal::Graphics::kMaxStockVertexAttributes> neutralAttributes{};
-            /// One per resolved stream, plus one for the neutral record when the draw needs it.
+            /// STREETW-0004: the four world-matrix columns, when this draw is instanced.
+            std::array<WGPUVertexAttribute, 4> instanceAttributes{};
+            /// One per resolved stream, plus one for the neutral record when the draw needs it,
+            /// plus one for STREETW-0004's per-instance stream.
             std::array<WGPUVertexBufferLayout,
-                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 1> buffers{};
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 2> buffers{};
             std::size_t bufferCount = 0;
         };
+
+        /**
+         * @brief STREETW-0004: appends the per-instance world-matrix buffer to @p state.
+         *
+         * Four `Float32x4` columns at locations 12-15 -- the numbering `pbr3d.vert.glsl`'s
+         * `CNA_INSTANCED` variant established and every instanced stock WGSL here reuses, clear of
+         * the widest stock record's own inputs. The stride is this renderer's materialized 64
+         * rather than the caller's, so `InstanceFrequency` never reaches a native layout.
+         *
+         * The neutral record is fixed up here as well, and it has to be: it steps PER INSTANCE
+         * with exactly one record, which serves an ordinary draw's single instance but limits an
+         * instanced draw to one. A zero stride under vertex step reads that same record for every
+         * vertex of every instance, which is the "one value for the whole draw" the neutral record
+         * means in the first place.
+         *
+         * @param state The already-built vertex state to extend.
+         * @param layout The layout it was built from, which says where the neutral record sits.
+         * @return The native slot the instance buffer must be bound at.
+         */
+        static std::uint32_t AppendInstanceBufferLayoutEXT(
+            StockVertexStateEXT& state,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
+
+        /**
+         * @brief STREETW-0004: the native slot a stock family's per-instance stream binds at.
+         *
+         * The slot after the draw's own per-vertex streams and its neutral record -- the same
+         * number `AppendInstanceBufferLayoutEXT` gave the pipeline, derived from the same layout
+         * rather than remembered, so the two cannot drift.
+         *
+         * @param layout The draw's resolved vertex layout.
+         * @return The vertex-buffer slot to bind the instance records at.
+         */
+        [[nodiscard]] static std::uint32_t StockInstanceSlotEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
 
 
         /**
@@ -4105,6 +4195,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -4186,7 +4279,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                bool depthTest, bool depthWrite,
@@ -4195,20 +4289,31 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-                               StockVertexShapeEXT shape);
+                               StockVertexShapeEXT shape,
+                               int instanceCount = 1,
+                               const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueTexturedDraw(WGPURenderPassEncoder pass, const TexturedDrawCommand& command,
                               ReplayState& state);
 
         WGPUShaderModule texturedShader_ = nullptr;
         WGPUShaderModule coloredTexturedShader_ = nullptr;
+        /// STREETW-0004: the instanced twins, whose vertex input declares the four world-matrix
+        /// columns at locations 12-15.
+        WGPUShaderModule texturedInstancedShader_ = nullptr;
+        WGPUShaderModule coloredTexturedInstancedShader_ = nullptr;
         WGPUBindGroupLayout texturedBindGroupLayout_ = nullptr;   ///< group 1: sampler + texture
         WGPUPipelineLayout texturedPipelineLayout_ = nullptr;     ///< group 0 (UBO) + group 1 (texture); shared by textured3d and colored_textured3d
         std::unordered_map<std::uint64_t, WGPURenderPipeline> texturedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> coloredTexturedPipelines_;
+        /// STREETW-0004: caches of their own -- the instanced variants differ in shader MODULE and
+        /// vertex-buffer COUNT, neither of which the pipeline key expresses.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> texturedInstancedPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> coloredTexturedInstancedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
 
         // Per-draw vertex/uniform/index buffers and bind groups are transient (created fresh
@@ -4255,6 +4360,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
@@ -4331,7 +4439,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
         /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
         /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
@@ -4346,24 +4455,35 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-                                  StockVertexShapeEXT shape);
+                                  StockVertexShapeEXT shape,
+                               int instanceCount = 1,
+                               const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueLitTexturedDraw(WGPURenderPassEncoder pass, const LitTexturedDrawCommand& command,
                               ReplayState& state);
 
         WGPUShaderModule litTexturedShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule litTexturedInstancedShader_ = nullptr;
         WGPUBindGroupLayout litBindGroupLayout_ = nullptr;   ///< group 0: primary UBO (binding 0) + LitLightParams UBO (binding 1)
         WGPUPipelineLayout litPipelineLayout_ = nullptr;     ///< group 0 (lit UBOs) + group 1 (texture, texturedBindGroupLayout_ reused)
         std::unordered_map<std::uint64_t, WGPURenderPipeline> litTexturedPipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> litTexturedInstancedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
         /// Task 1105: real per-vertex-lit sibling shader module + its own pipeline cache, keyed
         /// identically to litTexturedPipelines_ above. Shares litBindGroupLayout_/litPipelineLayout_
         /// with the per-pixel-lit shader (same UBO/binding shape).
         WGPUShaderModule litTexturedVertexLitShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule litTexturedVertexLitInstancedShader_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> litTexturedVertexLitPipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> litTexturedVertexLitInstancedPipelines_;
 
         // WEBGPU-23/34/72: alpha_test3d.wgsl -- AlphaTestEffect's per-pixel alpha discard, matching
         // VulkanRenderer's alpha_test3d.{vert,frag}.glsl / alpha_test_colored3d.vert.glsl.
@@ -4378,6 +4498,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -4448,18 +4571,29 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-                                StockVertexShapeEXT shape);
+                                StockVertexShapeEXT shape,
+                               int instanceCount = 1,
+                               const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueAlphaTestDraw(WGPURenderPassEncoder pass, const AlphaTestDrawCommand& command,
                               ReplayState& state);
 
-        WGPUShaderModule alphaTestShader_ = nullptr;          ///< strides 20/32 (no vertex colour)
-        WGPUShaderModule alphaTestColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
+        WGPUShaderModule alphaTestShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule alphaTestInstancedShader_ = nullptr;          ///< strides 20/32 (no vertex colour)
+        WGPUShaderModule alphaTestColoredShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule alphaTestColoredInstancedShader_ = nullptr;   ///< stride 24 (vertex colour tint)
         std::unordered_map<std::uint64_t, WGPURenderPipeline> alphaTestPipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> alphaTestInstancedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> alphaTestColoredPipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> alphaTestColoredInstancedPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
 
         // WEBGPU-24: dual_texture3d.wgsl -- DualTextureEffect (two texture layers sampled at the
@@ -4476,6 +4610,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -4560,20 +4697,31 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-                                  StockVertexShapeEXT shape);
+                                  StockVertexShapeEXT shape,
+                               int instanceCount = 1,
+                               const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueDualTextureDraw(WGPURenderPassEncoder pass, const DualTextureDrawCommand& command,
                               ReplayState& state);
 
-        WGPUShaderModule dualTextureShader_ = nullptr;          ///< stride 20 (no vertex colour)
-        WGPUShaderModule dualTextureColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
+        WGPUShaderModule dualTextureShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule dualTextureInstancedShader_ = nullptr;          ///< stride 20 (no vertex colour)
+        WGPUShaderModule dualTextureColoredShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule dualTextureColoredInstancedShader_ = nullptr;   ///< stride 24 (vertex colour tint)
         WGPUBindGroupLayout dualTextureBindGroupLayout_ = nullptr;  ///< group 1: sampler0 + texture0 + texture1 + sampler1
         WGPUPipelineLayout dualTexturePipelineLayout_ = nullptr;    ///< group 0 (UBO, coloredBindGroupLayout_) + group 1
         std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTexturePipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTextureInstancedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTextureColoredPipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTextureColoredInstancedPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         // WEBGPU-25/36/74: env_map3d.wgsl -- EnvironmentMapEffect's cube-map reflection shader,
@@ -4597,6 +4745,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -4689,19 +4840,26 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    int cullMode, bool wireframe,
                                                    float depthBias, float slopeScaleDepthBias,
                                                        const StencilKeyParams& stencil,
-                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                       bool instanced = false);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-                             StockVertexShapeEXT shape);
+                             StockVertexShapeEXT shape,
+                               int instanceCount = 1,
+                               const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueEnvMapDraw(WGPURenderPassEncoder pass, const EnvMapDrawCommand& command,
                               ReplayState& state);
 
         WGPUShaderModule envMapShader_ = nullptr;
+        /// STREETW-0004: its instanced twin.
+        WGPUShaderModule envMapInstancedShader_ = nullptr;
         WGPUBindGroupLayout envMapBindGroupLayout_ = nullptr;         ///< group 0: Transform UBO (binding 0) + EnvMapParams UBO (binding 1)
         WGPUBindGroupLayout envMapTextureBindGroupLayout_ = nullptr; ///< group 1: sampler0 + texture_2d + texture_cube + sampler1
         WGPUPipelineLayout envMapPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> envMapPipelines_;
+        /// STREETW-0004: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> envMapInstancedPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
 
         // WEBGPU-27/38/68: instanced3d.wgsl -- a genuinely SECOND vertex buffer binding
@@ -4831,15 +4989,9 @@ namespace CNA::Internal::Renderers::WebGPU
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
-            /// plans/plan_street_webgpu.md STREETW-0001: the per-instance world matrices, already
-            /// materialized to one 64-byte record per instance (InstanceFrequency applied). Empty
-            /// for an ordinary draw, which is what `instanced` below reports.
-            std::vector<std::uint8_t> instanceData;
-            /// STREETW-0001: whether this draw binds the per-instance stream above. Its own field
-            /// rather than `!instanceData.empty()`, because it also selects the shader module.
-            bool instanced = false;
-            /// STREETW-0001: instances to draw; 1 for every ordinary draw.
-            std::uint32_t instanceCount = 1;
+            /// plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// plans/plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
             bool colored = false;
             bool indexed = false;

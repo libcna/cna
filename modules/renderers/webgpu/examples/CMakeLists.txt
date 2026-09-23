@@ -351,6 +351,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_InstancedPbr3D COMMAND cna_test_webgpu_instanced_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_street_webgpu.md STREETW-0004: and the same for every OTHER stock family --
+    # textured, lit, alpha-test, dual-texture and env-map instanced draws all fell through to
+    # instanced3d.wgsl too.
+    cna_webgpu_test(cna_test_webgpu_instanced_stock_families
+                    webgpu_instanced_stock_families_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_InstancedStockFamilies
+        COMMAND cna_test_webgpu_instanced_stock_families
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # GLTF-213: exact mid-grey sRGB transfer and linear base+emissive composition, repeated on
     # both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_srgb_transfer

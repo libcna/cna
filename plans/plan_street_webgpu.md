@@ -36,6 +36,7 @@ CNA_GRAPHICS_RENDERER=WEBGPU $R --exec ./build/bin/cna-street --no-audio --no-ov
 | STREETW-0001 | WebGPU: every instanced draw took the position-only `instanced3d` program, whatever effect was applied | ✅ |
 | STREETW-0002 | cna-street: the atmospheric sky was GLSL or SPIR-V only, so a WGSL renderer drew no sky | ✅ |
 | STREETW-0003 | WebGPU: the whole frame sat half a pixel off the other renderers' — XNA's pixel-centre convention was never applied | ✅ |
+| STREETW-0004 | WebGPU: every OTHER stock family, instanced — textured, lit, alpha-test, dual-texture, env-map | ✅ |
 
 ---
 
@@ -63,11 +64,11 @@ family, each vertex shader compiled a second time with `CNA_INSTANCED`.
 (`VULKAN-219`): the per-instance matrix applies **inside** the effect's World, which `u.mvp` and
 `lp.world` already carry.
 
-* `webgpu_shaders.hpp`'s `kPbr` gained three instance markers beside its existing colour ones, and
-  its vertex stage now reads `localPos`, `instancedWorld` and `normalMatrix` — which the
-  non-instanced expansion defines as exactly the expressions that were written there before.
-* `ExpandPbrVertexColourWgslEXT` expands them, so one marked source still produces every variant.
-  Four modules rather than two: WGSL rejects a vertex input with no matching attribute, so a shader
+* `kPbr` gained instance markers beside its existing colour ones, expanded by
+  `ExpandPbrVertexColourWgslEXT`. **`STREETW-0004` replaced that with the general rewrite** every
+  family now shares, and `kPbr` went back to being byte-identical to its pre-task text; the
+  description here is kept because it is what this commit did.
+* Four modules rather than two: WGSL rejects a vertex input with no matching attribute, so a shader
   that declares the instance columns cannot also serve a draw that binds none.
 * The four world-matrix columns are `Float32x4` at locations 12–15, the numbering
   `pbr3d.vert.glsl` already uses, and the instance records are materialized at queue time the way
@@ -81,7 +82,8 @@ family, each vertex shader compiled a second time with `CNA_INSTANCED`.
 * An instanced `SkinnedPbrEffect` draw is **refused by name** rather than silently rendered by the
   wrong program. There is no instanced skinned WGSL variant; the street does not need one (its
   crowd is drawn per person), and a named refusal is this renderer's own established answer for a
-  route it does not cover.
+  route it does not cover. `STREETW-0004` widened that refusal to `SkinnedEffect` and left it as
+  the one gap between this renderer's instanced set and Vulkan's.
 
 **Test.** `WebGPU_InstancedPbr3D` (`modules/renderers/webgpu/examples/webgpu_instanced_pbr3d_test.cpp`),
 5/5 on the real GPU through the private compositor. It draws through the ordinary XNA surface —
@@ -213,3 +215,75 @@ is interior. This is the same correction `WebGpuWireFrameContract` had already m
 for the same reason ("the oracle's probe is the shared TRIANGLE's centroid, and asserting it about a
 quad measures the quad's diagonal rather than its fill"); this example had kept the centre. The
 Solid control and the recovery check moved with it, so the leg is still a differential.
+
+---
+
+## STREETW-0004 — the rest of the stock families, instanced
+
+`STREETW-0001` gave `PbrEffect` its family back because that is what cna-street draws. The defect
+was never PBR's: `DrawInstancedPrimitivesEx` built an `InstancedDrawCommand` for **any** stock draw
+that carried a per-instance stream, whatever effect was applied, so a textured `BasicEffect`, a lit
+one, an `AlphaTestEffect`, a `DualTextureEffect` and an `EnvironmentMapEffect` were all rendered by
+`instanced3d.wgsl` — position, an optional COLOR0, and `u.diffuseColor` as the output. Vulkan had
+closed the same hole family by family in `VULKAN-222`…`VULKAN-232`.
+
+**The cascade is not a second copy.** The instanced route now asks `SelectStockVertexShapeEXT` —
+the *same* function the ordinary route asks — and hands the draw to `DispatchStockDrawEXT` with its
+instance stream. An instanced draw and a non-instanced draw of the same buffer and effect therefore
+cannot land in different families, which is the property Vulkan's own instanced cascade was written
+to have and had to restate by hand. Two shapes stay where they were: `Colored` is what this
+renderer's `instanced3d` family exists for (`WEBGPU-27`), and a stride-derived draw that is neither
+PBR nor skinned still falls through to it.
+
+**One rewrite, not fourteen copies.** `MakeInstancedStockWgslEXT` is the WGSL counterpart of the
+`CNA_INSTANCED` define that `compile_shaders.py` compiles every Vulkan stock source a second time
+with. WGSL has no preprocessor, so the rewrite is a checked text transformation in the renderer:
+it inserts the four world-matrix columns at locations 12–15, adds the stage input, moves the
+object-space position through the instance matrix at the one place each family derives it — which
+carries the fog term and the world position with it, because they read that same local — composes
+the instance's inverse-transpose into the CPU-computed normal matrix, and folds it into the tangent
+basis where a family has one. Every step is checked: a family whose vertex stage does not have the
+shape it rewrites throws by name rather than compiling to a shader that ignores its instances.
+`STREETW-0001`'s bespoke PBR markers were removed in favour of it, which puts `kPbr` back to being
+**byte-identical to its pre-task text**.
+
+The shared parts are shared: `WebGPUInstanceStreamEXT` (the materialized records),
+`CaptureInstanceStreamEXT` (`InstanceFrequency` honoured by repetition, as
+`CaptureStockVertexStreamsEXT` does it), `BindInstanceStreamEXT`, `AppendInstanceBufferLayoutEXT`
+and `StockInstanceSlotEXT`, which derives the native slot from the layout rather than remembering
+it so the pipeline and the binding cannot drift.
+
+**One bug this found in existing code.** `WEBGPU-155`'s neutral record — the (0,0,0,1) any stock
+input a declaration does not name reads — is bound with a **per-instance step and exactly one
+record**, deliberately, because "every stock draw on this route submits exactly one instance". That
+stopped being true: wgpu refuses the draw with *"Instance 3 extends beyond limit 1 imposed by the
+buffer in slot 1"*. An instanced draw now binds it at a zero stride under vertex step, which reads
+record 0 for every vertex of every instance — the same "one value for the whole draw" the record
+exists to supply.
+
+**Skinned is refused, by name.** An instanced `SkinnedEffect` or `SkinnedPbrEffect` draw throws
+rather than rendering: those families are stride-derived, have five shader variants between them,
+and share one bone palette across every instance, which is a shape no caller here has asked for.
+Vulkan does implement it (`VULKAN-231`/`VULKAN-232`); this is a named refusal on a route, not a
+silent wrong result, and it is the one gap left between the two renderers' instanced sets.
+
+**Test.** `WebGPU_InstancedStockFamilies`
+(`modules/renderers/webgpu/examples/webgpu_instanced_stock_families_test.cpp`), 10/10 on the real
+GPU. Each family draws three instances of a small quad through the ordinary XNA surface with a RED
+texture and a WHITE `DiffuseColor`, and reads the three instance centres plus one pixel away from
+them: red at three distinct positions is a result the position-only program cannot produce, and it
+proves the routing and the per-instance transform in one reading.
+
+**Measured.** `ctest -L WebGPU`: **140/148**, the same 8 failures as before this row and as the
+unmodified branch — nothing broken, and the 148th test is this row's own. cna-street's 18-viewpoint
+capture is unchanged to three decimal places (viewpoint 13: 1.734 % against 1.733 % before), which
+is the regression check that matters for `STREETW-0001`'s own path after it was rebuilt on the
+shared machinery.
+
+**One test expectation moved, and it is the fix rather than a weakening.**
+`WebGPU_InstancedVertexColor_Cardinality` asserted that a stride-24 (position + colour + UV)
+instanced draw "builds its OWN Instanced3D variant". It no longer builds one: that record names a
+texture coordinate, so the instanced route hands it to `ColoredTextured3D` — the family the
+ordinary route has always given it. The leg's subject, that a different declaration gets a pipeline
+of its own rather than sharing one, is now counted natively, which is the count that does not
+depend on which family owns the draw.

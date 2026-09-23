@@ -4955,6 +4955,96 @@ namespace CNA::Internal::Renderers::WebGPU
         return resolved;
     }
 
+    void WebGPURenderer::CaptureInstanceStreamEXT(const GpuVertexStreamBinding* stream,
+                                                  const int instanceCount, const char* familyName,
+                                                  WebGPUInstanceStreamEXT& out) const
+    {
+        out = WebGPUInstanceStreamEXT{};
+        if (stream == nullptr) return;
+        if (stream->buffer == nullptr ||
+            static_cast<std::size_t>(stream->strideInBytes) != kInstanceRecordBytesEXT)
+        {
+            throw System::NotSupportedException(
+                std::string("CNA WebGPU: an instanced ") + familyName +
+                " draw needs one per-instance stream of four Vector4 world-matrix columns "
+                "(stride 64); this draw binds stride " + std::to_string(stream->strideInBytes) +
+                " at slot " + std::to_string(stream->slot) + '.');
+        }
+
+        const int instances = std::max(1, instanceCount);
+        const int frequency = std::max(1, stream->instanceFrequency);
+        const std::vector<std::uint8_t>& shadow =
+            static_cast<const WebGPUVertexBufferRenderer&>(*stream->buffer).ShadowData();
+        const std::size_t base =
+            static_cast<std::size_t>(std::max(0, stream->vertexOffset)) * kInstanceRecordBytesEXT;
+        out.records.assign(static_cast<std::size_t>(instances) * kInstanceRecordBytesEXT, 0u);
+        for (int instance = 0; instance < instances; ++instance)
+        {
+            const std::size_t sourceOffset =
+                base + static_cast<std::size_t>(instance / frequency) * kInstanceRecordBytesEXT;
+            if (sourceOffset + kInstanceRecordBytesEXT > shadow.size()) break;
+            std::memcpy(out.records.data() +
+                            static_cast<std::size_t>(instance) * kInstanceRecordBytesEXT,
+                        shadow.data() + sourceOffset, kInstanceRecordBytesEXT);
+        }
+        out.enabled = true;
+        out.count = static_cast<std::uint32_t>(instances);
+    }
+
+    WGPUBuffer WebGPURenderer::BindInstanceStreamEXT(WGPURenderPassEncoder pass,
+                                                     const WebGPUInstanceStreamEXT& state,
+                                                     const std::uint32_t slot)
+    {
+        if (!state.enabled || state.records.empty()) return nullptr;
+        WGPUBufferDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Instance Stream");
+        descriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        descriptor.size = Align4(state.records.size());
+        WGPUBuffer buffer = AcquireTransientBuffer(descriptor.usage, descriptor.size);
+        wgpuQueueWriteBuffer(queue_, buffer, 0, state.records.data(), state.records.size());
+        wgpuRenderPassEncoderSetVertexBuffer(pass, slot, buffer, 0, state.records.size());
+        return buffer;
+    }
+
+    std::uint32_t WebGPURenderer::StockInstanceSlotEXT(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
+    {
+        const std::uint32_t streams =
+            static_cast<std::uint32_t>(layout.streamCount > 0 ? layout.streamCount : 1u);
+        return streams + (layout.usesNeutralRecord ? 1u : 0u);
+    }
+
+    std::uint32_t WebGPURenderer::AppendInstanceBufferLayoutEXT(
+        StockVertexStateEXT& state,
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
+    {
+        // WEBGPU-155 gave the neutral record a per-instance step and exactly one record, which is
+        // right for a draw of one instance and wrong for every other: wgpu then refuses the draw
+        // with "Instance N extends beyond limit 1 imposed by the buffer in slot k". A zero stride
+        // under vertex step reads record 0 for every vertex of every instance, which is the same
+        // "one value for the whole draw" the record exists to supply.
+        if (layout.usesNeutralRecord)
+        {
+            const std::size_t neutral = layout.streamCount > 0 ? layout.streamCount : 1u;
+            state.buffers[neutral].arrayStride = 0;
+            state.buffers[neutral].stepMode = WGPUVertexStepMode_Vertex;
+        }
+        for (std::uint32_t column = 0; column < 4u; ++column)
+        {
+            state.instanceAttributes[column].format = WGPUVertexFormat_Float32x4;
+            state.instanceAttributes[column].offset = column * 16u;
+            state.instanceAttributes[column].shaderLocation = 12u + column;
+        }
+        const std::uint32_t slot = static_cast<std::uint32_t>(state.bufferCount);
+        state.buffers[state.bufferCount] = WGPUVertexBufferLayout{};
+        state.buffers[state.bufferCount].arrayStride = kInstanceRecordBytesEXT;
+        state.buffers[state.bufferCount].stepMode = WGPUVertexStepMode_Instance;
+        state.buffers[state.bufferCount].attributeCount = state.instanceAttributes.size();
+        state.buffers[state.bufferCount].attributes = state.instanceAttributes.data();
+        ++state.bufferCount;
+        return slot;
+    }
+
     void WebGPURenderer::BuildStockVertexStateEXT(
         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
         StockVertexStateEXT& out)
@@ -5300,7 +5390,212 @@ namespace CNA::Internal::Renderers::WebGPU
         texturedBindGroupLayout_ = nullptr;
         texturedShader_ = nullptr;
         coloredTexturedShader_ = nullptr;
+        // STREETW-0004: the instanced twins, on the same principle -- a pipeline cache nobody
+        // frees is exactly the leak this function exists to prevent.
+        for (auto* cache : {&texturedInstancedPipelines_, &coloredTexturedInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (texturedInstancedShader_ != nullptr) wgpuShaderModuleRelease(texturedInstancedShader_);
+        texturedInstancedShader_ = nullptr;
+        if (coloredTexturedInstancedShader_ != nullptr)
+            wgpuShaderModuleRelease(coloredTexturedInstancedShader_);
+        coloredTexturedInstancedShader_ = nullptr;
     }
+
+namespace
+{
+    /// plans/plan_street_webgpu.md STREETW-0004: which object-space position a stock family's
+    /// vertex stage hands to its transforms, and therefore where the per-instance matrix goes.
+    enum class InstancedWgslShapeEXT
+    {
+        /// The record's own position: `vec4f(input.position, 1.0)`.
+        Rigid,
+        /// The bone-skinned position: `skinMat * vec4f(input.position, 1.0)`. The instance applies
+        /// AFTER the skin, which is the composition EasyGL and Vulkan both use.
+        Skinned
+    };
+
+    /// STREETW-0004: the per-instance declarations every instanced stock module shares.
+    constexpr const char* kInstancedWgslPrologue = R"WGSL(
+struct CnaInstanceInput {
+    @location(12) col0: vec4f,
+    @location(13) col1: vec4f,
+    @location(14) col2: vec4f,
+    @location(15) col3: vec4f,
+};
+// A normal transforms by the inverse transpose, and that composes in order --
+// (W*I)^-T == W^-T * I^-T -- so the per-instance half multiplies the CPU-computed world half
+// rather than replacing it, and a non-uniformly scaled instance keeps its normals perpendicular.
+// WGSL has no inverse(), hence the adjugate.
+fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
+    let c0 = cross(m[1], m[2]);
+    let c1 = cross(m[2], m[0]);
+    let c2 = cross(m[0], m[1]);
+    let det = dot(m[0], c0);
+    // A singular instance matrix collapses the mesh anyway; the identity keeps the shader finite
+    // instead of propagating NaN into every lit pixel behind it.
+    if (abs(det) < 1e-12) {
+        return mat3x3f(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0));
+    }
+    return mat3x3f(c0, c1, c2) * (1.0 / det);
+}
+)WGSL";
+
+    /**
+     * @brief STREETW-0004: rewrites one stock family's WGSL into its instanced twin.
+     *
+     * Mechanical, and deliberately so: this is the WGSL counterpart of the `CNA_INSTANCED` define
+     * that `modules/renderers/vulkan/src/shaders/compile_shaders.py` compiles every Vulkan stock
+     * source a second time with, and it performs the same substitutions that define's macros do.
+     * WGSL has no preprocessor, so the rewrite happens here rather than in the source -- which
+     * also means the ordinary module stays the untouched original rather than becoming a variant
+     * that has to be kept in step.
+     *
+     * Every step is checked. A family whose vertex stage does not have the shape this rewrites
+     * throws by name, rather than compiling to a shader that silently ignores its instances.
+     *
+     * @param source The family's ordinary WGSL.
+     * @param shape Where this family's object-space position comes from.
+     * @param familyName Named in the diagnostics.
+     * @return The instanced WGSL.
+     * @throws std::runtime_error If the vertex stage does not have the expected shape.
+     */
+    std::string MakeInstancedStockWgslEXT(std::string source, const InstancedWgslShapeEXT shape,
+                                          const char* familyName)
+    {
+        const auto Require = [&familyName](const bool ok, const char* what) {
+            if (!ok)
+                throw std::runtime_error(std::string("CNA WebGPU: the ") + familyName +
+                                         " WGSL cannot be made instanced -- " + what);
+        };
+        const auto ReplaceOne = [&](const std::string& from, const std::string& to,
+                                    const char* what) {
+            const std::size_t at = source.find(from);
+            Require(at != std::string::npos, what);
+            source.replace(at, from.size(), to);
+        };
+
+        // 1. The per-instance declarations, ahead of the vertex entry point.
+        const std::size_t entry = source.find("@vertex fn vs_main(input: VertexInput)");
+        Require(entry != std::string::npos,
+                "it declares no `@vertex fn vs_main(input: VertexInput)`");
+        source.insert(entry, std::string(kInstancedWgslPrologue) + "\n");
+
+        // 2. The extra stage input, and the matrix it assembles.
+        ReplaceOne("@vertex fn vs_main(input: VertexInput) -> VertexOutput {\n"
+                   "    var output: VertexOutput;\n",
+                   "@vertex fn vs_main(input: VertexInput, cnaInstance: CnaInstanceInput)"
+                   " -> VertexOutput {\n"
+                   "    var output: VertexOutput;\n"
+                   "    let cnaInstanceMatrix = mat4x4f(cnaInstance.col0, cnaInstance.col1,\n"
+                   "                                    cnaInstance.col2, cnaInstance.col3);\n",
+                   "its vertex stage does not open with `var output: VertexOutput;`");
+
+        const std::size_t bodyAt = source.find("let cnaInstanceMatrix = mat4x4f");
+        const std::size_t bodyEnd = source.find("\n}", bodyAt);
+        Require(bodyAt != std::string::npos && bodyEnd != std::string::npos,
+                "its vertex stage body could not be delimited");
+        std::string body = source.substr(bodyAt, bodyEnd - bodyAt);
+
+        // 3. The position, at the one place the family derives it. Every later use -- the fog
+        //    term and the world position included -- reads that same local and so follows it.
+        if (shape == InstancedWgslShapeEXT::Skinned)
+        {
+            const std::string skinned = "let skinnedPos = skinMat * vec4f(input.position, 1.0);";
+            const std::size_t at = body.find(skinned);
+            Require(at != std::string::npos, "it declares no `skinnedPos` from `skinMat`");
+            body.replace(at, skinned.size(),
+                         "let skinnedPos = cnaInstanceMatrix * "
+                         "(skinMat * vec4f(input.position, 1.0));");
+        }
+        else
+        {
+            // The rigid families spell the object position inline, once per use, so the first
+            // use becomes a local and every occurrence points at it.
+            const std::string object = "vec4f(input.position, 1.0)";
+            Require(body.find(object) != std::string::npos,
+                    "its vertex stage never spells `vec4f(input.position, 1.0)`");
+            for (std::size_t at = body.find(object); at != std::string::npos;
+                 at = body.find(object, at))
+                body.replace(at, object.size(), "cnaObjectPos");
+            const std::size_t afterMatrix = body.find(";\n") + 2;
+            body.insert(afterMatrix, "    let cnaObjectPos = cnaInstanceMatrix * " + object + ";\n");
+        }
+
+        // 4. The normal basis, where the family has one. `normalMatrixCol*` is the CPU-computed
+        //    inverse transpose of World alone, so the instance's own half multiplies it.
+        for (const char* block : {"lp.normalMatrixCol", "ep.normalMatrixCol"})
+        {
+            const std::string matrix =
+                std::string("mat3x3f(") + block + "0.xyz, " + block + "1.xyz, " + block + "2.xyz)";
+            const std::size_t at = body.find(matrix);
+            if (at == std::string::npos) continue;
+            body.replace(at, matrix.size(),
+                         matrix + " * cnaInverseTranspose3(mat3x3f(cnaInstanceMatrix[0].xyz, "
+                                  "cnaInstanceMatrix[1].xyz, cnaInstanceMatrix[2].xyz))");
+        }
+
+        // 5. A tangent basis reads World as a 3x3 of its own rather than through the position, so
+        //    the instance has to reach it explicitly. Only the PBR families have one.
+        const std::string worldMat3 =
+            "mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz)";
+        const std::size_t worldAt = body.find(worldMat3);
+        if (worldAt != std::string::npos)
+        {
+            body.replace(worldAt, worldMat3.size(),
+                         "mat3x3f((lp.world * cnaInstanceMatrix)[0].xyz, "
+                         "(lp.world * cnaInstanceMatrix)[1].xyz, "
+                         "(lp.world * cnaInstanceMatrix)[2].xyz)");
+        }
+
+        source.replace(bodyAt, bodyEnd - bodyAt, body);
+        return source;
+    }
+
+    /**
+     * @brief STREETW-0004: creates one stock family's instanced shader module.
+     *
+     * A module of its own rather than a pipeline flag, for the reason GLTF-465 gives about the
+     * PBR colour variants: WGSL rejects a vertex input with no matching attribute, so a shader
+     * that declares the four instance columns cannot also serve a draw that binds none.
+     *
+     * @param device The live WebGPU device.
+     * @param label Debug label for the module.
+     * @param source The family's ordinary WGSL.
+     * @param shape Where this family's object-space position comes from.
+     * @param familyName Named in the diagnostics.
+     * @return The created module; never null.
+     * @throws std::runtime_error If the rewrite or the creation fails.
+     */
+    WGPUShaderModule CreateInstancedStockModuleEXT(WGPUDevice device, const char* label,
+                                                   const std::string& source,
+                                                   const InstancedWgslShapeEXT shape,
+                                                   const char* familyName,
+                                                   const char* appended = "")
+    {
+        // The rewrite runs on the family's OWN source and the shared block is appended after, so a
+        // helper block that happens to spell one of the rewritten patterns cannot be caught by it.
+        const std::string instanced =
+            MakeInstancedStockWgslEXT(source, shape, familyName) + appended;
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(instanced.c_str());
+        WGPUShaderModuleDescriptor descriptor{};
+        descriptor.label = StringView(label);
+        descriptor.nextInChain = &wgsl.chain;
+        WGPUShaderModule module = wgpuDeviceCreateShaderModule(device, &descriptor);
+        if (module == nullptr)
+            throw std::runtime_error(std::string("CNA WebGPU: failed to create the instanced ") +
+                                     familyName + " shader");
+        return module;
+    }
+
+}
 
     void WebGPURenderer::CreateTexturedResources()
     {
@@ -5359,6 +5654,14 @@ namespace CNA::Internal::Renderers::WebGPU
         coloredTexturedShaderDescriptor.label = StringView("CNA WebGPU ColoredTextured3D WGSL");
         coloredTexturedShaderDescriptor.nextInChain = &coloredTexturedWgsl.chain;
         coloredTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &coloredTexturedShaderDescriptor);
+
+        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins of both.
+        texturedInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU Textured3D Instanced WGSL", webgpu_shaders::kTextured,
+            InstancedWgslShapeEXT::Rigid, "Textured3D");
+        coloredTexturedInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU ColoredTextured3D Instanced WGSL", webgpu_shaders::kColoredTextured,
+            InstancedWgslShapeEXT::Rigid, "ColoredTextured3D");
         if (coloredTexturedShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create ColoredTextured3D shader");
     }
@@ -5371,7 +5674,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
@@ -5381,17 +5685,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
+        // STREETW-0004: a cache of its own; the key expresses neither the module nor the extra
+        // vertex buffer the instanced variant adds.
+        auto& cache = instanced ? texturedInstancedPipelines_ : texturedPipelines_;
+        if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU Textured3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU Textured3D Instanced Pipeline"
+                               : "CNA WebGPU Textured3D Pipeline";
         desc.layout = texturedPipelineLayout_;
-        desc.vertexModule = texturedShader_;
-        desc.fragmentModule = texturedShader_;
+        desc.vertexModule = instanced ? texturedInstancedShader_ : texturedShader_;
+        desc.fragmentModule = desc.vertexModule;
         desc.vertexBuffers = vertexState.buffers.data();
         desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
@@ -5406,7 +5715,7 @@ namespace CNA::Internal::Renderers::WebGPU
         desc.cullMode = cullMode;
         desc.stencil = stencil;
         WGPURenderPipeline created = Build3DPipelineEXT(desc);
-        texturedPipelines_[key] = created;
+        cache[key] = created;
         return created;
     }
 
@@ -5418,7 +5727,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
@@ -5428,17 +5738,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
+        // STREETW-0004: a cache of its own -- the key expresses neither the module nor
+        // the extra vertex buffer the instanced variant adds.
+        auto& cache = instanced ? coloredTexturedInstancedPipelines_ : coloredTexturedPipelines_;
+        if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU ColoredTextured3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU ColoredTextured3D Instanced Pipeline"
+                               : "CNA WebGPU ColoredTextured3D Pipeline";
         desc.layout = texturedPipelineLayout_;
-        desc.vertexModule = coloredTexturedShader_;
-        desc.fragmentModule = coloredTexturedShader_;
+        desc.vertexModule = instanced ? coloredTexturedInstancedShader_ : coloredTexturedShader_;
+        desc.fragmentModule = desc.vertexModule;
         desc.vertexBuffers = vertexState.buffers.data();
         desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
@@ -5453,7 +5768,7 @@ namespace CNA::Internal::Renderers::WebGPU
         desc.cullMode = cullMode;
         desc.stencil = stencil;
         WGPURenderPipeline created = Build3DPipelineEXT(desc);
-        coloredTexturedPipelines_[key] = created;
+        cache[key] = created;
         return created;
     }
 
@@ -5480,6 +5795,20 @@ namespace CNA::Internal::Renderers::WebGPU
         litPipelineLayout_ = nullptr;
         litBindGroupLayout_ = nullptr;
         litTexturedShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // principle -- a pipeline cache nobody frees is the leak this prevents.
+        for (auto* cache : {&litTexturedInstancedPipelines_, &litTexturedVertexLitInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (litTexturedInstancedShader_ != nullptr) wgpuShaderModuleRelease(litTexturedInstancedShader_);
+        litTexturedInstancedShader_ = nullptr;
+        if (litTexturedVertexLitInstancedShader_ != nullptr) wgpuShaderModuleRelease(litTexturedVertexLitInstancedShader_);
+        litTexturedVertexLitInstancedShader_ = nullptr;
     }
 
     void WebGPURenderer::CreateLitTexturedResources()
@@ -5508,6 +5837,10 @@ namespace CNA::Internal::Renderers::WebGPU
         shaderDescriptor.label = StringView("CNA WebGPU LitTextured3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         litTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        litTexturedInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU LitTextured3D Instanced WGSL", webgpu_shaders::kLitTextured,
+            InstancedWgslShapeEXT::Rigid, "LitTextured3D", webgpu_shaders::kShadowSampling);
 
         // Task 1105 (plans/plan_graphics.md Phase 80): real per-vertex-lit sibling -- identical
         // Blinn-Phong math to shaderSource above (FNA's Lighting.fxh ComputeLights()), moved from
@@ -5531,6 +5864,11 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexLitShaderDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexLit WGSL");
         vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
         litTexturedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        litTexturedVertexLitInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU LitTextured3D VertexLit Instanced WGSL",
+            webgpu_shaders::kLitTexturedVertexLit, InstancedWgslShapeEXT::Rigid,
+            "LitTextured3D VertexLit", webgpu_shaders::kShadowSampling);
 
         std::array<WGPUBindGroupLayoutEntry, 2> layoutEntries{};
         layoutEntries[0].binding = 0;
@@ -5570,7 +5908,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
@@ -5580,17 +5919,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
+        // STREETW-0004: a cache of its own -- the key expresses neither the module nor
+        // the extra vertex buffer the instanced variant adds.
+        auto& cache = instanced ? litTexturedInstancedPipelines_ : litTexturedPipelines_;
+        if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU LitTextured3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU LitTextured3D Instanced Pipeline"
+                               : "CNA WebGPU LitTextured3D Pipeline";
         desc.layout = litPipelineLayout_;
-        desc.vertexModule = litTexturedShader_;
-        desc.fragmentModule = litTexturedShader_;
+        desc.vertexModule = instanced ? litTexturedInstancedShader_ : litTexturedShader_;
+        desc.fragmentModule = desc.vertexModule;
         desc.vertexBuffers = vertexState.buffers.data();
         desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
@@ -5605,7 +5949,7 @@ namespace CNA::Internal::Renderers::WebGPU
         desc.cullMode = cullMode;
         desc.stencil = stencil;
         WGPURenderPipeline created = Build3DPipelineEXT(desc);
-        litTexturedPipelines_[key] = created;
+        cache[key] = created;
         return created;
     }
 
@@ -5616,7 +5960,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
@@ -5626,17 +5971,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
+        // STREETW-0004: a cache of its own -- the key expresses neither the module nor
+        // the extra vertex buffer the instanced variant adds.
+        auto& cache = instanced ? litTexturedVertexLitInstancedPipelines_ : litTexturedVertexLitPipelines_;
+        if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU LitTextured3D VertexLit Pipeline";
+        desc.label = instanced ? "CNA WebGPU LitTextured3D VertexLit Instanced Pipeline"
+                               : "CNA WebGPU LitTextured3D VertexLit Pipeline";
         desc.layout = litPipelineLayout_;
-        desc.vertexModule = litTexturedVertexLitShader_;
-        desc.fragmentModule = litTexturedVertexLitShader_;
+        desc.vertexModule = instanced ? litTexturedVertexLitInstancedShader_ : litTexturedVertexLitShader_;
+        desc.fragmentModule = desc.vertexModule;
         desc.vertexBuffers = vertexState.buffers.data();
         desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
@@ -5651,7 +6001,7 @@ namespace CNA::Internal::Renderers::WebGPU
         desc.cullMode = cullMode;
         desc.stencil = stencil;
         WGPURenderPipeline created = Build3DPipelineEXT(desc);
-        litTexturedVertexLitPipelines_[key] = created;
+        cache[key] = created;
         return created;
     }
 
@@ -5671,6 +6021,20 @@ namespace CNA::Internal::Renderers::WebGPU
         if (alphaTestColoredShader_ != nullptr) wgpuShaderModuleRelease(alphaTestColoredShader_);
         alphaTestShader_ = nullptr;
         alphaTestColoredShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // principle -- a pipeline cache nobody frees is the leak this prevents.
+        for (auto* cache : {&alphaTestInstancedPipelines_, &alphaTestColoredInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (alphaTestInstancedShader_ != nullptr) wgpuShaderModuleRelease(alphaTestInstancedShader_);
+        alphaTestInstancedShader_ = nullptr;
+        if (alphaTestColoredInstancedShader_ != nullptr) wgpuShaderModuleRelease(alphaTestColoredInstancedShader_);
+        alphaTestColoredInstancedShader_ = nullptr;
     }
 
     void WebGPURenderer::CreateAlphaTestResources()
@@ -5694,6 +6058,10 @@ namespace CNA::Internal::Renderers::WebGPU
         shaderDescriptor.label = StringView("CNA WebGPU AlphaTest3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         alphaTestShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        alphaTestInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU AlphaTest3D Instanced WGSL", webgpu_shaders::kAlphaTest,
+            InstancedWgslShapeEXT::Rigid, "AlphaTest3D");
         if (alphaTestShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create AlphaTest3D shader");
 
@@ -5709,6 +6077,10 @@ namespace CNA::Internal::Renderers::WebGPU
         coloredShaderDescriptor.label = StringView("CNA WebGPU AlphaTestColored3D WGSL");
         coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
         alphaTestColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        alphaTestColoredInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU AlphaTest3D Colored Instanced WGSL", webgpu_shaders::kAlphaTestColored,
+            InstancedWgslShapeEXT::Rigid, "AlphaTest3D Colored");
         if (alphaTestColoredShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create AlphaTestColored3D shader");
     }
@@ -5722,7 +6094,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-155: `colored` (a declaration question -- does it name COLOR0?) replaces the
         // former `stride == 24` test, and the three hand-written stride layouts below it are gone:
@@ -5736,16 +6109,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = colored ? alphaTestColoredPipelines_ : alphaTestPipelines_;
+        // STREETW-0004: the instanced variants keep caches of their own.
+        auto& cache = instanced ? (colored ? alphaTestColoredInstancedPipelines_ : alphaTestInstancedPipelines_)
+                                : (colored ? alphaTestColoredPipelines_ : alphaTestPipelines_);
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
-        WGPUShaderModule shaderModule = colored ? alphaTestColoredShader_ : alphaTestShader_;
+        WGPUShaderModule shaderModule =
+            instanced ? (colored ? alphaTestColoredInstancedShader_ : alphaTestInstancedShader_)
+                      : (colored ? alphaTestColoredShader_ : alphaTestShader_);
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU AlphaTest3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU AlphaTest3D Instanced Pipeline"
+                               : "CNA WebGPU AlphaTest3D Pipeline";
         desc.layout = texturedPipelineLayout_;
         desc.vertexModule = shaderModule;
         desc.fragmentModule = shaderModule;
@@ -5787,6 +6166,20 @@ namespace CNA::Internal::Renderers::WebGPU
         dualTextureBindGroupLayout_ = nullptr;
         dualTextureShader_ = nullptr;
         dualTextureColoredShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // principle -- a pipeline cache nobody frees is the leak this prevents.
+        for (auto* cache : {&dualTextureInstancedPipelines_, &dualTextureColoredInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (dualTextureInstancedShader_ != nullptr) wgpuShaderModuleRelease(dualTextureInstancedShader_);
+        dualTextureInstancedShader_ = nullptr;
+        if (dualTextureColoredInstancedShader_ != nullptr) wgpuShaderModuleRelease(dualTextureColoredInstancedShader_);
+        dualTextureColoredInstancedShader_ = nullptr;
     }
 
     void WebGPURenderer::CreateDualTextureResources()
@@ -5812,6 +6205,10 @@ namespace CNA::Internal::Renderers::WebGPU
         shaderDescriptor.label = StringView("CNA WebGPU DualTexture3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         dualTextureShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        dualTextureInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU DualTexture3D Instanced WGSL", webgpu_shaders::kDualTexture,
+            InstancedWgslShapeEXT::Rigid, "DualTexture3D");
         if (dualTextureShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create DualTexture3D shader");
 
@@ -5826,6 +6223,10 @@ namespace CNA::Internal::Renderers::WebGPU
         coloredShaderDescriptor.label = StringView("CNA WebGPU DualTextureColored3D WGSL");
         coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
         dualTextureColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        dualTextureColoredInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU DualTexture3D Colored Instanced WGSL", webgpu_shaders::kDualTextureColored,
+            InstancedWgslShapeEXT::Rigid, "DualTexture3D Colored");
         if (dualTextureColoredShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create DualTextureColored3D shader");
 
@@ -5875,7 +6276,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-159: the layout now carries TEXCOORD1 as well, which is what makes an independent
         // second UV set reach the shader instead of being a copy of the first. WEBGPU-155 replaced
@@ -5888,16 +6290,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = colored ? dualTextureColoredPipelines_ : dualTexturePipelines_;
+        // STREETW-0004: the instanced variants keep caches of their own.
+        auto& cache = instanced ? (colored ? dualTextureColoredInstancedPipelines_ : dualTextureInstancedPipelines_)
+                                : (colored ? dualTextureColoredPipelines_ : dualTexturePipelines_);
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
-        WGPUShaderModule shaderModule = colored ? dualTextureColoredShader_ : dualTextureShader_;
+        WGPUShaderModule shaderModule =
+            instanced ? (colored ? dualTextureColoredInstancedShader_ : dualTextureInstancedShader_)
+                      : (colored ? dualTextureColoredShader_ : dualTextureShader_);
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU DualTexture3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU DualTexture3D Instanced Pipeline"
+                               : "CNA WebGPU DualTexture3D Pipeline";
         desc.layout = dualTexturePipelineLayout_;
         desc.vertexModule = shaderModule;
         desc.fragmentModule = shaderModule;
@@ -5934,6 +6342,18 @@ namespace CNA::Internal::Renderers::WebGPU
         envMapBindGroupLayout_ = nullptr;
         envMapTextureBindGroupLayout_ = nullptr;
         envMapShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // principle -- a pipeline cache nobody frees is the leak this prevents.
+        for (auto* cache : {&envMapInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (envMapInstancedShader_ != nullptr) wgpuShaderModuleRelease(envMapInstancedShader_);
+        envMapInstancedShader_ = nullptr;
     }
 
     void WebGPURenderer::CreateEnvMapResources()
@@ -5958,6 +6378,10 @@ namespace CNA::Internal::Renderers::WebGPU
         shaderDescriptor.label = StringView("CNA WebGPU EnvMap3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         envMapShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        envMapInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU EnvMap3D Instanced WGSL", webgpu_shaders::kEnvMap,
+            InstancedWgslShapeEXT::Rigid, "EnvMap3D");
         if (envMapShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create EnvMap3D shader");
 
@@ -6024,7 +6448,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                int cullMode, bool wireframe,
                                                float depthBias, float slopeScaleDepthBias,
                                                     const StencilKeyParams& stencil,
-                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                    bool instanced)
     {
         // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
@@ -6034,17 +6459,22 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
+        // STREETW-0004: a cache of its own -- the key expresses neither the module nor
+        // the extra vertex buffer the instanced variant adds.
+        auto& cache = instanced ? envMapInstancedPipelines_ : envMapPipelines_;
+        if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
         StockVertexStateEXT vertexState;
         BuildStockVertexStateEXT(vertexLayout, vertexState);
+        if (instanced) AppendInstanceBufferLayoutEXT(vertexState, vertexLayout);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU EnvMap3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU EnvMap3D Instanced Pipeline"
+                               : "CNA WebGPU EnvMap3D Pipeline";
         desc.layout = envMapPipelineLayout_;
-        desc.vertexModule = envMapShader_;
-        desc.fragmentModule = envMapShader_;
+        desc.vertexModule = instanced ? envMapInstancedShader_ : envMapShader_;
+        desc.fragmentModule = desc.vertexModule;
         desc.vertexBuffers = vertexState.buffers.data();
         desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
@@ -6059,7 +6489,7 @@ namespace CNA::Internal::Renderers::WebGPU
         desc.cullMode = cullMode;
         desc.stencil = stencil;
         WGPURenderPipeline created = Build3DPipelineEXT(desc);
-        envMapPipelines_[key] = created;
+        cache[key] = created;
         return created;
     }
 
@@ -6067,13 +6497,18 @@ namespace CNA::Internal::Renderers::WebGPU
                                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                                 PrimitiveType primitive, int primitiveCount,
                                                 const GpuDrawParams& params,
-                                                StockVertexShapeEXT shape)
+                                                StockVertexShapeEXT shape,
+                                       int instanceCount,
+                                       const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // WEBGPU-155: reached because the declaration names Position, Normal and TEXCOORD0, at
         // whatever offsets and stride it puts them.
 
         EnvMapDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "EnvMapEffect",
+                                 command.instance);
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
         DrawVertexStreamsEXT streams;
         CollectPerVertexStreamsEXT(webgpuVb, &params, streams);
@@ -6262,7 +6697,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                               command.blend, command.blendParams,
                                                               command.cullMode, command.wireframe,
                                                               command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                              command.vertexLayout);
+                                                              command.vertexLayout,
+                                                              command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -6281,6 +6717,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
+        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer =
+            BindInstanceStreamEXT(pass, command.instance, StockInstanceSlotEXT(command.vertexLayout));
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -6288,14 +6730,14 @@ namespace CNA::Internal::Renderers::WebGPU
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -6303,6 +6745,7 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingBufferReleases_.push_back(transformBuffer);
         pendingBufferReleases_.push_back(paramsBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     void WebGPURenderer::DestroyInstancedResources()
@@ -12173,7 +12616,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                               const Matrix& world, const Matrix& view,
                                               const Matrix& projection,
                                               PrimitiveType primitive, int primitiveCount,
-                                              const GpuDrawParams& params, const char* route)
+                                              const GpuDrawParams& params, const char* route,
+                                              int instanceCount,
+                                              const GpuVertexStreamBinding* instanceStream)
     {
         // plans/plan_webgpu.md WEBGPU-155: ONE dispatch, shared by the indexed and non-indexed
         // entry points, and one decision inside it. What used to be a ladder of `stride == 16`,
@@ -12201,22 +12646,27 @@ namespace CNA::Internal::Renderers::WebGPU
         {
         case StockVertexShapeEXT::AlphaTest:
         case StockVertexShapeEXT::AlphaTestColored:
-            QueueAlphaTestDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            QueueAlphaTestDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                          shape, instanceCount, instanceStream);
             return;
         case StockVertexShapeEXT::DualTextured:
         case StockVertexShapeEXT::DualTexturedColored:
-            QueueDualTextureDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            QueueDualTextureDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                          shape, instanceCount, instanceStream);
             return;
         case StockVertexShapeEXT::EnvMapped:
-            QueueEnvMapDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            QueueEnvMapDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                          shape, instanceCount, instanceStream);
             return;
         case StockVertexShapeEXT::Lit:
         case StockVertexShapeEXT::LitVertexLit:
-            QueueLitTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            QueueLitTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                          shape, instanceCount, instanceStream);
             return;
         case StockVertexShapeEXT::Textured:
         case StockVertexShapeEXT::ColoredTextured:
-            QueueTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            QueueTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                          shape, instanceCount, instanceStream);
             return;
         case StockVertexShapeEXT::Colored:
             QueueColoredDraw(vb, ib, world, view, projection, primitive, primitiveCount, &params, shape);
@@ -12248,7 +12698,8 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         if (params.pbr && !params.skinned && (stride == 48 || stride == 60))
         {
-            QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                         instanceCount, instanceStream);
             return;
         }
         // WEBGPU-177: no stride clause. A skinned effect is a skinned DRAW whatever byte layout the
@@ -12370,24 +12821,42 @@ namespace CNA::Internal::Renderers::WebGPU
             return;
         }
 
-        // plans/plan_street_webgpu.md STREETW-0001: PbrEffect keeps its own family when the draw
-        // is instanced, exactly as VULKAN-232 gives it one there. Without this the draw fell
-        // through to the instanced3d family below -- position-only, unlit, untextured -- and every
-        // instanced PBR prop rendered as a flat silhouette in the effect's diffuse colour while
-        // the renderer reported success. It sits with the compiled- and custom-effect branches
-        // above because it is the same question: which program owns this draw.
-        if (params.pbr)
+        // plans/plan_street_webgpu.md STREETW-0001/0004: a stock effect keeps its OWN family when
+        // the draw is instanced -- it takes the ordinary family's programs and adds a per-instance
+        // binding, which is how VULKAN-222..232 put the same thing on the Vulkan renderer. Without
+        // this every instanced draw fell through to the instanced3d family below, which is
+        // position-only, unlit and untextured, and the renderer reported success while rendering a
+        // flat silhouette in the effect's diffuse colour.
+        //
+        // The cascade is NOT a second copy of the ordinary route's: `SelectStockVertexShapeEXT` is
+        // the same function the ordinary route asks, so an instanced draw and a non-instanced draw
+        // of the same buffer and effect cannot land in different families.
         {
-            if (params.skinned)
+            DrawVertexStreamsEXT shapeStreams;
+            CollectPerVertexStreamsEXT(static_cast<const WebGPUVertexBufferRenderer&>(vb), &params,
+                                       shapeStreams);
+            const StockVertexShapeEXT shape = SelectStockVertexShapeEXT(
+                shapeStreams.declarations.data(), shapeStreams.count,
+                static_cast<const WebGPUVertexBufferRenderer&>(vb).Stride(), params);
+            // Colored is the one shape this renderer's own instanced3d family exists for
+            // (WEBGPU-27), so it stays there; a stride-derived draw goes on unless it is PBR or
+            // skinned, whose families the dispatcher selects by effect state rather than shape.
+            const bool ownFamily =
+                shape != StockVertexShapeEXT::Colored &&
+                (shape != StockVertexShapeEXT::StrideDerived || params.pbr || params.skinned);
+            if (ownFamily)
             {
-                throw System::NotSupportedException(
-                    "CNA WebGPU: an instanced SkinnedPbrEffect draw has no instanced skinned "
-                    "program in this renderer; draw the instances separately, or use the "
-                    "non-skinned PbrEffect.");
+                if (params.skinned)
+                {
+                    throw System::NotSupportedException(
+                        "CNA WebGPU: an instanced SkinnedEffect or SkinnedPbrEffect draw has no "
+                        "instanced skinned program in this renderer; draw the instances "
+                        "separately, or use an unskinned effect.");
+                }
+                DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount,
+                                     params, "instanced", instanceCount, instanceStream);
+                return;
             }
-            QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params,
-                         instanceCount, instanceStream);
-            return;
         }
 
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
@@ -12675,7 +13144,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    command.blend, command.blendParams,
                                                    command.cullMode, command.wireframe,
                                                    command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                   command.vertexLayout)
+                                                   command.vertexLayout,
+                                                   command.instance.enabled)
             : GetOrCreatePipelineTextured3D(
                                             command.topology,
                                             RequiredStripIndexFormat(command),
@@ -12684,7 +13154,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                             command.blend, command.blendParams,
                                             command.cullMode, command.wireframe,
                                             command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                            command.vertexLayout);
+                                            command.vertexLayout,
+                                            command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -12703,6 +13174,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
+        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer =
+            BindInstanceStreamEXT(pass, command.instance, StockInstanceSlotEXT(command.vertexLayout));
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -12710,20 +13187,21 @@ namespace CNA::Internal::Renderers::WebGPU
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     void WebGPURenderer::IssueLitTexturedDraw(WGPURenderPassEncoder pass,
@@ -12799,7 +13277,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          command.blend, command.blendParams,
                                                          command.cullMode, command.wireframe,
                                                          command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                         command.vertexLayout)
+                                                         command.vertexLayout,
+                                                         command.instance.enabled)
             : GetOrCreatePipelineLitTextured3D(
                                                 command.topology,
                                                 RequiredStripIndexFormat(command),
@@ -12808,7 +13287,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                 command.blend, command.blendParams,
                                                 command.cullMode, command.wireframe,
                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                command.vertexLayout);
+                                                command.vertexLayout,
+                                                command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -12828,6 +13308,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
+        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer =
+            BindInstanceStreamEXT(pass, command.instance, StockInstanceSlotEXT(command.vertexLayout));
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -12835,14 +13321,14 @@ namespace CNA::Internal::Renderers::WebGPU
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -12852,13 +13338,16 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     void WebGPURenderer::QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount,
                                                       const GpuDrawParams& params,
-                                                      StockVertexShapeEXT shape)
+                                                      StockVertexShapeEXT shape,
+                                       int instanceCount,
+                                       const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // WEBGPU-155/156/157: no stride requirement. This family is reached because the
@@ -12869,6 +13358,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         LitTexturedDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "LitTexturedEffect",
+                                 command.instance);
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
         DrawVertexStreamsEXT streams;
         CollectPerVertexStreamsEXT(webgpuVb, &params, streams);
@@ -13024,7 +13516,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                  command.blend, command.blendParams,
                                                                  command.cullMode, command.wireframe,
                                                                  command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                                 command.vertexLayout);
+                                                                 command.vertexLayout,
+                                                                 command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -13043,6 +13536,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
+        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer =
+            BindInstanceStreamEXT(pass, command.instance, StockInstanceSlotEXT(command.vertexLayout));
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -13050,27 +13549,30 @@ namespace CNA::Internal::Renderers::WebGPU
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     void WebGPURenderer::QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount,
                                                     const GpuDrawParams& params,
-                                                    StockVertexShapeEXT shape)
+                                                    StockVertexShapeEXT shape,
+                                       int instanceCount,
+                                       const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // WEBGPU-155: no stride requirement -- this family is reached because the declaration
@@ -13080,6 +13582,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         AlphaTestDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "AlphaTestEffect",
+                                 command.instance);
         command.stride = stride;
         // WEBGPU-155: "does this vertex carry a colour" is the declaration's answer now, not the
         // stride's -- a padded Position+Colour+UV record is as coloured as a packed 24-byte one.
@@ -13249,7 +13754,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                    command.blend, command.blendParams,
                                                                    command.cullMode, command.wireframe,
                                                                    command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                                   command.vertexLayout);
+                                                                   command.vertexLayout,
+                                                                   command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -13268,6 +13774,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
+        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer =
+            BindInstanceStreamEXT(pass, command.instance, StockInstanceSlotEXT(command.vertexLayout));
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -13275,27 +13787,30 @@ namespace CNA::Internal::Renderers::WebGPU
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
         pendingBindGroupReleases_.push_back(texBindGroup);
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     void WebGPURenderer::QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount,
                                                       const GpuDrawParams& params,
-                                                      StockVertexShapeEXT shape)
+                                                      StockVertexShapeEXT shape,
+                                       int instanceCount,
+                                       const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // WEBGPU-155/159: no stride requirement -- the canonical XNA dual-texture vertex is
@@ -13305,6 +13820,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // samples instead.
 
         DualTextureDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "DualTextureEffect",
+                                 command.instance);
         command.hasVertexColor = (shape == StockVertexShapeEXT::DualTexturedColored);
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
         DrawVertexStreamsEXT streams;
@@ -13401,7 +13919,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params,
-                                                  StockVertexShapeEXT shape)
+                                                  StockVertexShapeEXT shape,
+                                       int instanceCount,
+                                       const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // WEBGPU-155: no stride requirement -- reached because the declaration names Position and
@@ -13411,6 +13931,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         TexturedDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "TexturedEffect",
+                                 command.instance);
         command.hasVertexColor = (shape == StockVertexShapeEXT::ColoredTextured);
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
         DrawVertexStreamsEXT streams;
@@ -13546,45 +14069,15 @@ namespace
     /// @param source The marked WGSL.
     /// @param colored Whether this variant's vertex layout supplies COLOR_0.
     /// @param attributeLocation Free vertex-input location for the colour (4 rigid, 6 skinned).
-    /// @param instanced Whether this variant reads its world transform from a per-instance stream.
     /// @return The expanded WGSL, with every marker consumed.
     std::string ExpandPbrVertexColourWgslEXT(std::string source, bool colored,
-                                             int attributeLocation, bool instanced = false)
+                                             int attributeLocation)
     {
         const auto Replace = [&source](const std::string& marker, const std::string& text) {
             for (std::size_t at = source.find(marker); at != std::string::npos;
                  at = source.find(marker, at + text.size()))
                 source.replace(at, marker.size(), text);
         };
-        // plans/plan_street_webgpu.md STREETW-0001: the instanced twin of this family. The four
-        // world-matrix columns sit at locations 12-15, the numbering pbr3d.vert.glsl's
-        // CNA_INSTANCED variant already uses, clear of every attribute the record itself declares.
-        Replace("/*CNA_PBR_INSTANCE_STRUCT*/",
-                instanced ? "struct InstanceInput {\n"
-                            "    @location(12) instCol0: vec4f,\n"
-                            "    @location(13) instCol1: vec4f,\n"
-                            "    @location(14) instCol2: vec4f,\n"
-                            "    @location(15) instCol3: vec4f,\n"
-                            "};"
-                          : "");
-        Replace("/*CNA_PBR_INSTANCE_PARAM*/", instanced ? ", instance: InstanceInput" : "");
-        Replace("/*CNA_PBR_INSTANCE_LOCALS*/",
-                instanced
-                    ? "    let instanceMatrix = mat4x4f(instance.instCol0, instance.instCol1,\n"
-                      "                                 instance.instCol2, instance.instCol3);\n"
-                      "    let localPos = instanceMatrix * vec4f(input.position, 1.0);\n"
-                      "    let instancedWorld = lp.world * instanceMatrix;\n"
-                      "    let normalMatrix =\n"
-                      "        mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz,\n"
-                      "                lp.normalMatrixCol2.xyz) *\n"
-                      "        inverseTranspose3(mat3x3f(instanceMatrix[0].xyz,\n"
-                      "                                  instanceMatrix[1].xyz,\n"
-                      "                                  instanceMatrix[2].xyz));"
-                    : "    let localPos = vec4f(input.position, 1.0);\n"
-                      "    let instancedWorld = lp.world;\n"
-                      "    let normalMatrix =\n"
-                      "        mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz,\n"
-                      "                lp.normalMatrixCol2.xyz);");
         Replace("/*CNA_PBR_COLOR_ATTRIBUTE*/",
                 colored ? "@location(" + std::to_string(attributeLocation) + ") color: vec4f," : "");
         Replace("/*CNA_PBR_COLOR_VARYING*/", colored ? "@location(5) color: vec4f," : "");
@@ -13671,7 +14164,8 @@ namespace
         // plans/plan_street_webgpu.md STREETW-0001: and both instanced twins, here rather than
         // only at the first instanced prop's pipeline -- which is what this whole function is for.
         const auto expandedInstancedPbr = [](const char* source, const bool colored) {
-            return ExpandPbrVertexColourWgslEXT(source, colored, 4, /*instanced=*/true)
+            return MakeInstancedStockWgslEXT(ExpandPbrVertexColourWgslEXT(source, colored, 4),
+                                             InstancedWgslShapeEXT::Rigid, "Pbr3D")
                  + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
         };
         validate("Pbr3D Instanced", expandedInstancedPbr(webgpu_shaders::kPbr, false).c_str());
@@ -13736,10 +14230,12 @@ namespace
         // with no matching attribute, so a shader that declares the four instance columns cannot
         // also serve a draw that binds none.
         const std::string instancedWgsl =
-            ExpandPbrVertexColourWgslEXT(shaderSource, false, 4, /*instanced=*/true)
+            MakeInstancedStockWgslEXT(ExpandPbrVertexColourWgslEXT(shaderSource, false, 4),
+                                      InstancedWgslShapeEXT::Rigid, "Pbr3D")
             + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
         const std::string instancedColorWgsl =
-            ExpandPbrVertexColourWgslEXT(shaderSource, true, 4, /*instanced=*/true)
+            MakeInstancedStockWgslEXT(ExpandPbrVertexColourWgslEXT(shaderSource, true, 4),
+                                      InstancedWgslShapeEXT::Rigid, "Pbr3D")
             + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
 
         WGPUShaderSourceWGSL instancedWgslChain{};
@@ -14029,46 +14525,8 @@ namespace
 
         PbrDrawCommand command;
         command.colored = (pbrStride == 60);
-        // plans/plan_street_webgpu.md STREETW-0001: the per-instance world matrices, materialized
-        // here for the reason CaptureStockVertexStreamsEXT states at length -- WebGPU's Instance
-        // step mode has an implicit divisor of one, so instance i's source record is
-        // `VertexOffset + i / frequency` and repeating each record `frequency` times makes the two
-        // agree. One stream of four Vector4 columns; a split or differently shaped one is refused
-        // by name rather than read as if it were this shape.
-        if (instanceStream != nullptr)
-        {
-            constexpr std::size_t kInstanceRecordBytes = 64u;
-            if (instanceStream->buffer == nullptr ||
-                static_cast<std::size_t>(instanceStream->strideInBytes) != kInstanceRecordBytes)
-            {
-                throw System::NotSupportedException(
-                    "CNA WebGPU: an instanced PbrEffect draw needs one per-instance stream of four "
-                    "Vector4 world-matrix columns (stride 64); this draw binds stride " +
-                    std::to_string(instanceStream->strideInBytes) + " at slot " +
-                    std::to_string(instanceStream->slot) + '.');
-            }
-            const int instances = std::max(1, instanceCount);
-            const int frequency = std::max(1, instanceStream->instanceFrequency);
-            const std::vector<std::uint8_t>& instanceShadow =
-                static_cast<const WebGPUVertexBufferRenderer&>(*instanceStream->buffer)
-                    .ShadowData();
-            const std::size_t base =
-                static_cast<std::size_t>(std::max(0, instanceStream->vertexOffset)) *
-                kInstanceRecordBytes;
-            command.instanceData.assign(
-                static_cast<std::size_t>(instances) * kInstanceRecordBytes, 0u);
-            for (int instance = 0; instance < instances; ++instance)
-            {
-                const std::size_t sourceOffset =
-                    base + static_cast<std::size_t>(instance / frequency) * kInstanceRecordBytes;
-                if (sourceOffset + kInstanceRecordBytes > instanceShadow.size()) break;
-                std::memcpy(command.instanceData.data() +
-                                static_cast<std::size_t>(instance) * kInstanceRecordBytes,
-                            instanceShadow.data() + sourceOffset, kInstanceRecordBytes);
-            }
-            command.instanced = true;
-            command.instanceCount = static_cast<std::uint32_t>(instances);
-        }
+        // plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "PbrEffect", command.instance);
         const auto& shadow = webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * pbrStride;
         if (byteOffset <= shadow.size())
@@ -14270,7 +14728,7 @@ namespace
                                                            command.blend, command.blendParams,
                                                            command.cullMode, command.wireframe,
                                                            command.depthBias, command.slopeScaleDepthBias, command.stencil,
-                                                           command.instanced);
+                                                           command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -14292,24 +14750,11 @@ namespace
         wgpuRenderPassEncoderSetBindGroup(pass, 3, iblBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
-        // plans/plan_street_webgpu.md STREETW-0001: the per-instance world matrices at slot 1,
-        // and the instance count on the draw. An ordinary draw binds neither and counts one, so
-        // its two calls below are exactly what they were.
-        WGPUBuffer instanceBuffer = nullptr;
-        if (command.instanced && !command.instanceData.empty())
-        {
-            WGPUBufferDescriptor instanceDescriptor{};
-            instanceDescriptor.label = StringView("CNA WebGPU Pbr3D InstanceBuffer");
-            instanceDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            instanceDescriptor.size = Align4(command.instanceData.size());
-            instanceBuffer = AcquireTransientBuffer(instanceDescriptor.usage,
-                                                    instanceDescriptor.size);
-            wgpuQueueWriteBuffer(queue_, instanceBuffer, 0, command.instanceData.data(),
-                                 command.instanceData.size());
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 1, instanceBuffer, 0,
-                                                 command.instanceData.size());
-        }
-        const std::uint32_t instances = command.instanced ? command.instanceCount : 1u;
+        // plans/plan_street_webgpu.md STREETW-0001/0004: the per-instance world matrices at the
+        // slot past this family's own single stream. An ordinary draw binds nothing and counts
+        // one, so its two calls below are exactly what they were.
+        WGPUBuffer instanceBuffer = BindInstanceStreamEXT(pass, command.instance, 1u);
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
