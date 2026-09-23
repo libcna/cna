@@ -1415,6 +1415,13 @@ SMG-0035's validation messages by SMG-0040.
 - Image-based lighting: not implemented (`SupportsImageBasedLightingEXT` false; 3 example skips).
 - `Texture2DArray`: not implemented.
 - The 27 classic failures, unchanged by name.
+
+### Backlog — SDL_GPU classic debt
+
+- **`SdlGpu_ConstructorExceptionSafety` → pre-existing double free.** A real bug, not test debt:
+  the binary aborts with `free(): double free detected in tcache 2`, identically on the unmodified
+  renderer sources (SMG-0041). Owner decision 2026-09-23: fix it later as a small targeted bugfix;
+  it is not a reason to hold the modern branch open.
 - `CNAEXT_NoPosixSetenv`: the Wayland workstream's.
 - Recorded only: upstream SDL still leaves the new texture fields zero for OpenXR swapchains; and
   `SdlGpuStorageTexture2DRenderer`/`SdlGpuComputeShaderRenderer` share the old
