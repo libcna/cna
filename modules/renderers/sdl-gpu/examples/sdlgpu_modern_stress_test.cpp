@@ -26,6 +26,9 @@
 //   * an indirect draw whose arguments live in a storage buffer;
 //   * a sprite drawn through a custom `ShaderEffect`, which is the path carrying the most
 //     per-draw snapshots;
+//   * SMG-0032: shadow reception -- a directional `ShadowMap` and a point light's
+//     `CubeShadowMap` built and filled, then sampled by a lit BasicEffect, a PbrEffect and an
+//     INDIRECT lit draw, each of which captures three maps and a parameter block per draw;
 //   * every one of those destroyed at the end of the cycle and rebuilt by the next.
 //
 // Check A -- the run completed, with no exception and no device loss.
@@ -33,6 +36,8 @@
 // Check C -- no file descriptor was leaked.
 // Check D -- no thread was leaked.
 // Check E -- the work really happened: the last cycle's readback still holds what it wrote.
+// Check F -- the last cycle's receivers really were shadowed, the indirect one exactly as the
+//            direct one, so the soak measured the shadow path rather than a skipped one.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = this renderer has no modern route.
 //
@@ -47,6 +52,10 @@ int main()
 }
 #else
 
+#include "CNA/Graphics/CubeShadowMap.hpp"
+#include "CNA/Graphics/DirectionalLightEXT.hpp"
+#include "CNA/Graphics/PointLightEXT.hpp"
+#include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/Graphics/StorageTexture2D.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -55,12 +64,19 @@ int main()
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PunctualLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -71,7 +87,9 @@ int main()
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -136,6 +154,47 @@ namespace
 
     std::size_t openDescriptors() { return countEntries("/proc/self/fd"); }
     std::size_t threadCount() { return countEntries("/proc/self/task"); }
+
+    // SMG-0032's scene: the shadow conformance suite's own, shrunk. A 20x20 ground plane seen
+    // from straight above, a 6x6 caster three units over it, and a sun straight down, so the
+    // shadow sits in the middle of the frame and the corners are lit.
+    constexpr float kGroundHalf = 10.0f;
+    constexpr float kCasterHalf = 3.0f;
+    constexpr float kCasterHigh = 3.0f;
+
+    std::array<VertexPositionNormalTexture, 6> quad(const float y, const float e)
+    {
+        const Vector3 up(0.0f, 1.0f, 0.0f);
+        const auto v = [&](float x, float z) {
+            return VertexPositionNormalTexture(Vector3(x, y, z), up, Vector2(0.0f, 0.0f));
+        };
+        return {v(-e, -e), v(e, -e), v(e, e), v(-e, -e), v(e, e), v(-e, e)};
+    }
+
+    /// PbrEffect's stride-48 record: position, normal, tangent (w = handedness), uv.
+    struct PbrVertex
+    {
+        float x, y, z, nx, ny, nz, tx, ty, tz, tw, u, v;
+    };
+
+    Matrix topDownView()
+    {
+        return Matrix::CreateLookAt(Vector3(0.0f, 20.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f),
+                                    Vector3(0.0f, 0.0f, 1.0f));
+    }
+
+    Matrix fitToGround()
+    {
+        return Matrix::CreateOrthographic(kGroundHalf * 2.0f, kGroundHalf * 2.0f, 0.1f, 60.0f);
+    }
+
+    /// Red channel at (x, y) of a square RGBA target; the light is white, so it orders pixels
+    /// exactly as luminance would.
+    int brightness(const std::vector<Color>& pixels, const int size, const int x, const int y)
+    {
+        return pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(size) +
+                      static_cast<std::size_t>(x)].getRProperty();
+    }
 }
 
 class SdlGpuModernStressTest final : public Game
@@ -165,6 +224,61 @@ protected:
         vertices.SetData(triangle, 3);
         BasicEffect effect(device);
         effect.VertexColorEnabled = true;
+
+        // SMG-0032: the shadow scene's geometry and receivers live across cycles; the maps they
+        // sample are rebuilt every cycle, which is the lifetime being soaked.
+        const bool shadows = device.SupportsShadowSamplingEXT();
+        const auto caster = quad(kCasterHigh, kCasterHalf);
+        const auto ground = quad(0.0f, kGroundHalf);
+        VertexBuffer groundBuffer(device, VertexPositionNormalTexture::getVertexDeclarationStatic(),
+                                  6, BufferUsage::None);
+        groundBuffer.SetData(ground.data(), 6);
+        std::array<PbrVertex, 6> pbrGround{};
+        for (std::size_t i = 0; i < ground.size(); ++i)
+        {
+            const Vector3& p = ground[i].Position;
+            pbrGround[i] = PbrVertex{p.X, p.Y, p.Z, 0.0f, 1.0f, 0.0f,
+                                     1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+        }
+        VertexBuffer pbrBuffer(device, 6);
+        pbrBuffer.SetDataRaw(pbrGround.data(), 6, static_cast<int>(sizeof(PbrVertex)));
+
+        BasicEffect lit(device);
+        lit.setLightingEnabledProperty(true);
+        lit.setPreferPerPixelLightingProperty(false);  // shadows must force per-pixel anyway
+        lit.setTextureEnabledProperty(false);
+        lit.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        lit.setAmbientLightColorProperty(Vector3(0.15f, 0.15f, 0.15f));
+        lit.setSpecularColorProperty(Vector3::Zero);
+        lit.setEmissiveColorProperty(Vector3::Zero);
+        lit.getDirectionalLight0Property().setEnabledProperty(true);
+        lit.getDirectionalLight0Property().setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+        lit.getDirectionalLight0Property().setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        lit.getDirectionalLight1Property().setEnabledProperty(false);
+        lit.getDirectionalLight2Property().setEnabledProperty(false);
+        lit.setViewProperty(topDownView());
+        lit.setProjectionProperty(fitToGround());
+        lit.setWorldProperty(Matrix::getIdentityProperty());
+
+        PbrEffect pbr(device);
+        pbr.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        pbr.setMetallicFactorProperty(0.0f);
+        pbr.setRoughnessFactorProperty(1.0f);
+        pbr.setAmbientLightColorProperty(Vector3(0.15f, 0.15f, 0.15f));
+        pbr.getDirectionalLight0Property().setEnabledProperty(true);
+        pbr.getDirectionalLight0Property().setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+        pbr.getDirectionalLight0Property().setDiffuseColorProperty(Vector3(3.0f, 3.0f, 3.0f));
+        pbr.getDirectionalLight1Property().setEnabledProperty(false);
+        pbr.getDirectionalLight2Property().setEnabledProperty(false);
+        pbr.setViewProperty(topDownView());
+        pbr.setProjectionProperty(fitToGround());
+        pbr.setWorldProperty(Matrix::getIdentityProperty());
+
+        CNA::Graphics::DirectionalLightEXT sun;
+        sun.Direction = Vector3(0.0f, -1.0f, 0.0f);
+        const BoundingBox bounds(Vector3(-kGroundHalf, -1.0f, -kGroundHalf),
+                                 Vector3(kGroundHalf, kCasterHigh + 1.0f, kGroundHalf));
+        std::vector<Color> litPixels, pbrPixels, indirectPixels;
 
         // Long enough that every lazily-created cache -- pipelines, samplers, the default white
         // texture, the transfer-buffer path -- has been created once, so its one-time growth is
@@ -269,6 +383,110 @@ protected:
                     device.SetRenderTarget(nullptr);
                 }
 
+                // SMG-0032: shadow reception, with every map built, filled, sampled and
+                // destroyed inside the cycle.
+                if (shadows)
+                {
+                    RenderTarget2D shadowed(device, kSize, kSize, false, SurfaceFormat::Color,
+                                            DepthFormat::Depth24);
+                    RenderTarget2D shadowedPbr(device, kSize, kSize, false, SurfaceFormat::Color,
+                                               DepthFormat::Depth24);
+                    RenderTarget2D shadowedIndirect(device, kSize, kSize, false,
+                                                    SurfaceFormat::Color, DepthFormat::Depth24);
+
+                    CNA::Graphics::ShadowMap shadowMap(device, CNA::Graphics::ShadowQuality::Low);
+                    device.setRasterizerStateProperty(RasterizerState::CullNone);
+                    device.setDepthStencilStateProperty(DepthStencilState::Default);
+                    device.setBlendStateProperty(BlendState::Opaque);
+                    device.SetVertexBuffer(nullptr);
+                    shadowMap.begin(sun, bounds);
+                    device.DrawUserPrimitives(PrimitiveType::TriangleList, caster.data(), 0, 2);
+                    shadowMap.end();
+
+                    // A point light with its own cube shadow, so the cube binding and its
+                    // keep-alive churn too. Off to one side and dim, so it does not wash out the
+                    // directional shadow that Check F reads.
+                    CNA::Graphics::CubeShadowMap cube(device, CNA::Graphics::ShadowQuality::Low);
+                    CNA::Graphics::PointLightEXT point;
+                    point.Position = Vector3(8.0f, 6.0f, 8.0f);
+                    point.Range = 4.0f;
+                    cube.update(point);
+                    for (int face = 0; face < CNA::Graphics::CubeShadowMap::kFaceCount; ++face)
+                    {
+                        cube.begin(face);
+                        device.DrawUserPrimitives(PrimitiveType::TriangleList, caster.data(), 0, 2);
+                        cube.end();
+                    }
+                    PunctualLightEXT punctual;
+                    punctual.Kind = PunctualLightKindEXT::Point;
+                    punctual.Position = point.Position;
+                    punctual.DiffuseColor = Vector3(0.5f, 0.5f, 0.5f);
+                    punctual.Range = point.Range;
+                    punctual.ShadowCube = cube.getShadowTexture();
+                    punctual.ShadowDepthBias = cube.getDepthBias();
+
+                    lit.setShadowMapEXT(shadowMap.getShadowTexture());
+                    lit.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+                    lit.setShadowsEnabledEXT(true);
+                    lit.setPunctualLightEXT(punctual);
+                    pbr.setShadowMapEXT(shadowMap.getShadowTexture());
+                    pbr.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+                    pbr.setShadowsEnabledEXT(true);
+
+                    device.SetRenderTarget(&shadowed);
+                    device.Clear(Color::Black);
+                    device.SetVertexBuffer(&groundBuffer);
+                    lit.Apply();
+                    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+
+                    device.SetRenderTarget(&shadowedPbr);
+                    device.Clear(Color::Black);
+                    device.SetVertexBuffer(&pbrBuffer);
+                    pbr.Apply();
+                    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+
+                    if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+                    {
+                        CNA::IndirectDrawArguments arguments{};
+                        arguments.VertexCount = 6;
+                        arguments.InstanceCount = 1;
+                        CNA::Graphics::StorageBuffer argumentBuffer(
+                            device, CNA::Graphics::StorageBufferDescriptor(
+                                        sizeof(arguments),
+                                        CNA::Graphics::StorageBufferUsage::IndirectArguments,
+                                        CNA::Graphics::StorageBufferCpuAccess::Write));
+                        argumentBuffer.setBytes(&arguments, sizeof(arguments));
+                        device.SetRenderTarget(&shadowedIndirect);
+                        device.Clear(Color::Black);
+                        device.SetVertexBuffer(&groundBuffer);
+                        lit.Apply();
+                        device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList,
+                                                         *argumentBuffer.getRendererEXT(), 0);
+                    }
+                    device.SetVertexBuffer(nullptr);
+                    device.SetRenderTarget(nullptr);
+
+                    // The maps die with this scope; the receivers must not keep pointing at them.
+                    lit.setShadowsEnabledEXT(false);
+                    lit.setShadowMapEXT(nullptr);
+                    lit.setPunctualLightEXT(PunctualLightEXT{});
+                    pbr.setShadowsEnabledEXT(false);
+                    pbr.setShadowMapEXT(nullptr);
+
+                    if (cycle == cycles + kWarmUp - 1)
+                    {
+                        const Rectangle region(0, 0, kSize, kSize);
+                        const auto read = [&](RenderTarget2D& from, std::vector<Color>& into) {
+                            into.assign(static_cast<std::size_t>(kSize) * kSize, Color::Transparent);
+                            from.GetData(0, &region, into.data(), 0, static_cast<int>(into.size()));
+                        };
+                        read(shadowed, litPixels);
+                        read(shadowedPbr, pbrPixels);
+                        if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+                            read(shadowedIndirect, indirectPixels);
+                    }
+                }
+
                 // The read-back, which is what forces the cycle's queued work through and is the
                 // only thing proving this cycle's own upload landed.
                 data.getBytes(readback.data(), readback.size() * sizeof(std::uint32_t));
@@ -328,6 +546,34 @@ protected:
         std::printf("    last readback element 0 = %u (cycle %d wrote %d)\n", readback[0],
                     completed - 1, completed - 1);
         check(lastCycleLanded, "Check E: the last cycle's readback holds what it wrote");
+
+        if (shadows && !litPixels.empty())
+        {
+            const int c = kSize / 2;
+            const int litCentre = brightness(litPixels, kSize, c, c);
+            const int litCorner = brightness(litPixels, kSize, 3, 3);
+            const int pbrCentre = brightness(pbrPixels, kSize, c, c);
+            const int pbrCorner = brightness(pbrPixels, kSize, 3, 3);
+            std::printf("    last cycle: lit centre %d corner %d, pbr centre %d corner %d\n",
+                        litCentre, litCorner, pbrCentre, pbrCorner);
+            bool indirectMatches = true;
+            if (!indirectPixels.empty())
+            {
+                const int indirectCentre = brightness(indirectPixels, kSize, c, c);
+                const int indirectCorner = brightness(indirectPixels, kSize, 3, 3);
+                std::printf("    last cycle: indirect centre %d corner %d\n", indirectCentre,
+                            indirectCorner);
+                indirectMatches = indirectCentre == litCentre && indirectCorner == litCorner;
+            }
+            std::fflush(stdout);
+            check(litCentre > 0 && litCentre < litCorner && pbrCentre > 0 &&
+                      pbrCentre < pbrCorner && indirectMatches,
+                  "Check F: the last cycle's receivers were shadowed, indirectly as directly");
+        }
+        else if (shadows)
+        {
+            check(false, "Check F: the last cycle's shadowed frames were never read back");
+        }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         Exit();
