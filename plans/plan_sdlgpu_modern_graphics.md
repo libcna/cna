@@ -727,3 +727,83 @@ affected, and running them would demonstrate only that.
 The repository's own boundary gates were run and pass: `sdl_inventory.py --check`,
 `sdl_classify.py --check`, `renderer_sdl_audit.py --check`, `sdl_ratchet.py --check`,
 `hot_path_lint.py`, `check_renderer_identities.py`.
+
+---
+
+## SMG-0031 — Final state
+
+### Measured, whole tree rebuilt first
+
+| suite | baseline | final |
+|---|---|---|
+| Modern `CnaGraphicsExtTests` | 682 / 21 / 259 | **900 / 0 / 62** of 962 |
+| Classic `-R '^SdlGpu'` | 202 / 27 | **202 / 27** of 229, failure set byte-identical |
+| CNAEXT examples `-L CnaExt` | 11 / 1 / 20 | **23 / 1 / 8** of 32 |
+| Dead / profile-aborted | 0 | **0** |
+| Soak | — | 3020 cycles, RSS **+16 KiB**, 5/5 PASS |
+| ASan / UBSan | — | **zero errors** |
+| LeakSanitizer | — | 768 bytes, **fixed** (identical at 70 and 520 cycles) |
+| Build size | 657 MB | 661 MB (`build-probe/smg-sdlgpu-asan` a further 2.8 GB) |
+
+The one remaining example failure is `CNAEXT_NoPosixSetenv`, which names `::unsetenv` call sites in
+`modules/platform/src/Wayland/`. It is pre-existing, fails identically on the baseline, and belongs
+to the Wayland workstream.
+
+### Environment of the authoritative runs
+
+| | |
+|---|---|
+| SDL | 3.5.0, vendored at `third_party/SDL` |
+| **SDL_gpu backend** | **`vulkan`** — logged at every renderer init (SMG-0031) |
+| **Physical adapter** | **AMD Radeon 780M (RADV PHOENIX)**, Mesa 25.0.7 |
+| Display | private headless Weston + rootful Xwayland, never `:0` or `wayland-0` |
+
+The adapter is not inferred from `vulkaninfo`'s ordering. Two crash backtraces taken during this
+workstream — the sampler crash of SMG-0008 and the use-after-free of SMG-0025 — both name
+`libvulkan_radeon.so` in frame 0, which is direct evidence the real GPU's driver was executing, not
+`llvmpipe`.
+
+### Capability matrix
+
+| feature group | state | evidence |
+|---|---|---|
+| shader intake (SPIR-V) | implemented + tested | `GetShaderDialectEXT` = `SpirV`; `SupportsShaderLanguageEXT` per stage; the whole engine layer's packages select and run |
+| graphics pipelines | implemented + tested | stock + custom, sprite and 3D, keyed on the same `PipelineCacheKey` |
+| vertex buffers / index buffers | implemented + tested | classic suite, unchanged |
+| vertex layouts (arbitrary, reflected) | implemented + tested | SMG-0019; locations from SPIR-V reflection |
+| uniform buffers (per-draw, std140 arrays, engine matrices) | implemented + tested | SMG-0010, SMG-0021 |
+| storage buffers | implemented + tested | SMG-0012; ranges, GPU copy, readback |
+| compute pipelines + dispatch | implemented + tested | SMG-0012; `ComputeTest`, `ClusteredLightComputeTest` 10/10 |
+| storage textures | implemented + tested | SMG-0012; `ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote` |
+| 2D / cube / volume textures | implemented + tested | classic suite + `SupportsTexture3DSamplingEXT` |
+| samplers | implemented + tested | classic suite |
+| render targets, MRT, depth/stencil, MSAA | implemented + tested | classic suite, unchanged |
+| draw / instancing | implemented + tested | SMG-0022 |
+| indirect draw | implemented + tested | SMG-0023; `IndirectDrawTest`, `GpuInstanceCullerTest` |
+| `ShaderEffect` (descriptor-based) | implemented + tested | SMG-0006…0022 |
+| render ↔ compute sequencing | implemented + tested | SMG-0012's flush rule |
+| uploads / readbacks | implemented + tested | SMG-0012 |
+| debug markers | implemented | SMG-0027 |
+| `Texture2DArray` | **not implemented** | nothing on this renderer exercises it — the engine-layer tests use a test double, so implementing it would add untested code and a capability with no conformance behind it |
+| shadow sampling | **not implemented** | needs shadow samplers in the stock lit shaders; 31 truthful skips |
+| image-based lighting | **not implemented** | same; capability correctly false |
+| **GPU timers** | **unsupported by SDL_gpu** | SDL 3.5's `SDL_gpu.h` contains no timestamp, query or query-pool API at all; `IGpuTimerRenderer` forbids substituting a CPU clock, so there is no honest partial implementation |
+| **occlusion queries** | **unsupported by SDL_gpu** | same absence |
+
+No entry is `unknown`.
+
+### Remaining skips, all truthful
+
+| count | reason | class |
+|---|---|---|
+| 31 | lit shaders do not sample shadow maps | future renderer work |
+| 17 | the test's payload is inline GLSL ES, not this renderer's dialect | permanent: a SPIR-V renderer cannot take GLSL text |
+| 6 | no GPU timer query | SDL_gpu API limitation |
+| 8 | single-case shapes (half-float readback, a refusal path that needs a renderer *without* a capability, and similar) | test/environment |
+
+### Git
+
+Baseline `d6e9ff050`; branch `sdlgpu-modern-graphics`; 11 commits; every one authored and committed
+by `Robert Vokac <robertvokac@robertvokac.com>`; zero matches for
+`claude|anthropic|co-authored-by|generated-by|generated with|assisted-by` in any commit message.
+Not pushed. `next` and `origin/next` are untouched and identical to the baseline.

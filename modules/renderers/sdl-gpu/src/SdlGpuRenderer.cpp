@@ -2481,9 +2481,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         // would never be recorded at all.
         BeginBackbufferSegment();
 
-        SDL_Log("[SDL_GPU] Renderer initialised (%dx%d), debug mode %s, %s",
+        // SMG-0031: the backend SDL_gpu actually chose is named here, because "SDL_GPU validated"
+        // is not a claim anyone can check without it -- SDL picks its own driver, and a run that
+        // silently landed on a software device would look identical in every other respect.
+        const std::string driver = GetDriverNameEXT();
+        SDL_Log("[SDL_GPU] Renderer initialised (%dx%d), debug mode %s, %s, SDL_gpu backend '%s'",
                 physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled",
-                headless_ ? "headless" : "swapchain");
+                headless_ ? "headless" : "swapchain",
+                driver.empty() ? "unknown" : driver.c_str());
     }
 
     SdlGpuRenderer::~SdlGpuRenderer()
