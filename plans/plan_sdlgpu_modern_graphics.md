@@ -581,3 +581,20 @@ negates and a 3D program that already does alike.
 | SMG-0012…0014 compute and storage | 834 | 52 | 76 |
 | SMG-0016…0018 sprite-path defects | 851 | 25 | 86 |
 | **SMG-0019…0022 the 3D path** | **887+** | **0** | — |
+
+### SMG-0023 — indirect draw
+
+`SDL_gpu` draws indirectly natively, and CNA's `IndirectDrawArguments` /
+`IndirectDrawIndexedArguments` are **field-for-field** `SDL_GPUIndirectDrawCommand` /
+`SDL_GPUIndexedIndirectDrawCommand`. So the bytes a compute shader wrote are handed to SDL
+unchanged: nothing is read back to the CPU and repacked, which would defeat the point of drawing
+indirectly. `SupportsIndirectDrawEXT` and `SupportsBaseInstanceDrawingEXT` are both true —
+`first_instance` is part of SDL's own command structure.
+
+The route matters more than the call. `DrawPrimitivesIndirectEXT` is **not** a custom-effect path:
+`IndirectDrawTests` draws with a stock `BasicEffect`, so the arguments have to reach whichever of
+the eleven queued families `DispatchStockDrawEXT`'s shape selection picks. They therefore ride the
+queued *command* rather than the route — every stock command carries the buffer and offset, stamped
+as it is pushed, and one shared `IssueQueuedDrawEXT` is now the single place a queued draw becomes a
+native draw call. A first cut that required a compiled custom effect refused the very test the
+feature exists for.

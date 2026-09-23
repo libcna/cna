@@ -5566,6 +5566,42 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    namespace
+    {
+        /// SMG-0023: the one place a queued stock draw turns into a native draw call.
+        ///
+        /// An indirect draw reads its counts from a buffer the GPU wrote, so they are simply not
+        /// known here -- which is why this takes the command's own arguments handle rather than
+        /// letting each family decide. CNA's IndirectDrawArguments and IndirectDrawIndexedArguments
+        /// are field-for-field SDL_GPUIndirectDrawCommand and SDL_GPUIndexedIndirectDrawCommand,
+        /// so the bytes are handed over unchanged.
+        template <typename CommandT>
+        void IssueQueuedDrawEXT(SDL_GPURenderPass* pass, const CommandT& command,
+                                const bool indexed, const Uint32 instanceCount = 1)
+        {
+            if (command.indirectArguments != nullptr)
+            {
+                if (indexed)
+                    SDL_DrawGPUIndexedPrimitivesIndirect(
+                        pass, command.indirectArguments, command.indirectOffset, 1);
+                else
+                    SDL_DrawGPUPrimitivesIndirect(
+                        pass, command.indirectArguments, command.indirectOffset, 1);
+                return;
+            }
+            if (indexed)
+            {
+                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, instanceCount,
+                                             command.firstIndex, command.vertexOffset, 0);
+                return;
+            }
+            // An instanced stock draw is always indexed, so its command carries no vertex count;
+            // asking for one would not compile rather than quietly drawing nothing.
+            if constexpr (requires { command.vertexCount; })
+                SDL_DrawGPUPrimitives(pass, command.vertexCount, instanceCount, 0, 0);
+        }
+    }
+
     void SdlGpuRenderer::IssueSpriteDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                                 const SpriteCommand& command, std::size_t index,
                                                 const float* viewportSize, SDL_GPUTextureFormat colorFormat,
@@ -6490,6 +6526,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         coloredDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Colored, coloredDrawCommands_.size() - 1);
         framePending_ = true;
@@ -6549,6 +6587,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         texturedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Textured, texturedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -6606,6 +6646,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         litTexturedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::LitTextured, litTexturedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7412,6 +7454,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         alphaTestDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::AlphaTest, alphaTestDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7480,6 +7524,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         dualTextureDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::DualTexture, dualTextureDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7571,6 +7617,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                          command.envMapMaxAnisotropy,
                          command.indexed ? 1 : 0);
         }
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         envMapDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::EnvMap, envMapDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7757,6 +7805,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         skinnedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Skinned, skinnedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7845,6 +7895,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         pbrDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Pbr, pbrDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8208,6 +8260,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CompiledEffectDrawCommand command;
         command.binding = BuildCompiledEffectBindingEXT(*sdlGpuEffect, compiledStreams);
         command.instanceCount = static_cast<Uint32>(std::max(1, instanceCount));
+        (void) indirectArguments;
+        (void) indirectOffset;
         command.vertexStride = command.binding.vertexBuffers.empty()
             ? 0u : command.binding.vertexBuffers.front().pitch;
 
@@ -8287,6 +8341,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+        command.indirectOffset = pendingIndirectOffsetEXT_;
         compiledEffectDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::CompiledEffect, compiledEffectDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8438,12 +8494,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -8499,12 +8554,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -8581,12 +8635,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -8641,12 +8694,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -8742,12 +8794,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -8813,9 +8864,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             pass, &indexBinding,
             command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
                             : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-        SDL_DrawGPUIndexedPrimitives(
-            pass, command.indexCount, command.instanceCount, command.firstIndex,
-            command.vertexOffset, 0);
+        IssueQueuedDrawEXT(pass, command, /*indexed=*/true, command.instanceCount);
     }
 
     void SdlGpuRenderer::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
@@ -8966,7 +9015,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // family's, and carries no extra or neutral streams of its own.
         for (CustomEffect3DDrawCommand& command : customEffect3DDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty()) continue;
+            // An indirect draw's counts live on the GPU, so vertexCount is legitimately zero here.
+            if (command.vertexData.empty()) continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
@@ -9092,12 +9142,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -9148,12 +9197,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -9201,12 +9249,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(
-                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/true);
         }
         else
         {
-            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            IssueQueuedDrawEXT(pass, command, /*indexed=*/false);
         }
     }
 
@@ -9919,7 +9966,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         const PrimitiveType primitive, const int primitiveCount, const GpuDrawParams& params,
-        SdlGpuEffectRenderer& effect, const int instanceCount)
+        SdlGpuEffectRenderer& effect, const int instanceCount,
+        SDL_GPUBuffer* const indirectArguments, const Uint32 indirectOffset)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const auto& elements = sdlGpuVb.Declaration().GetElements();
@@ -10049,6 +10097,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             depthStencilFormat, colorTargetCount, rasterizer, depthStencil, key);
         if (command.pipeline == nullptr) return;
 
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+
+        command.indirectOffset = pendingIndirectOffsetEXT_;
+
         customEffect3DDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::CustomEffect3D, customEffect3DDrawCommands_.size() - 1);
     }
@@ -10120,13 +10172,82 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_BindGPUIndexBuffer(
                 pass, &ibBinding,
                 command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, command.instanceCount,
-                                         command.firstIndex, command.vertexOffset, 0);
+            // SMG-0023: the arguments stay on the GPU. CNA's IndirectDrawIndexedArguments is
+            // field-for-field SDL_GPUIndexedIndirectDrawCommand, so whatever a compute shader
+            // wrote is what SDL reads -- nothing is read back and repacked, which would defeat
+            // the point of drawing indirectly.
+            if (command.indirectArguments != nullptr)
+                SDL_DrawGPUIndexedPrimitivesIndirect(
+                    pass, command.indirectArguments, command.indirectOffset, 1);
+            else
+                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, command.instanceCount,
+                                             command.firstIndex, command.vertexOffset, 0);
+        }
+        else if (command.indirectArguments != nullptr)
+        {
+            SDL_DrawGPUPrimitivesIndirect(
+                pass, command.indirectArguments, command.indirectOffset, 1);
         }
         else
         {
             SDL_DrawGPUPrimitives(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
+    }
+
+    void SdlGpuRenderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        const auto* arguments = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&argumentBuffer);
+        if (arguments == nullptr)
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: an indirect draw needs this renderer's own storage buffer");
+        // The same shape selection every direct draw takes -- a stock effect indirects exactly as
+        // a custom one does, because the arguments ride the queued command rather than the route.
+        pendingIndirectArgumentsEXT_ = arguments->Buffer();
+        pendingIndirectOffsetEXT_ = static_cast<Uint32>(argumentByteOffset);
+        try
+        {
+            DispatchStockDrawEXT(vb, nullptr, world, view, projection, primitive,
+                                 /*primitiveCount=*/1, params);
+        }
+        catch (...)
+        {
+            pendingIndirectArgumentsEXT_ = nullptr;
+            pendingIndirectOffsetEXT_ = 0;
+            throw;
+        }
+        pendingIndirectArgumentsEXT_ = nullptr;
+        pendingIndirectOffsetEXT_ = 0;
+    }
+
+    void SdlGpuRenderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib, const Matrix& world,
+        const Matrix& view, const Matrix& projection, const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        const auto* arguments = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&argumentBuffer);
+        if (arguments == nullptr)
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: an indirect draw needs this renderer's own storage buffer");
+        pendingIndirectArgumentsEXT_ = arguments->Buffer();
+        pendingIndirectOffsetEXT_ = static_cast<Uint32>(argumentByteOffset);
+        try
+        {
+            DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive,
+                                 /*primitiveCount=*/1, params);
+        }
+        catch (...)
+        {
+            pendingIndirectArgumentsEXT_ = nullptr;
+            pendingIndirectOffsetEXT_ = 0;
+            throw;
+        }
+        pendingIndirectArgumentsEXT_ = nullptr;
+        pendingIndirectOffsetEXT_ = 0;
     }
 
     void SdlGpuRenderer::DispatchStockDrawEXT(
@@ -10377,6 +10498,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.uniforms, ApplyXnaPixelCenter(world * view * projection), params);
         FillFogUniforms(command.fogUniforms, params);
         command.target = CurrentDrawTarget();
+
+        command.indirectArguments = pendingIndirectArgumentsEXT_;
+
+        command.indirectOffset = pendingIndirectOffsetEXT_;
 
         instancedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Instanced, instancedDrawCommands_.size() - 1);

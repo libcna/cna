@@ -2050,6 +2050,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 stride = 0;
             /** @brief Native topology. */
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             /** @brief The vertex attributes this effect's own shader consumes. */
             std::vector<SDL_GPUVertexAttribute> attributes;
             /** @brief The effect's fixed 128-byte per-draw block, world-view-projection included. */
@@ -2104,6 +2108,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};  ///< mirrors VulkanRenderer::FillExtPushConst()'s 128-byte layout
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2132,6 +2140,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2170,6 +2182,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -2208,6 +2224,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};  ///< [20..23]=alphaTest params, [24]=vertexColorEnabled (no lighting/ambient slots needed)
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2248,6 +2268,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2297,6 +2321,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
             std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -2348,6 +2376,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;
             Uint32 instanceCount = 1;
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};
             std::array<float, 8> fogUniforms{};
             bool depthTest = false;
@@ -2386,6 +2418,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
             std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
@@ -2430,6 +2466,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
             std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
@@ -2496,6 +2536,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
+            SDL_GPUBuffer* indirectArguments = nullptr;
+            /** @brief SMG-0023: byte offset of those arguments. */
+            Uint32 indirectOffset = 0;
             Uint32 vertexStride = 0;
             Uint32 instanceCount = 1;
             /// Everything BuildCompiledEffectBindingEXT captured from the applied pass -- shaders,
@@ -2753,6 +2797,33 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         void BindStorageBufferForDrawEXT(int binding,
                                          const IStorageBufferRenderer& buffer) override;
+        /**
+         * @brief True: `SDL_gpu` draws indirectly, including a non-zero first instance. SMG-0023.
+         * @return True whenever this renderer has a device.
+         */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override { return device_ != nullptr; }
+        /** @brief True: `first_instance` is part of SDL's own indirect command. @return As above. */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override
+        {
+            return device_ != nullptr;
+        }
+        /** @brief Draws with arguments read from a buffer. @param vb Vertex buffer.
+         *  @param world World. @param view View. @param projection Projection. @param primitive Topology.
+         *  @param argumentBuffer Arguments. @param argumentByteOffset Offset. @param params Draw description. */
+        void DrawPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+            const Matrix& projection, PrimitiveType primitive,
+            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+            const GpuDrawParams& params) override;
+        /** @brief Indexed counterpart. @param vb Vertex buffer. @param ib Index buffer.
+         *  @param world World. @param view View. @param projection Projection. @param primitive Topology.
+         *  @param argumentBuffer Arguments. @param argumentByteOffset Offset. @param params Draw description. */
+        void DrawIndexedPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib, const Matrix& world,
+            const Matrix& view, const Matrix& projection, PrimitiveType primitive,
+            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+            const GpuDrawParams& params) override;
+
         /** @brief Storage blocks a vertex shader may read. @return Non-zero where storage works. */
         [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override
         {
@@ -3589,7 +3660,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
             const Matrix& world, const Matrix& view, const Matrix& projection,
             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-            SdlGpuEffectRenderer& effect, int instanceCount = 1);
+            SdlGpuEffectRenderer& effect, int instanceCount = 1,
+            SDL_GPUBuffer* indirectArguments = nullptr, Uint32 indirectOffset = 0);
 
         /** @brief Replays one queued custom 3D draw. CNAEXT. @param pass Render pass.
          *  @param cmd Command buffer. @param command The queued draw. @param boundPipeline Cache. */
@@ -4133,6 +4205,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
         /// SMG-0019: 3D draws shaded by a custom ShaderEffect.
         std::vector<CustomEffect3DDrawCommand> customEffect3DDrawCommands_;
+        /// SMG-0023: the indirect arguments the draw being queued right now must use, or null.
+        /// Set for exactly the duration of one DrawPrimitivesIndirectEXT call, because the stock
+        /// families' Queue* functions are reached through DispatchStockDrawEXT's shape selection
+        /// and cannot be handed an extra parameter without threading it through all eleven.
+        SDL_GPUBuffer* pendingIndirectArgumentsEXT_ = nullptr;
+        Uint32 pendingIndirectOffsetEXT_ = 0;
         /// SMG-0020: storage buffers published for the draws that follow, by declared binding.
         std::vector<std::pair<int, SDL_GPUBuffer*>> drawStorageNativeEXT_;
         std::vector<std::shared_ptr<const void>> drawStorageKeepAliveEXT_;
