@@ -126,7 +126,11 @@ FAILED_EARLY=0
 
 cleanup() {
     trap - EXIT INT TERM
-    for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null; done
+    # `"${PIDS[@]:-}"` on an EMPTY array expands to one empty string, not to nothing -- which is
+    # how a --resume run with every shard already complete ended up calling `wait ""` and failing.
+    if [ "${#PIDS[@]}" -gt 0 ]; then
+        for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
+    fi
     wait 2>/dev/null
 }
 trap 'echo "run_gtest_bounded: interrupted" >&2; cleanup; exit 130' INT TERM
@@ -177,10 +181,12 @@ for i in $(seq 0 $((SHARDS - 1))); do
     PIDS+=("$!")
 done
 
-# Drain.
-for p in "${PIDS[@]:-}"; do
-    wait "$p" || FAILED_EARLY=1
-done
+# Drain. Guarded for the same empty-array reason cleanup() states.
+if [ "${#PIDS[@]}" -gt 0 ]; then
+    for p in "${PIDS[@]}"; do
+        wait "$p" || FAILED_EARLY=1
+    done
+fi
 trap - EXIT INT TERM
 
 # ---- aggregate -------------------------------------------------------------------------------
@@ -194,11 +200,13 @@ out, shards = sys.argv[1], int(sys.argv[2])
 total = passed = failed = skipped = 0
 killed = incomplete = 0
 failing_names = []
+mismatches = []
 
 for i in range(shards):
     xml = os.path.join(out, f"shard-{i}.xml")
     log = os.path.join(out, f"shard-{i}.log")
     st  = os.path.join(out, f"shard-{i}.status")
+    xml_p = xml_f = xml_sk = 0
     status = None
     if os.path.exists(st):
         try: status = int(open(st).read().strip())
@@ -225,20 +233,35 @@ for i in range(shards):
                 elif case.get("result") == "skipped" or case.find("skipped") is not None \
                         or case.get("status") == "notrun":
                     sk += 1
+            xml_p, xml_f, xml_sk = t - f - sk, f, sk
             total += t; failed += f; skipped += sk; passed += t - f - sk
             counted = True
         except ET.ParseError:
             counted = False          # truncated XML: a killed shard's usual signature
-    if not counted and os.path.exists(log):
+    # GoogleTest's own text summary, read for every shard that has one. When the XML was usable
+    # this is a CROSS-CHECK rather than a fallback, and that is deliberate: the first version of
+    # this aggregator read skips from the XML root -- where GoogleTest does not put them -- and
+    # reported a true 933/0/29 as a confident 962/0/0. Two independent readings that must agree is
+    # the cheapest permanent guard against that whole class of silently-green arithmetic.
+    text_counts = None
+    if os.path.exists(log):
         text = open(log, errors="ignore").read()
         def n(pat):
             m = re.search(pat, text)
             return int(m.group(1)) if m else 0
-        p, f, sk = n(r"\[  PASSED  \] (\d+) test"), n(r"\[  FAILED  \] (\d+) test"), n(r"\[  SKIPPED \] (\d+) test")
-        passed += p; failed += f; skipped += sk; total += p + f + sk
-        failing_names += re.findall(r"^\[  FAILED  \] (\S+\.\S+)", text, re.M)
-        if status != 0:
-            incomplete += 1
+        tp = n(r"\[  PASSED  \] (\d+) test")
+        tf = n(r"\[  FAILED  \] (\d+) test")
+        tsk = n(r"\[  SKIPPED \] (\d+) test")
+        if re.search(r"\[==========\] .* ran\.", text):
+            text_counts = (tp, tf, tsk)
+        if not counted:
+            passed += tp; failed += tf; skipped += tsk; total += tp + tf + tsk
+            failing_names += re.findall(r"^\[  FAILED  \] (\S+\.\S+)", text, re.M)
+            if status != 0:
+                incomplete += 1
+
+    if counted and text_counts is not None and text_counts != (xml_p, xml_f, xml_sk):
+        mismatches.append((i, (xml_p, xml_f, xml_sk), text_counts))
 
 print()
 print(f"run_gtest_bounded: {passed} passed / {failed} failed / {skipped} skipped  "
@@ -250,7 +273,21 @@ if incomplete:
     print(f"run_gtest_bounded: {incomplete} shard(s) ended without usable XML")
 for name in sorted(set(failing_names)):
     print(f"  FAILED  {name}")
+
+if mismatches:
+    print()
+    print("run_gtest_bounded: XML/TEXT DISAGREE -- the counts above cannot be trusted:")
+    for i, x, t in mismatches:
+        print(f"  shard {i}: xml(pass={x[0]} fail={x[1]} skip={x[2]}) "
+              f"!= text(pass={t[0]} fail={t[1]} skip={t[2]})")
+    sys.exit(3)
 PY
+
+AGGREGATE_STATUS=$?
+if [ "$AGGREGATE_STATUS" -eq 3 ]; then
+    echo "run_gtest_bounded: refusing to report a result the two readings disagree about" >&2
+    exit 3
+fi
 
 if [ "$FAILED_EARLY" -ne 0 ]; then
     echo "run_gtest_bounded: at least one shard did not exit 0" >&2
