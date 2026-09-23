@@ -19,9 +19,9 @@ The companion documents that this workstream does **not** duplicate:
 |---|---|
 | Branch | `sdlgpu-modern-graphics` |
 | Baseline | `d6e9ff050` (`origin/next` at 2026-09-23) |
-| Modern `CnaGraphicsExtTests` | baseline **682 / 21 / 259** of 962 |
-| Classic `-R '^SdlGpu'` | baseline **202 / 27** of 229 |
-| CNAEXT examples `-L CnaExt` | baseline **11 / 1 / 20** of 32 |
+| Modern `CnaGraphicsExtTests` | baseline **682 / 21 / 259** of 962 → SMG-0031 900 / 0 / 62 → **closeout 931 / 0 / 31** |
+| Classic `-R '^SdlGpu'` | baseline **202 / 27** of 229 → unchanged, same 27 by name |
+| CNAEXT examples `-L CnaExt` | baseline **11 / 1 / 20** of 32 → SMG-0031 23 / 1 / 8 → **closeout 26 / 2 / 4** (SMG-0034) |
 
 ---
 
@@ -807,3 +807,263 @@ Baseline `d6e9ff050`; branch `sdlgpu-modern-graphics`; 11 commits; every one aut
 by `Robert Vokac <robertvokac@robertvokac.com>`; zero matches for
 `claude|anthropic|co-authored-by|generated-by|generated with|assisted-by` in any commit message.
 Not pushed. `next` and `origin/next` are untouched and identical to the baseline.
+
+---
+
+# Closeout — shadow reception (SMG-0032…)
+
+Starting HEAD `1767563b5` (SMG-0031), reproduced before anything changed: **900 / 0 / 62** of 962,
+exactly as recorded. The closeout's one implementation target was the shadow cluster; GPU timers,
+inline GLSL ES intake, `Texture2DArray` and IBL were out of scope and stay as they were.
+
+## SMG-0032 — the 31 shadow skips, and the shadow reception that retires them
+
+### What the cluster was, measured rather than inferred from names
+
+Tallied from the shard XMLs' skip messages at the starting HEAD. Every one of the 31 skipped at the
+**same gate** — `SupportsShadowSamplingEXT()` false, "this renderer's lit shaders do not sample
+shadow maps" — in the fixture `SetUp()` of three suites:
+
+| suite | cases | gate |
+|---|---|---|
+| `ShadowVisibilityTest` | 17 | `ShadowVisibilityTests.cpp:257` |
+| `CascadedShadowVisibilityTest` | 7 | `CascadedShadowVisibilityTests.cpp:229` |
+| `PunctualShadowVisibilityTest` | 7 | `PunctualShadowVisibilityTests.cpp:161` |
+
+None was a missing caster: `ShadowMapTest`, `CascadedShadowMapTest`, `CubeShadowMapTest` and
+`SpotShadowMapTest` (51 cases) already passed, because MOD-2237's casters are checked-in SPIR-V
+`ShaderEffect`s that SMG-0006's intake runs. What was missing was exactly the receiving half.
+
+### The contract
+
+`IGraphicsRenderer.hpp`'s `SupportsShadowSamplingEXT` — "whether this renderer's lit shaders
+actually SAMPLE the shadow state an effect carries (single map, cascades, punctual)" — and
+`GpuDrawParams`' shadow groups (MOD-821/840/908/1005). The three reference renderers agree on every
+observable point, and SDL_GPU now does too:
+
+| | Vulkan | WebGPU | EasyGL | SDL_GPU |
+|---|---|---|---|---|
+| receiving families | lit BasicEffect, SkinnedEffect, PBR, skinned PBR | same | same | same |
+| parameter block | 129 floats, `FillShadowRecordEXT` | same floats, same order ("the same float-for-float block the Vulkan renderer fills") | uniforms | **the same 129 floats** (`CaptureShadowReceptionEXT`) |
+| comparison | manual, `uv.z - bias <= occluder` | manual | manual | manual — XNA has no comparison sampler, and none is used |
+| samplers | `SamplerStates[7]`, `[8]`, `[9]` | same | same | same |
+| absent map | 1×1 white ("nothing occludes") | same | same | same, plus a 1×1 white **cube** |
+| per-vertex lighting | a shadowed draw goes per-pixel | same | same | same |
+| what the shadow scales | the three directional lights' diffuse and specular, never ambient; punctual light added with its own shadow | same | same | same |
+
+### One source, not a second copy
+
+The shadow GLSL is **the Vulkan renderer's `shadow_sampling.glsl`**, not a port of it.
+`compile_shaders.py` here now expands `#include "shadow_sampling.glsl"` from
+`modules/renderers/vulkan/src/shaders/`, exactly as Vulkan's own generator does. The only thing that
+differs between the two renderers is *where* the four resources sit — SDL_gpu fixes fragment
+samplers to set 2 and fragment uniform buffers to set 3, each numbered from zero — so the snippet
+now takes its set/binding numbers from `CNA_SHADOW_*` macros whose defaults are Vulkan's own layout.
+
+**Proof that did not change Vulkan:** Vulkan's `compile_shaders.py` was run into a scratch file
+before and after the edit; both are byte-identical to the checked-in `spirv_shaders.hpp`
+(`cmp` → identical). No Vulkan SPIR-V word changed, so no Vulkan behaviour can have.
+
+On this renderer only three fragment modules changed (compared array-by-array):
+`kLitTextured3dFragSpv` (BasicEffect lit, and SkinnedEffect at stride 52, which reuses it),
+`kSkinnedColored3dFragSpv` (SkinnedEffect at stride 56), `kPbr3dFragSpv` (both PBR families). No
+variant was added, no pipeline was added: as on Vulkan, the receiving shaders *are* the lit
+shaders, and with the enable flag at zero and white bound they compute what they computed before.
+
+| shader | shadow maps at set 2 | `CnaShadowParams` at set 3 |
+|---|---|---|
+| `lit_textured3d.frag` | 1, 2, 3 | 3 |
+| `skinned_colored3d.frag` | 1, 2, 3 | 3 |
+| `pbr3d.frag` | 7, 8, 9 | 3 |
+
+`pbr3d.frag` already used all four of SDL_gpu's per-stage uniform buffers
+(`MAX_UNIFORM_BUFFERS_PER_STAGE` is 4 in `SDL_sysgpu.h`). Its two-vector `SamplerLodBias` block
+therefore moved to the tail of `PbrParams` (`lodBias0To3`, `lodBias4To7`), freeing slot 3 — the
+classic PBR tests (`SdlGpu_PbrEffect`, `_SkinnedPbrEffect`, `_Pbr_SrgbTransfer`,
+`_Pbr_FresnelFactors`, the PBR indexed-range test) pass unchanged.
+
+### Coordinates and bias — nothing added
+
+No flip was added and no constant was tuned. The directional read keeps the snippet's own
+`1 - v` (STREET-0007), which is right here for a measured reason: SMG-0016 made this renderer's
+SPIR-V programs produce the same texel layout as Vulkan's, so a caster's map is laid out as
+Vulkan's is. `TheShadowLandsWhereTheCasterIs`, the cascade atlas cases and the spot cases all pass
+on the first build, which a mirrored map would not. Bias reaches the shader as the public value,
+`shadowDepthBias` / `punctualShadowBias`, and the PCF radius is clamped 0…2 as on Vulkan.
+
+### Measured
+
+| | pass | fail | skip |
+|---|---|---|---|
+| the three shadow suites, first build | 29 | 2 | 0 |
+| after SMG-0033 | **31** | **0** | **0** |
+
+## SMG-0033 — an untextured PbrEffect was dropped at replay
+
+The two failures were `PbrEffectReceivesTheShadowOnItsDirectTermOnly` and
+`SkinnedPbrEffectReceivesTheShadow`, and both read **0 at every pixel** — the corners, which no
+shadow reaches, included. Switching shadows *off* in a local, reverted copy of the test left the
+frame black too, so it was not the shadow.
+
+A trace showed `QueuePbrDraw` ran and `IssuePbrDraw` never did. The replay dispatch required
+`c.texture` before issuing a PBR command — while `IssuePbrDraw` itself has bound neutral white for
+an absent base-colour map since GLTF-465, whose own comment says that is what makes an untextured
+material (glTF's default one) a complete draw. The guard predates that fallback and silently undid
+it: the frame kept its clear colour and nothing reported why. These two tests are the first on this
+renderer to draw a `PbrEffect` with no texture. The guard is gone; nothing else is.
+
+## SMG-0034 — `CNAEXT_PointShadow`: a crash inside SDL 3.5.0, not in CNA
+
+Opening `SupportsShadowSamplingEXT` made four gated examples live. Three pass —
+`CNAEXT_ShadowMap`, `CNAEXT_CascadedShadowMap`, `CNAEXT_ShadowReceiver` — and `CNAEXT_PointShadow`
+**segfaults** on its first frame.
+
+**It is not the shadow path.** The crash happens on the example's first readback, an ambient-only
+frame with no shadow state at all. The unmodified starting HEAD, with only
+`SupportsShadowSamplingEXT` forced true, crashes identically.
+
+**It is SDL's Vulkan defragmenter.** The fault is `cmpl $0x2,(%rcx)` with `rcx = 0` in
+`VULKAN_INTERNAL_TextureSubresourceMemoryBarrier`, which is
+`textureSubresource->parent->container->header.info.type == SDL_GPU_TEXTURETYPE_3D` with a null
+`container`. The caller is `VULKAN_INTERNAL_DefragmentMemory`, inlined into `VULKAN_Submit` — the
+instructions after the faulting call build a `VkImageCopy` (`width >> level`, clamped to 1) and call
+`vkCmdCopyImage` from transfer-source to transfer-destination layout, which is that function's
+texture branch and nothing else. In `third_party/SDL/src/gpu/vulkan/SDL_gpu_vulkan.c` the branch
+creates `newTexture`, barriers its subresources at **line 11128**, and only assigns
+`newTexture->container` at **line 11172**, after the loop. The barrier helper's 3D-texture workaround
+(the `VK_KHR_maintenance9` comment) reads `container` unconditionally, so defragmenting *any*
+texture allocation crashes.
+
+Defragmentation runs only on a submit that requested a swapchain image while a window is claimed
+(`performCleanups`), which is why every off-screen conformance case, the soak and the other
+examples never reach it, and this example — which presents — does. It is reachable by any SDL_GPU
+game once SDL decides an allocation is worth compacting.
+
+**Not fixed here.** The fix is a two-line reordering inside vendored SDL. Patching
+`third_party/SDL` changes the SDL build every platform backend and every build tree on this machine
+shares (`.sdl-prebuilt-*`), which is outside a renderer-local closeout. Recorded as an open owner
+decision: carry a `cmake/patches/` patch (the precedent is `apply-sdl-shadercross-patch.cmake`), or
+take a newer SDL with the upstream fix.
+
+## SMG-0035 — shadow reception in the soak, and under the sanitizers
+
+### The soak now carries the shadow path
+
+`sdlgpu_modern_stress_test.cpp` gained a per-cycle shadow block: a directional `ShadowMap` and a
+point light's `CubeShadowMap` are built and filled, then sampled by a lit `BasicEffect` (with
+`PreferPerPixelLighting` **false**, so the forced per-pixel rule is exercised too), a stride-48
+untextured `PbrEffect`, and an **indirect** lit draw whose arguments live in a storage buffer —
+after which every map is destroyed. Each receiving draw captures three maps, three sampler states
+and the 129-float block, so this is where a keep-alive that never expired would show.
+
+Check F reads the last cycle's three frames back: the centre must be darker than a corner and not
+black, and the indirect frame must equal the direct one pixel for pixel.
+
+| cycles | RSS delta | fds | threads | result |
+|---|---|---|---|---|
+| 50 (+20 warm-up) | +2892 KiB | 23 → 23 | 8 → 8 | 6/6 PASS |
+| 1000 (+20) | +4104 KiB | 23 → 23 | 8 → 8 | 6/6 PASS |
+| **3000 (+20)** | **+2780 KiB** | **23 → 23** | **8 → 8** | **6/6 PASS**, 85.8 s |
+
+The delta does not scale with the work — 3000 cycles grew less than 1000 did — so it is allocator
+high-water, not a leak. Last cycle, every run: lit centre **38** (= the 0.15 ambient, so the
+shadowed pixel keeps its ambient) against a corner of 255; PBR centre 108 (0.15 linear, sRGB-encoded)
+against 255; indirect centre 38 / corner 255, identical to the direct draw.
+
+### ASan, UBSan, LeakSanitizer
+
+Tree `build-probe/smg-sdlgpu-asan` (SMG-0029's recipe: Debug, `CNA_SANITIZE=address,undefined`,
+`O0`, and SDL_gpu's own debug mode on — every run logs "debug mode enabled").
+
+| run | result |
+|---|---|
+| whole modern suite, 9 shards of 120 | **931 / 0 / 31** — the Release result exactly |
+| AddressSanitizer | **0 reports** |
+| UndefinedBehaviorSanitizer | **0 runtime errors** |
+| LeakSanitizer, soak at 70 cycles | 768 bytes in 6 allocations |
+| LeakSanitizer, soak at 520 cycles | **768 bytes in 6 allocations** |
+
+The LeakSanitizer total is byte-for-byte SMG-0029's, at both workloads, with the shadow block now
+in every cycle: the new path allocates nothing that survives it.
+
+### Validation messages, classified
+
+SDL_gpu's debug mode reports **51** `VUID-vkDestroyDevice-device-05137` ("a `VkBuffer` is still
+alive when the device is destroyed") across the suite. None is from a shadow test. Attributed to
+the test running when each was printed: `ClusteredForwardEffectTest` 48 (3 in each of 16 cases),
+`ParticleSystemTest` 2, `GpuInstanceCullerTest` 1 — all storage-buffer users; every object is a
+buffer, never an image.
+
+**Pre-existing, not introduced here:** the same filter run on the starting HEAD, in the same
+sanitizer tree, prints the same 51. The soak, which creates three storage buffers every cycle,
+prints **none** at 70 or at 520 cycles, so the count does not grow with buffer churn. Candidate
+cause, for whoever takes it: `SdlGpuStorageBufferRenderer`'s destructor skips
+`SDL_ReleaseGPUBuffer` when `owner_->Device()` is already null, so a buffer that outlives its
+device is never released. Out of scope for a shadow closeout; nothing in it is SDL_GPU-shadow.
+
+## SMG-0036 — regressions, and why the reference renderers were not re-run
+
+| suite | before closeout | after |
+|---|---|---|
+| Classic `-R '^SdlGpu'` | 202 / 27 | **202 / 27**, the 27 **identical by name** (both lists taken this session, whole tree rebuilt before each) |
+| CNAEXT examples `-L CnaExt` | 23 / 1 / 8 | **26 / 2 / 4** |
+| Dead / profile-aborted | 0 | **0** (`profile_dead_tests.py` over all 962 modern cases and over the example run) |
+| Boundary gates | — | all six pass; `sdl_inventory.py --check` was **already failing at the starting HEAD** (1086 recorded, 1091 measured) and `plans/plan_platform.md` is regenerated |
+| Build size | 661 MB | 662 MB |
+
+Examples: +3 passes (`CNAEXT_ShadowMap`, `CNAEXT_CascadedShadowMap`, `CNAEXT_ShadowReceiver`), +1
+failure (`CNAEXT_PointShadow`, SMG-0034 — SDL, reproducible without this closeout), and
+`CNAEXT_NoPosixSetenv` unchanged (Wayland workstream). The 4 skips are image-based lighting (3) and
+the GPU timer (1).
+
+**WebGPU, Vulkan and EasyGL were not re-run, and need not be.** The one file outside
+`modules/renderers/sdl-gpu/` that changed is `modules/renderers/vulkan/src/shaders/shadow_sampling.glsl`,
+and Vulkan's generator produces a `spirv_shaders.hpp` **byte-identical** to the checked-in one from
+the edited file. WebGPU (WGSL) and EasyGL (its own GLSL) never read that file. No generic CNAEXT
+code, no renderer-neutral effect code and no test changed.
+
+## SMG-0037 — Final state of the workstream
+
+| suite | baseline `d6e9ff050` | SMG-0031 | **closeout** |
+|---|---|---|---|
+| Modern `CnaGraphicsExtTests` | 682 / 21 / 259 | 900 / 0 / 62 | **931 / 0 / 31** |
+| Classic `-R '^SdlGpu'` | 202 / 27 | 202 / 27 | **202 / 27**, same set |
+| CNAEXT examples | 11 / 1 / 20 | 23 / 1 / 8 | **26 / 2 / 4** |
+| Dead / profile-aborted | 0 | 0 | **0** |
+| ASan / UBSan | — | 0 / 0 | **0 / 0** |
+| LeakSanitizer | — | 768 B fixed | **768 B fixed** |
+| Soak | — | 3020 cycles, +16 KiB | **3020 cycles with shadows, +2780 KiB, not scaling** |
+
+Environment of every run above: SDL **3.5.0** (vendored), SDL_gpu backend **`vulkan`** (logged at
+each renderer init), AMD Radeon 780M, RADV PHOENIX, Mesa 25.0.7; private headless Weston plus
+rootful Xwayland from `run_gpu_tests_private.sh`, never `:0` or `wayland-0`.
+
+### The 31 remaining skips, every one accounted for
+
+| count | reason | class |
+|---|---|---|
+| 19 | the test's payload is inline GLSL ES (compute, clustered, prepass, FXAA early-out, thin film, aerial perspective, contact shadow, shader diagnostics, half-float sampling) | not applicable: this renderer's intake is SPIR-V |
+| 4 | `HalfFloatDepthMechanismTest` — `CanBuildTheFailingShape` requires `RunsGlslShaderSource` | same |
+| 6 | `GpuTimerTest` ×4, `PassTimingTest` ×2 | SDL_gpu 3.5 has no query API; a CPU clock is forbidden by `IGpuTimerRenderer` |
+| 2 | `IndirectDrawTest.ARendererWithoutTheCapabilityRefusesByName`, `ComputeTest.WithoutSupportBothWrappersRefuseByName` | the refusal paths of capabilities this renderer **has** |
+
+No shadow skip remains, and none of the 31 is a capability SDL_gpu could honestly claim.
+
+### Capability matrix — rows that changed
+
+| feature group | state | evidence |
+|---|---|---|
+| shadow sampling (single, cascade, point, spot) | **implemented + tested** | SMG-0032; 31 cases, 3 examples, the soak's Check F |
+| untextured `PbrEffect` | **fixed** | SMG-0033 |
+| stock hardware instancing | unlit, as before | `IssueInstancedDraw` pairs `instanced3d.vert` with the unlit coloured fragment shader, so an instanced stock draw is neither lit nor shadowed; instancing through a custom `ShaderEffect` is unaffected. Pre-existing, not a shadow limitation; no modern case fails on it |
+| image-based lighting | not implemented | representable; out of this closeout's scope; `SupportsImageBasedLightingEXT` stays false |
+| `Texture2DArray` | not implemented | unchanged (SMG-0031) |
+| GPU timers, occlusion queries | unsupported by SDL_gpu | unchanged |
+
+### Open for the owner
+
+1. **SMG-0034** — SDL 3.5.0's Vulkan defragmenter dereferences a null `container`. It crashes
+   `CNAEXT_PointShadow`, and can crash any presenting SDL_GPU program. Fixing it means patching the
+   shared vendored SDL, or updating it.
+2. **SMG-0035** — the 51 pre-existing `VkBuffer`-at-teardown validation messages in the
+   storage-buffer suites.
