@@ -198,8 +198,28 @@ protected:
         }
         if (frame_ >= kMaxWaitFrames)
         {
-            check(false, "Timed out waiting for the real window resize to propagate (the platform "
-                         "resize never arrived)");
+            // plans/plan_webgpu_failing_eight.md WGF-0006: say which half timed out. This arm used
+            // to report "the platform resize never arrived" whichever half was missing, which is
+            // the wrong half here and sent the diagnosis at the compositor instead of at the
+            // drawable-size path.
+            int rendererWidth = 0;
+            int rendererHeight = 0;
+            renderer.GetViewportSize(rendererWidth, rendererHeight);
+            const std::string measured =
+                " (window " + std::to_string(bounds.Width) + "x" + std::to_string(bounds.Height) +
+                ", target " + std::to_string(targetClientWidth_) + "x" +
+                std::to_string(targetClientHeight_) + ", renderer logical " +
+                std::to_string(rendererWidth) + "x" + std::to_string(rendererHeight) +
+                ", viewport " + std::to_string(device.getViewportProperty().getWidthProperty()) +
+                "x" + std::to_string(device.getViewportProperty().getHeightProperty()) + ")";
+            if (!resizeApplied)
+                check(false, ("Timed out: the platform window never reached the requested size" +
+                              measured).c_str());
+            else
+                check(false, ("Timed out: the platform window resized, but the new size never "
+                              "reached the device -- the renderer's own logical size did not "
+                              "change either, so the drawable size the surface query reports is "
+                              "what stayed behind" + measured).c_str());
             finish(device);
             return;
         }

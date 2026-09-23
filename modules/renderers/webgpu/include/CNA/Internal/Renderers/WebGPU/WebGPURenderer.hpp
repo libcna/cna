@@ -390,6 +390,29 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
                                                 const void* data, int dataLength) override;
 
+        /**
+         * @brief plans/plan_webgpu_failing_eight.md WGF-0003: the exact compressed blocks of one
+         *        face region, read back from the block store this class already keeps.
+         *
+         * The store is authoritative for the same reason `SetCompressedDataEXT` documents: a
+         * compressed level cannot be recovered from the GPU as blocks on every backend, so the
+         * upload keeps them. Reading them here is therefore exact rather than a re-encode, which
+         * is what `ITextureCubeRenderer::GetCompressedDataEXT`'s contract requires and why its
+         * default refuses.
+         *
+         * @param face Cube face index, 0..5.
+         * @param level Mip level.
+         * @param x Left edge in texels; must be block aligned.
+         * @param y Top edge in texels; must be block aligned.
+         * @param w Width in texels; block aligned, or reaching the mip's right edge.
+         * @param h Height in texels; block aligned, or reaching the mip's bottom edge.
+         * @param data Destination for tightly packed block rows.
+         * @param dataLength Available destination bytes.
+         * @return True only when the whole requested region was copied.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const override;
+
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /// WEBGPU-113: real per-face CPU readback, closing this class's former no-op
@@ -1587,6 +1610,24 @@ namespace CNA::Internal::Renderers::WebGPU
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         /// WEBGPU-58: the backbuffer's real, applied MSAA sample count (0 = none).
         [[nodiscard]] int GetMultiSampleCount() const override;
+        /**
+         * @brief plans/plan_webgpu_failing_eight.md WGF-0004: the sample count this renderer has
+         *        actually applied, not the one that was asked for.
+         *
+         * The interface default echoes the request back, which lets a device report a
+         * multisampled backbuffer it never created. This answers from the applied state, the way
+         * `EasyGLRenderer` does, so `PresentationParameters.MultiSampleCount` carries the truth
+         * after direct construction as well as after `Reset()`.
+         *
+         * @param requestedMultiSampleCount The count the caller asked for; not consulted.
+         * @return The applied backbuffer sample count, or 0 when the backbuffer is single-sampled.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            static_cast<void>(requestedMultiSampleCount);
+            return GetMultiSampleCount();
+        }
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
 

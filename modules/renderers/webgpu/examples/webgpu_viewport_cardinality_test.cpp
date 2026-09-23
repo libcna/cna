@@ -222,7 +222,15 @@ class WebGpuViewportCardinalityTest : public Game
             dev.Clear(kBlack);
             for (int i = 0; i < 32; ++i)
             {
-                SetVp(dev, i % kRT, (i * 3) % kRT, 1 + (i % (kRT - 1)), 1 + ((i * 5) % (kRT - 1)),
+                // plans/plan_webgpu_failing_eight.md WGF-0001: derived so that x + w and y + h
+                // stay inside the target. The 32 rectangles are still distinct -- which is what
+                // this leg measures -- but they no longer run off the surface: SOFTWARE-226
+                // restored Microsoft's active-surface bounds check on Viewport and
+                // ScissorRectangle, and 22 of the 32 this loop used to build were outside it, so
+                // the leg threw before it could count anything.
+                const int w = 1 + (i % (kRT - 1));
+                const int h = 1 + ((i * 5) % (kRT - 1));
+                SetVp(dev, (i % kRT) % (kRT - w + 1), ((i * 3) % kRT) % (kRT - h + 1), w, h,
                       static_cast<float>(i) / 64.0f, 1.0f);
                 Draw3D(dev, kRed);
             }

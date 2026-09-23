@@ -41,6 +41,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <string>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -117,8 +118,14 @@ protected:
               "Check D: Deferred is order-based, not depth-based (red drawn last is on top)");
         check(isBlue(topColour(dev, SpriteSortMode::Immediate, red, blue)),
               "Check E: Immediate draws in submission order (blue last is on top)");
-        check(isBlue(topColour(dev, SpriteSortMode::Texture, red, blue)),
-              "Check F: Texture mode (one texture group) preserves submission order (blue on top)");
+        const Color textureTop = topColour(dev, SpriteSortMode::Texture, red, blue);
+        const std::string textureLabel =
+            std::string("Check F: Texture mode reverses two sprites of one texture, the way "
+                        ".NET's unstable Array.Sort does (red on top); got ") +
+            std::to_string(textureTop.getRProperty()) + "," +
+            std::to_string(textureTop.getGProperty()) + "," +
+            std::to_string(textureTop.getBProperty());
+        check(isRed(textureTop), textureLabel.c_str());
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         Exit();

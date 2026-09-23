@@ -1097,8 +1097,22 @@ namespace CNA::Internal::Renderers::WebGPU
             // it is a LOWER clamp on the level-of-detail -- the same mapping the reference renderer
             // makes to GL_TEXTURE_MIN_LOD and FNA3D's SDL_GPU driver to min_lod. 0 is XNA's default
             // and means no restriction, which is also lodMinClamp's own default.
-            descriptor.lodMinClamp = static_cast<float>(std::max(0, maxMipLevel));
+            // plans/plan_webgpu_failing_eight.md WGF-0005: bounded by the upper clamp. WebGPU
+            // refuses a sampler whose lodMinClamp exceeds its lodMaxClamp -- "Invalid lodMaxClamp:
+            // 32. Must be greater or equal to lodMinClamp (which is 99)" -- and an invalid sampler
+            // then invalidates the bind group that names it, which invalidates the draw, which
+            // makes wgpuQueueSubmit PANIC in a non-unwinding frame and abort the process. XNA
+            // accepts any MaxMipLevel and simply has no level that far down the chain, so the
+            // faithful answer is the last level a sampler can express, not a dead process.
             descriptor.lodMaxClamp = 32.0f;
+            // A NEGATIVE MaxMipLevel is not "no restriction": XNA writes the field to Direct3D 9's
+            // UNSIGNED MaxMipLevel, so -1 arrives as a very large level and names the LAST one,
+            // exactly as 99 does. Folding it to 0 with std::max selected the most detailed level
+            // instead -- the opposite end of the chain.
+            descriptor.lodMinClamp =
+                maxMipLevel < 0
+                    ? descriptor.lodMaxClamp
+                    : std::min(static_cast<float>(maxMipLevel), descriptor.lodMaxClamp);
             // WebGPU requires maxAnisotropy==1 unless mag/min/mipmap are all Linear (true only for
             // filter==2 above) -- matches VulkanRenderer::ApplySamplerState()'s identical
             // enableAniso gate.
@@ -1977,6 +1991,56 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuQueueWriteTexture(owner_->Queue(), &destination, blocks, byteCount, &layout, &extent);
         // No mip generation: a compressed cube's mips arrive pre-compressed, and the render-pass
         // blit cascade could not write into a BC texture anyway -- it is not a render attachment.
+        return true;
+    }
+
+    bool WebGPUTextureCubeRenderer::GetCompressedDataEXT(int face, int level, int x, int y,
+                                                         int w, int h, void* data,
+                                                         int dataLength) const
+    {
+        // plans/plan_webgpu_failing_eight.md WGF-0003. The rules are VulkanTextureCubeRenderer's
+        // own, because this is one shared contract rather than two: a block-aligned origin, a
+        // block-aligned extent unless it reaches the mip edge, and tightly packed block rows out.
+        if (data == nullptr || !compressed_ || blockBytes_ <= 0) return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= mipLevels_) return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0) return false;
+
+        const int levelSize = MipDim(size_, level);
+        if (x + w > levelSize || y + h > levelSize) return false;
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const std::size_t index = static_cast<std::size_t>(face * mipLevels_ + level);
+        if (index >= compressedLevels_.size()) return false;
+        const std::vector<std::uint8_t>& blocks = compressedLevels_[index];
+
+        const std::size_t blockBytes = static_cast<std::size_t>(blockBytes_);
+        const int levelBlockColumns = (levelSize + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+        // A face that was never uploaded has no blocks to return, and zero-filling the caller's
+        // destination is the fabrication REMED-GFX-130 removed from the sibling readback.
+        if (blocks.size() < static_cast<std::size_t>(levelBlockColumns) *
+                                static_cast<std::size_t>((levelSize + 3) / 4) * blockBytes)
+            return false;
+
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t source =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            std::memcpy(destination + static_cast<std::size_t>(row) *
+                                          static_cast<std::size_t>(regionBlockColumns) * blockBytes,
+                        blocks.data() + source,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes);
+        }
         return true;
     }
 
@@ -3426,6 +3490,17 @@ namespace CNA::Internal::Renderers::WebGPU
             CreateSurface();
             RequestAdapterAndDevice();
             ConfigureSurface(true);
+            // plans/plan_webgpu_failing_eight.md WGF-0004: the requested backbuffer sample count,
+            // applied rather than merely reported. This constructor used to ignore
+            // `args.multiSampleCount` entirely, so a GraphicsDevice built directly from
+            // PresentationParameters (rather than through GraphicsDeviceManager, whose Reset()
+            // path calls ApplyMultiSampleCount) kept sampleCount_ at 1 -- while the XNA layer
+            // wrote `GetAppliedMultiSampleCountEXT`'s answer back into PresentationParameters.
+            // The base implementation of that query echoes the request verbatim, so the device
+            // reported MultiSampleCount 4 and rendered single-sampled: exactly the "echo the
+            // requested integer" `parity_backbuffer_msaa` exists to catch. EasyGL takes
+            // `args.multiSampleCount` at construction for the same reason.
+            static_cast<void>(ApplyMultiSampleCount(args.multiSampleCount));
             IGraphicsRenderer::RegisterForWindow(surfaceState_.GetWindowId(), this);
         }
         catch (...)
@@ -3600,6 +3675,17 @@ namespace CNA::Internal::Renderers::WebGPU
         DestroyPbrResources();
         DestroySkinnedResources();
         DestroySkinnedPbrResources();
+        // plans/plan_webgpu_failing_eight.md WGF-0002: the two SHARED bind-group layouts, which
+        // belong to the device exactly as every family's own do. `EnsureShadowResourcesEXT` and
+        // `EnsureIblResourcesEXT` build theirs once and return early while the handle is non-null,
+        // so a handle left over from a destroyed device is never rebuilt -- and every pipeline
+        // layout that names it then fails on the new device with "BindGroupLayout ... doesn't
+        // match Device". That is what `WebGPU_ContextRecovery` was reporting: the cycle recovered,
+        // and raised a validation error per family while it did.
+        if (shadowBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(shadowBindGroupLayout_);
+        shadowBindGroupLayout_ = nullptr;
+        if (iblBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(iblBindGroupLayout_);
+        iblBindGroupLayout_ = nullptr;
         pbrDefaultWhiteTexture_.reset();
         pbrDefaultFlatNormalTexture_.reset();
         classicNullTexture_.reset();
@@ -11297,7 +11383,16 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                  | ((static_cast<std::uint64_t>(addressW) & 0xFFull) << 32)
                                  // WEBGPU-161: a changed MaxMipLevel must produce a NEW sampler
                                  // rather than mutate a live one, so it belongs in the key.
-                                 | ((static_cast<std::uint64_t>(std::max(0, maxMipLevel)) & 0xFFull) << 40);
+                                 // plans/plan_webgpu_failing_eight.md WGF-0005: keyed the way the
+                                 // descriptor READS it. `std::max(0, ...)` folded every negative
+                                 // onto level 0, so a sampler asking for the last level (XNA's
+                                 // unsigned-negative spelling) collided with one asking for the
+                                 // most detailed, and the cache handed back whichever was built
+                                 // first -- the descriptor's own clamp could never be reached.
+                                 | ((static_cast<std::uint64_t>(
+                                         maxMipLevel < 0 ? 0xFFull
+                                                         : (static_cast<std::uint64_t>(maxMipLevel)
+                                                            & 0xFFull))) << 40);
         const auto it = slotSamplerCache_.find(key);
         const bool hit = it != slotSamplerCache_.end();
 

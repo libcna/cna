@@ -238,8 +238,15 @@ class WebGpuScissorCardinalityTest : public Game
             dev.Clear(kBlack);
             for (int i = 0; i < 32; ++i)
             {
-                SetScissor(dev, i % kRT, (i * 3) % kRT, 1 + (i % (kRT - 1)),
-                           1 + ((i * 5) % (kRT - 1)));
+                // plans/plan_webgpu_failing_eight.md WGF-0001: derived so that x + w and y + h
+                // stay inside the target. The 32 rectangles are still distinct -- which is what
+                // this leg measures -- but they no longer run off the surface: SOFTWARE-226
+                // restored Microsoft's active-surface bounds check on Viewport and
+                // ScissorRectangle, and 22 of the 32 this loop used to build were outside it, so
+                // the leg threw before it could count anything.
+                const int w = 1 + (i % (kRT - 1));
+                const int h = 1 + ((i * 5) % (kRT - 1));
+                SetScissor(dev, (i % kRT) % (kRT - w + 1), ((i * 3) % kRT) % (kRT - h + 1), w, h);
                 Draw3D(dev, kRed);
             }
             SetScissor(dev, 0, 0, kRT, kRT);
@@ -266,9 +273,28 @@ class WebGpuScissorCardinalityTest : public Game
             Draw3D(dev, kRed);
             SetScissor(dev, 0, 0, 0, 0);                       // wholly degenerate
             Draw3D(dev, kRed);
-            SetScissor(dev, kRT - 4, kRT - 4, 32, 32);         // hangs off the target
-            Draw3D(dev, kRed);
-            SetScissor(dev, kRT + 16, kRT + 16, 8, 8);         // entirely outside
+            // plans/plan_webgpu_failing_eight.md WGF-0001: this leg used to set two rectangles
+            // that leave the target -- one hanging off it, one entirely outside -- and assert they
+            // were "legal". SOFTWARE-226 restored Microsoft's active-surface bounds check, under
+            // which they are not: a zero-SIZE rectangle stays legal (its own validation test says
+            // so) but one whose X + Width exceeds the surface is refused. Asserting the refusal is
+            // the stronger statement, and it keeps this leg's subject -- a rejected rectangle must
+            // disturb the cardinality no more than an accepted one does, which is exactly what the
+            // counts below then measure.
+            const Rectangle keptRectangle = dev.getScissorRectangleProperty();
+            for (const Rectangle& outside : {Rectangle(kRT - 4, kRT - 4, 32, 32),
+                                             Rectangle(kRT + 16, kRT + 16, 8, 8)})
+            {
+                bool threw = false;
+                try { dev.setScissorRectangleProperty(outside); }
+                catch (const System::ArgumentException&) { threw = true; }
+                check(threw, "S4 a rectangle that leaves the target is refused (" +
+                             std::to_string(outside.X) + "," + std::to_string(outside.Y) + " " +
+                             std::to_string(outside.Width) + "x" + std::to_string(outside.Height) +
+                             ")");
+                check(dev.getScissorRectangleProperty() == keptRectangle,
+                      "S4 the refusal left the previous rectangle in place");
+            }
             Draw3D(dev, kRed);
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
