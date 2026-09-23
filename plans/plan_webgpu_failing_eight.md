@@ -16,13 +16,14 @@ Branch `webgpu-failing-eight` from `next` `e1c772a6f`. Task IDs `WGF-0001`, … 
 | WGF-0004 | `Parity_backbuffer_msaa` | a directly constructed device reported MSAA it never applied | ✅ |
 | WGF-0005 | `TextureFilterMipContract` | an out-of-range `MaxMipLevel` aborted the process, and a negative one picked the wrong end of the chain | ✅ |
 | WGF-0006 | `SpriteBatch_SortMode` | the test asserted a stability `Array.Sort` does not have | ✅ |
-| WGF-0007 | `RealWindowResize` | the window resizes and the drawable size never follows — **not WebGPU's, and not fixed** | 📏 diagnosed |
+| WGF-0007 | `RealWindowResize` | the test assumed a presentation mode that stopped being the default | ✅ |
 
-Seven of the eight pass. `ctest -L WebGPU`: **147/148**, from 140/148.
+All eight pass. `ctest -L WebGPU`: **148/148**, from 140/148.
 
-Three were defects in the renderer (`WGF-0002`, `0003`, `0004`, `0005`), two were tests asserting
-behaviour the framework had deliberately changed (`WGF-0001`, `0006`), and one is a shared-layer
-finding that reproduces on Vulkan (`WGF-0007`).
+Four were defects in the renderer (`WGF-0002`, `0003`, `0004`, `0005`) and three were tests
+asserting behaviour the framework had deliberately changed (`WGF-0001`, `0006`, `0007`). That split
+is the lesson: a plan row being green says the work was done, not that the test still describes the
+framework it was written against.
 
 ---
 
@@ -140,28 +141,47 @@ Measured: `255,0,0` — red, the first-submitted sprite, exactly as `Array.Sort`
 
 ---
 
-## WGF-0007 — the window resizes, the drawable size does not follow
+## WGF-0007 — the test assumed a presentation mode that stopped being the default
 
-**Not fixed, and not WebGPU's.** `Vulkan_RealWindowResize` fails identically in the same private
-compositor, so the cause is in the shared platform/device path rather than in either renderer.
+**Symptom.** `Timed out waiting for the real window resize to propagate (the platform resize never
+arrived)`, plus `Viewport width changed after a real window resize` failing.
 
-**What was measured**, which is the value this row adds — the old failure message named the wrong
-half:
+**The first diagnosis was wrong, and measuring is what corrected it.** The message named the
+platform, so the platform is where the investigation started; a temporary probe in
+`GraphicsDevice::UpdateViewportFromWindow` then showed the drawable size arriving correctly:
 
 ```
-window 1600x680, target 1600x680, renderer logical 800x480, viewport 800x480
+[diag-uvfw] #0 drawable=800x480    #3 drawable=1600x680    #300 drawable=1600x680
 ```
 
-The platform window **did** reach the requested size. What never changed is the size the renderer
-reports (`GetViewportSize`), and therefore the device's `Viewport`. `GraphicsDevice::Present()`
-calls `UpdateViewportFromWindow()` every frame, which re-queries `IPlatformWindow::GetPixelSize()`
-and hands it to `OnSurfaceChanged`; 300 frames of that changed nothing, so the drawable size the
-platform reports is what stayed behind — not the compositor, which honoured the resize, and not
-the renderer, which was never told.
+The window resized, the platform reported it, and `OnSurfaceChanged` received it. A second probe,
+inside `GetViewportSize`, named the real cause:
 
-The test's timeout now says which half timed out and prints all four numbers, because the message
-it used to print — "the platform resize never arrived" — is false here and points the next reader
-at the compositor.
+```
+[diag-gvs] #300 drawable=1600x680 mode=0 virtual=800x480 -> 800x480
+```
 
-Chasing the drawable-size path further belongs with the platform layer and both affected renderers,
-not in a WebGPU row; it wants a task of its own in `plans/plan_platform.md`.
+`mode=0` is `CnaPresentationMode::Letterbox`, under which the LOGICAL viewport is pinned to the
+virtual resolution in both axes **by design** — the window's new shape reaches the device as a
+different physical rectangle instead, and it did: `233,0 1133x680`, correctly letterboxed inside
+1600×680. Nothing was broken.
+
+**Root cause.** The test's header calls `FixedHeightDynamicWidth` "the default". It stopped being
+one; `GraphicsRendererCreateArgs` defaults to `Letterbox`. A width-only oracle can never pass under
+Letterbox. The reference test (`easygl_real_window_resize_test.cpp`) had already met this and says
+so in its constructor — *"This test predates Letterbox becoming CNA's default ... state that
+prerequisite instead of making the test silently depend on whichever presentation mode the
+framework defaults to"* — and asks for the mode it needs. The WebGPU copy never did.
+
+**Fix.** State the same prerequisite in the same place, so the two tests measure the same thing in
+the same mode. A seventh check came out of the investigation and is kept: the PHYSICAL viewport
+rectangle followed the resize too (`0,0 1600x680`, was `0,0 800x480`), which is what a renderer
+actually programs and what distinguishes "the device recomputed its viewport" from "the logical
+number happened to move". The timeout arms now say which half timed out and print all four numbers.
+
+**Note on `Vulkan_RealWindowResize`**, which fails in this environment and is NOT this row's: it
+runs the EasyGL source, which already asks for the mode, and fails differently — *"X11/Xvfb resize
+event never arrived"*, with `ClientSizeChanged` never firing. That test provokes the resize through
+the windowing library's own native call, which is exactly the path the WebGPU test's header
+explains it avoids. An environment limit of the private rootful Xwayland, not a renderer defect,
+and not something this row changes.

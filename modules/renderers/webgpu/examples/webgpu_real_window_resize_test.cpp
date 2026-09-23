@@ -85,6 +85,10 @@ class WebGpuRealWindowResizeTest : public Game
     int clientSizeChangedCount_ = 0;
 
     int initialViewportWidth_ = 0;
+    int initialPhysX_ = 0;
+    int initialPhysY_ = 0;
+    int initialPhysWidth_ = 0;
+    int initialPhysHeight_ = 0;
     int initialViewportHeight_ = 0;
     int initialBackBufferWidth_ = 0;
     int initialBackBufferHeight_ = 0;
@@ -106,12 +110,26 @@ class WebGpuRealWindowResizeTest : public Game
         const int newViewportHeight = device.getViewportProperty().getHeightProperty();
         const auto& parameters = device.getPresentationParametersProperty();
 
+        // plans/plan_webgpu_failing_eight.md WGF-0007: the physical rectangle as well as the
+        // logical size. Under FixedHeightDynamicWidth (which the constructor now asks for, the way
+        // the reference test does) both follow the window; the physical one is what a renderer
+        // actually programs, and checking it here is what distinguishes "the device recomputed its
+        // viewport" from "the logical number happened to move".
+        int physX = 0, physY = 0, physWidth = 0, physHeight = 0;
+        renderer.GetDefaultViewportRect(physX, physY, physWidth, physHeight);
         check(newViewportHeight == initialViewportHeight_,
-              "Viewport height stays pinned to PreferredBackBufferHeight after a real window resize "
-              "(FixedHeightDynamicWidth)");
+              "Viewport height stays pinned to PreferredBackBufferHeight after a real window "
+              "resize (FixedHeightDynamicWidth)");
         check(newViewportWidth != initialViewportWidth_,
-              "Viewport width changed after a real window resize -- the new window size reached the "
-              "device without anyone calling Reset()");
+              "Viewport width changed after a real window resize -- the new window size reached "
+              "the device without anyone calling Reset()");
+        check(physWidth != initialPhysWidth_ || physHeight != initialPhysHeight_ ||
+                  physX != initialPhysX_ || physY != initialPhysY_,
+              ("and the PHYSICAL viewport rectangle followed it too (" + std::to_string(physX) + "," +
+               std::to_string(physY) + " " + std::to_string(physWidth) + "x" +
+               std::to_string(physHeight) + ", was " + std::to_string(initialPhysX_) + "," +
+               std::to_string(initialPhysY_) + " " + std::to_string(initialPhysWidth_) + "x" +
+               std::to_string(initialPhysHeight_) + ")").c_str());
         check(parameters.getBackBufferWidthProperty() == initialBackBufferWidth_ &&
                   parameters.getBackBufferHeightProperty() == initialBackBufferHeight_,
               "PresentationParameters.BackBufferWidth/Height do NOT follow a real window resize "
@@ -156,6 +174,8 @@ protected:
         {
             initialViewportWidth_ = device.getViewportProperty().getWidthProperty();
             initialViewportHeight_ = device.getViewportProperty().getHeightProperty();
+            renderer.GetDefaultViewportRect(initialPhysX_, initialPhysY_, initialPhysWidth_,
+                                            initialPhysHeight_);
             const auto& parameters = device.getPresentationParametersProperty();
             initialBackBufferWidth_ = parameters.getBackBufferWidthProperty();
             initialBackBufferHeight_ = parameters.getBackBufferHeightProperty();
@@ -178,6 +198,8 @@ protected:
         const Rectangle bounds = window.getClientBoundsProperty();
         const bool resizeApplied =
             bounds.Width == targetClientWidth_ && bounds.Height == targetClientHeight_;
+        int physX = 0, physY = 0, physWidth = 0, physHeight = 0;
+        renderer.GetDefaultViewportRect(physX, physY, physWidth, physHeight);
         const bool viewportUpdated =
             device.getViewportProperty().getWidthProperty() != initialViewportWidth_;
 
@@ -216,10 +238,8 @@ protected:
                 check(false, ("Timed out: the platform window never reached the requested size" +
                               measured).c_str());
             else
-                check(false, ("Timed out: the platform window resized, but the new size never "
-                              "reached the device -- the renderer's own logical size did not "
-                              "change either, so the drawable size the surface query reports is "
-                              "what stayed behind" + measured).c_str());
+                check(false, ("Timed out: the platform window resized, but the device's physical "
+                              "viewport rectangle never followed" + measured).c_str());
             finish(device);
             return;
         }
@@ -235,6 +255,13 @@ public:
         // first check -- the defect plans/plan_vulkan_parity.md VKPAR-0006 fixed in 104 Vulkan
         // tests.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        // plans/plan_webgpu_failing_eight.md WGF-0007: state the prerequisite instead of assuming
+        // it. This test's header called FixedHeightDynamicWidth "the default"; it stopped being
+        // one, and `GraphicsRendererCreateArgs` now defaults to Letterbox -- under which the
+        // LOGICAL viewport is pinned in both axes by design and a width-only oracle can never
+        // pass. The reference test (easygl_real_window_resize_test.cpp) states the same
+        // prerequisite in the same place and for the same reason.
+        gdm_->setPreferredPresentationModeProperty(PresentationMode::FixedHeightDynamicWidth);
     }
 
     [[nodiscard]] int getResultProperty() const { return fail_ > 0 ? 1 : 0; }
