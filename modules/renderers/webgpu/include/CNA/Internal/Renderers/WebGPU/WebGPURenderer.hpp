@@ -3323,6 +3323,19 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param layout The layout it was built from, which says where the neutral record sits.
          * @return The native slot the instance buffer must be bound at.
          */
+        /**
+         * @brief STREETW-0005: fills the per-instance world-matrix buffer layout.
+         *
+         * The stride-derived families (PBR, Skinned, SkinnedPbr) build their vertex layout by hand
+         * rather than through `BuildStockVertexStateEXT`, so they take the columns from here
+         * instead of from `AppendInstanceBufferLayoutEXT`. One definition either way.
+         *
+         * @param attributes Storage for the four columns; must outlive the pipeline creation.
+         * @param layout Receives the buffer layout.
+         */
+        static void FillInstanceBufferLayoutEXT(std::array<WGPUVertexAttribute, 4>& attributes,
+                                                WGPUVertexBufferLayout& layout);
+
         static std::uint32_t AppendInstanceBufferLayoutEXT(
             StockVertexStateEXT& state,
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
@@ -5130,6 +5143,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // always-pass default).
         struct SkinnedDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
@@ -5193,10 +5209,13 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       bool instanced = false);
         void QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
-                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                              int instanceCount = 1,
+                              const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueSkinnedDraw(WGPURenderPassEncoder pass, const SkinnedDrawCommand& command,
                               ReplayState& state);
 
@@ -5204,12 +5223,26 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUShaderModule skinnedColorShader_ = nullptr;          ///< stride 56, per-pixel-lit
         WGPUShaderModule skinnedVertexLitShader_ = nullptr;      ///< stride 52, per-vertex-lit
         WGPUShaderModule skinnedVertexLitColorShader_ = nullptr; ///< stride 56, per-vertex-lit
+        /// STREETW-0005: the instanced twins of all four. The per-instance matrix applies AFTER
+        /// the bone skin, which is the composition EasyGL and Vulkan both use.
+        WGPUShaderModule skinnedInstancedShader_ = nullptr;
+        WGPUShaderModule skinnedColorInstancedShader_ = nullptr;
+        WGPUShaderModule skinnedVertexLitInstancedShader_ = nullptr;
+        WGPUShaderModule skinnedVertexLitColorInstancedShader_ = nullptr;
         WGPUBindGroupLayout skinnedBindGroupLayout_ = nullptr;   ///< group 0: Uniforms + LitLightParams + SkinningParams UBOs
         WGPUPipelineLayout skinnedPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (texture, texturedBindGroupLayout_ reused)
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPipelines_;
+        /// STREETW-0005: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedInstancedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedColorPipelines_;
+        /// STREETW-0005: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedColorInstancedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedVertexLitPipelines_;
+        /// STREETW-0005: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedVertexLitInstancedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedVertexLitColorPipelines_;
+        /// STREETW-0005: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedVertexLitColorInstancedPipelines_;
         std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
 
         // SkinnedPbrEffect (PBR + skinning combo, stride 68, VertexPositionNormalTangentTextureSkinned).
@@ -5222,6 +5255,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
         struct SkinnedPbrDrawCommand
         {
+            /// plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world
+            /// matrices, or a disabled state for an ordinary draw.
+            WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
             /// WMG-0022: this draw's image-based lighting, resolved at its public call.
@@ -5294,21 +5330,32 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       bool instanced = false);
         void QueueSkinnedPbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                  const Matrix& world, const Matrix& view, const Matrix& projection,
-                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                              int instanceCount = 1,
+                              const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssueSkinnedPbrDraw(WGPURenderPassEncoder pass, const SkinnedPbrDrawCommand& command,
                               ReplayState& state);
 
         WGPUShaderModule skinnedPbrShader_ = nullptr;
+        /// STREETW-0005: its instanced twin.
+        WGPUShaderModule skinnedPbrInstancedShader_ = nullptr;
         /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin.
         WGPUShaderModule skinnedPbrColorShader_ = nullptr;
+        /// STREETW-0005: its instanced twin.
+        WGPUShaderModule skinnedPbrColorInstancedShader_ = nullptr;
         WGPUBindGroupLayout skinnedPbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors + SkinningParams UBOs
         WGPUPipelineLayout skinnedPbrPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (pbrBindGroupLayout1_ reused)
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrPipelines_;
+        /// STREETW-0005: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrInstancedPipelines_;
         /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorPipelines_;
+        /// STREETW-0005: its instanced twin's cache.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorInstancedPipelines_;
         std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
 
         /**

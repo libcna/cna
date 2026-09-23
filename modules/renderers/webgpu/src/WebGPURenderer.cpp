@@ -5006,6 +5006,26 @@ namespace CNA::Internal::Renderers::WebGPU
         return buffer;
     }
 
+    void WebGPURenderer::FillInstanceBufferLayoutEXT(
+        std::array<WGPUVertexAttribute, 4>& attributes, WGPUVertexBufferLayout& layout)
+    {
+        // Four Float32x4 columns at locations 12-15 -- the numbering pbr3d.vert.glsl's
+        // CNA_INSTANCED variant established and every instanced stock WGSL here reuses, clear of
+        // the widest stock record's own inputs. The stride is this renderer's materialized 64
+        // rather than the caller's, so InstanceFrequency never reaches a native layout.
+        for (std::uint32_t column = 0; column < 4u; ++column)
+        {
+            attributes[column].format = WGPUVertexFormat_Float32x4;
+            attributes[column].offset = column * 16u;
+            attributes[column].shaderLocation = 12u + column;
+        }
+        layout = WGPUVertexBufferLayout{};
+        layout.arrayStride = kInstanceRecordBytesEXT;
+        layout.stepMode = WGPUVertexStepMode_Instance;
+        layout.attributeCount = attributes.size();
+        layout.attributes = attributes.data();
+    }
+
     std::uint32_t WebGPURenderer::StockInstanceSlotEXT(
         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
     {
@@ -5029,18 +5049,8 @@ namespace CNA::Internal::Renderers::WebGPU
             state.buffers[neutral].arrayStride = 0;
             state.buffers[neutral].stepMode = WGPUVertexStepMode_Vertex;
         }
-        for (std::uint32_t column = 0; column < 4u; ++column)
-        {
-            state.instanceAttributes[column].format = WGPUVertexFormat_Float32x4;
-            state.instanceAttributes[column].offset = column * 16u;
-            state.instanceAttributes[column].shaderLocation = 12u + column;
-        }
         const std::uint32_t slot = static_cast<std::uint32_t>(state.bufferCount);
-        state.buffers[state.bufferCount] = WGPUVertexBufferLayout{};
-        state.buffers[state.bufferCount].arrayStride = kInstanceRecordBytesEXT;
-        state.buffers[state.bufferCount].stepMode = WGPUVertexStepMode_Instance;
-        state.buffers[state.bufferCount].attributeCount = state.instanceAttributes.size();
-        state.buffers[state.bufferCount].attributes = state.instanceAttributes.data();
+        FillInstanceBufferLayoutEXT(state.instanceAttributes, state.buffers[state.bufferCount]);
         ++state.bufferCount;
         return slot;
     }
@@ -12693,7 +12703,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // neutral-white default for it.
         if (params.pbr && params.skinned && (stride == 68 || stride == 80))
         {
-            QueueSkinnedPbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            QueueSkinnedPbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                                instanceCount, instanceStream);
             return;
         }
         if (params.pbr && !params.skinned && (stride == 48 || stride == 60))
@@ -12710,7 +12721,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // as "not a stride-16 VertexPositionColor buffer": a true statement about the wrong route.
         if (params.skinned && !params.pbr)
         {
-            QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                                instanceCount, instanceStream);
             return;
         }
 
@@ -12846,13 +12858,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 (shape != StockVertexShapeEXT::StrideDerived || params.pbr || params.skinned);
             if (ownFamily)
             {
-                if (params.skinned)
-                {
-                    throw System::NotSupportedException(
-                        "CNA WebGPU: an instanced SkinnedEffect or SkinnedPbrEffect draw has no "
-                        "instanced skinned program in this renderer; draw the instances "
-                        "separately, or use an unskinned effect.");
-                }
+                // STREETW-0005: skinned draws included. The per-instance matrix applies AFTER the
+                // bone skin -- one palette serves every instance, which is what an instanced
+                // skinned draw means, and the composition EasyGL and Vulkan both use.
                 DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount,
                                      params, "instanced", instanceCount, instanceStream);
                 return;
@@ -14814,6 +14822,24 @@ namespace
         skinnedColorShader_ = nullptr;
         skinnedVertexLitShader_ = nullptr;
         skinnedVertexLitColorShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0005: the instanced twins, on the same
+        // principle -- a pipeline cache nobody frees is the leak this prevents.
+        for (auto* cache : {&skinnedInstancedPipelines_, &skinnedColorInstancedPipelines_, &skinnedVertexLitInstancedPipelines_, &skinnedVertexLitColorInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (skinnedInstancedShader_ != nullptr) wgpuShaderModuleRelease(skinnedInstancedShader_);
+        skinnedInstancedShader_ = nullptr;
+        if (skinnedColorInstancedShader_ != nullptr) wgpuShaderModuleRelease(skinnedColorInstancedShader_);
+        skinnedColorInstancedShader_ = nullptr;
+        if (skinnedVertexLitInstancedShader_ != nullptr) wgpuShaderModuleRelease(skinnedVertexLitInstancedShader_);
+        skinnedVertexLitInstancedShader_ = nullptr;
+        if (skinnedVertexLitColorInstancedShader_ != nullptr) wgpuShaderModuleRelease(skinnedVertexLitColorInstancedShader_);
+        skinnedVertexLitColorInstancedShader_ = nullptr;
     }
 
     void WebGPURenderer::CreateSkinnedResources()
@@ -14846,6 +14872,11 @@ namespace
         shaderDescriptor.label = StringView("CNA WebGPU Skinned3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         skinnedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // is appended after the rewrite, exactly as the ordinary module composes it.
+        skinnedInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU Skinned3D Instanced WGSL", webgpu_shaders::kSkinned,
+            InstancedWgslShapeEXT::Skinned, "Skinned3D", webgpu_shaders::kShadowSampling);
 
         // Stride-56 sibling: adds the CNB-67 trailing per-vertex Color (normalized ubyte4, offset
         // 52), gated by uVertexColorEnabled (u.light0DiffuseVertexColor.w). A WebGPU pipeline must
@@ -14869,6 +14900,11 @@ namespace
         colorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexColor WGSL");
         colorShaderDescriptor.nextInChain = &colorWgsl.chain;
         skinnedColorShader_ = wgpuDeviceCreateShaderModule(device_, &colorShaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // is appended after the rewrite, exactly as the ordinary module composes it.
+        skinnedColorInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU Skinned3D Colored Instanced WGSL", webgpu_shaders::kSkinnedColor,
+            InstancedWgslShapeEXT::Skinned, "Skinned3D Colored", webgpu_shaders::kShadowSampling);
 
         // Real per-vertex-lit sibling of both shaders above -- Task 1102b's identical technique
         // (move the Blinn-Phong math from fs_main into vs_main, Gouraud-interpolate via varyings),
@@ -14887,6 +14923,11 @@ namespace
         vertexLitShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit WGSL");
         vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
         skinnedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // is appended after the rewrite, exactly as the ordinary module composes it.
+        skinnedVertexLitInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU Skinned3D VertexLit Instanced WGSL", webgpu_shaders::kSkinnedVertexLit,
+            InstancedWgslShapeEXT::Skinned, "Skinned3D VertexLit", webgpu_shaders::kShadowSampling);
 
         // Vertex-lit + vertex-colour combo (stride 56).
         // WMG-0014: shadow reception, appended to every module of this family so they
@@ -14901,6 +14942,11 @@ namespace
         vertexLitColorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit VertexColor WGSL");
         vertexLitColorShaderDescriptor.nextInChain = &vertexLitColorWgsl.chain;
         skinnedVertexLitColorShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitColorShaderDescriptor);
+        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // is appended after the rewrite, exactly as the ordinary module composes it.
+        skinnedVertexLitColorInstancedShader_ = CreateInstancedStockModuleEXT(
+            device_, "CNA WebGPU Skinned3D VertexLit Colored Instanced WGSL", webgpu_shaders::kSkinnedVertexLitColor,
+            InstancedWgslShapeEXT::Skinned, "Skinned3D VertexLit Colored", webgpu_shaders::kShadowSampling);
 
         std::array<WGPUBindGroupLayoutEntry, 3> layoutEntries{};
         layoutEntries[0].binding = 0;
@@ -14945,7 +14991,8 @@ namespace
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    bool instanced)
     {
         const bool hasVertexColor = (stride == 56);
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
@@ -14955,15 +15002,27 @@ namespace
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = preferVertexLit
-            ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
-            : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_);
+        // STREETW-0005: caches of their own -- the instanced variants differ in shader MODULE
+        // and vertex-buffer COUNT, neither of which the key expresses.
+        auto& cache = instanced
+            ? (preferVertexLit
+                   ? (hasVertexColor ? skinnedVertexLitColorInstancedPipelines_
+                                     : skinnedVertexLitInstancedPipelines_)
+                   : (hasVertexColor ? skinnedColorInstancedPipelines_ : skinnedInstancedPipelines_))
+            : (preferVertexLit
+                   ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
+                   : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_));
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
-        WGPUShaderModule shaderModule = preferVertexLit
-            ? (hasVertexColor ? skinnedVertexLitColorShader_ : skinnedVertexLitShader_)
-            : (hasVertexColor ? skinnedColorShader_ : skinnedShader_);
+        WGPUShaderModule shaderModule = instanced
+            ? (preferVertexLit
+                   ? (hasVertexColor ? skinnedVertexLitColorInstancedShader_
+                                     : skinnedVertexLitInstancedShader_)
+                   : (hasVertexColor ? skinnedColorInstancedShader_ : skinnedInstancedShader_))
+            : (preferVertexLit
+                   ? (hasVertexColor ? skinnedVertexLitColorShader_ : skinnedVertexLitShader_)
+                   : (hasVertexColor ? skinnedColorShader_ : skinnedShader_));
 
         // Matches ApplyLayout's stride==52/56 cases (VertexPositionNormalTextureSkinned, with an
         // optional trailing Color appended at offset 52 for stride 56 -- CNB-67's own "append
@@ -14997,19 +15056,24 @@ namespace
             arrayStride = 56;
         }
 
-        WGPUVertexBufferLayout vertexBufferLayout{};
+        // STREETW-0005: the per-instance world matrices at slot 1, when this draw is instanced.
+        std::array<WGPUVertexBufferLayout, 2> vertexBufferLayouts{};
+        WGPUVertexBufferLayout& vertexBufferLayout = vertexBufferLayouts[0];
         vertexBufferLayout.arrayStride = arrayStride;
         vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes.data();
+        std::array<WGPUVertexAttribute, 4> instanceAttributes{};
+        if (instanced) FillInstanceBufferLayoutEXT(instanceAttributes, vertexBufferLayouts[1]);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU Skinned3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU Skinned3D Instanced Pipeline"
+                               : "CNA WebGPU Skinned3D Pipeline";
         desc.layout = skinnedPipelineLayout_;
         desc.vertexModule = shaderModule;
         desc.fragmentModule = shaderModule;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexBufferLayouts.data();
+        desc.vertexBufferCount = instanced ? 2u : 1u;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -15135,7 +15199,9 @@ namespace
     void WebGPURenderer::QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
-                                                  const GpuDrawParams& params)
+                                                  const GpuDrawParams& params,
+                                              int instanceCount,
+                                              const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         const std::size_t stride = webgpuVb.Stride();
@@ -15143,6 +15209,8 @@ namespace
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         SkinnedDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "SkinnedEffect", command.instance);
         // WEBGPU-177: the canonical stride-52/56 record still takes the memcpy it always did, so
         // nothing about the layout this renderer has always accepted changes. Any OTHER declaration
         // that can supply the same five semantics is rewritten into that record instead of being
@@ -15337,7 +15405,8 @@ namespace
                                                                 command.depthWrite, command.depthFunc,
                                                                 command.blend, command.blendParams,
                                                                 command.cullMode, command.wireframe,
-                                                                command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                                command.depthBias, command.slopeScaleDepthBias, command.stencil,
+            command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -15354,6 +15423,11 @@ namespace
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // plans/plan_street_webgpu.md STREETW-0005: the per-instance world matrices at the
+        // slot past this family's own single stream. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer = BindInstanceStreamEXT(pass, command.instance, 1u);
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -15361,14 +15435,14 @@ namespace
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -15379,6 +15453,7 @@ namespace
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(skinningUniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -15409,6 +15484,20 @@ namespace
         skinnedPbrPipelineLayout_ = nullptr;
         skinnedPbrBindGroupLayout0_ = nullptr;
         skinnedPbrShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0005: the instanced twins, on the same
+        // principle -- a pipeline cache nobody frees is the leak this prevents.
+        for (auto* cache : {&skinnedPbrInstancedPipelines_, &skinnedPbrColorInstancedPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (skinnedPbrInstancedShader_ != nullptr) wgpuShaderModuleRelease(skinnedPbrInstancedShader_);
+        skinnedPbrInstancedShader_ = nullptr;
+        if (skinnedPbrColorInstancedShader_ != nullptr) wgpuShaderModuleRelease(skinnedPbrColorInstancedShader_);
+        skinnedPbrColorInstancedShader_ = nullptr;
     }
 
     void WebGPURenderer::CreateSkinnedPbrResources()
@@ -15437,6 +15526,15 @@ namespace
         const std::string colorWgsl =
             ExpandPbrVertexColourWgslEXT(shaderSource, true, 6) + webgpu_shaders::kShadowSampling
             + webgpu_shaders::kIblSampling;
+        // plans/plan_street_webgpu.md STREETW-0005: the instanced twins of both.
+        const std::string shadowAndIbl =
+            std::string(webgpu_shaders::kShadowSampling) + webgpu_shaders::kIblSampling;
+        const std::string instancedWgsl = MakeInstancedStockWgslEXT(
+            ExpandPbrVertexColourWgslEXT(shaderSource, false, 6),
+            InstancedWgslShapeEXT::Skinned, "SkinnedPbr3D") + shadowAndIbl;
+        const std::string instancedColorWgsl = MakeInstancedStockWgslEXT(
+            ExpandPbrVertexColourWgslEXT(shaderSource, true, 6),
+            InstancedWgslShapeEXT::Skinned, "SkinnedPbr3D") + shadowAndIbl;
 
         WGPUShaderSourceWGSL wgsl{};
         wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -15455,6 +15553,24 @@ namespace
         colorShaderDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D VertexColor WGSL");
         colorShaderDescriptor.nextInChain = &colorWgslChain.chain;
         skinnedPbrColorShader_ = wgpuDeviceCreateShaderModule(device_, &colorShaderDescriptor);
+
+        WGPUShaderSourceWGSL instancedWgslChain{};
+        instancedWgslChain.chain.sType = WGPUSType_ShaderSourceWGSL;
+        instancedWgslChain.code = StringView(instancedWgsl.c_str());
+        WGPUShaderModuleDescriptor instancedDescriptor{};
+        instancedDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D Instanced WGSL");
+        instancedDescriptor.nextInChain = &instancedWgslChain.chain;
+        skinnedPbrInstancedShader_ = wgpuDeviceCreateShaderModule(device_, &instancedDescriptor);
+
+        WGPUShaderSourceWGSL instancedColorWgslChain{};
+        instancedColorWgslChain.chain.sType = WGPUSType_ShaderSourceWGSL;
+        instancedColorWgslChain.code = StringView(instancedColorWgsl.c_str());
+        WGPUShaderModuleDescriptor instancedColorDescriptor{};
+        instancedColorDescriptor.label =
+            StringView("CNA WebGPU SkinnedPbr3D Instanced VertexColor WGSL");
+        instancedColorDescriptor.nextInChain = &instancedColorWgslChain.chain;
+        skinnedPbrColorInstancedShader_ =
+            wgpuDeviceCreateShaderModule(device_, &instancedColorDescriptor);
         if (skinnedPbrColorShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create SkinnedPbr3D vertex-colour shader");
 
@@ -15505,7 +15621,8 @@ namespace
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    bool instanced)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
@@ -15514,7 +15631,10 @@ namespace
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_;
+        // STREETW-0005: the instanced variants keep caches of their own.
+        auto& cache = instanced
+            ? (colored ? skinnedPbrColorInstancedPipelines_ : skinnedPbrInstancedPipelines_)
+            : (colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_);
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
@@ -15547,19 +15667,28 @@ namespace
             attributes[6].offset = 76;
             attributes[6].shaderLocation = 6;
         }
-        WGPUVertexBufferLayout vertexBufferLayout{};
+        // STREETW-0005: the per-instance world matrices at slot 1, when this draw is instanced.
+        std::array<WGPUVertexBufferLayout, 2> vertexBufferLayouts{};
+        WGPUVertexBufferLayout& vertexBufferLayout = vertexBufferLayouts[0];
         vertexBufferLayout.arrayStride = colored ? 80u : 68u;
         vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
         vertexBufferLayout.attributeCount = colored ? 7u : 6u;
         vertexBufferLayout.attributes = attributes.data();
+        std::array<WGPUVertexAttribute, 4> instanceAttributes{};
+        if (instanced) FillInstanceBufferLayoutEXT(instanceAttributes, vertexBufferLayouts[1]);
+
+        WGPUShaderModule module = instanced
+            ? (colored ? skinnedPbrColorInstancedShader_ : skinnedPbrInstancedShader_)
+            : (colored ? skinnedPbrColorShader_ : skinnedPbrShader_);
 
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU SkinnedPbr3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU SkinnedPbr3D Instanced Pipeline"
+                               : "CNA WebGPU SkinnedPbr3D Pipeline";
         desc.layout = skinnedPbrPipelineLayout_;
-        desc.vertexModule = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
-        desc.fragmentModule = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexModule = module;
+        desc.fragmentModule = module;
+        desc.vertexBuffers = vertexBufferLayouts.data();
+        desc.vertexBufferCount = instanced ? 2u : 1u;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -15579,7 +15708,9 @@ namespace
     void WebGPURenderer::QueueSkinnedPbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                                      PrimitiveType primitive, int primitiveCount,
-                                                     const GpuDrawParams& params)
+                                                     const GpuDrawParams& params,
+                                              int instanceCount,
+                                              const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // plans/plan_gltf.md GLTF-463/GLTF-465: stride 80 is the same record with TEXCOORD_1 and a packed
@@ -15593,6 +15724,8 @@ namespace
         EnsurePbrDefaultTextures();
 
         SkinnedPbrDrawCommand command;
+        // plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world matrices.
+        CaptureInstanceStreamEXT(instanceStream, instanceCount, "SkinnedPbrEffect", command.instance);
         command.colored = (skinnedPbrStride == 80);
         const auto& shadow = webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * skinnedPbrStride;
@@ -15805,7 +15938,8 @@ namespace
                                                                   command.depthWrite, command.depthFunc,
                                                                   command.blend, command.blendParams,
                                                                   command.cullMode, command.wireframe,
-                                                                  command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                                  command.depthBias, command.slopeScaleDepthBias, command.stencil,
+            command.instance.enabled);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -15826,6 +15960,11 @@ namespace
         wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 3, iblBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // plans/plan_street_webgpu.md STREETW-0005: the per-instance world matrices at the
+        // slot past this family's own single stream. An ordinary draw binds nothing and
+        // counts one, so its draw call below is exactly what it was.
+        WGPUBuffer instanceBuffer = BindInstanceStreamEXT(pass, command.instance, 1u);
+        const std::uint32_t instances = command.instance.enabled ? command.instance.count : 1u;
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -15833,14 +15972,14 @@ namespace
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -15853,6 +15992,7 @@ namespace
         pendingBufferReleases_.push_back(factorsUniformBuffer);
         pendingBufferReleases_.push_back(skinningUniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 }
 

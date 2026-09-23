@@ -40,6 +40,8 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -102,6 +104,54 @@ namespace
         Vector2 uv0;
         Vector2 uv1;
     };
+
+    /// QueueSkinnedDraw's stride-52 record (VertexPositionNormalTextureSkinned).
+    struct SkinnedVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(SkinnedVertex) == 52, "skinned vertex must be 52 bytes");
+
+    /// The stride-52 record's own declaration, in the order that layout expects.
+    const VertexDeclaration& SkinnedDeclaration()
+    {
+        static const VertexDeclaration declaration{
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+            VertexElement(48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0)};
+        return declaration;
+    }
+
+    /// QueueSkinnedPbrDraw's stride-68 record (VertexPositionNormalTangentTextureSkinned).
+    struct SkinnedPbrVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(SkinnedPbrVertex) == 68, "skinned PBR vertex must be 68 bytes");
+
+    /// The stride-68 record's own declaration.
+    const VertexDeclaration& SkinnedPbrDeclaration()
+    {
+        static const VertexDeclaration declaration{
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0),
+            VertexElement(40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+            VertexElement(64, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0)};
+        return declaration;
+    }
 
     Color ReadPixel(GraphicsDevice& device, int x, int y)
     {
@@ -311,6 +361,63 @@ protected:
             effect.getDirectionalLight2Property().setEnabledProperty(false);
             effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
             DrawAndCheck(device, effect, geometry, indices, instanceStream, "EnvMap3D");
+        }
+
+        // ---- Skinned: one bone palette, three instances. -----------------------------------
+        // plans/plan_street_webgpu.md STREETW-0005. The bone is the identity, so what the leg
+        // measures is the family and the per-instance matrix rather than the skin itself -- and a
+        // single palette serving every instance is exactly what an instanced skinned draw means.
+        {
+            const SkinnedVertex quad[4] = {
+                {-0.1f, -0.1f, 0.5f,  0, 0, -1,  0.0f, 1.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+                { 0.1f, -0.1f, 0.5f,  0, 0, -1,  1.0f, 1.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+                { 0.1f,  0.1f, 0.5f,  0, 0, -1,  1.0f, 0.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+                {-0.1f,  0.1f, 0.5f,  0, 0, -1,  0.0f, 0.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+            };
+            VertexBuffer geometry(device, SkinnedDeclaration(), 4, BufferUsage::WriteOnly);
+            geometry.SetDataRaw(quad, 4, static_cast<int>(sizeof(SkinnedVertex)));
+
+            SkinnedEffect effect(device);
+            effect.setWorldProperty(identity);
+            effect.setViewProperty(identity);
+            effect.setProjectionProperty(identity);
+            effect.setTextureProperty(&red);
+            const std::vector<Matrix> bones = {identity};
+            effect.SetBoneTransforms(bones);
+            effect.setWeightsPerVertexProperty(1);
+            effect.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            effect.DirectionalLight0.setEnabledProperty(false);
+            effect.DirectionalLight1.setEnabledProperty(false);
+            effect.DirectionalLight2.setEnabledProperty(false);
+            effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            DrawAndCheck(device, effect, geometry, indices, instanceStream, "Skinned3D");
+        }
+
+        // ---- SkinnedPbr: the other half of the skinned gap. --------------------------------
+        {
+            const SkinnedPbrVertex quad[4] = {
+                {-0.1f, -0.1f, 0.5f,  0, 0, -1,  1, 0, 0, 1,  0.0f, 1.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+                { 0.1f, -0.1f, 0.5f,  0, 0, -1,  1, 0, 0, 1,  1.0f, 1.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+                { 0.1f,  0.1f, 0.5f,  0, 0, -1,  1, 0, 0, 1,  1.0f, 0.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+                {-0.1f,  0.1f, 0.5f,  0, 0, -1,  1, 0, 0, 1,  0.0f, 0.0f,  1, 0, 0, 0,  0, 0, 0, 0},
+            };
+            VertexBuffer geometry(device, SkinnedPbrDeclaration(), 4, BufferUsage::WriteOnly);
+            geometry.SetDataRaw(quad, 4, static_cast<int>(sizeof(SkinnedPbrVertex)));
+
+            SkinnedPbrEffect effect(device);
+            effect.setWorldProperty(identity);
+            effect.setViewProperty(identity);
+            effect.setProjectionProperty(identity);
+            effect.setTextureProperty(&red);
+            const std::vector<Matrix> bones = {identity};
+            effect.SetBoneTransforms(bones);
+            effect.setWeightsPerVertexProperty(1);
+            effect.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            effect.DirectionalLight0.setEnabledProperty(false);
+            effect.DirectionalLight1.setEnabledProperty(false);
+            effect.DirectionalLight2.setEnabledProperty(false);
+            effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            DrawAndCheck(device, effect, geometry, indices, instanceStream, "SkinnedPbr3D");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

@@ -37,6 +37,7 @@ CNA_GRAPHICS_RENDERER=WEBGPU $R --exec ./build/bin/cna-street --no-audio --no-ov
 | STREETW-0002 | cna-street: the atmospheric sky was GLSL or SPIR-V only, so a WGSL renderer drew no sky | ✅ |
 | STREETW-0003 | WebGPU: the whole frame sat half a pixel off the other renderers' — XNA's pixel-centre convention was never applied | ✅ |
 | STREETW-0004 | WebGPU: every OTHER stock family, instanced — textured, lit, alpha-test, dual-texture, env-map | ✅ |
+| STREETW-0005 | WebGPU: the skinned families, instanced — the last gap against Vulkan's instanced set | ✅ |
 
 ---
 
@@ -261,11 +262,10 @@ buffer in slot 1"*. An instanced draw now binds it at a zero stride under vertex
 record 0 for every vertex of every instance — the same "one value for the whole draw" the record
 exists to supply.
 
-**Skinned is refused, by name.** An instanced `SkinnedEffect` or `SkinnedPbrEffect` draw throws
-rather than rendering: those families are stride-derived, have five shader variants between them,
-and share one bone palette across every instance, which is a shape no caller here has asked for.
-Vulkan does implement it (`VULKAN-231`/`VULKAN-232`); this is a named refusal on a route, not a
-silent wrong result, and it is the one gap left between the two renderers' instanced sets.
+**Skinned was refused by name here, and `STREETW-0005` then implemented it.** The refusal is
+described because it is what this commit shipped: an instanced `SkinnedEffect` or
+`SkinnedPbrEffect` draw threw rather than rendering, which is a named refusal on a route rather
+than a silent wrong result.
 
 **Test.** `WebGPU_InstancedStockFamilies`
 (`modules/renderers/webgpu/examples/webgpu_instanced_stock_families_test.cpp`), 10/10 on the real
@@ -287,3 +287,43 @@ texture coordinate, so the instanced route hands it to `ColoredTextured3D` — t
 ordinary route has always given it. The leg's subject, that a different declaration gets a pipeline
 of its own rather than sharing one, is now counted natively, which is the count that does not
 depend on which family owns the draw.
+
+---
+
+## STREETW-0005 — the skinned families, instanced
+
+The last gap between this renderer's instanced set and Vulkan's. `STREETW-0004` refused an
+instanced `SkinnedEffect` or `SkinnedPbrEffect` draw by name; it now draws one.
+
+**Nothing new was needed, which is the point.** Every piece was already in place: the WGSL rewrite
+has a `Skinned` shape, which moves the instance matrix onto `skinnedPos` — **after** the bone skin,
+the composition `VULKAN-231` chose and `EasyGL`'s skinned program uses — and from there the
+existing text carries it into `u.mvp`, `lp.world` and the fog term, because they all read that same
+local. The normal follows the rule the rewrite already applies: `normalMatrix` is `W^-T`, so the
+instance's own `I^-T` multiplies it and the total is `W^-T · I^-T · (bone normal)`. SkinnedPbr's
+tangent basis picks the instance up through `mat3(lp.world * cnaInstanceMatrix)`, so a mirroring
+instance flips the bitangent exactly as a mirroring World does — `sign(det(W·I)) ==
+sign(det(W))·sign(det(I))`, which is what `pbr3d.vert.glsl`'s own header says about its version.
+
+Six modules: `Skinned3D` ×4 (per-pixel/per-vertex lit × with/without the trailing colour) and
+`SkinnedPbr3D` ×2 (with/without COLOR_0). These families build their vertex layout by hand rather
+than through `BuildStockVertexStateEXT`, so the per-instance columns come from
+`FillInstanceBufferLayoutEXT` — factored out of `AppendInstanceBufferLayoutEXT` in this row so that
+the stride-derived families and the declaration-driven ones state the layout once between them.
+
+**One bone palette serves every instance.** That is what an instanced skinned draw *means*: the
+palette is effect state, not per-instance state, so a crowd sharing one pose is what this draws.
+Per-instance palettes would need a storage buffer indexed by `instance_index`, which is a different
+feature and is not what Vulkan implements either.
+
+**The route no longer refuses anything.** `DrawInstancedPrimitivesEx` hands every stock shape to
+`DispatchStockDrawEXT`; `Colored` keeps the `instanced3d` family it exists for, and an unsupported
+stride-derived draw still falls through to it exactly as before.
+
+**Test.** `WebGPU_InstancedStockFamilies` grew two legs, 14/14 on the real GPU: `Skinned3D` at
+stride 52 and `SkinnedPbr3D` at stride 68, each with an identity bone so the leg measures the
+family and the per-instance matrix rather than the skin, three instances at three screen positions
+through a red texture.
+
+**Measured.** `ctest -L WebGPU`: **140/148**, the same 8 failures as the unmodified branch. No
+family in this renderer now renders an instanced draw with the wrong program, and none refuses one.
