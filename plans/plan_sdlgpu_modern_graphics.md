@@ -372,3 +372,37 @@ Also landed here:
 
 Classic `-R '^SdlGpu'` stayed at 202 / 27 of 229 across the first tranche, with a byte-identical
 failure set.
+
+### SMG-0013 — compute bindings are indexed by slot, not appended
+
+A defect in SMG-0012's own first cut, found by `ClusteredLightComputeTest` reporting
+"cluster 1576: CPU has 1 lights, GPU has 0".
+
+`SDL_BindGPUComputeStorageBuffers` takes a **contiguous array starting at a first-slot index**, so
+the array's position *is* the binding. The first cut built that array by appending every resource
+it found bound and skipping every one it did not — so a shader with an unbound resource, or one
+whose declaration order differed from its binding order, had every later binding shifted down one.
+Nothing reports an error when that happens: the shader reads a real buffer, just not the one it
+asked for.
+
+Now every binding array is sized from the reflected count and written at `resource.slot`, leaving a
+hole where the caller bound nothing. Applied to all four kinds — read-only and read-write storage
+buffers, storage images, and samplers.
+
+**Measured:** `ClusteredLightComputeTest` 5 failures to **10/10 passing**.
+
+### SMG-0014 — a methodology finding worth more than the bug it hid
+
+Two classic tests, `SdlGpu_MinimizedRetry` and `SdlGpu_PresentationSurface`, appeared to regress
+after SMG-0012 and reproduced on every rerun. They were not a regression.
+
+This configuration is `CNA_SHARED_LIBRARY=ON`: the renderer lives in `libcna.so`, and the example
+test binaries link against it. Adding virtual members to `SdlGpuRenderer` changes its vtable
+layout, so an example binary built before that change calls through a slot that has since moved —
+`GetSwapIntervalEXT()` returned something that was never a swap interval. Rebuilding only
+`cna_renderer_sdl_gpu` and `CnaGraphicsExtTests`, as the iteration loop had been doing, leaves
+every `cna_test_sdlgpu_*` executable stale.
+
+**Rule for every measurement run in this ledger from here on: `cmake --build cmake-build-sdlgpu`
+with no `--target`, then measure.** A targeted build is for compile-checking only. After the full
+build both tests pass, and the classic failure set is the baseline's again.

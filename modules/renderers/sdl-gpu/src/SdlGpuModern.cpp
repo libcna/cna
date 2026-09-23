@@ -655,8 +655,14 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // SDL splits the two directions: read-write bindings are declared when the pass opens, so
         // the driver can transition them once, and read-only ones are bound inside it.
-        std::vector<SDL_GPUStorageBufferReadWriteBinding> readWrite;
-        std::vector<SDL_GPUBuffer*> readOnly;
+        // Indexed BY SLOT, never appended. `SDL_BindGPUComputeStorageBuffers` takes a contiguous
+        // array starting at a first-slot index, so a resource the caller left unbound must leave a
+        // hole in place rather than shift every later binding down one -- which is what appending
+        // did, and is exactly the kind of defect that produces a shader reading the wrong buffer
+        // while nothing reports an error.
+        std::vector<SDL_GPUStorageBufferReadWriteBinding> readWrite(
+            reflection_.readWriteStorageBufferCount);
+        std::vector<SDL_GPUBuffer*> readOnly(reflection_.readOnlyStorageBufferCount, nullptr);
         for (const SpirvResourceBindingEXT& resource : reflection_.resources)
         {
             if (resource.kind != SpirvResourceKindEXT::StorageBuffer) continue;
@@ -670,13 +676,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                     ? bound->buffer->Buffer()
                     : nullptr;
             if (buffer == nullptr) continue;
-            if (resource.readOnly) readOnly.push_back(buffer);
-            else readWrite.push_back(SDL_GPUStorageBufferReadWriteBinding{buffer, false, 0, 0, 0});
+            if (resource.readOnly)
+            {
+                if (resource.slot < readOnly.size()) readOnly[resource.slot] = buffer;
+            }
+            else if (resource.slot < readWrite.size())
+            {
+                readWrite[resource.slot].buffer = buffer;
+                readWrite[resource.slot].cycle = false;
+            }
         }
 
         // Storage images divide the same way, and by the same reflected read-only flag.
-        std::vector<SDL_GPUStorageTextureReadWriteBinding> readWriteTextures;
-        std::vector<SDL_GPUTexture*> readOnlyTextures;
+        std::vector<SDL_GPUStorageTextureReadWriteBinding> readWriteTextures(
+            reflection_.readWriteStorageTextureCount);
+        std::vector<SDL_GPUTexture*> readOnlyTextures(
+            reflection_.readOnlyStorageTextureCount, nullptr);
         for (const SpirvResourceBindingEXT& resource : reflection_.resources)
         {
             if (resource.kind != SpirvResourceKindEXT::StorageTexture) continue;
@@ -686,12 +701,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                     return static_cast<std::uint32_t>(candidate.unit) == resource.originalBinding;
                 });
             if (bound == storageTextures_.end() || bound->texture == nullptr) continue;
-            if (resource.readOnly) readOnlyTextures.push_back(bound->texture);
-            else
+            if (resource.readOnly)
             {
-                SDL_GPUStorageTextureReadWriteBinding binding{};
-                binding.texture = bound->texture;
-                readWriteTextures.push_back(binding);
+                if (resource.slot < readOnlyTextures.size())
+                    readOnlyTextures[resource.slot] = bound->texture;
+            }
+            else if (resource.slot < readWriteTextures.size())
+            {
+                readWriteTextures[resource.slot].texture = bound->texture;
             }
         }
 
@@ -717,23 +734,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         // on the graphics path, as a crash inside the Vulkan driver rather than a diagnostic).
         if (reflection_.samplerCount > 0)
         {
-            std::vector<SDL_GPUTextureSamplerBinding> samplers;
-            samplers.reserve(reflection_.samplerCount);
+            std::vector<SDL_GPUTextureSamplerBinding> samplers(reflection_.samplerCount);
+            for (auto& binding : samplers)
+            {
+                binding.texture = owner_->AcquireDefaultWhiteTextureEXT();
+                binding.sampler = owner_->AcquireComputeSamplerEXT();
+            }
             for (const SpirvResourceBindingEXT& resource : reflection_.resources)
             {
                 if (resource.kind != SpirvResourceKindEXT::SampledTexture) continue;
+                if (resource.slot >= samplers.size()) continue;
                 const auto bound = std::find_if(
                     sampledTextures_.begin(), sampledTextures_.end(),
                     [&resource](const SdlGpuComputeBoundTextureEXT& candidate) {
                         return static_cast<std::uint32_t>(candidate.unit)
                              == resource.originalBinding;
                     });
-                SDL_GPUTextureSamplerBinding binding{};
-                binding.texture = bound != sampledTextures_.end() ? bound->texture : nullptr;
-                if (binding.texture == nullptr)
-                    binding.texture = owner_->AcquireDefaultWhiteTextureEXT();
-                binding.sampler = owner_->AcquireComputeSamplerEXT();
-                samplers.push_back(binding);
+                if (bound != sampledTextures_.end() && bound->texture != nullptr)
+                    samplers[resource.slot].texture = bound->texture;
             }
             if (!samplers.empty())
                 SDL_BindGPUComputeSamplers(
