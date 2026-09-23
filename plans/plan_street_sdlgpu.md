@@ -35,6 +35,7 @@ Vulkan is the natural reference: same driver, same GPU.
 |---|---|---|
 | STREETS-0001 | SDL_GPU: every instanced stock draw took the position-only `instanced3d` module, whatever effect was applied | ✅ |
 | STREETS-0002 | SDL_GPU: no image-based lighting -- the street fell back to a flat hemisphere ambient | ✅ |
+| STREETS-0003 | SDL_GPU: half-float textures reported unfilterable, so FXAA and bloom read the HDR scene with point sampling | ✅ |
 
 ---
 
@@ -145,3 +146,52 @@ name. `GltfRendererPbrFallbackPolicy`: the three pre-existing failures only.
 **The street after the fix:** 2-21 % of pixels differ from Vulkan (mean 0.5-4.8/255), from 44-99 %
 before STREETS-0001; the environment is baked (`environment baked -- peak radiance 1.445`) and the
 fallback message is gone.
+
+---
+
+## STREETS-0003 — the engine layer read the HDR scene with point sampling
+
+**Symptom.** After STREETS-0002 the two frames agreed in tone to a fraction of a level, but 2-21 %
+of pixels still differed, concentrated on foliage and distant roof edges. Found by measurement, in
+the order STREETW-0003 used:
+
+* **Not a shift.** A sub-pixel search over +-1 px puts the optimum at exactly (0, 0).
+* **Not tone.** Frame means agree to 0.3/255 per channel.
+* **Sharpness.** The SDL_GPU frame carried 12-20 % more high-frequency energy than Vulkan's.
+* **Not MSAA.** `multiSample: 0` changes neither renderer's capture (it only affects the back
+  buffer, which receives the final composite).
+* **FXAA.** With `fxaa: false` in both, the high-frequency energy matches (8.06 vs 7.97). With it,
+  Vulkan's drops 33 % and SDL_GPU's only 19 %: the pass ran, and did less.
+
+**Root cause.** FXAA's taps sit at sub-texel offsets, so it depends on a linear filter.
+`CNA::Graphics::FullscreenPass` degrades a filtered read of a half-float source to `PointClamp`
+wherever `EngineLayerFloatFilteringScope::RendererFiltersFormat` says the renderer cannot filter
+it, and on SDL_GPU that fell through to `HalfFloatTextureLinearFiltering`, which the renderer never
+implemented: `SupportsHalfFloatTextureLinearFilteringEXT()` was the interface default `false`, and
+its own capability switch hardcoded the same. So every engine-layer pass sampling the HDR scene --
+FXAA, and `BloomPass`, which asks the same capability -- read nearest texels. `plans/plan_sdlgpu.md`
+had recorded "half filtering still inherited" as owned by later sampler/effect tasks; none took it.
+
+**Fix.** `SupportsHalfFloatTextureLinearFilteringEXT()` answers true where an RGBA16F render
+target exists on the device. SDL_gpu has no filterability query, unlike Vulkan's
+`vkGetPhysicalDeviceFormatProperties`, and does not need one: every backend it drives guarantees
+linear filtering of 16-bit float colour -- Vulkan's required-format table mandates
+`SAMPLED_IMAGE_FILTER_LINEAR` for R16G16B16A16_SFLOAT, D3D12 from feature level 11, Metal on every
+GPU family. 32-bit float formats carry no such guarantee and are untouched. The XNA-level refusal
+of a filtered float read outside the engine layer (SOFTWARE-217) is unaffected: it does not
+consult this capability.
+
+**Tests.** `SdlGpu_HalfFloatFiltering` (new): a 2x1 HdrBlendable target, black then white,
+stretched through `FullscreenPass` with `LinearClamp`. **A/B:** with the old answer the row is
+0 / 0 / 0 / 255 / 255 with **0** intermediate pixels; with the fix it ramps 0 / 4 / 124 / 131 /
+251 / 255 with 26. `SdlGpu_Smoke` pinned the old `false` ("half-float storage is absent"), which
+was never true of its render targets; the check now pins the new contract (filtering exactly where
+RGBA16F targets exist) and passes -- the test still fails on its two older stale checks, as on the
+baseline. Classic `-R '^SdlGpu'`: the same 27 by name; `-L CnaExt` 27/1/4; `CnaGraphicsExtTests`
+931/0/31; the 79 capability/format/bloom/FXAA cases in `CnaTests` pass except
+`ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges`, which fails
+identically with the change stashed (a NormalizedByte4 BasicEffect expectation, not filtering).
+
+**The street after the fix:** 1.0-7.2 % of pixels differ from Vulkan at 17 of the 18 viewpoints
+(mean 0.3-2.0/255), and high-frequency energy matches (06: 4.82 vs 4.68; 13: 5.40 vs 5.33).
+`06-above-the-junction` stays at 18.9 % -- see the next task.

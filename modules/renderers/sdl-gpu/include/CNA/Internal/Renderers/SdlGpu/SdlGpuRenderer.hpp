@@ -2964,6 +2964,21 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Whether this device can run compute. @return True when compute pipelines work here.
          */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+
+        /**
+         * @brief plans/plan_street_sdlgpu.md STREETS-0003: whether a half-float colour texture can
+         *        be sampled with a linear filter here.
+         *
+         * SDL_gpu has no filterability query, so this cannot ask the way the Vulkan renderer asks
+         * `vkGetPhysicalDeviceFormatProperties`. It does not have to: every backend SDL_gpu drives
+         * guarantees it -- Vulkan's required-format table mandates
+         * `SAMPLED_IMAGE_FILTER_LINEAR` for R16G16B16A16_SFLOAT, D3D12 requires it from feature
+         * level 11, and Metal filters RGBA16Float on every GPU family -- so the one live question
+         * is whether this device made the format a sampleable render target at all.
+         *
+         * @return True when RGBA16F render targets exist on this device.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
         /**
          * @brief Whether the stock lit shaders sample the shadow state. SMG-0032.
          *

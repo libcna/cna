@@ -246,9 +246,14 @@ protected:
                       dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets) ==
                       dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable),
                   "float render-target capabilities agree with exact live format support");
-            check(!dev.SupportsCapability(
-                      CNA::GraphicsCapability::HalfFloatTextureLinearFiltering),
-                  "half-float filtering is false while half-float storage is absent");
+            // plans/plan_street_sdlgpu.md STREETS-0003: filtering is reported exactly where an
+            // RGBA16F render target -- the only half-float surface this renderer makes -- exists.
+            check(dev.SupportsCapability(
+                      CNA::GraphicsCapability::HalfFloatTextureLinearFiltering) ==
+                      (renderer.ClassifyRenderTargetFormatEXT(
+                           static_cast<int>(SurfaceFormat::HalfVector4)) ==
+                       CNA::Internal::Renderers::RendererFormatVerdict::Supported),
+                  "half-float filtering is reported exactly where RGBA16F render targets exist");
             check(!dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) &&
                       !dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
                   "out-of-scope modern capabilities are not inherited as true");

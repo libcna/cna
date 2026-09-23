@@ -2705,10 +2705,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                 return SupportsCompiledEffects();
             case CNA::GraphicsCapability::WireFrame:
                 return true;
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+                return SupportsHalfFloatTextureLinearFilteringEXT();
             case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::FloatRenderTargets:
             case CNA::GraphicsCapability::HalfFloatRenderTargets:
-            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
             case CNA::GraphicsCapability::ComputeShaders:
             case CNA::GraphicsCapability::IndirectDraw:
                 return false;
@@ -2784,6 +2785,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             return nullptr;
         }
+    }
+
+    bool SdlGpuRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // Without this every engine-layer pass that samples the HDR scene -- FXAA's sub-texel
+        // taps, bloom's downsample -- was forced onto point sampling on SDL_GPU, and cna-street's
+        // anti-aliasing visibly did less than on Vulkan on the same GPU.
+        return device_ != nullptr &&
+               ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::HalfVector4)) ==
+                   RendererFormatVerdict::Supported;
     }
 
     CNA::RendererFormatSupport SdlGpuRenderer::GetSurfaceFormatUsageSupportEXT(

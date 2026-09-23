@@ -570,6 +570,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_instanced_stock_families
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # plans/plan_street_sdlgpu.md STREETS-0003: an engine-layer pass reads a half-float render
+    # target through the linear filter it asked for. FullscreenPass exists only with CNAEXT.
+    if(CNA_CNAEXT)
+        cna_sdlgpu_test(cna_test_sdlgpu_halffloat_filtering sdlgpu_halffloat_filtering_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_HalfFloatFiltering
+            COMMAND cna_test_sdlgpu_halffloat_filtering
+            TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    endif()
+
     # GLTF-213: exact PBR sRGB transfer witnesses on rigid and identity-skinned pipelines.
     cna_sdlgpu_test(cna_test_sdlgpu_pbr_srgb_transfer
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
