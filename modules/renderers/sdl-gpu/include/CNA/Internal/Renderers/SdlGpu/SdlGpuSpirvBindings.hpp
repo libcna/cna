@@ -108,7 +108,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::uint32_t assignedBinding = 0;
         /**
          * @brief Zero-based index within its own `SDL_gpu` category, which is the slot number
-         *        every `SDL_Bind*` call actually takes.
+         *        every binding call actually takes.
          */
         std::uint32_t slot = 0;
         /** @brief How many descriptors this declaration occupies; above one for an array. */

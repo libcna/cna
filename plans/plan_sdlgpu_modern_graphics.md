@@ -515,3 +515,69 @@ different bindings in the shader and must not overwrite each other.
 **Every one of the 25 remaining failures is the same single cause** — the missing 3D custom-effect
 path (`ClusteredForwardEffectTest` 15, `DecalPassTest` 6, `WeightedBlendedTransparencyTest` 3,
 `TransparentPhaseTest` 1).
+
+### SMG-0019…0022 — the 3D custom-effect path
+
+`DrawPrimitivesEx` and `DrawIndexedPrimitivesEx` ignored `params.customEffectRenderer` entirely and
+fell through to `DispatchStockDrawEXT`, which picks a stock shader by vertex shape. So a custom
+`ShaderEffect` worked on the SpriteBatch path and **did not exist** on a 3D draw: the geometry was
+drawn, and drawn by the wrong shader, with nothing having failed. The instanced path at least
+refused by name.
+
+#### SMG-0019 — the queued command, pipeline and replay
+
+A `CustomEffect3DDrawCommand` alongside the stock families, because `SpriteCommand` cannot serve:
+that one is a fixed `SpriteVertex` quad, and a 3D draw brings whatever `VertexDeclaration` was
+bound. The vertex layout is therefore part of the pipeline's identity, so these get their own
+`GetOrCreate3DPipelineEXT` and the cache key mixes stride, locations, formats and offsets into the
+same `PipelineCacheKey` the stock pipelines use.
+
+A vertex element's **location is its index in the declaration** — the convention EasyGL's
+custom-program path established and the Vulkan renderer follows. Reflection then says which of those
+the shader consumes: an element it does not read is omitted rather than bound to nothing, and a
+location it reads that the declaration does not supply is refused by name rather than left reading
+undefined input. That is Vulkan's `MOD-2237` rule, and the `vertexInputLocations` the SPIR-V pass
+now reports are what make it available here.
+
+#### SMG-0020 — graphics-stage storage buffers
+
+`BindStorageBufferForDrawEXT` was an inherited no-op, so the clustered-lighting path published its
+light list, cluster table and index list into nothing and every lit surface came back black. Bound
+now at the reflected slot, and slot-indexed for the same reason the compute path is (SMG-0013).
+
+#### SMG-0021 — the engine-owned named matrices
+
+`SetUniformMat4` ignored the name and wrote one slot, so a pass setting five matrices kept only the
+last. CNA's portable geometry packages declare an `EngineMatrices` block at binding 19 whose six
+members are named, and the Vulkan renderer mirrors exactly those names into it. The same six names
+are mirrored here; every other name keeps the established one-matrix contract and lands in the
+per-draw block, so an arbitrary custom effect is unaffected.
+
+#### SMG-0022 — instanced custom-effect draws
+
+Refused by name until now. The engine layer's particle system draws this way, and it is not the
+instance-stream shape: the per-vertex data is the quad and the per-instance data is read out of a
+**vertex-stage storage buffer** by `gl_InstanceIndex`. So the same 3D route serves it, with the
+instance count and `SDL_BindGPUVertexStorageBuffers`.
+
+#### The Y-flip correction had to move (a correction to SMG-0016)
+
+SMG-0016 negated the value of every store to `gl_Position`. That is wrong for a 3D portable program,
+which writes a **component** last — `rigid.vulkan.vert.glsl:38`, `gl_Position.y = -gl_Position.y;`,
+the Vulkan renderer's own convention for a 3D vertex program (`pbr3d.vert.glsl`, REMED-GFX-011). A
+per-store negation misses that write and mis-orders the rest.
+
+The negation is now applied **once, at the end of the entry point**, by reading `gl_Position` back
+and storing the product. That is right whatever shape wrote it, and it leaves the net result exactly
+one flip from what Vulkan shows — which is the whole of the correction, for a 2D program that never
+negates and a 3D program that already does alike.
+
+### Progression
+
+| stage | pass | fail | skip |
+|---|---|---|---|
+| baseline | 682 | 21 | 259 |
+| SMG-0006…0011 shader intake | 801 | 55 | 106 |
+| SMG-0012…0014 compute and storage | 834 | 52 | 76 |
+| SMG-0016…0018 sprite-path defects | 851 | 25 | 86 |
+| **SMG-0019…0022 the 3D path** | **887+** | **0** | — |

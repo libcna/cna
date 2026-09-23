@@ -94,7 +94,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         constexpr std::uint32_t kOpTypeFloat = 22;
         constexpr std::uint32_t kOpTypeVector = 23;
         constexpr std::uint32_t kOpConstantComposite = 44;
+        constexpr std::uint32_t kOpLoad = 61;
         constexpr std::uint32_t kOpStore = 62;
+        constexpr std::uint32_t kOpReturn = 253;
         constexpr std::uint32_t kOpAccessChain = 65;
         constexpr std::uint32_t kOpFMul = 133;
         constexpr std::uint32_t kDecorationBuiltIn = 11;
@@ -491,7 +493,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::map<std::uint32_t, std::uint32_t> slotOf;
 
         // One resource set is filled by appending categories in SDL's documented order, each
-        // category's slot numbering restarting at zero because that is what SDL_Bind* indexes.
+        // category's slot numbering restarting at zero because that is what a binding call indexes.
         auto fill = [&](const std::uint32_t set, const std::vector<std::vector<std::size_t>>& groups) {
             std::uint32_t binding = 0;
             for (const auto& group : groups)
@@ -652,7 +654,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // ---- pass 5: cancel SDL_gpu's clip-space Y flip, for a vertex module ----------------
         //
         // SDL's own Vulkan backend negates the viewport height it is given
-        // (`SDL_gpu_vulkan.c`: `currentViewport.y = viewport->y + viewport->h;
+        // (its Vulkan backend's viewport setter: `currentViewport.y = viewport->y + viewport->h;
         // `currentViewport.height = -viewport->h;`), so clip space on SDL_gpu is Y-up. CNA's
         // portable shaders are written to CNA's Vulkan renderer's convention, which is Y-down --
         // that renderer passes a POSITIVE height precisely because its shaders emit NDC directly.
@@ -667,8 +669,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             // glslang writes gl_Position as member 0 of the gl_PerVertex block, reached by an
             // OpAccessChain, not as a variable of its own -- so the BuiltIn decoration to look for
-            // is an OpMemberDecorate, and the thing to negate is the value stored THROUGH that
-            // chain. (A module that decorates a bare variable is handled too; some producers do.)
+            // is an OpMemberDecorate. (A module that decorates a bare variable is handled too.)
             std::uint32_t positionStruct = 0;
             std::uint32_t positionVariable = 0;
             for (const Instruction& inst : rewritten)
@@ -681,8 +682,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                          && w[2] == kDecorationBuiltIn && w[3] == kBuiltInPosition)
                     positionVariable = w[1];
             }
-
-            // The Output variable whose pointee is that block.
             if (positionStruct != 0)
             {
                 for (const std::uint32_t variable : variableOrder)
@@ -698,44 +697,73 @@ namespace CNA::Internal::Renderers::SdlGpu
                 }
             }
 
-            // Every pointer that names gl_Position: the access chains into member 0, plus the
-            // variable itself when it is decorated directly.
-            std::set<std::uint32_t> positionPointers;
+            // The negation is applied ONCE, at the end of the entry point, by reading gl_Position
+            // back and storing the product -- not per store. A shader may write it more than once,
+            // and CNA's 3D portable programs deliberately write a component last
+            // (`rigid.vulkan.vert.glsl`: `gl_Position.y = -gl_Position.y;`, the Vulkan renderer's
+            // own convention for a 3D program). Negating each stored value would miss that one and
+            // mis-order the rest; negating the final value is right whatever shape wrote it, and
+            // leaves the net result exactly one flip away from what Vulkan shows, which is the
+            // whole correction (see the block comment above).
+            std::uint32_t vectorPointerType = 0;
             std::uint32_t vectorType = 0;
+            std::uint32_t zeroIndex = 0;
             if (positionVariable != 0 && positionStruct == 0)
             {
-                positionPointers.insert(positionVariable);
                 const auto pointer = variableType.find(positionVariable);
-                if (pointer != variableType.end() && pointerPointee.count(pointer->second) != 0)
-                    vectorType = pointerPointee[pointer->second];
+                if (pointer != variableType.end())
+                {
+                    vectorPointerType = pointer->second;
+                    if (pointerPointee.count(vectorPointerType) != 0)
+                        vectorType = pointerPointee[vectorPointerType];
+                }
             }
             else if (positionVariable != 0)
             {
                 for (const Instruction& inst : rewritten)
                 {
                     const auto& w = inst.words;
-                    if (inst.opcode != kOpAccessChain || w.size() < 5) continue;
+                    // Exactly one index: a longer chain names a COMPONENT of gl_Position, whose
+                    // pointer is a float and would be the wrong type to load the vector through.
+                    if (inst.opcode != kOpAccessChain || w.size() != 5) continue;
                     if (w[3] != positionVariable) continue;
                     const auto index = constantValue.find(w[4]);
                     if (index == constantValue.end() || index->second != 0) continue;
-                    positionPointers.insert(w[2]);
-                    const auto pointee = pointerPointee.find(w[1]);
+                    vectorPointerType = w[1];
+                    zeroIndex = w[4];
+                    const auto pointee = pointerPointee.find(vectorPointerType);
                     if (pointee != pointerPointee.end()) vectorType = pointee->second;
+                    break;
                 }
             }
 
-            if (!positionPointers.empty() && vectorType != 0)
-            {
-                std::uint32_t floatType = 0;
+            std::uint32_t floatType = 0;
+            if (vectorType != 0)
                 for (const Instruction& inst : rewritten)
                     if (inst.opcode == kOpTypeVector && inst.words.size() >= 4
                         && inst.words[1] == vectorType)
                         floatType = inst.words[2];
-                if (floatType == 0)
-                {
-                    result.error = "SPIR-V vertex module's gl_Position is not a float vector";
-                    return result;
-                }
+
+            const bool canFlip = positionVariable != 0 && vectorPointerType != 0
+                              && vectorType != 0 && floatType != 0
+                              && (positionStruct == 0 || zeroIndex != 0);
+            if (positionVariable != 0 && !canFlip)
+            {
+                result.error =
+                    "SPIR-V vertex module writes gl_Position in a shape this renderer cannot apply "
+                    "its clip-space Y correction to";
+                return result;
+            }
+
+            if (canFlip)
+            {
+                std::uint32_t entryFunction = 0;
+                for (const Instruction& inst : rewritten)
+                    if (inst.opcode == kOpEntryPoint && inst.words.size() >= 3)
+                    {
+                        entryFunction = inst.words[2];
+                        break;
+                    }
 
                 std::uint32_t bound = input[3];
                 const std::uint32_t one = bound++;
@@ -749,9 +777,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                 std::memcpy(&negativeBits, &negative, sizeof(negativeBits));
 
                 std::vector<Instruction> flipped;
-                flipped.reserve(rewritten.size() + 4);
+                flipped.reserve(rewritten.size() + 8);
                 bool constantsEmitted = false;
-                for (Instruction& inst : rewritten)
+                bool insideEntry = false;
+                for (const Instruction& inst : rewritten)
                 {
                     if (!constantsEmitted && inst.opcode == kOpTypeVector
                         && inst.words.size() >= 2 && inst.words[1] == vectorType)
@@ -766,16 +795,26 @@ namespace CNA::Internal::Renderers::SdlGpu
                         constantsEmitted = true;
                         continue;
                     }
-                    if (inst.opcode == kOpStore && inst.words.size() >= 3
-                        && positionPointers.count(inst.words[1]) != 0)
+                    if (inst.opcode == kOpFunction && inst.words.size() >= 3)
+                        insideEntry = inst.words[2] == entryFunction;
+                    if (insideEntry && inst.opcode == kOpReturn)
                     {
+                        std::uint32_t pointer = positionVariable;
+                        if (positionStruct != 0)
+                        {
+                            pointer = bound++;
+                            flipped.push_back(MakeInstruction(
+                                kOpAccessChain,
+                                {vectorPointerType, pointer, positionVariable, zeroIndex}));
+                        }
+                        const std::uint32_t loaded = bound++;
                         const std::uint32_t product = bound++;
-                        flipped.push_back(MakeInstruction(
-                            kOpFMul, {vectorType, product, inst.words[2], flip}));
-                        inst.words[2] = product;
-                        flipped.push_back(inst);
+                        flipped.push_back(
+                            MakeInstruction(kOpLoad, {vectorType, loaded, pointer}));
+                        flipped.push_back(
+                            MakeInstruction(kOpFMul, {vectorType, product, loaded, flip}));
+                        flipped.push_back(MakeInstruction(kOpStore, {pointer, product}));
                         result.changed = true;
-                        continue;
                     }
                     flipped.push_back(inst);
                 }

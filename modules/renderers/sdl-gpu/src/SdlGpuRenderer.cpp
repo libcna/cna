@@ -2754,6 +2754,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         return computeSamplerEXT_;
     }
 
+    void SdlGpuRenderer::BindStorageBufferForDrawEXT(
+        const int binding, const IStorageBufferRenderer& buffer)
+    {
+        const auto* native = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&buffer);
+        if (native == nullptr) return;
+        for (auto& [bound, handle] : drawStorageNativeEXT_)
+        {
+            if (bound != binding) continue;
+            handle = native->Buffer();
+            return;
+        }
+        drawStorageNativeEXT_.emplace_back(binding, native->Buffer());
+    }
+
     void SdlGpuRenderer::DispatchCompute(
         IComputeShaderRenderer* shader, const int groupsX, const int groupsY, const int groupsZ)
     {
@@ -5406,6 +5420,106 @@ namespace CNA::Internal::Renderers::SdlGpu
     // kind in real chronological order. boundPipeline is passed by reference from the caller's own
     // single running variable, so this still skips a redundant rebind across consecutive
     // same-pipeline sprites (SDLGPU-42/43's own rationale, now also true across kind switches).
+    void SdlGpuEffectRenderer::Apply3DUniformsEXT(std::array<float, 32>& block) const
+    {
+        // Slots the effect itself owns: the mat4 at byte 16, the vec4 at 80 and the scalar at 96.
+        // The renderer has already written the world-view-projection matrix into the same mat4
+        // slot, so an effect that set one of its own overwrites it -- which is the intent, since
+        // a ShaderEffect's matrix parameter is the one the game asked for.
+        std::memcpy(block.data() + 4, pushConst_.data() + 4, 64);
+        std::memcpy(block.data() + 20, pushConst_.data() + 20, 16);
+        block[24] = pushConst_[24];
+    }
+
+    void SdlGpuRenderer::ResolveActiveTargetFormatsEXT(
+        SdlGpuColorTargetFormatsEXT& colorFormats, SDL_GPUSampleCount& sampleCount,
+        SDL_GPUTextureFormat& depthStencilFormat, int& colorTargetCount)
+    {
+        colorFormats.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
+        sampleCount = SDL_GPU_SAMPLECOUNT_1;
+        depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        colorTargetCount = 1;
+
+        if (currentRenderTarget_ != nullptr)
+        {
+            const std::shared_ptr<SdlGpuRenderTarget2DState>& state = currentRenderTarget_->State();
+            colorFormats[0] = state->colorFormat;
+            sampleCount = state->sampleCount;
+            depthStencilFormat =
+                state->depthTexture != nullptr ? state->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID;
+            if (PassSegment* segment = CurrentSegment())
+            {
+                colorTargetCount = 1 + static_cast<int>(segment->extraAttachments.size());
+                for (std::size_t i = 0; i < segment->extraAttachments.size(); ++i)
+                    colorFormats[i + 1] = segment->extraAttachments[i]->colorFormat;
+            }
+        }
+        else if (currentRenderTargetCube_ != nullptr)
+        {
+            const std::shared_ptr<SdlGpuRenderTargetCubeState>& state =
+                currentRenderTargetCube_->State();
+            colorFormats[0] = state->colorFormat;
+            sampleCount = state->sampleCount;
+            depthStencilFormat =
+                state->depthTexture != nullptr ? state->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID;
+        }
+        else
+        {
+            colorFormats[0] = backbufferFormat_;
+            depthStencilFormat = depthStencilFormat_;
+        }
+    }
+
+    void SdlGpuRenderer::BindCustomEffectSamplersEXT(
+        SDL_GPURenderPass* pass,
+        const std::vector<SpirvResourceBindingEXT>* samplers,
+        const SdlGpuEffectTexturesEXT* textures,
+        SDL_GPUTexture* spriteTexture)
+    {
+        if (samplers == nullptr || samplers->empty()) return;
+        // SMG-0018: resolved by what the shader DECLARED, not by the compacted slot index. See
+        // kEffectTextureSetEXT for the table, and for why slot-indexing is only ever right by
+        // accident.
+        std::vector<SDL_GPUTextureSamplerBinding> bindings;
+        bindings.reserve(samplers->size());
+        SDL_GPUSampler* sampler = AcquireComputeSamplerEXT();
+        for (const SpirvResourceBindingEXT& declared : *samplers)
+        {
+            SDL_GPUTexture* texture = nullptr;
+            if (declared.originalSet != kEffectTextureSetEXT)
+            {
+                texture = spriteTexture;
+            }
+            else if (textures != nullptr)
+            {
+                const std::uint32_t binding = declared.originalBinding;
+                if (binding >= kEffectVolumeBindingBaseEXT)
+                {
+                    const std::uint32_t unit = binding - kEffectVolumeBindingBaseEXT;
+                    if (unit < textures->textures3D.size())
+                        texture = textures->textures3D[unit].texture;
+                }
+                else if (binding >= kEffectCubeBindingBaseEXT)
+                {
+                    const std::uint32_t unit = binding - kEffectCubeBindingBaseEXT;
+                    if (unit < textures->texturesCube.size())
+                        texture = textures->texturesCube[unit].texture;
+                }
+                else if (binding < textures->textures2D.size())
+                {
+                    texture = textures->textures2D[binding].texture;
+                }
+            }
+            if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
+            SDL_GPUTextureSamplerBinding binding{};
+            binding.texture = texture;
+            binding.sampler = sampler;
+            bindings.push_back(binding);
+        }
+        SDL_BindGPUFragmentSamplers(
+            pass, 0, bindings.data(), static_cast<Uint32>(bindings.size()));
+    }
+
     void SdlGpuRenderer::PushCustomEffectUniformsEXT(
         SDL_GPUCommandBuffer* cmd,
         const std::vector<SpirvResourceBindingEXT>* uniforms,
@@ -5438,6 +5552,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case kMat4ArrayBindingEXT:
                     data = source.mat4s.data();
                     size = static_cast<Uint32>(source.mat4s.size() * sizeof(float));
+                    break;
+                case kEngineMatricesBindingEXT:
+                    data = source.engineMatrices.data();
+                    size = static_cast<Uint32>(source.engineMatrices.size() * sizeof(float));
                     break;
                 default: break;
             }
@@ -8702,7 +8820,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
-        if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
+        if (customEffect3DDrawCommands_.empty() &&
+            coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
             alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
             instancedDrawCommands_.empty() && skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -8840,6 +8959,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
+            if (command.indexed && !command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        }
+        // SMG-0019: a custom 3D effect's geometry rides the same per-frame upload as every stock
+        // family's, and carries no extra or neutral streams of its own.
+        for (CustomEffect3DDrawCommand& command : customEffect3DDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty()) continue;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -9139,6 +9267,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                                          depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
                 }
+                case DrawKind::CustomEffect3D:
+                {
+                    const CustomEffect3DDrawCommand& c = customEffect3DDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
+                        IssueCustomEffect3DDrawEXT(pass, cmd, c, boundPipeline);
+                    break;
+                }
                 case DrawKind::Textured:
                 {
                     const TexturedDrawCommand& c = texturedDrawCommands_[ref.index];
@@ -9273,6 +9408,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) coloredDrawCommands_.clear();
+        for (CustomEffect3DDrawCommand& command : customEffect3DDrawCommands_)
+        {
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
+        }
+        if (clearCommands) customEffect3DDrawCommands_.clear();
         for (TexturedDrawCommand& command : texturedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
@@ -9774,11 +9915,239 @@ namespace CNA::Internal::Renderers::SdlGpu
         return resolved;
     }
 
+    void SdlGpuRenderer::QueueCustomEffect3DDrawEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        const PrimitiveType primitive, const int primitiveCount, const GpuDrawParams& params,
+        SdlGpuEffectRenderer& effect, const int instanceCount)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        const auto& elements = sdlGpuVb.Declaration().GetElements();
+        if (elements.empty())
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: a 3D ShaderEffect draw needs the VertexDeclaration of its vertex "
+                "buffer, and none was propagated");
+
+        // The location of an element is its INDEX in the declaration -- the convention EasyGL's
+        // custom-program path established and the Vulkan renderer follows
+        // (`VulkanRenderer.cpp`: "the location is the element's index in it"). Reflection then says
+        // which of those the shader actually consumes: an element it does not read is omitted
+        // rather than bound to nothing, and a location it reads that the declaration does not
+        // supply is refused rather than left reading undefined input.
+        const std::vector<SpirvResourceBindingEXT>& vertexResources = effect.GetVertexResourcesEXT();
+        (void) vertexResources;
+        const std::vector<std::uint32_t>& consumed = effect.GetVertexInputLocationsEXT();
+        std::vector<SDL_GPUVertexAttribute> attributes;
+        attributes.reserve(elements.size());
+        for (std::size_t index = 0; index < elements.size(); ++index)
+        {
+            const auto location = static_cast<std::uint32_t>(index);
+            if (!consumed.empty()
+                && std::find(consumed.begin(), consumed.end(), location) == consumed.end())
+                continue;
+            SDL_GPUVertexAttribute attribute{};
+            attribute.location = location;
+            attribute.buffer_slot = 0;
+            attribute.format = ToSdlGpuStockVertexFormat(elements[index].getVertexElementFormatProperty());
+            attribute.offset = static_cast<Uint32>(elements[index].getOffsetProperty());
+            attributes.push_back(attribute);
+        }
+        for (const std::uint32_t location : consumed)
+        {
+            const bool supplied = std::any_of(
+                attributes.begin(), attributes.end(),
+                [location](const SDL_GPUVertexAttribute& attribute) {
+                    return attribute.location == location;
+                });
+            if (!supplied)
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this ShaderEffect's vertex stage consumes location "
+                    + std::to_string(location)
+                    + ", but the active VertexDeclaration does not supply it");
+        }
+
+        CustomEffect3DDrawCommand command;
+        command.attributes = std::move(attributes);
+        command.stride = static_cast<Uint32>(sdlGpuVb.Stride());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthWrite = depthWriteEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.renderState = CaptureRenderState();
+        command.target = CurrentDrawTarget();
+
+        const int vertexStart = params.vertexStart;
+        const std::vector<std::uint8_t>& vertexShadow = sdlGpuVb.ShadowData();
+        const std::size_t byteStart =
+            static_cast<std::size_t>(vertexStart) * static_cast<std::size_t>(command.stride);
+        command.vertexData.assign(
+            vertexShadow.begin() + static_cast<std::ptrdiff_t>(std::min(byteStart, vertexShadow.size())),
+            vertexShadow.end());
+
+        if (ib != nullptr)
+        {
+            const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
+            command.indexed = true;
+            command.index32 = sdlGpuIb.IsThirtyTwoBit();
+            command.indexData = sdlGpuIb.ShadowData();
+            ApplyIndexedRange(command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
+            command.vertexCount =
+                static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount =
+                static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        // The per-draw block. A ShaderEffect has no World/View/Projection parameters of its own, so
+        // the matrix it receives is the combined one every other family also receives here.
+        FillExtUniforms(command.uniforms, ApplyXnaPixelCenter(world * view * projection), params);
+        effect.Apply3DUniformsEXT(command.uniforms);
+        command.uniformArrays = effect.SnapshotUniformArraysEXT();
+        command.vertexUniforms = effect.SnapshotVertexUniformsEXT();
+        command.fragmentUniforms = effect.SnapshotFragmentUniformsEXT();
+        command.fragmentSamplers = effect.SnapshotFragmentSamplersEXT();
+        command.textures = effect.SnapshotBoundTexturesEXT();
+        command.fragmentStorageBuffers = effect.SnapshotFragmentStorageBuffersEXT();
+        command.vertexStorageBuffers = effect.SnapshotVertexStorageBuffersEXT();
+        command.storageBuffers = drawStorageNativeEXT_;
+        command.instanceCount = static_cast<Uint32>(std::max(1, instanceCount));
+
+        SdlGpuColorTargetFormatsEXT colorFormats{};
+        colorFormats.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
+        SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+        SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        int colorTargetCount = 1;
+        ResolveActiveTargetFormatsEXT(
+            colorFormats, sampleCount, depthStencilFormat, colorTargetCount);
+
+        std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
+        FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormats,
+                                    command.renderState);
+        SDL_GPURasterizerState rasterizer{};
+        FillRasterizerState(rasterizer, command.renderState, command.topology,
+                            depthStencilFormat);
+        SDL_GPUDepthStencilState depthStencil{};
+        FillDepthStencilState(depthStencil, command.depthTest, command.depthWrite,
+                              command.depthFunc, command.renderState);
+
+        std::size_t key = PipelineCacheKey(
+            command.topology, command.depthTest, command.depthWrite, command.depthFunc,
+            colorFormats, colorTargetCount, sampleCount, depthStencilFormat, command.renderState);
+        // The vertex layout is pipeline-static here in a way it never is for the sprite family.
+        key = HashCombine(key, static_cast<std::size_t>(command.stride));
+        for (const SDL_GPUVertexAttribute& attribute : command.attributes)
+        {
+            key = HashCombine(key, static_cast<std::size_t>(attribute.location));
+            key = HashCombine(key, static_cast<std::size_t>(attribute.format));
+            key = HashCombine(key, static_cast<std::size_t>(attribute.offset));
+        }
+
+        command.pipeline = effect.GetOrCreate3DPipelineEXT(
+            command.attributes, command.stride, command.topology, colorTargets, sampleCount,
+            depthStencilFormat, colorTargetCount, rasterizer, depthStencil, key);
+        if (command.pipeline == nullptr) return;
+
+        customEffect3DDrawCommands_.push_back(std::move(command));
+        PushDrawOrder(DrawKind::CustomEffect3D, customEffect3DDrawCommands_.size() - 1);
+    }
+
+    void SdlGpuRenderer::IssueCustomEffect3DDrawEXT(
+        SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+        const CustomEffect3DDrawCommand& command, SDL_GPUGraphicsPipeline*& boundPipeline)
+    {
+        if (command.pipeline == nullptr) return;
+        if (command.pipeline != boundPipeline)
+        {
+            SDL_BindGPUGraphicsPipeline(pass, command.pipeline);
+            boundPipeline = command.pipeline;
+        }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+
+        PushCustomEffectUniformsEXT(cmd, command.vertexUniforms.get(), command.uniforms,
+                                    command.uniformArrays.get(), /*fragment=*/false);
+        PushCustomEffectUniformsEXT(cmd, command.fragmentUniforms.get(), command.uniforms,
+                                    command.uniformArrays.get(), /*fragment=*/true);
+        BindCustomEffectSamplersEXT(pass, command.fragmentSamplers.get(), command.textures.get(),
+                                    /*spriteTexture=*/nullptr);
+
+        // SMG-0020: the clustered-lighting path publishes its light list, cluster table and index
+        // list through BindStorageBufferForDrawEXT at the bindings its shader declares. Indexed by
+        // the reflected SLOT for the same reason the compute path is (SMG-0013): SDL takes a
+        // contiguous array, so a gap must stay a gap rather than shift its neighbours.
+        if (command.vertexStorageBuffers != nullptr && !command.vertexStorageBuffers->empty())
+        {
+            std::vector<SDL_GPUBuffer*> storage(command.vertexStorageBuffers->size(), nullptr);
+            for (const SpirvResourceBindingEXT& declared : *command.vertexStorageBuffers)
+            {
+                if (declared.slot >= storage.size()) continue;
+                for (const auto& [binding, handle] : command.storageBuffers)
+                {
+                    if (static_cast<std::uint32_t>(binding) != declared.originalBinding) continue;
+                    storage[declared.slot] = handle;
+                    break;
+                }
+            }
+            SDL_BindGPUVertexStorageBuffers(
+                pass, 0, storage.data(), static_cast<Uint32>(storage.size()));
+        }
+        if (command.fragmentStorageBuffers != nullptr && !command.fragmentStorageBuffers->empty())
+        {
+            std::vector<SDL_GPUBuffer*> storage(command.fragmentStorageBuffers->size(), nullptr);
+            for (const SpirvResourceBindingEXT& declared : *command.fragmentStorageBuffers)
+            {
+                if (declared.slot >= storage.size()) continue;
+                for (const auto& [binding, handle] : command.storageBuffers)
+                {
+                    if (static_cast<std::uint32_t>(binding) != declared.originalBinding) continue;
+                    storage[declared.slot] = handle;
+                    break;
+                }
+            }
+            SDL_BindGPUFragmentStorageBuffers(
+                pass, 0, storage.data(), static_cast<Uint32>(storage.size()));
+        }
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
+        {
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(
+                pass, &ibBinding,
+                command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, command.instanceCount,
+                                         command.firstIndex, command.vertexOffset, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, command.instanceCount, 0, 0);
+        }
+    }
+
     void SdlGpuRenderer::DispatchStockDrawEXT(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // SMG-0019: a custom ShaderEffect shades the draw itself. This used to fall straight
+        // through to the stock-shape selection below, which drew the geometry with whatever stock
+        // effect its VertexDeclaration happened to match -- so a sky, a decal or a clustered-lit
+        // surface rendered, and rendered wrongly, with nothing having failed.
+        if (params.customEffectRenderer != nullptr)
+        {
+            if (auto* effect = dynamic_cast<SdlGpuEffectRenderer*>(params.customEffectRenderer);
+                effect != nullptr && effect->IsValid())
+            {
+                QueueCustomEffect3DDrawEXT(vb, ib, world, view, projection, primitive,
+                                           primitiveCount, params, *effect);
+                return;
+            }
+        }
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         StockDrawVertexStreamsEXT streams;
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
@@ -9923,10 +10292,19 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 #endif
+        // SMG-0022: an instanced draw shaded by a custom effect goes down the same 3D route, with
+        // its instance count. The engine layer's particle system draws this way: per-vertex data is
+        // the quad, and the per-instance data is read out of a storage buffer by gl_InstanceIndex
+        // rather than supplied as a second vertex stream.
         if (params.customEffectRenderer != nullptr)
         {
-            throw System::NotSupportedException(
-                "CNA SDL_GPU: custom-effect instancing is not implemented");
+            auto* effect = dynamic_cast<SdlGpuEffectRenderer*>(params.customEffectRenderer);
+            if (effect == nullptr || !effect->IsValid())
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this instanced draw names a custom effect that did not compile");
+            QueueCustomEffect3DDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount,
+                                       params, *effect, instanceCount);
+            return;
         }
         if (FirstInstanceStream(params) == nullptr)
         {
@@ -11880,6 +12258,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         vertexResourcesEXT_ = std::move(vertex.resources);
         fragmentResourcesEXT_ = std::move(fragment.resources);
         fragmentSamplerCountEXT_ = static_cast<int>(fragment.samplerCount);
+        vertexInputLocationsEXT_ = vertex.vertexInputLocations;
         valid_ = true;
         return true;
     }
@@ -11915,6 +12294,44 @@ namespace CNA::Internal::Renderers::SdlGpu
             textureSnapshotEXT_ =
                 std::make_shared<const SdlGpuEffectTexturesEXT>(boundTexturesEXT_);
         return textureSnapshotEXT_;
+    }
+
+    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
+    SdlGpuEffectRenderer::SnapshotVertexStorageBuffersEXT() const
+    {
+        if (vertexResourcesEXT_.empty()) return nullptr;
+        if (vertexStorageSnapshotEXT_ == nullptr)
+        {
+            auto buffers = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
+            for (const SpirvResourceBindingEXT& resource : vertexResourcesEXT_)
+                if (resource.kind == SpirvResourceKindEXT::StorageBuffer)
+                    buffers->push_back(resource);
+            std::sort(buffers->begin(), buffers->end(),
+                      [](const SpirvResourceBindingEXT& a, const SpirvResourceBindingEXT& b) {
+                          return a.slot < b.slot;
+                      });
+            vertexStorageSnapshotEXT_ = std::move(buffers);
+        }
+        return vertexStorageSnapshotEXT_;
+    }
+
+    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
+    SdlGpuEffectRenderer::SnapshotFragmentStorageBuffersEXT() const
+    {
+        if (fragmentResourcesEXT_.empty()) return nullptr;
+        if (fragmentStorageSnapshotEXT_ == nullptr)
+        {
+            auto buffers = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
+            for (const SpirvResourceBindingEXT& resource : fragmentResourcesEXT_)
+                if (resource.kind == SpirvResourceKindEXT::StorageBuffer)
+                    buffers->push_back(resource);
+            std::sort(buffers->begin(), buffers->end(),
+                      [](const SpirvResourceBindingEXT& a, const SpirvResourceBindingEXT& b) {
+                          return a.slot < b.slot;
+                      });
+            fragmentStorageSnapshotEXT_ = std::move(buffers);
+        }
+        return fragmentStorageSnapshotEXT_;
     }
 
     std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
@@ -12112,6 +12529,54 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
     }
 
+    SDL_GPUGraphicsPipeline* SdlGpuEffectRenderer::GetOrCreate3DPipelineEXT(
+        const std::vector<SDL_GPUVertexAttribute>& attributes, const Uint32 stride,
+        const SDL_GPUPrimitiveType topology,
+        const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
+        const SDL_GPUSampleCount sampleCount, const SDL_GPUTextureFormat depthStencilFormat,
+        const int colorTargetCount, const SDL_GPURasterizerState& rasterizerState,
+        const SDL_GPUDepthStencilState& depthStencilState, const std::size_t cacheKey)
+    {
+        if (!valid_) return nullptr;
+        const auto existing = pipelines_.find(cacheKey);
+        if (existing != pipelines_.end()) return existing->second;
+
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = stride;
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = vertexShader_;
+        pipelineInfo.fragment_shader = fragmentShader_;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes =
+            static_cast<Uint32>(attributes.size());
+        pipelineInfo.primitive_type = topology;
+        pipelineInfo.rasterizer_state = rasterizerState;
+        pipelineInfo.multisample_state.sample_count = sampleCount;
+        pipelineInfo.depth_stencil_state = depthStencilState;
+        pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
+        pipelineInfo.target_info.num_color_targets = static_cast<Uint32>(colorTargetCount);
+        pipelineInfo.target_info.has_depth_stencil_target =
+            (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
+
+        SDL_GPUGraphicsPipeline* pipeline =
+            SDL_CreateGPUGraphicsPipeline(owner_->Device(), &pipelineInfo);
+        if (pipeline == nullptr)
+        {
+            compileError_ =
+                std::string("SDL_CreateGPUGraphicsPipeline (3D custom effect) failed: ")
+                + SDL_GetError();
+            return nullptr;
+        }
+        pipelines_.emplace(cacheKey, pipeline);
+        return pipeline;
+    }
+
     SDL_GPUGraphicsPipeline* SdlGpuEffectRenderer::GetOrCreatePipeline(
                                                                        const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
                                                                        SDL_GPUSampleCount sampleCount,
@@ -12191,9 +12656,33 @@ namespace CNA::Internal::Renderers::SdlGpu
     // Fixed 128-byte layout mirroring D3D11EffectRenderer's own convention byte-for-byte: [0..15]=
     // vpSize (vec4, xy used), [16..79]=mat4 matrix, [80..95]=vec4 color, [96..99]=float/int slot 0.
     // `name` is deliberately ignored, matching every sibling EffectRenderer's own convention.
-    void SdlGpuEffectRenderer::SetUniformMat4(const char* /*name*/, const float* matrix)
+    void SdlGpuEffectRenderer::SetUniformMat4(const char* name, const float* matrix)
     {
+        // The established one-matrix contract: an arbitrary custom effect's matrix lands in the
+        // per-draw block at byte 16, whatever it is called.
         std::memcpy(pushConst_.data() + 4, matrix, 64);
+
+        // SMG-0021: and, for the six engine-owned names only, additionally into the named-matrix
+        // block the portable geometry packages declare at binding 19. Without this a pass that
+        // sets five of them keeps only the last, because they all share that one slot.
+        int engineMatrix = -1;
+        if (name != nullptr)
+        {
+            if (std::strcmp(name, "uLightViewProjection") == 0
+                || std::strcmp(name, "uFaceViewProjection") == 0)
+                engineMatrix = 0;
+            else if (std::strcmp(name, "uWorld") == 0) engineMatrix = 1;
+            else if (std::strcmp(name, "uView") == 0) engineMatrix = 2;
+            else if (std::strcmp(name, "uProjection") == 0) engineMatrix = 3;
+            else if (std::strcmp(name, "uPreviousWorld") == 0) engineMatrix = 4;
+            else if (std::strcmp(name, "uPreviousViewProjection") == 0) engineMatrix = 5;
+        }
+        if (engineMatrix < 0) return;
+        std::memcpy(uniformArraysEXT_.engineMatrices.data()
+                        + static_cast<std::size_t>(engineMatrix) * 16,
+                    matrix, 64);
+        uniformArraysUsedEXT_ = true;
+        uniformArraySnapshotEXT_.reset();
     }
 
     void SdlGpuEffectRenderer::SetUniformVec4(const char* /*name*/, float x, float y, float z, float w)
