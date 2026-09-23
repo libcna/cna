@@ -187,9 +187,22 @@ this renderer's stock WGSL negates nothing, so `+x/-y` is the same half-pixel sh
 * `WebGPU_DescriptorCapacityContract`, the other half of the recorded pair, passes too.
 * `ctest -L WebGPU`: **139/147**, against 137/147 before this row and the same 137 on the
   unmodified branch. Two fixed, none broken.
-* cna-street viewpoint 13 against OPENGL33: **28.3 % → 9.0 %** of pixels differing, mean absolute
-  difference 7.69 → 2.84/255, and the sub-pixel search that found the offset now reports its
-  optimum at exactly (0, 0), symmetric in both axes.
+* The renderer-neutral corpus, A/B rather than argued. A bounded `CnaTests` run on WEBGPU
+  (`tools/tests/run_gtest_bounded.sh` inside the private compositor) reached 42 of its 53 shards
+  before it was stopped for time, and every failure in it that could plausibly be raster-shaped was
+  then run **both ways** from the same build tree — the 196 tests of `IndexedDrawDeferredTest`,
+  `ClassicTextureFormat`, `HdrRenderTargetRoundTripTest`, `TextureCubeTest`, `Texture3DTest`,
+  `Texture3DTextureCubeContentTypeReaderTest` and `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+  with this commit's two source files reverted to `975fd282a` and rebuilt in between. **The same 20
+  fail either way**, name for name: no regression and no accidental fix. Their messages say so
+  independently — `Expected: (nullptr) != (vulkanRenderer)` for a Vulkan-only test running under
+  WEBGPU, "The vertex buffer resource is in use", and a blue channel 255 out rather than a fraction
+  of a pixel.
+* cna-street, the 18-viewpoint capture against OPENGL33: **8–32 % → 0.5–8.8 %** of pixels
+  differing, 17 of the 18 under 3.2 %, against VULKAN's 0.3–1.9 %. Viewpoint 13 alone goes
+  28.3 % → 1.7 %, and the sub-pixel search that found the offset now reports its optimum at
+  exactly (0, 0), symmetric in both axes. The one viewpoint still above 3 % is the aerial
+  `06-above-the-junction`, which is Vulkan's worst case too.
 
 **One test changed, and why it is not a weakened expectation.** `WebGPU_GraphicsState`'s wireframe
 leg probed the quad's exact centre. That quad is two triangles sharing the `tr`–`bl` diagonal, and
