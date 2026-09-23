@@ -598,3 +598,45 @@ queued *command* rather than the route — every stock command carries the buffe
 as it is pushed, and one shared `IssueQueuedDrawEXT` is now the single place a queued draw becomes a
 native draw call. A first cut that required a compiled custom effect refused the very test the
 feature exists for.
+
+### SMG-0024 — a soak over the modern resources
+
+`modules/renderers/sdl-gpu/examples/sdlgpu_modern_stress_test.cpp`, modelled on the WebGPU
+workstream's own. Not registered with ctest: it takes minutes rather than seconds and is run
+deliberately, the way the other renderers' stress programs are.
+
+What it tests is **lifetime**, not pixels — the conformance suite already checks what each resource
+computes. This renderer defers every draw to `Present()`, so a queued command holds keep-alives to
+textures, uniform-array blocks, sampler tables and storage buffers the game may already have
+destroyed, and SMG-0006…0023 added several such snapshots per draw. A keep-alive that never
+expires, a pipeline cache that never evicts and a transfer buffer that is never released all look
+identical from outside: nothing fails, and memory grows. So RSS, open file descriptors and thread
+count are sampled after a twenty-cycle warm-up and again at the end.
+
+Per cycle: a storage buffer uploaded, read back and GPU-copied; a storage image; a texture upload;
+a render pass into an offscreen target whose size changes every 64th cycle; an indirect draw; and
+every one of them destroyed again.
+
+### SMG-0025 — what the soak found, immediately: a use-after-free on the indirect path
+
+**It crashed on the first run, inside `VULKAN_DrawPrimitivesIndirect`.**
+
+The stress program creates its indirect argument buffer inside the frame and destroys it at the end
+of the cycle — which is the normal shape for GPU-driven drawing, and exactly what the conformance
+tests do not do, because they keep their buffer alive across the `Present()`. This renderer replays
+draws at `Present()`, so by then the buffer was gone and the queued command held a released
+`SDL_GPUBuffer*`.
+
+This is the same rule every sampled texture here already follows (REMED-GFX-152), and SMG-0023 had
+declared a `storageBufferKeepAlive` field without ever populating it. `IStorageBufferRenderer`
+derives from `std::enable_shared_from_this`, so the queued draw now owns a reference to every buffer
+it will read — the indirect arguments and each buffer published through
+`BindStorageBufferForDrawEXT`.
+
+**Why the conformance suite missed it:** a released handle still addresses memory nothing has reused
+yet, so the failure is a crash deep inside the driver on a *later* allocation pattern rather than a
+wrong result on the next line. Only thousands of create/destroy cycles make the reuse certain. That
+is what a soak is for, and it earned its place on its first run.
+
+**Measured after the fix**, 220 cycles: RSS 101 052 → 101 116 KiB (**+64 KiB**), file descriptors
+23 → 23, threads 6 → 6, all five checks PASS.

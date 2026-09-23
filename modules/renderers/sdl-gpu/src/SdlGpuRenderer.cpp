@@ -2759,13 +2759,15 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         const auto* native = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&buffer);
         if (native == nullptr) return;
-        for (auto& [bound, handle] : drawStorageNativeEXT_)
+        for (std::size_t i = 0; i < drawStorageNativeEXT_.size(); ++i)
         {
-            if (bound != binding) continue;
-            handle = native->Buffer();
+            if (drawStorageNativeEXT_[i].first != binding) continue;
+            drawStorageNativeEXT_[i].second = native->Buffer();
+            drawStorageKeepAliveEXT_[i] = buffer.shared_from_this();
             return;
         }
         drawStorageNativeEXT_.emplace_back(binding, native->Buffer());
+        drawStorageKeepAliveEXT_.push_back(buffer.shared_from_this());
     }
 
     void SdlGpuRenderer::DispatchCompute(
@@ -6528,6 +6530,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         coloredDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Colored, coloredDrawCommands_.size() - 1);
         framePending_ = true;
@@ -6589,6 +6592,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         texturedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Textured, texturedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -6648,6 +6652,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         litTexturedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::LitTextured, litTexturedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7456,6 +7461,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         alphaTestDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::AlphaTest, alphaTestDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7526,6 +7532,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         dualTextureDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::DualTexture, dualTextureDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7619,6 +7626,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         envMapDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::EnvMap, envMapDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7807,6 +7815,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         skinnedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Skinned, skinnedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7897,6 +7906,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         pbrDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Pbr, pbrDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8343,6 +8353,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.target = CurrentDrawTarget();
         command.indirectArguments = pendingIndirectArgumentsEXT_;
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         compiledEffectDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::CompiledEffect, compiledEffectDrawCommands_.size() - 1);
         framePending_ = true;
@@ -10060,6 +10071,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.fragmentStorageBuffers = effect.SnapshotFragmentStorageBuffersEXT();
         command.vertexStorageBuffers = effect.SnapshotVertexStorageBuffersEXT();
         command.storageBuffers = drawStorageNativeEXT_;
+        command.storageBufferKeepAlive = drawStorageKeepAliveEXT_;
         command.instanceCount = static_cast<Uint32>(std::max(1, instanceCount));
 
         SdlGpuColorTargetFormatsEXT colorFormats{};
@@ -10100,6 +10112,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.indirectArguments = pendingIndirectArgumentsEXT_;
 
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
 
         customEffect3DDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::CustomEffect3D, customEffect3DDrawCommands_.size() - 1);
@@ -10208,6 +10221,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // a custom one does, because the arguments ride the queued command rather than the route.
         pendingIndirectArgumentsEXT_ = arguments->Buffer();
         pendingIndirectOffsetEXT_ = static_cast<Uint32>(argumentByteOffset);
+        // SMG-0025: the queued draw outlives this call, so it must own a reference to the buffer
+        // it will read. Without one a game that creates its arguments inside the frame -- which is
+        // the normal shape, and what the stress program does -- hands the replay a released handle.
+        pendingIndirectKeepAliveEXT_ = argumentBuffer.shared_from_this();
         try
         {
             DispatchStockDrawEXT(vb, nullptr, world, view, projection, primitive,
@@ -10221,6 +10238,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         pendingIndirectArgumentsEXT_ = nullptr;
         pendingIndirectOffsetEXT_ = 0;
+        pendingIndirectKeepAliveEXT_.reset();
     }
 
     void SdlGpuRenderer::DrawIndexedPrimitivesIndirectEXT(
@@ -10235,6 +10253,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: an indirect draw needs this renderer's own storage buffer");
         pendingIndirectArgumentsEXT_ = arguments->Buffer();
         pendingIndirectOffsetEXT_ = static_cast<Uint32>(argumentByteOffset);
+        // SMG-0025: the queued draw outlives this call, so it must own a reference to the buffer
+        // it will read. Without one a game that creates its arguments inside the frame -- which is
+        // the normal shape, and what the stress program does -- hands the replay a released handle.
+        pendingIndirectKeepAliveEXT_ = argumentBuffer.shared_from_this();
         try
         {
             DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive,
@@ -10248,6 +10270,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         pendingIndirectArgumentsEXT_ = nullptr;
         pendingIndirectOffsetEXT_ = 0;
+        pendingIndirectKeepAliveEXT_.reset();
     }
 
     void SdlGpuRenderer::DispatchStockDrawEXT(
@@ -10502,6 +10525,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.indirectArguments = pendingIndirectArgumentsEXT_;
 
         command.indirectOffset = pendingIndirectOffsetEXT_;
+        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
 
         instancedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Instanced, instancedDrawCommands_.size() - 1);

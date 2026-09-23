@@ -113,6 +113,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Parity_backbuffer_msaa_Reset PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # plans/plan_sdlgpu_modern_graphics.md SMG-0024: a three-thousand-cycle soak over the modern
+    # resources, looking for the lifetime failures that only appear after thousands of cycles. Not
+    # registered with ctest: it takes minutes rather than seconds and is run deliberately, the way
+    # the other renderers' stress programs are.
+    cna_sdlgpu_test(cna_test_sdlgpu_modern_stress sdlgpu_modern_stress_test.cpp)
+
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
         target_compile_definitions(cna_test_sdlgpu_smoke PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)
