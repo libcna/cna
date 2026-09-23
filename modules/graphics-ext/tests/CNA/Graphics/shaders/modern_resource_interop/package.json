@@ -21,12 +21,30 @@
       "entry_point": "main"
     },
     {
+      "symbol": "kVulkanComputeWgsl",
+      "source": "vulkan.comp.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
       "symbol": "kVulkanUnsignedSamplerComputeSpirV",
       "source": "vulkan_uint.comp.glsl",
       "language": "spirv",
       "source_language": "vulkan-glsl",
       "stage": "compute",
       "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanUnsignedSamplerComputeWgsl",
+      "source": "vulkan_uint.comp.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "wgsl",
       "entry_point": "main"
     }
   ]

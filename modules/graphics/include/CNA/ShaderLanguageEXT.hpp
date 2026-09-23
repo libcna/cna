@@ -54,4 +54,24 @@ namespace CNA
         /** @brief Number of declared stage identities; not itself a shader stage. */
         Count = 4
     };
+
+    /**
+     * @brief Answers whether a language is one CNA ships as a generated package built on the
+     *        descriptor binding contract.
+     *
+     * `SpirV` and `Wgsl` payloads are produced from the same Vulkan GLSL sources by
+     * `tools/shader_package/generate_shader_package.py`, so they share one binding layout:
+     * storage buffers in a set of their own, uniform arrays inside the scalar block, and
+     * textures in numbered slots rather than in the sampler units a hand-written GLSL shader
+     * uses. Engine code choosing between that route and the GLSL one must ask this question,
+     * not name a single language -- naming one silently sends the other down the GLSL path and
+     * asks the renderer for sampler units the packaged shader does not have.
+     *
+     * @param language The language a shader package selected, or one a device was asked about.
+     * @return true when payloads in that language follow the packaged descriptor binding contract.
+     */
+    [[nodiscard]] constexpr bool UsesDescriptorBindingContractEXT(const ShaderLanguageEXT language)
+    {
+        return language == ShaderLanguageEXT::SpirV || language == ShaderLanguageEXT::Wgsl;
+    }
 }

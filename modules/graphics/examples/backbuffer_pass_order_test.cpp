@@ -77,6 +77,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/ProjectGraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
@@ -216,8 +217,10 @@ namespace
     // O3 was the only mixed-family check in this file. REMED-GFX-159 replaced the fixed list of
     // per-family replay loops with one ordered reference stream, and this declaration turned over;
     // both checks were measured red the moment the fix landed.
+    // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
+    // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-68's proxy preserves each ordered backbuffer segment and makes its contents exactly
     // readable. The formerly false clear-after-draw and depth-only-clear declarations are also
@@ -314,6 +317,18 @@ namespace
             return px[static_cast<std::size_t>(y) * w + x];
         }
     };
+}
+
+namespace {
+/// plans/plan_webgpu_modern_graphics.md WMG-0005: a row that declares `wantHiDefProfile` needs
+/// HiDef to be the PROGRAM's profile, not a request made later. `Game`'s own GraphicsDevice is
+/// default-constructed at Reach before `GraphicsDeviceManager` exists (plans/plan_dx9.md D9-103),
+/// so the manager-level request below arrives after the device it has to describe -- the test then
+/// ran to a Reach refusal instead of to its checks. A row that wants Reach keeps Reach.
+const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
+    kContract.wantHiDefProfile
+        ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+        : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach};
 }
 
 class BackbufferPassOrderTest : public Game

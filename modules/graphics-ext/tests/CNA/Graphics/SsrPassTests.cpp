@@ -865,7 +865,10 @@ TEST(SsrPassTest, SupportAsksTheTwoPartQuestion)
 {
     // MOD-1699/MOD-2239m: CustomEffects alone means the renderer accepts an effect. The pass also
     // needs one complete language variant from its package; it does not require runtime execution
-    // of source text when a renderer can select the checked-in SPIR-V payload instead.
+    // of source text when a renderer can select a checked-in binary or generated payload instead.
+    // The list is every language CNA ships in a package -- WGSL joined SPIR-V as one of them, and
+    // a list that names only the languages that existed when it was written reads a renderer that
+    // works as a renderer that is unsupported.
     CnaTest::EngineLayer::HiDefDevice gd;
     SsrPass pass(gd);
 
@@ -874,6 +877,7 @@ TEST(SsrPassTest, SupportAsksTheTwoPartQuestion)
                gd.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment);
     };
     const bool hasPackageLanguage = supportsPair(CNA::ShaderLanguageEXT::SpirV) ||
+                                    supportsPair(CNA::ShaderLanguageEXT::Wgsl) ||
                                     supportsPair(CNA::ShaderLanguageEXT::GlslDesktop) ||
                                     supportsPair(CNA::ShaderLanguageEXT::GlslEs);
     const bool expected = gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects) &&

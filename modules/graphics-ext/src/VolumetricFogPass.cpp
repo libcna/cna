@@ -61,7 +61,7 @@ namespace CNA::Graphics {
 
         [[nodiscard]] ShaderPackageEXT MakeVolumetricFogPackage(
             const TextStage& esFragment, const TextStage& desktopFragment,
-            const SpirVStage& vulkanFragment,
+            const SpirVStage& vulkanFragment, const TextStage& wgslFragment,
             std::vector<ShaderBindingRequirementEXT> additionalRequirements)
         {
             using ShaderCodeEXT = CNA::Graphics::ShaderCodeEXT;
@@ -94,10 +94,17 @@ namespace CNA::Graphics {
                                   "volumetric_fog/fullscreen.vulkan.vert.spv",
                                   ToBytes(kFullscreenVulkanVertexSpirV,
                                           kFullscreenVulkanVertexSpirVByteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "volumetric_fog/fullscreen.vulkan.vert.wgsl",
+                                  std::string(kFullscreenVulkanVertexWgsl)),
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   vulkanFragment.label,
                                   ToBytes(vulkanFragment.words, vulkanFragment.byteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  wgslFragment.label, std::string(wgslFragment.source)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 std::move(requirements));
@@ -111,6 +118,7 @@ namespace CNA::Graphics {
                 {kBuildDesktopFragmentSource, "volumetric_fog/build.desktop.frag.glsl"},
                 {kBuildVulkanFragmentSpirV, kBuildVulkanFragmentSpirVByteSize,
                  "volumetric_fog/build.vulkan.frag.spv"},
+                {kBuildVulkanFragmentWgsl, "volumetric_fog/build.vulkan.frag.wgsl"},
                 {ShaderBindingRequirementEXT(
                     "uShadowSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                     CNA::ShaderStageEXT::Fragment)});
@@ -125,6 +133,7 @@ namespace CNA::Graphics {
                  "volumetric_fog/resolve.desktop.frag.glsl"},
                 {kResolveVulkanFragmentSpirV, kResolveVulkanFragmentSpirVByteSize,
                  "volumetric_fog/resolve.vulkan.frag.spv"},
+                {kResolveVulkanFragmentWgsl, "volumetric_fog/resolve.vulkan.frag.wgsl"},
                 {
                     ShaderBindingRequirementEXT(
                         "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,

@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "atmospheric_sky";
-inline constexpr std::string_view kManifestSha256 = "95600cd717b842ab4e2669ee3b70de5e4dfe817b42c960027fe2af0adaed6220";
+inline constexpr std::string_view kManifestSha256 = "8b6da0a955157785deeb4fd34c5b9879883035fbecd1404a60cafa56d5b8d108";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kEsVertexSource =
     R"CNA_SHADER(#version 300 es
@@ -259,6 +263,64 @@ inline constexpr std::uint32_t kVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kVulkanVertexSpirVByteSize = sizeof(kVulkanVertexSpirV);
 
+inline constexpr std::string_view kVulkanVertexWgsl =
+    R"CNA_SHADER(// sky.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct PushConstants {
+    viewportSize: vec2<f32>,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: vec2<f32>,
+    @location(1) member_1: vec4<f32>,
+}
+
+var<private> aPos_1: vec2<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> TexCoord: vec2<f32>;
+var<private> aTexCoord_1: vec2<f32>;
+var<private> SpriteColor: vec4<f32>;
+var<private> aColor_1: vec4<f32>;
+
+fn main_1() {
+    var ndc: vec2<f32>;
+
+    let _e14 = aPos_1;
+    let _e16 = pc.viewportSize;
+    ndc = (((_e14 / _e16) * 2f) - vec2<f32>(1f, 1f));
+    let _e20 = ndc;
+    unnamed.gl_Position = vec4<f32>(_e20.x, _e20.y, 0f, 1f);
+    let _e25 = aTexCoord_1;
+    TexCoord = _e25;
+    let _e26 = aColor_1;
+    SpriteColor = _e26;
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPos: vec2<f32>, @location(1) aTexCoord: vec2<f32>, @location(2) aColor: vec4<f32>) -> VertexOutput {
+    aPos_1 = aPos;
+    aTexCoord_1 = aTexCoord;
+    aColor_1 = aColor;
+    main_1();
+    let _e11 = unnamed.gl_Position.y;
+    unnamed.gl_Position.y = -(_e11);
+    let _e13 = unnamed.gl_Position;
+    let _e14 = TexCoord;
+    let _e15 = SpriteColor;
+    return VertexOutput(_e13, _e14, _e15);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000001a4u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -371,13 +433,197 @@ inline constexpr std::uint32_t kVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kVulkanFragmentSpirVByteSize = sizeof(kVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 6> kPayloads = {{
+inline constexpr std::string_view kVulkanFragmentWgsl =
+    R"CNA_SHADER(// sky.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Mat4Array {
+    uSkyMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct Vec3Array {
+    uSkyVectors: array<vec3<f32>, 72>,
+}
+
+struct FloatArray {
+    uSkyScalars: array<f32, 72>,
+}
+
+var<private> TexCoord_1: vec2<f32>;
+@group(1) @binding(15) 
+var<uniform> unnamed: Mat4Array;
+@group(1) @binding(14) 
+var<uniform> unnamed_1: Vec3Array;
+@group(1) @binding(12) 
+var<storage> unnamed_2: FloatArray;
+var<private> FragColor: vec4<f32>;
+var<private> SpriteColor_1: vec4<f32>;
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+
+fn cnaMiePhase_u0028_f1_u003b(cosAngle: ptr<function, f32>) -> f32 {
+    var gg: f32;
+    var d: f32;
+
+    gg = 0.5776f;
+    let _e38 = gg;
+    let _e40 = (*cosAngle);
+    d = ((1f + _e38) - (1.52f * _e40));
+    let _e43 = gg;
+    let _e46 = d;
+    let _e49 = gg;
+    return ((0.07957747f * (1f - _e43)) / max((pow(max(_e46, 0.0001f), 1.5f) * (2f + _e49)), 0.0001f));
+}
+
+fn cnaRayleighPhase_u0028_f1_u003b(cosAngle_1: ptr<function, f32>) -> f32 {
+    let _e36 = (*cosAngle_1);
+    let _e37 = (*cosAngle_1);
+    return (0.059683103f * (1f + (_e36 * _e37)));
+}
+
+fn cnaAirMass_u0028_f1_u003b(upwards: ptr<function, f32>) -> f32 {
+    var up: f32;
+    var zenithDegrees: f32;
+
+    let _e38 = (*upwards);
+    up = clamp(_e38, 0f, 1f);
+    let _e40 = up;
+    zenithDegrees = degrees(acos(_e40));
+    let _e43 = up;
+    let _e44 = zenithDegrees;
+    return (1f / max((_e43 + (0.50572f * pow(max((96.07995f - _e44), 0.001f), -1.6364f))), 0.0001f));
+}
+
+fn cnaScatteringAlongPath_u0028_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b(viewDirection: ptr<function, vec3<f32>>, sunDirection: ptr<function, vec3<f32>>, turbidity: ptr<function, f32>, viewMass: ptr<function, f32>) -> vec3<f32> {
+    var view: vec3<f32>;
+    var toSun: vec3<f32>;
+    var cosAngle_2: f32;
+    var sunMass: f32;
+    var param: f32;
+    var mie: f32;
+    var total: vec3<f32>;
+    var scattered: vec3<f32>;
+    var param_1: f32;
+    var param_2: f32;
+    var alongView: vec3<f32>;
+    var sunlight: vec3<f32>;
+
+    let _e51 = (*viewDirection);
+    view = normalize(_e51);
+    let _e53 = (*sunDirection);
+    toSun = -(normalize(_e53));
+    let _e56 = view;
+    let _e57 = toSun;
+    cosAngle_2 = dot(_e56, _e57);
+    let _e60 = toSun[1u];
+    param = _e60;
+    let _e61 = cnaAirMass_u0028_f1_u003b((&param));
+    sunMass = _e61;
+    let _e62 = (*turbidity);
+    mie = (0.021f * max((_e62 - 1f), 0f));
+    let _e66 = mie;
+    total = (vec3<f32>(0.0464f, 0.1085f, 0.265f) + vec3(_e66));
+    let _e69 = cosAngle_2;
+    param_1 = _e69;
+    let _e70 = cnaRayleighPhase_u0028_f1_u003b((&param_1));
+    let _e72 = mie;
+    let _e73 = cosAngle_2;
+    param_2 = _e73;
+    let _e74 = cnaMiePhase_u0028_f1_u003b((&param_2));
+    scattered = ((vec3<f32>(0.0464f, 0.1085f, 0.265f) * _e70) + vec3((_e72 * _e74)));
+    let _e78 = total;
+    let _e80 = (*viewMass);
+    alongView = (vec3<f32>(1f, 1f, 1f) - exp((-(_e78) * _e80)));
+    let _e84 = total;
+    let _e86 = sunMass;
+    sunlight = exp((-(_e84) * _e86));
+    let _e89 = scattered;
+    let _e90 = total;
+    let _e92 = alongView;
+    let _e94 = sunlight;
+    return ((((_e89 / _e90) * _e92) * _e94) * 24f);
+}
+
+fn cnaSkyRadiance_u0028_vf3_u003b_vf3_u003b_f1_u003b(viewDirection_1: ptr<function, vec3<f32>>, sunDirection_1: ptr<function, vec3<f32>>, turbidity_1: ptr<function, f32>) -> vec3<f32> {
+    var param_3: f32;
+    var param_4: vec3<f32>;
+    var param_5: vec3<f32>;
+    var param_6: f32;
+    var param_7: f32;
+
+    let _e43 = (*viewDirection_1);
+    param_3 = normalize(_e43).y;
+    let _e46 = cnaAirMass_u0028_f1_u003b((&param_3));
+    let _e47 = (*viewDirection_1);
+    param_4 = _e47;
+    let _e48 = (*sunDirection_1);
+    param_5 = _e48;
+    let _e49 = (*turbidity_1);
+    param_6 = _e49;
+    param_7 = _e46;
+    let _e50 = cnaScatteringAlongPath_u0028_vf3_u003b_vf3_u003b_f1_u003b_f1_u003b((&param_4), (&param_5), (&param_6), (&param_7));
+    return _e50;
+}
+
+fn main_1() {
+    var cameraUv: vec2<f32>;
+    var ndc: vec2<f32>;
+    var ray: vec4<f32>;
+    var direction: vec3<f32>;
+    var radiance: vec3<f32>;
+    var param_8: vec3<f32>;
+    var param_9: vec3<f32>;
+    var param_10: f32;
+
+    let _e44 = TexCoord_1[0u];
+    let _e46 = TexCoord_1[1u];
+    cameraUv = vec2<f32>(_e44, (1f - _e46));
+    let _e49 = cameraUv;
+    ndc = ((_e49 * 2f) - vec2(1f));
+    let _e55 = unnamed.uSkyMatrices[0i];
+    let _e56 = ndc;
+    ray = (_e55 * vec4<f32>(_e56.x, _e56.y, 1f, 1f));
+    let _e61 = ray;
+    let _e64 = ray[3u];
+    direction = normalize((_e61.xyz / vec3(_e64)));
+    let _e68 = direction;
+    param_8 = _e68;
+    let _e71 = unnamed_1.uSkyVectors[0i];
+    param_9 = _e71;
+    let _e74 = unnamed_2.uSkyScalars[0i];
+    param_10 = _e74;
+    let _e75 = cnaSkyRadiance_u0028_vf3_u003b_vf3_u003b_f1_u003b((&param_8), (&param_9), (&param_10));
+    let _e78 = unnamed_2.uSkyScalars[1i];
+    radiance = (_e75 * _e78);
+    let _e80 = radiance;
+    let _e85 = SpriteColor_1;
+    FragColor = (vec4<f32>(_e80.x, _e80.y, _e80.z, 1f) * _e85);
+    let _e87 = TexCoord_1;
+    let _e88 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e87);
+    let _e92 = FragColor[3u];
+    FragColor[3u] = (_e92 + (_e88.w * 0f));
+    return;
+}
+
+@fragment 
+fn main(@location(0) TexCoord: vec2<f32>, @location(1) SpriteColor: vec4<f32>) -> @location(0) vec4<f32> {
+    TexCoord_1 = TexCoord;
+    SpriteColor_1 = SpriteColor;
+    main_1();
+    let _e5 = FragColor;
+    return _e5;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 8> kPayloads = {{
     {"kEsVertexSource", "sky.es.vert.glsl", "8cdfb0a708dbc0ce8a5f2c4f4123a5c7be01b89c8d0d212d9e6017e0205c2fb1", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kEsFragmentSource", "sky.es.frag.glsl", "ea4004716af3807aaa8c8406358f9346179b4836fcd12bf6bf8a6f609de55c46", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kDesktopVertexSource", "sky.desktop.vert.glsl", "613b520f75f1e4c158a8986abad0f6313266b423cf9954f40e98ab683b90f498", "glsl", "glsl", "vertex", "text", "main"},
     {"kDesktopFragmentSource", "sky.desktop.frag.glsl", "04b44a73d09a9e74f4a10d107e716eb201149ee632e59620e8b6b77691c97dae", "glsl", "glsl", "fragment", "text", "main"},
     {"kVulkanVertexSpirV", "sky.vulkan.vert.glsl", "c347a0738d726e58833e35577e9a5bf70e9a213fc0129af71e57783672f912bd", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kVulkanVertexWgsl", "sky.vulkan.vert.glsl", "c347a0738d726e58833e35577e9a5bf70e9a213fc0129af71e57783672f912bd", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kVulkanFragmentSpirV", "sky.vulkan.frag.glsl", "f2f31bf33d1b932787c01c8711d117a41a8b50fbb24f4de04f29e0f9b4f82c3c", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kVulkanFragmentWgsl", "sky.vulkan.frag.glsl", "f2f31bf33d1b932787c01c8711d117a41a8b50fbb24f4de04f29e0f9b4f82c3c", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::AtmosphericSkyGenerated

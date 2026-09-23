@@ -10,8 +10,11 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,7 +22,7 @@ from typing import Any
 
 SKIP = 77
 STAGES = {"vertex": 0, "fragment": 1, "compute": 2}
-FORMATS = {"text", "spirv"}
+FORMATS = {"text", "spirv", "wgsl"}
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 NAMESPACE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$")
 SPIRV_MAGIC = 0x07230203
@@ -119,6 +122,10 @@ def load_manifest(path: Path) -> tuple[dict[str, Any], bytes, list[Payload]]:
             raise ValueError(f"payload '{symbol}' must declare language 'spirv'")
         if output_format == "spirv" and source_language != "vulkan-glsl":
             raise ValueError(f"payload '{symbol}' must compile declared 'vulkan-glsl' source")
+        if output_format == "wgsl" and language != "wgsl":
+            raise ValueError(f"payload '{symbol}' must declare language 'wgsl'")
+        if output_format == "wgsl" and source_language != "vulkan-glsl":
+            raise ValueError(f"payload '{symbol}' must translate declared 'vulkan-glsl' source")
         if output_format == "text" and language not in {"glsl", "glsl-es", "vulkan-glsl"}:
             raise ValueError(f"payload '{symbol}' has an unsupported text language")
         if not isinstance(entry_point, str) or not IDENTIFIER.fullmatch(entry_point):
@@ -246,6 +253,244 @@ class ShadercCompiler:
         return Toolchain(path, sha256(path.read_bytes()), version.value, revision.value)
 
 
+# ---- WGSL payloads (plans/plan_webgpu_modern_graphics.md WMG-0005) --------------------------------
+#
+# A "wgsl" payload is derived from the SAME Vulkan GLSL source as the package's SPIR-V payload, so
+# the Vulkan and WebGPU programs cannot drift apart: the source is rewritten into the WebGPU binding
+# contract (below), compiled by shaderc exactly like a SPIR-V payload, and translated to WGSL by
+# naga. Every rule here is a mechanical rewrite of a declaration, never of shader logic.
+#
+# The WebGPU binding contract the rewrite targets (docs/webgpu-renderer.md, "Modern shader payloads"):
+#   * the push-constant block becomes `@group(3) @binding(0) var<uniform>` -- WebGPU has no push
+#     constants (wgpu-native's immediate data is a native-only extension, and browsers have none);
+#   * every combined `sampler*` at (set S, binding B) becomes a texture at (S, B) and a sampler at
+#     (S, B + 32) -- WGSL has no combined image sampler;
+#   * a std140 block holding only arrays of 4- or 8-byte elements becomes a std430 read-only storage
+#     block -- WGSL's uniform address space cannot express std140's 16-byte stride for those, and
+#     naga would otherwise write an `array<f32, N>` the WebGPU validator rejects;
+#   * `writeonly buffer` becomes `buffer` -- WGSL storage buffers are read or read_write.
+# Clip space needs no rule: naga's SPIR-V frontend negates the vertex position's y (Vulkan's clip
+# space is y-down, WebGPU's y-up), which makes every generated program produce the framebuffer image
+# its Vulkan twin produces.
+WEBGPU_TRANSFORM = "cna-webgpu-glsl/1"
+WEBGPU_SCALAR_BLOCK = (3, 0)
+WEBGPU_SAMPLER_BINDING_OFFSET = 32
+_COMBINED_SAMPLERS = {
+    "sampler2D": ("texture2D", "sampler"),
+    "samplerCube": ("textureCube", "sampler"),
+    "sampler3D": ("texture3D", "sampler"),
+    "sampler2DArray": ("texture2DArray", "sampler"),
+    "sampler2DShadow": ("texture2D", "samplerShadow"),
+    "isampler2D": ("itexture2D", "sampler"),
+    "usampler2D": ("utexture2D", "sampler"),
+}
+_SAMPLER_DECL = re.compile(
+    r"layout\s*\(\s*set\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\)\s*uniform\s+"
+    r"(?:(?:highp|mediump|lowp)\s+)?(\w+)\s+(\w+)\s*;")
+_PUSH_CONSTANT = re.compile(r"layout\s*\(\s*push_constant\s*\)\s*uniform")
+_WRITEONLY_BUFFER = re.compile(r"\bwriteonly(\s+buffer\b)")
+_STD140_BLOCK = re.compile(
+    r"layout\s*\(\s*(set\s*=\s*\d+\s*,\s*binding\s*=\s*\d+)\s*,\s*std140\s*\)\s*uniform\s+(\w+)\s*\{([^}]*)\}")
+_NARROW_ARRAY_MEMBER = re.compile(
+    r"^\s*(?:(?:highp|mediump|lowp)\s+)?(float|int|uint|bool|vec2|ivec2|uvec2)\s+\w+\s*\[\s*\d+\s*\]\s*$")
+
+
+def webgpu_transform(source: str, name: str) -> str:
+    """Rewrites Vulkan GLSL into the WebGPU binding contract described above."""
+    lines = source.split("\n")
+    if not lines or not lines[0].startswith("#version"):
+        raise ValueError(f"{name}: a wgsl payload's Vulkan GLSL must start with #version")
+    body = "\n".join(lines[1:])
+    body = _PUSH_CONSTANT.sub(
+        f"layout(set = {WEBGPU_SCALAR_BLOCK[0]}, binding = {WEBGPU_SCALAR_BLOCK[1]}, std140) uniform",
+        body)
+    body = _WRITEONLY_BUFFER.sub(r"\1", body)
+
+    def narrow_block(match: re.Match) -> str:
+        members = [m for m in match.group(3).split(";") if m.strip()]
+        narrow = [bool(_NARROW_ARRAY_MEMBER.match(m)) for m in members]
+        if not any(narrow):
+            return match.group(0)
+        if not all(narrow):
+            raise ValueError(
+                f"{name}: std140 block '{match.group(2)}' mixes a 4/8-byte-element array with other "
+                "members; WGSL's uniform address space cannot express its 16-byte array stride")
+        return (f"layout({match.group(1)}, std430) readonly buffer {match.group(2)} "
+                f"{{{match.group(3)}}}")
+
+    body = _STD140_BLOCK.sub(narrow_block, body)
+
+    defines: list[str] = []
+
+    def split_sampler(match: re.Match) -> str:
+        group, binding, kind, var = match.group(1), int(match.group(2)), match.group(3), match.group(4)
+        if kind not in _COMBINED_SAMPLERS:
+            return match.group(0)
+        texture, sampler = _COMBINED_SAMPLERS[kind]
+        defines.append(f"#define {var} {kind}({var}_cnaTexture, {var}_cnaSampler)")
+        return (f"layout(set = {group}, binding = {binding}) uniform {texture} {var}_cnaTexture;\n"
+                f"layout(set = {group}, binding = {binding + WEBGPU_SAMPLER_BINDING_OFFSET}) "
+                f"uniform {sampler} {var}_cnaSampler;")
+
+    body = _SAMPLER_DECL.sub(split_sampler, body)
+    text = lines[0] + "\n" + body
+    if defines:
+        # The macros must follow the declarations they name and precede every use, so they go
+        # directly after the last rewritten declaration.
+        at = text.rfind("_cnaSampler;")
+        at = text.find("\n", at) + 1
+        text = text[:at] + "\n".join(defines) + "\n" + text[at:]
+    return text
+
+
+def find_naga(explicit: str | None) -> Path:
+    requested = explicit or os.environ.get("CNA_NAGA")
+    if requested:
+        path = Path(requested).expanduser().resolve()
+        if not path.is_file():
+            raise ToolchainUnavailable(f"naga does not exist: {path}")
+        return path
+    found = shutil.which("naga")
+    if found:
+        return Path(found).resolve()
+    raise ToolchainUnavailable("naga (naga-cli) was not found; put it on PATH or set CNA_NAGA")
+
+
+@dataclass(frozen=True)
+class NagaToolchain:
+    path: Path
+    sha256: str
+    version: str
+
+
+def naga_toolchain(path: Path) -> NagaToolchain:
+    result = subprocess.run([str(path), "--version"], capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise ToolchainUnavailable(f"{path} --version failed: {result.stderr.strip()}")
+    return NagaToolchain(path, sha256(path.read_bytes()), result.stdout.strip())
+
+
+# SPIR-V block layouts, compared between the shaderc module and naga's re-emission of the WGSL. The
+# WGSL is correct exactly when every uniform/storage block has the same member offsets, array
+# strides and matrix strides in both -- which is what makes the WebGPU renderer's byte uploads mean
+# what the Vulkan renderer's mean.
+_OP_CONSTANT, _OP_TYPE_INT, _OP_TYPE_FLOAT, _OP_TYPE_VECTOR, _OP_TYPE_MATRIX = 43, 21, 22, 23, 24
+_OP_TYPE_ARRAY, _OP_TYPE_RUNTIME_ARRAY, _OP_TYPE_STRUCT, _OP_TYPE_POINTER = 28, 29, 30, 32
+_OP_VARIABLE, _OP_DECORATE, _OP_MEMBER_DECORATE, _OP_TYPE_BOOL = 59, 71, 72, 20
+_DEC_ARRAY_STRIDE, _DEC_MATRIX_STRIDE, _DEC_BINDING, _DEC_SET, _DEC_OFFSET = 6, 7, 33, 34, 35
+_SC_UNIFORM, _SC_STORAGE_BUFFER = 2, 12
+
+
+def spirv_block_layouts(binary: bytes) -> dict[tuple[int, int], Any]:
+    words = struct.unpack(f"<{len(binary) // 4}I", binary)
+    types: dict[int, tuple] = {}
+    constants: dict[int, int] = {}
+    decorations: dict[int, dict[int, int]] = {}
+    member_decorations: dict[tuple[int, int], dict[int, int]] = {}
+    variables: list[tuple[int, int, int]] = []
+    pointers: dict[int, int] = {}
+    at = 5
+    while at < len(words):
+        count, opcode = words[at] >> 16, words[at] & 0xFFFF
+        operands = words[at + 1:at + count]
+        if count == 0:
+            raise ValueError("malformed SPIR-V")
+        if opcode == _OP_TYPE_INT:
+            types[operands[0]] = ("int", operands[1], operands[2])
+        elif opcode == _OP_TYPE_FLOAT:
+            types[operands[0]] = ("float", operands[1])
+        elif opcode == _OP_TYPE_BOOL:
+            types[operands[0]] = ("bool",)
+        elif opcode == _OP_TYPE_VECTOR:
+            types[operands[0]] = ("vec", operands[1], operands[2])
+        elif opcode == _OP_TYPE_MATRIX:
+            types[operands[0]] = ("mat", operands[1], operands[2])
+        elif opcode == _OP_TYPE_ARRAY:
+            types[operands[0]] = ("array", operands[1], operands[2])
+        elif opcode == _OP_TYPE_RUNTIME_ARRAY:
+            types[operands[0]] = ("rtarray", operands[1])
+        elif opcode == _OP_TYPE_STRUCT:
+            types[operands[0]] = ("struct",) + tuple(operands[1:])
+        elif opcode == _OP_TYPE_POINTER:
+            pointers[operands[0]] = operands[2]
+        elif opcode == _OP_CONSTANT:
+            constants[operands[1]] = operands[2]
+        elif opcode == _OP_VARIABLE:
+            variables.append((operands[0], operands[1], operands[2]))
+        elif opcode == _OP_DECORATE and len(operands) >= 3:
+            decorations.setdefault(operands[0], {})[operands[1]] = operands[2]
+        elif opcode == _OP_MEMBER_DECORATE and len(operands) >= 4:
+            member_decorations.setdefault((operands[0], operands[1]), {})[operands[2]] = operands[3]
+        at += count
+
+    def describe(type_id: int) -> Any:
+        t = types[type_id]
+        if t[0] in ("int", "float", "bool"):
+            return t
+        if t[0] == "vec":
+            return ("vec", describe(t[1]), t[2])
+        if t[0] == "mat":
+            return ("mat", describe(t[1]), t[2])
+        if t[0] == "array":
+            return ("array", describe(t[1]), constants.get(t[2]),
+                    decorations.get(type_id, {}).get(_DEC_ARRAY_STRIDE))
+        if t[0] == "rtarray":
+            return ("rtarray", describe(t[1]), decorations.get(type_id, {}).get(_DEC_ARRAY_STRIDE))
+        members = []
+        for index, member in enumerate(t[1:]):
+            d = member_decorations.get((type_id, index), {})
+            members.append((d.get(_DEC_OFFSET), d.get(_DEC_MATRIX_STRIDE), describe(member)))
+        return ("struct", tuple(members))
+
+    blocks: dict[tuple[int, int], Any] = {}
+    for pointer_type, variable, storage_class in variables:
+        if storage_class not in (_SC_UNIFORM, _SC_STORAGE_BUFFER):
+            continue
+        d = decorations.get(variable, {})
+        key = (d.get(_DEC_SET, 0), d.get(_DEC_BINDING, 0))
+        layout = describe(pointers[pointer_type])
+        # naga wraps a block whose type it cannot decorate in place; compare the payload.
+        while (layout[0] == "struct" and len(layout[1]) == 1 and layout[1][0][0] == 0
+               and layout[1][0][2][0] == "struct"):
+            layout = layout[1][0][2]
+        blocks[key] = layout
+    return blocks
+
+
+def translate_to_wgsl(compiler: ShadercCompiler, naga: NagaToolchain, payload: Payload) -> str:
+    source = webgpu_transform(payload.source.decode("utf-8"), payload.source_name)
+    transformed = Payload(payload.symbol, payload.source_path, payload.source_name,
+                          source.encode("utf-8"), "spirv", "vulkan-glsl", payload.stage, "spirv",
+                          payload.entry_point)
+    spirv = compiler.compile(transformed)
+    with tempfile.TemporaryDirectory(prefix="cna-wgsl-") as scratch:
+        spv_path = Path(scratch) / "in.spv"
+        wgsl_path = Path(scratch) / "out.wgsl"
+        back_path = Path(scratch) / "back.spv"
+        spv_path.write_bytes(spirv)
+        result = subprocess.run([str(naga.path), str(spv_path), str(wgsl_path)],
+                                capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(f"naga failed for {payload.source_name}:\n{result.stderr.strip()}")
+        wgsl = wgsl_path.read_text(encoding="utf-8")
+        result = subprocess.run([str(naga.path), str(wgsl_path), str(back_path)],
+                                capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"naga cannot re-read its own WGSL for {payload.source_name}:\n{result.stderr.strip()}")
+        expected = spirv_block_layouts(spirv)
+        actual = spirv_block_layouts(back_path.read_bytes())
+    for key, layout in expected.items():
+        if actual.get(key) != layout:
+            raise RuntimeError(
+                f"{payload.source_name}: the WGSL block at group {key[0]} binding {key[1]} does not "
+                f"have the byte layout of its Vulkan GLSL source\n  expected {layout}\n"
+                f"  actual   {actual.get(key)}")
+    header = (f"// {payload.source_name} -> {WEBGPU_TRANSFORM} -> shaderc -> naga. "
+              "Generated; edit the Vulkan GLSL source.\n")
+    return header + wgsl
+
+
 def raw_string(text: str) -> str:
     delimiter = "CNA_SHADER"
     if f"){delimiter}\"" in text:
@@ -264,9 +509,11 @@ def spirv_array(symbol: str, output: bytes) -> list[str]:
 
 
 def generate(manifest: dict[str, Any], manifest_raw: bytes, payloads: list[Payload],
-             library_path: Path | None) -> str:
+             library_path: Path | None, naga_path: Path | None = None) -> str:
     compiled: dict[str, bytes] = {}
+    translated: dict[str, str] = {}
     toolchain: Toolchain | None = None
+    naga: NagaToolchain | None = None
     compiler: ShadercCompiler | None = None
     if any(payload.output_format == "spirv" for payload in payloads):
         assert library_path is not None
@@ -276,6 +523,20 @@ def generate(manifest: dict[str, Any], manifest_raw: bytes, payloads: list[Paylo
             for payload in payloads:
                 if payload.output_format == "spirv":
                     compiled[payload.symbol] = compiler.compile(payload)
+        finally:
+            compiler.close()
+    if any(payload.output_format == "wgsl" for payload in payloads):
+        assert library_path is not None and naga_path is not None
+        naga = naga_toolchain(naga_path)
+        # Always unoptimized: WGSL keeps every block member's name, which the WebGPU renderer's
+        # name-based scalar uniforms (ComputeShader::setUniform) need, and it stays readable.
+        compiler = ShadercCompiler(library_path, "zero")
+        try:
+            if toolchain is None:
+                toolchain = compiler.toolchain(library_path)
+            for payload in payloads:
+                if payload.output_format == "wgsl":
+                    translated[payload.symbol] = translate_to_wgsl(compiler, naga, payload)
         finally:
             compiler.close()
 
@@ -331,12 +592,22 @@ def generate(manifest: dict[str, Any], manifest_raw: bytes, payloads: list[Paylo
             'inline constexpr std::string_view kCompilerTarget = "";',
             'inline constexpr std::string_view kCompilerOptimization = "";',
         ])
+    if naga:
+        lines.extend([
+            'inline constexpr std::string_view kWgslTranslator = "naga-cli";',
+            f'inline constexpr std::string_view kWgslTranslatorVersion = "{naga.version}";',
+            f'inline constexpr std::string_view kWgslTranslatorSha256 = "{naga.sha256}";',
+            f'inline constexpr std::string_view kWgslSourceTransform = "{WEBGPU_TRANSFORM}";',
+        ])
     lines.append("")
 
     for payload in payloads:
         if payload.output_format == "text":
             lines.append(f"inline constexpr std::string_view {payload.symbol} =")
             lines.append(f"    {raw_string(payload.source.decode('utf-8'))};")
+        elif payload.output_format == "wgsl":
+            lines.append(f"inline constexpr std::string_view {payload.symbol} =")
+            lines.append(f"    {raw_string(translated[payload.symbol])};")
         else:
             lines.extend(spirv_array(payload.symbol, compiled[payload.symbol]))
         lines.append("")
@@ -361,6 +632,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, type=Path, help="generated C++ header")
     parser.add_argument("--check", action="store_true", help="compare without writing")
     parser.add_argument("--shaderc-library", help="path to libshaderc.so.1")
+    parser.add_argument("--naga", help="path to the naga (naga-cli) executable for wgsl payloads")
     return parser.parse_args()
 
 
@@ -369,8 +641,11 @@ def main() -> int:
     try:
         manifest, raw, payloads = load_manifest(args.manifest.resolve())
         library_path = (find_shaderc(args.shaderc_library)
-                        if any(payload.output_format == "spirv" for payload in payloads) else None)
-        generated = generate(manifest, raw, payloads, library_path)
+                        if any(payload.output_format in ("spirv", "wgsl") for payload in payloads)
+                        else None)
+        naga_path = (find_naga(args.naga)
+                     if any(payload.output_format == "wgsl" for payload in payloads) else None)
+        generated = generate(manifest, raw, payloads, library_path, naga_path)
         output = args.output.resolve()
         if args.check:
             if not output.is_file():

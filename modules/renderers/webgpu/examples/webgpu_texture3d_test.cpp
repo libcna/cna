@@ -22,6 +22,8 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "CNA/ProjectGraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -47,6 +49,16 @@ namespace
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
         if (ok) ++passCount;
     }
+}
+
+namespace {
+/// plans/plan_webgpu_modern_graphics.md WMG-0005: HiDef as the PROGRAM's profile, not as a request
+/// made later. Reach has no volume textures, so this test died on a profile refusal before its
+/// first check. It has to be set here rather than on the GraphicsDeviceManager, because `Game`'s
+/// own GraphicsDevice is default-constructed at Reach before that manager exists
+/// (plans/plan_dx9.md D9-103), so a manager-level request arrives after the device it describes.
+const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
+    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef};
 }
 
 class WebGpuTexture3DTest : public Game

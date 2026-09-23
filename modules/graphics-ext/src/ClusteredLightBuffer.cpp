@@ -171,8 +171,12 @@ namespace CNA::Graphics {
             indexList_->SetData(texels.data(), static_cast<int>(texels.size()));
         }
 
-        if (device_.SupportsShaderLanguageEXT(
-                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment))
+        const bool descriptorContractDevice =
+            device_.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::SpirV,
+                                              CNA::ShaderStageEXT::Fragment)
+            || device_.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                                 CNA::ShaderStageEXT::Fragment);
+        if (descriptorContractDevice)
         {
             const auto makeStorage = [this](const void* data, const std::size_t byteSize) {
                 auto buffer = std::make_unique<StorageBuffer>(

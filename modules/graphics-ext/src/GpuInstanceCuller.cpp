@@ -81,6 +81,10 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "gpu_instance_culler/cull.vulkan.comp.spv",
                                   ToBytes(kCullVulkanComputeSpirV)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "gpu_instance_culler/cull.vulkan.comp.wgsl",
+                                  std::string(kCullVulkanComputeWgsl)),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {

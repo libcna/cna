@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "constant_buffer";
-inline constexpr std::string_view kManifestSha256 = "bf271359b83a72d6a79a0d3bb893594a366628a57169cc9a4830d516d1d6ae71";
+inline constexpr std::string_view kManifestSha256 = "e26d3a3873fa84ccf7c44e437d8d5e5233d0641b0407637549620e735ef3e42e";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -30,6 +30,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kEasyGlComputeSource =
     R"CNA_SHADER(#version 310 es
@@ -75,9 +79,37 @@ inline constexpr std::uint32_t kVulkanComputeSpirV[] = {
 };
 inline constexpr std::size_t kVulkanComputeSpirVByteSize = sizeof(kVulkanComputeSpirV);
 
-inline constexpr std::array<PayloadProvenance, 2> kPayloads = {{
+inline constexpr std::string_view kVulkanComputeWgsl =
+    R"CNA_SHADER(// vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Output {
+    result: vec4<f32>,
+}
+
+struct Parameters {
+    value: vec4<f32>,
+}
+
+@group(0) @binding(1) 
+var<storage, read_write> unnamed: Output;
+@group(0) @binding(0) 
+var<uniform> unnamed_1: Parameters;
+
+fn main_1() {
+    let _e6 = unnamed_1.value;
+    unnamed.result = _e6;
+    return;
+}
+
+@compute @workgroup_size(1, 1, 1) 
+fn main() {
+    main_1();
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 3> kPayloads = {{
     {"kEasyGlComputeSource", "easygl.comp.glsl", "b5568238caefe97d53651310fac0422ab449368b19f3aad3836c356108564125", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kVulkanComputeSpirV", "vulkan.comp.glsl", "4e341b5d1526604c92c88883c4594b23f864423ea1e5b74ed14caf6ccc60c546", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kVulkanComputeWgsl", "vulkan.comp.glsl", "4e341b5d1526604c92c88883c4594b23f864423ea1e5b74ed14caf6ccc60c546", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
 }};
 
 } // namespace CNA::Tests::ConstantBuffer

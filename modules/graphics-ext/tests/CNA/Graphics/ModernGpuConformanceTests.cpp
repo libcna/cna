@@ -126,10 +126,12 @@ namespace {
         return std::vector<std::uint8_t>(begin, begin + sizeof(words));
     }
 
-    /// One compute program as a two-variant package: the generated GLSL ES text and SPIR-V words.
+    /// One compute program as a three-variant package: the generated GLSL ES text, the SPIR-V
+    /// words and the WGSL the generator derives from the same Vulkan GLSL
+    /// (plans/plan_webgpu_modern_graphics.md WMG-0005), so every renderer runs the same program.
     template <std::size_t N>
     ShaderPackageEXT ComputePackage(std::string_view label, std::string_view esSource,
-                                    const std::uint32_t (&spirv)[N],
+                                    const std::uint32_t (&spirv)[N], std::string_view wgsl,
                                     std::vector<ShaderBindingRequirementEXT> bindings)
     {
         return ShaderPackageEXT(
@@ -138,6 +140,8 @@ namespace {
                               std::string(label) + ".es.comp.glsl", std::string(esSource)),
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute, "main",
                               std::string(label) + ".vulkan.comp.glsl", Bytes(spirv)),
+                ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute, "main",
+                              std::string(label) + ".vulkan.comp.glsl -> wgsl", std::string(wgsl)),
             },
             {CNA::ShaderStageEXT::Compute}, std::move(bindings));
     }
@@ -223,7 +227,8 @@ TEST_F(ModernGpuConformance, ADispatchCoversExactlyItsThreeDimensionalGrid)
     constexpr int kWidth = 12, kHeight = 4, kDepth = 4;
     constexpr std::size_t kCount = kWidth * kHeight * kDepth;
     constexpr std::uint32_t kUnwritten = 0xFFFFFFFFu;
-    ComputeShader grid(gd, ComputePackage("grid", Package::kGridEsSource, Package::kGridSpirV,
+    ComputeShader grid(gd, ComputePackage("grid", Package::kGridEsSource,
+                                          Package::kGridSpirV, Package::kGridWgsl,
                                           {StorageAt("Output", 0)}));
     auto output = Buffer(kCount * sizeof(std::uint32_t), kStorage);
 
@@ -279,7 +284,7 @@ TEST_F(ModernGpuConformance, UniformsAndUploadsKeepCallOrderAcrossReadModifyWrit
     constexpr std::size_t kCount = 256;
     constexpr int kActive = 200;
     ComputeShader accumulate(gd, ComputePackage("accumulate", Package::kAccumulateEsSource,
-                                                Package::kAccumulateSpirV,
+                                                Package::kAccumulateSpirV, Package::kAccumulateWgsl,
                                                 {StorageAt("Input", 0), StorageAt("Accumulator", 1)}));
     auto inputs = Buffer(kCount * sizeof(float), kStorage);
     auto acc = Buffer(kCount * sizeof(float), kStorage);
@@ -325,7 +330,8 @@ TEST_F(ModernGpuConformance, ChainedDispatchesSeeEachOthersWritesWithoutABarrier
     // back. Each link doubles and adds one, so C = 4i + 3 and the rewritten A = 8i + 7 -- exact only
     // if every dispatch read what the previous one wrote. No ComputeShader::barrier() is called.
     constexpr std::size_t kCount = 512;
-    ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource, Package::kChainSpirV,
+    ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource,
+                                           Package::kChainSpirV, Package::kChainWgsl,
                                            {StorageAt("Source", 0), StorageAt("Destination", 1)}));
     auto a = Buffer(kCount * sizeof(std::uint32_t), kStorage);
     auto b = Buffer(kCount * sizeof(std::uint32_t), kStorage);
@@ -367,7 +373,8 @@ TEST_F(ModernGpuConformance, AcceptedWorkSurvivesDisposalOfItsProgramAndInputs)
     constexpr std::size_t kCount = 256;
     auto output = Buffer(kCount * sizeof(std::uint32_t), kStorage);
     {
-        ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource, Package::kChainSpirV,
+        ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource,
+                                               Package::kChainSpirV, Package::kChainWgsl,
                                                {StorageAt("Source", 0), StorageAt("Destination", 1)}));
         auto input = Buffer(kCount * sizeof(std::uint32_t), kStorage);
         std::vector<std::uint32_t> seed(kCount);
@@ -399,7 +406,7 @@ TEST_F(ModernGpuConformance, ManySmallUploadsInOneFrameAreEachConsumedInOrder)
     constexpr std::size_t kCount = 64;
     constexpr int kRounds = 64;
     ComputeShader accumulate(gd, ComputePackage("accumulate", Package::kAccumulateEsSource,
-                                                Package::kAccumulateSpirV,
+                                                Package::kAccumulateSpirV, Package::kAccumulateWgsl,
                                                 {StorageAt("Input", 0), StorageAt("Accumulator", 1)}));
     auto inputs = Buffer(kCount * sizeof(float), kStorage);
     auto acc = Buffer(kCount * sizeof(float), kStorage);
@@ -491,7 +498,8 @@ TEST_F(ModernGpuConformance, AStorageImageHoldsExactlyWhatComputeWrote)
             GTEST_SKIP() << "this renderer has no Color storage image: " << e.what();
     }
 
-    ComputeShader writer(gd, ComputePackage("image", Package::kImageEsSource, Package::kImageSpirV,
+    ComputeShader writer(gd, ComputePackage("image", Package::kImageEsSource,
+                                            Package::kImageSpirV, Package::kImageWgsl,
                                             {ShaderBindingRequirementEXT(
                                                 "uImage", 0, ShaderBindingTypeEXT::StorageTexture2D,
                                                 CNA::ShaderStageEXT::Compute)}));
@@ -553,7 +561,8 @@ TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
         VertexPositionColor(Vector3(-0.6f, 1.0f, 0.25f), Color(0, 60, 180)),
         VertexPositionColor(Vector3(1.0f, -1.0f, 0.25f), Color(0, 60, 180))};
 
-    ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource, Package::kChainSpirV,
+    ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource,
+                                           Package::kChainSpirV, Package::kChainWgsl,
                                            {StorageAt("Source", 0), StorageAt("Destination", 1)}));
     auto a = Buffer(kCount * sizeof(std::uint32_t), kStorage);
     auto b = Buffer(kCount * sizeof(std::uint32_t), kStorage);

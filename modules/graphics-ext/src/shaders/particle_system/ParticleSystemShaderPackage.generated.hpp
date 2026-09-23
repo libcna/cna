@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "particle_system";
-inline constexpr std::string_view kManifestSha256 = "342b73cd443ae3907b00ebf5ab02f0de5520a63cb7337c14c9321064fede12b7";
+inline constexpr std::string_view kManifestSha256 = "c913f5d208d87e454befa22e51d9ed10f10f4596a45dcd7e47c185903eba356d";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kSimulateEsComputeSource =
     R"CNA_SHADER(#version 310 es
@@ -401,6 +405,266 @@ inline constexpr std::uint32_t kSimulateVulkanComputeSpirV[] = {
 };
 inline constexpr std::size_t kSimulateVulkanComputeSpirVByteSize = sizeof(kSimulateVulkanComputeSpirV);
 
+inline constexpr std::string_view kSimulateVulkanComputeWgsl =
+    R"CNA_SHADER(// simulate.vulkan.comp.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct ParticleSimulationParameters {
+    uSimulation0_: vec4<f32>,
+    uSimulation1_: vec4<f32>,
+    uOrigin: vec4<f32>,
+    uDirection: vec4<f32>,
+    uGravity: vec4<f32>,
+}
+
+struct CnaParticles {
+    cnaParticles: array<vec4<f32>>,
+}
+
+@group(0) @binding(1) 
+var<uniform> unnamed: ParticleSimulationParameters;
+var<private> gl_GlobalInvocationID_1: vec3<u32>;
+@group(0) @binding(0) 
+var<storage, read_write> unnamed_1: CnaParticles;
+
+fn cnaNormaliseOr_u0028_vf3_u003b_vf3_u003b(value: ptr<function, vec3<f32>>, fallbackValue: ptr<function, vec3<f32>>) -> vec3<f32> {
+    var valueLength: f32;
+    var local: vec3<f32>;
+
+    let _e36 = (*value);
+    valueLength = length(_e36);
+    let _e38 = valueLength;
+    if (_e38 > 0.000001f) {
+        let _e40 = (*value);
+        let _e41 = valueLength;
+        local = (_e40 / vec3(_e41));
+    } else {
+        let _e44 = (*fallbackValue);
+        local = _e44;
+    }
+    let _e45 = local;
+    return _e45;
+}
+
+fn cnaParticleHash_u0028_u1_u003b(x: ptr<function, u32>) -> u32 {
+    let _e33 = (*x);
+    let _e36 = (*x);
+    (*x) = (_e36 ^ (_e33 >> bitcast<u32>(16u)));
+    let _e38 = (*x);
+    (*x) = (_e38 * 2146121005u);
+    let _e40 = (*x);
+    let _e43 = (*x);
+    (*x) = (_e43 ^ (_e40 >> bitcast<u32>(15u)));
+    let _e45 = (*x);
+    (*x) = (_e45 * 2221713035u);
+    let _e47 = (*x);
+    let _e50 = (*x);
+    (*x) = (_e50 ^ (_e47 >> bitcast<u32>(16u)));
+    let _e52 = (*x);
+    return _e52;
+}
+
+fn cnaParticleRandom_u0028_u1_u003b(seed: ptr<function, u32>) -> f32 {
+    var param: u32;
+
+    let _e34 = (*seed);
+    param = _e34;
+    let _e35 = cnaParticleHash_u0028_u1_u003b((&param));
+    return (f32((_e35 & 16777215u)) / 16777216f);
+}
+
+fn cnaSpawn_u0028_u1_u003b_u1_u003b_vf3_u003b_vf3_u003b_f1_u003b(index: ptr<function, u32>, generation: ptr<function, u32>, position: ptr<function, vec3<f32>>, velocity: ptr<function, vec3<f32>>, lifetime: ptr<function, f32>) {
+    var seed_1: u32;
+    var param_1: u32;
+    var u: f32;
+    var param_2: u32;
+    var v: f32;
+    var param_3: u32;
+    var w: f32;
+    var param_4: u32;
+    var x_1: f32;
+    var param_5: u32;
+    var cosTheta: f32;
+    var sinTheta: f32;
+    var phi: f32;
+    var axis: vec3<f32>;
+    var param_6: vec3<f32>;
+    var param_7: vec3<f32>;
+    var helper: vec3<f32>;
+    var right: vec3<f32>;
+    var param_8: vec3<f32>;
+    var param_9: vec3<f32>;
+    var up: vec3<f32>;
+    var direction: vec3<f32>;
+    var speed: f32;
+
+    let _e60 = (*index);
+    let _e62 = (*generation);
+    param_1 = ((_e60 * 747796405u) + (_e62 * 2891336453u));
+    let _e65 = cnaParticleHash_u0028_u1_u003b((&param_1));
+    seed_1 = _e65;
+    let _e66 = seed_1;
+    param_2 = _e66;
+    let _e67 = cnaParticleRandom_u0028_u1_u003b((&param_2));
+    u = _e67;
+    let _e68 = seed_1;
+    param_3 = (_e68 + 1u);
+    let _e70 = cnaParticleRandom_u0028_u1_u003b((&param_3));
+    v = _e70;
+    let _e71 = seed_1;
+    param_4 = (_e71 + 2u);
+    let _e73 = cnaParticleRandom_u0028_u1_u003b((&param_4));
+    w = _e73;
+    let _e74 = seed_1;
+    param_5 = (_e74 + 3u);
+    let _e76 = cnaParticleRandom_u0028_u1_u003b((&param_5));
+    x_1 = _e76;
+    let _e79 = unnamed.uSimulation0_[2u];
+    let _e82 = u;
+    cosTheta = (1f + ((cos(_e79) - 1f) * _e82));
+    let _e85 = cosTheta;
+    let _e86 = cosTheta;
+    sinTheta = sqrt(max((1f - (_e85 * _e86)), 0f));
+    let _e91 = v;
+    phi = (6.2831855f * _e91);
+    let _e94 = unnamed.uDirection;
+    param_6 = _e94.xyz;
+    param_7 = vec3<f32>(0f, 1f, 0f);
+    let _e96 = cnaNormaliseOr_u0028_vf3_u003b_vf3_u003b((&param_6), (&param_7));
+    axis = _e96;
+    let _e98 = axis[1u];
+    helper = select(vec3<f32>(1f, 0f, 0f), vec3<f32>(0f, 1f, 0f), vec3((abs(_e98) < 0.99f)));
+    let _e103 = helper;
+    let _e104 = axis;
+    param_8 = cross(_e103, _e104);
+    param_9 = vec3<f32>(1f, 0f, 0f);
+    let _e106 = cnaNormaliseOr_u0028_vf3_u003b_vf3_u003b((&param_8), (&param_9));
+    right = _e106;
+    let _e107 = axis;
+    let _e108 = right;
+    up = cross(_e107, _e108);
+    let _e110 = axis;
+    let _e111 = cosTheta;
+    let _e113 = right;
+    let _e114 = phi;
+    let _e117 = up;
+    let _e118 = phi;
+    let _e122 = sinTheta;
+    direction = ((_e110 * _e111) + (((_e113 * cos(_e114)) + (_e117 * sin(_e118))) * _e122));
+    let _e127 = unnamed.uSimulation0_[3u];
+    let _e130 = unnamed.uSimulation1_[0u];
+    let _e131 = w;
+    speed = (_e127 * (1f + (_e130 * ((_e131 * 2f) - 1f))));
+    let _e138 = unnamed.uOrigin;
+    (*position) = _e138.xyz;
+    let _e140 = direction;
+    let _e141 = speed;
+    (*velocity) = (_e140 * _e141);
+    let _e145 = unnamed.uSimulation1_[1u];
+    let _e148 = unnamed.uSimulation1_[2u];
+    let _e149 = x_1;
+    (*lifetime) = max((_e145 * (1f + (_e148 * ((_e149 * 2f) - 1f)))), 0.001f);
+    return;
+}
+
+fn main_1() {
+    var index_1: u32;
+    var activeCount: u32;
+    var base: u32;
+    var position_1: vec3<f32>;
+    var velocity_1: vec3<f32>;
+    var state: vec4<f32>;
+    var age: f32;
+    var lifetime_1: f32;
+    var generation_1: f32;
+    var param_10: u32;
+    var param_11: u32;
+    var param_12: vec3<f32>;
+    var param_13: vec3<f32>;
+    var param_14: f32;
+
+    let _e47 = gl_GlobalInvocationID_1[0u];
+    index_1 = _e47;
+    let _e50 = unnamed.uSimulation0_[0u];
+    activeCount = u32((max(_e50, 0f) + 0.5f));
+    let _e54 = index_1;
+    let _e55 = activeCount;
+    if (_e54 >= _e55) {
+        return;
+    }
+    let _e57 = index_1;
+    base = (_e57 * 3u);
+    let _e59 = base;
+    let _e62 = unnamed_1.cnaParticles[_e59];
+    position_1 = _e62.xyz;
+    let _e64 = base;
+    let _e68 = unnamed_1.cnaParticles[(_e64 + 1u)];
+    velocity_1 = _e68.xyz;
+    let _e70 = base;
+    let _e74 = unnamed_1.cnaParticles[(_e70 + 2u)];
+    state = _e74;
+    let _e76 = state[0u];
+    age = _e76;
+    let _e78 = state[1u];
+    lifetime_1 = _e78;
+    let _e80 = state[3u];
+    generation_1 = _e80;
+    let _e83 = unnamed.uSimulation0_[1u];
+    let _e84 = age;
+    age = (_e84 + _e83);
+    let _e86 = age;
+    let _e87 = lifetime_1;
+    if (_e86 >= _e87) {
+        let _e89 = generation_1;
+        generation_1 = (_e89 + 1f);
+        let _e91 = lifetime_1;
+        let _e92 = age;
+        age = (_e92 - _e91);
+        let _e94 = generation_1;
+        let _e96 = index_1;
+        param_10 = _e96;
+        param_11 = u32(_e94);
+        cnaSpawn_u0028_u1_u003b_u1_u003b_vf3_u003b_vf3_u003b_f1_u003b((&param_10), (&param_11), (&param_12), (&param_13), (&param_14));
+        let _e97 = param_12;
+        position_1 = _e97;
+        let _e98 = param_13;
+        velocity_1 = _e98;
+        let _e99 = param_14;
+        lifetime_1 = _e99;
+    }
+    let _e101 = unnamed.uGravity;
+    let _e105 = unnamed.uSimulation0_[1u];
+    let _e107 = velocity_1;
+    velocity_1 = (_e107 + (_e101.xyz * _e105));
+    let _e109 = velocity_1;
+    let _e112 = unnamed.uSimulation1_[3u];
+    let _e115 = unnamed.uSimulation0_[1u];
+    let _e119 = velocity_1;
+    velocity_1 = (_e119 - (_e109 * min((_e112 * _e115), 1f)));
+    let _e121 = velocity_1;
+    let _e124 = unnamed.uSimulation0_[1u];
+    let _e126 = position_1;
+    position_1 = (_e126 + (_e121 * _e124));
+    let _e128 = base;
+    let _e129 = position_1;
+    unnamed_1.cnaParticles[_e128] = vec4<f32>(_e129.x, _e129.y, _e129.z, 0f);
+    let _e136 = base;
+    let _e138 = velocity_1;
+    unnamed_1.cnaParticles[(_e136 + 1u)] = vec4<f32>(_e138.x, _e138.y, _e138.z, 0f);
+    let _e145 = base;
+    let _e147 = age;
+    let _e148 = lifetime_1;
+    let _e150 = state[2u];
+    let _e151 = generation_1;
+    unnamed_1.cnaParticles[(_e145 + 2u)] = vec4<f32>(_e147, _e148, _e150, _e151);
+    return;
+}
+
+@compute @workgroup_size(64, 1, 1) 
+fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
+    gl_GlobalInvocationID_1 = gl_GlobalInvocationID;
+    main_1();
+}
+)CNA_SHADER";
+
 inline constexpr std::string_view kDrawEsVertexSource =
     R"CNA_SHADER(#version 310 es
 precision highp float;
@@ -642,6 +906,123 @@ inline constexpr std::uint32_t kDrawVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kDrawVulkanVertexSpirVByteSize = sizeof(kDrawVulkanVertexSpirV);
 
+inline constexpr std::string_view kDrawVulkanVertexWgsl =
+    R"CNA_SHADER(// draw.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct CnaParticleBuffer {
+    cnaParticles: array<vec4<f32>>,
+}
+
+struct FloatArray {
+    uParticleScalars: array<f32, 72>,
+}
+
+struct Mat4Array {
+    uParticleMatrices: array<mat4x4<f32>, 72>,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct Vec3Array {
+    uParticleColours: array<vec3<f32>, 72>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(0) member: vec2<f32>,
+    @location(1) member_1: vec4<f32>,
+    @location(2) member_2: f32,
+}
+
+var<private> gl_InstanceIndex_1: i32;
+@group(2) @binding(7) 
+var<storage> unnamed: CnaParticleBuffer;
+@group(1) @binding(12) 
+var<storage> unnamed_1: FloatArray;
+@group(1) @binding(15) 
+var<uniform> unnamed_2: Mat4Array;
+var<private> aPos_1: vec3<f32>;
+var<private> unnamed_3: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> vTexCoord: vec2<f32>;
+var<private> vColor: vec4<f32>;
+@group(1) @binding(14) 
+var<uniform> unnamed_4: Vec3Array;
+var<private> vViewDepth: f32;
+
+fn main_1() {
+    var base: i32;
+    var position: vec3<f32>;
+    var state: vec4<f32>;
+    var t: f32;
+    var size: f32;
+    var viewPosition: vec3<f32>;
+
+    let _e29 = gl_InstanceIndex_1;
+    base = (_e29 * 3i);
+    let _e31 = base;
+    let _e34 = unnamed.cnaParticles[_e31];
+    position = _e34.xyz;
+    let _e36 = base;
+    let _e40 = unnamed.cnaParticles[(_e36 + 2i)];
+    state = _e40;
+    let _e42 = state[0u];
+    let _e44 = state[1u];
+    t = clamp((_e42 / max(_e44, 0.0001f)), 0f, 1f);
+    let _e50 = unnamed_1.uParticleScalars[2i];
+    let _e53 = unnamed_1.uParticleScalars[3i];
+    let _e54 = t;
+    size = mix(_e50, _e53, _e54);
+    let _e56 = gl_InstanceIndex_1;
+    let _e60 = unnamed_1.uParticleScalars[4i];
+    if (f32(_e56) >= _e60) {
+        size = 0f;
+    }
+    let _e64 = unnamed_2.uParticleMatrices[0i];
+    let _e65 = position;
+    viewPosition = (_e64 * vec4<f32>(_e65.x, _e65.y, _e65.z, 1f)).xyz;
+    let _e72 = aPos_1;
+    let _e74 = size;
+    let _e76 = viewPosition;
+    let _e78 = (_e76.xy + (_e72.xy * _e74));
+    viewPosition[0u] = _e78.x;
+    viewPosition[1u] = _e78.y;
+    let _e85 = unnamed_2.uParticleMatrices[1i];
+    let _e86 = viewPosition;
+    unnamed_3.gl_Position = (_e85 * vec4<f32>(_e86.x, _e86.y, _e86.z, 1f));
+    let _e93 = aPos_1;
+    vTexCoord = (_e93.xy + vec2(0.5f));
+    let _e99 = unnamed_4.uParticleColours[0i];
+    let _e102 = unnamed_4.uParticleColours[1i];
+    let _e103 = t;
+    let _e105 = mix(_e99, _e102, vec3(_e103));
+    let _e108 = unnamed_1.uParticleScalars[0i];
+    let _e111 = unnamed_1.uParticleScalars[1i];
+    let _e112 = t;
+    vColor = vec4<f32>(_e105.x, _e105.y, _e105.z, mix(_e108, _e111, _e112));
+    let _e119 = viewPosition[2u];
+    vViewDepth = -(_e119);
+    return;
+}
+
+@vertex 
+fn main(@builtin(instance_index) gl_InstanceIndex: u32, @location(0) aPos: vec3<f32>) -> VertexOutput {
+    gl_InstanceIndex_1 = i32(gl_InstanceIndex);
+    aPos_1 = aPos;
+    main_1();
+    let _e11 = unnamed_3.gl_Position.y;
+    unnamed_3.gl_Position.y = -(_e11);
+    let _e13 = unnamed_3.gl_Position;
+    let _e14 = vTexCoord;
+    let _e15 = vColor;
+    let _e16 = vViewDepth;
+    return VertexOutput(_e13, _e14, _e15, _e16);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kDrawVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000082u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -711,16 +1092,110 @@ inline constexpr std::uint32_t kDrawVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kDrawVulkanFragmentSpirVByteSize = sizeof(kDrawVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 9> kPayloads = {{
+inline constexpr std::string_view kDrawVulkanFragmentWgsl =
+    R"CNA_SHADER(// draw.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uParticleScalars: array<f32, 72>,
+}
+
+@group(0) @binding(0) 
+var texture1_cnaTexture: texture_2d<f32>;
+@group(0) @binding(32) 
+var texture1_cnaSampler: sampler;
+var<private> vTexCoord_1: vec2<f32>;
+var<private> vColor_1: vec4<f32>;
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+var<private> gl_FragCoord_1: vec4<f32>;
+@group(1) @binding(1) 
+var uSceneDepth_cnaTexture: texture_2d<f32>;
+@group(1) @binding(33) 
+var uSceneDepth_cnaSampler: sampler;
+var<private> vViewDepth_1: f32;
+var<private> FragColor: vec4<f32>;
+
+fn cnaUnpackDepth_u0028_vf4_u003b(channels: ptr<function, vec4<f32>>) -> f32 {
+    let _e29 = (*channels);
+    return dot(_e29, vec4<f32>(0.00000006030863f, 0.0000153787f, 0.003921569f, 1f));
+}
+
+fn main_1() {
+    var colour: vec4<f32>;
+    var viewportSize: vec2<f32>;
+    var uv: vec2<f32>;
+    var depthTexel: vec4<f32>;
+    var linearDepth: f32;
+    var param: vec4<f32>;
+    var behind: f32;
+    var phi_64_: bool;
+
+    let _e35 = vTexCoord_1;
+    let _e36 = textureSample(texture1_cnaTexture, texture1_cnaSampler, _e35);
+    let _e37 = vColor_1;
+    colour = (_e36 * _e37);
+    let _e41 = unnamed.uParticleScalars[5i];
+    let _e42 = (_e41 > 0.5f);
+    phi_64_ = _e42;
+    if _e42 {
+        let _e45 = unnamed.uParticleScalars[6i];
+        phi_64_ = (_e45 > 0f);
+    }
+    let _e48 = phi_64_;
+    if _e48 {
+        let _e51 = unnamed.uParticleScalars[8i];
+        let _e54 = unnamed.uParticleScalars[9i];
+        viewportSize = max(vec2<f32>(_e51, _e54), vec2<f32>(1f, 1f));
+        let _e57 = gl_FragCoord_1;
+        let _e59 = viewportSize;
+        uv = (_e57.xy / _e59);
+        let _e61 = uv;
+        let _e62 = textureSample(uSceneDepth_cnaTexture, uSceneDepth_cnaSampler, _e61);
+        depthTexel = _e62;
+        let _e64 = depthTexel[0u];
+        let _e65 = depthTexel;
+        param = _e65;
+        let _e66 = cnaUnpackDepth_u0028_vf4_u003b((&param));
+        let _e69 = unnamed.uParticleScalars[10i];
+        linearDepth = mix(_e64, _e66, clamp(_e69, 0f, 1f));
+        let _e72 = linearDepth;
+        let _e75 = unnamed.uParticleScalars[7i];
+        behind = (_e72 * _e75);
+        let _e77 = behind;
+        let _e78 = vViewDepth_1;
+        let _e82 = unnamed.uParticleScalars[6i];
+        let _e86 = colour[3u];
+        colour[3u] = (_e86 * clamp(((_e77 - _e78) / _e82), 0f, 1f));
+    }
+    let _e89 = colour;
+    FragColor = _e89;
+    return;
+}
+
+@fragment 
+fn main(@location(0) vTexCoord: vec2<f32>, @location(1) vColor: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(2) vViewDepth: f32) -> @location(0) vec4<f32> {
+    vTexCoord_1 = vTexCoord;
+    vColor_1 = vColor;
+    gl_FragCoord_1 = gl_FragCoord;
+    vViewDepth_1 = vViewDepth;
+    main_1();
+    let _e9 = FragColor;
+    return _e9;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 12> kPayloads = {{
     {"kSimulateEsComputeSource", "simulate.es.comp.glsl", "b81e0eb63ad074d3057c4a328ce8ccb6d2767b9462cdc1fbd588f46239b823c4", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kSimulateDesktopComputeSource", "simulate.desktop.comp.glsl", "df2d8f3cae8638072c048ddee3c52f7e6fd74ce314da4bb5b6118b58cb718cc7", "glsl", "glsl", "compute", "text", "main"},
     {"kSimulateVulkanComputeSpirV", "simulate.vulkan.comp.glsl", "48f6ef4a44dc289714ba9c868a0662f21bb1c7e733c3dc53bc596547da9fe632", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
+    {"kSimulateVulkanComputeWgsl", "simulate.vulkan.comp.glsl", "48f6ef4a44dc289714ba9c868a0662f21bb1c7e733c3dc53bc596547da9fe632", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
     {"kDrawEsVertexSource", "draw.es.vert.glsl", "a42d83dcc9941e54bb3cbf9ab76019d0f3224e6515e64b49b25a2d365bd49b90", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kDrawEsFragmentSource", "draw.es.frag.glsl", "340b0ea5fcd42d2a80f9c94dea588d8006a7dc14522daaaffb3731cbc0cc9846", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kDrawDesktopVertexSource", "draw.desktop.vert.glsl", "28674a821d8f559219b02072b9c130345250a26f7d5dd3de272d829eec52044b", "glsl", "glsl", "vertex", "text", "main"},
     {"kDrawDesktopFragmentSource", "draw.desktop.frag.glsl", "5b8e745253340fd7fa3d120184458dd64e678a7765bdac7060606fb4f17f2199", "glsl", "glsl", "fragment", "text", "main"},
     {"kDrawVulkanVertexSpirV", "draw.vulkan.vert.glsl", "c1348ca26f08c855c2f2df0c31a1f14afcd0392d6919ddfe3bd08d4e0d841060", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kDrawVulkanVertexWgsl", "draw.vulkan.vert.glsl", "c1348ca26f08c855c2f2df0c31a1f14afcd0392d6919ddfe3bd08d4e0d841060", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kDrawVulkanFragmentSpirV", "draw.vulkan.frag.glsl", "042ce3489671bc162320beaaaa78927872f2fbf0f48794b3b0a86885cf9fb667", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kDrawVulkanFragmentWgsl", "draw.vulkan.frag.glsl", "042ce3489671bc162320beaaaa78927872f2fbf0f48794b3b0a86885cf9fb667", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::ParticleSystemGenerated

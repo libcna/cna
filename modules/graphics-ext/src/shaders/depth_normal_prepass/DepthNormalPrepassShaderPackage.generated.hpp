@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "depth_normal_prepass";
-inline constexpr std::string_view kManifestSha256 = "827c5021a3d692529ca460840c53b92e9e146c965e28190cc79b911be156e071";
+inline constexpr std::string_view kManifestSha256 = "a19019325c95a2909d69a19f038eb6f486a60c26e6daff4abbe568e236112d55";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -32,6 +32,10 @@ inline constexpr std::uint32_t kCompilerSpirVVersion = 0x00010600u;
 inline constexpr std::uint32_t kCompilerSpirVRevision = 1u;
 inline constexpr std::string_view kCompilerTarget = "Vulkan 1.0 / SPIR-V 1.0";
 inline constexpr std::string_view kCompilerOptimization = "performance";
+inline constexpr std::string_view kWgslTranslator = "naga-cli";
+inline constexpr std::string_view kWgslTranslatorVersion = "28.0.0";
+inline constexpr std::string_view kWgslTranslatorSha256 = "6721540d62bd3f618ca4c19ab1b70033a5a286a69e34e1eeca38079bdf392481";
+inline constexpr std::string_view kWgslSourceTransform = "cna-webgpu-glsl/1";
 
 inline constexpr std::string_view kRigidEsVertexSource =
     R"CNA_SHADER(#version 300 es
@@ -419,6 +423,95 @@ inline constexpr std::uint32_t kRigidVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kRigidVulkanVertexSpirVByteSize = sizeof(kRigidVulkanVertexSpirV);
 
+inline constexpr std::string_view kRigidVulkanVertexWgsl =
+    R"CNA_SHADER(// rigid.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct EngineMatrices {
+    uReservedLightViewProjection: mat4x4<f32>,
+    uWorld: mat4x4<f32>,
+    uView: mat4x4<f32>,
+    uProjection: mat4x4<f32>,
+    uPreviousWorld: mat4x4<f32>,
+    uPreviousViewProjection: mat4x4<f32>,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct FloatArray {
+    uPrepassScalars: array<f32, 72>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(2) member: vec4<f32>,
+    @location(3) member_1: vec4<f32>,
+    @location(0) member_2: vec3<f32>,
+    @location(1) member_3: f32,
+}
+
+@group(1) @binding(19) 
+var<uniform> unnamed: EngineMatrices;
+var<private> aPosition_1: vec3<f32>;
+var<private> unnamed_1: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> vCurrentClip: vec4<f32>;
+var<private> vPreviousClip: vec4<f32>;
+var<private> vViewNormal: vec3<f32>;
+var<private> aNormal_1: vec3<f32>;
+var<private> vViewDepth: f32;
+@group(1) @binding(12) 
+var<storage> unnamed_2: FloatArray;
+
+fn main_1() {
+    var world: vec4<f32>;
+    var view: vec4<f32>;
+
+    let _e23 = unnamed.uWorld;
+    let _e24 = aPosition_1;
+    world = (_e23 * vec4<f32>(_e24.x, _e24.y, _e24.z, 1f));
+    let _e31 = unnamed.uView;
+    let _e32 = world;
+    view = (_e31 * _e32);
+    let _e35 = unnamed.uProjection;
+    let _e36 = view;
+    unnamed_1.gl_Position = (_e35 * _e36);
+    let _e40 = unnamed_1.gl_Position;
+    vCurrentClip = _e40;
+    let _e43 = unnamed_1.gl_Position[1u];
+    unnamed_1.gl_Position[1u] = -(_e43);
+    let _e48 = unnamed.uPreviousViewProjection;
+    let _e50 = unnamed.uPreviousWorld;
+    let _e51 = aPosition_1;
+    vPreviousClip = (_e48 * (_e50 * vec4<f32>(_e51.x, _e51.y, _e51.z, 1f)));
+    let _e59 = unnamed.uView;
+    let _e68 = unnamed.uWorld;
+    let _e77 = aNormal_1;
+    vViewNormal = normalize(((mat3x3<f32>(_e59[0].xyz, _e59[1].xyz, _e59[2].xyz) * mat3x3<f32>(_e68[0].xyz, _e68[1].xyz, _e68[2].xyz)) * _e77));
+    let _e81 = view[2u];
+    let _e85 = unnamed_2.uPrepassScalars[0i];
+    vViewDepth = clamp((-(_e81) / _e85), 0f, 1f);
+    return;
+}
+
+@vertex 
+fn main(@location(0) aPosition: vec3<f32>, @location(1) aNormal: vec3<f32>) -> VertexOutput {
+    aPosition_1 = aPosition;
+    aNormal_1 = aNormal;
+    main_1();
+    let _e11 = unnamed_1.gl_Position.y;
+    unnamed_1.gl_Position.y = -(_e11);
+    let _e13 = unnamed_1.gl_Position;
+    let _e14 = vCurrentClip;
+    let _e15 = vPreviousClip;
+    let _e16 = vViewNormal;
+    let _e17 = vViewDepth;
+    return VertexOutput(_e13, _e14, _e15, _e16, _e17);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kSkinnedVulkanVertexSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000000eeu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -579,6 +672,147 @@ inline constexpr std::uint32_t kSkinnedVulkanVertexSpirV[] = {
 };
 inline constexpr std::size_t kSkinnedVulkanVertexSpirVByteSize = sizeof(kSkinnedVulkanVertexSpirV);
 
+inline constexpr std::string_view kSkinnedVulkanVertexWgsl =
+    R"CNA_SHADER(// skinned.vulkan.vert.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct Mat4Array {
+    uBones: array<mat4x4<f32>, 72>,
+}
+
+struct PushConstants {
+    viewportSize: vec2<f32>,
+    uMatrix: mat4x4<f32>,
+    uVector: vec4<f32>,
+    uWeightsPerVertex: f32,
+}
+
+struct EngineMatrices {
+    uReservedLightViewProjection: mat4x4<f32>,
+    uWorld: mat4x4<f32>,
+    uView: mat4x4<f32>,
+    uProjection: mat4x4<f32>,
+    uPreviousWorld: mat4x4<f32>,
+    uPreviousViewProjection: mat4x4<f32>,
+}
+
+struct gl_PerVertex {
+    @builtin(position) gl_Position: vec4<f32>,
+    gl_PointSize: f32,
+    gl_ClipDistance: array<f32, 1>,
+    gl_CullDistance: array<f32, 1>,
+}
+
+struct FloatArray {
+    uPrepassScalars: array<f32, 72>,
+}
+
+struct VertexOutput {
+    @builtin(position) gl_Position: vec4<f32>,
+    @location(2) member: vec4<f32>,
+    @location(3) member_1: vec4<f32>,
+    @location(0) member_2: vec3<f32>,
+    @location(1) member_3: f32,
+}
+
+@group(1) @binding(15) 
+var<uniform> unnamed: Mat4Array;
+var<private> aBoneIndices_1: vec4<u32>;
+var<private> aBoneWeights_1: vec4<f32>;
+@group(3) @binding(0) 
+var<uniform> pc: PushConstants;
+@group(1) @binding(19) 
+var<uniform> unnamed_1: EngineMatrices;
+var<private> aPosition_1: vec3<f32>;
+var<private> unnamed_2: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
+var<private> vCurrentClip: vec4<f32>;
+var<private> vPreviousClip: vec4<f32>;
+var<private> vViewNormal: vec3<f32>;
+var<private> aNormal_1: vec3<f32>;
+var<private> vViewDepth: f32;
+@group(1) @binding(12) 
+var<storage> unnamed_3: FloatArray;
+var<private> aUV_1: vec2<f32>;
+
+fn main_1() {
+    var skin: mat4x4<f32>;
+    var world: vec4<f32>;
+    var view: vec4<f32>;
+
+    let _e33 = aBoneIndices_1[0u];
+    let _e37 = unnamed.uBones[bitcast<i32>(_e33)];
+    let _e39 = aBoneWeights_1[0u];
+    skin = (_e37 * _e39);
+    let _e42 = pc.uWeightsPerVertex;
+    if (_e42 >= 2f) {
+        let _e45 = aBoneIndices_1[1u];
+        let _e49 = unnamed.uBones[bitcast<i32>(_e45)];
+        let _e51 = aBoneWeights_1[1u];
+        let _e52 = (_e49 * _e51);
+        let _e53 = skin;
+        skin = mat4x4<f32>((_e53[0] + _e52[0]), (_e53[1] + _e52[1]), (_e53[2] + _e52[2]), (_e53[3] + _e52[3]));
+    }
+    let _e68 = pc.uWeightsPerVertex;
+    if (_e68 >= 4f) {
+        let _e71 = aBoneIndices_1[2u];
+        let _e75 = unnamed.uBones[bitcast<i32>(_e71)];
+        let _e77 = aBoneWeights_1[2u];
+        let _e78 = (_e75 * _e77);
+        let _e80 = aBoneIndices_1[3u];
+        let _e84 = unnamed.uBones[bitcast<i32>(_e80)];
+        let _e86 = aBoneWeights_1[3u];
+        let _e87 = (_e84 * _e86);
+        let _e100 = mat4x4<f32>((_e78[0] + _e87[0]), (_e78[1] + _e87[1]), (_e78[2] + _e87[2]), (_e78[3] + _e87[3]));
+        let _e101 = skin;
+        skin = mat4x4<f32>((_e101[0] + _e100[0]), (_e101[1] + _e100[1]), (_e101[2] + _e100[2]), (_e101[3] + _e100[3]));
+    }
+    let _e116 = unnamed_1.uWorld;
+    let _e117 = skin;
+    let _e119 = aPosition_1;
+    world = ((_e116 * _e117) * vec4<f32>(_e119.x, _e119.y, _e119.z, 1f));
+    let _e126 = unnamed_1.uView;
+    let _e127 = world;
+    view = (_e126 * _e127);
+    let _e130 = unnamed_1.uProjection;
+    let _e131 = view;
+    unnamed_2.gl_Position = (_e130 * _e131);
+    let _e135 = unnamed_2.gl_Position;
+    vCurrentClip = _e135;
+    let _e138 = unnamed_2.gl_Position[1u];
+    unnamed_2.gl_Position[1u] = -(_e138);
+    let _e143 = unnamed_1.uPreviousViewProjection;
+    let _e145 = unnamed_1.uPreviousWorld;
+    let _e146 = skin;
+    let _e148 = aPosition_1;
+    vPreviousClip = (_e143 * ((_e145 * _e146) * vec4<f32>(_e148.x, _e148.y, _e148.z, 1f)));
+    let _e156 = unnamed_1.uView;
+    let _e165 = unnamed_1.uWorld;
+    let _e174 = skin;
+    let _e183 = aNormal_1;
+    vViewNormal = normalize((((mat3x3<f32>(_e156[0].xyz, _e156[1].xyz, _e156[2].xyz) * mat3x3<f32>(_e165[0].xyz, _e165[1].xyz, _e165[2].xyz)) * mat3x3<f32>(_e174[0].xyz, _e174[1].xyz, _e174[2].xyz)) * _e183));
+    let _e187 = view[2u];
+    let _e191 = unnamed_3.uPrepassScalars[0i];
+    vViewDepth = clamp((-(_e187) / _e191), 0f, 1f);
+    return;
+}
+
+@vertex 
+fn main(@location(4) aBoneIndices: vec4<u32>, @location(3) aBoneWeights: vec4<f32>, @location(0) aPosition: vec3<f32>, @location(1) aNormal: vec3<f32>, @location(2) aUV: vec2<f32>) -> VertexOutput {
+    aBoneIndices_1 = aBoneIndices;
+    aBoneWeights_1 = aBoneWeights;
+    aPosition_1 = aPosition;
+    aNormal_1 = aNormal;
+    aUV_1 = aUV;
+    main_1();
+    let _e17 = unnamed_2.gl_Position.y;
+    unnamed_2.gl_Position.y = -(_e17);
+    let _e19 = unnamed_2.gl_Position;
+    let _e20 = vCurrentClip;
+    let _e21 = vPreviousClip;
+    let _e22 = vViewNormal;
+    let _e23 = vViewDepth;
+    return VertexOutput(_e19, _e20, _e21, _e22, _e23);
+}
+)CNA_SHADER";
+
 inline constexpr std::uint32_t kPrepassVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000078u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
     0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
@@ -637,6 +871,95 @@ inline constexpr std::uint32_t kPrepassVulkanFragmentSpirV[] = {
     0x00000059u, 0x000200f8u, 0x00000059u, 0x000100fdu, 0x00010038u,
 };
 inline constexpr std::size_t kPrepassVulkanFragmentSpirVByteSize = sizeof(kPrepassVulkanFragmentSpirV);
+
+inline constexpr std::string_view kPrepassVulkanFragmentWgsl =
+    R"CNA_SHADER(// prepass.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uPrepassScalars: array<f32, 72>,
+}
+
+struct FragmentOutput {
+    @location(0) member: vec4<f32>,
+    @location(1) member_1: vec4<f32>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+var<private> vViewDepth_1: f32;
+var<private> vViewNormal_1: vec3<f32>;
+var<private> FragTarget0_: vec4<f32>;
+var<private> FragTarget1_: vec4<f32>;
+
+fn cnaPackDepth_u0028_f1_u003b(value: ptr<function, f32>) -> vec4<f32> {
+    var channels: vec4<f32>;
+
+    let _e22 = (*value);
+    channels = fract((vec4<f32>(16581375f, 65025f, 255f, 1f) * clamp(_e22, 0f, 0.99999994f)));
+    let _e26 = channels;
+    let _e29 = channels;
+    channels = (_e29 - (_e26.xxyz * vec4<f32>(0f, 0.003921569f, 0.003921569f, 0.003921569f)));
+    let _e31 = channels;
+    return _e31;
+}
+
+fn main_1() {
+    var depthOut: vec4<f32>;
+    var local: vec4<f32>;
+    var param: f32;
+    var normalOut: vec4<f32>;
+    var outputMode: i32;
+
+    let _e27 = unnamed.uPrepassScalars[1i];
+    if (_e27 >= 0.5f) {
+        let _e29 = vViewDepth_1;
+        param = _e29;
+        let _e30 = cnaPackDepth_u0028_f1_u003b((&param));
+        local = _e30;
+    } else {
+        let _e31 = vViewDepth_1;
+        local = vec4<f32>(_e31, _e31, _e31, 1f);
+    }
+    let _e33 = local;
+    depthOut = _e33;
+    let _e34 = vViewNormal_1;
+    let _e37 = ((_e34 * 0.5f) + vec3(0.5f));
+    let _e40 = unnamed.uPrepassScalars[3i];
+    normalOut = vec4<f32>(_e37.x, _e37.y, _e37.z, _e40);
+    let _e47 = unnamed.uPrepassScalars[2i];
+    outputMode = i32((_e47 + 0.5f));
+    let _e50 = outputMode;
+    if (_e50 == 1i) {
+        let _e52 = depthOut;
+        FragTarget0_ = _e52;
+        let _e53 = depthOut;
+        FragTarget1_ = _e53;
+    } else {
+        let _e54 = outputMode;
+        if (_e54 == 2i) {
+            let _e56 = normalOut;
+            FragTarget0_ = _e56;
+            let _e57 = normalOut;
+            FragTarget1_ = _e57;
+        } else {
+            let _e58 = depthOut;
+            FragTarget0_ = _e58;
+            let _e59 = normalOut;
+            FragTarget1_ = _e59;
+        }
+    }
+    return;
+}
+
+@fragment 
+fn main(@location(1) vViewDepth: f32, @location(0) vViewNormal: vec3<f32>) -> FragmentOutput {
+    vViewDepth_1 = vViewDepth;
+    vViewNormal_1 = vViewNormal;
+    main_1();
+    let _e6 = FragTarget0_;
+    let _e7 = FragTarget1_;
+    return FragmentOutput(_e6, _e7);
+}
+)CNA_SHADER";
 
 inline constexpr std::uint32_t kPrepassVelocityVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000120u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -733,7 +1056,169 @@ inline constexpr std::uint32_t kPrepassVelocityVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kPrepassVelocityVulkanFragmentSpirVByteSize = sizeof(kPrepassVelocityVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 10> kPayloads = {{
+inline constexpr std::string_view kPrepassVelocityVulkanFragmentWgsl =
+    R"CNA_SHADER(// prepass_velocity.vulkan.frag.glsl -> cna-webgpu-glsl/1 -> shaderc -> naga. Generated; edit the Vulkan GLSL source.
+struct FloatArray {
+    uPrepassScalars: array<f32, 72>,
+}
+
+struct FragmentOutput {
+    @location(0) member: vec4<f32>,
+    @location(1) member_1: vec4<f32>,
+    @location(2) member_2: vec4<f32>,
+}
+
+@group(1) @binding(12) 
+var<storage> unnamed: FloatArray;
+var<private> vViewDepth_1: f32;
+var<private> vViewNormal_1: vec3<f32>;
+var<private> vCurrentClip_1: vec4<f32>;
+var<private> vPreviousClip_1: vec4<f32>;
+var<private> FragTarget0_: vec4<f32>;
+var<private> FragTarget1_: vec4<f32>;
+var<private> FragTarget2_: vec4<f32>;
+
+fn cnaEncodeVelocity_u0028_vf2_u003b(velocityUv: ptr<function, vec2<f32>>) -> vec4<f32> {
+    let _e26 = (*velocityUv);
+    let _e32 = clamp(((_e26 * 0.5f) + vec2(0.5f)), vec2(0f), vec2(1f));
+    return vec4<f32>(_e32.x, _e32.y, 0f, 0f);
+}
+
+fn cnaNoVelocity_u0028_() -> vec4<f32> {
+    return vec4<f32>(0.5f, 0.5f, 0f, 1f);
+}
+
+fn cnaVelocityOut_u0028_vf4_u003b_vf4_u003b(currentClip: ptr<function, vec4<f32>>, previousClip: ptr<function, vec4<f32>>) -> vec4<f32> {
+    var currentUv: vec2<f32>;
+    var previousUv: vec2<f32>;
+    var param: vec2<f32>;
+    var phi_78_: bool;
+
+    let _e31 = (*currentClip)[3u];
+    let _e32 = (_e31 <= 0f);
+    phi_78_ = _e32;
+    if !(_e32) {
+        let _e35 = (*previousClip)[3u];
+        phi_78_ = (_e35 <= 0f);
+    }
+    let _e38 = phi_78_;
+    if _e38 {
+        let _e39 = cnaNoVelocity_u0028_();
+        return _e39;
+    }
+    let _e40 = (*currentClip);
+    let _e43 = (*currentClip)[3u];
+    currentUv = (((_e40.xy / vec2(_e43)) * 0.5f) + vec2(0.5f));
+    let _e49 = (*previousClip);
+    let _e52 = (*previousClip)[3u];
+    previousUv = (((_e49.xy / vec2(_e52)) * 0.5f) + vec2(0.5f));
+    let _e58 = currentUv;
+    let _e59 = previousUv;
+    param = (_e58 - _e59);
+    let _e61 = cnaEncodeVelocity_u0028_vf2_u003b((&param));
+    return _e61;
+}
+
+fn cnaPackDepth_u0028_f1_u003b(value: ptr<function, f32>) -> vec4<f32> {
+    var channels: vec4<f32>;
+
+    let _e27 = (*value);
+    channels = fract((vec4<f32>(16581375f, 65025f, 255f, 1f) * clamp(_e27, 0f, 0.99999994f)));
+    let _e31 = channels;
+    let _e34 = channels;
+    channels = (_e34 - (_e31.xxyz * vec4<f32>(0f, 0.003921569f, 0.003921569f, 0.003921569f)));
+    let _e36 = channels;
+    return _e36;
+}
+
+fn main_1() {
+    var depthOut: vec4<f32>;
+    var local: vec4<f32>;
+    var param_1: f32;
+    var normalOut: vec4<f32>;
+    var velocityOut: vec4<f32>;
+    var param_2: vec4<f32>;
+    var param_3: vec4<f32>;
+    var outputMode: i32;
+
+    let _e35 = unnamed.uPrepassScalars[1i];
+    if (_e35 >= 0.5f) {
+        let _e37 = vViewDepth_1;
+        param_1 = _e37;
+        let _e38 = cnaPackDepth_u0028_f1_u003b((&param_1));
+        local = _e38;
+    } else {
+        let _e39 = vViewDepth_1;
+        local = vec4<f32>(_e39, _e39, _e39, 1f);
+    }
+    let _e41 = local;
+    depthOut = _e41;
+    let _e42 = vViewNormal_1;
+    let _e45 = ((_e42 * 0.5f) + vec3(0.5f));
+    let _e48 = unnamed.uPrepassScalars[3i];
+    normalOut = vec4<f32>(_e45.x, _e45.y, _e45.z, _e48);
+    let _e53 = vCurrentClip_1;
+    param_2 = _e53;
+    let _e54 = vPreviousClip_1;
+    param_3 = _e54;
+    let _e55 = cnaVelocityOut_u0028_vf4_u003b_vf4_u003b((&param_2), (&param_3));
+    velocityOut = _e55;
+    let _e58 = unnamed.uPrepassScalars[2i];
+    outputMode = i32((_e58 + 0.5f));
+    let _e61 = outputMode;
+    if (_e61 == 1i) {
+        let _e63 = depthOut;
+        FragTarget0_ = _e63;
+        let _e64 = depthOut;
+        FragTarget1_ = _e64;
+        let _e65 = depthOut;
+        FragTarget2_ = _e65;
+    } else {
+        let _e66 = outputMode;
+        if (_e66 == 2i) {
+            let _e68 = normalOut;
+            FragTarget0_ = _e68;
+            let _e69 = normalOut;
+            FragTarget1_ = _e69;
+            let _e70 = normalOut;
+            FragTarget2_ = _e70;
+        } else {
+            let _e71 = outputMode;
+            if (_e71 == 3i) {
+                let _e73 = velocityOut;
+                FragTarget0_ = _e73;
+                let _e74 = velocityOut;
+                FragTarget1_ = _e74;
+                let _e75 = velocityOut;
+                FragTarget2_ = _e75;
+            } else {
+                let _e76 = depthOut;
+                FragTarget0_ = _e76;
+                let _e77 = normalOut;
+                FragTarget1_ = _e77;
+                let _e78 = velocityOut;
+                FragTarget2_ = _e78;
+            }
+        }
+    }
+    return;
+}
+
+@fragment 
+fn main(@location(1) vViewDepth: f32, @location(0) vViewNormal: vec3<f32>, @location(2) vCurrentClip: vec4<f32>, @location(3) vPreviousClip: vec4<f32>) -> FragmentOutput {
+    vViewDepth_1 = vViewDepth;
+    vViewNormal_1 = vViewNormal;
+    vCurrentClip_1 = vCurrentClip;
+    vPreviousClip_1 = vPreviousClip;
+    main_1();
+    let _e11 = FragTarget0_;
+    let _e12 = FragTarget1_;
+    let _e13 = FragTarget2_;
+    return FragmentOutput(_e11, _e12, _e13);
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 14> kPayloads = {{
     {"kRigidEsVertexSource", "rigid.es.vert.glsl", "b1f33ce484f2ccaa61de67a6b7307d971fc73b9436c16151dd6d81acc6a7c243", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kSkinnedEsVertexSource", "skinned.es.vert.glsl", "59e2b0a1353df3b62deeb259f7e7bbe0664d6fb1b0dc957d5992996928d28abc", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kPrepassEsFragmentSource", "prepass.es.frag.glsl", "ed95c978fc70a982883a2592d70b53dc1196bb93c492611d3abf10939992f0c0", "glsl-es", "glsl-es", "fragment", "text", "main"},
@@ -741,9 +1226,13 @@ inline constexpr std::array<PayloadProvenance, 10> kPayloads = {{
     {"kSkinnedDesktopVertexSource", "skinned.desktop.vert.glsl", "e0c24a3d0e5bb7d52e1cb8f8be4cb1111f9ab462f3d4a0a30b39c3a6e5d16111", "glsl", "glsl", "vertex", "text", "main"},
     {"kPrepassDesktopFragmentSource", "prepass.desktop.frag.glsl", "0320d07e0162b99951cffad60fd9aa452cc230096d60e8151932d268ba1710bb", "glsl", "glsl", "fragment", "text", "main"},
     {"kRigidVulkanVertexSpirV", "rigid.vulkan.vert.glsl", "6fcfdd02e56a00e79728b5472e5f9e2e86bc583c3e9242135b3ca1dc09ecdabc", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kRigidVulkanVertexWgsl", "rigid.vulkan.vert.glsl", "6fcfdd02e56a00e79728b5472e5f9e2e86bc583c3e9242135b3ca1dc09ecdabc", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kSkinnedVulkanVertexSpirV", "skinned.vulkan.vert.glsl", "226d89ce984129dd9b50a7162e71a0986755d430dfd94aa115935a4a0354b28b", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
+    {"kSkinnedVulkanVertexWgsl", "skinned.vulkan.vert.glsl", "226d89ce984129dd9b50a7162e71a0986755d430dfd94aa115935a4a0354b28b", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kPrepassVulkanFragmentSpirV", "prepass.vulkan.frag.glsl", "f8d18544eb4e0625197a9404ff08b17933f5a98b921da06301b4e295ed8beee0", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kPrepassVulkanFragmentWgsl", "prepass.vulkan.frag.glsl", "f8d18544eb4e0625197a9404ff08b17933f5a98b921da06301b4e295ed8beee0", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
     {"kPrepassVelocityVulkanFragmentSpirV", "prepass_velocity.vulkan.frag.glsl", "3348d899ebf1c60bbb7655bc9a0e6dbf1d1e5c041c6f5e1e3079d9ec2c388c69", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kPrepassVelocityVulkanFragmentWgsl", "prepass_velocity.vulkan.frag.glsl", "3348d899ebf1c60bbb7655bc9a0e6dbf1d1e5c041c6f5e1e3079d9ec2c388c69", "wgsl", "vulkan-glsl", "fragment", "wgsl", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::DepthNormalPrepassGenerated

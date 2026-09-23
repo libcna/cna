@@ -29,12 +29,30 @@
       "entry_point": "main"
     },
     {
+      "symbol": "kVulkanVertexWgsl",
+      "source": "vulkan.vert.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
       "symbol": "kVulkanFragmentSpirV",
       "source": "vulkan.frag.glsl",
       "language": "spirv",
       "source_language": "vulkan-glsl",
       "stage": "fragment",
       "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanFragmentWgsl",
+      "source": "vulkan.frag.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "wgsl",
       "entry_point": "main"
     }
   ]

@@ -349,7 +349,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_srgb_transfer
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
-    target_link_libraries(cna_test_webgpu_pbr_srgb_transfer PRIVATE SDL3::SDL3)
+    # plans/plan_webgpu_modern_graphics.md WMG-0024: guarded, because CNA_ENABLE_SDL=OFF is a
+    # configuration that has to exist -- these two borrow an EasyGL source that reaches for SDL3
+    # itself, and an unconditional link failed the whole CONFIGURE of an SDL-free tree.
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(cna_test_webgpu_pbr_srgb_transfer PRIVATE SDL3::SDL3)
+    endif()
     cna_register_renderer_test(NAME WebGPU_Pbr_SrgbTransfer COMMAND cna_test_webgpu_pbr_srgb_transfer
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -357,7 +362,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # repeated on both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_fresnel_factors
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
-    target_link_libraries(cna_test_webgpu_pbr_fresnel_factors PRIVATE SDL3::SDL3)
+    if(TARGET SDL3::SDL3)  # WMG-0024, as above
+        target_link_libraries(cna_test_webgpu_pbr_fresnel_factors PRIVATE SDL3::SDL3)
+    endif()
     cna_register_renderer_test(NAME WebGPU_Pbr_FresnelFactors COMMAND cna_test_webgpu_pbr_fresnel_factors
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -462,6 +469,26 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # ends up on top, with each depth-sorted mode set opposite to submission order.
     cna_webgpu_test(cna_test_webgpu_spritebatch_sortmode webgpu_spritebatch_sortmode_test.cpp)
     cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu_modern_graphics.md WMG-0027: a long run over the modern resources, whose
+    # oracle is the renderer's own uncaptured-error count plus RSS/fd/thread deltas.
+    cna_webgpu_test(cna_test_webgpu_modern_stress webgpu_modern_stress_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_ModernStress COMMAND cna_test_webgpu_modern_stress --cycles 512
+        TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu_modern_graphics.md WMG-0021: a per-instance vertex stream on the custom
+    # ShaderEffect route -- four instances that differ only in their per-instance record.
+    cna_webgpu_test(cna_test_webgpu_shadereffect_instanced webgpu_shadereffect_instanced_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_ShaderEffectInstanced
+        COMMAND cna_test_webgpu_shadereffect_instanced
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu_modern_graphics.md WMG-0020: GPU debug labels. SetStringMarkerEXT reaches
+    # the command stream as an ordered entry, and the debug groups the renderer opens around its
+    # own render and compute passes are balanced.
+    cna_webgpu_test(cna_test_webgpu_debug_marker webgpu_debug_marker_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DebugMarker COMMAND cna_test_webgpu_debug_marker
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-84: real GPU occlusion queries -- the same quad reads back 0 samples behind an occluder

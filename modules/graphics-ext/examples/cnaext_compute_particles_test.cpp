@@ -113,6 +113,10 @@ namespace
                               CNA::ShaderStageEXT::Compute, "main",
                               "compute_particles/integrate.vulkan.comp.spv",
                               ToBytes(kIntegratorVulkanComputeSpirV)),
+                ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                              CNA::ShaderStageEXT::Compute, "main",
+                              "compute_particles/integrate.vulkan.comp.wgsl",
+                              std::string(kIntegratorVulkanComputeWgsl)),
             },
             {CNA::ShaderStageEXT::Compute},
             {

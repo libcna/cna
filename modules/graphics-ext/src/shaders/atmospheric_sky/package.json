@@ -4,11 +4,73 @@
   "package": "atmospheric_sky",
   "preprocessor_guard": "CNA_CNAEXT",
   "payloads": [
-    {"symbol":"kEsVertexSource","source":"sky.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
-    {"symbol":"kEsFragmentSource","source":"sky.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
-    {"symbol":"kDesktopVertexSource","source":"sky.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
-    {"symbol":"kDesktopFragmentSource","source":"sky.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
-    {"symbol":"kVulkanVertexSpirV","source":"sky.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
-    {"symbol":"kVulkanFragmentSpirV","source":"sky.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+    {
+      "symbol": "kEsVertexSource",
+      "source": "sky.es.vert.glsl",
+      "language": "glsl-es",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kEsFragmentSource",
+      "source": "sky.es.frag.glsl",
+      "language": "glsl-es",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kDesktopVertexSource",
+      "source": "sky.desktop.vert.glsl",
+      "language": "glsl",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kDesktopFragmentSource",
+      "source": "sky.desktop.frag.glsl",
+      "language": "glsl",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanVertexSpirV",
+      "source": "sky.vulkan.vert.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanVertexWgsl",
+      "source": "sky.vulkan.vert.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanFragmentSpirV",
+      "source": "sky.vulkan.frag.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanFragmentWgsl",
+      "source": "sky.vulkan.frag.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "wgsl",
+      "entry_point": "main"
+    }
   ]
 }

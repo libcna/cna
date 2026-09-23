@@ -54,6 +54,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/ProjectGraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -132,8 +133,10 @@ namespace
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_WEBGPU)
+    // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
+    // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
+                                 true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
@@ -252,6 +255,18 @@ namespace
         std::size_t exact = 0;            ///< entries in the asserted window equal to expectation
         std::size_t window = 0;           ///< size of the asserted window
     };
+}
+
+namespace {
+/// plans/plan_webgpu_modern_graphics.md WMG-0005: a row that declares `wantHiDefProfile` needs
+/// HiDef to be the PROGRAM's profile, not a request made later. `Game`'s own GraphicsDevice is
+/// default-constructed at Reach before `GraphicsDeviceManager` exists (plans/plan_dx9.md D9-103),
+/// so the manager-level request below arrives after the device it has to describe -- the test then
+/// ran to a Reach refusal instead of to its checks. A row that wants Reach keeps Reach.
+const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
+    kContract.wantHiDefProfile
+        ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+        : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach};
 }
 
 class CubeVolumeGetDataContractTest : public Game

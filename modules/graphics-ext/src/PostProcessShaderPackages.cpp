@@ -40,7 +40,7 @@ namespace CNA::Graphics::detail
 
         [[nodiscard]] ShaderPackageEXT MakeFullscreenPackage(
             const TextStage& esFragment, const TextStage& desktopFragment,
-            const SpirVStage& vulkanFragment,
+            const SpirVStage& vulkanFragment, const TextStage& wgslFragment,
             std::vector<ShaderBindingRequirementEXT> additionalRequirements = {})
         {
             using ShaderCodeEXT = CNA::Graphics::ShaderCodeEXT;
@@ -79,6 +79,16 @@ namespace CNA::Graphics::detail
                                   vulkanFragment.label,
                                   ToBytes(vulkanFragment.words,
                                           vulkanFragment.byteSize)),
+                    // plans/plan_webgpu_modern_graphics.md WMG-0005: the WGSL the generator derives
+                    // from the same Vulkan GLSL, so a WGSL renderer runs the pass rather than
+                    // falling back to a copy of its input.
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "post_process/fullscreen.vulkan.vert.wgsl",
+                                  std::string(kFullscreenVulkanVertexWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  wgslFragment.label, std::string(wgslFragment.source)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 std::move(requirements));
@@ -96,6 +106,8 @@ namespace CNA::Graphics::detail
             {kAerialPerspectiveVulkanFragmentSpirV,
              kAerialPerspectiveVulkanFragmentSpirVByteSize,
              "post_process/aerial_perspective.vulkan.frag.spv"},
+            {kAerialPerspectiveVulkanFragmentWgsl,
+             "post_process/aerial_perspective.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -110,7 +122,9 @@ namespace CNA::Graphics::detail
              "post_process/bloom_extract.desktop.frag.glsl"},
             {kBloomExtractVulkanFragmentSpirV,
              kBloomExtractVulkanFragmentSpirVByteSize,
-             "post_process/bloom_extract.vulkan.frag.spv"});
+             "post_process/bloom_extract.vulkan.frag.spv"},
+            {kBloomExtractVulkanFragmentWgsl,
+             "post_process/bloom_extract.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateBloomBlurShaderPackage()
@@ -122,7 +136,9 @@ namespace CNA::Graphics::detail
              "post_process/bloom_blur.desktop.frag.glsl"},
             {kBloomBlurVulkanFragmentSpirV,
              kBloomBlurVulkanFragmentSpirVByteSize,
-             "post_process/bloom_blur.vulkan.frag.spv"});
+             "post_process/bloom_blur.vulkan.frag.spv"},
+            {kBloomBlurVulkanFragmentWgsl,
+             "post_process/bloom_blur.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateBloomUpsampleShaderPackage()
@@ -136,6 +152,8 @@ namespace CNA::Graphics::detail
             {kBloomUpsampleVulkanFragmentSpirV,
              kBloomUpsampleVulkanFragmentSpirVByteSize,
              "post_process/bloom_upsample.vulkan.frag.spv"},
+            {kBloomUpsampleVulkanFragmentWgsl,
+             "post_process/bloom_upsample.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uSmallerSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -152,6 +170,8 @@ namespace CNA::Graphics::detail
             {kBloomCombineVulkanFragmentSpirV,
              kBloomCombineVulkanFragmentSpirVByteSize,
              "post_process/bloom_combine.vulkan.frag.spv"},
+            {kBloomCombineVulkanFragmentWgsl,
+             "post_process/bloom_combine.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uBloomSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -165,7 +185,9 @@ namespace CNA::Graphics::detail
             {kChromaticDesktopFragmentSource,
              "post_process/chromatic.desktop.frag.glsl"},
             {kChromaticVulkanFragmentSpirV, kChromaticVulkanFragmentSpirVByteSize,
-             "post_process/chromatic.vulkan.frag.spv"});
+             "post_process/chromatic.vulkan.frag.spv"},
+            {kChromaticVulkanFragmentWgsl,
+             "post_process/chromatic.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateContactShadowShaderPackage()
@@ -179,6 +201,8 @@ namespace CNA::Graphics::detail
             {kContactShadowVulkanFragmentSpirV,
              kContactShadowVulkanFragmentSpirVByteSize,
              "post_process/contact_shadow.vulkan.frag.spv"},
+            {kContactShadowVulkanFragmentWgsl,
+             "post_process/contact_shadow.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -191,7 +215,9 @@ namespace CNA::Graphics::detail
             {kCrtEsFragmentSource, "post_process/crt.es.frag.glsl"},
             {kCrtDesktopFragmentSource, "post_process/crt.desktop.frag.glsl"},
             {kCrtVulkanFragmentSpirV, kCrtVulkanFragmentSpirVByteSize,
-             "post_process/crt.vulkan.frag.spv"});
+             "post_process/crt.vulkan.frag.spv"},
+            {kCrtVulkanFragmentWgsl,
+             "post_process/crt.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateDecalShaderPackage()
@@ -203,6 +229,8 @@ namespace CNA::Graphics::detail
              "post_process/decal.desktop.frag.glsl"},
             {kDecalVulkanFragmentSpirV, kDecalVulkanFragmentSpirVByteSize,
              "post_process/decal.vulkan.frag.spv"},
+            {kDecalVulkanFragmentWgsl,
+             "post_process/decal.vulkan.frag.wgsl"},
             {
                 ShaderBindingRequirementEXT(
                     "uDecalSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
@@ -224,6 +252,8 @@ namespace CNA::Graphics::detail
             {kDepthEffectVulkanFragmentSpirV,
              kDepthEffectVulkanFragmentSpirVByteSize,
              "post_process/depth_effect.vulkan.frag.spv"},
+            {kDepthEffectVulkanFragmentWgsl,
+             "post_process/depth_effect.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uPalette", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -240,6 +270,8 @@ namespace CNA::Graphics::detail
             {kColorGradeStripVulkanFragmentSpirV,
              kColorGradeStripVulkanFragmentSpirVByteSize,
              "post_process/color_grade_strip.vulkan.frag.spv"},
+            {kColorGradeStripVulkanFragmentWgsl,
+             "post_process/color_grade_strip.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uLutSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -256,6 +288,8 @@ namespace CNA::Graphics::detail
             {kColorGradeInterpolatedStripVulkanFragmentSpirV,
              kColorGradeInterpolatedStripVulkanFragmentSpirVByteSize,
              "post_process/color_grade_interpolated_strip.vulkan.frag.spv"},
+            {kColorGradeInterpolatedStripVulkanFragmentWgsl,
+             "post_process/color_grade_interpolated_strip.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uLutSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -272,6 +306,8 @@ namespace CNA::Graphics::detail
             {kColorGradeVolumeVulkanFragmentSpirV,
              kColorGradeVolumeVulkanFragmentSpirVByteSize,
              "post_process/color_grade_volume.vulkan.frag.spv"},
+            {kColorGradeVolumeVulkanFragmentWgsl,
+             "post_process/color_grade_volume.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uLutVolume", 1, ShaderBindingTypeEXT::SampledTexture3D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -284,7 +320,9 @@ namespace CNA::Graphics::detail
             {kFxaaEsFragmentSource, "post_process/fxaa.es.frag.glsl"},
             {kFxaaDesktopFragmentSource, "post_process/fxaa.desktop.frag.glsl"},
             {kFxaaVulkanFragmentSpirV, kFxaaVulkanFragmentSpirVByteSize,
-             "post_process/fxaa.vulkan.frag.spv"});
+             "post_process/fxaa.vulkan.frag.spv"},
+            {kFxaaVulkanFragmentWgsl,
+             "post_process/fxaa.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateFilmGrainShaderPackage()
@@ -296,7 +334,9 @@ namespace CNA::Graphics::detail
              "post_process/film_grain.desktop.frag.glsl"},
             {kFilmGrainVulkanFragmentSpirV,
              kFilmGrainVulkanFragmentSpirVByteSize,
-             "post_process/film_grain.vulkan.frag.spv"});
+             "post_process/film_grain.vulkan.frag.spv"},
+            {kFilmGrainVulkanFragmentWgsl,
+             "post_process/film_grain.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateTonemapShaderPackage()
@@ -306,7 +346,9 @@ namespace CNA::Graphics::detail
             {kTonemapEsFragmentSource, "post_process/tonemap.es.frag.glsl"},
             {kTonemapDesktopFragmentSource, "post_process/tonemap.desktop.frag.glsl"},
             {kTonemapVulkanFragmentSpirV, kTonemapVulkanFragmentSpirVByteSize,
-             "post_process/tonemap.vulkan.frag.spv"});
+             "post_process/tonemap.vulkan.frag.spv"},
+            {kTonemapVulkanFragmentWgsl,
+             "post_process/tonemap.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateWeightedTransparencyResolveShaderPackage()
@@ -320,6 +362,8 @@ namespace CNA::Graphics::detail
             {kWeightedTransparencyResolveVulkanFragmentSpirV,
              kWeightedTransparencyResolveVulkanFragmentSpirVByteSize,
              "post_process/weighted_transparency_resolve.vulkan.frag.spv"},
+            {kWeightedTransparencyResolveVulkanFragmentWgsl,
+             "post_process/weighted_transparency_resolve.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uRevealage", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -334,7 +378,9 @@ namespace CNA::Graphics::detail
              "post_process/lens_flare.desktop.frag.glsl"},
             {kLensFlareVulkanFragmentSpirV,
              kLensFlareVulkanFragmentSpirVByteSize,
-             "post_process/lens_flare.vulkan.frag.spv"});
+             "post_process/lens_flare.vulkan.frag.spv"},
+            {kLensFlareVulkanFragmentWgsl,
+             "post_process/lens_flare.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateHdrDisplayShaderPackage()
@@ -346,7 +392,9 @@ namespace CNA::Graphics::detail
              "post_process/hdr_display.desktop.frag.glsl"},
             {kHdrDisplayVulkanFragmentSpirV,
              kHdrDisplayVulkanFragmentSpirVByteSize,
-             "post_process/hdr_display.vulkan.frag.spv"});
+             "post_process/hdr_display.vulkan.frag.spv"},
+            {kHdrDisplayVulkanFragmentWgsl,
+             "post_process/hdr_display.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateHeightFogShaderPackage()
@@ -359,6 +407,8 @@ namespace CNA::Graphics::detail
             {kHeightFogVulkanFragmentSpirV,
              kHeightFogVulkanFragmentSpirVByteSize,
              "post_process/height_fog.vulkan.frag.spv"},
+            {kHeightFogVulkanFragmentWgsl,
+             "post_process/height_fog.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -375,6 +425,8 @@ namespace CNA::Graphics::detail
             {kDepthOfFieldVulkanFragmentSpirV,
              kDepthOfFieldVulkanFragmentSpirVByteSize,
              "post_process/depth_of_field.vulkan.frag.spv"},
+            {kDepthOfFieldVulkanFragmentWgsl,
+             "post_process/depth_of_field.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -390,6 +442,8 @@ namespace CNA::Graphics::detail
             {kMotionBlurVulkanFragmentSpirV,
              kMotionBlurVulkanFragmentSpirVByteSize,
              "post_process/motion_blur.vulkan.frag.spv"},
+            {kMotionBlurVulkanFragmentWgsl,
+             "post_process/motion_blur.vulkan.frag.wgsl"},
             {
                 ShaderBindingRequirementEXT(
                     "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
@@ -411,6 +465,8 @@ namespace CNA::Graphics::detail
             {kSsaoOcclusionVulkanFragmentSpirV,
              kSsaoOcclusionVulkanFragmentSpirVByteSize,
              "post_process/ssao_occlusion.vulkan.frag.spv"},
+            {kSsaoOcclusionVulkanFragmentWgsl,
+             "post_process/ssao_occlusion.vulkan.frag.wgsl"},
             {
                 ShaderBindingRequirementEXT(
                     "uNormalSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
@@ -431,6 +487,8 @@ namespace CNA::Graphics::detail
             {kSsaoComposeVulkanFragmentSpirV,
              kSsaoComposeVulkanFragmentSpirVByteSize,
              "post_process/ssao_compose.vulkan.frag.spv"},
+            {kSsaoComposeVulkanFragmentWgsl,
+             "post_process/ssao_compose.vulkan.frag.wgsl"},
             {ShaderBindingRequirementEXT(
                 "uOcclusionSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)});
@@ -444,6 +502,8 @@ namespace CNA::Graphics::detail
             {kSsrDesktopFragmentSource, "post_process/ssr.desktop.frag.glsl"},
             {kSsrVulkanFragmentSpirV, kSsrVulkanFragmentSpirVByteSize,
              "post_process/ssr.vulkan.frag.spv"},
+            {kSsrVulkanFragmentWgsl,
+             "post_process/ssr.vulkan.frag.wgsl"},
             {
                 ShaderBindingRequirementEXT(
                     "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
@@ -464,7 +524,9 @@ namespace CNA::Graphics::detail
              "post_process/spatial_upscale.desktop.frag.glsl"},
             {kSpatialUpscaleVulkanFragmentSpirV,
              kSpatialUpscaleVulkanFragmentSpirVByteSize,
-             "post_process/spatial_upscale.vulkan.frag.spv"});
+             "post_process/spatial_upscale.vulkan.frag.spv"},
+            {kSpatialUpscaleVulkanFragmentWgsl,
+             "post_process/spatial_upscale.vulkan.frag.wgsl"});
     }
 
     ShaderPackageEXT CreateLightShaftShaderPackage()
@@ -476,7 +538,9 @@ namespace CNA::Graphics::detail
              "post_process/light_shaft.desktop.frag.glsl"},
             {kLightShaftVulkanFragmentSpirV,
              kLightShaftVulkanFragmentSpirVByteSize,
-             "post_process/light_shaft.vulkan.frag.spv"});
+             "post_process/light_shaft.vulkan.frag.spv"},
+            {kLightShaftVulkanFragmentWgsl,
+             "post_process/light_shaft.vulkan.frag.wgsl"});
     }
 }
 

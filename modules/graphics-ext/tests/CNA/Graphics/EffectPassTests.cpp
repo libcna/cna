@@ -191,6 +191,13 @@ TEST(EffectPassTest, AnAdaptedEffectRunsInsideAChain)
         || (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::SpirV,
                                          CNA::ShaderStageEXT::Vertex)
             && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::SpirV,
+                                            CNA::ShaderStageEXT::Fragment))
+        // WMG-0012: WGSL is one of the languages CRTEffect's package ships, so a renderer that
+        // speaks it has a variant. A list that names only the languages that existed when it was
+        // written reads a working renderer as one with nothing to run.
+        || (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                         CNA::ShaderStageEXT::Vertex)
+            && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
                                             CNA::ShaderStageEXT::Fragment));
     if (!hasPortableCrtVariant)
         GTEST_SKIP() << "this renderer has no CRTEffect package variant";

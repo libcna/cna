@@ -264,7 +264,7 @@ TEST(ClusteredLightBufferTest, AnEmptySetUploadsWithoutAZeroSizedTexture)
 TEST(ClusteredLightBufferTest, TheShaderReadsBackEveryFieldOfEveryLight)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -319,7 +319,7 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
     // cannot tell "it matched" from "the shader always paints white". This asks for the wrong
     // answer on purpose.
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
@@ -352,7 +352,7 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
 TEST(ClusteredLightBufferTest, TheShaderWalksTheSameClusterListTheCpuBuilt)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 

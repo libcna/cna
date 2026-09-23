@@ -66,11 +66,19 @@ namespace CNA::Graphics {
                                   "clustered_forward/forward.vulkan.vert.spv",
                                   ToBytes(kForwardVulkanVertexSpirV,
                                           kForwardVulkanVertexSpirVByteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "clustered_forward/forward.vulkan.vert.wgsl",
+                                  std::string(kForwardVulkanVertexWgsl)),
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   "clustered_forward/forward.vulkan.frag.spv",
                                   ToBytes(kForwardVulkanFragmentSpirV,
                                           kForwardVulkanFragmentSpirVByteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "clustered_forward/forward.vulkan.frag.wgsl",
+                                  std::string(kForwardVulkanFragmentWgsl)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 {
@@ -147,7 +155,7 @@ namespace CNA::Graphics {
         }
 
         effect_->Apply();
-        if (effect_->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV)
+        if (CNA::UsesDescriptorBindingContractEXT(effect_->GetSelectedShaderLanguageEXT()))
         {
             const bool transmits = extensions_ != nullptr && extensions_->isTransmissionEnabled();
             if (transmits && opaqueFrame_ == nullptr)

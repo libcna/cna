@@ -23,7 +23,10 @@
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -482,7 +485,7 @@ TEST(WebGPUCompiledEffectDrawTest, LodBiasAppliesToTheSamplersOwnRegisterRatherT
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                   static_cast<const void*>(ramp), 0, 2, declaration);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -590,11 +593,11 @@ TEST(WebGPUCompiledEffectDrawTest, LodBiasIsCapturedWithTheDeferredDrawRatherTha
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
 
-    unbiasedEffect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    unbiasedEffect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     device.DrawUserPrimitives(PrimitiveType::TriangleList,
                               static_cast<const void*>(left), 0, 2, declaration);
     // The mutation: this Apply() overwrites the sampler state a replay-time read would find.
-    biasedEffect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    biasedEffect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     device.DrawUserPrimitives(PrimitiveType::TriangleList,
                               static_cast<const void*>(right), 0, 2, declaration);
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -642,7 +645,15 @@ TEST(WebGPUCompiledEffectDrawTest, AddressWSelectsADifferentVolumeSliceForEachMo
     using Microsoft::Xna::Framework::Rectangle;
     using Microsoft::Xna::Framework::Vector4;
 
-    GraphicsDevice device;
+    // plans/plan_webgpu_modern_graphics.md WMG-0028, the same defect WMG-0005 found in six other
+    // rows: a default GraphicsDevice is Reach, Reach has no volume textures at all, and this test
+    // builds a Texture3D on its third line. It therefore threw before reaching a single assertion
+    // and reported as a renderer failure. tools/platform/profile_dead_tests.py named it
+    // DEAD-ON-PROFILE; the fix is to ask for the profile the test actually uses.
+    GraphicsDevice device(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::
+                              getDefaultAdapterProperty(),
+                          Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+                          Microsoft::Xna::Framework::Graphics::PresentationParameters{});
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
@@ -680,7 +691,7 @@ TEST(WebGPUCompiledEffectDrawTest, AddressWSelectsADifferentVolumeSliceForEachMo
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                   static_cast<const void*>(quad), 0, 2, declaration);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));

@@ -324,6 +324,15 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
+    # plans/plan_webgpu_modern_graphics.md WMG-0028, for exactly the reason the FNA3D entry above
+    # states: the WGSL reflection suite (WMG-0007) lives under modules/renderers/webgpu/tests/ and
+    # includes WebGPUWgslReflection.hpp, whose include root arrives with the WebGPU renderer
+    # target. Without this the unconditional glob broke every OTHER renderer's CnaTests configure
+    # -- found by building cmake-build-vulkan, not by inspection.
+    if(NOT "WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/WebGPU/.*\\.cpp$")
+    endif()
+
     # plan/plan_compilation.md COMP-002: compile each module's test sources through one object library.
     # The legacy CnaTests executable consumes every group, preserving its complete test inventory,
     # while focused executables consume one group and avoid compiling unrelated test translation
