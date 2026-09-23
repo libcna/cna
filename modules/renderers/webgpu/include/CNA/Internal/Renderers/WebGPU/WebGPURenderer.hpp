@@ -4812,6 +4812,15 @@ namespace CNA::Internal::Renderers::WebGPU
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
+            /// plans/plan_street_webgpu.md STREETW-0001: the per-instance world matrices, already
+            /// materialized to one 64-byte record per instance (InstanceFrequency applied). Empty
+            /// for an ordinary draw, which is what `instanced` below reports.
+            std::vector<std::uint8_t> instanceData;
+            /// STREETW-0001: whether this draw binds the per-instance stream above. Its own field
+            /// rather than `!instanceData.empty()`, because it also selects the shader module.
+            bool instanced = false;
+            /// STREETW-0001: instances to draw; 1 for every ordinary draw.
+            std::uint32_t instanceCount = 1;
             /// plans/plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
             bool colored = false;
             bool indexed = false;
@@ -4876,16 +4885,25 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       bool instanced = false);
+        /// @param instanceStream STREETW-0001: the per-instance world-matrix stream, or null for
+        ///        an ordinary draw. Its records are materialized here, honouring InstanceFrequency.
         void QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
-                          PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                          PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                          int instanceCount = 1,
+                          const GpuVertexStreamBinding* instanceStream = nullptr);
         void IssuePbrDraw(WGPURenderPassEncoder pass, const PbrDrawCommand& command,
                               ReplayState& state);
 
         WGPUShaderModule pbrShader_ = nullptr;
         /// plans/plan_gltf.md GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
         WGPUShaderModule pbrColorShader_ = nullptr;
+        /// plans/plan_street_webgpu.md STREETW-0001: the instanced twins of both, whose vertex
+        /// input declares the four world-matrix columns at locations 12-15.
+        WGPUShaderModule pbrInstancedShader_ = nullptr;
+        WGPUShaderModule pbrInstancedColorShader_ = nullptr;
         WGPUBindGroupLayout pbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors UBOs
         WGPUBindGroupLayout pbrBindGroupLayout1_ = nullptr;  ///< group 1: sampler + 5 textures
         WGPUPipelineLayout pbrPipelineLayout_ = nullptr;
@@ -4893,6 +4911,10 @@ namespace CNA::Internal::Renderers::WebGPU
         /// plans/plan_gltf.md GLTF-465: the stride-60 pipelines; a separate cache because the vertex
         /// layout and the shader module both differ, so the key alone cannot separate them.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrColorPipelines_;
+        /// plans/plan_street_webgpu.md STREETW-0001: the instanced pipelines, separate for the
+        /// same reason -- a second vertex buffer and a different module.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrInstancedPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrInstancedColorPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultFlatNormalTexture_;

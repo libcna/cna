@@ -12304,6 +12304,26 @@ namespace CNA::Internal::Renderers::WebGPU
             return;
         }
 
+        // plans/plan_street_webgpu.md STREETW-0001: PbrEffect keeps its own family when the draw
+        // is instanced, exactly as VULKAN-232 gives it one there. Without this the draw fell
+        // through to the instanced3d family below -- position-only, unlit, untextured -- and every
+        // instanced PBR prop rendered as a flat silhouette in the effect's diffuse colour while
+        // the renderer reported success. It sits with the compiled- and custom-effect branches
+        // above because it is the same question: which program owns this draw.
+        if (params.pbr)
+        {
+            if (params.skinned)
+            {
+                throw System::NotSupportedException(
+                    "CNA WebGPU: an instanced SkinnedPbrEffect draw has no instanced skinned "
+                    "program in this renderer; draw the instances separately, or use the "
+                    "non-skinned PbrEffect.");
+            }
+            QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params,
+                         instanceCount, instanceStream);
+            return;
+        }
+
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         const auto& webgpuIb = static_cast<const WebGPUIndexBufferRenderer&>(ib);
         const auto& webgpuInstVb =
@@ -13425,6 +13445,19 @@ namespace CNA::Internal::Renderers::WebGPU
         pbrColorPipelines_.clear();
         if (pbrColorShader_ != nullptr) wgpuShaderModuleRelease(pbrColorShader_);
         pbrColorShader_ = nullptr;
+        // plans/plan_street_webgpu.md STREETW-0001: the instanced twins, on the same principle.
+        for (auto* cache : {&pbrInstancedPipelines_, &pbrInstancedColorPipelines_})
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (pbrInstancedShader_ != nullptr) wgpuShaderModuleRelease(pbrInstancedShader_);
+        pbrInstancedShader_ = nullptr;
+        if (pbrInstancedColorShader_ != nullptr) wgpuShaderModuleRelease(pbrInstancedColorShader_);
+        pbrInstancedColorShader_ = nullptr;
         if (pbrPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(pbrPipelineLayout_);
         if (pbrBindGroupLayout1_ != nullptr) wgpuBindGroupLayoutRelease(pbrBindGroupLayout1_);
         if (pbrBindGroupLayout0_ != nullptr) wgpuBindGroupLayoutRelease(pbrBindGroupLayout0_);
@@ -13447,15 +13480,45 @@ namespace
     /// @param source The marked WGSL.
     /// @param colored Whether this variant's vertex layout supplies COLOR_0.
     /// @param attributeLocation Free vertex-input location for the colour (4 rigid, 6 skinned).
+    /// @param instanced Whether this variant reads its world transform from a per-instance stream.
     /// @return The expanded WGSL, with every marker consumed.
     std::string ExpandPbrVertexColourWgslEXT(std::string source, bool colored,
-                                             int attributeLocation)
+                                             int attributeLocation, bool instanced = false)
     {
         const auto Replace = [&source](const std::string& marker, const std::string& text) {
             for (std::size_t at = source.find(marker); at != std::string::npos;
                  at = source.find(marker, at + text.size()))
                 source.replace(at, marker.size(), text);
         };
+        // plans/plan_street_webgpu.md STREETW-0001: the instanced twin of this family. The four
+        // world-matrix columns sit at locations 12-15, the numbering pbr3d.vert.glsl's
+        // CNA_INSTANCED variant already uses, clear of every attribute the record itself declares.
+        Replace("/*CNA_PBR_INSTANCE_STRUCT*/",
+                instanced ? "struct InstanceInput {\n"
+                            "    @location(12) instCol0: vec4f,\n"
+                            "    @location(13) instCol1: vec4f,\n"
+                            "    @location(14) instCol2: vec4f,\n"
+                            "    @location(15) instCol3: vec4f,\n"
+                            "};"
+                          : "");
+        Replace("/*CNA_PBR_INSTANCE_PARAM*/", instanced ? ", instance: InstanceInput" : "");
+        Replace("/*CNA_PBR_INSTANCE_LOCALS*/",
+                instanced
+                    ? "    let instanceMatrix = mat4x4f(instance.instCol0, instance.instCol1,\n"
+                      "                                 instance.instCol2, instance.instCol3);\n"
+                      "    let localPos = instanceMatrix * vec4f(input.position, 1.0);\n"
+                      "    let instancedWorld = lp.world * instanceMatrix;\n"
+                      "    let normalMatrix =\n"
+                      "        mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz,\n"
+                      "                lp.normalMatrixCol2.xyz) *\n"
+                      "        inverseTranspose3(mat3x3f(instanceMatrix[0].xyz,\n"
+                      "                                  instanceMatrix[1].xyz,\n"
+                      "                                  instanceMatrix[2].xyz));"
+                    : "    let localPos = vec4f(input.position, 1.0);\n"
+                      "    let instancedWorld = lp.world;\n"
+                      "    let normalMatrix =\n"
+                      "        mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz,\n"
+                      "                lp.normalMatrixCol2.xyz);");
         Replace("/*CNA_PBR_COLOR_ATTRIBUTE*/",
                 colored ? "@location(" + std::to_string(attributeLocation) + ") color: vec4f," : "");
         Replace("/*CNA_PBR_COLOR_VARYING*/", colored ? "@location(5) color: vec4f," : "");
@@ -13539,6 +13602,15 @@ namespace
         };
         validate("Pbr3D", expandedPbr(webgpu_shaders::kPbr, false, 4).c_str());
         validate("Pbr3D VertexColor", expandedPbr(webgpu_shaders::kPbr, true, 4).c_str());
+        // plans/plan_street_webgpu.md STREETW-0001: and both instanced twins, here rather than
+        // only at the first instanced prop's pipeline -- which is what this whole function is for.
+        const auto expandedInstancedPbr = [](const char* source, const bool colored) {
+            return ExpandPbrVertexColourWgslEXT(source, colored, 4, /*instanced=*/true)
+                 + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
+        };
+        validate("Pbr3D Instanced", expandedInstancedPbr(webgpu_shaders::kPbr, false).c_str());
+        validate("Pbr3D Instanced VertexColor",
+                 expandedInstancedPbr(webgpu_shaders::kPbr, true).c_str());
         validate("SkinnedPbr3D", expandedPbr(webgpu_shaders::kSkinnedPbr, false, 6).c_str());
         validate("SkinnedPbr3D VertexColor",
                  expandedPbr(webgpu_shaders::kSkinnedPbr, true, 6).c_str());
@@ -13592,6 +13664,40 @@ namespace
         pbrColorShader_ = wgpuDeviceCreateShaderModule(device_, &colorShaderDescriptor);
         if (pbrColorShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Pbr3D vertex-colour shader");
+
+        // plans/plan_street_webgpu.md STREETW-0001: the instanced twins. A fourth module rather
+        // than a pipeline flag, for the reason GLTF-465 gives above -- WGSL rejects a vertex input
+        // with no matching attribute, so a shader that declares the four instance columns cannot
+        // also serve a draw that binds none.
+        const std::string instancedWgsl =
+            ExpandPbrVertexColourWgslEXT(shaderSource, false, 4, /*instanced=*/true)
+            + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
+        const std::string instancedColorWgsl =
+            ExpandPbrVertexColourWgslEXT(shaderSource, true, 4, /*instanced=*/true)
+            + webgpu_shaders::kShadowSampling + webgpu_shaders::kIblSampling;
+
+        WGPUShaderSourceWGSL instancedWgslChain{};
+        instancedWgslChain.chain.sType = WGPUSType_ShaderSourceWGSL;
+        instancedWgslChain.code = StringView(instancedWgsl.c_str());
+        WGPUShaderModuleDescriptor instancedShaderDescriptor{};
+        instancedShaderDescriptor.label = StringView("CNA WebGPU Pbr3D Instanced WGSL");
+        instancedShaderDescriptor.nextInChain = &instancedWgslChain.chain;
+        pbrInstancedShader_ = wgpuDeviceCreateShaderModule(device_, &instancedShaderDescriptor);
+        if (pbrInstancedShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Pbr3D instanced shader");
+
+        WGPUShaderSourceWGSL instancedColorWgslChain{};
+        instancedColorWgslChain.chain.sType = WGPUSType_ShaderSourceWGSL;
+        instancedColorWgslChain.code = StringView(instancedColorWgsl.c_str());
+        WGPUShaderModuleDescriptor instancedColorShaderDescriptor{};
+        instancedColorShaderDescriptor.label =
+            StringView("CNA WebGPU Pbr3D Instanced VertexColor WGSL");
+        instancedColorShaderDescriptor.nextInChain = &instancedColorWgslChain.chain;
+        pbrInstancedColorShader_ =
+            wgpuDeviceCreateShaderModule(device_, &instancedColorShaderDescriptor);
+        if (pbrInstancedColorShader_ == nullptr)
+            throw std::runtime_error(
+                "CNA WebGPU: failed to create Pbr3D instanced vertex-colour shader");
 
         std::array<WGPUBindGroupLayoutEntry, 3> uboEntries{};
         uboEntries[0].binding = 0;
@@ -13656,7 +13762,8 @@ namespace
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    bool instanced)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
@@ -13665,7 +13772,12 @@ namespace
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = colored ? pbrColorPipelines_ : pbrPipelines_;
+        // plans/plan_street_webgpu.md STREETW-0001: caches of their own rather than one more bit
+        // in the key -- the instanced variants differ in shader MODULE and vertex-buffer COUNT,
+        // neither of which the key expresses, so a shared cache would hand an instanced draw the
+        // ordinary pipeline whenever the two agree on everything the key does describe.
+        auto& cache = instanced ? (colored ? pbrInstancedColorPipelines_ : pbrInstancedPipelines_)
+                                : (colored ? pbrColorPipelines_ : pbrPipelines_);
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
@@ -13695,19 +13807,44 @@ namespace
             attributes[4].offset = 56;
             attributes[4].shaderLocation = 4;
         }
-        WGPUVertexBufferLayout vertexBufferLayout{};
+        std::array<WGPUVertexBufferLayout, 2> vertexBufferLayouts{};
+        WGPUVertexBufferLayout& vertexBufferLayout = vertexBufferLayouts[0];
         vertexBufferLayout.arrayStride = colored ? 60u : sizeof(PbrVertex);
         vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
         vertexBufferLayout.attributeCount = colored ? 5u : 4u;
         vertexBufferLayout.attributes = attributes.data();
 
+        // plans/plan_street_webgpu.md STREETW-0001: the world matrix as four Float32x4 columns at
+        // locations 12-15, one record per instance. Materialized at queue time, so the stride is
+        // this renderer's own 64 rather than the caller's -- InstanceFrequency never reaches a
+        // native layout here, exactly as WEBGPU-172 established for the instanced3d family.
+        std::array<WGPUVertexAttribute, 4> instanceAttributes{};
+        for (std::uint32_t column = 0; column < 4u; ++column)
+        {
+            instanceAttributes[column].format = WGPUVertexFormat_Float32x4;
+            instanceAttributes[column].offset = column * 16u;
+            instanceAttributes[column].shaderLocation = 12u + column;
+        }
+        if (instanced)
+        {
+            vertexBufferLayouts[1].arrayStride = 64u;
+            vertexBufferLayouts[1].stepMode = WGPUVertexStepMode_Instance;
+            vertexBufferLayouts[1].attributeCount = instanceAttributes.size();
+            vertexBufferLayouts[1].attributes = instanceAttributes.data();
+        }
+
+        WGPUShaderModule module = instanced
+            ? (colored ? pbrInstancedColorShader_ : pbrInstancedShader_)
+            : (colored ? pbrColorShader_ : pbrShader_);
+
         Pipeline3DDescEXT desc;
-        desc.label = "CNA WebGPU Pbr3D Pipeline";
+        desc.label = instanced ? "CNA WebGPU Pbr3D Instanced Pipeline"
+                               : "CNA WebGPU Pbr3D Pipeline";
         desc.layout = pbrPipelineLayout_;
-        desc.vertexModule = colored ? pbrColorShader_ : pbrShader_;
-        desc.fragmentModule = colored ? pbrColorShader_ : pbrShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexModule = module;
+        desc.fragmentModule = module;
+        desc.vertexBuffers = vertexBufferLayouts.data();
+        desc.vertexBufferCount = instanced ? 2u : 1u;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -13809,7 +13946,9 @@ namespace
     void WebGPURenderer::QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                               PrimitiveType primitive, int primitiveCount,
-                                              const GpuDrawParams& params)
+                                              const GpuDrawParams& params,
+                                              int instanceCount,
+                                              const GpuVertexStreamBinding* instanceStream)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // plans/plan_gltf.md GLTF-465: stride 60 is the same record with TEXCOORD_1 and a packed COLOR_0
@@ -13824,6 +13963,46 @@ namespace
 
         PbrDrawCommand command;
         command.colored = (pbrStride == 60);
+        // plans/plan_street_webgpu.md STREETW-0001: the per-instance world matrices, materialized
+        // here for the reason CaptureStockVertexStreamsEXT states at length -- WebGPU's Instance
+        // step mode has an implicit divisor of one, so instance i's source record is
+        // `VertexOffset + i / frequency` and repeating each record `frequency` times makes the two
+        // agree. One stream of four Vector4 columns; a split or differently shaped one is refused
+        // by name rather than read as if it were this shape.
+        if (instanceStream != nullptr)
+        {
+            constexpr std::size_t kInstanceRecordBytes = 64u;
+            if (instanceStream->buffer == nullptr ||
+                static_cast<std::size_t>(instanceStream->strideInBytes) != kInstanceRecordBytes)
+            {
+                throw System::NotSupportedException(
+                    "CNA WebGPU: an instanced PbrEffect draw needs one per-instance stream of four "
+                    "Vector4 world-matrix columns (stride 64); this draw binds stride " +
+                    std::to_string(instanceStream->strideInBytes) + " at slot " +
+                    std::to_string(instanceStream->slot) + '.');
+            }
+            const int instances = std::max(1, instanceCount);
+            const int frequency = std::max(1, instanceStream->instanceFrequency);
+            const std::vector<std::uint8_t>& instanceShadow =
+                static_cast<const WebGPUVertexBufferRenderer&>(*instanceStream->buffer)
+                    .ShadowData();
+            const std::size_t base =
+                static_cast<std::size_t>(std::max(0, instanceStream->vertexOffset)) *
+                kInstanceRecordBytes;
+            command.instanceData.assign(
+                static_cast<std::size_t>(instances) * kInstanceRecordBytes, 0u);
+            for (int instance = 0; instance < instances; ++instance)
+            {
+                const std::size_t sourceOffset =
+                    base + static_cast<std::size_t>(instance / frequency) * kInstanceRecordBytes;
+                if (sourceOffset + kInstanceRecordBytes > instanceShadow.size()) break;
+                std::memcpy(command.instanceData.data() +
+                                static_cast<std::size_t>(instance) * kInstanceRecordBytes,
+                            instanceShadow.data() + sourceOffset, kInstanceRecordBytes);
+            }
+            command.instanced = true;
+            command.instanceCount = static_cast<std::uint32_t>(instances);
+        }
         const auto& shadow = webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * pbrStride;
         if (byteOffset <= shadow.size())
@@ -14024,7 +14203,8 @@ namespace
                                                            command.depthWrite, command.depthFunc,
                                                            command.blend, command.blendParams,
                                                            command.cullMode, command.wireframe,
-                                                           command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                           command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                           command.instanced);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -14046,20 +14226,39 @@ namespace
         wgpuRenderPassEncoderSetBindGroup(pass, 3, iblBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
+        // plans/plan_street_webgpu.md STREETW-0001: the per-instance world matrices at slot 1,
+        // and the instance count on the draw. An ordinary draw binds neither and counts one, so
+        // its two calls below are exactly what they were.
+        WGPUBuffer instanceBuffer = nullptr;
+        if (command.instanced && !command.instanceData.empty())
+        {
+            WGPUBufferDescriptor instanceDescriptor{};
+            instanceDescriptor.label = StringView("CNA WebGPU Pbr3D InstanceBuffer");
+            instanceDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            instanceDescriptor.size = Align4(command.instanceData.size());
+            instanceBuffer = AcquireTransientBuffer(instanceDescriptor.usage,
+                                                    instanceDescriptor.size);
+            wgpuQueueWriteBuffer(queue_, instanceBuffer, 0, command.instanceData.data(),
+                                 command.instanceData.size());
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 1, instanceBuffer, 0,
+                                                 command.instanceData.size());
+        }
+        const std::uint32_t instances = command.instanced ? command.instanceCount : 1u;
+
         if (command.indexed && !command.indexData.empty())
         {
             WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                 pass, command.indexData, command.index32);
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
                 wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
+                    pass, command.indexCount, instances,
                     command.firstIndex, command.baseVertex, 0);
             pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
             if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         pendingBindGroupReleases_.push_back(uboBindGroup);
@@ -14071,6 +14270,7 @@ namespace
         pendingBufferReleases_.push_back(lightUniformBuffer);
         pendingBufferReleases_.push_back(factorsUniformBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
+        if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     // ------------------------------------------------------------------------------------------

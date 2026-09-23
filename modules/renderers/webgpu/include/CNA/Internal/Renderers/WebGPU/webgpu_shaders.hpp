@@ -1128,6 +1128,7 @@ struct VertexInput {
     @location(3) uv: vec2f,
     /*CNA_PBR_COLOR_ATTRIBUTE*/
 };
+/*CNA_PBR_INSTANCE_STRUCT*/
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
@@ -1140,18 +1141,38 @@ struct VertexOutput {
 fn directionHandedness(m: mat3x3f) -> f32 {
     return select(1.0, -1.0, dot(m[0], cross(m[1], m[2])) < 0.0);
 }
-@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+// The instanced variant's normal matrix. inverse-transpose is multiplicative in order --
+// (W*I)^-T == W^-T * I^-T -- so the per-instance half composes with the CPU-computed
+// lp.normalMatrixCol* rather than replacing it, and a non-uniformly scaled instance keeps its
+// normals perpendicular. WGSL has no inverse() builtin, hence the adjugate below.
+fn inverseTranspose3(m: mat3x3f) -> mat3x3f {
+    let c0 = cross(m[1], m[2]);
+    let c1 = cross(m[2], m[0]);
+    let c2 = cross(m[0], m[1]);
+    let det = dot(m[0], c0);
+    // A singular instance matrix collapses the mesh anyway; the identity keeps the shader
+    // finite instead of propagating NaN into every lit pixel behind it.
+    if (abs(det) < 1e-12) {
+        return mat3x3f(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0));
+    }
+    return mat3x3f(c0, c1, c2) * (1.0 / det);
+}
+@vertex fn vs_main(input: VertexInput/*CNA_PBR_INSTANCE_PARAM*/) -> VertexOutput {
     var output: VertexOutput;
-    output.position = u.mvp * vec4f(input.position, 1.0);
+    // The per-instance transform applies INSIDE the effect's own World, which u.mvp and lp.world
+    // already carry -- the same composition order pbr3d.vert.glsl's CNA_INSTANCE_POSITION() and
+    // CNA_INSTANCE_WORLD() spell for the Vulkan renderer. Without an instance stream all three
+    // locals below are exactly the expressions this shader carried before.
+    /*CNA_PBR_INSTANCE_LOCALS*/
+    output.position = u.mvp * localPos;
     output.uv = input.uv;
-    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
     output.worldNormal = normalMatrix * input.normal;
     // Tangent transforms as a plain direction under mat3(world) (uniform-scale assumption),
     // matching EnsurePbrProgram()'s own documented simplification.
-    let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
+    let worldMat3 = mat3x3f(instancedWorld[0].xyz, instancedWorld[1].xyz, instancedWorld[2].xyz);
     output.worldTangent = worldMat3 * input.tangent.xyz;
     output.bitangentSign = input.tangent.w * directionHandedness(worldMat3);
-    output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
+    output.worldPos = (lp.world * localPos).xyz;
     /*CNA_PBR_COLOR_ASSIGN*/
     return output;
 }
