@@ -1315,6 +1315,16 @@ namespace CNA::Internal::Renderers::OpenGL4
                                            const GpuDrawParams& paramsIn)
     {
         ApplyStencilPrimitiveTopology(primitive);
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // plans/plan_opengl4_modern_graphics.md GL4-0020: a compiled effect's vertex layout is
+        // arbitrary and validated against the applied pass's own shader reflection, so it
+        // dispatches before the stock-program guard below runs.
+        if (paramsIn.compiledEffectRuntime != nullptr)
+        {
+            DrawCompiledPrimitivesEXT(vbIn, primitive, primitiveCount, paramsIn);
+            return;
+        }
+#endif
         auto& vb = const_cast<OpenGL4VertexBufferRenderer&>(
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;
@@ -1361,6 +1371,15 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                   int primitiveCount, const GpuDrawParams& paramsIn)
     {
         ApplyStencilPrimitiveTopology(primitive);
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // GL4-0020: see DrawPrimitivesEx.
+        if (paramsIn.compiledEffectRuntime != nullptr)
+        {
+            DrawCompiledIndexedPrimitivesEXT(vbIn, ibIn, primitive, primitiveCount, false, 0,
+                                             paramsIn);
+            return;
+        }
+#endif
         auto& vb = const_cast<OpenGL4VertexBufferRenderer&>(
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;
@@ -1416,6 +1435,16 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                     int instanceCount, const GpuDrawParams& paramsIn)
     {
         ApplyStencilPrimitiveTopology(primitive);
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // GL4-0020 (plans/plan_fx.md FX-082): every per-instance stream keeps its real
+        // InstanceFrequency; BindCompiledEffectForDrawEXT sets each matched attribute's divisor.
+        if (paramsIn.compiledEffectRuntime != nullptr)
+        {
+            DrawCompiledIndexedPrimitivesEXT(vbIn, ibIn, primitive, primitiveCount, true,
+                                             instanceCount, paramsIn);
+            return;
+        }
+#endif
         auto& vb = const_cast<OpenGL4VertexBufferRenderer&>(
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;

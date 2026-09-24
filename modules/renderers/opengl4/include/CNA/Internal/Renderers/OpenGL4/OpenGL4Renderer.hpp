@@ -8,6 +8,9 @@
 #include "CNA/Internal/Renderers/OpenGL4/GL4Loader.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Common.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Resources.hpp"
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+#include "mojoshader.h"
+#endif
 
 #include <array>
 #include <cstdint>
@@ -16,9 +19,19 @@
 #include <string>
 #include <vector>
 
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+#endif
+
 namespace CNA::Internal::Renderers::OpenGL4
 {
     class OpenGL4Renderer;
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+    class OpenGL4CompiledEffect;
+#endif
 
     /**
      * @brief One linked GL program, compiled from a vertex/fragment source pair.
@@ -336,6 +349,18 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         void FlushBatch();
         void ResolveCurrentTextureRowOrder();
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        /// plans/plan_fx.md FX-118: whether the batch being built flushes through the compiled
+        /// route, which corrects a render target's row order per sampler slot instead of in the
+        /// sprite's own V. The route is fixed for the whole batch: SetCustomEffect() flushes.
+        [[nodiscard]] bool BatchFlushesThroughCompiledEffect() const;
+        /// plans/plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it
+        /// shares nothing with the stock/ShaderEffect route and keeps that route unchanged.
+        void FlushBatchWithCompiledEffect();
+        /// Applies the embedded XNA SpriteEffect's pass so a custom pass that assigns only a pixel
+        /// shader inherits its vertex shader and MatrixTransform, exactly as Direct3D does.
+        void ApplyCompiledSpriteVertexShader(int logicalWidth, int logicalHeight);
+#endif
 
         OpenGL4Renderer* owner_ = nullptr;
         OpenGL4RawProgram program_;
@@ -360,6 +385,16 @@ namespace CNA::Internal::Renderers::OpenGL4
         float pendingLodBias_ = 0.0f;
         std::vector<Vertex> pendingVertices_;
         std::vector<std::uint16_t> pendingIndices_;
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        /// The embedded XNA SpriteEffect, created on the first compiled-effect flush so a batch that
+        /// never meets a compiled Effect never touches MojoShader.
+        std::unique_ptr<OpenGL4CompiledEffect> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+        /// plans/plan_fx.md FX-120: the compiled route's own geometry, retained rather than created
+        /// per flush, because the shared compiled-effect vertex array object records them.
+        std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
+        std::unique_ptr<IIndexBufferRenderer> compiledSpriteIndexBuffer_;
+#endif
     };
 
     /**
@@ -703,6 +738,139 @@ namespace CNA::Internal::Renderers::OpenGL4
          */
         CNAEXT void ApplyStencilPrimitiveTopology(PrimitiveType primitive);
 
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // --- Compiled XNA effects (plans/plan_opengl4_modern_graphics.md GL4-0020) -------------
+        // Defined in OpenGL4CompiledEffects.cpp. The route is EasyGL's desktop-profile one
+        // (plans/plan_fx.md FX-062, FX-080, FX-082, FX-083, FX-088, FX-099, FX-118, FX-128).
+
+        /**
+         * @brief Parses a compiled XNA effect for this device.
+         *
+         * @param effectCode Compiled effect bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime.
+         * @throws std::runtime_error if MojoShader has no context for this device or rejects the
+         *         bytes.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief True: this renderer executes compiled XNA Effect Framework bytecode.
+         *
+         * Every draw route recognises a compiled effect -- ordinary, indexed, instanced,
+         * multi-stream and SpriteBatch -- and a pass's declared `sampler_state` block reaches the
+         * GPU. A texture whose dimension does not match the shader's sampler is refused by name.
+         *
+         * @return true.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /**
+         * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.
+         *
+         * MojoShader allows one context per GL context, so it is owned here rather than by each
+         * effect. It is asked for `MOJOSHADER_PROFILE_GLSL120` explicitly, never for
+         * `MOJOSHADER_glBestProfile`, whose `glspirv` choice cannot finalise a pixel-only pass
+         * (plans/plan_fx.md FX-128).
+         *
+         * @return The context, or null if it could not be created.
+         */
+        CNAEXT [[nodiscard]] MOJOSHADER_glContext* GetMojoShaderContextEXT();
+
+        /**
+         * @brief CNAEXT. One vertex stream a compiled-effect draw may read attributes from.
+         *
+         * A compiled effect's vertex shader declares arbitrary semantics, and XNA lets any of them
+         * come from any bound `VertexBufferBinding`; each stream therefore carries its own buffer,
+         * stride, starting byte offset and instance frequency (plans/plan_fx.md FX-082).
+         */
+        struct CompiledEffectStreamEXT
+        {
+            /** @brief Buffer holding this stream's records; its declaration names the semantics. */
+            const OpenGL4VertexBufferRenderer* buffer = nullptr;
+            /** @brief Bytes between consecutive records inside this buffer. */
+            std::size_t stride = 0;
+            /** @brief Byte offset of this stream's first record (its public VertexOffset). */
+            std::size_t baseByteOffset = 0;
+            /** @brief `InstanceFrequency`; 0 means the stream advances once per vertex. */
+            unsigned int instanceFrequency = 0;
+            /**
+             * @brief Renderer-neutral binding metadata carrying XNA/FNA's effective usage-index
+             *        remap, or null for an internal single-stream draw.
+             */
+            const GpuVertexStreamBinding* binding = nullptr;
+        };
+
+        /**
+         * @brief CNAEXT. Binds a compiled effect's applied-pass program, vertex attributes, sampler
+         *        textures and sampler state, and pushes its uniforms -- everything a compiled draw
+         *        needs immediately before the GL draw call.
+         *
+         * The caller must have bound `EnsureCompiledEffectVaoEXT()` first: MojoShader's OpenGL
+         * adapter tracks enabled attribute arrays in its own context state, so every compiled draw
+         * goes through one and the same vertex array object.
+         *
+         * @param streams Bound streams, in public binding-slot order.
+         * @param streamCount Number of entries in @p streams; must be at least one.
+         * @param runtime The applied compiled effect.
+         * @param spriteBatchSlotZeroTexture When non-null, the texture that takes sampler slot 0
+         *        regardless of the effect -- SpriteBatch's own rule. Null for ordinary draws.
+         * @param deviceTextures When non-null, the owning device's authoritative texture slots.
+         * @param deviceSamplerStates When non-null, the matching authoritative sampler states.
+         * @param deviceVertexTextures When non-null, the four public vertex texture slots.
+         * @param deviceVertexSamplerStates The matching authoritative vertex sampler states.
+         * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
+         *         not created by this renderer.
+         * @throws System::NotSupportedException if no stream supplies an input the vertex shader
+         *         consumes, or a reflected sampler has an incompatible texture bound.
+         */
+        CNAEXT void BindCompiledEffectForDrawEXT(
+            const CompiledEffectStreamEXT* streams, std::size_t streamCount,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection* deviceTextures = nullptr,
+            const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+                deviceSamplerStates = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                deviceVertexTextures = nullptr,
+            const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+                deviceVertexSamplerStates = nullptr);
+
+        /**
+         * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.
+         *
+         * MojoShader's OpenGL adapter remembers which attribute arrays it enabled in its own
+         * context state, not per VAO, so routing compiled draws through each vertex buffer's own
+         * VAO would both desynchronise that belief and overwrite the layout `ApplyLayout()`
+         * installed there (plans/plan_fx.md FX-082).
+         *
+         * @return The compiled-effect vertex array name, created on first use.
+         */
+        CNAEXT [[nodiscard]] unsigned int EnsureCompiledEffectVaoEXT();
+
+        /**
+         * @brief CNAEXT. Returns a row-order-corrected copy of @p source for a compiled sampler.
+         *
+         * This renderer never flips geometry for a framebuffer object, so a render target's colour
+         * texture stores its rows bottom-up relative to an uploaded `Texture2D`. The stock
+         * programs correct that at sampling time (`uRtFlipV`, REMED-GFX-147), but a compiled
+         * Effect's GLSL is generated by MojoShader and cannot be given the correction -- so the
+         * pixels are corrected instead: the source's colour texture is blitted, Y reversed, into
+         * this slot's own copy, and the copy is bound (plans/plan_fx.md FX-099). The copy keeps
+         * the source's storage format, its mip chain and its Direct3D 9 channel expansion.
+         *
+         * @param slot Native texture unit the copy is for; each owns its own copy so two render
+         *        targets sampled by one pass cannot overwrite each other.
+         * @param source The render target being sampled. Must not be the current draw target.
+         * @return The GL name of the corrected copy.
+         * @throws System::NotSupportedException if @p slot is out of range, @p source is being
+         *         drawn into, or its SurfaceFormat has no render-target storage.
+         */
+        CNAEXT [[nodiscard]] unsigned int AcquireCompiledEffectFlippedSourceEXT(
+            int slot, const OpenGL4RenderTargetRenderer& source);
+#endif
+
     private:
         friend class OpenGL4SpriteBatchRenderer;
 
@@ -748,7 +916,34 @@ namespace CNA::Internal::Renderers::OpenGL4
         void ApplyCurrentDepthBias();
         void FinalizeCurrentMRT();
 
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        friend class OpenGL4CompiledEffect;
+        // Compiled-effect draw routes (OpenGL4CompiledEffects.cpp); the Draw*Ex entry points
+        // dispatch here before any stock-program validation, because a compiled effect's vertex
+        // layout is validated against the applied pass's own shader reflection instead.
+        void DrawCompiledPrimitivesEXT(const IVertexBufferRenderer& vb, PrimitiveType primitive,
+                                       int primitiveCount, const GpuDrawParams& params);
+        void DrawCompiledIndexedPrimitivesEXT(const IVertexBufferRenderer& vb,
+                                              const IIndexBufferRenderer& ib,
+                                              PrimitiveType primitive, int primitiveCount,
+                                              bool instanced, int instanceCount,
+                                              const GpuDrawParams& params);
+        void RegisterCompiledEffectEXT(OpenGL4CompiledEffect* effect);
+        void UnregisterCompiledEffectEXT(OpenGL4CompiledEffect* effect);
+        /// MojoShader's OpenGL adapter keeps its current context in process-global state; every
+        /// entry that reaches it names this device's context first, so two devices cannot cross.
+        void MakeMojoShaderContextCurrentEXT() const;
+        /// Teardown: releases every live compiled effect's native state, the MojoShader context
+        /// and the compiled route's GL objects while this renderer's GL context is still current.
+        void ReleaseCompiledEffectResourcesEXT();
+
+        // XNA's four HiDef vertex samplers occupy native units 16..19, after the sixteen pixel
+        // samplers: MojoShader's MOJOSHADER_XNA4_VERTEX_TEXTURES layout. GraphicsDevice applies
+        // only 0..15; the compiled route is the only writer of the last four.
+        static constexpr int kMaxSamplerSlots = 20;
+#else
         static constexpr int kMaxSamplerSlots = 16;
+#endif
 
         // Declared before every GL resource-owning member so it outlives those resources.
         std::shared_ptr<PlatformGlContextOwner> platformContext_;
@@ -849,5 +1044,30 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         // Sampler objects, one per XNA sampler slot, each bound to its own texture unit.
         unsigned int samplers_[kMaxSamplerSlots] = {};
+
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        /// One MojoShader GL context for this renderer's lifetime, created on first use.
+        MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+        /// Device-wide legacy Direct3D 9 texture-stage values consumed by TEXBEM/L and BEM.
+        std::array<CompiledEffectLegacyBumpMapEnvState, 16> compiledLegacyBumpMapEnvs_{};
+        /// The one array object every compiled draw binds (EnsureCompiledEffectVaoEXT).
+        unsigned int compiledEffectVao_ = 0;
+        /// One native unit's row-order-corrected copy of a render target being sampled.
+        struct CompiledEffectFlippedSource
+        {
+            unsigned int texture = 0;
+            unsigned int framebuffer = 0;
+            int width = 0;
+            int height = 0;
+            int levelCount = 1;
+            int surfaceFormat = -1;
+        };
+        std::array<CompiledEffectFlippedSource, kMaxSamplerSlots> compiledFlippedSources_{};
+        /// Read framebuffer the sampled target's colour texture is attached to per blit, so the
+        /// target's own framebuffers -- including a multisample one -- are never touched.
+        unsigned int compiledFlipReadFbo_ = 0;
+        /// Every live compiled effect of this device, released early if this renderer dies first.
+        std::vector<OpenGL4CompiledEffect*> compiledEffects_;
+#endif
     };
 }

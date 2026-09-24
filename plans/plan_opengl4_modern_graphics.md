@@ -513,3 +513,40 @@ no window manager, and the X11 backend correctly refuses `BorderlessFullscreen` 
 Test executables `NEEDED` only `libcna.so` and the C++ runtime. `WaylandIsSdlFree.*` 5/5.
 `ModuleLinkClosure_*` skip under the Ninja generator (they read Makefiles link files), so the ELF
 listings above are the evidence.
+
+## GL4-0020 — Compiled XNA Effect bytecode on OpenGL4
+
+The one classic capability the EasyGL family had and OpenGL4 lacked: compiled `.fxb` effects through
+MojoShader's OpenGL adapter (`plans/plan_fx.md` FX-062/080/082/083/088/099/118/128). Now behind
+`CNA_OPENGL4_COMPILED_EFFECTS` (off by default, shaped like `CNA_EASYGL_COMPILED_EFFECTS`), ported
+from EasyGL's desktop profile against a fixed contract:
+
+- `OpenGL4CompiledEffect.{hpp,cpp}` — the runtime (techniques, parameters, textures, pass
+  application with shader-model-1 sampler inference, the FX-129 link-failure check, bound-sampler
+  reporting, `Clone`); `OpenGL4CompiledEffects.cpp` — the renderer side: the MojoShader context with
+  `MOJOSHADER_PROFILE_GLSL120` set explicitly (FX-128: `glspirv` crashes on pixel-only passes), the
+  shared compiled-effect VAO, multi-stream/instanced/base-vertex draw routes, vertex samplers on
+  units 16–19, render-target orientation by flipped source copies (FX-099/FX-118), and the
+  SpriteBatch route with the embedded XNA SpriteEffect for vertex-shader inheritance (FX-080).
+- Deliberately different from EasyGL: no context-loss path (desktop OpenGL4 has none); the flipped
+  copy carries the D3D9 channel expansion (`Single` samples as (R,1,1,1)); an effect that outlives
+  its renderer is detached and refuses further use by name (EasyGL's destructor then calls into the
+  destroyed renderer — recorded as an EasyGL defect, not changed).
+- **Shared build change:** `cna_configure_mojoshader()` refused every configuration without an SDL3
+  target, and OPENGL4's natural configuration is SDL-free. With `CNA_ENABLE_SDL=OFF` MojoShader is
+  now built on the C standard library without its SDL_GPU adapter; with SDL on, the configuration is
+  unchanged and a missing SDL3 target is still fatal. `cna_mojoshader_effect_probe` links SDL3 only
+  when it exists; the SDL_GPU/GL probes are skipped without SDL3. The configure re-applied the
+  pinned MojoShader patch series in the shared `~/deps/FNA3D` checkout (its stamp predated the
+  current series) — other trees pointing at that checkout will recompile MojoShader once.
+
+`cmake-build-opengl4` now carries the option ON; `cmake-build-opengl4-x11` keeps it OFF and still
+builds, so both sides of the guard stay compiled.
+
+| suite (OPENGL4, Radeon 780M, private runner) | before | after |
+|---|---|---|
+| corpus `-R '^OpenGL4_'` | 405 / 0 | **405 / 0** |
+| `CnaRendererTests` | 231 / 0 / 10 | **318 / 0 / 10** — 84 new `OpenGL4Compiled*` (every renderer-neutral case of EasyGL's compiled-effect suite, the shared `Run*Contract` conformance, draw and SpriteBatch golden pixels) + 3 probe cases |
+| `CnaGraphicsTests` | 2 815 / 0 / 75 | **2 833 / 0 / 57** — the 15 compiled-effect skips now run and pass; `SupportsCompiledEffectsOnlyOnCompletedBackends` passes |
+| `cna_mojoshader_effect_probe` | — | 1 / 1, built without SDL |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |

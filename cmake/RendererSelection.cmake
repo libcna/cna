@@ -509,6 +509,20 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
     list(APPEND _cna_identity_defines CNA_RENDERER_OPENGL4)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGL4")
     find_package(OpenGL REQUIRED)
+    # plans/plan_opengl4_modern_graphics.md GL4-0020: compiled XNA Effect bytecode through
+    # MojoShader's own OpenGL adapter, asked for its desktop GLSL 1.20 dialect -- the route EasyGL's
+    # desktop profile takes under CNA_EASYGL_COMPILED_EFFECTS. Off by default and shaped exactly like
+    # that option, for the same reason: MojoShader is a fetched dependency this renderer does not
+    # otherwise need. OPENGL4 is a real SDL-free renderer (native X11/Wayland), so in a
+    # CNA_ENABLE_SDL=OFF build cna_configure_mojoshader() compiles MojoShader on the C standard
+    # library rather than SDL3's.
+    option(CNA_OPENGL4_COMPILED_EFFECTS
+           "Build OpenGL4 support for compiled XNA Effect bytecode (plans/plan_opengl4_modern_graphics.md GL4-0020)" OFF)
+    if(CNA_OPENGL4_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_OPENGL4_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     message(STATUS "CNA: Using classic Win32 GDI 2D graphics renderer")
     set(RENDERER_DIR "modules/renderers/gdi")

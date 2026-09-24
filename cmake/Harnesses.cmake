@@ -404,7 +404,12 @@ endif()
 # not needed until a non-FNA3D backend is actually implemented.
 if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_mojoshader_effect_probe tools/graphics/mojoshader_effect_probe.cpp)
-    target_link_libraries(cna_mojoshader_effect_probe PRIVATE cna_mojoshader SDL3::SDL3)
+    target_link_libraries(cna_mojoshader_effect_probe PRIVATE cna_mojoshader)
+    # SDL3 only as MojoShader's standard library; a CNA_ENABLE_SDL=OFF build compiles MojoShader
+    # on the C library instead (cna_configure_mojoshader), and the probe itself calls no SDL.
+    if(TARGET SDL3::SDL3)
+        target_link_libraries(cna_mojoshader_effect_probe PRIVATE SDL3::SDL3)
+    endif()
     add_test(NAME cna_mojoshader_effect_probe
              COMMAND cna_mojoshader_effect_probe
                      "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/BasicEffect.fxb"
@@ -421,7 +426,8 @@ endif()
 #
 # Not registered with ctest: it needs a working GPU device, which a headless CI runner may not
 # have, and a missing device is not a CNA regression.
-if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND TARGET SDL3::SDL3 AND NOT EMSCRIPTEN
+   AND NOT ANDROID)
     add_executable(cna_mojoshader_sdlgpu_probe tools/graphics/mojoshader_sdlgpu_probe.cpp)
     target_link_libraries(cna_mojoshader_sdlgpu_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
@@ -438,7 +444,8 @@ endif()
 # not have, and a missing display is not a CNA regression. Does not require CNA_EASYGL_COMPILED_
 # EFFECTS or even the EasyGL renderer to be selected -- only cna_mojoshader (any renderer that
 # enables its own compiled-effects option publishes that target) and SDL3's GL context support.
-if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND TARGET SDL3::SDL3 AND NOT EMSCRIPTEN
+   AND NOT ANDROID)
     add_executable(cna_mojoshader_gl_probe tools/graphics/mojoshader_gl_probe.cpp)
     target_link_libraries(cna_mojoshader_gl_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()

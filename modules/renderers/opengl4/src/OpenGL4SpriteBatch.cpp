@@ -4,6 +4,9 @@
 // layer depth, drawn with the device's own blend/depth/rasterizer/sampler state, projected from the
 // device Viewport, corrected for render-target row order and submitted in XNA's 2 048-sprite chunks.
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/OpenGL4/OpenGL4CompiledEffect.hpp"
+#endif
 #include "CNA/Internal/Renderers/Common/GlStockShaderSources.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -117,6 +120,13 @@ namespace CNA::Internal::Renderers::OpenGL4
     {
         currentTextureBottomUp_ = currentTexture_ != nullptr &&
                                   SampledRowOrderIsBottomUp(currentTexture_);
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // plans/plan_fx.md FX-118: the compiled route corrects a bottom-up source per sampler slot
+        // (AcquireCompiledEffectFlippedSourceEXT), so the sprite's own V is left alone there --
+        // doing both would mirror the image.
+        if (BatchFlushesThroughCompiledEffect())
+            currentTextureBottomUp_ = false;
+#endif
     }
 
     void OpenGL4SpriteBatchRenderer::SetCustomEffect(Effect* effect)
@@ -154,9 +164,18 @@ namespace CNA::Internal::Renderers::OpenGL4
         if (customEffect_ != nullptr)
         {
             if (customEffect_->GetCompiledRuntimePtr() != nullptr)
+            {
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+                // plans/plan_fx.md FX-080: a compiled XNA Effect has its own route
+                // (OpenGL4CompiledEffects.cpp); nothing below applies to it.
+                FlushBatchWithCompiledEffect();
+                return;
+#else
                 throw System::NotSupportedException(
                     "OpenGL4: SpriteBatch cannot draw with a compiled XNA Effect; this renderer "
                     "does not execute compiled effect bytecode.");
+#endif
+            }
             auto* renderer = dynamic_cast<OpenGL4EffectRenderer*>(customEffect_->GetEffectRendererPtr());
             customEffect_->Apply();
             if (renderer != nullptr && renderer->IsValid())

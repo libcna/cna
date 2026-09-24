@@ -1146,6 +1146,12 @@ namespace CNA::Internal::Renderers::OpenGL4
         catch (...)
         {
         }
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // In the body, not left to member destruction: the MojoShader context is a raw pointer
+        // and needs this GL context current, and compiled effects that outlive this renderer must
+        // give their native state back before that context goes (OpenGL4CompiledEffects.cpp).
+        ReleaseCompiledEffectResourcesEXT();
+#endif
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
         for (unsigned int* texture : {&defaultWhiteTexture_, &defaultBlackTexture_,
                                       &defaultBlackCubeTexture_, &defaultFlatNormalTexture_})
