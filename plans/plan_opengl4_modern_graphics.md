@@ -242,3 +242,37 @@ then passing — the enabling commit is part of Workstream A, not a way of hidin
 `CnaRendererTests` aborts on OPENGL33 inside `EasyGLRedundantStateTest` in this configuration
 (`terminate called without an active exception`, no XML written). It is EasyGL-internal, does not
 occur on OpenGL4 (231 / 0 / 10), and is recorded here as reference-side evidence only.
+
+## GL4-0008 — One GL stock-effect shader corpus instead of two
+
+**Decision (Workstream A architecture).** OpenGL4 stays its own renderer family — its own context
+(desktop 4.x core), its own loader, native wireframe and exact occlusion counts — but it stops
+hand-maintaining its own copy of XNA's stock-effect shading. Its 23 GLSL 410 programs were ported
+from EasyGL in July 2026; EasyGL's have since absorbed the corrections the baseline measured
+OpenGL4 missing (null texture → opaque black, `COLOR0` saturation, fog premultiplied by alpha,
+render-target V orientation, inverse-transpose skin normals, dual-UV PBR, the Direct3D clip-depth
+conversion, shadow reception, IBL). Porting each correction again would leave two corpora to drift
+apart a second time.
+
+`modules/graphics/include/CNA/Internal/Renderers/Common/GlStockShaderSources.hpp` now holds the
+GLSL ES 3.00 sources of every stock program (`Colored3D`, `Textured3D`, `ColoredTextured3D`,
+`Lit3D`, `Lit3DVertexLit`, `DualTextured3D`, `DualTexturedColored3D`, `EnvMapped3D`, `Skinned`,
+`SkinnedVertexLit`, `Pbr`/`PbrSkinned` single- and dual-UV, `Sprite`), the shared declarations
+(`CNA_GL_*_DECL`, `CnaGlIblDecl`) and the clip-depth adaptation. The text was **moved verbatim**
+out of `EasyGLRenderer.cpp` by script; the only edit is that the PBR builders take
+`explicitLodAvailable` as a parameter instead of reading EasyGL's active profile. EasyGL compiles
+the same strings through the same adaptation as before.
+
+**EasyGL is unchanged by the move (B39), measured on the same binaries:**
+
+| suite | before | after |
+|---|---|---|
+| corpus `-R '^OpenGL4_(Parity|EasyGLParity)_'`, OPENGL33 | 355 / 23 of 378 | no new failure; 3 newly pass (the `GL4-0004` HiDef fixes and the corpus working-directory fix) |
+| same, OPENGLES3 | 351 / 27 of 378 | no new failure; same 3 newly pass |
+| `CnaGraphicsExtTests`, OPENGL33 | 922 / 7 / 33 | 922 / 7 / 33 |
+| `CnaGraphicsExtTests`, OPENGLES3 | — | 954 / 0 / 8 |
+
+The uniform contract these programs declare is part of the corpus: every uniform a program
+declares is resolved by EasyGL (checked by script — no declared-but-unresolved uniform in any of
+the twelve 3D programs), so a second binder may resolve the complete name set generically and
+obtain EasyGL's exact per-program behaviour.
