@@ -39,6 +39,7 @@ Vulkan is the natural reference: same driver, same GPU.
 | STREETS-0004 | SDL_GPU: a ShaderEffect's texture units ignored `SamplerStates[unit]` -- SSAO's tiled noise was clamped | ✅ |
 | STREETS-0005 | SDL_GPU: a debugging `getenv("SMGDBG_NOUPLOAD")` left in the white shadow cube's upload | ✅ |
 | STREETS-0006 | Three `GltfRendererPbrFallbackPolicy` cases quoted SDL_GPU PBR code SMG-0032 had since renamed | ✅ |
+| STREETS-0007 | `SdlGpu_Smoke` pinned two capability answers that later, correct work had changed | ✅ |
 
 ---
 
@@ -290,3 +291,21 @@ its own slot's bias, the packed channels, both KHR_materials_specular maps -- so
 the current spelling. The sampler-count evidence is replaced by the two specular maps' own binding
 lines (`samplerBindings[5]` / `[6]`): what the test is about is where those maps bind, and a total
 count goes stale whenever an unrelated sampler is added. `GltfRendererPbrFallbackPolicy` 30/30.
+
+### STREETS-0007 — the smoke test pinned answers that had since become correct differently
+
+`SdlGpu_Smoke` failed on `next` (28/30) on two checks, neither a renderer defect:
+
+* **"MRT is reported"** asked the public `SupportsCapability(MultipleRenderTargets)` of the game's
+  own device. Since RLGL-040 that answer is the renderer's promise AND the XNA profile's limit, and
+  the test's game runs XNA's default Reach profile, which has one render target -- so `false` was
+  the right answer. The check is now two: the renderer implements MRT, and the public answer equals
+  "the profile is HiDef".
+* **"out-of-scope modern capabilities are not inherited as true"** required compute and indirect
+  drawing to be absent. SMG-0012 and SMG-0023 implemented both. What the check existed for -- that
+  the public answer comes from the renderer's implemented query, not from a capability-switch
+  default -- is what it asserts now: public == `SupportsComputeShadersEXT()` /
+  `SupportsIndirectDrawEXT()`, and both true.
+
+One check more, so `kExpectedChecks` is 31. `SdlGpu_Smoke` **31/31** -- it had not passed since
+those tasks landed.

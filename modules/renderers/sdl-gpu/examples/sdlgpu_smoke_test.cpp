@@ -61,7 +61,7 @@ namespace
 {
     constexpr int kTotalFrames = 60;
 #if defined(CNA_SDL_GPU_SHADER_EFFECTS)
-    constexpr int kExpectedChecks = 30;
+    constexpr int kExpectedChecks = 31;
 #else
     // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
     constexpr int kExpectedChecks = 31;
@@ -219,8 +219,15 @@ protected:
             check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
                   "MSAA is reported after the renderer's live color/depth format query");
 
-            check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
-                  "MRT is reported after independent fragment outputs and mixed-format pipelines");
+            // plans/plan_street_sdlgpu.md STREETS-0007: RLGL-040 made the public MRT answer a profile
+            // fact as well as a renderer one, and this game runs XNA's default Reach profile, which
+            // has a single render target. The renderer's own promise and the public answer are two
+            // checks, so neither can hide the other.
+            check(renderer.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
+                  "MRT is implemented after independent fragment outputs and mixed-format pipelines");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets) ==
+                      (dev.getGraphicsProfileProperty() == GraphicsProfile::HiDef),
+                  "the public MRT answer follows the XNA profile (false under Reach)");
             check(dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
                   "WireFrame is reported because native line fill is pixel-verified");
             check(!dev.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
@@ -254,9 +261,15 @@ protected:
                            static_cast<int>(SurfaceFormat::HalfVector4)) ==
                        CNA::Internal::Renderers::RendererFormatVerdict::Supported),
                   "half-float filtering is reported exactly where RGBA16F render targets exist");
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) &&
-                      !dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
-                  "out-of-scope modern capabilities are not inherited as true");
+            // STREETS-0007: compute (SMG-0012) and indirect drawing (SMG-0023) are implemented now.
+            // What this still guards is that the public answer is DERIVED from the renderer's own
+            // implemented query rather than inherited from a capability-switch default.
+            check(dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) ==
+                      renderer.SupportsComputeShadersEXT() &&
+                      dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw) ==
+                      renderer.SupportsIndirectDrawEXT() &&
+                      renderer.SupportsComputeShadersEXT() && renderer.SupportsIndirectDrawEXT(),
+                  "compute and indirect drawing are reported from the renderer's implemented paths");
 
             check(renderer.GetMaxVertexStreams() == 16,
                   "numeric vertex-stream limit agrees with the XNA public ceiling");
