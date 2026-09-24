@@ -4,7 +4,16 @@
 # third-party dependency (GL4Loader.hpp/.cpp is this renderer's own hand-rolled loader for
 # the GL 1.2+ entry points a core profile needs).
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE OpenGL::GL)
+# plans/plan_opengl4_modern_graphics.md GL4-0034: the renderer needs GL entry points only -- its
+# context comes from the platform (EGL on Wayland, GLX on X11, WGL/CGL elsewhere). With GLVND,
+# OpenGL::GL is libOpenGL *and* libGLX, so a Wayland build carried a GLX dependency that only the
+# linker's --as-needed happened to drop (and a sanitizer link did not). OpenGL::OpenGL is the
+# window-system-neutral GLVND library; where it does not exist, OpenGL::GL is the only choice.
+if(TARGET OpenGL::OpenGL)
+    target_link_libraries(${RENDERER_TARGET} PRIVATE OpenGL::OpenGL)
+else()
+    target_link_libraries(${RENDERER_TARGET} PRIVATE OpenGL::GL)
+endif()
 
 # plans/plan_opengl4_modern_graphics.md GL4-0020: compiled XNA effects go through MojoShader's own
 # OpenGL adapter plus the translation shared with every other compiled-effect backend, exactly as

@@ -1246,3 +1246,50 @@ eglMakeCurrent(d, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); eglDestroyCon
 | `draw surfaceless noterm` | 2,112 B / 44 allocations leaked |
 | `none wayland noterm` | nothing |
 | `draw wayland` / `draw surfaceless` / with KHR_debug output | nothing |
+
+## GL4-0034 — Platform matrix, SDL-free proof and build size (B37–B40)
+
+### The modern surface on both native Unix platforms (Radeon 780M, Mesa 25.0.7 radeonsi, 4.6 core)
+
+| Suite | Wayland / EGL (`cmake-build-opengl4`) | X11 / GLX (`cmake-build-opengl4-x11`, openbox managing the private display) |
+|---|---|---|
+| `CnaGraphicsExtTests` | **955 / 0 / 7** (`GL4-0030`) | **956 / 0 / 6** — one more case runs because this tree has compiled effects off, giving `RequireCapabilityTest` a capability to refuse |
+| `CnaRendererTests` | 336 / 0 / 10 (the 10: EasyGL-internal suites) | **232 / 0 / 0** (219 in `GL4-A-GATE` + the 13 Workstream B cases) |
+| CNAEXT oracles + `ModernGpuCapabilityProbe` + `OpenGL4_Modern*` | 32 / 1 / 0 + discovery + stress | **34 / 1 / 0** (the failure on both: `CNAEXT_NoPosixSetenv`, `GL4-0024`) |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+### SDL-free, and now GLX-free on Wayland
+
+`readelf -d libcna.so` (NEEDED) and `ldd`:
+
+| Tree | SDL | GL libraries NEEDED | X libraries in `ldd` |
+|---|---|---|---|
+| Wayland | none | `libOpenGL.so.0` (EGL is loaded by the platform) | only through FFmpeg's `libva-x11`, as recorded in `VMG-0002` |
+| X11 | none | `libOpenGL.so.0` (GLX is loaded by the platform) | the X platform's own `libX11`/`libXi`/… |
+| `build-asan` (Wayland) | none | `libOpenGL.so.0` | none |
+
+**The defect this found.**
+
+- `build-asan`'s `libcna.so` first listed **`libGLX.so.0`**, although it is a Wayland build that
+  references no GLX symbol.
+- The cause: the renderer linked `OpenGL::GL`, which under GLVND is libOpenGL *and* libGLX. The
+  regular trees lost libGLX only because the linker's `--as-needed` dropped it; the sanitizer link
+  did not.
+- The renderer needs GL entry points only, and its context comes from the platform. It now links
+  `OpenGL::OpenGL`, GLVND's window-system-neutral library, where that target exists, and `OpenGL::GL`
+  elsewhere (macOS, Windows).
+- After the change all three trees need `libOpenGL.so.0` only, and OpenGL4's tests pass unchanged:
+  Wayland 94 / 94, X11 18 / 18, ASan 18 / 18.
+- `CnaWaylandLinkClosure` did not catch it, because it inspects the platform binaries, not
+  `libcna.so`.
+
+### Build size (`CNA_SHARED_LIBRARY=ON`, Debug)
+
+| Tree | Size | Contents |
+|---|---|---|
+| `cmake-build-opengl4` | **6.6 GB** | OPENGL4 + OPENGLES3 + OPENGL33 compiled in, 497 test/example executables (2.9 GB), `libcna.so` 204 MB |
+| `cmake-build-opengl4-x11` | 2.8 GB | OPENGL4 only |
+| `build-asan` | 2.9 GB | three targets only |
+
+All are far under the brief's 15 GB alarm line, so nothing needed investigating. Only the targets a
+run needed were built, never whole trees.
