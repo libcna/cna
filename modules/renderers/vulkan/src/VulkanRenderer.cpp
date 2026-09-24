@@ -19536,24 +19536,35 @@ namespace CNA::Internal::Renderers::Vulkan
                     ? liveModernStagingAllocationCountEXT_ - r.modernStagingAllocations
                     : 0;
         };
+        // STREETPERF-0001: both queues are compacted in one pass. Erasing each eligible entry
+        // from the vector on its own moved everything behind it, once per entry -- cna-street
+        // retires ~940 buckets a frame, and that quadratic erase was half of Vulkan's frame.
         // GFX-095 MRT framebuffers borrow their targets' attachment views. Destroy an eligible
         // proxy before the same-generation resource bucket can free those views.
-        for (auto it = retiredMrtProxies_.begin(); it != retiredMrtProxies_.end(); )
+        auto keptProxy = retiredMrtProxies_.begin();
+        for (auto it = retiredMrtProxies_.begin(); it != retiredMrtProxies_.end(); ++it)
         {
             if (force || it->first + MaxFramesInFlight < frameGeneration_)
-                it = retiredMrtProxies_.erase(it);   // last share frees the proxy (device_ still valid)
-            else
-                ++it;
-        }
-        for (auto it = retiredResources_.begin(); it != retiredResources_.end(); )
-        {
-            if (force || it->generation + MaxFramesInFlight < frameGeneration_) {
-                freeBucket(*it);
-                it = retiredResources_.erase(it);
-            } else {
-                ++it;
+            {
+                it->second.reset();   // last share frees the proxy (device_ still valid)
+                continue;
             }
+            if (keptProxy != it) *keptProxy = std::move(*it);
+            ++keptProxy;
         }
+        retiredMrtProxies_.erase(keptProxy, retiredMrtProxies_.end());
+        auto keptBucket = retiredResources_.begin();
+        for (auto it = retiredResources_.begin(); it != retiredResources_.end(); ++it)
+        {
+            if (force || it->generation + MaxFramesInFlight < frameGeneration_)
+            {
+                freeBucket(*it);
+                continue;
+            }
+            if (keptBucket != it) *keptBucket = std::move(*it);
+            ++keptBucket;
+        }
+        retiredResources_.erase(keptBucket, retiredResources_.end());
     }
 
     // REMED-GFX-075: null a dying OcclusionQuery out of every pending 3D draw (the draw survives;
