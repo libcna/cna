@@ -32,8 +32,8 @@ Companion documents this ledger does not duplicate:
 |---|---|
 | Branch | `opengl4-modern-graphics` |
 | Baseline | `b2a0a5671c4db9b7ac1564a7ac2bf9ffd88530e1` (`origin/next` = `next`, 2026-09-24) |
-| Workstream A | in progress — classic corpus 405/405, `CnaGraphicsTests` 0 failures (`GL4-0018`) |
-| Workstream B | not started (gated on A) |
+| Workstream A | **COMPLETE** (`GL4-A-GATE`, 2026-09-24) |
+| Workstream B | in progress |
 
 ---
 
@@ -655,3 +655,49 @@ layout afterwards. A float-stored element bound to an integer input is refused w
 (`FF FF FF 00`, `FF FF FF FE`, … per pixel). The refusal case is the second test. Corpus 405/405;
 `CnaRendererTests` 323/0/10, `CnaGraphicsTests` 2 833/0/57, `CnaGraphicsExtTests` 856/1/105, zero
 GL errors in each.
+
+## GL4-A-GATE — WORKSTREAM A COMPLETE
+
+Recorded 2026-09-24 at `d86e4e7e4` + this commit, after the final classic regression below. Every
+Workstream A requirement, with the task that satisfies it:
+
+| requirement | where |
+|---|---|
+| A1 EasyGL inventory · A2 OpenGL4 audit | `GL4-0005` (corpus derived from EasyGL's own registrations), `GL4-0006` (baseline classified by cluster), `GL4-0022` (matrix) |
+| A3 compile baseline | `GL4-0003` (SDL-free configure), `GL4-0019` (OPENGL4-only configure) |
+| A4 registration integrity — no dead / profile-aborted test | `GL4-0004`, `GL4-0017`; `profile_dead_tests.py` finds **0** on both trees |
+| A5 EasyGL reference · A6 OpenGL4 baseline | `GL4-0006`, `GL4-0007` |
+| A7 core-profile context, refused below 4.1 core | `GL4-0011` |
+| A8 GL debug output, serious messages fail tests, 0 unexplained | `GL4-0016`; **0** `[OpenGL4 GL Error]` lines in every suite below |
+| A9 GL error discipline | `GL4-0011` (drain-then-judge transfers, MRT setup checks), `GL4-0012` (completeness named), `GL4-0021` (the one error class the gate found, fixed) |
+| A10 state isolation | `GL4-0011` (clears restore every mask they override), `GL4-0013` (declaration layout restored after every draw), `GL4-0021`; corpus `Backbuffer_PassOrder`, `FullscreenSpriteThen3D`, `SpriteBatch3DOrder`, `SpriteBatch_BlendStateLeak`, `ResourceLeak`, gtests `*DoNotLeakBetweenFrames`, `SharedStockDrawIsolationContract` |
+| A11 vertex declarations / VAOs / integer inputs | `GL4-0013`, `GL4-0023` |
+| A12 buffers · A13 texture formats, swizzles, transfers · A14 cube · A15 volume | `GL4-0011`, `GL4-0012` |
+| A16 samplers | `GL4-0011`, `GL4-0015` |
+| A17 render targets · A18 MRT (limits queried) | `GL4-0011`, `GL4-0012`, `GL4-0014` |
+| A19 depth/stencil incl. two-sided · A20 blending · A21 rasterizer · A22 viewport conventions | `GL4-0011`, `GL4-0017` |
+| A23 stock effects from the canonical corpus | `GL4-0008`, `GL4-0013` |
+| A24 missing stock textures per the measured XNA contract | `GL4-0013` (opaque black / neutral PBR fallbacks), `GL4-0018` |
+| A25 SpriteBatch (Effect::Apply at submission) · A26 SpriteFont · A27 custom effects | `GL4-0014`, `GL4-0018`, `GL4-0020` |
+| A28 queries | `GL4-0011` |
+| A29 presentation and resize | `GL4-0010` |
+| A30 X11 hardware · A31 Wayland hardware · A32 SDL-free | `GL4-0019` and the table below |
+| A33 parity matrix with no unknown / stub / silently skipped entry | `GL4-0022` |
+| A34 this gate · A35 coherent commits | this row; `git log b2a0a5671..HEAD` |
+
+### Final classic regression (AMD Radeon 780M, Mesa 25.0.7 radeonsi, GL 4.6 core, private runner)
+
+| suite | Wayland / EGL | X11 / GLX |
+|---|---|---|
+| corpus `-R '^OpenGL4_'` (405) | **405 / 0** | **405 / 0** (openbox managing the private display) |
+| `CnaRendererTests` | **323 / 0 / 10** (the 10: EasyGL-internal suites) | **219 / 0 / 0** |
+| `CnaGraphicsTests` | **2 833 / 0 / 57** | **2 800 / 0 / 71** |
+| `CnaContentTests` | 1 850 / 0 / 4 (`GL4-0018`) | — |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |
+| profile-dead tests | 0 | 0 |
+| EasyGL on the same corpus binaries | OPENGL33 364 / 14, OPENGLES3 358 / 20 — nothing that passed at baseline fails | — |
+
+EasyGL's remaining corpus failures are EasyGL defects this workstream found and OpenGL4 does not
+share (cube-face SpriteBatch projection, the lost REMED-GFX-234 rule, `MsaaFragmentContract`,
+`SkinnedEffectVector4BoneIndices`); they are recorded, not changed, because EasyGL is the reference
+and outside this workstream. The one `CnaGraphicsExtTests` failure is a modern (Workstream B) case.

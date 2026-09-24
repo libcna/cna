@@ -85,7 +85,7 @@ Measured on an AMD Radeon 780M (Mesa radeonsi, 4.6 core) through
 |---|---|---|
 | `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures and 346 EasyGL example sources rebuilt against OpenGL4 | 405 / 405 | 405 / 405 |
 | `CnaGraphicsTests` | 2 833 / 0 / 57 | 2 800 / 0 / 71 (OpenGL4-only build) |
-| `CnaRendererTests` | 321 / 0 / 10 | 217 / 0 / 0 |
+| `CnaRendererTests` | 323 / 0 / 10 | 219 / 0 / 0 |
 
 Every remaining skip is classified in the ledger (tests owned by another renderer, refusal legs for
 behaviour OpenGL4 has, environment-dependent cases). Windows and macOS remain unvalidated.
