@@ -283,3 +283,6 @@ endif()
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()
+# plans/plan_opengl4_modern_graphics.md GL4-0016: a registration may replace FAIL_REGULAR_EXPRESSION
+# after registering; put the OpenGL4 GL error gate back on every test of this directory.
+cna_apply_opengl4_gl_error_gate()

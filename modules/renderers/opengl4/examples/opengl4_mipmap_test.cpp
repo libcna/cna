@@ -17,10 +17,10 @@
 // Check A -- TextureFilter::LinearMipPoint at a tiny (8x8px) destination size samples GREEN: a
 //   real high mip level was genuinely selected and its genuinely-uploaded content sampled, not
 //   just "didn't throw".
-// Check B -- TextureFilter::Point at the SAME tiny size samples RED: this renderer deliberately
-//   maps Point to a non-mip-aware GL_NEAREST (matching EasyGLRenderer's own identical,
-//   documented choice) -- Point never mip-selects regardless of minification, a known behavior
-//   this check asserts, not a bug.
+// Check B -- TextureFilter::Point at the SAME tiny size samples GREEN: XNA's Point is min, mag
+//   AND mip point (REMED-GFX-175), so a minified draw selects the high level exactly as
+//   LinearMipPoint does. plans/plan_opengl4_modern_graphics.md GL4-0015: this check asserted RED
+//   while the renderer mapped Point onto a mip-less GL_NEAREST, which is the defect that fixed.
 // Check C -- the SAME mip texture sampled at a NORMAL (non-minified, 1:1) destination size with
 //   LinearMipPoint reads RED (level 0's own content) -- proves level 0's upload still works
 //   correctly alongside the higher levels now being real.
@@ -122,8 +122,8 @@ protected:
               "Check A: LinearMipPoint at 8x8px (128->1 texture) samples GREEN (high mip level genuinely selected)");
 
         const Color pointOnly = DrawAndSample(sb, mipTex, TextureFilter::Point, 8);
-        Check(IsRed(pointOnly),
-              "Check B: Point at the same tiny size samples RED (documented: Point never mip-selects on this renderer)");
+        Check(IsGreen(pointOnly),
+              "Check B: Point at the same tiny size samples GREEN (Point carries a mip-point term)");
 
         const Color level0 = DrawAndSample(sb, mipTex, TextureFilter::LinearMipPoint, kWindowSize);
         Check(IsRed(level0),

@@ -106,6 +106,33 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
         gl4_glDrawElementsInstancedBaseVertexBaseInstance = nullptr;
     PFNGL4GETINTERNALFORMATIVPROC         gl4_glGetInternalformativ         = nullptr;
 
+    PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv                   = nullptr;
+    PFNGL4UNIFORM4FVPROC                   gl4_glUniform4fv                   = nullptr;
+    PFNGL4UNIFORM1IVPROC                   gl4_glUniform1iv                   = nullptr;
+    PFNGL4UNIFORMMATRIX3FVPROC             gl4_glUniformMatrix3fv             = nullptr;
+    PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXPROC gl4_glDrawElementsInstancedBaseVertex = nullptr;
+    PFNGL4DRAWARRAYSINSTANCEDPROC          gl4_glDrawArraysInstanced          = nullptr;
+    PFNGL4SAMPLEMASKIPROC                  gl4_glSampleMaski                  = nullptr;
+    PFNGL4COMPRESSEDTEXIMAGE2DPROC         gl4_glCompressedTexImage2D         = nullptr;
+    PFNGL4COMPRESSEDTEXSUBIMAGE2DPROC      gl4_glCompressedTexSubImage2D      = nullptr;
+    PFNGL4GETCOMPRESSEDTEXIMAGEPROC        gl4_glGetCompressedTexImage        = nullptr;
+    PFNGL4GETBUFFERSUBDATAPROC             gl4_glGetBufferSubData             = nullptr;
+    PFNGL4COPYBUFFERSUBDATAPROC            gl4_glCopyBufferSubData            = nullptr;
+    PFNGL4CLEARBUFFERFVPROC                gl4_glClearBufferfv                = nullptr;
+    PFNGL4CLEARBUFFERIVPROC                gl4_glClearBufferiv                = nullptr;
+    PFNGL4CLEARBUFFERFIPROC                gl4_glClearBufferfi                = nullptr;
+    PFNGL4FRAMEBUFFERTEXTUREPROC           gl4_glFramebufferTexture           = nullptr;
+    PFNGL4GETFRAMEBUFFERATTACHMENTPARAMETERIVPROC gl4_glGetFramebufferAttachmentParameteriv = nullptr;
+    PFNGL4GETSAMPLERPARAMETERIVPROC        gl4_glGetSamplerParameteriv        = nullptr;
+    PFNGL4ISPROGRAMPROC                    gl4_glIsProgram                    = nullptr;
+
+    PFNGL4DEBUGMESSAGECALLBACKPROC         gl4_glDebugMessageCallback         = nullptr;
+    PFNGL4DEBUGMESSAGECONTROLPROC          gl4_glDebugMessageControl          = nullptr;
+    PFNGL4DEBUGMESSAGEINSERTPROC           gl4_glDebugMessageInsert           = nullptr;
+    PFNGL4PUSHDEBUGGROUPPROC               gl4_glPushDebugGroup               = nullptr;
+    PFNGL4POPDEBUGGROUPPROC                gl4_glPopDebugGroup                = nullptr;
+    PFNGL4OBJECTLABELPROC                  gl4_glObjectLabel                  = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -349,6 +376,36 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 
         ok &= Resolve(getProcAddress, "glDrawElementsInstanced", gl4_glDrawElementsInstanced);
         ok &= Resolve(getProcAddress, "glVertexAttribDivisor", gl4_glVertexAttribDivisor);
+
+        ok &= Resolve(getProcAddress, "glUniform3fv", gl4_glUniform3fv);
+        ok &= Resolve(getProcAddress, "glUniform4fv", gl4_glUniform4fv);
+        ok &= Resolve(getProcAddress, "glUniform1iv", gl4_glUniform1iv);
+        ok &= Resolve(getProcAddress, "glUniformMatrix3fv", gl4_glUniformMatrix3fv);
+        ok &= Resolve(getProcAddress, "glDrawElementsInstancedBaseVertex",
+                      gl4_glDrawElementsInstancedBaseVertex);
+        ok &= Resolve(getProcAddress, "glDrawArraysInstanced", gl4_glDrawArraysInstanced);
+        ok &= Resolve(getProcAddress, "glSampleMaski", gl4_glSampleMaski);
+        ok &= Resolve(getProcAddress, "glCompressedTexImage2D", gl4_glCompressedTexImage2D);
+        ok &= Resolve(getProcAddress, "glCompressedTexSubImage2D", gl4_glCompressedTexSubImage2D);
+        ok &= Resolve(getProcAddress, "glGetCompressedTexImage", gl4_glGetCompressedTexImage);
+        ok &= Resolve(getProcAddress, "glGetBufferSubData", gl4_glGetBufferSubData);
+        ok &= Resolve(getProcAddress, "glCopyBufferSubData", gl4_glCopyBufferSubData);
+        ok &= Resolve(getProcAddress, "glClearBufferfv", gl4_glClearBufferfv);
+        ok &= Resolve(getProcAddress, "glClearBufferiv", gl4_glClearBufferiv);
+        ok &= Resolve(getProcAddress, "glClearBufferfi", gl4_glClearBufferfi);
+        ok &= Resolve(getProcAddress, "glFramebufferTexture", gl4_glFramebufferTexture);
+        ok &= Resolve(getProcAddress, "glGetFramebufferAttachmentParameteriv",
+                      gl4_glGetFramebufferAttachmentParameteriv);
+        ok &= Resolve(getProcAddress, "glGetSamplerParameteriv", gl4_glGetSamplerParameteriv);
+        ok &= Resolve(getProcAddress, "glIsProgram", gl4_glIsProgram);
+
+        // KHR_debug: core in 4.3, an extension before it. Optional -- see the declarations.
+        ResolveOptional(getProcAddress, "glDebugMessageCallback", gl4_glDebugMessageCallback);
+        ResolveOptional(getProcAddress, "glDebugMessageControl", gl4_glDebugMessageControl);
+        ResolveOptional(getProcAddress, "glDebugMessageInsert", gl4_glDebugMessageInsert);
+        ResolveOptional(getProcAddress, "glPushDebugGroup", gl4_glPushDebugGroup);
+        ResolveOptional(getProcAddress, "glPopDebugGroup", gl4_glPopDebugGroup);
+        ResolveOptional(getProcAddress, "glObjectLabel", gl4_glObjectLabel);
 
         return ok;
     }

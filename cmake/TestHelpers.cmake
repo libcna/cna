@@ -80,6 +80,7 @@ function(cna_register_renderer_test)
     # reason: the value goes into a list that list(APPEND) would otherwise flatten.
     set(_cna_vk_gate_regex "")
     cna_append_vulkan_validation_gate_pattern(_cna_vk_gate_regex ${T_NAME})
+    cna_append_opengl4_gl_error_gate_pattern(_cna_vk_gate_regex ${T_NAME})
     if(_cna_vk_gate_regex)
         string(REPLACE ";" "\\;" _cna_vk_gate_escaped "${_cna_vk_gate_regex}")
         list(APPEND _cna_test_props FAIL_REGULAR_EXPRESSION "${_cna_vk_gate_escaped}")
@@ -172,6 +173,60 @@ macro(cna_apply_vulkan_validation_gate)
             if(_cna_vk_regex)
                 set_tests_properties(${_cna_vk_t} PROPERTIES
                     FAIL_REGULAR_EXPRESSION "${_cna_vk_regex}")
+            endif()
+        endforeach()
+    endif()
+endmacro()
+
+# plans/plan_opengl4_modern_graphics.md GL4-0016 -- the OpenGL4 GL error output gate.
+#
+# OpenGL4Renderer installs a KHR_debug callback (Debug builds, or CNA_OPENGL4_DEBUG_OUTPUT=1) and
+# prints "[OpenGL4 GL Error] <message>" for every GL error, undefined-behaviour or high-severity
+# message; a stock program that fails to build is reported on the same line. The same output-gate
+# shape as the Vulkan one above, for the same reason: a message raised during teardown is out of
+# reach of any in-process assertion. Applied only where an OpenGL4 context can exist. The exemption
+# list is empty and must stay reasoned: an entry names the exact message and why it is not CNA's.
+set(CNA_OPENGL4_GL_ERROR_GATE_EXEMPT ""
+    CACHE INTERNAL "plans/plan_opengl4_modern_graphics.md GL4-0016: CTests exempt from the OpenGL4 GL error gate")
+
+function(cna_opengl4_gl_error_gate_applies out)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4" OR "OPENGL4" IN_LIST CNA_GRAPHICS_RENDERERS)
+        set(${out} TRUE PARENT_SCOPE)
+    else()
+        set(${out} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(cna_append_opengl4_gl_error_gate_pattern list_var test_name)
+    cna_opengl4_gl_error_gate_applies(_cna_gl4_gate)
+    if(NOT _cna_gl4_gate)
+        return()
+    endif()
+    if(test_name IN_LIST CNA_OPENGL4_GL_ERROR_GATE_EXEMPT)
+        return()
+    endif()
+    set(_cna_patterns "${${list_var}}")
+    if(NOT "\\[OpenGL4 GL Error\\]" IN_LIST _cna_patterns)
+        list(APPEND _cna_patterns "\\[OpenGL4 GL Error\\]")
+    endif()
+    set(${list_var} "${_cna_patterns}" PARENT_SCOPE)
+endfunction()
+
+# Re-applies the OpenGL4 gate over the calling directory's tests, merging with each test's existing
+# FAIL_REGULAR_EXPRESSION -- for registrations that replace the property after registering.
+macro(cna_apply_opengl4_gl_error_gate)
+    cna_opengl4_gl_error_gate_applies(_cna_gl4_dir_gate)
+    if(_cna_gl4_dir_gate)
+        get_property(_cna_gl4_dir_tests DIRECTORY PROPERTY TESTS)
+        foreach(_cna_gl4_t IN LISTS _cna_gl4_dir_tests)
+            get_test_property(${_cna_gl4_t} FAIL_REGULAR_EXPRESSION _cna_gl4_regex)
+            if(NOT _cna_gl4_regex)
+                set(_cna_gl4_regex "")
+            endif()
+            cna_append_opengl4_gl_error_gate_pattern(_cna_gl4_regex ${_cna_gl4_t})
+            if(_cna_gl4_regex)
+                set_tests_properties(${_cna_gl4_t} PROPERTIES
+                    FAIL_REGULAR_EXPRESSION "${_cna_gl4_regex}")
             endif()
         endforeach()
     endif()

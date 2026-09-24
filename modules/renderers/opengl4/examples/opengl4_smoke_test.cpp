@@ -17,6 +17,7 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -121,6 +122,9 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(320);
         gdm_->setPreferredBackBufferHeightProperty(240);
+        // The default PreferredDepthStencilFormat is Depth24, which has no stencil, and XNA refuses a
+        // stencil clear without one; the stencil clears below need Depth24Stencil8.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
     }
 

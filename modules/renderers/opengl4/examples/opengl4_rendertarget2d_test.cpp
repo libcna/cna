@@ -24,7 +24,7 @@
 //   dropped to 0), and the resolved interior pixel matches the flat colour drawn into it.
 // Check J -- SpriteBatch::Draw() INTO a bound RenderTarget2D smaller than the window: proves
 //   OpenGL4SpriteBatchRenderer::FlushBatch's viewport/ortho sizing correctly follows the bound
-//   RT's own size (GetCurrentRenderTarget2DSize), not the window's physical size -- without that
+//   RT's own size (GetBoundRenderTargetSize), not the window's physical size -- without that
 //   fix this check would sample the wrong region (or nothing) instead of the sprite's flat colour.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -148,9 +148,12 @@ protected:
             fx.setProjectionProperty(Matrix::getIdentityProperty());
             fx.Apply();
 
+            // plans/plan_opengl4_modern_graphics.md GL4-0017: both quads inside XNA's [0, w] clip-depth
+            // range. The near quad used to sit at z=-0.5, which Direct3D -- and so XNA -- clips; it
+            // only rendered while OpenGL4 used GL's [-w, w] range instead of converting.
             const VertexPositionColor farVerts[6] = {
-                {Vector3(-1.0f, -1.0f, 0.5f), Color::Red}, {Vector3(-1.0f, 1.0f, 0.5f), Color::Red}, {Vector3(1.0f, -1.0f, 0.5f), Color::Red},
-                {Vector3(-1.0f, 1.0f, 0.5f), Color::Red}, {Vector3(1.0f, 1.0f, 0.5f), Color::Red}, {Vector3(1.0f, -1.0f, 0.5f), Color::Red},
+                {Vector3(-1.0f, -1.0f, 0.75f), Color::Red}, {Vector3(-1.0f, 1.0f, 0.75f), Color::Red}, {Vector3(1.0f, -1.0f, 0.75f), Color::Red},
+                {Vector3(-1.0f, 1.0f, 0.75f), Color::Red}, {Vector3(1.0f, 1.0f, 0.75f), Color::Red}, {Vector3(1.0f, -1.0f, 0.75f), Color::Red},
             };
             VertexBuffer farVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
             farVb.SetData(farVerts, 0, 6);
@@ -158,8 +161,8 @@ protected:
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
             const VertexPositionColor nearVerts[6] = {
-                {Vector3(-1.0f, -1.0f, -0.5f), Color::Green}, {Vector3(-1.0f, 1.0f, -0.5f), Color::Green}, {Vector3(1.0f, -1.0f, -0.5f), Color::Green},
-                {Vector3(-1.0f, 1.0f, -0.5f), Color::Green}, {Vector3(1.0f, 1.0f, -0.5f), Color::Green}, {Vector3(1.0f, -1.0f, -0.5f), Color::Green},
+                {Vector3(-1.0f, -1.0f, 0.25f), Color::Green}, {Vector3(-1.0f, 1.0f, 0.25f), Color::Green}, {Vector3(1.0f, -1.0f, 0.25f), Color::Green},
+                {Vector3(-1.0f, 1.0f, 0.25f), Color::Green}, {Vector3(1.0f, 1.0f, 0.25f), Color::Green}, {Vector3(1.0f, -1.0f, 0.25f), Color::Green},
             };
             VertexBuffer nearVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
             nearVb.SetData(nearVerts, 0, 6);

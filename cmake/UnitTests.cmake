@@ -1326,12 +1326,18 @@ if(CNA_BUILD_TESTS)
     if(_cna_unit_tests_audio_environment)
         set(_cna_unit_tests_audio_properties PROPERTIES ${_cna_unit_tests_audio_environment})
     endif()
-    cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
-    if(_cna_unit_tests_vk_gate)
+    # plans/plan_opengl4_modern_graphics.md GL4-0016: the OpenGL4 GL error gate reaches the
+    # discovered cases through the same hook, alongside the Vulkan gate where both apply.
+    set(_cna_unit_tests_output_gate "")
+    cna_append_vulkan_validation_gate_pattern(_cna_unit_tests_output_gate CnaTests)
+    cna_append_opengl4_gl_error_gate_pattern(_cna_unit_tests_output_gate CnaTests)
+    # One alternation rather than a list: a semicolon inside PROPERTIES would split the pair.
+    string(JOIN "|" _cna_unit_tests_output_gate ${_cna_unit_tests_output_gate})
+    if(_cna_unit_tests_output_gate)
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ${_cna_unit_tests_discovery_filter}
-            PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]"
+            PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
                        ${_cna_unit_tests_audio_environment})
     else()
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
