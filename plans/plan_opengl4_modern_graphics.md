@@ -480,3 +480,36 @@ them); 1 wireframe-refusal leg (OpenGL4 has native polygon mode); 5 fake-window 
 (OpenGL4 needs a real GL window); Texture3D-absent/present complements (2); three presentation-region
 tests for STUB/SOFTWARE/HEADLESS; GLES/WebGL adapter contract (1); adapter flag selection (1); two
 multi-renderer fallback configuration tests. None is an OpenGL4 gap except compiled effects.
+
+## GL4-0019 — X11 hardware path, SDL-free proof, and an OPENGL4-only configure defect
+
+**Configure defect.** An OPENGL4-only configuration could not build `CnaRendererTests`:
+`cmake/UnitTests.cmake` counted OPENGL4 among the EasyGL identities, so EasyGL's own suites (which
+include `<metagl/metagl.hpp>` from the easy-gl checkout only EasyGL brings) were compiled without
+their include root. OPENGL4 is removed from that list; the multi-renderer tree, where EasyGL is
+present, is unaffected.
+
+**X11 (GLX) on hardware.** `cmake-build-opengl4-x11` — the Wayland tree's settings with
+`CNA_PLATFORM=X11` and OPENGL4 alone (named after the `cmake-build-webgpu-x11` precedent), built
+target by target (the corpus, `CnaGraphicsTests`, `CnaRendererTests`), run on the private rootful
+Xwayland with DRI3, `GL_RENDERER` AMD Radeon 780M (radeonsi), 4.6 core:
+
+| suite | X11 / GLX | Wayland / EGL (`GL4-0018`) |
+|---|---|---|
+| corpus `-R '^OpenGL4_'` | **404 / 1** of 405, then the one under openbox **1 / 0** | 405 / 0 |
+| `CnaGraphicsTests` | **2 800 / 0 / 71** of 2 871 (single-renderer inventory) | 2 815 / 0 / 75 |
+| `CnaRendererTests` | **214 / 0 / 0** (no EasyGL suites in this configuration) | 231 / 0 / 10 |
+
+The one corpus failure is an environment boundary, not a renderer result: the private Xwayland runs
+no window manager, and the X11 backend correctly refuses `BorderlessFullscreen` without EWMH
+(`FullScreenField`). Run again with `~/deps/openbox` managing the same private display it passes.
+
+**SDL-free.** Both trees configure with `CNA_ENABLE_SDL=OFF`. `readelf -d libcna.so` `NEEDED`:
+
+- Wayland: `libwayland-client libxkbcommon libOpenGL` (+ FFmpeg, zstd, libstdc++/libc) — no SDL,
+  no X11. `ldd` shows `libX11`/`xcb` only transitively through FFmpeg's `libva-x11`.
+- X11: `libX11 libXext libXi libXrandr libXcursor libXau libXss libOpenGL` (+ the same) — no SDL.
+
+Test executables `NEEDED` only `libcna.so` and the C++ runtime. `WaylandIsSdlFree.*` 5/5.
+`ModuleLinkClosure_*` skip under the Ninja generator (they read Makefiles link files), so the ELF
+listings above are the evidence.

@@ -330,7 +330,10 @@ if(CNA_BUILD_TESTS)
     # therefore produced a CnaTests that could not compile, which is what blocked the SDL_GPU
     # classic baseline this closeout exists to measure. Found by configuring SDL_GPU, exactly as
     # WMG-0028's twin was found by configuring Vulkan.
-    set(_cna_gl_identities OPENGLES2 OPENGLES3 OPENGL33 OPENGL4 WEBGL1 WEBGL2)
+    # plans/plan_opengl4_modern_graphics.md GL4-0019: the EasyGL identities only. OPENGL4 is its
+    # own renderer family with no easy-gl/meta-gl checkout, so an OPENGL4-only configuration
+    # compiled these suites without their include root.
+    set(_cna_gl_identities OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
     set(_cna_have_gl_identity FALSE)
     foreach(_cna_gl IN LISTS _cna_gl_identities)
         if("${_cna_gl}" IN_LIST CNA_RENDERER_IDENTITIES)
