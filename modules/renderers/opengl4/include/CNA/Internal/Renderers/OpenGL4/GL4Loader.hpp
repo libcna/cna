@@ -866,6 +866,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4PROGRAMUNIFORM1IPROC             = void (*)(GLuint, GLint, GLint);
     using PFNGL4PROGRAMUNIFORM1FPROC             = void (*)(GLuint, GLint, GLfloat);
     using PFNGL4GETQUERYIVPROC                   = void (*)(GLenum, GLenum, GLint*);
+    using PFNGL4ISBUFFERPROC                     = GLboolean (*)(GLuint);
+    using PFNGL4ISQUERYPROC                      = GLboolean (*)(GLuint);
 
     // plans/plan_opengl4_modern_graphics.md GL4-0009: further GL <= 4.1 core entry points the
     // EasyGL-parity paths need (vector/matrix uniforms for the shared stock programs, instanced
@@ -1024,6 +1026,10 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4PROGRAMUNIFORM1FPROC            gl4_glProgramUniform1f;
     /** GL4-0027: the timestamp counter width, asked before a GPU timer is promised. */
     extern PFNGL4GETQUERYIVPROC                  gl4_glGetQueryiv;
+    /** GL4-0031: name-liveness queries for GL object leak accounting. */
+    extern PFNGL4ISBUFFERPROC                    gl4_glIsBuffer;
+    /** GL4-0031: see gl4_glIsBuffer. */
+    extern PFNGL4ISQUERYPROC                     gl4_glIsQuery;
 
     // GL4-0009 mandatory additions (see the types above).
     extern PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv;

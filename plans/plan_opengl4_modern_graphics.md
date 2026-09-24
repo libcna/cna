@@ -1108,3 +1108,21 @@ The complete profile, from `cna_probe_modern_gpu_capabilities` on the Radeon 780
 
 OpenGL4's seven remaining `CnaGraphicsExtTests` skips are all cases that cannot apply to a renderer
 with the capability: the six refusal legs, and the SPIR-V-only intake. EasyGL OPENGLES3 skips eight.
+
+## GL4-0031 — Lifetime, context ownership, threading and GL object accounting (B19, B28–B31, B35)
+
+Every modern resource (`OpenGL4StorageBufferRenderer`, `…ComputeShaderRenderer`,
+`…StorageTexture2DRenderer`, `…GpuTimerRenderer`) is an `OpenGL4ContextResource` attached to its
+creating device's context (`GL4-0021`). Its operations enter that context and restore the previous
+binding; its destructor issues no GL once that context is gone. `OpenGL4ModernLifetimeTests.cpp`
+proves the four properties the brief lists:
+
+| Case | What it proves |
+|---|---|
+| `EveryModernResourceReleasesItsGlNames` | **GL object leak accounting, asked of the driver.** Three rounds each create, use and destroy a storage buffer, compute program, two-level storage texture and GPU timer. Every name is live (`glIs*` true) while its object exists, and dead (`glIs*` false) afterwards. **Mutation check:** without the buffer's `glDeleteBuffers` the case fails on all three buffers. |
+| `AnEffectDestroyedAfterEndLeavesNothingToReplay` | **ShaderEffect lifetime.** OpenGL4 issues a SpriteBatch's draws from `End()`, and `SpriteBatch::End` then clears the renderer's effect pointer. So OpenGL4 has **no counterpart of WebGPU's queued-frame window** (`ForgetEffectEXT`, `webgpu_effect_outlived_by_draw_test`): a draw cannot outlive its effect. The case destroys the effect straight after `End`, draws again through the stock program, and checks both halves of the target. It runs under AddressSanitizer in `GL4-0033`. |
+| `TwoDevicesComputeInTheirOwnContexts` | **Context ownership.** Interleaved dispatches on two devices, each call arriving while the other context is current, compute exact results. The first device is then destroyed, its buffer and program are released without GL, and the second device's resources still compute. No `[OpenGL4 GL Error]` line. |
+| `ResourcesCreatedOnALoadingThreadServeTheFrameThread` | **Threading.** The frame thread releases its binding through the lease, as a `Game` does between frames. A loading thread takes the lease, creates a storage buffer and compute program and uploads data. The frame thread then dispatches with them and reads exact results. This is the `ContentManager` contract, applied to Workstream B objects. |
+
+The loader gained `glIsBuffer`/`glIsQuery` (optional), and the compute program and timer expose their
+GL names (`CNAEXT`, renderer-internal) for the accounting.

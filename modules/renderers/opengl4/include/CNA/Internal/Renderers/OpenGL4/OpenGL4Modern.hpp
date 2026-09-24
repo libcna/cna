@@ -207,6 +207,8 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] bool IsValid() const override { return program_ != 0 && valid_; }
         /** @brief Returns the compiler and linker logs of a failed build. */
         [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+        /** @brief Returns the GL program name (0 when the build failed). */
+        CNAEXT [[nodiscard]] unsigned int GLProgram() const noexcept { return program_; }
 
         /**
          * @brief Installs the recorded bindings, dispatches, orders the writes, and restores.
@@ -385,6 +387,16 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] bool IsResultAvailable() const override;
         /** @brief Returns the nanoseconds between the two timestamps, or 0 before they arrive. */
         [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+        /**
+         * @brief Returns one of the two timestamp query names.
+         *
+         * @param index 0 for the opening timestamp, 1 for the closing one.
+         * @return The GL query name.
+         */
+        CNAEXT [[nodiscard]] unsigned int GLQuery(int index) const noexcept
+        {
+            return queries_[index == 0 ? 0 : 1];
+        }
 
     private:
         unsigned int queries_[2] = {0, 0};
