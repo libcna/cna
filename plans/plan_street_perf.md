@@ -43,11 +43,16 @@ measured speed; they compared pictures.
 | STREETPERF-0001 | Vulkan: the retired-resource queue was drained with one `vector::erase` per entry | ✅ |
 | STREETPERF-0002 | SDL_GPU: every draw re-uploaded its buffers' whole contents every frame (~430 MB), and every `SetData` submitted a command buffer of its own | ✅ |
 | STREETPERF-0003 | Vulkan: every draw copied its whole vertex buffer and its indices, twice | ✅ |
+| STREETPERF-0004 | WebGPU: every draw wrote its buffers' whole contents again with `wgpuQueueWriteBuffer` | ✅ |
 
 **Found, not caused** (each A/B-checked: reverted source, rebuilt, still fails):
 
 * `Vulkan_DrawRangeValidation` -- six of its checks expect an invalid draw range to be forwarded,
   and the device now refuses it.
+* On WebGPU (`cmake-build-webgpu`), 20 of 2 918 `CnaGraphicsTests` cases and 2 `CnaRendererTests`
+  cases (`WebGPUCompiledEffect*.SharedBackendConformanceContract`). Among the former, the
+  `IndexedDrawDeferredTest` strip cases either expect the Vulkan renderer or rewrite a still-bound
+  buffer.
 * On Vulkan (`cmake-build-cnaext`), 3 of 2 894 `CnaGraphicsTests` cases:
   `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`,
   `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset`,
@@ -219,3 +224,53 @@ move to a fresh buffer disabled its first two cases fail here too. `VulkanReside
 | `CnaGraphicsExtTests` | **937 / 0 / 32** |
 | `CnaRendererTests` | **231 / 0 / 10** before the new test; the new test passes |
 | `CnaGraphicsTests` | 2 691 / 3 / 200 -- the three above, which fail without this change |
+
+---
+
+## STREETPERF-0004 — WebGPU wrote every draw's geometry again
+
+**Root cause.** The SDL_GPU design, on `wgpuQueueWriteBuffer`: the vertex and index buffers own a
+`WGPUBuffer` that `SetData` fills, but each draw copied the buffer's bytes into its command and the
+replay wrote them into a pooled transient buffer again -- in wgpu each write allocates staging
+memory and copies (the `malloc`/`memcpy` under `queue_write_buffer` in the first profile).
+
+**Fix.** `STREETPERF-0002`'s, in this renderer's terms: `WebGPUBufferStorageEXT` held by
+`shared_ptr`; stock primary streams (all six families and the instanced route), PBR, skinned PBR,
+skinned (unless normalized) and custom `ShaderEffect` draws bind it at their first vertex, and every
+index buffer binds in place (`UploadDrawVerticesEXT`, `BindDrawIndicesEXT`). A `SetData` while a
+queued draw holds the storage moves to fresh storage: `wgpuQueueWriteBuffer` is ordered before the
+frame's later submission, so writing in place would change what the queued draw reads; work
+already submitted is safe by queue order. A resident buffer is never handed to
+`pendingBufferReleases_`, whose recycler would pool it as a transient. After a device loss the
+storage is gone and draws copy `shadowData_` as they always could.
+
+The wireframe route (`WEBGPU-153`) rewrites a triangle draw's indices into a 32-bit line list at
+queue time; it now drops the resident index binding. The first build did not, bound the buffer's
+own triangle indices as 32-bit, and wgpu refused the draw ("Index 6 extends beyond limit 1") in
+`WebGpuWireFrameContract.EveryPublicDrawRouteWireframesAndAcceptsSolid`.
+
+**Measured** (`--benchmark baseline`, load average 3.5-4.5):
+
+| | CPU frame | fps |
+|---|---|---|
+| as found | 316-367 ms | 2.7-3.2 |
+| after this task | **107-113 ms** | **8.8-9.4** |
+| OPENGL4, same runs | 34.4 ms | 29.1 |
+
+**What is left** (60 stacks after the fix): 28 inside `GpuTimer::end`/`begin`, which flush and
+submit the pending draws because this renderer's timers ride on per-pass timestamp writes
+(`WMG-0017`), plus one resolve submit per timer; 13 in `wgpuQueueSubmit` and 11 in wgpu's per-submit
+maintenance overall; 14 in `wgpuDeviceCreateBindGroup` -- every draw creates its bind groups. Those
+are the frame structure (one submit per flush, bind groups per draw), not a copy, and are not
+changed here.
+
+**The picture:** the 18 captures are identical to the unmodified WebGPU renderer's except the
+views that also differ between two runs of one renderer (01, 11) and 0.009 % at 18, likewise.
+
+**Regression runs** (`cmake-build-webgpu`, WEBGPU;VULKAN;OPENGLES3, Wayland):
+
+| suite | result |
+|---|---|
+| `-L WebGPU` | **148 / 0** |
+| `CnaRendererTests` | 286 / 2 / 12 -- the two above, which fail without this change |
+| `CnaGraphicsTests` | 2 701 / 20 / 197 -- the twenty above, which fail without this change; `BufferRewriteWithinFrameTests` pass, no uncaptured wgpu error |

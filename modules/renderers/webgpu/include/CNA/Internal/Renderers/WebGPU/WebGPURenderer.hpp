@@ -664,6 +664,29 @@ namespace CNA::Internal::Renderers::WebGPU
         int mipLevels_ = 1;
     };
 
+    /**
+     * @brief STREETPERF-0004: a vertex or index buffer's GPU storage, shared with queued draws.
+     *
+     * A queued draw binds the storage its buffer had when the draw was issued and keeps it alive
+     * until the frame is submitted. A `SetData` while a queued draw still holds the storage moves
+     * the buffer to fresh storage -- `wgpuQueueWriteBuffer` is ordered before the frame's own
+     * later submission, so writing in place would change what the queued draw reads.
+     */
+    struct WebGPUBufferStorageEXT
+    {
+        /** @brief Takes ownership of @p buffer, of @p capacityBytes bytes. */
+        WebGPUBufferStorageEXT(WGPUBuffer buffer, std::uint64_t capacityBytes);
+        /** @brief Releases the buffer. */
+        ~WebGPUBufferStorageEXT();
+        WebGPUBufferStorageEXT(const WebGPUBufferStorageEXT&) = delete;
+        WebGPUBufferStorageEXT& operator=(const WebGPUBufferStorageEXT&) = delete;
+
+        /** @brief The native buffer. */
+        WGPUBuffer buffer = nullptr;
+        /** @brief Its size in bytes. */
+        std::uint64_t capacityBytes = 0;
+    };
+
     class WebGPUVertexBufferRenderer final : public IVertexBufferRenderer,
                                              public IWebGPUDeviceResourceEXT
     {
@@ -682,7 +705,9 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetDataWithOptions(const void* data, int vertexCount, std::size_t strideInBytes, SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
-        [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
+        [[nodiscard]] WGPUBuffer Buffer() const { return storage_ ? storage_->buffer : nullptr; }
+        /** @brief The storage a draw binds in place (STREETPERF-0004); null before any upload. */
+        [[nodiscard]] const std::shared_ptr<WebGPUBufferStorageEXT>& Storage() const { return storage_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
         /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
@@ -707,8 +732,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
     private:
         WebGPURenderer* owner_ = nullptr;
-        WGPUBuffer buffer_ = nullptr;
-        std::uint64_t capacityBytes_ = 0;
+        std::shared_ptr<WebGPUBufferStorageEXT> storage_;
         int vertexCapacity_ = 0;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
@@ -730,7 +754,9 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
-        [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
+        [[nodiscard]] WGPUBuffer Buffer() const { return storage_ ? storage_->buffer : nullptr; }
+        /** @brief The storage a draw binds in place (STREETPERF-0004); null before any upload. */
+        [[nodiscard]] const std::shared_ptr<WebGPUBufferStorageEXT>& Storage() const { return storage_; }
         // See WebGPUVertexBufferRenderer::ShadowData() for why this exists.
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
@@ -746,8 +772,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit);
 
         WebGPURenderer* owner_ = nullptr;
-        WGPUBuffer buffer_ = nullptr;
-        std::uint64_t capacityBytes_ = 0;
+        std::shared_ptr<WebGPUBufferStorageEXT> storage_;
         int indexCapacity_ = 0;
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;
@@ -3248,13 +3273,28 @@ namespace CNA::Internal::Renderers::WebGPU
          *        honoured by repeating each source record @c frequency times here, which keeps the
          *        divisor a data-preparation concern that never reaches the pipeline or its key.
          */
+        /** @brief STREETPERF-0004: the source buffers' own storage, when a draw binds it in place. */
+        struct ResidentGeometryEXT
+        {
+            /** @brief The vertex buffer's storage, or null when `vertexData` carries the bytes. */
+            std::shared_ptr<WebGPUBufferStorageEXT> vertexStorage;
+            /** @brief Byte offset of the draw's first vertex in that storage. */
+            std::uint64_t vertexOffset = 0;
+            /** @brief Bytes bound from there -- what `vertexData` would have held. */
+            std::uint64_t vertexSize = 0;
+            /** @brief The index buffer's storage, or null when `indexData` carries the bytes. */
+            std::shared_ptr<WebGPUBufferStorageEXT> indexStorage;
+            /** @brief Bytes of indices bound from its start -- what `indexData` would have held. */
+            std::uint64_t indexSize = 0;
+        };
+
         static void CaptureStockVertexStreamsEXT(
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
             const DrawVertexStreamsEXT& streams,
             int vertexStart,
             std::vector<std::uint8_t>& stream0Data,
             std::vector<CapturedVertexStreamEXT>& extra,
-            int instanceCount = 1);
+            int instanceCount = 1, ResidentGeometryEXT* resident = nullptr);
 
         /**
          * @brief WEBGPU-172: binds a replayed draw's further vertex streams at slots 1..n.
@@ -4191,6 +4231,8 @@ namespace CNA::Internal::Renderers::WebGPU
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /**
              * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
              *
@@ -4262,6 +4304,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /**
              * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
              *
@@ -4397,6 +4441,51 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Acquire a pooled buffer of at least @p size with exactly @p usage (reused or freshly made).
         [[nodiscard]] WGPUBuffer AcquireTransientBuffer(WGPUBufferUsage usage, std::uint64_t size);
         /// Upload an indexed draw's captured bytes to a pooled transient buffer and bind it.
+        /** @brief STREETPERF-0004: where a replayed draw's vertices are bound from. */
+        struct DrawVertexSourceEXT
+        {
+            WGPUBuffer buffer = nullptr;      ///< bound at slot 0
+            std::uint64_t offset = 0;         ///< byte offset of the first vertex
+            std::uint64_t size = 0;           ///< bytes bound
+            WGPUBuffer transient = nullptr;   ///< the pooled copy to release, or null when resident
+        };
+        /// A draw's vertices: its buffer's own storage, or a pooled copy of `data` written now.
+        DrawVertexSourceEXT UploadDrawVerticesEXT(const std::vector<std::uint8_t>& data,
+                                                  const ResidentGeometryEXT& resident,
+                                                  WGPUBufferUsage usage, std::uint64_t size);
+        /// Binds a draw's indices and returns the pooled copy to release, or null when resident.
+        [[nodiscard]] WGPUBuffer BindDrawIndicesEXT(WGPURenderPassEncoder pass,
+                                                    const std::vector<std::uint8_t>& data,
+                                                    const ResidentGeometryEXT& resident,
+                                                    bool index32);
+        /// Whether a draw has vertices to bind, copied or resident.
+        template <typename CommandT>
+        [[nodiscard]] static bool HasVertexSourceEXT(const CommandT& command)
+        {
+            return !command.vertexData.empty() || command.resident.vertexStorage != nullptr;
+        }
+        /// Whether a draw has indices to bind, copied or resident.
+        template <typename CommandT>
+        [[nodiscard]] static bool HasIndexSourceEXT(const CommandT& command)
+        {
+            return !command.indexData.empty() || command.resident.indexStorage != nullptr;
+        }
+        /// STREETPERF-0004: an index buffer's bytes as the draw sees them -- its own storage,
+        /// bound in place, or a copy where it has none.
+        template <typename CommandT>
+        static void CaptureIndicesEXT(CommandT& command, const WebGPUIndexBufferRenderer& ib)
+        {
+            if (ib.Storage() != nullptr && !ib.ShadowData().empty())
+            {
+                command.resident.indexStorage = ib.Storage();
+                command.resident.indexSize = ib.ShadowData().size();
+            }
+            else
+            {
+                command.indexData = ib.ShadowData();
+            }
+        }
+
         [[nodiscard]] WGPUBuffer CreateAndBindDeferredIndexBuffer(
             WGPURenderPassEncoder pass, const std::vector<std::uint8_t>& logicalData, bool index32);
         /// Return @p buffer to the pool for reuse (or release it if the class cap is reached).
@@ -4429,6 +4518,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /**
              * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
              *
@@ -4565,6 +4656,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /**
              * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
              *
@@ -4677,6 +4770,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /**
              * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
              *
@@ -4812,6 +4907,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /**
              * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
              *
@@ -4936,6 +5033,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;
             /**
              * @brief WEBGPU-172: every stream after the first, per-vertex and per-instance alike.
@@ -5042,6 +5141,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;
             /// plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
@@ -5195,6 +5296,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -5309,6 +5412,8 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;
             /// plans/plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
             bool colored = false;
@@ -5412,6 +5517,8 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
             WebGPUIndirectArgsEXT indirect{};
             std::vector<std::uint8_t> vertexData;
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -5510,6 +5617,8 @@ namespace CNA::Internal::Renderers::WebGPU
             };
             std::vector<Stream> streams;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
+            /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             bool indexed = false;
             bool index32 = false;
             std::uint32_t vertexCount = 0;
