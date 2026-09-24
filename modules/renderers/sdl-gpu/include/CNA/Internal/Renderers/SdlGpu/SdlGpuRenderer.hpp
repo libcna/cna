@@ -17,6 +17,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -1116,6 +1117,32 @@ namespace CNA::Internal::Renderers::SdlGpu
         const ITexture3DRenderer* texture, const char* usage);
 
     /** @brief `SDL_gpu`-backed vertex buffer. */
+    /**
+     * @brief STREETPERF-0002: a vertex or index buffer's GPU storage, shared with queued draws.
+     *
+     * A queued draw binds the storage its buffer had when the draw was issued and keeps it alive
+     * until the frame is submitted, so a temporary buffer (`DrawUserPrimitives`) may die first.
+     * A `SetData` while a queued draw still holds the storage moves the buffer to fresh storage:
+     * the queued draw keeps what it was issued with -- XNA's semantics -- without every draw
+     * copying the buffer's bytes and uploading them again at `Present()`.
+     */
+    struct SdlGpuBufferStorageEXT
+    {
+        /** @brief Creates storage of @p capacityBytes with @p usage on @p device. */
+        SdlGpuBufferStorageEXT(SDL_GPUDevice* device, SDL_GPUBufferUsageFlags usage, Uint32 capacityBytes);
+        /** @brief Releases the native buffer. */
+        ~SdlGpuBufferStorageEXT();
+        SdlGpuBufferStorageEXT(const SdlGpuBufferStorageEXT&) = delete;
+        SdlGpuBufferStorageEXT& operator=(const SdlGpuBufferStorageEXT&) = delete;
+
+        /** @brief The device the buffer belongs to. */
+        SDL_GPUDevice* device = nullptr;
+        /** @brief The native buffer. */
+        SDL_GPUBuffer* buffer = nullptr;
+        /** @brief Its size in bytes. */
+        Uint32 capacityBytes = 0;
+    };
+
     class SdlGpuVertexBufferRenderer final : public IVertexBufferRenderer
     {
     public:
@@ -1150,7 +1177,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
         /** @brief Returns the underlying `SDL_GPUBuffer`. CNAEXT — internal use only. */
-        CNAEXT [[nodiscard]] SDL_GPUBuffer* Buffer() const { return buffer_; }
+        CNAEXT [[nodiscard]] SDL_GPUBuffer* Buffer() const { return storage_ ? storage_->buffer : nullptr; }
+        /** @brief The storage a draw binds in place (STREETPERF-0002); null before any `SetData`. CNAEXT. */
+        CNAEXT [[nodiscard]] const std::shared_ptr<SdlGpuBufferStorageEXT>& Storage() const { return storage_; }
         /** @brief Returns the vertex stride in bytes from the most recent `SetData()`. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t Stride() const { return stride_; }
         // CPU-side copy of the most recent SetData() upload -- needed because DrawColoredPrimitives()/
@@ -1167,8 +1196,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     private:
         SdlGpuRenderer* owner_ = nullptr;
-        SDL_GPUBuffer* buffer_ = nullptr;
-        Uint32 capacityBytes_ = 0;
+        std::shared_ptr<SdlGpuBufferStorageEXT> storage_;
         int vertexCapacity_ = 0;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
@@ -1193,7 +1221,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         /** @brief Returns the underlying `SDL_GPUBuffer`. CNAEXT — internal use only. */
-        CNAEXT [[nodiscard]] SDL_GPUBuffer* Buffer() const { return buffer_; }
+        CNAEXT [[nodiscard]] SDL_GPUBuffer* Buffer() const { return storage_ ? storage_->buffer : nullptr; }
+        /** @brief The storage a draw binds in place (STREETPERF-0002); null before any upload. CNAEXT. */
+        CNAEXT [[nodiscard]] const std::shared_ptr<SdlGpuBufferStorageEXT>& Storage() const { return storage_; }
         /** @brief CPU-side copy of the most recent upload. CNAEXT — see SdlGpuVertexBufferRenderer::ShadowData(). */
         CNAEXT [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
@@ -1201,8 +1231,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit, bool cycle);
 
         SdlGpuRenderer* owner_ = nullptr;
-        SDL_GPUBuffer* buffer_ = nullptr;
-        Uint32 capacityBytes_ = 0;
+        std::shared_ptr<SdlGpuBufferStorageEXT> storage_;
         int indexCapacity_ = 0;
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;
@@ -2037,6 +2066,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /** @brief One additional vertex stream captured for deferred replay. */
+        /** @brief STREETPERF-0002: the source buffers' own storage, when a draw binds it in place. */
+        struct ResidentGeometryEXT
+        {
+            /** @brief The vertex buffer's storage, or null when `vertexData` carries the bytes. */
+            std::shared_ptr<SdlGpuBufferStorageEXT> vertexStorage;
+            /** @brief Byte offset of the draw's first vertex in that storage. */
+            Uint32 vertexOffset = 0;
+            /** @brief The index buffer's storage, or null when `indexData` carries the bytes. */
+            std::shared_ptr<SdlGpuBufferStorageEXT> indexStorage;
+        };
+
         struct CapturedStockVertexStreamEXT
         {
             std::vector<std::uint8_t> data;
@@ -2181,6 +2221,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             DrawTarget target;
             /** @brief Transient, set by `UploadSceneDrawData`. */
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             /** @brief Transient, set by `UploadSceneDrawData`. */
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -2222,6 +2266,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;  ///< transient, set by UploadSceneDrawData
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
         };
@@ -2277,6 +2325,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -2332,6 +2384,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -2386,6 +2442,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -2450,6 +2510,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -2522,6 +2586,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -2591,6 +2659,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool hasVertexColor = false;  ///< normalized stride 56 vs stride 52
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
             SDL_GPUTexture* uploadedBoneTexture = nullptr;
         };
@@ -2673,6 +2745,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 4> iblParams{};
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
             SDL_GPUTexture* uploadedBoneTexture = nullptr;  ///< only set when skinned == true
         };
@@ -2734,6 +2810,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;  ///< transient, set by UploadSceneDrawData
+            /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */
+            Uint32 uploadedVertexOffset = 0;
+            /** @brief STREETPERF-0002: storage bound in place instead of `vertexData`/`indexData`. */
+            ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
         };
 #endif  // CNA_SDL_GPU_COMPILED_EFFECTS
@@ -2959,6 +3039,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] std::size_t GetRecordedDebugMarkerCountEXT() const
         {
             return recordedDebugMarkersEXT_;
+        }
+
+        /** @brief Bytes the last frame staged for its 3D draws' geometry and palettes. Test-only.
+         *  CNAEXT. STREETPERF-0002: a draw from buffers whose storage it binds stages none.
+         *  @return The byte count of the most recent scene upload. */
+        CNAEXT [[nodiscard]] std::uint64_t GetLastSceneUploadBytesEXT() const
+        {
+            return lastSceneUploadBytesEXT_;
         }
 
         // ---- modern (CNAEXT) compute and storage. SMG-0012 ----
@@ -3577,6 +3665,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Returns the underlying `SDL_GPUDevice`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }
         /**
+         * @brief Queues a vertex or index buffer's contents for the next frame's copy pass.
+         *
+         * STREETPERF-0002: `SetData` used to acquire, record and submit a command buffer of its
+         * own for every call -- cna-street's instancing rewrites ~340 buffers a frame -- although
+         * nothing reads the buffer before the frame's draws, whose copy pass runs first. Safe to
+         * call from a loading thread. CNAEXT.
+         *
+         * @param storage The storage the bytes are written to.
+         * @param data The bytes; copied before the call returns.
+         * @param sizeBytes How many bytes.
+         * @param cycle Whether the upload may cycle storage the GPU is still reading.
+         */
+        CNAEXT void QueueBufferUploadEXT(std::shared_ptr<SdlGpuBufferStorageEXT> storage,
+                                         const void* data, Uint32 sizeBytes, bool cycle);
+        /**
          * @brief Whether `SDL_CreateGPUDevice`'s `debug_mode` was requested for this device.
          *
          * Mirrors `DirectX11Renderer::IsDebugLayerEnabledEXT()`'s identical `#ifndef NDEBUG`
@@ -3883,7 +3986,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const StockDrawVertexStreamsEXT& streams, int vertexStart,
             std::vector<std::uint8_t>& stream0Data,
             std::vector<CapturedStockVertexStreamEXT>& extra,
-            int instanceCount = 1);
+            int instanceCount = 1, ResidentGeometryEXT* resident = nullptr);
 
         [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
             const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
@@ -3995,7 +4098,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         static void BindInstanceTransformStreamEXT(
             SDL_GPURenderPass* pass, const InstanceTransformStreamEXT& instance);
         static void BindStockVertexBuffersEXT(
-            SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+            SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer, Uint32 vertexOffset,
             const std::vector<CapturedStockVertexStreamEXT>& extraVertexStreams,
             SDL_GPUBuffer* neutralVertexBuffer,
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
@@ -4211,11 +4314,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     SDL_GPUGraphicsPipeline*& boundPipeline);
 #endif
 
-        // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
-        // transient SDL_GPUBuffer per command (mirrors WebGPURenderer's own per-draw
-        // transient-buffer approach) -- must run in the same copy pass as UploadSpriteVertexData,
-        // BEFORE BeginGPURenderPass.
+        // Uploads every queued 3D draw command's shadow-copied vertex/index data into its own
+        // SDL_GPUBuffer -- must run in the same copy pass as UploadSpriteVertexData, BEFORE
+        // BeginGPURenderPass. STREETPERF-0002: the buffers, the bone-palette textures and the
+        // staging transfer buffers are pooled across frames and rewritten with SDL's cycling,
+        // rather than created and released for every draw of every frame.
         void UploadSceneDrawData(SDL_GPUCommandBuffer* cmd);
+        /// A pooled scene buffer of at least @p sizeBytes for @p usage, marked in use.
+        SDL_GPUBuffer* AcquireSceneBufferEXT(SDL_GPUBufferUsageFlags usage, Uint32 sizeBytes);
+        /// A pooled bone-palette texture, marked in use.
+        SDL_GPUTexture* AcquireBonePaletteTextureEXT();
+        /// Returns an in-use scene buffer to its pool; one the pool does not know is released.
+        void RecycleSceneBufferEXT(SDL_GPUBuffer*& buffer);
+        /// Returns an in-use bone-palette texture to its pool; an unknown one is released.
+        void RecycleBonePaletteTextureEXT(SDL_GPUTexture*& texture);
+        /// Releases every pooled scene buffer, texture and transfer chunk (teardown).
+        void DestroySceneUploadPoolsEXT();
         void IssueColoredDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const ColoredDrawCommand& command,
                              SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                              SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
@@ -4244,9 +4358,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                               SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                               SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                               std::uint64_t segment);
-        // Releases every transient buffer UploadSceneDrawData created, and clears all 3 queues --
-        // safe to call immediately after SDL_SubmitGPUCommandBuffer (SDL_gpu defers the actual
-        // free until the GPU is done, per SDL_ReleaseGPUBuffer's own documented contract).
+        // Returns every buffer and texture UploadSceneDrawData handed out to its pool, and clears
+        // the queues -- safe immediately after SDL_SubmitGPUCommandBuffer: the next frame's upload
+        // cycles any buffer the GPU may still be reading (STREETPERF-0002).
         void ReleaseSceneDrawBuffers(bool clearCommands = true);
         [[nodiscard]] SDL_GPUPrimitiveType ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
@@ -4265,6 +4379,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         // family is being queued. `params` is null only for the DrawUser* path, whose vertex and
         // index data GraphicsDevice has already copied and rebased, so its native offsets are
         // legitimately zero.
+        // STREETPERF-0002: an index buffer's bytes as the draw sees them -- its own storage, bound
+        // in place, or a copy where it has none.
+        template <typename CommandT>
+        static void CaptureIndicesEXT(CommandT& command, const SdlGpuIndexBufferRenderer& ib)
+        {
+            if (ib.Storage() != nullptr && !ib.ShadowData().empty())
+                command.resident.indexStorage = ib.Storage();
+            else
+                command.indexData = ib.ShadowData();
+        }
+
         template<typename CommandT>
         void ApplyIndexedRange(CommandT& command,
                                const SdlGpuIndexBufferRenderer& ib,
@@ -4668,6 +4793,31 @@ namespace CNA::Internal::Renderers::SdlGpu
         // See QueueTextureRelease's own doc comment -- GPU texture handles from a destroyed
         // render target, deferred until the next successful command-buffer submit.
         std::vector<SDL_GPUTexture*> pendingTextureReleases_;
+        // STREETPERF-0002: scene-upload pools. A free buffer is keyed by usage and power-of-two
+        // capacity; an in-use one remembers its key until ReleaseSceneDrawBuffers returns it.
+        std::unordered_map<std::uint64_t, std::vector<SDL_GPUBuffer*>> sceneBufferFreeEXT_;
+        std::unordered_map<SDL_GPUBuffer*, std::uint64_t> sceneBufferInUseEXT_;
+        std::vector<SDL_GPUTexture*> bonePaletteFreeEXT_;
+        std::vector<SDL_GPUTexture*> bonePaletteInUseEXT_;
+        /// Staging chunks, walked in order by each upload and mapped once each with cycling.
+        struct SceneTransferChunkEXT
+        {
+            SDL_GPUTransferBuffer* buffer = nullptr;
+            Uint32 capacity = 0;
+        };
+        std::vector<SceneTransferChunkEXT> sceneTransferChunksEXT_;
+        std::uint64_t lastSceneUploadBytesEXT_ = 0;
+        /// STREETPERF-0002: buffer contents SetData queued for the next frame's copy pass.
+        struct PendingBufferUploadEXT
+        {
+            std::shared_ptr<SdlGpuBufferStorageEXT> storage;
+            std::vector<std::uint8_t> bytes;
+            bool cycle = true;
+        };
+        std::mutex pendingBufferUploadsMutexEXT_;
+        std::vector<PendingBufferUploadEXT> pendingBufferUploadsEXT_;
+        /// Taken by the frame being recorded; handed back if that frame fails to submit.
+        std::vector<PendingBufferUploadEXT> frameBufferUploadsEXT_;
         /// SDLGPU-81: custom-effect pipelines whose wrappers died before deferred replay.
         std::vector<SDL_GPUGraphicsPipeline*> pendingGraphicsPipelineReleases_;
 

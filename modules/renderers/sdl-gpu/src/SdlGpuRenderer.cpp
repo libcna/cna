@@ -39,6 +39,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -2581,6 +2582,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // lines below is what actually frees it. ReleaseSceneDrawBuffers() clears the 3D command
         // vectors; sprites and pending segments hold references of their own.
         ReleaseSceneDrawBuffers();
+        DestroySceneUploadPoolsEXT();
         spriteCommands_.clear();
         passSegments_.clear();
         drawOrder_.clear();
@@ -6617,7 +6619,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CollectStockVertexStreamsEXT(sdlGpuVb, params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
-                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1,
+                                     &command.resident);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -6642,7 +6645,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             // REMED-GFX-117: startIndex/baseVertex reach the native draw through the one
             // shared resolver, never a default-zero literal.
             ApplyIndexedRange(
@@ -6685,7 +6688,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
-                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1,
+                                     &command.resident);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -6711,7 +6715,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -6750,7 +6754,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
-                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1,
+                                     &command.resident);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -6777,7 +6782,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -7653,7 +7658,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
-                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1,
+                                     &command.resident);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -7678,7 +7684,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -7719,7 +7725,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
-                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1,
+                                     &command.resident);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -7754,7 +7761,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -7795,7 +7802,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, instancedLayout);
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
-                                     instancedLayout ? pendingInstanceCountEXT_ : 1);
+                                     instancedLayout ? pendingInstanceCountEXT_ : 1,
+                                     &command.resident);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -7833,7 +7841,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -8017,7 +8025,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         const auto& shadow = *stream;
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * sourceStride;
         if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        {
+            // STREETPERF-0002: bytes the buffer holds unchanged bind its own storage; a
+            // normalized stream is new data and is carried by the draw.
+            if (stream == &sdlGpuVb.ShadowData() && sdlGpuVb.Storage() != nullptr &&
+                byteOffset < shadow.size())
+            {
+                command.resident.vertexStorage = sdlGpuVb.Storage();
+                command.resident.vertexOffset = static_cast<Uint32>(byteOffset);
+            }
+            else
+            {
+                command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+            }
+        }
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -8046,7 +8067,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -8095,7 +8116,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         const auto& shadow = sdlGpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
         if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        {
+            // STREETPERF-0002: PBR reads the buffer's bytes unchanged, so it binds its storage.
+            if (sdlGpuVb.Storage() != nullptr && byteOffset < shadow.size())
+            {
+                command.resident.vertexStorage = sdlGpuVb.Storage();
+                command.resident.vertexOffset = static_cast<Uint32>(byteOffset);
+            }
+            else
+            {
+                command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+            }
+        }
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -8159,7 +8191,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(
                 command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -8593,8 +8625,18 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
             const std::size_t byteOffset = static_cast<std::size_t>(firstVertex) * stride;
             if (byteOffset <= shadow.size())
+            {
+                if (nativeSlot == 0 && source.buffer->Storage() != nullptr &&
+                    byteOffset < shadow.size())
+                {
+                    // STREETPERF-0002: bound in place, like every stock family's primary stream.
+                    command.resident.vertexStorage = source.buffer->Storage();
+                    command.resident.vertexOffset = static_cast<Uint32>(byteOffset);
+                    continue;
+                }
                 destination->assign(
                     shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+            }
         }
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
@@ -8607,7 +8649,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
@@ -8707,6 +8749,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<SDL_GPUBufferBinding> vertexBindings(
             1 + command.extraVertexStreams.size());
         vertexBindings[0].buffer = command.uploadedVertexBuffer;
+        vertexBindings[0].offset = command.uploadedVertexOffset;
         for (std::size_t i = 0; i < command.extraVertexStreams.size(); ++i)
             vertexBindings[i + 1].buffer = command.extraVertexStreams[i].uploadedBuffer;
         SDL_BindGPUVertexBuffers(
@@ -8747,7 +8790,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::array<float, 8> lodBiases{command.lodBias};
         SDL_PushGPUFragmentUniformData(cmd, 1, lodBiases.data(), sizeof(lodBiases));
 
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer, command.uploadedVertexOffset,
                                   command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
@@ -8798,7 +8841,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.texture0LodBias, command.texture1LodBias};
         SDL_PushGPUFragmentUniformData(cmd, 0, lodBiases.data(), sizeof(lodBiases));
 
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer, command.uploadedVertexOffset,
                                   command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
@@ -8859,7 +8902,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::array<float, 8> lodBiases{command.lodBias, command.envMapLodBias};
         SDL_PushGPUFragmentUniformData(cmd, 2, lodBiases.data(), sizeof(lodBiases));
 
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer, command.uploadedVertexOffset,
                                   command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
@@ -8945,6 +8988,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
+        vbBinding.offset = command.uploadedVertexOffset;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
         BindInstanceTransformStreamEXT(pass, command.instanceStream);
         SDL_GPUTextureSamplerBinding boneBinding{};
@@ -9021,6 +9065,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
+        vbBinding.offset = command.uploadedVertexOffset;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
         BindInstanceTransformStreamEXT(pass, command.instanceStream);
         // The unskinned pbrVertexShader_ declares no vertex samplers. The skinned variant reads
@@ -9117,7 +9162,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     void SdlGpuRenderer::BindStockVertexBuffersEXT(
-        SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+        SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer, const Uint32 vertexOffset,
         const std::vector<CapturedStockVertexStreamEXT>& extraVertexStreams,
         SDL_GPUBuffer* neutralVertexBuffer,
         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
@@ -9125,6 +9170,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::array<SDL_GPUBufferBinding,
                    CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 1> bindings{};
         bindings[0].buffer = vertexBuffer;
+        bindings[0].offset = vertexOffset;
         Uint32 count = 1;
         for (const CapturedStockVertexStreamEXT& stream : extraVertexStreams)
         {
@@ -9149,7 +9195,13 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
-        if (customEffect3DDrawCommands_.empty() &&
+        {
+            std::lock_guard<std::mutex> lock(pendingBufferUploadsMutexEXT_);
+            for (PendingBufferUploadEXT& upload : pendingBufferUploadsEXT_)
+                frameBufferUploadsEXT_.push_back(std::move(upload));
+            pendingBufferUploadsEXT_.clear();
+        }
+        if (frameBufferUploadsEXT_.empty() && customEffect3DDrawCommands_.empty() &&
             coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
             alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
             skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
@@ -9157,123 +9209,152 @@ namespace CNA::Internal::Renderers::SdlGpu
             && compiledEffectDrawCommands_.empty()
 #endif
             )
+        {
+            lastSceneUploadBytesEXT_ = 0;
             return;
+        }
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         CopyPassOwner copyPassOwner(copyPass);
+
+        // STREETPERF-0002: every draw used to create an SDL_GPUBuffer and an SDL_GPUTransferBuffer
+        // of its own and release both after the frame -- two native allocations a draw, most of
+        // cna-street's frame on this renderer. Now the destinations come from pools and the
+        // bytes are staged in three steps: place every item in a transfer chunk, then map each
+        // chunk once (cycling, so a chunk the GPU still reads gets a fresh backing), and only
+        // then record the copies, so no copy is recorded from a chunk that is mapped afterwards.
+        struct StagedUpload
+        {
+            const std::uint8_t* bytes = nullptr;
+            Uint32 sizeBytes = 0;
+            std::size_t chunk = 0;
+            Uint32 offset = 0;
+            SDL_GPUBuffer* buffer = nullptr;
+            SDL_GPUTexture* texture = nullptr;
+            Uint32 textureWidth = 0;
+            bool cycle = true;
+        };
+        std::vector<StagedUpload> staged;
+        std::vector<Uint32> chunkUsed;
+        const auto place = [&](StagedUpload item)
+        {
+            constexpr Uint32 kChunkBytes = 8u << 20;
+            constexpr Uint32 kAlignment = 16;
+            std::size_t chunk = chunkUsed.empty() ? 0 : chunkUsed.size() - 1;
+            Uint32 offset = chunkUsed.empty() ? 0 : (chunkUsed.back() + kAlignment - 1) & ~(kAlignment - 1);
+            if (chunkUsed.empty() || chunk >= sceneTransferChunksEXT_.size() ||
+                offset + item.sizeBytes > sceneTransferChunksEXT_[chunk].capacity)
+            {
+                chunk = chunkUsed.size();
+                offset = 0;
+                chunkUsed.push_back(0);
+                const Uint32 wanted = std::max(kChunkBytes, std::bit_ceil(item.sizeBytes));
+                if (chunk >= sceneTransferChunksEXT_.size())
+                    sceneTransferChunksEXT_.push_back({});
+                SceneTransferChunkEXT& slot = sceneTransferChunksEXT_[chunk];
+                if (slot.capacity < item.sizeBytes)
+                {
+                    if (slot.buffer != nullptr) SDL_ReleaseGPUTransferBuffer(device_, slot.buffer);
+                    SDL_GPUTransferBufferCreateInfo transferInfo{};
+                    transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+                    transferInfo.size = wanted;
+                    slot.buffer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
+                    slot.capacity = slot.buffer != nullptr ? wanted : 0;
+                    if (slot.buffer == nullptr)
+                        throw std::runtime_error(std::string(
+                            "CNA SDL_GPU: failed to create scene draw transfer buffer: ") + SDL_GetError());
+                }
+            }
+            item.chunk = chunk;
+            item.offset = offset;
+            chunkUsed[chunk] = offset + item.sizeBytes;
+            staged.push_back(item);
+        };
 
         auto uploadOne = [&](const std::vector<std::uint8_t>& data, SDL_GPUBufferUsageFlags usage) -> SDL_GPUBuffer*
         {
             if (data.empty())
                 return nullptr;
-            const Uint32 sizeBytes = static_cast<Uint32>(data.size());
-            SDL_GPUBufferCreateInfo bufferInfo{};
-            bufferInfo.usage = usage;
-            bufferInfo.size = sizeBytes;
-            SDL_GPUBuffer* buffer = SDL_CreateGPUBuffer(device_, &bufferInfo);
-            if (buffer == nullptr)
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create scene draw buffer: ") + SDL_GetError());
-
-            SDL_GPUTransferBufferCreateInfo transferInfo{};
-            transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-            transferInfo.size = sizeBytes;
-            SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
-            if (transferBuffer == nullptr)
-            {
-                SDL_ReleaseGPUBuffer(device_, buffer);
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create scene draw transfer buffer: ") + SDL_GetError());
-            }
-            void* mapped = SDL_MapGPUTransferBuffer(device_, transferBuffer, false);
-            if (mapped == nullptr)
-            {
-                SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
-                SDL_ReleaseGPUBuffer(device_, buffer);
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to map scene draw transfer buffer: ") + SDL_GetError());
-            }
-            std::memcpy(mapped, data.data(), sizeBytes);
-            SDL_UnmapGPUTransferBuffer(device_, transferBuffer);
-
-            SDL_GPUTransferBufferLocation source{};
-            source.transfer_buffer = transferBuffer;
-            SDL_GPUBufferRegion destRegion{};
-            destRegion.buffer = buffer;
-            destRegion.size = sizeBytes;
-            SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, true);
-            SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
-            return buffer;
+            StagedUpload item;
+            item.bytes = data.data();
+            item.sizeBytes = static_cast<Uint32>(data.size());
+            item.buffer = AcquireSceneBufferEXT(usage, item.sizeBytes);
+            place(item);
+            return item.buffer;
         };
 
         auto uploadBonePalette = [&](const std::array<float, 72 * 16>& bones) -> SDL_GPUTexture*
         {
-            constexpr Uint32 width = 72 * 4;
-            constexpr Uint32 sizeBytes = sizeof(bones);
-            if (!SDL_GPUTextureSupportsFormat(
-                    device_, SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
-                    SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER))
-            {
-                throw std::runtime_error(
-                    "CNA SDL_GPU: the active driver cannot sample the RGBA32F bone palette");
-            }
-
-            SDL_GPUTextureCreateInfo textureInfo{};
-            textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-            textureInfo.format = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
-            textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-            textureInfo.width = width;
-            textureInfo.height = 1;
-            textureInfo.layer_count_or_depth = 1;
-            textureInfo.num_levels = 1;
-            textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-            SDL_GPUTexture* texture = SDL_CreateGPUTexture(device_, &textureInfo);
-            if (texture == nullptr)
-                throw std::runtime_error(std::string(
-                    "CNA SDL_GPU: failed to create bone-palette texture: ") + SDL_GetError());
-
-            SDL_GPUTransferBufferCreateInfo transferInfo{};
-            transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-            transferInfo.size = sizeBytes;
-            SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
-            if (transfer == nullptr)
-            {
-                SDL_ReleaseGPUTexture(device_, texture);
-                throw std::runtime_error(std::string(
-                    "CNA SDL_GPU: failed to create bone-palette transfer buffer: ") + SDL_GetError());
-            }
-            void* mapped = SDL_MapGPUTransferBuffer(device_, transfer, false);
-            if (mapped == nullptr)
-            {
-                SDL_ReleaseGPUTransferBuffer(device_, transfer);
-                SDL_ReleaseGPUTexture(device_, texture);
-                throw std::runtime_error(std::string(
-                    "CNA SDL_GPU: failed to map bone-palette transfer buffer: ") + SDL_GetError());
-            }
-            std::memcpy(mapped, bones.data(), sizeBytes);
-            SDL_UnmapGPUTransferBuffer(device_, transfer);
-
-            SDL_GPUTextureTransferInfo source{};
-            source.transfer_buffer = transfer;
-            source.pixels_per_row = width;
-            source.rows_per_layer = 1;
-            SDL_GPUTextureRegion destination{};
-            destination.texture = texture;
-            destination.w = width;
-            destination.h = 1;
-            destination.d = 1;
-            SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
-            SDL_ReleaseGPUTransferBuffer(device_, transfer);
-            return texture;
+            StagedUpload item;
+            item.bytes = reinterpret_cast<const std::uint8_t*>(bones.data());
+            item.sizeBytes = static_cast<Uint32>(sizeof(bones));
+            item.texture = AcquireBonePaletteTextureEXT();
+            item.textureWidth = 72 * 4;
+            place(item);
+            return item.texture;
         };
 
-        const auto* neutralBegin = reinterpret_cast<const std::uint8_t*>(
-            CNA::Internal::Graphics::kNeutralVertexRecordEXT.data());
-        const std::vector<std::uint8_t> neutralData(
-            neutralBegin,
-            neutralBegin + sizeof(CNA::Internal::Graphics::kNeutralVertexRecordEXT));
+        // Buffer contents first, in the order SetData queued them: a draw below binds storage
+        // these write, and two writes of one storage must land in order.
+        for (const PendingBufferUploadEXT& upload : frameBufferUploadsEXT_)
+        {
+            StagedUpload item;
+            item.bytes = upload.bytes.data();
+            item.sizeBytes = static_cast<Uint32>(upload.bytes.size());
+            item.buffer = upload.storage->buffer;
+            item.cycle = upload.cycle;
+            place(item);
+        }
+
+        // STREETPERF-0002: a draw whose geometry is its buffers' own storage uploads nothing.
+        const auto uploadVertices = [&](auto& command) -> bool
+        {
+            if (command.resident.vertexStorage != nullptr)
+            {
+                command.uploadedVertexBuffer = command.resident.vertexStorage->buffer;
+                command.uploadedVertexOffset = command.resident.vertexOffset;
+                return true;
+            }
+            if (command.vertexData.empty())
+                return false;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            command.uploadedVertexOffset = 0;
+            return true;
+        };
+        const auto uploadIndices = [&](auto& command)
+        {
+            if (!command.indexed)
+                return;
+            if (command.resident.indexStorage != nullptr)
+                command.uploadedIndexBuffer = command.resident.indexStorage->buffer;
+            else if (!command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        };
+
+        // The neutral record is an instance-rate stream, so an instanced draw reads one record per
+        // instance. A single record left every instance after the first reading past the end of
+        // its buffer -- which this driver's robust access happened to answer with (0, 0, 0, 1),
+        // and a pooled, larger buffer answered with whatever it held before (STREETPERF-0002).
+        // Each instance count gets its own run of records; std::map keeps the bytes in place
+        // until the staged copies read them.
+        std::map<Uint32, std::vector<std::uint8_t>> neutralDataByInstances;
         const auto uploadNeutralIfNeeded = [&](auto& command)
         {
-            if (command.vertexLayout.usesNeutralRecord)
-                command.uploadedNeutralVertexBuffer =
-                    uploadOne(neutralData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            if (!command.vertexLayout.usesNeutralRecord)
+                return;
+            const Uint32 instances = std::max<Uint32>(1u, command.instanceCount);
+            std::vector<std::uint8_t>& neutralData = neutralDataByInstances[instances];
+            if (neutralData.empty())
+            {
+                const auto* record = reinterpret_cast<const std::uint8_t*>(
+                    CNA::Internal::Graphics::kNeutralVertexRecordEXT.data());
+                constexpr std::size_t recordBytes =
+                    sizeof(CNA::Internal::Graphics::kNeutralVertexRecordEXT);
+                neutralData.resize(recordBytes * instances);
+                for (Uint32 instance = 0; instance < instances; ++instance)
+                    std::memcpy(neutralData.data() + recordBytes * instance, record, recordBytes);
+            }
+            command.uploadedNeutralVertexBuffer = uploadOne(neutralData, SDL_GPU_BUFFERUSAGE_VERTEX);
         };
         const auto uploadExtraStreams = [&](auto& command)
         {
@@ -9283,110 +9364,268 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         for (ColoredDrawCommand& command : coloredDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
         // SMG-0019: a custom 3D effect's geometry rides the same per-frame upload as every stock
         // family's, and carries no extra or neutral streams of its own.
         for (CustomEffect3DDrawCommand& command : customEffect3DDrawCommands_)
         {
             // An indirect draw's counts live on the GPU, so vertexCount is legitimately zero here.
-            if (command.vertexData.empty()) continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            if (!uploadVertices(command)) continue;
+            uploadIndices(command);
         }
         for (TexturedDrawCommand& command : texturedDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
         for (LitTexturedDrawCommand& command : litTexturedDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
         for (AlphaTestDrawCommand& command : alphaTestDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
         for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
         for (EnvMapDrawCommand& command : envMapDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
         for (SkinnedDrawCommand& command : skinnedDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             command.instanceStream.uploadedBuffer =
                 uploadOne(command.instanceStream.data, SDL_GPU_BUFFERUSAGE_VERTEX);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
             command.uploadedBoneTexture = uploadBonePalette(command.boneUniforms);
         }
         for (PbrDrawCommand& command : pbrDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             command.instanceStream.uploadedBuffer =
                 uploadOne(command.instanceStream.data, SDL_GPU_BUFFERUSAGE_VERTEX);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
             if (command.skinned)
                 command.uploadedBoneTexture = uploadBonePalette(command.boneUniforms);
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         for (CompiledEffectDrawCommand& command : compiledEffectDrawCommands_)
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
+            if (command.vertexCount == 0 || !uploadVertices(command))
                 continue;
-            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             uploadExtraStreams(command);
-            if (command.indexed && !command.indexData.empty())
-                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            uploadIndices(command);
         }
 #endif
 
+        lastSceneUploadBytesEXT_ = 0;
+        for (std::size_t i = frameBufferUploadsEXT_.size(); i < staged.size(); ++i)
+            lastSceneUploadBytesEXT_ += staged[i].sizeBytes;
+        for (std::size_t chunk = 0; chunk < chunkUsed.size(); ++chunk)
+        {
+            SDL_GPUTransferBuffer* transfer = sceneTransferChunksEXT_[chunk].buffer;
+            auto* mapped = static_cast<std::uint8_t*>(SDL_MapGPUTransferBuffer(device_, transfer, true));
+            if (mapped == nullptr)
+                throw std::runtime_error(std::string(
+                    "CNA SDL_GPU: failed to map scene draw transfer buffer: ") + SDL_GetError());
+            for (const StagedUpload& item : staged)
+                if (item.chunk == chunk)
+                    std::memcpy(mapped + item.offset, item.bytes, item.sizeBytes);
+            SDL_UnmapGPUTransferBuffer(device_, transfer);
+        }
+        for (const StagedUpload& item : staged)
+        {
+            SDL_GPUTransferBuffer* transfer = sceneTransferChunksEXT_[item.chunk].buffer;
+            if (item.buffer != nullptr)
+            {
+                SDL_GPUTransferBufferLocation source{};
+                source.transfer_buffer = transfer;
+                source.offset = item.offset;
+                SDL_GPUBufferRegion destination{};
+                destination.buffer = item.buffer;
+                destination.size = item.sizeBytes;
+                SDL_UploadToGPUBuffer(copyPass, &source, &destination, item.cycle);
+            }
+            else
+            {
+                SDL_GPUTextureTransferInfo source{};
+                source.transfer_buffer = transfer;
+                source.offset = item.offset;
+                source.pixels_per_row = item.textureWidth;
+                source.rows_per_layer = 1;
+                SDL_GPUTextureRegion destination{};
+                destination.texture = item.texture;
+                destination.w = item.textureWidth;
+                destination.h = 1;
+                destination.d = 1;
+                SDL_UploadToGPUTexture(copyPass, &source, &destination, true);
+            }
+        }
+
         copyPassOwner.End();
+    }
+
+    SDL_GPUBuffer* SdlGpuRenderer::AcquireSceneBufferEXT(const SDL_GPUBufferUsageFlags usage,
+                                                         const Uint32 sizeBytes)
+    {
+        // Power-of-two capacities keep the pools few and let one buffer serve every size up to
+        // its own; a draw binds at offset 0, so the unused tail is never read.
+        const Uint32 capacity = std::max<Uint32>(256u, std::bit_ceil(sizeBytes));
+        const std::uint64_t key = (static_cast<std::uint64_t>(usage) << 32) | capacity;
+        std::vector<SDL_GPUBuffer*>& free = sceneBufferFreeEXT_[key];
+        SDL_GPUBuffer* buffer = nullptr;
+        if (!free.empty())
+        {
+            buffer = free.back();
+            free.pop_back();
+        }
+        else
+        {
+            SDL_GPUBufferCreateInfo bufferInfo{};
+            bufferInfo.usage = usage;
+            bufferInfo.size = capacity;
+            buffer = SDL_CreateGPUBuffer(device_, &bufferInfo);
+            if (buffer == nullptr)
+                throw std::runtime_error(std::string(
+                    "CNA SDL_GPU: failed to create scene draw buffer: ") + SDL_GetError());
+        }
+        sceneBufferInUseEXT_[buffer] = key;
+        return buffer;
+    }
+
+    SDL_GPUTexture* SdlGpuRenderer::AcquireBonePaletteTextureEXT()
+    {
+        SDL_GPUTexture* texture = nullptr;
+        if (!bonePaletteFreeEXT_.empty())
+        {
+            texture = bonePaletteFreeEXT_.back();
+            bonePaletteFreeEXT_.pop_back();
+        }
+        else
+        {
+            if (!SDL_GPUTextureSupportsFormat(
+                    device_, SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
+                    SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER))
+            {
+                throw std::runtime_error(
+                    "CNA SDL_GPU: the active driver cannot sample the RGBA32F bone palette");
+            }
+            SDL_GPUTextureCreateInfo textureInfo{};
+            textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+            textureInfo.format = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+            textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+            textureInfo.width = 72 * 4;
+            textureInfo.height = 1;
+            textureInfo.layer_count_or_depth = 1;
+            textureInfo.num_levels = 1;
+            textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            texture = SDL_CreateGPUTexture(device_, &textureInfo);
+            if (texture == nullptr)
+                throw std::runtime_error(std::string(
+                    "CNA SDL_GPU: failed to create bone-palette texture: ") + SDL_GetError());
+        }
+        bonePaletteInUseEXT_.push_back(texture);
+        return texture;
+    }
+
+    void SdlGpuRenderer::RecycleSceneBufferEXT(SDL_GPUBuffer*& buffer)
+    {
+        if (buffer == nullptr) return;
+        // A buffer the pool did not hand out is a vertex or index buffer's own storage, bound in
+        // place (STREETPERF-0002) and owned by that storage; the draw merely stops naming it.
+        const auto it = sceneBufferInUseEXT_.find(buffer);
+        if (it != sceneBufferInUseEXT_.end())
+        {
+            sceneBufferFreeEXT_[it->second].push_back(buffer);
+            sceneBufferInUseEXT_.erase(it);
+        }
+        buffer = nullptr;
+    }
+
+    void SdlGpuRenderer::RecycleBonePaletteTextureEXT(SDL_GPUTexture*& texture)
+    {
+        if (texture == nullptr) return;
+        const auto it = std::find(bonePaletteInUseEXT_.begin(), bonePaletteInUseEXT_.end(), texture);
+        if (it != bonePaletteInUseEXT_.end())
+        {
+            *it = bonePaletteInUseEXT_.back();
+            bonePaletteInUseEXT_.pop_back();
+            bonePaletteFreeEXT_.push_back(texture);
+        }
+        else
+        {
+            SDL_ReleaseGPUTexture(device_, texture);
+        }
+        texture = nullptr;
+    }
+
+    void SdlGpuRenderer::QueueBufferUploadEXT(std::shared_ptr<SdlGpuBufferStorageEXT> storage,
+                                              const void* data, const Uint32 sizeBytes,
+                                              const bool cycle)
+    {
+        PendingBufferUploadEXT upload;
+        upload.storage = std::move(storage);
+        upload.bytes.assign(static_cast<const std::uint8_t*>(data),
+                            static_cast<const std::uint8_t*>(data) + sizeBytes);
+        upload.cycle = cycle;
+        std::lock_guard<std::mutex> lock(pendingBufferUploadsMutexEXT_);
+        pendingBufferUploadsEXT_.push_back(std::move(upload));
+    }
+
+    void SdlGpuRenderer::DestroySceneUploadPoolsEXT()
+    {
+        frameBufferUploadsEXT_.clear();
+        {
+            std::lock_guard<std::mutex> lock(pendingBufferUploadsMutexEXT_);
+            pendingBufferUploadsEXT_.clear();
+        }
+        if (device_ == nullptr) return;
+        for (auto& [key, buffers] : sceneBufferFreeEXT_)
+            for (SDL_GPUBuffer* buffer : buffers)
+                SDL_ReleaseGPUBuffer(device_, buffer);
+        sceneBufferFreeEXT_.clear();
+        for (auto& [buffer, key] : sceneBufferInUseEXT_)
+            SDL_ReleaseGPUBuffer(device_, buffer);
+        sceneBufferInUseEXT_.clear();
+        for (SDL_GPUTexture* texture : bonePaletteFreeEXT_)
+            SDL_ReleaseGPUTexture(device_, texture);
+        bonePaletteFreeEXT_.clear();
+        for (SDL_GPUTexture* texture : bonePaletteInUseEXT_)
+            SDL_ReleaseGPUTexture(device_, texture);
+        bonePaletteInUseEXT_.clear();
+        for (SceneTransferChunkEXT& chunk : sceneTransferChunksEXT_)
+            if (chunk.buffer != nullptr)
+                SDL_ReleaseGPUTransferBuffer(device_, chunk.buffer);
+        sceneTransferChunksEXT_.clear();
     }
 
     void SdlGpuRenderer::IssueColoredDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
@@ -9405,7 +9644,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer, command.uploadedVertexOffset,
                                   command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
@@ -9446,7 +9685,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::array<float, 8> lodBiases{command.lodBias};
         SDL_PushGPUFragmentUniformData(cmd, 1, lodBiases.data(), sizeof(lodBiases));
 
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer, command.uploadedVertexOffset,
                                   command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
@@ -9498,7 +9737,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::array<float, 8> lodBiases{command.lodBias};
         SDL_PushGPUFragmentUniformData(cmd, 2, lodBiases.data(), sizeof(lodBiases));
 
-        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer, command.uploadedVertexOffset,
                                   command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
@@ -9691,22 +9930,22 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::ReleaseSceneDrawBuffers(bool clearCommands)
     {
-        auto release = [&](SDL_GPUBuffer*& buffer)
+        if (clearCommands)
         {
-            if (buffer != nullptr)
-            {
-                SDL_ReleaseGPUBuffer(device_, buffer);
-                buffer = nullptr;
-            }
-        };
-        auto releaseTexture = [&](SDL_GPUTexture*& texture)
+            frameBufferUploadsEXT_.clear();
+        }
+        else if (!frameBufferUploadsEXT_.empty())
         {
-            if (texture != nullptr)
-            {
-                SDL_ReleaseGPUTexture(device_, texture);
-                texture = nullptr;
-            }
-        };
+            // The frame failed to submit: its buffer contents go back in front of anything
+            // queued since, so the retry writes them first.
+            std::lock_guard<std::mutex> lock(pendingBufferUploadsMutexEXT_);
+            for (PendingBufferUploadEXT& upload : pendingBufferUploadsEXT_)
+                frameBufferUploadsEXT_.push_back(std::move(upload));
+            pendingBufferUploadsEXT_ = std::move(frameBufferUploadsEXT_);
+            frameBufferUploadsEXT_.clear();
+        }
+        auto release = [&](SDL_GPUBuffer*& buffer) { RecycleSceneBufferEXT(buffer); };
+        auto releaseTexture = [&](SDL_GPUTexture*& texture) { RecycleBonePaletteTextureEXT(texture); };
         const auto releaseExtraStreams = [&](auto& command)
         {
             for (CapturedStockVertexStreamEXT& stream : command.extraVertexStreams)
@@ -9886,7 +10125,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
         const StockDrawVertexStreamsEXT& streams, int vertexStart,
         std::vector<std::uint8_t>& stream0Data,
-        std::vector<CapturedStockVertexStreamEXT>& extra, int instanceCount)
+        std::vector<CapturedStockVertexStreamEXT>& extra, int instanceCount,
+        ResidentGeometryEXT* resident)
     {
         stream0Data.clear();
         extra.clear();
@@ -9937,6 +10177,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             const std::size_t byteOffset = firstRecord * static_cast<std::size_t>(stride);
             if (byteOffset <= shadow.size())
             {
+                // STREETPERF-0002: the per-vertex primary stream binds its buffer's own storage.
+                if (i == 0 && resident != nullptr && source.buffer->Storage() != nullptr &&
+                    byteOffset < shadow.size())
+                {
+                    resident->vertexStorage = source.buffer->Storage();
+                    resident->vertexOffset = static_cast<Uint32>(byteOffset);
+                    continue;
+                }
                 destination->assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset),
                                     shadow.end());
             }
@@ -10435,16 +10683,26 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::vector<std::uint8_t>& vertexShadow = sdlGpuVb.ShadowData();
         const std::size_t byteStart =
             static_cast<std::size_t>(vertexStart) * static_cast<std::size_t>(command.stride);
-        command.vertexData.assign(
-            vertexShadow.begin() + static_cast<std::ptrdiff_t>(std::min(byteStart, vertexShadow.size())),
-            vertexShadow.end());
+        if (sdlGpuVb.Storage() != nullptr && byteStart < vertexShadow.size())
+        {
+            // STREETPERF-0002: the buffer's own storage, bound at the draw's first vertex.
+            command.resident.vertexStorage = sdlGpuVb.Storage();
+            command.resident.vertexOffset =
+                static_cast<Uint32>(std::min(byteStart, vertexShadow.size()));
+        }
+        else
+        {
+            command.vertexData.assign(
+                vertexShadow.begin() + static_cast<std::ptrdiff_t>(std::min(byteStart, vertexShadow.size())),
+                vertexShadow.end());
+        }
 
         if (ib != nullptr)
         {
             const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(*ib);
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
-            command.indexData = sdlGpuIb.ShadowData();
+            CaptureIndicesEXT(command, sdlGpuIb);
             ApplyIndexedRange(command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount =
                 static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
@@ -10574,6 +10832,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
+        vbBinding.offset = command.uploadedVertexOffset;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -12516,11 +12775,44 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     }
 
-    SdlGpuVertexBufferRenderer::~SdlGpuVertexBufferRenderer()
+    SdlGpuBufferStorageEXT::SdlGpuBufferStorageEXT(SDL_GPUDevice* const device,
+                                                   const SDL_GPUBufferUsageFlags usage,
+                                                   const Uint32 capacity)
+        : device(device), capacityBytes(capacity)
     {
-        if (buffer_ != nullptr)
-            SDL_ReleaseGPUBuffer(owner_->Device(), buffer_);
+        SDL_GPUBufferCreateInfo createInfo{};
+        createInfo.usage = usage;
+        createInfo.size = capacity;
+        buffer = SDL_CreateGPUBuffer(device, &createInfo);
+        if (buffer == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create ") +
+                                     (usage == SDL_GPU_BUFFERUSAGE_INDEX ? "index" : "vertex") +
+                                     " buffer: " + SDL_GetError());
     }
+
+    SdlGpuBufferStorageEXT::~SdlGpuBufferStorageEXT()
+    {
+        if (buffer != nullptr)
+            SDL_ReleaseGPUBuffer(device, buffer);
+    }
+
+    namespace
+    {
+        // STREETPERF-0002: the storage an upload of @p allocSizeBytes writes. A queued draw that
+        // still holds the current storage keeps it -- with the contents it was issued with -- and
+        // the buffer moves to fresh storage; otherwise the current one is rewritten in place.
+        std::shared_ptr<SdlGpuBufferStorageEXT>& StorageForUploadEXT(
+            std::shared_ptr<SdlGpuBufferStorageEXT>& storage, SDL_GPUDevice* device,
+            SDL_GPUBufferUsageFlags usage, Uint32 allocSizeBytes)
+        {
+            if (storage == nullptr || storage->capacityBytes < allocSizeBytes ||
+                storage.use_count() > 1)
+                storage = std::make_shared<SdlGpuBufferStorageEXT>(device, usage, allocSizeBytes);
+            return storage;
+        }
+    }
+
+    SdlGpuVertexBufferRenderer::~SdlGpuVertexBufferRenderer() = default;
 
     void SdlGpuVertexBufferRenderer::SetData(const void* data, int vertexCount, std::size_t strideInBytes)
     {
@@ -12538,18 +12830,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // model part with vertexCount == 0), so the backing allocation is clamped to that
         // minimum; vertexCount_/shadowData_ below still report the real (possibly zero) size.
         const Uint32 allocSizeBytes = std::max<Uint32>(sizeBytes, 4);
-        if (buffer_ == nullptr || capacityBytes_ < allocSizeBytes)
-        {
-            if (buffer_ != nullptr)
-                SDL_ReleaseGPUBuffer(device, buffer_);
-            SDL_GPUBufferCreateInfo createInfo{};
-            createInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-            createInfo.size = allocSizeBytes;
-            buffer_ = SDL_CreateGPUBuffer(device, &createInfo);
-            if (buffer_ == nullptr)
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create vertex buffer: ") + SDL_GetError());
-            capacityBytes_ = allocSizeBytes;
-        }
+        StorageForUploadEXT(storage_, device, SDL_GPU_BUFFERUSAGE_VERTEX, allocSizeBytes);
 
         if (sizeBytes == 0)
         {
@@ -12559,41 +12840,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 
-        SDL_GPUTransferBufferCreateInfo transferInfo{};
-        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        transferInfo.size = sizeBytes;
-        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
-        if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create vertex transfer buffer: ") + SDL_GetError());
-        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
-        if (mapped == nullptr)
-        {
-            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to map vertex transfer buffer: ") + SDL_GetError());
-        }
-        std::memcpy(mapped, data, sizeBytes);
-        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
-
-        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
-        if (cmd == nullptr)
-        {
-            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_AcquireGPUCommandBuffer (vertex upload) failed: ") + SDL_GetError());
-        }
-        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
-        SDL_GPUTransferBufferLocation source{};
-        source.transfer_buffer = transferBuffer;
-        SDL_GPUBufferRegion destRegion{};
-        destRegion.buffer = buffer_;
-        destRegion.size = sizeBytes;
-        SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, cycle);
-        SDL_EndGPUCopyPass(copyPass);
-        if (!SDL_SubmitGPUCommandBuffer(cmd))
-        {
-            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer (vertex upload) failed: ") + SDL_GetError());
-        }
-        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        // STREETPERF-0002: written by the next frame's copy pass, before any draw reads it.
+        owner_->QueueBufferUploadEXT(storage_, data, sizeBytes, cycle);
 
         vertexCount_ = vertexCount;
         stride_ = strideInBytes;
@@ -12607,11 +12855,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     }
 
-    SdlGpuIndexBufferRenderer::~SdlGpuIndexBufferRenderer()
-    {
-        if (buffer_ != nullptr)
-            SDL_ReleaseGPUBuffer(owner_->Device(), buffer_);
-    }
+    SdlGpuIndexBufferRenderer::~SdlGpuIndexBufferRenderer() = default;
 
     // SetDataOptions::None/Discard both cycle -- see SdlGpuVertexBufferRenderer::SetDataWithOptions's
     // own doc comment for the real Discard/NoOverwrite rationale.
@@ -12635,18 +12879,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // driver asserts on GPU buffers smaller than 4 bytes (e.g. a skinned model part with
         // indexCount == 0), so the backing allocation is clamped to that minimum.
         const Uint32 allocSizeBytes = std::max<Uint32>(sizeBytes, 4);
-        if (buffer_ == nullptr || capacityBytes_ < allocSizeBytes)
-        {
-            if (buffer_ != nullptr)
-                SDL_ReleaseGPUBuffer(device, buffer_);
-            SDL_GPUBufferCreateInfo createInfo{};
-            createInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
-            createInfo.size = allocSizeBytes;
-            buffer_ = SDL_CreateGPUBuffer(device, &createInfo);
-            if (buffer_ == nullptr)
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create index buffer: ") + SDL_GetError());
-            capacityBytes_ = allocSizeBytes;
-        }
+        StorageForUploadEXT(storage_, device, SDL_GPU_BUFFERUSAGE_INDEX, allocSizeBytes);
 
         if (sizeBytes == 0)
         {
@@ -12656,41 +12889,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 
-        SDL_GPUTransferBufferCreateInfo transferInfo{};
-        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        transferInfo.size = sizeBytes;
-        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
-        if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create index transfer buffer: ") + SDL_GetError());
-        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
-        if (mapped == nullptr)
-        {
-            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to map index transfer buffer: ") + SDL_GetError());
-        }
-        std::memcpy(mapped, data, sizeBytes);
-        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
-
-        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
-        if (cmd == nullptr)
-        {
-            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_AcquireGPUCommandBuffer (index upload) failed: ") + SDL_GetError());
-        }
-        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
-        SDL_GPUTransferBufferLocation source{};
-        source.transfer_buffer = transferBuffer;
-        SDL_GPUBufferRegion destRegion{};
-        destRegion.buffer = buffer_;
-        destRegion.size = sizeBytes;
-        SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, cycle);
-        SDL_EndGPUCopyPass(copyPass);
-        if (!SDL_SubmitGPUCommandBuffer(cmd))
-        {
-            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer (index upload) failed: ") + SDL_GetError());
-        }
-        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        // STREETPERF-0002: written by the next frame's copy pass, before any draw reads it.
+        owner_->QueueBufferUploadEXT(storage_, data, sizeBytes, cycle);
 
         indexCount_ = indexCount;
         thirtyTwoBit_ = dataIsThirtyTwoBit;
