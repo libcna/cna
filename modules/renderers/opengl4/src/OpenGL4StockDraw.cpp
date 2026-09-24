@@ -5,6 +5,7 @@
 // declaration-driven semantic attribute binding, multi-stream/instance stream placement and the
 // negative-base-vertex fallback carry EasyGL's measured semantics over raw desktop GL.
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
+#include "CNA/Internal/Renderers/OpenGL4/OpenGL4Modern.hpp"
 #include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Renderers/Common/GlStockShaderSources.hpp"
@@ -1305,7 +1306,8 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                             GLenum indexType,
                                                             const void* indexOffset,
                                                             int startIndex, int baseVertex,
-                                                            bool instanced, int instanceCount)
+                                                            bool instanced, int instanceCount,
+                                                            int firstInstance)
     {
         // A negative base is valid in XNA when the stored indices compensate it. Folding it into
         // the index slice avoids driver-dependent handling of negative native base vertices.
@@ -1317,7 +1319,15 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         const void* effectiveOffset = foldNegativeIndices ? nullptr : indexOffset;
         const int effectiveBaseVertex = foldNegativeIndices ? 0 : baseVertex;
-        if (instanced)
+        if (instanced && firstInstance > 0)
+        {
+            // GL4-0026: baseinstance offsets every per-instance attribute's fetch, which is what
+            // CNA's first logical instance means; gl_InstanceID still counts from zero.
+            gl4_glDrawElementsInstancedBaseVertexBaseInstance(
+                primitive, indexCount, indexType, effectiveOffset, instanceCount,
+                effectiveBaseVertex, static_cast<GLuint>(firstInstance));
+        }
+        else if (instanced)
         {
             if (effectiveBaseVertex == 0)
                 gl4_glDrawElementsInstanced(primitive, indexCount, indexType, effectiveOffset,
@@ -1634,7 +1644,167 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         DrawIndexedWithBaseVertexFallback(ib, ToGLPrimitive(primitive), indexCount, indexType,
                                           indexOffset, params.startIndex, params.baseVertex, true,
-                                          instanceCount);
+                                          instanceCount, params.firstInstance);
+
+        for (int i = placements.count; i-- > 0;)
+        {
+            const InstanceStreamPlacement& placement = placements.entries[static_cast<std::size_t>(i)];
+            DisableDeclarationAttributes(placement.firstLocation, placement.elementCount);
+        }
+        if (reconfigurePerVertex && params.customEffectRenderer != nullptr)
+            RestoreSingleStreamAttributes(params);
+        if (stock != nullptr && stock->loc_instanced >= 0)
+            gl4_glUniform1f(stock->loc_instanced, 0.0f);
+        gl4_glBindVertexArray(0);
+        if (semanticLayout || integerInputs) RestoreDeclarationLayout(vb);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Indirect draws (plans/plan_opengl4_modern_graphics.md GL4-0026)
+    // ------------------------------------------------------------------------------------
+
+    void OpenGL4Renderer::DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                    const Matrix& world, const Matrix& view,
+                                                    const Matrix& projection,
+                                                    PrimitiveType primitive,
+                                                    const IStorageBufferRenderer& argumentBuffer,
+                                                    int argumentByteOffset,
+                                                    const GpuDrawParams& params)
+    {
+        IssueIndirectDrawEXT(vb, nullptr, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
+    }
+
+    void OpenGL4Renderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib, const Matrix& world,
+        const Matrix& view, const Matrix& projection, PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        IssueIndirectDrawEXT(vb, &ib, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
+    }
+
+    void OpenGL4Renderer::IssueIndirectDrawEXT(const IVertexBufferRenderer& vbIn,
+                                               const IIndexBufferRenderer* ibIn,
+                                               const Matrix& world, const Matrix& view,
+                                               const Matrix& projection, PrimitiveType primitive,
+                                               const IStorageBufferRenderer& argumentBuffer,
+                                               int argumentByteOffset,
+                                               const GpuDrawParams& paramsIn)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (!SupportsIndirectDrawEXT())
+            throw System::NotSupportedException(
+                "OpenGL4: this context resolved no glDrawArraysIndirect/glDrawElementsIndirect.");
+        if (paramsIn.compiledEffectRuntime != nullptr)
+            throw System::NotSupportedException(
+                "OpenGL4: an indirect draw does not accept a compiled (FX) effect; the effect "
+                "framework's own draw routes carry the primitive count this route reads from GPU "
+                "memory instead.");
+        const auto* arguments = dynamic_cast<const OpenGL4StorageBufferRenderer*>(&argumentBuffer);
+        if (arguments == nullptr)
+            throw std::invalid_argument(
+                "OpenGL4: the indirect argument buffer was not created by this renderer.");
+        ApplyStencilPrimitiveTopology(primitive);
+
+        auto& vb = const_cast<OpenGL4VertexBufferRenderer&>(
+            static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
+        GpuDrawParams unlitScratch;
+        const GpuDrawParams& params = StockParamsFor(vb, paramsIn, unlitScratch);
+        const auto* ib = static_cast<const OpenGL4IndexBufferRenderer*>(ibIn);
+        const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
+        // REMED-GFX-218: validated before the VAO is touched, exactly as on the ordinary routes.
+        if (params.customEffectRenderer == nullptr)
+            RequireDeclarationFitsStockProgram(vb.GetDeclarationElements(), layoutStride, params);
+
+        // The instanced route's stream configuration, because an indirect draw always carries an
+        // instance count -- its argument record has a word for it whether or not it exceeds 1.
+        const bool multiStream = HasMultipleVertexStreams(params);
+        const GpuVertexStreamBinding* firstPerVertex = FirstPerVertexStream(params);
+        const bool reconfigurePerVertex =
+            multiStream || (firstPerVertex != nullptr && firstPerVertex->vertexOffset != 0);
+        if (reconfigurePerVertex && vb.GetDeclarationElements().empty())
+            throw System::InvalidOperationException(
+                "OpenGL4 indirect drawing cannot apply a nonzero vertex-buffer offset without a "
+                "VertexDeclaration.");
+
+        InstanceStreamPlacements placements;
+        const unsigned int instanceBaseLocation = params.customEffectRenderer != nullptr
+            ? PerVertexLocationCount(params)
+            : kStockInstanceBaseLocation;
+        if (FirstInstanceStream(params) != nullptr)
+        {
+            if ((params.customEffectRenderer == nullptr &&
+                 instanceBaseLocation < PerVertexLocationCount(params)) ||
+                !PlaceInstanceStreams(params, instanceBaseLocation, placements))
+            {
+                throw System::InvalidOperationException(
+                    "OpenGL4 indirect drawing requires a complete per-instance declaration "
+                    "within the 16-attribute XNA profile limit.");
+            }
+        }
+
+        const bool semanticLayout = params.customEffectRenderer == nullptr &&
+                                    ConfigureDeclarationForStockProgram(vb, layoutStride, params);
+        gl4_glBindVertexArray(vb.VaoHandle());
+        if (params.customEffectRenderer != nullptr && reconfigurePerVertex &&
+            !ConfigureMultiStreamAttributes(params))
+        {
+            gl4_glBindVertexArray(0);
+            throw System::InvalidOperationException(
+                "OpenGL4 multi-stream drawing requires every bound VertexBuffer to carry a "
+                "VertexDeclaration.");
+        }
+        {
+            std::size_t placementIndex = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0) continue;
+                const InstanceStreamPlacement& placement = placements.entries[placementIndex++];
+                ConfigureDeclarationAttributes(AsBuffer(stream.buffer), placement.firstLocation,
+                                               stream.vertexOffset,
+                                               static_cast<unsigned int>(stream.instanceFrequency),
+                                               placement.elementCount);
+            }
+        }
+
+        OpenGL4StockProgram* stock = nullptr;
+        bool integerInputs = false;
+        if (params.customEffectRenderer)
+        {
+            BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
+            integerInputs =
+                RebindIntegerShaderInputs(params.customEffectRenderer, vb, params, &placements);
+        }
+        else
+        {
+            stock = &SelectProgram(layoutStride, params);
+            stock->prog.Use();
+            BindDrawParams(*stock, world, view, projection, params);
+        }
+
+        // The GPU fetches the counts from this buffer as the command executes: nothing here reads
+        // them and nothing waits for them. A dispatch that wrote them ended with a barrier that
+        // covers command reads (OpenGL4ComputeShaderRenderer::DispatchEXT).
+        GLint previousIndirect = 0;
+        glGetIntegerv(GL_DRAW_INDIRECT_BUFFER_BINDING, &previousIndirect);
+        gl4_glBindBuffer(GL_DRAW_INDIRECT_BUFFER, arguments->GLHandle());
+        const void* address =
+            reinterpret_cast<const void*>(static_cast<std::uintptr_t>(argumentByteOffset));
+        if (ib != nullptr)
+        {
+            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->IboHandle());
+            gl4_glDrawElementsIndirect(ToGLPrimitive(primitive),
+                                       ib->IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                                       address);
+        }
+        else
+        {
+            gl4_glDrawArraysIndirect(ToGLPrimitive(primitive), address);
+        }
+        gl4_glBindBuffer(GL_DRAW_INDIRECT_BUFFER, static_cast<GLuint>(previousIndirect));
 
         for (int i = placements.count; i-- > 0;)
         {

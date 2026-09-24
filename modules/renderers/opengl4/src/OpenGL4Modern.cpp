@@ -669,6 +669,16 @@ namespace CNA::Internal::Renderers::OpenGL4
         if (native != 0) gl4_glMemoryBarrier(native);
     }
 
+    bool OpenGL4Renderer::SupportsIndirectDrawEXT() const
+    {
+        return modernCapabilities_.indirectDrawingNative;
+    }
+
+    bool OpenGL4Renderer::SupportsBaseInstanceDrawingEXT() const
+    {
+        return modernCapabilities_.baseInstanceDrawingNative;
+    }
+
     void OpenGL4Renderer::BindStorageBufferForDrawEXT(const int binding,
                                                       const IStorageBufferRenderer& buffer)
     {

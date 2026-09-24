@@ -877,3 +877,42 @@ now runs EasyGL's desktop image path, which reads back zero for every texel.
 | 6 | GPU timer | later B task |
 | 1 | Color storage image (format usage unclassified) | later B task |
 | 1 + 1 + 1 | refusal paths for capabilities OpenGL4 has, and SPIR-V-only intake | stay skipped |
+
+## GL4-0026 — Indirect draws and base-instance drawing (B12, B15)
+
+- **Indirect draws.** `DrawPrimitivesIndirectEXT` and `DrawIndexedPrimitivesIndirectEXT` issue
+  `glDrawArraysIndirect`/`glDrawElementsIndirect` from the argument buffer's GL name.
+  - They take the instanced route's stream configuration, because the record always carries an
+    instance count: per-instance streams, multi-stream custom effects, integer shader inputs,
+    `REMED-GFX-218` validation before the VAO is touched, and restoration of every location claimed.
+  - The indirect-buffer binding is put back afterwards.
+  - A compiled XNA effect is refused, as on EasyGL, because its passes carry the primitive count this
+    route reads from GPU memory.
+  - Nothing reads the counts on the CPU. A dispatch that wrote them ended with a barrier covering
+    command reads (`GL4-0025`).
+  - `SupportsIndirectDrawEXT` is the native fact (core 4.0, so every accepted context once the entry
+    points resolve). `IndirectArguments`-only buffers are therefore creatable without compute.
+- **Base instance.** `SupportsBaseInstanceDrawingEXT` is the native 4.2 fact. A non-zero
+  `firstInstance` draws through `glDrawElementsInstancedBaseVertexBaseInstance`, on the stock route
+  and on the compiled-effect route alike. GL's base instance offsets every per-instance attribute's
+  fetch, which is exactly Vulkan's contract (`vulkan_shader_effect_3d_test` check J);
+  `gl_InstanceID` still counts from zero.
+- **Test** `OpenGL4BaseInstanceTests.cpp`. No renderer-neutral suite draws through base instance —
+  the shared case only observes a refusal on a mock. This test draws one instance from logical
+  instance 0, 1 and 2 and requires that instance's per-instance colour on all 16 pixels, and a
+  negative first instance is refused.
+  - **Mutation check:** with the base-instance call disabled, instances 1 and 2 fail.
+  - A first instance *past* the stream is not refused on OpenGL4, deliberately: like every XNA draw
+    range it reaches the native API unvalidated, because
+    `RequiresManagedBufferedDrawRangeValidationEXT` is false (`GL4-0011`).
+  - While writing the test, a trap: `Color` is a 24-byte polymorphic object, so `SetDataRaw` on a
+    `Color` array uploads vtable bytes. The stream receives packed values.
+
+**Results:**
+
+| Suite | GL4-0025 | GL4-0026 |
+|---|---|---|
+| `CnaGraphicsExtTests` OPENGL4 | 893 / 1 / 68 | **904 / 1 / 57** — all twelve indirect cases run; one of them is now the capability's refusal leg ("does support indirect drawing") |
+| CNAEXT oracles OPENGL4 | 22 / 1 / 10 | 23 / 1 / 9 — `CNAEXT_GpuDriven` (GPU culling → indirect draw) passes |
+| `CnaGraphicsTests` capability/profile/instancing/indirect/limit subset | — | 200 / 0 / 2 |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |

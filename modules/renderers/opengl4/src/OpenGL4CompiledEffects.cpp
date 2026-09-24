@@ -917,7 +917,8 @@ namespace CNA::Internal::Renderers::OpenGL4
         DrawIndexedWithBaseVertexFallback(indices, ToGLPrimitive(primitive),
                                           VertexCountForPrimitives(primitive, primitiveCount),
                                           indexType, indexOffset, params.startIndex,
-                                          params.baseVertex, instanced, instanceCount);
+                                          params.baseVertex, instanced, instanceCount,
+                                          instanced ? params.firstInstance : 0);
     }
 
     // ------------------------------------------------------------------------------------

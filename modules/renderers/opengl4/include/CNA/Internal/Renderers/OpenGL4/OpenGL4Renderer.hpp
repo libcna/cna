@@ -697,6 +697,60 @@ namespace CNA::Internal::Renderers::OpenGL4
         void BindStorageBufferForDrawEXT(int binding,
                                          const IStorageBufferRenderer& buffer) override;
         /**
+         * @brief Whether draw arguments can be read from a GPU buffer.
+         *
+         * @return The native fact: `glDrawArraysIndirect`/`glDrawElementsIndirect` are core 4.0,
+         *         so every context this renderer accepts has them once the entry points resolve.
+         */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        /**
+         * @brief Whether an instanced draw can begin at a caller-selected instance.
+         *
+         * @return True where `glDrawElementsInstancedBaseVertexBaseInstance` (core 4.2) resolved.
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
+        /**
+         * @brief Draws with its vertex and instance counts read from @p argumentBuffer.
+         *
+         * @param vb The first bound vertex buffer.
+         * @param world World matrix for the stock programs.
+         * @param view View matrix for the stock programs.
+         * @param projection Projection matrix for the stock programs.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Buffer holding the four-word `IndirectDrawArguments` record.
+         * @param argumentByteOffset Byte offset of the record.
+         * @param params Draw state, streams and effect.
+         * @throws System::NotSupportedException for a compiled XNA effect, whose passes carry the
+         *         primitive count this route reads from GPU memory.
+         */
+        void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb, const Matrix& world,
+                                       const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive,
+                                       const IStorageBufferRenderer& argumentBuffer,
+                                       int argumentByteOffset,
+                                       const GpuDrawParams& params) override;
+        /**
+         * @brief Indexed counterpart of @ref DrawPrimitivesIndirectEXT (five-word record).
+         *
+         * @param vb The first bound vertex buffer.
+         * @param ib The bound index buffer.
+         * @param world World matrix for the stock programs.
+         * @param view View matrix for the stock programs.
+         * @param projection Projection matrix for the stock programs.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Buffer holding the `IndirectDrawIndexedArguments` record.
+         * @param argumentByteOffset Byte offset of the record.
+         * @param params Draw state, streams and effect.
+         * @throws System::NotSupportedException for a compiled XNA effect.
+         */
+        void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                              const IIndexBufferRenderer& ib,
+                                              const Matrix& world, const Matrix& view,
+                                              const Matrix& projection, PrimitiveType primitive,
+                                              const IStorageBufferRenderer& argumentBuffer,
+                                              int argumentByteOffset,
+                                              const GpuDrawParams& params) override;
+        /**
          * @brief Returns false: every buffered draw is a native GL draw from a bound buffer object.
          *
          * XNA forwards draw ranges to the native API unvalidated, and GL never reads host memory
@@ -1025,7 +1079,13 @@ namespace CNA::Internal::Renderers::OpenGL4
         void DrawIndexedWithBaseVertexFallback(const OpenGL4IndexBufferRenderer& ib,
                                                GLenum primitive, int indexCount, GLenum indexType,
                                                const void* indexOffset, int startIndex,
-                                               int baseVertex, bool instanced, int instanceCount);
+                                               int baseVertex, bool instanced, int instanceCount,
+                                               int firstInstance = 0);
+        void IssueIndirectDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                  const Matrix& world, const Matrix& view,
+                                  const Matrix& projection, PrimitiveType primitive,
+                                  const IStorageBufferRenderer& argumentBuffer,
+                                  int argumentByteOffset, const GpuDrawParams& params);
         void EnsureDefaultTexture(unsigned int& texture, const std::uint8_t rgba[4]);
         void EnsureDefaultBlackCubeTexture();
         void BindDefaultTexture(unsigned int texture, int unit, unsigned int target);
