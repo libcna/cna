@@ -2,7 +2,8 @@
 #pragma once
 
 // plans/plan_opengl4_modern_graphics.md Workstream B: the modern CNA/CNAEXT GPU surface over desktop
-// OpenGL 4.3+ -- storage and constant buffers, compute programs and GPU timers. Every class here
+// OpenGL 4.3+ -- storage and constant buffers, compute programs, storage textures and GPU timers.
+// Every class here
 // exists only when GL4::DiscoverModernCapabilities found the native feature in the live context;
 // the renderer's Supports*EXT answers are what promise it.
 
@@ -184,6 +185,18 @@ namespace CNA::Internal::Renderers::OpenGL4
          */
         void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
         /**
+         * @brief Records a StorageTexture2D as an image for the next dispatches.
+         *
+         * @param unit Image unit.
+         * @param texture The storage texture, or null to clear the unit.
+         * @param accessMode `CNA::GraphicsImageAccess` ordinal.
+         * @return False for a unit beyond the compute image limit or a texture of another
+         *         renderer family.
+         */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture,
+            int accessMode) override;
+        /**
          * @brief Records a sampled Texture2D (or render target) for the next dispatches.
          *
          * @param unit Texture unit; the sampler uniform is pointed at it by the caller.
@@ -241,6 +254,108 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::vector<BufferBinding> constantBuffers_;
         std::vector<TextureBinding> textures_;
         std::vector<ImageBinding> images_;
+    };
+
+    /**
+     * @brief GL storage and exact transfer layout of one storage-image SurfaceFormat (GL4-0030).
+     */
+    struct OpenGL4StorageImageFormat
+    {
+        /** @brief Sized internal format; always one of GL 4.3's image-unit formats. */
+        GLenum internalFormat = 0;
+        /** @brief Transfer pixel format. */
+        GLenum pixelFormat = 0;
+        /** @brief Transfer pixel type. */
+        GLenum pixelType = 0;
+        /** @brief Bytes of one texel in the declared (public) layout, which is also GL's. */
+        int bytesPerTexel = 0;
+    };
+
+    /**
+     * @brief Maps a SurfaceFormat to its storage-image format.
+     *
+     * The fifteen formats whose declared bytes are exactly one GL 4.3 image-unit format, so an
+     * upload, a compute write and a readback all see the same bytes: Color, NormalizedByte2/4,
+     * Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2,
+     * HalfVector4, HdrBlendable, ByteEXT and UShortEXT -- Vulkan's set.
+     *
+     * @param surfaceFormat SurfaceFormat ordinal.
+     * @param out Receives the mapping.
+     * @return False for every other format.
+     */
+    [[nodiscard]] bool MapStorageImageFormat(int surfaceFormat, OpenGL4StorageImageFormat& out);
+
+    /**
+     * @brief One `CNA::Graphics::StorageTexture2D`: a mutable GL 2D texture with every declared
+     *        level allocated, read and written by compute as an image (GL4-0030).
+     *
+     * Transfers are the declared format's exact bytes, tightly packed. A readback asks GL for the
+     * whole level (`glGetTexImage`; the sub-image query is 4.5) and returns the rectangle.
+     */
+    class OpenGL4StorageTexture2DRenderer final : public IStorageTexture2DRenderer,
+                                                  public OpenGL4ContextResource
+    {
+    public:
+        /**
+         * @brief Allocates the texture and every level of its chain.
+         *
+         * @param width Level-0 width.
+         * @param height Level-0 height.
+         * @param mipLevelCount Levels to allocate.
+         * @param format The storage-image mapping of the SurfaceFormat.
+         */
+        OpenGL4StorageTexture2DRenderer(int width, int height, int mipLevelCount,
+                                        const OpenGL4StorageImageFormat& format);
+        /** @brief Deletes the texture in its own context; issues no GL if that context is gone. */
+        ~OpenGL4StorageTexture2DRenderer() override;
+
+        OpenGL4StorageTexture2DRenderer(const OpenGL4StorageTexture2DRenderer&) = delete;
+        OpenGL4StorageTexture2DRenderer& operator=(const OpenGL4StorageTexture2DRenderer&) = delete;
+
+        /**
+         * @brief Uploads a rectangle of one level.
+         *
+         * @param mipLevel Level.
+         * @param x Left texel.
+         * @param y Top texel.
+         * @param width Rectangle width.
+         * @param height Rectangle height.
+         * @param data Tightly packed texels in the declared format.
+         * @param byteCount Bytes at @p data; must be exactly the rectangle's.
+         * @return False when the rectangle, the byte count or the context is not valid.
+         */
+        [[nodiscard]] bool SetData(int mipLevel, int x, int y, int width, int height,
+                                   const void* data, std::size_t byteCount) override;
+        /**
+         * @brief Reads a rectangle of one level back, after every write issued before it.
+         *
+         * @param mipLevel Level.
+         * @param x Left texel.
+         * @param y Top texel.
+         * @param width Rectangle width.
+         * @param height Rectangle height.
+         * @param data Receives tightly packed texels in the declared format.
+         * @param byteCount Bytes at @p data; must be exactly the rectangle's.
+         * @return False when the rectangle, the byte count or the context is not valid.
+         */
+        [[nodiscard]] bool GetData(int mipLevel, int x, int y, int width, int height,
+                                   void* data, std::size_t byteCount) const override;
+
+        /** @brief Returns the GL texture name. */
+        CNAEXT [[nodiscard]] unsigned int GLHandle() const noexcept { return texture_; }
+        /** @brief Returns the sized internal format, which is the image-unit format. */
+        CNAEXT [[nodiscard]] GLenum InternalFormat() const noexcept { return format_.internalFormat; }
+
+    private:
+        [[nodiscard]] bool ValidRegion(int mipLevel, int x, int y, int width, int height,
+                                       std::size_t byteCount, int& levelWidth,
+                                       int& levelHeight) const;
+
+        unsigned int texture_ = 0;
+        int width_ = 0;
+        int height_ = 0;
+        int levels_ = 1;
+        OpenGL4StorageImageFormat format_;
     };
 
     /**

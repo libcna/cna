@@ -567,6 +567,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #ifndef GL_R16
 #define GL_R16 0x822A
 #endif
+#ifndef GL_RG8
+#define GL_RG8 0x822B
+#endif
 #ifndef GL_COMPUTE_SHADER
 #define GL_COMPUTE_SHADER 0x91B9
 #endif

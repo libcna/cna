@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
+#include "CNA/Internal/Renderers/OpenGL4/OpenGL4Modern.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
@@ -692,21 +693,41 @@ namespace CNA::Internal::Renderers::OpenGL4
         // rewrite its sampling -- but it can say what is being sampled. A shader that declares
         // `uniform vec4 uRtFlipV;` gets the same render-target orientation flag the stock effects
         // get; one that does not pays nothing.
-        if (unit >= 0 && unit < 4)
+        UpdateRtFlipV(unit, SampledRowOrderIsBottomUp(texture) ? 1.0f : 0.0f);
+    }
+
+    void OpenGL4EffectRenderer::UpdateRtFlipV(const int unit, const float flip)
+    {
+        if (unit < 0 || unit >= 4) return;
+        if (rtFlipV_[unit] == flip && rtFlipVUploaded_) return;
+        rtFlipV_[unit] = flip;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation("uRtFlipV");
+        if (loc >= 0)
         {
-            const float flip = SampledRowOrderIsBottomUp(texture) ? 1.0f : 0.0f;
-            if (rtFlipV_[unit] != flip || !rtFlipVUploaded_)
-            {
-                rtFlipV_[unit] = flip;
-                MakeProgramCurrent();
-                const int loc = program_.UniformLocation("uRtFlipV");
-                if (loc >= 0)
-                {
-                    gl4_glUniform4f(loc, rtFlipV_[0], rtFlipV_[1], rtFlipV_[2], rtFlipV_[3]);
-                    rtFlipVUploaded_ = true;
-                }
-            }
+            gl4_glUniform4f(loc, rtFlipV_[0], rtFlipV_[1], rtFlipV_[2], rtFlipV_[3]);
+            rtFlipVUploaded_ = true;
         }
+    }
+
+    bool OpenGL4EffectRenderer::BindStorageTexture2DEXT(
+        const int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
+    {
+        if (unit < 0) return false;
+        const OpenGL4StorageTexture2DRenderer* native = nullptr;
+        if (texture != nullptr)
+        {
+            native = dynamic_cast<const OpenGL4StorageTexture2DRenderer*>(texture.get());
+            if (native == nullptr) return false;
+        }
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        gl4_glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(unit));
+        glBindTexture(GL_TEXTURE_2D, native != nullptr ? native->GLHandle() : 0);
+        gl4_glActiveTexture(GL_TEXTURE0);
+        // Its rows are stored top-down like an uploaded Texture2D's, never a target's.
+        UpdateRtFlipV(unit, 0.0f);
+        return true;
     }
 
     void OpenGL4EffectRenderer::BindTextureCube(int unit, ITextureCubeRenderer* texture)

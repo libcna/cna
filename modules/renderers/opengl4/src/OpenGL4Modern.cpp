@@ -9,7 +9,9 @@
 #include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Resources.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -380,6 +382,34 @@ namespace CNA::Internal::Renderers::OpenGL4
                            ToGlImageAccess(accessMode), static_cast<GLenum>(internalFormat)});
     }
 
+    bool OpenGL4ComputeShaderRenderer::BindStorageTexture2DEXT(
+        const int unit, std::shared_ptr<IStorageTexture2DRenderer> texture, const int accessMode)
+    {
+        if (unit < 0) return false;
+        {
+            const auto ownContext = EnterOwnContext();
+            if (!ownContext) return false;
+            if (unit >= std::min(QueryInteger(GL_MAX_COMPUTE_IMAGE_UNIFORMS),
+                                 QueryInteger(GL_MAX_IMAGE_UNITS)))
+                return false;
+        }
+        const OpenGL4StorageTexture2DRenderer* native = nullptr;
+        if (texture != nullptr)
+        {
+            native = dynamic_cast<const OpenGL4StorageTexture2DRenderer*>(texture.get());
+            if (native == nullptr) return false;
+        }
+        images_.erase(std::remove_if(images_.begin(), images_.end(),
+                                     [unit](const ImageBinding& entry) {
+                                         return entry.unit == unit;
+                                     }),
+                      images_.end());
+        if (native != nullptr)
+            images_.push_back({unit, texture, native->GLHandle(), ToGlImageAccess(accessMode),
+                               native->InternalFormat()});
+        return true;
+    }
+
     void OpenGL4ComputeShaderRenderer::DispatchEXT(const unsigned int groupsX,
                                                    const unsigned int groupsY,
                                                    const unsigned int groupsZ,
@@ -459,6 +489,154 @@ namespace CNA::Internal::Renderers::OpenGL4
         gl4_glBindBuffer(GL_UNIFORM_BUFFER, static_cast<GLuint>(previousGenericUniform));
         gl4_glActiveTexture(static_cast<GLenum>(previousActiveTexture));
         gl4_glUseProgram(static_cast<GLuint>(previousProgram));
+    }
+
+    // ------------------------------------------------------------------------------------
+    // OpenGL4StorageTexture2DRenderer (GL4-0030)
+    // ------------------------------------------------------------------------------------
+
+    bool MapStorageImageFormat(const int surfaceFormat, OpenGL4StorageImageFormat& out)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+                out = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4}; return true;
+            case SurfaceFormat::NormalizedByte2:
+                out = {GL_RG8_SNORM, GL_RG, GL_BYTE, 2}; return true;
+            case SurfaceFormat::NormalizedByte4:
+                out = {GL_RGBA8_SNORM, GL_RGBA, GL_BYTE, 4}; return true;
+            case SurfaceFormat::Rgba1010102:
+                // XNA packs R in the low ten bits and A in the top two: GL's _REV layout.
+                out = {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, 4}; return true;
+            case SurfaceFormat::Rg32:
+                out = {GL_RG16, GL_RG, GL_UNSIGNED_SHORT, 4}; return true;
+            case SurfaceFormat::Rgba64:
+                out = {GL_RGBA16, GL_RGBA, GL_UNSIGNED_SHORT, 8}; return true;
+            case SurfaceFormat::Single:
+                out = {GL_R32F, GL_RED, GL_FLOAT, 4}; return true;
+            case SurfaceFormat::Vector2:
+                out = {GL_RG32F, GL_RG, GL_FLOAT, 8}; return true;
+            case SurfaceFormat::Vector4:
+                out = {GL_RGBA32F, GL_RGBA, GL_FLOAT, 16}; return true;
+            case SurfaceFormat::HalfSingle:
+                out = {GL_R16F, GL_RED, GL_HALF_FLOAT, 2}; return true;
+            case SurfaceFormat::HalfVector2:
+                out = {GL_RG16F, GL_RG, GL_HALF_FLOAT, 4}; return true;
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                out = {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, 8}; return true;
+            case SurfaceFormat::ByteEXT:
+                out = {GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1}; return true;
+            case SurfaceFormat::UShortEXT:
+                out = {GL_R16, GL_RED, GL_UNSIGNED_SHORT, 2}; return true;
+            default:
+                out = {};
+                return false;
+        }
+    }
+
+    OpenGL4StorageTexture2DRenderer::OpenGL4StorageTexture2DRenderer(
+        const int width, const int height, const int mipLevelCount,
+        const OpenGL4StorageImageFormat& format)
+        : width_(width), height_(height), levels_(std::max(1, mipLevelCount)), format_(format)
+    {
+        glGenTextures(1, &texture_);
+        const Detail::ScopedTextureBinding scope(GL_TEXTURE_2D, texture_);
+        const Detail::ScopedUnpackState unpack(1);
+        int levelWidth = width_;
+        int levelHeight = height_;
+        for (int level = 0; level < levels_; ++level)
+        {
+            glTexImage2D(GL_TEXTURE_2D, level, static_cast<GLint>(format_.internalFormat),
+                         levelWidth, levelHeight, 0, format_.pixelFormat, format_.pixelType,
+                         nullptr);
+            levelWidth = std::max(1, levelWidth / 2);
+            levelHeight = std::max(1, levelHeight / 2);
+        }
+        // Every declared level exists and no other does: the texture is complete, which an image
+        // unit requires, whatever filter a later draw samples it with.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, levels_ - 1);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        levels_ > 1 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+
+    OpenGL4StorageTexture2DRenderer::~OpenGL4StorageTexture2DRenderer()
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext || texture_ == 0) return;
+        glDeleteTextures(1, &texture_);
+    }
+
+    bool OpenGL4StorageTexture2DRenderer::ValidRegion(const int mipLevel, const int x, const int y,
+                                                      const int width, const int height,
+                                                      const std::size_t byteCount,
+                                                      int& levelWidth, int& levelHeight) const
+    {
+        if (mipLevel < 0 || mipLevel >= levels_) return false;
+        levelWidth = std::max(1, width_ >> mipLevel);
+        levelHeight = std::max(1, height_ >> mipLevel);
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 || x > levelWidth - width ||
+            y > levelHeight - height)
+            return false;
+        return byteCount == static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
+                                static_cast<std::size_t>(format_.bytesPerTexel);
+    }
+
+    bool OpenGL4StorageTexture2DRenderer::SetData(const int mipLevel, const int x, const int y,
+                                                  const int width, const int height,
+                                                  const void* data, const std::size_t byteCount)
+    {
+        int levelWidth = 0;
+        int levelHeight = 0;
+        if (data == nullptr ||
+            !ValidRegion(mipLevel, x, y, width, height, byteCount, levelWidth, levelHeight))
+            return false;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        DrainGlErrors();
+        const Detail::ScopedTextureBinding scope(GL_TEXTURE_2D, texture_);
+        const Detail::ScopedUnpackState unpack(1);
+        glTexSubImage2D(GL_TEXTURE_2D, mipLevel, x, y, width, height, format_.pixelFormat,
+                        format_.pixelType, data);
+        return GlOperationSucceeded();
+    }
+
+    bool OpenGL4StorageTexture2DRenderer::GetData(const int mipLevel, const int x, const int y,
+                                                  const int width, const int height, void* data,
+                                                  const std::size_t byteCount) const
+    {
+        int levelWidth = 0;
+        int levelHeight = 0;
+        if (data == nullptr ||
+            !ValidRegion(mipLevel, x, y, width, height, byteCount, levelWidth, levelHeight))
+            return false;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        const std::size_t texel = static_cast<std::size_t>(format_.bytesPerTexel);
+        std::vector<std::uint8_t> level(static_cast<std::size_t>(levelWidth) *
+                                        static_cast<std::size_t>(levelHeight) * texel);
+        DrainGlErrors();
+        {
+            const Detail::ScopedTextureBinding scope(GL_TEXTURE_2D, texture_);
+            const Detail::ScopedPackState pack(1);
+            glGetTexImage(GL_TEXTURE_2D, mipLevel, format_.pixelFormat, format_.pixelType,
+                          level.data());
+        }
+        if (!GlOperationSucceeded()) return false;
+        auto* out = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(width) * texel;
+        for (int row = 0; row < height; ++row)
+        {
+            const std::size_t source = (static_cast<std::size_t>(y + row) *
+                                            static_cast<std::size_t>(levelWidth) +
+                                        static_cast<std::size_t>(x)) * texel;
+            std::memcpy(out + static_cast<std::size_t>(row) * rowBytes, level.data() + source,
+                        rowBytes);
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -739,6 +917,104 @@ namespace CNA::Internal::Renderers::OpenGL4
         add(GraphicsMemoryBarrier::Framebuffer, GL_FRAMEBUFFER_BARRIER_BIT);
         add(GraphicsMemoryBarrier::IndirectCommand, GL_COMMAND_BARRIER_BIT);
         if (native != 0) gl4_glMemoryBarrier(native);
+    }
+
+    std::unique_ptr<IStorageTexture2DRenderer> OpenGL4Renderer::CreateStorageTexture2DEXT(
+        const int width, const int height, const int mipLevelCount, const int surfaceFormat,
+        const std::uint32_t usage)
+    {
+        EnsureCallingThreadContext();
+        (void)usage;   // every storage texture here is readable, writable, sampled and copyable
+        OpenGL4StorageImageFormat format;
+        if (!SupportsComputeImageBindingEXT() || !MapStorageImageFormat(surfaceFormat, format))
+            return nullptr;
+        if (width <= 0 || height <= 0 || width > GetMaxTextureDimension() ||
+            height > GetMaxTextureDimension() || mipLevelCount <= 0)
+            return nullptr;
+        auto texture = std::make_unique<OpenGL4StorageTexture2DRenderer>(width, height,
+                                                                         mipLevelCount, format);
+        texture->AttachOwningContext(platformContext_);
+        return texture;
+    }
+
+    CNA::RendererFormatSupport OpenGL4Renderer::GetSurfaceFormatUsageSupportEXT(
+        const int surfaceFormat) const
+    {
+        using CNA::RendererFormatUsage;
+        if (surfaceFormat < 0 || surfaceFormat >= static_cast<int>(formatUsageCache_.size()))
+            return {};
+        auto& cached = formatUsageCache_[static_cast<std::size_t>(surfaceFormat)];
+        if (cached.has_value()) return *cached;
+
+        // Asked of the driver, never assumed; where glGetInternalformativ is missing (a 4.1
+        // context without GL_ARB_internalformat_query2) the answer stays unknown rather than a
+        // guess. TextureStorage, RenderTarget and ColorTransfer are GraphicsDevice's own
+        // classification of this renderer's verdicts and are not repeated here.
+        CNA::RendererFormatSupport support;
+        if (!modernCapabilities_.internalFormatQueriesNative || gl4_glGetInternalformativ == nullptr)
+        {
+            cached = support;
+            return support;
+        }
+        const auto supported = [](const GLenum target, const GLenum internalFormat,
+                                  const GLenum name) {
+            GLint value = GL_NONE;
+            gl4_glGetInternalformativ(target, internalFormat, name, 1, &value);
+            return value == GL_FULL_SUPPORT || value == GL_CAVEAT_SUPPORT;
+        };
+        const auto mark = [&support](const RendererFormatUsage usage, const bool yes) {
+            support.knownUsages |= static_cast<std::uint32_t>(usage);
+            if (yes) support.supportedUsages |= static_cast<std::uint32_t>(usage);
+        };
+
+        // Sampling, filtering, transfers and mip chains: of the storage a Texture2D in this
+        // format actually gets.
+        const bool texture =
+            ClassifySurfaceFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
+        Detail::TextureTransferFormat textureFormat;
+        const bool textureMapped =
+            texture && !Detail::IsDxtFormat(surfaceFormat) &&
+            Detail::MapTextureTransferFormat(surfaceFormat, true, textureFormat);
+        const GLenum sampledFormat = textureMapped ? textureFormat.internalFormat
+            : (texture && Detail::IsDxtFormat(surfaceFormat) && Detail::ContextHasS3tc()
+                   ? Detail::DxtInternalFormat(surfaceFormat)
+                   : GL_RGBA8);
+        mark(RendererFormatUsage::Sampled,
+             texture && supported(GL_TEXTURE_2D, sampledFormat, GL_FRAGMENT_TEXTURE));
+        mark(RendererFormatUsage::Filterable,
+             texture && supported(GL_TEXTURE_2D, sampledFormat, GL_FILTER));
+        mark(RendererFormatUsage::TransferSource, texture);
+        mark(RendererFormatUsage::TransferDestination, texture);
+        mark(RendererFormatUsage::Mipmapped, texture);
+
+        // Blending and multisampling: of the storage a render target in this format gets.
+        Detail::RenderTargetColorStorage target;
+        const bool renderable =
+            ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported &&
+            Detail::MapRenderTargetColorFormat(surfaceFormat, target);
+        mark(RendererFormatUsage::Blendable,
+             renderable && supported(GL_TEXTURE_2D, target.internalFormat, GL_FRAMEBUFFER_BLEND));
+        GLint maxSamples = 0;
+        if (renderable)
+            gl4_glGetInternalformativ(GL_RENDERBUFFER, target.internalFormat, GL_SAMPLES, 1,
+                                      &maxSamples);
+        mark(RendererFormatUsage::Multisample, renderable && maxSamples > 1);
+
+        // Storage images: the StorageTexture2D mapping, and only where compute can bind one.
+        OpenGL4StorageImageFormat image;
+        const bool storage = SupportsComputeImageBindingEXT() &&
+                             MapStorageImageFormat(surfaceFormat, image);
+        mark(RendererFormatUsage::StorageRead,
+             storage && supported(GL_TEXTURE_2D, image.internalFormat, GL_SHADER_IMAGE_LOAD));
+        mark(RendererFormatUsage::StorageWrite,
+             storage && supported(GL_TEXTURE_2D, image.internalFormat, GL_SHADER_IMAGE_STORE));
+        // GLSL's image atomics operate on r32i/r32ui images (and exchange on r32f) only; none of
+        // CNA's formats is one, whatever GL_SHADER_IMAGE_ATOMIC says of the storage itself --
+        // Mesa answers "full support" for rgba8, where no imageAtomic* call can compile.
+        mark(RendererFormatUsage::StorageAtomic, false);
+
+        cached = support;
+        return support;
     }
 
     bool OpenGL4Renderer::SupportsGpuTimerEXT() const

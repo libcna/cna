@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -132,6 +133,15 @@ namespace CNA::Internal::Renderers::OpenGL4
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
+        /**
+         * @brief Binds a StorageTexture2D for this program to sample (GL4-0030).
+         *
+         * @param unit Texture unit.
+         * @param texture The storage texture, or null to unbind the unit.
+         * @return False for a texture of another renderer family.
+         */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
 
         /** @brief Returns the program, so a SpriteBatch flush binds the one the setters wrote to. */
         [[nodiscard]] OpenGL4RawProgram& GetProgram() { return program_; }
@@ -151,6 +161,8 @@ namespace CNA::Internal::Renderers::OpenGL4
          * @return Location, or -1.
          */
         [[nodiscard]] int ArrayUniformLocation(const char* name) const;
+        /// REMED-GFX-147: records and uploads one unit's render-target row-order flag.
+        void UpdateRtFlipV(int unit, float flip);
 
         OpenGL4RawProgram program_;
         float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -724,6 +736,28 @@ namespace CNA::Internal::Renderers::OpenGL4
          */
         [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
         /**
+         * @brief Creates a storage texture in one of the fifteen storage-image formats.
+         *
+         * @param width Level-0 width.
+         * @param height Level-0 height.
+         * @param mipLevelCount Levels to allocate.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @param usage `CNA::Graphics::StorageTexture2DUsage` bits.
+         * @return The texture, or null without compute image binding or for another format.
+         */
+        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int width, int height, int mipLevelCount, int surfaceFormat,
+            std::uint32_t usage) override;
+        /**
+         * @brief Classifies one SurfaceFormat's sampling, filtering, blending, multisample,
+         *        transfer, mip and storage-image uses from `glGetInternalformativ`.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Known and supported masks; unknown where the context has no format query.
+         */
+        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int surfaceFormat) const override;
+        /**
          * @brief Whether GPU time can be measured.
          *
          * @return True where timestamp queries resolved and the driver reports a non-zero
@@ -1273,6 +1307,8 @@ namespace CNA::Internal::Renderers::OpenGL4
         unsigned int computeSampler_ = 0;
         /// GL_TIMESTAMP counter width, asked on first use; -1 until then (GL4-0027).
         mutable int timestampCounterBits_ = -1;
+        /// Per-SurfaceFormat usage answers, asked of the driver once each (GL4-0030).
+        mutable std::array<std::optional<CNA::RendererFormatSupport>, 27> formatUsageCache_{};
 
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         /// One MojoShader GL context for this renderer's lifetime, created on first use.

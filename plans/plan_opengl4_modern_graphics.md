@@ -1016,3 +1016,95 @@ which does not ask `isSupported()`, failed on OPENGL4 and OPENGL33 alike.
 | six | the refusal legs of capabilities OpenGL4 now has: compute, indirect drawing, two GPU-timer cases, pass timing, and `RequireCapability` ("supports every capability there is") |
 | one | the SPIR-V-only compute intake |
 | one | the Color storage image, which is `GL4-0030` |
+
+## GL4-0030 — StorageTexture2D, format-usage answers, and why there is no Texture2DArray (B10, B11, B13)
+
+**Storage textures.**
+
+- `OpenGL4StorageTexture2DRenderer` is a mutable GL 2D texture with every declared level allocated
+  and `GL_TEXTURE_MAX_LEVEL` clamped, so it is always complete, which an image unit requires.
+- It covers Vulkan's fifteen storage formats (`MapStorageImageFormat`). In every one of them the
+  declared bytes are exactly a GL 4.3 image-unit format, so an upload, a compute write and a readback
+  see the same bytes. `Rgba1010102` is `GL_UNSIGNED_INT_2_10_10_10_REV`, XNA's bit order.
+- Readback asks GL for the level (`glGetTexImage`; the sub-image query is 4.5) and returns the
+  rectangle. A dispatch that wrote the image ended with a barrier covering texture updates
+  (`GL4-0025`).
+- Compute binds it with `glBindImageTexture` in its own format, recorded and restored like every
+  other compute binding (`GL4-0025`).
+- A `ShaderEffect` samples it through `SetStorageTextureEXT` → `BindStorageTexture2DEXT`, with the
+  unit's render-target row flag cleared, because its rows are stored top-down like an uploaded
+  texture's.
+
+**Format-usage answers** (`GetSurfaceFormatUsageSupportEXT`):
+
+- Every answer is asked of `glGetInternalformativ`. A context without the query leaves the bits
+  unknown rather than guessed. They are cached per format and per device.
+
+| Usage | Asked of |
+|---|---|
+| Sampled, Filterable, Transfer*, Mipmapped | the storage a `Texture2D` of the format actually gets |
+| Blendable, Multisample | the render-target storage |
+| StorageRead, StorageWrite | the storage-image mapping, where compute image binding exists |
+
+- **StorageAtomic is known and false for every format.** GLSL image atomics operate only on
+  `r32i`/`r32ui` images (and exchange on `r32f`), and no CNA format is one. Mesa's
+  `GL_SHADER_IMAGE_ATOMIC` nevertheless answers "full support" for `rgba8`, where no `imageAtomic*`
+  call can compile, so it is not believed. Vulkan's atomic bit is likewise only on its R32 integer
+  formats.
+- TextureStorage, RenderTarget and ColorTransfer remain `GraphicsDevice`'s own classification of
+  the renderer's verdicts.
+- Consequence: `ByteEXT` and `UShortEXT` are storage-readable and storage-writable but not
+  `Texture2D` formats on OpenGL4. Since `StorageTexture2D` requires `TextureStorage` of its format,
+  it refuses them by name. The other thirteen are created.
+
+The complete profile, from `cna_probe_modern_gpu_capabilities` on the Radeon 780M:
+
+- **Features.** Every feature is supported except the non-desktop shader dialects.
+- **Limits.**
+
+  | Limit | Value |
+  |---|---|
+  | work-group count | 2 147 483 646 / 65 535 / 65 535 |
+  | work-group size | 1024³ |
+  | work-group invocations | 1024 |
+  | vertex SSBO blocks | 16 |
+  | storage and uniform block bytes | 4 035 026 944 |
+  | compute SSBO bindings | 16 |
+  | sampled textures per stage | 32 |
+  | storage images per stage | 16 |
+  | vertex input bindings | 16 |
+  | vertex attributes | 16 |
+  | colour attachments | 4 |
+  | offset alignments | 4 / 4 |
+  | timestamp period | 1000 ps |
+  | texture-array layers | **0** |
+
+**Texture2DArray is not implemented, deliberately.**
+
+- The brief admits it "only if renderer-neutral coverage exists". None does: `Texture2DArrayTests`
+  runs against a mock renderer, and the only real draws through a texture array are Vulkan's own
+  examples (`vulkan_texture2d_array_contract_test`, `vulkan_effect_bound_texture_test`).
+- OpenGL4 therefore keeps `MaxTextureArrayLayers = 0`. `Texture2DArray` construction is refused by
+  the public class before the renderer is asked, and `ShaderPackageEXT` rejects a package with a
+  `SampledTexture2DArray` binding ("requires sampled texture arrays").
+- The native fact (`textureArraysNative`) stays recorded for the day a renderer-neutral case exists.
+
+**Tests** `OpenGL4StorageTextureTests.cpp`:
+
+- The thirteen advertised formats round-trip their exact bytes through level 0, level 1 and a level-1
+  sub-rectangle, with value patterns that survive any exact transfer: finite floats and halves, and
+  SNORM bytes that avoid −128. The two CNA-only formats are refused.
+- A compute-written `Vector4` image reads back bit-exactly.
+- A storage texture **sampled by a `ShaderEffect`** draws its four texels in XNA row order.
+- **Mutation check:** with the effect binding bound to name 0, the sampling case fails.
+
+**Results:**
+
+| Suite | GL4-0029 | GL4-0030 |
+|---|---|---|
+| `CnaGraphicsExtTests` OPENGL4 | 954 / 0 / 8 | **955 / 0 / 7** — `ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote` runs; all eight conformance cases now run, 22 checks, none skipped |
+| `CnaGraphicsTests` OPENGL4 | 2 833 / 0 / 57 | 2 833 / 0 / 57 |
+| OpenGL4's own gtests (`CnaRendererTests --gtest_filter='OpenGL4*'`) | — | 90 / 0 / 0 |
+
+OpenGL4's seven remaining `CnaGraphicsExtTests` skips are all cases that cannot apply to a renderer
+with the capability: the six refusal legs, and the SPIR-V-only intake. EasyGL OPENGLES3 skips eight.
