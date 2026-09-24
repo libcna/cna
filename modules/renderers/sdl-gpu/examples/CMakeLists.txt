@@ -570,6 +570,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_instanced_stock_families
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # plans/plan_street_sdlgpu.md STREETS-0008: Direct3D 9 saturates a vertex shader's colour
+    # outputs (oD0/oD1) before interpolation, which XNA games observe. Vulkan's two renderer-agnostic
+    # witnesses, compiled again: BasicEffect's unlit COLOR0 (VULKAN-197) and EnvironmentMapEffect's
+    # COLOR1 amount (VULKAN-196, already clamped here since SDLGPU-81).
+    cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_diffuse_color_clamp
+        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_BasicEffect_DiffuseColorClamp
+        COMMAND cna_test_sdlgpu_basiceffect_diffuse_color_clamp
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    cna_sdlgpu_test(cna_test_sdlgpu_environmentmapeffect_amount_clamp
+        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_EnvironmentMapEffect_AmountClamp
+        COMMAND cna_test_sdlgpu_environmentmapeffect_amount_clamp
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
     # plans/plan_street_sdlgpu.md STREETS-0004: a ShaderEffect's texture unit u samples through
     # SamplerStates[u]. Vulkan's VULKAN-166 witness, compiled again: legs A-D are XNA-only, and the
     # define leaves out leg E, which reads the Vulkan validation layer.

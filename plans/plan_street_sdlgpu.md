@@ -40,6 +40,7 @@ Vulkan is the natural reference: same driver, same GPU.
 | STREETS-0005 | SDL_GPU: a debugging `getenv("SMGDBG_NOUPLOAD")` left in the white shadow cube's upload | ✅ |
 | STREETS-0006 | Three `GltfRendererPbrFallbackPolicy` cases quoted SDL_GPU PBR code SMG-0032 had since renamed | ✅ |
 | STREETS-0007 | `SdlGpu_Smoke` pinned two capability answers that later, correct work had changed | ✅ |
+| STREETS-0008 | SDL_GPU did not saturate BasicEffect-family unlit `COLOR0`, as Direct3D 9 does | ✅ |
 
 ---
 
@@ -309,3 +310,36 @@ count goes stale whenever an unrelated sampler is added. `GltfRendererPbrFallbac
 
 One check more, so `kExpectedChecks` is 31. `SdlGpu_Smoke` **31/31** -- it had not passed since
 those tasks landed.
+
+### STREETS-0008 — the unlit diffuse colour was not saturated at the vertex
+
+`ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` failed on `next`
+(and identically with STREETS-0003 stashed, so not caused by it): a NormalizedByte4 texel of -0.5
+drawn by `BasicEffect` with `DiffuseColor = (-1, 0, 0)` came out R = 128 where XNA gives 0.
+
+**Cause:** the Vulkan renderer's `VULKAN-197`, never carried to SDL_GPU. Direct3D 9 saturates a
+vertex shader's colour output registers before interpolation, FNA writes the material colour to
+`vout.Diffuse : COLOR0`, and `BasicEffect.DiffuseColor` has no clamp in its setter, so a game can
+hand the shader any value. Measured against the real XNA 4.0 runtime by VULKAN-197's spike: a grey
+texture at DiffuseColor 0.5 / 1 / 2 / 3 gives (50) / (100) / (100) / (100). SDL_GPU wrote
+`pc.diffuseColor` (or `inColor * pc.diffuseColor`) straight into the varying, so 2.0 doubled the
+texel and the negative case multiplied two negatives into a positive.
+
+**Fix:** clamped at the **vertex** stage, where `oD0` is, in the seven SDL_GPU shaders that write
+it raw -- `textured3d`, `colored3d`, `colored_textured3d`, `alpha_test3d`, `alpha_test_colored3d`,
+`dual_texture3d`, `dual_texture_colored3d` -- which, since STREETS-0001, also regenerates their seven
+instanced twins. Nothing else in `spirv_shaders.hpp` changed (checked word for word). The same
+shaders VULKAN-197 deliberately left alone are left alone here, for its reasons: the per-pixel lit
+path (FNA applies the material colour in the pixel shader there, unsaturated), the skinned colour
+paths (raw unorm vertex colour, no multiplier), sprites, and PBR (a CNA extension with no D3D9
+contract). `EnvironmentMapEffect`'s `COLOR1` amount (VULKAN-196) was already clamped here
+(SDLGPU-81).
+
+**Tests.** Vulkan's two renderer-agnostic witnesses, registered for SDL_GPU:
+`SdlGpu_BasicEffect_DiffuseColorClamp` -- **3/9 on the unfixed renderer**, exactly Vulkan's
+before-state (the three control legs pass, every clamp leg fails, the gradient midpoint clips to 255
+where XNA gives 178), **9/9 now** -- and `SdlGpu_EnvironmentMapEffect_AmountClamp` 3/3 before and
+after. `ClassicTextureFormat` passes (the four skips are this renderer's refusal of public
+half-float and volume formats, unrelated). 202 instancing/BasicEffect/vertex-colour tests pass.
+Classic `-R '^SdlGpu'` now **26** failures -- the old 27 minus `SdlGpu_Smoke` (STREETS-0007), none
+new; `-L CnaExt` 27/1/4; `CnaGraphicsExtTests` 931/0/31.

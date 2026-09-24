@@ -36,7 +36,11 @@ void main() {
     // Vulkan driver already presents a D3D/OpenGL-style Y-up clip space to shaders, so XNA's own
     // Y-up-convention projection matrix needs no additional correction on this renderer.
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
-    fragColor = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
+    // plans/plan_street_sdlgpu.md STREETS-0008 (the Vulkan renderer's VULKAN-197): Direct3D 9
+    // saturates a vertex shader's colour output registers before interpolation, and FNA writes this
+    // value to `vout.Diffuse : COLOR0`. Clamped here, at the vertex, not after the interpolator.
+    fragColor = clamp((pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor
+                          : pc.diffuseColor, 0.0, 1.0);
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
