@@ -36,7 +36,9 @@ separate factors and equations, blend factor, per-target `ColorWriteChannels`, `
 the counter-clockwise tuple applied to triangles only (Direct3D 9's rule), reference stencil ·
 `RasterizerState` (culling, native wireframe, scissor including zero-extent rectangles, depth bias
 converted by depth-format precision, multisample toggle) · XNA pixel centre and Direct3D clip depth ·
-samplers with every filter ordinal's mip term, anisotropy, AddressW, MaxMipLevel and LOD bias ·
+samplers with every filter ordinal's mip term, anisotropy, AddressW, MaxMipLevel and LOD bias,
+each parameter written only when the slot's sampler object does not already hold it (EasyGL's
+GLB-41 rule; without it every draw re-wrote all sixteen slots, `STREETGL4-0001`) ·
 Texture2D in every EasyGL format (packed 16-bit, SNORM, RGB10A2, RGBA16, half/float, channel-expanded
 formats, DXT native or exactly decoded) · TextureCube and Texture3D with declared-format transfers ·
 RenderTarget2D/RenderTargetCube with MSAA, resolve, mip regeneration and bottom-up storage mapped on

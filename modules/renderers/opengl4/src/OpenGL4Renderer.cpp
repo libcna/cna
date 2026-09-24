@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -1278,7 +1279,11 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         gl4_glGenSamplers(kMaxSamplerSlots, samplers_);
         for (int slot = 0; slot < kMaxSamplerSlots; ++slot)
+        {
             gl4_glBindSampler(static_cast<GLuint>(slot), samplers_[slot]);
+            samplerShadows_[static_cast<std::size_t>(slot)] = {};
+            samplerShadows_[static_cast<std::size_t>(slot)].bound = true;
+        }
 
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
@@ -2272,58 +2277,95 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                             int maxAnisotropy)
     {
-        EnsureCallingThreadContext();   // GL4-0021
+        // STREETGL4-0001: GraphicsDevice applies all sixteen slots before every draw, and a
+        // street frame has ~2 000 draws. Writing each object's ten parameters unconditionally cost
+        // ~500 000 GL calls a frame -- half the frame -- so an unchanged value issues nothing, and
+        // a call that issues nothing needs no context either.
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
-        const GLuint sampler = samplers_[slot];
         samplerFilters_[static_cast<std::size_t>(slot)] = filter;
         GLint minFilter = GL_LINEAR, magFilter = GL_LINEAR;
         FilterOrdinalToGL(filter, minFilter, magFilter);
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, minFilter);
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, magFilter);
-        // REMED-GFX-174: anisotropy is a component of the ordinal and is written on every
+        WriteSamplerParameter(slot, SamplerShadowField::MinFilter, GL_TEXTURE_MIN_FILTER, minFilter);
+        WriteSamplerParameter(slot, SamplerShadowField::MagFilter, GL_TEXTURE_MAG_FILTER, magFilter);
+        // REMED-GFX-174: anisotropy is a component of the ordinal and is enforced on every
         // application, or one Anisotropic draw leaves the long-lived slot object anisotropic.
         if (maxAnisotropy_ > 1.0f)
         {
             const float clamped = filter == 2 ? ClampedMaxAnisotropy(maxAnisotropy, maxAnisotropy_)
                                               : 1.0f;
-            gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, clamped);
+            WriteSamplerParameter(slot, SamplerShadowField::MaxAnisotropy,
+                                  GL_TEXTURE_MAX_ANISOTROPY, clamped);
         }
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, ToGLWrap(addressU));
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, ToGLWrap(addressV));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapS, GL_TEXTURE_WRAP_S, ToGLWrap(addressU));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapT, GL_TEXTURE_WRAP_T, ToGLWrap(addressV));
         // FX-092: the rest of the object's state is also a function of THIS call. W follows U
         // (every XNA preset sets all three axes alike); the mip range and bias return to XNA's
         // defaults, which a device-driven application then overwrites via ApplySamplerMipState and
         // ApplySamplerAddressW. XNA has no comparison sampler, so comparison stays off.
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, ToGLWrap(addressU));
-        gl4_glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD, 0.0f);
-        gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_LOD, 1000.0f);
-        gl4_glSamplerParameterf(sampler, GL_TEXTURE_LOD_BIAS, 0.0f);
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-        gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
+        WriteSamplerParameter(slot, SamplerShadowField::WrapR, GL_TEXTURE_WRAP_R, ToGLWrap(addressU));
+        WriteSamplerParameter(slot, SamplerShadowField::MinLod, GL_TEXTURE_MIN_LOD, 0.0f);
+        WriteSamplerParameter(slot, SamplerShadowField::MaxLod, GL_TEXTURE_MAX_LOD, 1000.0f);
+        WriteSamplerParameter(slot, SamplerShadowField::LodBias, GL_TEXTURE_LOD_BIAS, 0.0f);
+        WriteSamplerParameter(slot, SamplerShadowField::CompareMode, GL_TEXTURE_COMPARE_MODE,
+                              static_cast<GLint>(GL_NONE));
+        BindSamplerToOwnUnit(slot);
     }
 
     void OpenGL4Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
     {
-        EnsureCallingThreadContext();   // GL4-0021
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
-        const GLuint sampler = samplers_[slot];
         // XNA's MaxMipLevel is the MOST detailed level the sampler may use: a lower bound on the
         // LOD, i.e. GL_TEXTURE_MIN_LOD. XNA writes the signed property through D3D9's DWORD
         // channel, so a negative value converts to UInt32 and clamps rather than becoming zero.
         constexpr std::uint32_t kGlDefaultMaxLod = 1000u;
         const auto requested = static_cast<std::uint32_t>(maxMipLevel);
-        gl4_glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD,
-                                static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
-        gl4_glSamplerParameterf(sampler, GL_TEXTURE_LOD_BIAS, lodBias);
-        gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
+        WriteSamplerParameter(slot, SamplerShadowField::MinLod, GL_TEXTURE_MIN_LOD,
+                              static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
+        WriteSamplerParameter(slot, SamplerShadowField::LodBias, GL_TEXTURE_LOD_BIAS, lodBias);
+        BindSamplerToOwnUnit(slot);
     }
 
     void OpenGL4Renderer::ApplySamplerAddressW(int slot, int addressW)
     {
-        EnsureCallingThreadContext();   // GL4-0021
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
-        gl4_glSamplerParameteri(samplers_[slot], GL_TEXTURE_WRAP_R, ToGLWrap(addressW));
+        WriteSamplerParameter(slot, SamplerShadowField::WrapR, GL_TEXTURE_WRAP_R, ToGLWrap(addressW));
+        BindSamplerToOwnUnit(slot);
+    }
+
+    void OpenGL4Renderer::WriteSamplerParameter(int slot, SamplerShadowField field, GLenum pname,
+                                                GLint value)
+    {
+        SamplerSlotShadow& shadow = samplerShadows_[static_cast<std::size_t>(slot)];
+        const auto index = static_cast<std::size_t>(field);
+        const auto bits = static_cast<std::uint32_t>(value);
+        if (shadow.known[index] && shadow.bits[index] == bits) return;
+        EnsureCallingThreadContext();   // GL4-0021
+        gl4_glSamplerParameteri(samplers_[slot], pname, value);
+        shadow.known[index] = true;
+        shadow.bits[index] = bits;
+    }
+
+    void OpenGL4Renderer::WriteSamplerParameter(int slot, SamplerShadowField field, GLenum pname,
+                                                GLfloat value)
+    {
+        // Compared bit for bit: "the object already holds exactly this value", nothing looser.
+        SamplerSlotShadow& shadow = samplerShadows_[static_cast<std::size_t>(slot)];
+        const auto index = static_cast<std::size_t>(field);
+        const auto bits = std::bit_cast<std::uint32_t>(value);
+        if (shadow.known[index] && shadow.bits[index] == bits) return;
+        EnsureCallingThreadContext();   // GL4-0021
+        gl4_glSamplerParameterf(samplers_[slot], pname, value);
+        shadow.known[index] = true;
+        shadow.bits[index] = bits;
+    }
+
+    void OpenGL4Renderer::BindSamplerToOwnUnit(int slot)
+    {
+        SamplerSlotShadow& shadow = samplerShadows_[static_cast<std::size_t>(slot)];
+        if (shadow.bound) return;
+        EnsureCallingThreadContext();   // GL4-0021
         gl4_glBindSampler(static_cast<GLuint>(slot), samplers_[slot]);
+        shadow.bound = true;
     }
 
     // ------------------------------------------------------------------------------------

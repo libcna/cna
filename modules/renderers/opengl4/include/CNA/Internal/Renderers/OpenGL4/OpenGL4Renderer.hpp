@@ -1230,6 +1230,26 @@ namespace CNA::Internal::Renderers::OpenGL4
         void ApplyCurrentDepthBias();
         void FinalizeCurrentMRT();
 
+        // Sampler objects: every write is enforced, and the GL call skipped only when the object
+        // already holds exactly the value (STREETGL4-0001).
+        enum class SamplerShadowField : std::size_t
+        {
+            MinFilter,
+            MagFilter,
+            MaxAnisotropy,
+            WrapS,
+            WrapT,
+            WrapR,
+            MinLod,
+            MaxLod,
+            LodBias,
+            CompareMode,
+            Count
+        };
+        void WriteSamplerParameter(int slot, SamplerShadowField field, GLenum pname, GLint value);
+        void WriteSamplerParameter(int slot, SamplerShadowField field, GLenum pname, GLfloat value);
+        void BindSamplerToOwnUnit(int slot);
+
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         friend class OpenGL4CompiledEffect;
         // Compiled-effect draw routes (OpenGL4CompiledEffects.cpp); the Draw*Ex entry points
@@ -1358,6 +1378,16 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         // Sampler objects, one per XNA sampler slot, each bound to its own texture unit.
         unsigned int samplers_[kMaxSamplerSlots] = {};
+        /// What each slot's sampler object holds and whether it is bound to its own unit. Only
+        /// this renderer writes these objects, and the compute path restores the unit binding it
+        /// borrows, so the record stays exact (STREETGL4-0001).
+        struct SamplerSlotShadow
+        {
+            std::array<bool, static_cast<std::size_t>(SamplerShadowField::Count)> known{};
+            std::array<std::uint32_t, static_cast<std::size_t>(SamplerShadowField::Count)> bits{};
+            bool bound = false;
+        };
+        std::array<SamplerSlotShadow, kMaxSamplerSlots> samplerShadows_{};
         /// Nearest/clamp sampler every sampled compute input reads through (GL4-0025).
         unsigned int computeSampler_ = 0;
         /// XNA TextureFilter ordinal applied to each sampler slot (GL4-0037).
