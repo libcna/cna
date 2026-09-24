@@ -591,6 +591,20 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         /** @brief Returns true: a Texture3D bound to a custom effect is a real GL_TEXTURE_3D sampler input. */
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
+        /**
+         * @brief Returns true: the lit stock programs sample the configured shadow resources.
+         *
+         * The shared stock corpus carries directional, cascaded, point (cube) and spot shadow
+         * sampling, and the draw path binds every shadow map and parameter (units 7-9,
+         * plans/plan_opengl4_modern_graphics.md GL4-0013, GL4-0028).
+         */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+        /**
+         * @brief Returns true: PbrEffect/SkinnedPbrEffect shade from an image-based light.
+         *
+         * Irradiance, prefiltered specular and the BRDF table reach units 10-12 (GL4-0013).
+         */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
 
         // --- Modern CNAEXT surface (Workstream B; OpenGL4Modern.cpp) -------------------------
 

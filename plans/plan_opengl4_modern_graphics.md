@@ -962,3 +962,24 @@ The six `CnaGraphicsExtTests` changes that ran before and after, per test:
 - Three went from passing to skipped, because they are the refusal legs for a renderer *without* a
   timer: `AnUnsupportedTimerIsInert…`, `AnUnsupportedTimerNeverInventsANumber` and
   `TurningItOnWhereThereIsNoTimer…`.
+
+## GL4-0028 — Shadow sampling and image-based lighting are real (B20, B21)
+
+The lit stock programs OpenGL4 compiles are the shared corpus (`GL4-0008`). They carry directional,
+cascaded, point (cube) and spot shadow sampling, and PBR image-based lighting. `GL4-0013` already
+binds every resource and parameter they read: shadow map, cascades, punctual cube and spot map on
+units 7–9; irradiance, prefiltered specular and BRDF table on units 10–12; the neutral fallbacks
+where a resource is absent. What was missing was the promise, so the queries answered false and 31
+shared cases and eight CNAEXT oracles skipped a path that worked.
+
+`SupportsShadowSamplingEXT` and `SupportsImageBasedLightingEXT` now answer true, as EasyGL's do, and
+the cases that skipped on them now run and pass unchanged:
+
+| Suite | GL4-0027 | GL4-0028 |
+|---|---|---|
+| `CnaGraphicsExtTests` OPENGL4 | 907 / 1 / 54 | **938 / 1 / 23** — all 31 "lit shaders do not sample shadow maps" cases pass |
+| CNAEXT oracles OPENGL4 | 24 / 1 / 8 | **31 / 1 / 1** — `ShadowMap`, `CascadedShadowMap`, `PointShadow`, `ShadowReceiver`, `ImageBasedLighting`, `Showcase` and `GltfPbr` pass their pixel oracles |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+The remaining OpenGL4 skips are 15 clustered-effect cases (the next row), the storage-image case
+(`GL4-0030`), and refusal legs for capabilities OpenGL4 now has.
