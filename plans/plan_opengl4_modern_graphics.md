@@ -701,3 +701,77 @@ EasyGL's remaining corpus failures are EasyGL defects this workstream found and 
 share (cube-face SpriteBatch projection, the lost REMED-GFX-234 rule, `MsaaFragmentContract`,
 `SkinnedEffectVector4BoneIndices`); they are recorded, not changed, because EasyGL is the reference
 and outside this workstream. The one `CnaGraphicsExtTests` failure is a modern (Workstream B) case.
+
+---
+
+# Workstream B — the modern CNA/CNAEXT Graphics API on OpenGL4
+
+## GL4-0024 — Inventory and baselines (B1/B2)
+
+### The modern surface, and where OpenGL4 stood when B began
+
+Taken from the renderer contract (`IGraphicsRenderer.hpp`: the compute/storage/timer interfaces and
+the renderer virtuals from `CreateComputeShader` onward), the CNAEXT members of `GraphicsDevice`
+(`GetRendererCapabilityProfileEXT` and friends), `docs/modern-gpu-baseline.md`, and the live profile
+the checked-in `cna_probe_modern_gpu_capabilities` printed for OPENGL4 on the Radeon 780M at
+`a0ae5d056`. The last column names the task that closes the row; it is filled in as they land.
+
+| Group | Entry points | OpenGL4 at `a0ae5d056` | Native fact (`GL4::DiscoverModernCapabilities`, Mesa 4.6 core) | Closed by |
+|---|---|---|---|---|
+| Capability discovery | `GraphicsCapability` 17/18, `RendererFeature` (Compute, ComputeImageBinding, Indirect, BaseInstance, ShadowSampling, IBL, GpuTimers), 22 `RendererLimit`s, 13 `RendererFormatUsage` bits × 27 formats | every modern feature **unsupported**; every modern limit 0; format usages only the shared derivation (no Sampled/Filterable/Storage*/Multisample answers) | all native | |
+| Shader payloads | `SupportsShaderLanguageEXT` | GlslDesktop vertex/fragment only | 4.30 compute available | |
+| Compute | `CreateComputeShader`, `DispatchCompute`, scalar uniforms, storage/constant buffer bindings, sampled textures, image binding, storage textures | absent (renderer default: null) | `glDispatchCompute`, `glBindImageTexture`, `glMemoryBarrier` resolved | |
+| Buffers | `CreateStorageBuffer(EXT)` — 6 roles × CPU access, ranged transfers, `CopyToEXT`, constant buffers | absent | SSBO, UBO, `glCopyBufferSubData` | |
+| Ordering | `MemoryBarrierEXT`, ADR 0001 (results visible without caller barriers, no routine global stalls) | absent | `glMemoryBarrier` | |
+| Draws | `DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT`, `DrawInstancedPrimitivesBaseInstanceEXT`, `BindStorageBufferForDrawEXT` | absent / base instance refused | `glDraw*Indirect`, `glDrawElementsInstancedBaseVertexBaseInstance` | |
+| Timing / debug | `CreateGpuTimerEXT`, `SetStringMarkerEXT`, `GetTimestampPeriodPicosecondsEXT` | absent; the marker is the base no-op | `GL_TIME_ELAPSED` 64-bit, `KHR_debug` markers | |
+| Textures | `StorageTexture2D` (15 exact formats), `Texture2DArray`, float/HDR targets, `Texture3D` sampling | float/HDR targets and 3D sampling already done (Workstream A); storage textures and arrays absent | image load/store, `GL_TEXTURE_2D_ARRAY` | |
+| Stock-shader queries | `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT` | false, although the stock programs already bind shadow and IBL resources (`GL4-0013`) | — | |
+| Engine layer on top | shadows, IBL, clustered forward, GPU culling, particles, auto-exposure, WBOIT, post-process | runs where no modern query gates it; clustered forward has **no desktop GLSL variant** at all | — | |
+| Effect lifetime | an effect disposed while work that names it is outstanding | SpriteBatch holds the custom effect by raw pointer between `Begin` and `End` | — | |
+| Not applicable | command buffers, descriptors, queues, native handles | CNA exposes none (ADR 0001); nothing is added because GL could | — | — |
+
+Outside the modern API, so not implemented here: mesh/task shaders, bindless, VRS, sparse
+resources, ray tracing, asynchronous compute (`MOD-2266`).
+
+### Baselines — before any Workstream B change
+
+`cmake-build-opengl4` (Wayland, SDL-free, `CNA_CNAEXT=ON`, `CNA_GRAPHICS_RENDERERS=OPENGL4;OPENGLES3;OPENGL33`),
+one binary per suite, runtime renderer selection, private runner, Radeon 780M, `a0ae5d056`.
+
+| Suite | OPENGL4 | EasyGL OPENGLES3 | EasyGL OPENGL33 |
+|---|---|---|---|
+| `CnaGraphicsExtTests` (962, bounded runner, 5 shards) | **856 / 1 / 105** | 954 / 0 / 8 | 922 / **7** / 33 |
+| CNAEXT oracles `-R '^CNAEXT_\|^ModernGpuCapabilityProbe$'` (33) | 21 / 1 / 11 | 32 / 1 / 0 | — |
+
+The other families' recorded closeouts on the same hardware, for comparison (their own ledgers):
+Vulkan 928 / 0 / 32 of 960 (`VMG-0019`), WebGPU 933 / 0 / 29 (`plan_webgpu_modern_graphics.md`
+closeout), SDL_GPU 931 / 0 / 31 of 962 (`SMG-0042`).
+
+**OpenGL4's 105 `CnaGraphicsExtTests` skips, by the reason the test printed:**
+
+| skips | reason | cause |
+|---|---|---|
+| 31 | "this renderer's lit shaders do not sample shadow maps" | `SupportsShadowSamplingEXT` false |
+| 17 + 16 + 7 | "does not support / has no compute shaders" | no compute |
+| 15 | "this renderer cannot run the clustered effect" | `clustered_forward` package has no GlslDesktop variant |
+| 6 | "has no indirect draw route" | no indirect |
+| 6 | "has no GPU timer query" | no timer |
+| 4 | "ShaderPackageEXT: no usable shader variant" | no compute, and the test packages carry no desktop compute variant |
+| 1 + 1 + 1 | SPIR-V compute / StorageBuffer refused / no argument buffer | no compute, no storage buffers |
+
+**The one failure** — `ClusteredForwardEffectTest.ATransmissiveMaterialWithoutAnOpaqueFrameIsRefused`
+— is the same missing desktop variant: the case does not ask `isSupported()`, so on a renderer that
+cannot build the effect its "accepted with a frame" leg throws. OPENGL33 fails it identically.
+
+**EasyGL OPENGL33's seven failures** are the same two gaps, seen from a renderer that *has* compute:
+Mesa grants EasyGL's 3.3 request a 4.6 core context, so `SupportsComputeShadersEXT` is true, and six
+`ModernGpuConformance` cases then throw "no usable shader variant" because
+`modern_conformance`'s package offers GLSL ES, SPIR-V and WGSL but no desktop GLSL. The seventh is the
+clustered case above.
+
+**CNAEXT oracles.** OpenGL4's eleven skips are the same capability answers (shadow sampling ×5, IBL
+×3 with them, compute, indirect+compute, timer, and `CNAEXT_ClusteredLights` for the missing desktop
+package). `CNAEXT_NoPosixSetenv` fails on **every** renderer — a source scan finding `setenv`/`unsetenv`
+in `modules/platform/src/Wayland/` and the Wayland platform tests. It is not an OpenGL4 or modern-graphics
+defect, is outside this workstream's scope, and is recorded here rather than changed.
