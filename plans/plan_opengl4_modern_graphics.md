@@ -983,3 +983,36 @@ the cases that skipped on them now run and pass unchanged:
 
 The remaining OpenGL4 skips are 15 clustered-effect cases (the next row), the storage-image case
 (`GL4-0030`), and refusal legs for capabilities OpenGL4 now has.
+
+## GL4-0029 — The clustered forward effect on desktop GL (B22)
+
+`clustered_forward` was the one engine-layer shader package with no desktop GLSL variant. On every
+desktop core renderer the effect reported `isSupported() == false`, so 15 cases skipped and
+`CNAEXT_ClusteredLights` skipped. `ClusteredForwardEffectTest.ATransmissiveMaterialWithoutAnOpaqueFrameIsRefused`,
+which does not ask `isSupported()`, failed on OPENGL4 and OPENGL33 alike.
+
+- `forward.desktop.vert.glsl` and `forward.desktop.frag.glsl` are the ES 3.00 sources with
+  `#version 300 es` + `precision highp float;` replaced by `#version 330 core`. That is exactly the
+  convention of the package's siblings (`skybox`, `volumetric_fog`, …). Nothing else in the shader is
+  dialect-specific: it reads its light tables with `texelFetch` and needs no storage buffer.
+- The header was regenerated; `--check` reproduces it, and the SPIR-V and WGSL payloads are
+  byte-identical, with only the two text payloads added.
+- `ClusteredForwardEffect` offers the variant.
+
+**Results** (every renderer the variant can reach, same binary):
+
+| Suite | Before | After |
+|---|---|---|
+| `Clustered*` (97 cases) | OPENGL4 81 / 1 / 15, OPENGL33 same | **97 / 0 / 0** on OPENGL4, OPENGL33 and OPENGLES3 |
+| `CnaGraphicsExtTests` OPENGL4 | 938 / 1 / 23 | **954 / 0 / 8** — the EasyGL OPENGLES3 reference's own figure |
+| `CnaGraphicsExtTests` OPENGL33 | 938 / 2 / 22 | 954 / 1 / 7 (the remaining failure is the EasyGL image-binding defect of `GL4-0025`) |
+| `CnaGraphicsExtTests` OPENGLES3 | 954 / 0 / 8 | 954 / 0 / 8 |
+| CNAEXT oracles | OPENGL4 31 / 1 / 1 | **OPENGL4 32 / 1 / 0**, OPENGLES3 32 / 1 / 0 (`CNAEXT_ClusteredLights` passes; the failure is `CNAEXT_NoPosixSetenv`, `GL4-0024`) |
+
+**OpenGL4's eight remaining `CnaGraphicsExtTests` skips**, every one a case that cannot apply:
+
+| Skips | Reason |
+|---|---|
+| six | the refusal legs of capabilities OpenGL4 now has: compute, indirect drawing, two GPU-timer cases, pass timing, and `RequireCapability` ("supports every capability there is") |
+| one | the SPIR-V-only compute intake |
+| one | the Color storage image, which is `GL4-0030` |
