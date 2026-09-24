@@ -119,6 +119,11 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr const char* kRendererName = "OPENGL4";
+    constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;

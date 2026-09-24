@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_opengl4.md GL4-1..GL4-9: end-to-end smoke test for the real desktop OpenGL 4.x
 // core-profile graphics renderer's device/window/context lifecycle and color/depth/stencil
-// clear+present. Real window, a real SDL_GLContext requesting SDL_GL_CONTEXT_PROFILE_CORE
-// (unlike EasyGL's SDL_GL_CONTEXT_PROFILE_ES), and a real 60-frame Clear()+Present() loop.
+// clear+present. Real window, a real core-profile context from the platform's GL service, and a
+// real 60-frame Clear()+Present() loop.
 //
-// Check A -- GameWindow handle returns a real, non-null SDL_Window.
-// Check B -- SDL_GetRenderer(window) is null (this renderer does not use SDL_Renderer).
+// Check A -- GameWindow handle returns a real, non-null native window.
+// Check B -- the context GL reports is a desktop OpenGL 4.x context.
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
 // Check D -- a real OpenGL4VertexBufferRenderer/OpenGL4IndexBufferRenderer round-trip: SetData()
 //   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded.
@@ -62,8 +62,13 @@ protected:
 
         if (frame_ == 1)
         {
-            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GameWindow handle returns a real window");
-            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr, "SDL_GetRenderer(window) is null (no SDL_Renderer)");
+            check(getWindowProperty().getHandleProperty() != 0, "GameWindow handle returns a real window");
+            // plans/plan_opengl4_modern_graphics.md GL4-0003: platform-neutral replacement for the
+            // former SDL_GetRenderer(window) == nullptr check, which named SDL and could not build
+            // on a native X11/Wayland platform. What it guarded -- that this is a real desktop GL
+            // context rather than something else presenting the window -- is asked of GL itself.
+            const auto& caps = renderer.GetModernCapabilitiesEXT();
+            check(caps.contextMajor >= 4, "the context is a desktop OpenGL 4.x context");
 
             int width = 0;
             int height = 0;

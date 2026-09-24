@@ -158,6 +158,11 @@ namespace
     // examples/rendertargetcube_msaa_face_test.cpp is the fuller oracle for it.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", true, Support::Exact, true, true,
+                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_VULKAN)
     // `msaaCubeTargets` true since plan_vulkan.md VULKAN-216: a cube target's sample count is its
     // OWN, so it multisamples on the count IT asked for rather than only when the BACKBUFFER was

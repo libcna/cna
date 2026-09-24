@@ -275,6 +275,12 @@ namespace
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, true};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", Support::Exact, true, Support::Exact,
+                                 true, true, true, true, true,
+                                 true, true, true, true, true, true, false, true};
 #elif defined(CNA_RENDERER_VULKAN)
     // `msaaRt2dPreserves` false: the multisampled RenderTarget2D leg hardcodes
     // `discardContents=true`, discarding colour AND depth -- REMED-GFX-141's recorded finding.
