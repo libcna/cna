@@ -2820,9 +2820,37 @@ namespace CNA::Internal::Renderers::Vulkan
         allocatedBytes_ = needed;
         hostBytes_.resize(static_cast<std::size_t>(needed));
 
-        // Safe without a fence: nothing outside this object holds the handle (see the header).
-        if (oldBuffer != VK_NULL_HANDLE) vkDestroyBuffer(dev, oldBuffer, nullptr);
-        if (oldMemory != VK_NULL_HANDLE) vkFreeMemory(dev, oldMemory, nullptr);
+        // STREETPERF-0003: a draw may have bound the old buffer, and then it leaves on the frame
+        // fence; one nothing has bound since it was written is still this object's alone.
+        if (boundSinceWrite_)
+        {
+            VulkanRenderer::RetiredResources r;
+            if (oldBuffer != VK_NULL_HANDLE) r.buffers.push_back(oldBuffer);
+            if (oldMemory != VK_NULL_HANDLE) r.memories.push_back(oldMemory);
+            owner_->RetireResources(std::move(r));
+            boundSinceWrite_ = false;
+        }
+        else
+        {
+            if (oldBuffer != VK_NULL_HANDLE) vkDestroyBuffer(dev, oldBuffer, nullptr);
+            if (oldMemory != VK_NULL_HANDLE) vkFreeMemory(dev, oldMemory, nullptr);
+        }
+    }
+
+    void VulkanVertexBufferRenderer::MoveToFreshBufferEXT()
+    {
+        VulkanRenderer::RetiredResources r;
+        if (buffer_ != VK_NULL_HANDLE) r.buffers.push_back(buffer_);
+        if (memory_ != VK_NULL_HANDLE) r.memories.push_back(memory_);
+        buffer_ = VK_NULL_HANDLE;
+        memory_ = VK_NULL_HANDLE;
+        mappedPtr_ = nullptr;
+        owner_->CreateBuffer(allocatedBytes_,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            buffer_, memory_, &mappedPtr_);
+        owner_->RetireResources(std::move(r));
+        boundSinceWrite_ = false;
     }
 
     void VulkanVertexBufferRenderer::ReleaseVulkanResources()
@@ -2872,6 +2900,13 @@ namespace CNA::Internal::Renderers::Vulkan
 
         const std::size_t bytes = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
         std::memcpy(hostBytes_.data(), data, bytes);
+        if (boundSinceWrite_ && owner_ != nullptr && owner_->device_ != VK_NULL_HANDLE)
+        {
+            // STREETPERF-0003: a queued draw, or a frame in flight, reads the current buffer.
+            MoveToFreshBufferEXT();
+            std::memcpy(mappedPtr_, hostBytes_.data(), static_cast<std::size_t>(allocatedBytes_));
+            return;
+        }
         std::memcpy(mappedPtr_, data, bytes);
     }
 
@@ -2934,9 +2969,7 @@ namespace CNA::Internal::Renderers::Vulkan
         RequireByteCapacity(
             static_cast<VkDeviceSize>(index_count) * sizeof(uint16_t), "a 16-bit index upload");
         indexCount_ = index_count;
-        const std::size_t bytes = static_cast<std::size_t>(index_count) * sizeof(uint16_t);
-        std::memcpy(hostBytes_.data(), data, bytes);
-        std::memcpy(mappedPtr_, data, bytes);
+        Write(data, static_cast<std::size_t>(index_count) * sizeof(uint16_t));
     }
 
     void VulkanIndexBufferRenderer::SetData32(const void* data, int index_count)
@@ -2945,9 +2978,36 @@ namespace CNA::Internal::Renderers::Vulkan
         RequireByteCapacity(
             static_cast<VkDeviceSize>(index_count) * sizeof(uint32_t), "a 32-bit index upload");
         indexCount_ = index_count;
-        const std::size_t bytes = static_cast<std::size_t>(index_count) * sizeof(uint32_t);
+        Write(data, static_cast<std::size_t>(index_count) * sizeof(uint32_t));
+    }
+
+    void VulkanIndexBufferRenderer::Write(const void* data, const std::size_t bytes)
+    {
         std::memcpy(hostBytes_.data(), data, bytes);
+        if (boundSinceWrite_ && owner_ != nullptr && owner_->device_ != VK_NULL_HANDLE)
+        {
+            // STREETPERF-0003: see VulkanVertexBufferRenderer::SetData.
+            MoveToFreshBufferEXT();
+            std::memcpy(mappedPtr_, hostBytes_.data(), static_cast<std::size_t>(allocatedBytes_));
+            return;
+        }
         std::memcpy(mappedPtr_, data, bytes);
+    }
+
+    void VulkanIndexBufferRenderer::MoveToFreshBufferEXT()
+    {
+        VulkanRenderer::RetiredResources r;
+        if (buffer_ != VK_NULL_HANDLE) r.buffers.push_back(buffer_);
+        if (memory_ != VK_NULL_HANDLE) r.memories.push_back(memory_);
+        buffer_ = VK_NULL_HANDLE;
+        memory_ = VK_NULL_HANDLE;
+        mappedPtr_ = nullptr;
+        owner_->CreateBuffer(allocatedBytes_,
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            buffer_, memory_, &mappedPtr_);
+        owner_->RetireResources(std::move(r));
+        boundSinceWrite_ = false;
     }
 
     // =========================================================================
@@ -14313,9 +14373,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::overflow_error("CNA Vulkan: per-frame 3D geometry size overflow");
             used += bytes;
         };
+        lastArenaGeometryBytesEXT_ = 0;
         for (const auto& draw : pending3D_) {
             if (rtOnly && !recordedByFlush(draw.rt.get(), draw.segment)) continue;
-            if (draw.vbData.empty()) continue;
+            if (draw.vbData.empty() && draw.residentVb == VK_NULL_HANDLE) continue;
+            lastArenaGeometryBytesEXT_ += draw.vbData.size() + draw.ibData.size();
             addArenaBytes(requiredVB, static_cast<VkDeviceSize>(draw.vbData.size()));
             if (!draw.ibData.empty()) {
                 const VkDeviceSize alignment = draw.indexType == VK_INDEX_TYPE_UINT32 ? 4 : 2;
@@ -14811,11 +14873,12 @@ namespace CNA::Internal::Renderers::Vulkan
                     }
                     continue;
                 }
-                if (draw.vbData.empty()) continue;
+                if (draw.vbData.empty() && draw.residentVb == VK_NULL_HANDLE) continue;
                 const bool indexedDraw = draw.indirectBuffer != VK_NULL_HANDLE
-                    ? draw.indirectIndexed : !draw.ibData.empty();
+                    ? draw.indirectIndexed
+                    : (!draw.ibData.empty() || draw.residentIb != VK_NULL_HANDLE);
                 VkDeviceSize nativeIbOff = ibOff;
-                if (indexedDraw) {
+                if (indexedDraw && draw.residentIb == VK_NULL_HANDLE) {
                     const VkDeviceSize indexAlignment =
                         draw.indexType == VK_INDEX_TYPE_UINT32
                             ? sizeof(uint32_t)
@@ -14860,8 +14923,9 @@ namespace CNA::Internal::Renderers::Vulkan
                     }
                 }
 
-                std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOff,
-                            draw.vbData.data(), draw.vbData.size());
+                if (!draw.vbData.empty())
+                    std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOff,
+                                draw.vbData.data(), draw.vbData.size());
                 if (!draw.ibData.empty()) {
                     // REMED-GFX-112: each deferred draw keeps exact logical bytes/counts. Only
                     // its placement in the shared native arena is padded so vkCmdBindIndexBuffer's
@@ -15285,11 +15349,17 @@ namespace CNA::Internal::Renderers::Vulkan
                                    static_cast<const void*>(draw.rt.get()),
                                    static_cast<unsigned long long>(draw.segment),
                                    VkH(draw.descSet), draw.drawCount, draw.instanceCount);
-                vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOff);
+                if (draw.residentVb != VK_NULL_HANDLE)
+                    vkCmdBindVertexBuffers(cb, 0, 1, &draw.residentVb, &draw.residentVbOffset);
+                else
+                    vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOff);
                 if (draw.useInstanced && !draw.instVbData.empty()) {
                     vkCmdBindVertexBuffers(cb, 1, 1, &frame3DInstVB_[currentFrame_], &instVbOff);
                 }
-                if (indexedDraw) {
+                if (indexedDraw && draw.residentIb != VK_NULL_HANDLE) {
+                    vkCmdBindIndexBuffer(cb, draw.residentIb, draw.residentIbOffset,
+                                         draw.indexType);
+                } else if (indexedDraw) {
                     vkCmdBindIndexBuffer(
                         cb, frame3DIB_[currentFrame_], nativeIbOff, draw.indexType);
                 }
@@ -15313,7 +15383,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 {
                     vkCmdDraw(cb, draw.drawCount, draw.instanceCount, 0, draw.firstInstance);
                 }
-                if (indexedDraw)
+                if (indexedDraw && draw.residentIb == VK_NULL_HANDLE)
                     ibOff = nativeIbOff + static_cast<VkDeviceSize>(draw.ibData.size());
                 if (draw.useInstanced)
                     instVbOff += static_cast<VkDeviceSize>(draw.instVbData.size());
@@ -20058,7 +20128,8 @@ namespace CNA::Internal::Renderers::Vulkan
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
         const void* indexData, std::size_t indexBytes, VkIndexType indexType,
         const IVertexBufferRenderer* instVb_in, int instanceVertexOffset,
-        int instanceFrequency, int instanceCount)
+        int instanceFrequency, int instanceCount,
+        const VulkanIndexBufferRenderer* indexSource, const VkDeviceSize indexSourceOffset)
     {
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
         const uint32_t drawCount =
@@ -20182,20 +20253,43 @@ namespace CNA::Internal::Renderers::Vulkan
             else
             {
                 const int vertexCount = vb.GetVertexCount();
-                d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
-                std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
-                            static_cast<std::size_t>(vertexCount) * stride);
+                if (vertexCount > 0 && stride > 0 && vb.GetBuffer() != VK_NULL_HANDLE)
+                {
+                    // STREETPERF-0003: the buffer itself, not a copy of it.
+                    d.residentVb = vb.BindForDrawEXT();
+                }
+                else
+                {
+                    d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
+                    std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
+                                static_cast<std::size_t>(vertexCount) * stride);
+                }
                 d.baseVertex = static_cast<int32_t>(params.baseVertex);
             }
-            d.ibData.resize(indexBytes);
-            // VMG-0017: an indirect draw queues no CPU-side indices (see DrawPrimitivesEx).
-            if (indexBytes != 0)
-                std::memcpy(d.ibData.data(), indexData, indexBytes);
+            if (indexSource != nullptr && indexBytes != 0 &&
+                indexSource->GetBuffer() != VK_NULL_HANDLE)
+            {
+                d.residentIb = indexSource->BindForDrawEXT();
+                d.residentIbOffset = indexSourceOffset;
+            }
+            else
+            {
+                d.ibData.resize(indexBytes);
+                // VMG-0017: an indirect draw queues no CPU-side indices (see DrawPrimitivesEx).
+                if (indexBytes != 0)
+                    std::memcpy(d.ibData.data(), indexData, indexBytes);
+            }
             d.drawCount = drawCount;
         } else {
             if (packsVertexStreams)
             {
                 d.vbData = std::move(packedVertexStreams.bytes);
+            }
+            else if (drawCount * stride > 0 && vb.GetBuffer() != VK_NULL_HANDLE)
+            {
+                // STREETPERF-0003: the buffer itself, at the draw's first vertex.
+                d.residentVb = vb.BindForDrawEXT();
+                d.residentVbOffset = static_cast<VkDeviceSize>(params.vertexStart) * stride;
             }
             else
             {
@@ -20757,6 +20851,12 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             d.vbData = std::move(packedVertexStreams.bytes);
         }
+        else if (drawCount * stride > 0 && vb.GetBuffer() != VK_NULL_HANDLE)
+        {
+            // STREETPERF-0003: the buffer itself, at the draw's first vertex, not a copy of it.
+            d.residentVb = vb.BindForDrawEXT();
+            d.residentVbOffset = static_cast<VkDeviceSize>(params.vertexStart) * stride;
+        }
         else
         {
             d.vbData.resize(drawCount * stride);
@@ -20876,7 +20976,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 vb_in, world, view, projection, primitive, primitiveCount, params,
                 static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize,
                 indexCount * static_cast<std::size_t>(indexSize),
-                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                nullptr, 0, 1, 1, &ib,
+                static_cast<VkDeviceSize>(params.startIndex) * static_cast<VkDeviceSize>(indexSize));
             return;
         }
 
@@ -21000,16 +21102,33 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         else
         {
-            d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
-            std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
-                        static_cast<std::size_t>(vertexCount) * stride);
+            if (vertexCount > 0 && stride > 0 && vb.GetBuffer() != VK_NULL_HANDLE)
+            {
+                // STREETPERF-0003: the buffer itself, not a copy of it.
+                d.residentVb = vb.BindForDrawEXT();
+            }
+            else
+            {
+                d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
+                std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
+                            static_cast<std::size_t>(vertexCount) * stride);
+            }
             d.baseVertex = static_cast<int32_t>(params.baseVertex);
         }
-        d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
-        // VMG-0017: see DrawPrimitivesEx -- an indirect draw queues no CPU-side indices.
-        if (!d.ibData.empty())
-            std::memcpy(d.ibData.data(), selectedIndices,
-                        static_cast<std::size_t>(indexCount) * indexSize);
+        if (indexCount > 0 && ib.GetBuffer() != VK_NULL_HANDLE)
+        {
+            d.residentIb = ib.BindForDrawEXT();
+            d.residentIbOffset =
+                static_cast<VkDeviceSize>(params.startIndex) * static_cast<VkDeviceSize>(indexSize);
+        }
+        else
+        {
+            d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
+            // VMG-0017: see DrawPrimitivesEx -- an indirect draw queues no CPU-side indices.
+            if (!d.ibData.empty())
+                std::memcpy(d.ibData.data(), selectedIndices,
+                            static_cast<std::size_t>(indexCount) * indexSize);
+        }
         d.topology      = ToVkTopology(primitive);
         d.drawCount     = indexCount;
         d.depthTest     = depthTestEnabled_;
@@ -21168,7 +21287,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 ib != nullptr && ib->IsThirtyTwoBit()
                     ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
                 instanceStream->buffer, instanceStream->vertexOffset,
-                instanceStream->instanceFrequency, instanceCount);
+                instanceStream->instanceFrequency, instanceCount, ib,
+                ib != nullptr ? static_cast<VkDeviceSize>(params.startIndex) *
+                                    static_cast<VkDeviceSize>(indexSize)
+                              : 0);
             return;
         }
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
@@ -21514,9 +21636,13 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             d.vbData = std::move(packedVertexStreams.bytes);
         }
+        else if (vertexCount > 0 && pvStride > 0 && vb.GetBuffer() != VK_NULL_HANDLE)
+        {
+            // STREETPERF-0003: the single stream is bound in place rather than snapshotted.
+            d.residentVb = vb.BindForDrawEXT();
+        }
         else
         {
-            // The single-stream path preserves its established whole-buffer snapshot.
             d.vbData.resize(static_cast<std::size_t>(vertexCount) * pvStride);
             std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
                         static_cast<std::size_t>(vertexCount) * pvStride);
@@ -21525,7 +21651,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // Copy index data (with startIndex offset) only for the indexed public route. The private
         // non-indexed form is used by Vulkan indirect drawing so it can share the exact instanced
         // effect/pipeline capture without inventing an index buffer.
-        if (ib != nullptr)
+        if (ib != nullptr && drawCount > 0 && ib->GetBuffer() != VK_NULL_HANDLE)
+        {
+            d.residentIb = ib->BindForDrawEXT();
+            d.residentIbOffset =
+                static_cast<VkDeviceSize>(params.startIndex) * static_cast<VkDeviceSize>(indexSize);
+        }
+        else if (ib != nullptr)
         {
             d.ibData.resize(static_cast<std::size_t>(drawCount) * indexSize);
             if (!d.ibData.empty())
@@ -21820,6 +21952,12 @@ namespace CNA::Internal::Renderers::Vulkan
 
         Pending3DDraw draw = std::move(pending3D_.back());
         pending3D_.pop_back();
+        // STREETPERF-0003: this route builds its own snapshots below (from the folded first
+        // record, and the whole index buffer), so the capture's in-place bindings do not apply.
+        draw.residentVb = VK_NULL_HANDLE;
+        draw.residentVbOffset = 0;
+        draw.residentIb = VK_NULL_HANDLE;
+        draw.residentIbOffset = 0;
         const int foldedOffset = ib_in != nullptr ? params.baseVertex : params.vertexStart;
         if (foldedOffset < 0)
             throw std::invalid_argument(

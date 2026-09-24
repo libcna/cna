@@ -42,11 +42,16 @@ measured speed; they compared pictures.
 |---|---|---|
 | STREETPERF-0001 | Vulkan: the retired-resource queue was drained with one `vector::erase` per entry | ✅ |
 | STREETPERF-0002 | SDL_GPU: every draw re-uploaded its buffers' whole contents every frame (~430 MB), and every `SetData` submitted a command buffer of its own | ✅ |
+| STREETPERF-0003 | Vulkan: every draw copied its whole vertex buffer and its indices, twice | ✅ |
 
 **Found, not caused** (each A/B-checked: reverted source, rebuilt, still fails):
 
 * `Vulkan_DrawRangeValidation` -- six of its checks expect an invalid draw range to be forwarded,
   and the device now refuses it.
+* On Vulkan (`cmake-build-cnaext`), 3 of 2 894 `CnaGraphicsTests` cases:
+  `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`,
+  `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset`,
+  `OrdinaryDrawMultiStreamTest.SixteenBindingsCanSupplyAConsumedSemanticFromSlot15`.
 * On SDL_GPU (`cmake-build-sdlgpu`): 25 of 238 `-R '^SdlGpu'` ctests and 25 of 2 845
   `CnaGraphicsTests` cases. Two of the latter
   (`SdlGpuIndexedDrawRangeTest.MutatingSourceBuffersAfterQueuingDoesNotChangeQueuedDraws`,
@@ -161,3 +166,56 @@ Vulkan runs (the street's shop dressing and traffic depend on timing).
 | `CnaGraphicsExtTests` | **931 / 0 / 38** |
 | `CnaRendererTests` | **224 / 0** |
 | `CnaGraphicsTests` | 2 593 / 25 / 227 -- the same 25 as the unmodified renderer |
+
+---
+
+## STREETPERF-0003 — Vulkan copied every draw's geometry twice
+
+**Root cause.** With `STREETPERF-0001` in, `QueueCustomEffect3DDrawEXT` held 23 of 60 stacks and
+the record 13 more. This renderer's vertex and index buffers already own a host-visible `VkBuffer`
+that `SetData` writes, but no draw ever bound it: every draw copied the buffer's bytes into its
+record -- for an indexed draw the *whole* vertex buffer -- and `RecordCommandBuffer` copied them
+again into the frame's 3D arena. The same ~430 MB a frame SDL_GPU uploaded, copied twice.
+
+**Fix.** The same rule as SDL_GPU, fitted to this renderer's retirement queue:
+
+* A draw binds its buffers' own `VkBuffer`s (`Pending3DDraw::residentVb/residentIb` and their
+  byte offsets: the draw's first vertex, or `startIndex` for indices -- exactly the windows the
+  copies used). `BindForDrawEXT` marks the buffer as bound since its last write.
+* `SetData` on a bound buffer moves to a fresh `VkBuffer` of the same size and retires the old one
+  on the frame fence, so the queued draw -- and any frame still in flight -- keeps what it was
+  issued with. A buffer nothing has bound since its last write is rewritten in place, as before;
+  the invariant "unbound since written" is exactly "no command reads it". `EnsureByteCapacity`
+  retires a bound buffer instead of destroying it, for the same reason.
+* Covered: the stock `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` routes, custom `ShaderEffect`
+  draws (ordinary and instanced, the index source now passed through), and the instanced core's
+  single stream. Packed multi-stream draws and the indirect route keep their snapshots; the
+  indirect route builds its own from a folded first record, so it clears the capture's in-place
+  bindings -- the first build missed that, and `Vulkan_IndirectDraw` said so (31/256 red pixels).
+
+**Measured** (`--benchmark baseline`, load average 3-4):
+
+| | CPU frame | fps | GPU frame |
+|---|---|---|---|
+| as found | 120 ms | 8.3 | 43.5 ms |
+| after `STREETPERF-0001` | 97-104 ms | 9.7-10.3 | 43.2 ms |
+| after this task | **27.0-28.0 ms** | **35.7-37.0** | 41.6 ms |
+| OPENGL4, same runs | 38.0 ms | 26.4 | 49.6 ms |
+
+**The picture:** the 18 captures are **bit-identical to the pre-change Vulkan capture** at every
+viewpoint. Under `VK_LAYER_KHRONOS_validation` for 40 frames: no errors -- ten
+`AllocateDescriptorSets-WrongType` warnings, about descriptor pools this task does not touch.
+
+**Tests.** `BufferRewriteWithinFrameTests` (from `STREETPERF-0002`) passes on Vulkan, and with the
+move to a fresh buffer disabled its first two cases fail here too. `VulkanResidentGeometryTests`:
+32 draws from two unchanged buffers copy no bytes into the frame arena
+(`GetLastArenaGeometryBytesEXT`, test-only).
+
+**Regression runs** (`cmake-build-cnaext`, VULKAN;OPENGLES3, Wayland):
+
+| suite | result |
+|---|---|
+| `-R '^Vulkan_'` | 383 / 1 of 384 -- `Vulkan_DrawRangeValidation`, as before |
+| `CnaGraphicsExtTests` | **937 / 0 / 32** |
+| `CnaRendererTests` | **231 / 0 / 10** before the new test; the new test passes |
+| `CnaGraphicsTests` | 2 691 / 3 / 200 -- the three above, which fail without this change |

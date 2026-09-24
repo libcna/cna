@@ -1463,6 +1463,10 @@ namespace CNA::Internal::Renderers::Vulkan
         int  GetVertexCount() const override { return vertexCount_; }
 
         VkBuffer    GetBuffer()    const { return buffer_; }
+        /// STREETPERF-0003: the buffer a draw binds in place of a copy of its bytes. The next
+        /// SetData then moves to a fresh buffer and retires this one on the frame fence, so the
+        /// draw -- and any frame still in flight -- keeps what it was issued with.
+        VkBuffer    BindForDrawEXT() const { boundSinceWrite_ = true; return buffer_; }
         int         GetCapacity()  const { return capacity_; }
         // Deferred draws copy from ordinary cached RAM, not a CPU-slow GPU mapping.
         const void* GetMappedPtr() const { return hostBytes_.data(); }
@@ -1495,6 +1499,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// so nothing but this object can name the handle. Keep that true, or this needs the
         /// retirement queue.
         void EnsureByteCapacity(VkDeviceSize needed);
+        /// STREETPERF-0003: replace a buffer a draw has bound with a fresh one of the same size.
+        void MoveToFreshBufferEXT();
 
         VkBuffer                buffer_      = VK_NULL_HANDLE;
         VkDeviceMemory          memory_      = VK_NULL_HANDLE;
@@ -1506,6 +1512,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<std::uint8_t> hostBytes_;
         VulkanRenderer*  owner_       = nullptr;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
+        /// Whether a draw has bound `buffer_` since it was last written (STREETPERF-0003).
+        mutable bool            boundSinceWrite_ = false;
     };
 
     // -------------------------------------------------------------------------
@@ -1525,6 +1533,8 @@ namespace CNA::Internal::Renderers::Vulkan
         bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         VkBuffer    GetBuffer()    const { return buffer_; }
+        /// STREETPERF-0003: see VulkanVertexBufferRenderer::BindForDrawEXT.
+        VkBuffer    BindForDrawEXT() const { boundSinceWrite_ = true; return buffer_; }
         const void* GetMappedPtr() const { return hostBytes_.data(); }
 
         void ReleaseVulkanResources();
@@ -1544,6 +1554,9 @@ namespace CNA::Internal::Renderers::Vulkan
         /// width that is not this buffer's. Both are caller errors, and widening the allocation
         /// would make the second one draw from misread bytes rather than fail.
         void RequireByteCapacity(VkDeviceSize needed, const char* what) const;
+        /// STREETPERF-0003: see VulkanVertexBufferRenderer::MoveToFreshBufferEXT.
+        void MoveToFreshBufferEXT();
+        void Write(const void* data, std::size_t bytes);
 
         VkBuffer                buffer_        = VK_NULL_HANDLE;
         VkDeviceMemory          memory_        = VK_NULL_HANDLE;
@@ -1554,6 +1567,8 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceSize            allocatedBytes_ = 0;
         std::vector<std::uint8_t> hostBytes_;
         VulkanRenderer*  owner_         = nullptr;
+        /// Whether a draw has bound `buffer_` since it was last written (STREETPERF-0003).
+        mutable bool            boundSinceWrite_ = false;
     };
 
     // -------------------------------------------------------------------------
@@ -3812,6 +3827,19 @@ namespace CNA::Internal::Renderers::Vulkan
             return retiredBufferCountEXT_;
         }
         /**
+         * @brief Test-only: geometry bytes the last recorded frame copied into its 3D arena.
+         *
+         * plans/plan_street_perf.md `STREETPERF-0003`. A draw from buffers it binds in place
+         * copies none; a snapshotted draw (packed streams, rewritten or temporary geometry)
+         * copies its vertex and index bytes.
+         *
+         * @return Vertex plus index bytes copied by the most recent command-buffer record.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetLastArenaGeometryBytesEXT() const noexcept
+        {
+            return lastArenaGeometryBytesEXT_;
+        }
+        /**
          * @brief Test-only: how many one-time command submissions this renderer has performed.
          *
          * plans/plan_vulkan.md `VULKAN-396`. Legacy texture transfers and synchronous readbacks
@@ -4611,6 +4639,7 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t deviceWaitIdleCountEXT_ = 0;
         /// plan_vulkan.md VULKAN-392: VkBuffer handles handed to the retirement queue.
         uint64_t retiredBufferCountEXT_ = 0;
+        uint64_t lastArenaGeometryBytesEXT_ = 0;   // STREETPERF-0003
         /// plan_vulkan.md VULKAN-396/MOD-2253: one-time command submissions and the time their
         /// individual completion-fence waits cost.
         uint64_t oneTimeCommandCountEXT_ = 0;
@@ -5304,6 +5333,11 @@ namespace CNA::Internal::Renderers::Vulkan
         struct Pending3DDraw {
             std::vector<uint8_t>    vbData;       // copied vertex bytes
             std::vector<uint8_t>    ibData;       // copied index bytes, empty = non-indexed
+            // STREETPERF-0003: the source buffers themselves, bound in place of vbData/ibData.
+            VkBuffer                residentVb       = VK_NULL_HANDLE;
+            VkDeviceSize            residentVbOffset = 0;
+            VkBuffer                residentIb       = VK_NULL_HANDLE;
+            VkDeviceSize            residentIbOffset = 0;
             VkPrimitiveTopology     topology;
             uint32_t                drawCount;    // vertex or index count to submit
             float                   pushConst[32] = {}; // 128 bytes: [0..15]=MVP, [16..31]=ext params
@@ -5552,7 +5586,9 @@ namespace CNA::Internal::Renderers::Vulkan
                                         const IVertexBufferRenderer* instVb_in = nullptr,
                                         int instanceVertexOffset = 0,
                                         int instanceFrequency = 1,
-                                        int instanceCount = 1);
+                                        int instanceCount = 1,
+                                        const VulkanIndexBufferRenderer* indexSource = nullptr,
+                                        VkDeviceSize indexSourceOffset = 0);
         void DrawInstancedPrimitivesCoreEXT(
             const IVertexBufferRenderer& vb,
             const IIndexBufferRenderer* ib,
