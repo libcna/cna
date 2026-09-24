@@ -1126,3 +1126,48 @@ proves the four properties the brief lists:
 
 The loader gained `glIsBuffer`/`glIsQuery` (optional), and the compute program and timer expose their
 GL names (`CNAEXT`, renderer-internal) for the accounting.
+
+## GL4-0032 — 3000-cycle modern stress with RSS, file-descriptor and thread accounting (B36)
+
+`OpenGL4_ModernStress` (`opengl4_modern_stress_test.cpp`) follows `webgpu_modern_stress_test`
+(`WMG-0027`) with OpenGL4's own oracle. OpenGL4 issues work immediately, so its risks are different:
+
+- a GL name used after its object was deleted;
+- a binding a compute pass left for the next draw;
+- a missing barrier.
+
+All three surface as GL errors through the synchronous KHR_debug callback, or as wrong readback. A
+name never deleted surfaces as growth.
+
+Every cycle creates, uses, reads back and destroys:
+
+- a seeded storage-buffer dispatch;
+- a second dispatch reading that buffer and painting a **storage texture**;
+- render pass → compute → render pass;
+- an **indirect** draw;
+- a **base-instance** draw;
+- a **GPU timer** around the cycle;
+- a render-target resize every 64th cycle.
+
+The checks:
+
+- (A) the run completes;
+- (B) the debug callback reports no GL error, counted through the Logger sink;
+- (C) RSS grows less than 64 MiB;
+- (D) no file descriptor leaks;
+- (E) no thread leaks;
+- (F) the last cycle's readback holds exactly what its own dispatch wrote.
+
+Measured through the private runner (ctest, 3000 cycles after 10 warm-up):
+
+```
+warm: RSS 166048 KiB, 10 fds, 15 threads, 0 GL errors
+ran 3010 of 3010 cycles
+RSS 166048 -> 166992 KiB (+944), fds 10 -> 10, threads 15 -> 15
+GL errors 0 -> 0
+6/6 PASS                                   (5.5 s)
+```
+
+While writing it, one trap: the first version labelled check B "zero [OpenGL4 GL Error] lines". The
+CTest error gate (`GL4-0016`) matches that literal in the output and failed a run whose six checks
+all passed. The label no longer contains the gate's token; the gate itself is unchanged.

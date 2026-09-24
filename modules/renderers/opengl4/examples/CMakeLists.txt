@@ -277,6 +277,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
             COMMAND cna_test_opengl4_modern_feature_discovery
             TIMEOUT 60 LABELS "OpenGL4;ModernGPU"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_opengl4_modern_graphics.md GL4-0032: 3000 cycles creating, using, reading back
+        # and destroying every modern resource; zero GL errors, no RSS/fd/thread growth.
+        cna_opengl4_test(cna_test_opengl4_modern_stress opengl4_modern_stress_test.cpp)
+        cna_register_renderer_test(NAME OpenGL4_ModernStress
+            COMMAND cna_test_opengl4_modern_stress
+            TIMEOUT 900 LABELS "OpenGL4;ModernGPU"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endif()
 endif()
 
