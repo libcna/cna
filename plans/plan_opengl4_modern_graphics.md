@@ -32,7 +32,7 @@ Companion documents this ledger does not duplicate:
 |---|---|
 | Branch | `opengl4-modern-graphics` |
 | Baseline | `b2a0a5671c4db9b7ac1564a7ac2bf9ffd88530e1` (`origin/next` = `next`, 2026-09-24) |
-| Workstream A | in progress |
+| Workstream A | in progress — classic corpus 405/405, `CnaGraphicsTests` 0 failures (`GL4-0018`) |
 | Workstream B | not started (gated on A) |
 
 ---
@@ -276,3 +276,207 @@ The uniform contract these programs declare is part of the corpus: every uniform
 declares is resolved by EasyGL (checked by script — no declared-but-unresolved uniform in any of
 the twelve 3D programs), so a second binder may resolve the complete name set generically and
 obtain EasyGL's exact per-program behaviour.
+
+## GL4-0009 — Loader: the tokens and entry points the EasyGL-parity paths need
+
+`GL4Loader.hpp/.cpp` gained the `#ifndef`-guarded tokens the rewrite below uses (sample mask,
+program point size, subpixel bits, context profile/flags, `KHR_debug`, texture swizzle, draw-buffer
+and attachment limits, the S3TC/snorm/packed/float/integer formats, LOD/level parameters, PBO and
+copy-buffer targets, framebuffer status codes, …) and, as **required** 4.1-core entry points,
+`glUniform{3,4}fv`/`glUniform1iv`/`glUniformMatrix3fv`, `glDrawElementsInstancedBaseVertex`,
+`glDrawArraysInstanced`, `glSampleMaski`, the compressed-texture and buffer copy/readback calls,
+`glClearBuffer*`, `glFramebufferTexture`, `glGetFramebufferAttachmentParameteriv`,
+`glGetSamplerParameteriv` and `glIsProgram`. `KHR_debug` (`glDebugMessageCallback/Control/Insert`,
+`glPush/PopDebugGroup`, `glObjectLabel`) is loaded **optionally**: it is core only from 4.3, and a
+4.1 context without it keeps working with debug output simply unavailable.
+
+## GL4-0010 — One presentation transform for both GL families
+
+`EasyGLSurfaceState` — virtual resolution, `FixedHeightDynamicWidth`/`Stretch`/`Letterbox`/
+`Overscan`, window↔logical mapping and the physical default viewport — moved **verbatim** into
+`modules/graphics/include/CNA/Internal/Renderers/Common/GlPresentationSurfaceState.hpp`;
+`EasyGLRenderer.hpp` keeps `using EasyGLSurfaceState = GlPresentationSurfaceState;`. OpenGL4
+presented with a fill-the-window-only mapping before (`PresentationRectangle*`, Letterbox and the
+`OPENGL4 implements no virtual resolution` skips of `GL4-0007`); it now uses the same object.
+EasyGL rebuilt unchanged (see the regression line in `GL4-0018`).
+
+## GL4-0011 — The renderer rewrite: EasyGL's measured semantics over raw desktop GL
+
+**Decision.** OpenGL4 stays its own family (own context request, own loader, native polygon mode,
+exact occlusion counts), but everything that decides *what XNA means* is EasyGL's measured code,
+ported line by line onto `gl4_*`, instead of the July 2026 implementation that had drifted from it
+by 95 failing tests. The new structure:
+
+| file | owns |
+|---|---|
+| `OpenGL4Common.hpp` | the bound-target record (`REMED-GFX-168`, shared with every target through `weak_ptr`), `SampledRowOrderIsBottomUp` (`REMED-GFX-147`), GL error-queue discipline, `ScopedScissorTestDisabled`, `AdaptGlslEs300ForDesktopCore` |
+| `OpenGL4Renderer.cpp` | context/version check, debug output, presentation and MSAA, clears, render state, samplers, render targets and MRT, buffers, custom effects, occlusion queries, the context lease |
+| `OpenGL4StockDraw.cpp` | stock program selection, uniform binding, declaration-driven attributes, multi-stream and instancing, the base-vertex fallback, every draw route |
+| `OpenGL4SpriteBatch.cpp` | the SpriteBatch |
+| `OpenGL4Resources.hpp`, `OpenGL4Textures.cpp`, `OpenGL4RenderTargets.cpp`, `OpenGL4Formats.cpp` | textures, cube/volume textures, render targets, the surface-format layer and its runtime probes |
+
+**Context (A7).** The constructor reads back `GL_MAJOR/MINOR_VERSION` and
+`GL_CONTEXT_PROFILE_MASK` and **throws** when the platform granted less than a 4.1 core context,
+naming what it got, instead of running as some other GL. The startup line moved from `std::cout` to
+the renderer log (`GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout`).
+
+**Render state (A10/A18–A20), each an EasyGL rule and each a failure of the old code:**
+`BlendState.Opaque` disables blending, factors/equations are always rewritten, per-slot colour
+masks through `glColorMaski`, `MultiSampleMask` through `glSampleMaski`; depth/stencil gated by the
+bound target's real depth format; two-sided stencil with XNA's clockwise tuple on `GL_BACK` (the old
+code had the faces swapped); the CCW tuple applied only to triangles (D3D9's rule); reference
+stencil reissued on its own; every clear neutralises and restores scissor, colour masks and the
+depth/stencil write masks (`REMED-GFX-237` — `ClearColorAndStencil` restores the stencil mask, which
+EasyGL's twin of that route does not); zero-extent scissor rectangles reach `glScissor`
+(`SOFTWARE-310`); depth bias converted to polygon-offset units by the bound depth format's
+precision; the XNA pixel-centre displacement (63/128 of a pixel, capped by subpixel precision,
+suppressed on multisampled destinations — `REMED-GFX-235`); D3D clip-depth conversion in every stock
+vertex program (`SOFTWARE-336`).
+
+**Samplers (A16).** One sampler object per XNA slot bound to its own unit; every filter ordinal
+carries its mip term (`REMED-GFX-175` — the old code mapped Point/Linear to mip-less filters);
+anisotropy, W, MinLod/MaxLod/LodBias and compare mode are rewritten on every application
+(`REMED-GFX-174`, `FX-092`); `MaxMipLevel` → `GL_TEXTURE_MIN_LOD` with XNA's UInt32 conversion.
+
+## GL4-0012 — Textures, render targets and formats
+
+Ported from EasyGL against a fixed header contract, then integrated and measured here.
+Every EasyGL Texture2D format with the same storage choice (packed 16-bit with its alpha rotation,
+RG8/RGBA8 SNORM, RGB10_A2, RGBA16, half/float, channel-expanded Alpha8/Single/Vector2/…, DXT native
+when S3TC exists and exact CPU decode otherwise); cube and volume textures with declared-format
+transfers; RenderTarget2D and RenderTargetCube with MSAA (clamped to `GL_MAX_SAMPLES` and to the
+format's own `GL_SAMPLES`), resolve and mip regeneration on unbind, bottom-up storage mapped on
+readback, and the runtime float/normalized render-target probes. Deliberate desktop deviations,
+each measured by the corpus: every transfer restores the unit, framebuffer, pack/unpack and PBO
+bindings it touched; cube and volume readback uses `glGetTexImage` instead of EasyGL's ES-only CPU
+copy; framebuffer completeness is checked and a failure names its status; every resolve blit runs
+with the scissor test off (`ScopedScissorTestDisabled`) — EasyGL's resolves are clipped by an active
+partial scissor, which XNA's are not.
+
+## GL4-0013 — The stock draw path
+
+Program **shape** from the effect state, never from the stride (`REMED-GFX-218`); the programs are
+the shared corpus of `GL4-0008`, adapted to `#version 410 core`. Attributes are bound by semantic
+from the caller's declaration, across every per-vertex stream (`REMED-GFX-201`), with per-instance
+streams at locations 12–15 for stock programs and after the per-vertex streams for a
+`ShaderEffect` (`REMED-GFX-202`); a negative `baseVertex` is folded into a scratch index buffer.
+
+Two defects found and fixed while bringing this up, both measured:
+
+- **`REMED-GFX-234` / `WEBGPU-158` — a declaration that names no Normal cannot be lit.** Vulkan and
+  WebGPU implement it; EasyGL lost it when its selection moved to effect state, which is why both GL
+  families failed `Parity_unlit_position_color` and the clamp leg of
+  `Parity_basic_effect_vertex_color`. OpenGL4 now draws such a BasicEffect draw unlit
+  (`DeclarationRulesOutLighting`). EasyGL still fails both (recorded, not changed here).
+- **Lazily created fallback textures clobbered the active unit.** Creating the white
+  metallic-roughness fallback bound it on the unit that already held the flat-normal fallback, so
+  the first PBR draw of a process was lit with a `(1,1,1)` normal: `PbrEffect_Golden` quad A read
+  162 against 137, while B/C/D matched EasyGL to one step. Fallback creation now restores the
+  unit's binding. The same defect explained the three `Gltf_*Tangent*`/`SkinnedPbrNonUniformJoint`
+  failures.
+
+## GL4-0014 — SpriteBatch
+
+EasyGL's: the device's own blend/depth/rasterizer/sampler state (the old code hard-coded
+`SrcAlpha/InvSrcAlpha` and depth off), projection from the device Viewport including game-set
+sub-viewports and letterboxing (`REMED-GFX-072`), render-target V mirrored in the quad
+(`REMED-GFX-147`), clamp-constant UV reduction, 2 048-sprite submissions, Immediate mode flushing
+per Draw, a custom effect applied at submission with the Effect's own program. One EasyGL defect
+**not** carried over: its "is a target bound" question ignores a bound cube face, so a sprite drawn
+into a cube face is projected onto the window instead (`GetBoundRenderTargetSize` answers for cube
+faces here). That single defect is behind ten corpus failures EasyGL still has
+(`RenderTargetCube_*`, `ColorSpace_MidTone` G1, `OrderedClear` K1, `RenderTarget_FirstUse`/
+`PassBoundary`/`BackbufferConsumer`, `Backbuffer_PassOrder`).
+
+## GL4-0015 — XNA's Point filter is mip-point too
+
+`OpenGL4_Mipmap` Check B asserted that Point "never mip-selects on this renderer" — the old defect
+written down as behaviour. It now asserts XNA's answer (GREEN at a minified size).
+
+## GL4-0016 — GL debug output and the `[OpenGL4 GL Error]` gate (A8/A9)
+
+With `KHR_debug` available (Debug builds, or `CNA_OPENGL4_DEBUG_OUTPUT=1`), the renderer installs a
+synchronous callback. An error, undefined behaviour or high-severity message prints
+`[OpenGL4 GL Error] <source>/<type>/<severity> id=<n>: <message>`; informational messages are
+dropped unless `CNA_OPENGL4_DEBUG_OUTPUT=verbose`. Shader-compiler messages are not errors here: a
+game's broken GLSL reaches its caller through `ShaderEffect`'s compile diagnostics, and a stock
+program that fails to build prints its own `[OpenGL4 GL Error]` line and throws.
+
+`cmake/TestHelpers.cmake` gains `cna_append_opengl4_gl_error_gate_pattern` beside the Vulkan
+validation gate, applied by `cna_register_renderer_test` wherever an OpenGL4 context can exist, by
+`cna_apply_opengl4_gl_error_gate()` at the end of the OpenGL4 examples directory, and to the
+PRE_TEST-discovered `CnaTests` cases (one alternation with the Vulkan pattern). The exemption list
+is empty.
+
+**Measured on the corpus: 0 serious messages** in the final 405-test run.
+
+## GL4-0017 — Tests that encoded OpenGL4's old non-XNA behaviour
+
+Corrected, each to XNA's measured answer, each with a comment at the change:
+
+| test | was asserting | now |
+|---|---|---|
+| `OpenGL4_RenderState` E, `OpenGL4_RenderTarget2D` C, `OpenGL4_RenderTargetCube_MRT` D | a "near" quad at z=−0.5 wins the depth test | both quads inside XNA's `[0,w]` clip range (0.25 / 0.75); −0.5 is clipped by D3D and XNA |
+| `OpenGL4_Fog` C–H | full fog at Z=FogStart=−0.9 | FogStart=0.9/FogEnd=−0.9: same two oracles, inside the clip range |
+| `OpenGL4_Readback` G | `Color(255,255,255,128)` over black is half green | the premultiplied half tint `Color(128,128,128,128)` — `AlphaBlend` is One/InvSrcAlpha |
+| `OpenGL4_Smoke`, `OpenGL4_RenderState` | stencil clears with the default `Depth24` | request `Depth24Stencil8`; XNA refuses a stencil clear without stencil |
+| `OpenGL4_ShaderEffect3D`, `OpenGL4_ShaderEffectSpriteBatch` | — (`GL4-0004`'s project-profile opt-in never reached these: they have no `GraphicsDeviceManager`) | HiDef set on the Game's own device, as EasyGL's copies do |
+
+## GL4-0018 — Shared tests brought in line with measured XNA; OpenGL4 admitted to the shared gates
+
+**Shared test corrections** (each failed on every renderer, EasyGL included, before this):
+
+- `draw_line_topology_test` asserted zero-capacity buffers are accepted; Microsoft XNA refuses them
+  with `ArgumentOutOfRangeException` (`SOFTWARE-204`) and the framework does.
+- `rendertarget_active_msaa_readback_test` accepted only `NotSupportedException`; reading an active
+  target throws XNA's `InvalidOperationException` (`SOFTWARE-246`) from the shared guard.
+- `rendertarget_surface_format_contract_test` asserted a `Dxt1` render target is refused; XNA
+  substitutes `Color` for an unavailable preferred format (`SOFTWARE-216`). The check (from `DX-215`)
+  was never reconciled with that rule.
+- `easygl_viewspace_fog_test`'s SkinnedEffect leg multiplied by an unset texture, which reads
+  opaque black under `GSC-0004`; it now supplies a white texel.
+- `easygl_shader_effect_test` hard-coded the GLSL ES dialect; it now expects the context's own. The
+  `PortableTint` shader package gained a desktop-GLSL pair (regenerated reproducibly with
+  `tools/shader_package`) — without it no desktop GL context had a usable variant.
+- `sampler_lod_addressw_contract_test`, `rendertarget_surface_format_contract_test` picked HLSL for
+  OpenGL4; they now take the GLSL branch. Ten sampler/format contract tests printed `UNKNOWN` for
+  the renderer name and now name OPENGL4 (they already ran every check).
+- `GltfRendererPbrFallbackPolicy` (source-evidence audit) failed 19 cases after `GL4-0008` moved the
+  shaders — a regression of that commit, caught here. The GL families' audited text now includes the
+  shared corpus header (the D3D families' `common/d3d` precedent), and every OpenGL4 row names the
+  new binder and the shared shader text.
+
+**Renderer gates.** 191 `CNA_SKIP_IF_RENDERER_IS_NONE_OF`/`CNA_RENDERER_IS` lists in 33 shared test
+files named OPENGL33 and not OPENGL4; OPENGL4 was added to each and the suites run. One gate was
+EasyGL-internal (a `dynamic_cast` to EasyGL's buffer) and was left alone. Three compile-time
+`#if defined(CNA_RENDERER_EASYGL)` groups now include OpenGL4, and three generic tests pinned to
+Vulkan/Software or OPENGL33 alone (`IndexedTopologiesRenderExactDistinctGeometry`,
+`PublicThirtyTwoBitTopologiesRenderExactDistinctGeometry`,
+`ThirtyTwoBitDrawDoesNotPoisonNextDesktopContext`) were admitted and pass.
+
+**Found, not changed (outside this workstream):** `ContentManagerVideoXnbTest.TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne`
+writes and then deletes the **committed** fixture `tests/assets/media/video/video_xnb_object_fixture.xnb`
+in the source tree on every run; it is restored with `git checkout` after each `CnaContentTests` run
+here and never staged.
+
+### Results after GL4-0009..GL4-0018 (same hardware, private runner)
+
+| suite | baseline (`GL4-0006`) | now |
+|---|---|---|
+| corpus `-R '^OpenGL4_'` on OPENGL4 | 283 / 122 of 405 | **405 / 0** |
+| same binaries, OPENGL33 (378 shared) | 355 / 23 | 364 / 14 — no test that passed before fails |
+| same binaries, OPENGLES3 (378 shared) | 351 / 27 | 358 / 20 — no test that passed before fails |
+| `CnaRendererTests` OPENGL4 | 231 / 0 / 10 | 231 / 0 / 10 (the ten are EasyGL-internal) |
+| `CnaGraphicsTests` OPENGL4 | 2 473 / 12 / 376 | **2 815 / 0 / 75** of 2 890, then +3 admitted above (run individually, 3/3) |
+| `CnaContentTests` OPENGL4 | not run at baseline | **1 850 / 0 / 4** |
+| `CnaGraphicsExtTests` OPENGL4 (modern, Workstream B) | 798 / 44 / 120 | 856 / 1 / 105 — the one failure is `ClusteredForwardEffectTest.ATransmissiveMaterialWithoutAnOpaqueFrameIsRefused`, which OPENGL33 fails identically |
+
+The 72 `CnaGraphicsTests` skips left after those three admissions, classified: 27 `SdlGpu*`,
+6 `Software*` non-indexed, 2 `Software*` indexed, 1 `D3D*`, 1 SDL_GPU point list, 1 SDL_GPU
+layout — tests owned by another renderer; 15
+compiled-effect tests (`SupportsCompiledEffects` is false — see the parity matrix); 4
+`VertexDeclarationLayoutTests` for renderers that refuse colliding declarations (OpenGL4 translates
+them); 1 wireframe-refusal leg (OpenGL4 has native polygon mode); 5 fake-window platform tests
+(OpenGL4 needs a real GL window); Texture3D-absent/present complements (2); three presentation-region
+tests for STUB/SOFTWARE/HEADLESS; GLES/WebGL adapter contract (1); adapter flag selection (1); two
+multi-renderer fallback configuration tests. None is an OpenGL4 gap except compiled effects.

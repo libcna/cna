@@ -123,7 +123,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool DeclarationLayout()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, Software, SdlGpu, 
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, WebGPU, Vulkan, Software, SdlGpu, 
                             DirectX9, DirectX11, DirectX12);
 }
 
@@ -132,7 +132,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-6: the same set, evaluated at runtime.
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2,
                            Vulkan, WebGPU, Software, SdlGpu, DirectX11, DirectX12);
 }
 
@@ -175,7 +175,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// WINCLOSE-0013). DirectX12 lost its guard in the same change but has not been measured here.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, WebGPU, Vulkan,
                            Software, DirectX11, DirectX12);
 }
 
@@ -1171,7 +1171,7 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
 TEST_F(DeclarationGuardTest, CustomShaderEffectKeepsItsElementIndexConvention)
 {
     // plans/plan_runtimerenderer.md RTR-P9-6: EasyGL's own convention, asked of the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2);
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";

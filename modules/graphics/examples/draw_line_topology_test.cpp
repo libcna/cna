@@ -26,9 +26,9 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -99,54 +99,58 @@ class DrawLineTopologyTest final : public CNA::Examples::PixelTestGame
 {
     std::unique_ptr<GraphicsDeviceManager> manager_;
 
+    /// Microsoft XNA 4.0 checks `vertexCount <= 0` / `indexCount <= 0` in the static AND dynamic
+    /// buffer constructors (SOFTWARE-204, recovered from the shipped assemblies), so a zero-sized
+    /// buffer is refused with ArgumentOutOfRangeException before any native resource exists. This
+    /// check first asserted FNA's opposite rule -- zero-capacity buffers accepting empty uploads --
+    /// and failed on every renderer once the constructors followed XNA
+    /// (plans/plan_opengl4_modern_graphics.md GL4-0018).
+    template <typename Create>
+    static bool RefusedAsOutOfRange(Create&& create)
+    {
+        try
+        {
+            create();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return false;
+    }
+
     void CheckZeroSizedBuffers(GraphicsDevice& device)
     {
-        bool staticVertexOk = true;
-        bool dynamicVertexOk = true;
-        bool staticIndexOk = true;
-        bool dynamicIndexOk = true;
-        try
-        {
+        const bool staticVertexOk = RefusedAsOutOfRange([&] {
             VertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(), 0,
                                 BufferUsage::None);
-            buffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0);
-            staticVertexOk = buffer.getVertexCountProperty() == 0;
-        }
-        catch (...) { staticVertexOk = false; }
-        try
-        {
-            DynamicVertexBuffer buffer(device,
-                                       VertexPositionColor::getVertexDeclarationStatic(), 0,
+        });
+        const bool dynamicVertexOk = RefusedAsOutOfRange([&] {
+            DynamicVertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(), 0,
                                        BufferUsage::None);
-            buffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0, 0,
-                           SetDataOptions::Discard);
-            dynamicVertexOk = buffer.getVertexCountProperty() == 0;
-        }
-        catch (...) { dynamicVertexOk = false; }
-        try
-        {
-            IndexBuffer buffer(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-            buffer.SetData(static_cast<const std::uint16_t*>(nullptr), 0);
-            IndexBuffer wide(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-            wide.SetData(static_cast<const std::uint32_t*>(nullptr), 0);
-            staticIndexOk = buffer.getIndexCountProperty() == 0 &&
-                            wide.getIndexCountProperty() == 0;
-        }
-        catch (...) { staticIndexOk = false; }
-        try
-        {
-            DynamicIndexBuffer buffer(device, IndexElementSize::SixteenBits, 0,
-                                      BufferUsage::None);
-            buffer.SetData(static_cast<const std::uint16_t*>(nullptr), 0, 0,
-                           SetDataOptions::NoOverwrite);
-            dynamicIndexOk = buffer.getIndexCountProperty() == 0;
-        }
-        catch (...) { dynamicIndexOk = false; }
+        });
+        const bool staticIndexOk =
+            RefusedAsOutOfRange([&] {
+                IndexBuffer buffer(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
+            }) &&
+            RefusedAsOutOfRange([&] {
+                IndexBuffer buffer(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
+            });
+        const bool dynamicIndexOk = RefusedAsOutOfRange([&] {
+            DynamicIndexBuffer buffer(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
+        });
 
-        Check(staticVertexOk, "zero-sized VertexBuffer accepts an empty upload");
-        Check(dynamicVertexOk, "zero-sized DynamicVertexBuffer accepts an empty Discard upload");
-        Check(staticIndexOk, "zero-sized 16/32-bit IndexBuffers accept empty uploads");
-        Check(dynamicIndexOk, "zero-sized DynamicIndexBuffer accepts an empty NoOverwrite upload");
+        Check(staticVertexOk, "zero-sized VertexBuffer is refused with ArgumentOutOfRangeException");
+        Check(dynamicVertexOk,
+              "zero-sized DynamicVertexBuffer is refused with ArgumentOutOfRangeException");
+        Check(staticIndexOk,
+              "zero-sized 16/32-bit IndexBuffers are refused with ArgumentOutOfRangeException");
+        Check(dynamicIndexOk,
+              "zero-sized DynamicIndexBuffer is refused with ArgumentOutOfRangeException");
     }
 
     void Issue(GraphicsDevice& device, BasicEffect& effect, Route route, PrimitiveType topology)

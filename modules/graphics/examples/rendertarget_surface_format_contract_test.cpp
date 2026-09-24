@@ -42,11 +42,15 @@ namespace
     constexpr const char* kRendererName = "D3D12";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0018: OPENGL4 compiles the same GLSL ES 3.00
+    // source as EasyGL, adapted to its desktop core context.
+    constexpr const char* kRendererName = "OpenGL4";
 #else
     constexpr const char* kRendererName = "unknown";
 #endif
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL4)
     const char* kVertexShader = R"(#version 300 es
 precision highp float;
 layout(location = 0) in vec2 aPosition;
@@ -190,18 +194,24 @@ class RenderTargetSurfaceFormatContract final : public Game
               "Color target keeps the established RGBA8 result byte-for-byte");
     }
 
+    /// A render-target format is a PREFERENCE in XNA: the constructor asks
+    /// GraphicsAdapter.QueryRenderTargetFormat and allocates what it selects, so a compressed
+    /// preference that no device can render into becomes Color rather than an exception
+    /// (SOFTWARE-216, recovered from the shipped assemblies). This check first asserted a refusal
+    /// (DX-215) and was not reconciled when the two lines of work met; it failed on every renderer
+    /// with the framework's measured rule in place. plans/plan_opengl4_modern_graphics.md GL4-0018.
     void RunUnsupported()
     {
         try
         {
-            RenderTarget2D unsupported(getGraphicsDeviceProperty(), 4, 4, false,
+            RenderTarget2D substituted(getGraphicsDeviceProperty(), 4, 4, false,
                                        SurfaceFormat::Dxt1, DepthFormat::None);
-            (void)unsupported;
-            Check(false, "compressed render-target format is refused instead of substituted");
+            Check(substituted.getFormatProperty() == SurfaceFormat::Color,
+                  "a compressed render-target preference is substituted with Color");
         }
         catch (const std::exception&)
         {
-            Check(true, "compressed render-target format is refused instead of substituted");
+            Check(false, "a compressed render-target preference is substituted with Color");
         }
     }
 

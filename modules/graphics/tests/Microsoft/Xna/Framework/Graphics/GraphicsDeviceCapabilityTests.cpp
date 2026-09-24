@@ -394,12 +394,12 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL4)
     // SOFTWARE-178: desktop OpenGL always has native polygon mode. GLES/WebGL report the runtime
     // truth of GL_NV_polygon_mode / WEBGL_polygon_mode, so either value is legal there and the
     // positive/refusal arms below verify that the reported value matches the actual draw.
-    if (CNA_RENDERER_IS(OpenGL33))
-        EXPECT_TRUE(reported) << "desktop EasyGL lost core glPolygonMode support";
+    if (CNA_RENDERER_IS(OpenGL33, OpenGL4))
+        EXPECT_TRUE(reported) << "desktop GL lost core glPolygonMode support";
 #elif defined(CNA_RENDERER_WEBGPU)
     // plans/plan_webgpu.md WEBGPU-153: true, for exactly the reason the EasyGL arm above is true and
     // by the same mechanism. WEBGPU-115 asserted false here on the grounds that "wgpu-native has no

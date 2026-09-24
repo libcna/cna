@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
@@ -120,6 +121,15 @@ namespace
             try
             {
                 target.GetData(0, &rect, pixels.data(), kGuard, count);
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                // Microsoft XNA's own answer: "The render target must be resolved before its data
+                // can be transferred" (SOFTWARE-246, recovered from the shipped assemblies), raised
+                // by the shared transfer guard before any renderer is asked. Accepting only
+                // NotSupportedException predated that guard and failed every renderer.
+                // plans/plan_opengl4_modern_graphics.md GL4-0018.
+                rejected = true;
             }
             catch (const System::NotSupportedException&)
             {

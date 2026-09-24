@@ -106,6 +106,9 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_OPENGL4)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "OPENGL4";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "VULKAN";

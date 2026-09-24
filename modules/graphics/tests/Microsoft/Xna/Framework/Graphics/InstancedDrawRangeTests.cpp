@@ -132,7 +132,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2,
                            DirectX11, DirectX12, Vulkan, WebGPU, Software);
 }
 
@@ -909,6 +909,7 @@ namespace
     defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_OPENGL4) || \
     defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_DIRECTX12) || \
     defined(CNA_RENDERER_SOFTWARE)
@@ -1996,7 +1997,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // decoy range 4..6, while applying it twice underflows the vertex buffer.
 TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, OpenGL4, WebGL2, Software, DirectX11, DirectX12);
     RequireInstancedRendering();
 
     const GridLayout layout = BackbufferLayout();
@@ -2046,7 +2047,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2);
     RunBindingOffsetAndFrequencyOracle();
 }
 

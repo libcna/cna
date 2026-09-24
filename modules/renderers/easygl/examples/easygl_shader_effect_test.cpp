@@ -71,14 +71,24 @@ protected:
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
 
+        // plans/plan_opengl4_modern_graphics.md GL4-0018: the GL dialect is the context's -- GLSL ES
+        // for the ES/WebGL profiles, desktop GLSL for OPENGL33 and OPENGL4 -- and the language the
+        // renderer accepts must be that same one. Asserting GLSL ES outright failed every desktop
+        // context, EasyGL's own OPENGL33 included.
         const auto dialect = device.GetShaderDialectEXT();
-        const bool dialectOk = dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslEs;
+        const bool desktop = dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop;
+        const bool dialectOk =
+            desktop || dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslEs;
+        const auto language =
+            desktop ? CNA::ShaderLanguageEXT::GlslDesktop : CNA::ShaderLanguageEXT::GlslEs;
+        const auto otherLanguage =
+            desktop ? CNA::ShaderLanguageEXT::GlslEs : CNA::ShaderLanguageEXT::GlslDesktop;
         const bool graphicsLanguageOk = device.SupportsShaderLanguageEXT(
-            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex)
-            && device.SupportsShaderLanguageEXT(
-                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment);
+            language, CNA::ShaderStageEXT::Vertex)
+            && device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment)
+            && !device.SupportsShaderLanguageEXT(otherLanguage, CNA::ShaderStageEXT::Fragment);
         const bool computeLanguageOk = device.SupportsShaderLanguageEXT(
-            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute)
+            language, CNA::ShaderStageEXT::Compute)
             == device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders);
         const bool refusalOk = !device.SupportsShaderLanguageEXT(
             CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment)
@@ -87,7 +97,7 @@ protected:
             && !device.SupportsShaderLanguageEXT(
                 static_cast<CNA::ShaderLanguageEXT>(999), CNA::ShaderStageEXT::Fragment)
             && !device.SupportsShaderLanguageEXT(
-                CNA::ShaderLanguageEXT::GlslEs, static_cast<CNA::ShaderStageEXT>(999));
+                language, static_cast<CNA::ShaderStageEXT>(999));
         if (!dialectOk || !graphicsLanguageOk || !computeLanguageOk || !refusalOk)
         {
             std::printf("[FAIL] EasyGLShaderEffect: shader language contract mismatch "
@@ -147,13 +157,18 @@ protected:
         const auto package = CNA::Examples::PortableTint::CreatePackage();
         const auto selection = package.selectFor(device);
         ownedEffect = std::make_unique<ShaderEffect>(device, package);
+        // The package carries both GLSL dialects; the context's own is the one selected.
+        const bool desktop = device.GetShaderDialectEXT()
+            == CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop;
+        const auto language =
+            desktop ? CNA::ShaderLanguageEXT::GlslDesktop : CNA::ShaderLanguageEXT::GlslEs;
         packageSelectionOk = selection.isUsable()
-            && selection.getLanguage() == CNA::ShaderLanguageEXT::GlslEs
-            && ownedEffect->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::GlslEs
+            && selection.getLanguage() == language
+            && ownedEffect->GetSelectedShaderLanguageEXT() == language
             && selection.findStage(CNA::ShaderStageEXT::Vertex) != nullptr
             && selection.findStage(CNA::ShaderStageEXT::Fragment) != nullptr;
-        std::printf("[%s] MOD-2217: portable package selected GLSL ES on EasyGL\n",
-                    packageSelectionOk ? "PASS" : "FAIL");
+        std::printf("[%s] MOD-2217: portable package selected the context's GLSL dialect (%s)\n",
+                    packageSelectionOk ? "PASS" : "FAIL", desktop ? "desktop" : "ES");
 #else
         // The legacy constructor keeps this renderer test usable in the intentional CNAEXT-off
         // configuration; MOD-2217's package-selection leg runs in the CNAEXT-on configuration.

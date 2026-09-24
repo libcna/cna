@@ -139,7 +139,7 @@ TEST_F(Texture2DContentTypeReaderTest,
        PreservesEveryClassicUncompressedFormatAndExactBytes)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, OpenGL4, WebGL2, DirectX11, DirectX12);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters()};
@@ -200,7 +200,7 @@ TEST_F(Texture2DContentTypeReaderTest,
        PreservesEveryClassicCompressedFormatAndExactBlocks)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, OpenGL4, WebGL2, DirectX11, DirectX12);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters()};
@@ -233,7 +233,7 @@ TEST_F(Texture2DContentTypeReaderTest,
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2ReadsTwoBytesPerTexel)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, OpenGL4, WebGL2, DirectX11, DirectX12);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -284,7 +284,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
     // Same guard as NormalizedByte2ReadsTwoBytesPerTexel above: the reader constructs the texture
     // before it validates the per-level byte count, so the malformed-level rejection is observable
     // only on renderers that can create a NormalizedByte2 texture.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, OpenGL4, WebGL2, DirectX11, DirectX12);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -312,7 +312,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexels)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, OpenGL4, WebGL2, DirectX11, DirectX12);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);

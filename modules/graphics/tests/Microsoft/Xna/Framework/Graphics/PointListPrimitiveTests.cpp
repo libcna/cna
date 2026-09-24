@@ -409,6 +409,7 @@ namespace
 #if defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_OPENGL4) || \
     defined(CNA_RENDERER_VULKAN) || \
     defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_SOFTWARE)
@@ -1257,7 +1258,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, WebGPU, Software);
     RequirePointRendering();
 
     const int width = BackbufferWidth();

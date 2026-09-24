@@ -141,7 +141,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryMultiStream()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
                             DirectX12, Software, SdlGpu);
 }
 

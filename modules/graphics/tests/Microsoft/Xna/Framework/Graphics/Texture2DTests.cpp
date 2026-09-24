@@ -374,7 +374,7 @@ namespace
 
 TEST(Texture2DTest, SetDataSourceWindowOverloadCoversLogicalAndRawValueTypes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
 
     GraphicsDevice device;
 
@@ -760,7 +760,8 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // Software retains the signed values in its canonical CPU sampling plane.
     // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
     // FNA3D's D3D11 mapping (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12,
+                        OpenGL4))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -774,7 +775,8 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM; DirectX11 as
     // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12,
+                        OpenGL4))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -792,7 +794,8 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
     // DirectX11: DXGI_FORMAT_B5G5R5A1_UNORM, a<<15|r<<10|g<<5|b field for field (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11, DirectX12,
+                        OpenGL4))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -804,7 +807,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreExact)
 {
-    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, DirectX12))
+    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, OpenGL4, WebGL2, Software, DirectX11, DirectX12))
         GTEST_SKIP() << "The active renderer has not promoted packed-16 Texture2D storage";
 
     using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
@@ -1144,8 +1147,10 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // assertion describes the ACTIVE renderer rather than the build default.
         // WEBGPU-184/SDLGPU-69: these renderers provide the signed-normalized formats end to end.
         // The name keeps its EasyGL prefix only because the list began there.
+        // plans/plan_opengl4_modern_graphics.md GL4-0012: OpenGL4 stores both through EasyGL's own
+        // RG8_SNORM/RGBA8_SNORM path and its packed 16-bit formats through EasyGL's rotations.
         const bool easyGlSignedNormalized =
-            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software);
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, OpenGL4);
         // plan_vulkan.md VULKAN-174: CNA's Vulkan renderer stores both, as VK_FORMAT_R8G8_SNORM and
         // VK_FORMAT_R8G8B8A8_SNORM. Kept as its own flag rather than folded into the EasyGL one
         // above for the reason vulkanPacked16 is separate: these two renderers promote different
@@ -1155,7 +1160,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
         // copy and which therefore cannot see a wrong channel order.
-        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software);
+        const bool easyGlPacked16 =
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software, OpenGL4);
         // plan_vulkan.md VULKAN-173: CNA's Vulkan renderer stores the two packed 16-bit formats
         // whose exact VkFormat is CORE 1.0 -- Bgr565 as VK_FORMAT_R5G6B5_UNORM_PACK16 and Bgra5551
         // as VK_FORMAT_A1R5G5B5_UNORM_PACK16, both field for field. Bgra4444 is deliberately NOT
@@ -1218,7 +1224,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.
-            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software)
+            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, Software)
             // plan_vulkan.md VULKAN-172: and on Vulkan, natively as BC1/BC2/BC3 rather than
             // through a decode -- conditional on VkPhysicalDeviceFeatures.textureCompressionBC,
             // so derived from the renderer for the same reason Bgra4444 is. Verified by a real

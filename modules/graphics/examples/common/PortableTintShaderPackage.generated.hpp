@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "portable_tint";
-inline constexpr std::string_view kManifestSha256 = "1df44fbaf2027bd653377c1856da152af8a8326b57b298649ff060330c2862f2";
+inline constexpr std::string_view kManifestSha256 = "afbe2ea7ae9222e5fc385535f004f6c3b39050c3a5e408bfa8809f1cd50ed5bd";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -59,6 +59,43 @@ void main()
 inline constexpr std::string_view kEasyGlFragmentSource =
     R"CNA_SHADER(#version 300 es
 precision mediump float;
+
+in vec2 TexCoord;
+in vec4 Color;
+
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+uniform vec4 uColor;
+
+void main()
+{
+    FragColor = texture(texture1, TexCoord) * Color * uColor;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kDesktopVertexSource =
+    R"CNA_SHADER(#version 330 core
+
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+layout(location = 2) in vec4 aColor;
+
+out vec2 TexCoord;
+out vec4 Color;
+
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+    Color = aColor;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kDesktopFragmentSource =
+    R"CNA_SHADER(#version 330 core
 
 in vec2 TexCoord;
 in vec4 Color;
@@ -249,9 +286,11 @@ fn main(@location(0) vUV: vec2<f32>, @location(1) vColor: vec4<f32>) -> @locatio
 }
 )CNA_SHADER";
 
-inline constexpr std::array<PayloadProvenance, 6> kPayloads = {{
+inline constexpr std::array<PayloadProvenance, 8> kPayloads = {{
     {"kEasyGlVertexSource", "easygl.vert.glsl", "984dfc26c35cda88b9712650f46331069a65ed169681ce85c328a0aec89f7676", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kEasyGlFragmentSource", "easygl.frag.glsl", "b07750c45141d19e040be3e646d19145228d621b01e111805fa4a06b257dce4d", "glsl-es", "glsl-es", "fragment", "text", "main"},
+    {"kDesktopVertexSource", "desktop.vert.glsl", "ae3d5ef5f7ca8ce82bb3843decc214336cebeca46ec1dafb4a58ac182083a16b", "glsl", "glsl", "vertex", "text", "main"},
+    {"kDesktopFragmentSource", "desktop.frag.glsl", "ee3492ada979f32666e5eb3e6eaa24a67bb6d9bff8d11b13345f173897091734", "glsl", "glsl", "fragment", "text", "main"},
     {"kVulkanVertexSpirV", "vulkan.vert.glsl", "39751115d431be524f1c638457282779a077c1a07bda0ec89571b896b9714a2f", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
     {"kVulkanVertexWgsl", "vulkan.vert.glsl", "39751115d431be524f1c638457282779a077c1a07bda0ec89571b896b9714a2f", "wgsl", "vulkan-glsl", "vertex", "wgsl", "main"},
     {"kVulkanFragmentSpirV", "vulkan.frag.glsl", "3a1c8f13648fd1eea6cb4fa17544939567b22845ad1cb201dd733cb0c2377c29", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},

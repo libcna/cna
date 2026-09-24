@@ -70,6 +70,11 @@ namespace
 #  else
     constexpr bool kLodBiasIsRepresentable = false;
 #  endif
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0018: a desktop core context, so
+    // GL_TEXTURE_LOD_BIAS exists -- the same answer as EasyGL's OPENGL33 profile.
+    constexpr const char* kRendererName = "OpenGL4";
+    constexpr bool kLodBiasIsRepresentable = true;
 #else
     constexpr const char* kRendererName = "unknown";
     constexpr bool kLodBiasIsRepresentable = false;
@@ -80,7 +85,7 @@ namespace
     const Color kBlue(0, 0, 255, 255);
     const Color kYellow(255, 255, 0, 255);
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL4)
     const char* kVolumeVertexShader = R"(#version 300 es
 precision highp float;
 layout(location = 0) in vec2 aPosition;
