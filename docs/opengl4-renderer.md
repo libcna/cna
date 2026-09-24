@@ -1,90 +1,91 @@
-# OPENGL4 renderer — real desktop OpenGL 4.x core profile
+# OPENGL4 renderer — desktop OpenGL 4.x core profile
 
 `-DCNA_GRAPHICS_RENDERER=OPENGL4` · enum `CNA::GraphicsRendererType::OpenGL4` · target
-`cna_renderer_opengl4` · sources `src/Graphics/Renderers/OpenGL4/`.
+`cna_renderer_opengl4` · sources `modules/renderers/opengl4/`.
 
-Plan and per-task history: `plans/plan_opengl4.md` (GL4-1 … GL4-33).
+History: `plans/plan_opengl4.md` (the 2026-07 build-out, `GL4-1` … `GL4-33`) and
+`plans/plan_opengl4_modern_graphics.md` (the EasyGL-parity rewrite and its evidence ledger,
+`GL4-0001` …). The capability table there (`GL4-0022`) is the authoritative parity record; this page
+summarises it.
 
 ## Identity
 
-- Requests **OpenGL 4.1 core profile minimum** (`SDL_GL_CONTEXT_PROFILE_CORE`, 4.1 being the
-  highest core version macOS also provides); runs on whatever newer core context the driver
-  grants — validated on Mesa llvmpipe's **4.5 (Core Profile)**, GLSL 4.50.
-- **Deliberately independent of EasyGL/easy-gl.** EasyGL requests
-  `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2) and cannot create a desktop core-profile
-  context at all; there is no shared code and no routing through the hidden EasyGL identity.
-- Dependencies: the platform's own GL library (`find_package(OpenGL REQUIRED)` —
-  libGL/opengl32/OpenGL.framework) plus SDL3 for window/context management. GL entry points past
-  1.1 are resolved by the renderer's own small hand-rolled loader (`GL4Loader.hpp/.cpp`) — zero
-  new third-party dependency, nothing vendored, nothing downloaded.
-- Shaders: **GLSL 410 core**, compiled at runtime from inline sources; compilation failure throws
-  `std::runtime_error` carrying the driver's own info log. No generated files.
+- Requests a desktop **OpenGL 4.1 core** context — the highest core version macOS also provides —
+  and runs on whatever newer core context the driver grants. A platform that grants less (a lower
+  version, or a compatibility profile) is **refused by name** at construction rather than run as
+  some other GL.
+- Its own renderer family: its own context request, its own `gl4_*` loader (`GL4Loader.hpp`),
+  native `glPolygonMode` wireframe, exact `GL_SAMPLES_PASSED` occlusion counts. It does not use
+  easy-gl/meta-gl.
+- What decides **what XNA means** is shared with the EasyGL family: the stock-effect GLSL corpus
+  (`modules/graphics/include/CNA/Internal/Renderers/Common/GlStockShaderSources.hpp`, compiled here
+  as `#version 410 core`) and the presentation transform (`GlPresentationSurfaceState.hpp`). The
+  draw, state, sampler, texture and SpriteBatch code carries EasyGL's measured semantics over raw
+  desktop GL.
+- Platforms: native **X11 (GLX)** and **Wayland (EGL)** with no SDL, and SDL3. Dependencies: the
+  platform's GL library only (`find_package(OpenGL)`); MojoShader only with the compiled-effects
+  option below.
 
-## Supported
+## Classic XNA surface — all implemented
 
-Window/context lifecycle · `Clear` (all six clear variants) · `Present` · viewport · scissor ·
-dynamic `BlendState` (presets + custom + `SetBlendFactor`, separate alpha, blend equations) ·
-per-MRT-slot `ColorWriteChannels` via `glColorMaski` · `DepthStencilState` incl. real two-sided
-stencil · `RasterizerState` culling + **real WireFrame** (`glPolygonMode`, shared-pixel-oracle
-verified) · dynamic `SamplerState` (filter/address; anisotropy when the driver grants the
-extension) · `Texture2D` incl. real per-level mip upload and mip-aware filters · `Texture3D` and
-`TextureCube` with real readback (per-slice / per-face+level FBO `glReadPixels`) ·
-`RenderTarget2D` (FBO, depth formats, MSAA resolve, mip regen, `GetData`) · `RenderTargetCube`
-(per-face FBO, `SetData`/`GetData`) · **real MRT** (up to 8 targets, `glDrawBuffers`) ·
-backbuffer **MSAA** (manual multisample FBO + blit resolve) · vertex/index buffers (**16- and
-32-bit**) · non-indexed/indexed draws with `vertexStart`/`startIndex`/**`baseVertex`**
-(`glDrawElementsBaseVertex`) · all five stock effects (`BasicEffect` textured/lit/vertex-lit via
-`PreferPerPixelLighting`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
-`SkinnedEffect`) · `PbrEffect`/`SkinnedPbrEffect` (glTF 2.0 metallic-roughness BRDF) · fog on all
-stride-dispatched programs (FNA fog-vector form, REMED-GFX-010) · real **occlusion queries**
-(`GL_SAMPLES_PASSED`, exact pixel counts) · custom GLSL `ShaderEffect` for 3D draws and
-`SpriteBatch::SetCustomEffect` · **hardware instancing** (`glDrawElementsInstanced` +
-`glVertexAttribDivisor`, unified vertex-stream transport, custom-effect driven) ·
-`TransformWindowToLogical`/`TransformLogicalToWindow` · resize/reset · disposal.
+Presentation (virtual resolution; NativeBackBuffer, FixedHeightDynamicWidth, Stretch, Letterbox,
+Overscan) · backbuffer MSAA with apply/reset · swap interval · all six clears, which ignore the
+scissor rectangle and the colour/depth/stencil write masks as XNA's do · `BlendState` (Opaque,
+separate factors and equations, blend factor, per-target `ColorWriteChannels`, `MultiSampleMask`) ·
+`DepthStencilState` gated by the bound target's real depth format, two-sided stencil on XNA's faces,
+the counter-clockwise tuple applied to triangles only (Direct3D 9's rule), reference stencil ·
+`RasterizerState` (culling, native wireframe, scissor including zero-extent rectangles, depth bias
+converted by depth-format precision, multisample toggle) · XNA pixel centre and Direct3D clip depth ·
+samplers with every filter ordinal's mip term, anisotropy, AddressW, MaxMipLevel and LOD bias ·
+Texture2D in every EasyGL format (packed 16-bit, SNORM, RGB10A2, RGBA16, half/float, channel-expanded
+formats, DXT native or exactly decoded) · TextureCube and Texture3D with declared-format transfers ·
+RenderTarget2D/RenderTargetCube with MSAA, resolve, mip regeneration and bottom-up storage mapped on
+readback · up to four render targets (`GL_MAX_DRAW_BUFFERS`/`GL_MAX_COLOR_ATTACHMENTS` queried),
+cube faces included · vertex declarations bound by semantic in any order, multi-stream input,
+instancing with per-instance streams, 16/32-bit indices, base vertex (negative folded on the CPU),
+point lists · every stock effect (BasicEffect per-vertex/per-pixel, AlphaTest, DualTexture,
+EnvironmentMap, Skinned) plus PbrEffect/SkinnedPbrEffect · SpriteBatch (device state and viewport,
+sort modes, Immediate, 2 048-sprite submissions, custom effect applied at submission) and SpriteFont ·
+custom GLSL `ShaderEffect` (desktop dialect; GLSL ES 3.00 sources are adapted, with diagnostics on
+the author's own line numbers) · occlusion queries · backbuffer and render-target readback ·
+background content loading through the context lease · several GraphicsDevices at once, each device's
+work in its own context.
 
-The unrecognised-stride fallback renders the applied effect's `DiffuseColor`, gated by its
-`VertexColorEnabled` (`plans/plan_gltf.md GLTF-475`). It used to reach that fallback through the
-params-free colour route, which discarded `GpuDrawParams` and left the program painting attribute
-location 1 -- the `NORMAL` on every record from stride 32 upward -- as the surface colour. The
-stride-16 `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` entry points are unchanged: they
-have no effect to read and state white with the attribute enabled, which is the old formula.
+**Compiled XNA Effect bytecode** (`.fxb`, content effects) through MojoShader's GLSL 1.20 route with
+`-DCNA_OPENGL4_COMPILED_EFFECTS=ON` (off by default, like EasyGL's option; builds without SDL).
 
-## Unsupported — every one rejects or reports truthfully, none silently
+## Not applicable
 
-- **Multi-stream vertex input** (`GraphicsCapability::MultiStreamVertexInput` = `false`):
-  `ApplyLayout` binds one `GL_ARRAY_BUFFER` and reads every attribute from it at stride offsets.
-  `GraphicsDevice` refuses the binding shape up front, and every `Draw*Ex` route additionally
-  throws `System::NotSupportedException` if a multi-stream draw reaches the renderer directly.
-- **Declarations the stride dispatch cannot represent faithfully** are refused at draw time by
-  `RequireFaithfulDeclarationEXT` (REMED-GFX-DECL-GUARD; asymmetric — only what the caller
-  declared is checked). Custom-`ShaderEffect` draws bind attributes generically from the
-  declaration itself and are exempt by construction.
-- **Anisotropic filtering** is answered from the queried driver ceiling
-  (`GL_MAX_TEXTURE_MAX_ANISOTROPY`); the extension is core only in GL 4.6, so a driver without it
-  gets a truthful `false` and the sampler parameter is never uploaded.
-- `BlendState.MultiSampleMask` is accepted but only the all-ones default is implemented — the
-  same documented gap EasyGL records.
-- `ApplyMultiSampleCount` after construction is not overridden (inherited no-op) — MSAA is fixed
-  at renderer construction, EasyGL's own documented limitation.
-- Cube faces inside a **multi-target** `SetRenderTargets` set throw `std::runtime_error`
-  (single-face binds route to the real cube-face setter). MRT sets carry no depth attachment
-  (EasyGL's same documented gap).
-- Context-loss recovery was explicitly deferred by the 2026-07-22 project-owner scoping decision
-  (`plans/plan_opengl4.md`); `SetContextRecoveryEnabled` keeps the base no-op.
-- Windows/macOS validation is environment-blocked in this dev loop and remains open in
-  `plans/plan_opengl4.md`'s remaining work.
+- **Context-loss recovery** (`SetContextRecoveryEnabled`, `DebugSimulateContextLoss`) exists for
+  WebGL and Android, where the context is taken away. A desktop 4.x core context without
+  `GL_ARB_robustness` reset notification is not; `CanBeginDrawEXT` keeps the base answer.
+- The ES 2.0/WebGL 1 fallbacks of the EasyGL family have no counterpart in a desktop 4.x context.
 
-## Capability report
+## Modern (CNAEXT) GPU features
 
-`SupportsCapability` answers **all ten** current `GraphicsCapability` members explicitly — nine
-`true` (each backed by a named real implementation), `MultiStreamVertexInput` `false`,
-`AnisotropicFiltering` from the driver. The switch has no default case, so a future enum member
-surfaces as a compiler warning rather than an inherited wrong answer.
+Compute, storage buffers, image load/store, indirect draw, GPU timers, texture arrays and the
+shadow/IBL sampling queries are Workstream B of `plans/plan_opengl4_modern_graphics.md`. Until a
+subset is implemented and tested its capability answers false; `GL4::DiscoverModernCapabilities`
+records the live context's native facts separately from those promises (`plans/plan_modern.md`
+`MOD-2260`).
+
+## Diagnostics
+
+With `KHR_debug` available (Debug builds, or `CNA_OPENGL4_DEBUG_OUTPUT=1`) the renderer installs a
+synchronous debug callback and logs `[OpenGL4 GL Error] …` for every error, undefined-behaviour or
+high-severity message. Every OpenGL4 CTest fails on that line (`cmake/TestHelpers.cmake`).
+`CNA_OPENGL4_DEBUG_OUTPUT=verbose` also logs informational messages.
 
 ## Validation
 
-25 dedicated pixel-readback CTest suites (label `OpenGL4`, `ctest -R OpenGL4_`), all passing
-against a real `OpenGL 4.5 (Core Profile) Mesa` context under Xvfb, plus the full `CnaTests`
-corpus under `CNA_GRAPHICS_RENDERER=OPENGL4` and an ASan/UBSan run of the representative renderer
-suites. The integration-time record lives in `integration/lanes/opengl4.md` on the planning
-branch.
+Measured on an AMD Radeon 780M (Mesa radeonsi, 4.6 core) through
+`tools/platform/run_gpu_tests_private.sh`, never on a live desktop:
+
+| suite | Wayland (EGL) | X11 (GLX) |
+|---|---|---|
+| `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures and 346 EasyGL example sources rebuilt against OpenGL4 | 405 / 405 | 405 / 405 |
+| `CnaGraphicsTests` | 2 833 / 0 / 57 | 2 800 / 0 / 71 (OpenGL4-only build) |
+| `CnaRendererTests` | 321 / 0 / 10 | 217 / 0 / 0 |
+
+Every remaining skip is classified in the ledger (tests owned by another renderer, refusal legs for
+behaviour OpenGL4 has, environment-dependent cases). Windows and macOS remain unvalidated.

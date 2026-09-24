@@ -385,7 +385,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     OpenGL4RawProgram::~OpenGL4RawProgram() { Destroy(); }
 
     OpenGL4RawProgram::OpenGL4RawProgram(OpenGL4RawProgram&& other) noexcept
-        : program_(other.program_), error_(std::move(other.error_))
+        : program_(other.program_), error_(std::move(other.error_)),
+          integerAttributeMask_(other.integerAttributeMask_)
     {
         other.program_ = 0;
     }
@@ -397,6 +398,7 @@ namespace CNA::Internal::Renderers::OpenGL4
             Destroy();
             program_ = other.program_;
             error_ = std::move(other.error_);
+            integerAttributeMask_ = other.integerAttributeMask_;
             other.program_ = 0;
         }
         return *this;
@@ -409,6 +411,7 @@ namespace CNA::Internal::Renderers::OpenGL4
             gl4_glDeleteProgram(program_);
             program_ = 0;
         }
+        integerAttributeMask_ = 0;
     }
 
     namespace
@@ -482,6 +485,30 @@ namespace CNA::Internal::Renderers::OpenGL4
             return false;
         }
         program_ = prog;
+
+        // GL4-0023: remember which inputs are integer-typed; a draw feeds those through
+        // glVertexAttribIPointer. Every stock program and every XNA-ported effect declares float
+        // inputs only (Direct3D 9 vertex inputs are float registers), so this is 0 for them.
+        integerAttributeMask_ = 0;
+        GLint attributeCount = 0, maxNameLength = 0;
+        gl4_glGetProgramiv(prog, GL_ACTIVE_ATTRIBUTES, &attributeCount);
+        gl4_glGetProgramiv(prog, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxNameLength);
+        std::vector<GLchar4> name(static_cast<std::size_t>(std::max(maxNameLength, 1)) + 1);
+        for (GLint index = 0; index < attributeCount; ++index)
+        {
+            GLint size = 0;
+            GLenum type = 0;
+            gl4_glGetActiveAttrib(prog, static_cast<GLuint>(index),
+                                  static_cast<GLsizei>(name.size()), nullptr, &size, &type,
+                                  name.data());
+            const bool integer = type == GL_INT || type == GL_INT_VEC2 || type == GL_INT_VEC3 ||
+                                 type == GL_INT_VEC4 || type == GL_UNSIGNED_INT ||
+                                 type == GL_UNSIGNED_INT_VEC2 || type == GL_UNSIGNED_INT_VEC3 ||
+                                 type == GL_UNSIGNED_INT_VEC4;
+            const GLint location = gl4_glGetAttribLocation(prog, name.data());
+            if (integer && location >= 0 && location < 32)
+                integerAttributeMask_ |= 1u << static_cast<unsigned int>(location);
+        }
         return true;
     }
 

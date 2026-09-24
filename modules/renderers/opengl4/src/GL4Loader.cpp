@@ -36,6 +36,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     PFNGL4BINDATTRIBLOCATIONPROC       gl4_glBindAttribLocation       = nullptr;
 
     PFNGL4GETUNIFORMLOCATIONPROC       gl4_glGetUniformLocation       = nullptr;
+    PFNGL4GETACTIVEATTRIBPROC          gl4_glGetActiveAttrib          = nullptr;
+    PFNGL4GETATTRIBLOCATIONPROC        gl4_glGetAttribLocation        = nullptr;
     PFNGL4UNIFORM1IPROC                gl4_glUniform1i                = nullptr;
     PFNGL4UNIFORM1FPROC                gl4_glUniform1f                = nullptr;
     PFNGL4UNIFORM2FPROC                gl4_glUniform2f                = nullptr;
@@ -321,6 +323,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glBindAttribLocation", gl4_glBindAttribLocation);
 
         ok &= Resolve(getProcAddress, "glGetUniformLocation", gl4_glGetUniformLocation);
+        ok &= Resolve(getProcAddress, "glGetActiveAttrib", gl4_glGetActiveAttrib);
+        ok &= Resolve(getProcAddress, "glGetAttribLocation", gl4_glGetAttribLocation);
         ok &= Resolve(getProcAddress, "glUniform1i", gl4_glUniform1i);
         ok &= Resolve(getProcAddress, "glUniform1f", gl4_glUniform1f);
         ok &= Resolve(getProcAddress, "glUniform2f", gl4_glUniform2f);

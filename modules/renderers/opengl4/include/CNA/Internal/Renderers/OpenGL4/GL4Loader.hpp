@@ -468,6 +468,22 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #ifndef GL_TEXTURE_BINDING_2D
 #define GL_TEXTURE_BINDING_2D 0x8069
 #endif
+#ifndef GL_ACTIVE_ATTRIBUTES
+#define GL_ACTIVE_ATTRIBUTES 0x8B89
+#endif
+#ifndef GL_ACTIVE_ATTRIBUTE_MAX_LENGTH
+#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH 0x8B8A
+#endif
+#ifndef GL_INT_VEC2
+#define GL_INT_VEC2 0x8B53
+#define GL_INT_VEC3 0x8B54
+#define GL_INT_VEC4 0x8B55
+#endif
+#ifndef GL_UNSIGNED_INT_VEC2
+#define GL_UNSIGNED_INT_VEC2 0x8DC6
+#define GL_UNSIGNED_INT_VEC3 0x8DC7
+#define GL_UNSIGNED_INT_VEC4 0x8DC8
+#endif
 #ifndef GL_TEXTURE_BINDING_CUBE_MAP
 #define GL_TEXTURE_BINDING_CUBE_MAP 0x8514
 #endif
@@ -579,6 +595,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4BINDATTRIBLOCATIONPROC      = void (*)(GLuint, GLuint, const GLchar4*);
 
     using PFNGL4GETUNIFORMLOCATIONPROC      = GLint (*)(GLuint, const GLchar4*);
+    // plans/plan_opengl4_modern_graphics.md GL4-0023: active-attribute reflection (GL 2.0 core).
+    using PFNGL4GETACTIVEATTRIBPROC         = void (*)(GLuint, GLuint, GLsizei, GLsizei*, GLint*, GLenum*, GLchar4*);
+    using PFNGL4GETATTRIBLOCATIONPROC       = GLint (*)(GLuint, const GLchar4*);
     using PFNGL4UNIFORM1IPROC               = void (*)(GLint, GLint);
     using PFNGL4UNIFORM1FPROC               = void (*)(GLint, GLfloat);
     using PFNGL4UNIFORM2FPROC               = void (*)(GLint, GLfloat, GLfloat);
@@ -747,6 +766,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4BINDATTRIBLOCATIONPROC       gl4_glBindAttribLocation;
 
     extern PFNGL4GETUNIFORMLOCATIONPROC       gl4_glGetUniformLocation;
+    extern PFNGL4GETACTIVEATTRIBPROC          gl4_glGetActiveAttrib;
+    extern PFNGL4GETATTRIBLOCATIONPROC        gl4_glGetAttribLocation;
     extern PFNGL4UNIFORM1IPROC                gl4_glUniform1i;
     extern PFNGL4UNIFORM1FPROC                gl4_glUniform1f;
     extern PFNGL4UNIFORM2FPROC                gl4_glUniform2f;

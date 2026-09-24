@@ -588,3 +588,70 @@ issued in the second context, destroyed the second device's own objects.
 
 EasyGL has the same single-context assumption (its renderer, too, only switches context when
 creating resources); recorded here, not changed.
+
+## GL4-0022 — EasyGL ↔ OpenGL4 classic parity matrix (A32/A33)
+
+Every classic capability of the EasyGL family, with OpenGL4's status and the evidence that decides
+it. "Same binaries" means the `OpenGL4_EasyGLParity_*`/`OpenGL4_Parity_*` corpus of `GL4-0005`,
+run on OpenGL4 and, by runtime selection, on EasyGL. No row is unknown, stubbed or silently
+skipped; the only classic rows that are not "implemented" are the two marked **n/a**, each with its
+reason. Modern (CNAEXT) rows are Workstream B's and are listed at the end only so the partition is
+visible.
+
+| area | EasyGL | OpenGL4 | evidence |
+|---|---|---|---|
+| Context | ES 3.0/WebGL2 or desktop 3.3 core | desktop **4.1 core** floor, refuses less by name (`GL4-0011`) | `OpenGL4_Smoke`, `OpenGL4_ModernFeatureDiscovery` (forced 4.1) |
+| Platforms | SDL3, X11, Wayland | X11 (GLX) and Wayland (EGL), SDL-free | `GL4-0019`: 405/405 on each |
+| Presentation | virtual resolution, 5 modes, window↔logical | same object (`GlPresentationSurfaceState`) | `PresentationRectangleTests` (admitted), corpus `Presentation*`, `Letterbox*` |
+| Backbuffer MSAA, apply/reset | yes | yes (4.x guarantees ≥4 samples) | corpus `MsaaChange`, `Backbuffer*`, `MsaaFragmentContract` (EasyGL fails, OpenGL4 passes) |
+| Swap interval (recorded) | yes | yes | corpus `SwapIntervalForwarding` |
+| Clears (6 routes, masks/scissor restored) | yes | yes, plus the stencil-mask restore EasyGL omits | corpus `GraphicsDevice_OrderedClear`, `Clear*` |
+| BlendState (Opaque, factors, equations, per-slot masks, MultiSampleMask) | yes | yes | `Parity_blend_states`, `BlendState*`, `GraphicsProfileBlendStateTests` |
+| DepthStencilState (depth formats, two-sided stencil, CCW on triangles only, reference) | yes | yes | `Parity_depth_states`, `Parity_stencil_*`, `TwoSidedStencilTests` |
+| RasterizerState (cull, native wireframe, scissor incl. zero extent, depth bias in depth units, MSAA toggle) | yes (desktop native wireframe) | yes | `Parity_fill_mode_wireframe`, `Parity_rasterizer_viewport`, `RasterizerDepthBiasContractTests` |
+| Viewport, XNA pixel centre, D3D clip depth | yes | yes | `Parity_rasterizer_viewport`, `OpenGL4_RenderState` |
+| Samplers (9 filter ordinals with mip terms, anisotropy, W, MaxMipLevel, LOD bias) | yes | yes (LOD bias as desktop GL) | `Parity_sampler_*`, `SamplerLodAddressWContract`, `TextureFilter*Contract` |
+| Texture2D formats (Color, packed 16-bit, SNORM, RGB10A2, RGBA16, half/float, expanded channels, DXT native or decoded) | yes | yes | `ClassicTextureFormatTests`, `Texture2DTests` (lists admitted), corpus `DxtTexture*`, `ColorSpace_*` |
+| TextureCube / Texture3D (formats, transfers, sampling) | yes | yes; readback via `glGetTexImage` | `Texture3DTextureCubeRenderTargetTests`, corpus `TextureCube*`, `Texture3D*` |
+| RenderTarget2D / RenderTargetCube (formats, MSAA, resolve, mips, preserve, readback orientation) | yes, but a SpriteBatch drawn into a cube face is projected onto the window | yes, including cube faces | corpus `RenderTarget*` (10 cube tests EasyGL fails), `NormalizedRenderTargetRoundTripTests` |
+| MRT (≤4, `GL_MAX_DRAW_BUFFERS`/`COLOR_ATTACHMENTS` queried, cube faces, completeness) | yes | yes | corpus `RenderTargetCube_PluralBinding`, `OpenGL4_RenderTargetCube_MRT` |
+| Vertex input (declaration semantics, any order, multi-stream, stride fallback, REMED-GFX-234) | yes, but lit draws with no Normal are not unlit | yes | `VertexDeclaration*Tests`, `BuiltInVertexLayoutTests`, `OrdinaryDrawMultiStreamTests`, `Parity_vertex_semantics`, `Parity_unlit_position_color` |
+| Integer GLSL inputs of a `ShaderEffect` (`ivecN`/`uvecN`) | read through the float path (undefined) | `glVertexAttribIPointer` from integer storage; float storage refused by name (`GL4-0023`) | `OpenGL4IntegerAttribute.*` 2/2 |
+| Index buffers 16/32, base vertex (negative folded), draw ranges | yes | yes (`glDrawElementsBaseVertex`) | `IndexedDrawDeferredTests`, `NonIndexedDrawRangeTests`, `IndexBuffer*` |
+| Instancing (per-instance streams, frequency, offsets) | yes | yes | `InstancedDraw*Tests`, `Parity_instanced_draw` |
+| Point lists | yes | yes (`gl_PointSize`) | `PointListPrimitiveTests` |
+| Stock effects (Basic incl. per-vertex/per-pixel, AlphaTest, DualTexture, EnvironmentMap, Skinned) | shared corpus | same corpus (`GL4-0008`) | `Parity_*` (32), corpus `*Effect*` |
+| Fog, null-texture black, stock sampler contract | yes | yes | `ViewSpace_Fog`, `StockEffectNullTextureTests`, `StockEffectSamplerContract` |
+| PBR / glTF materials (CNAEXT stock) | yes | yes | `PbrEffect_Golden`, `Gltf_*`, `GltfRendererPbrFallbackPolicy` 30/30 |
+| SpriteBatch (device state, viewport, sort modes, Immediate, 2 048 chunks, custom effect at submission) | yes | yes | `SpriteBatchRasterizationTests`, `Parity_sprite_*`, corpus `SpriteBatch*` |
+| SpriteFont | yes | yes | `Parity_sprite_font`, corpus `SpriteFont*` |
+| Custom GLSL `ShaderEffect` (desktop dialect, diagnostics on the author's lines, render-target sources) | yes | yes | `ShaderEffect_GLSL`, `ShaderEffect_ReflectionContract`, `RenderTarget_EffectSource` |
+| Compiled XNA Effect bytecode | opt-in `CNA_EASYGL_COMPILED_EFFECTS` | opt-in `CNA_OPENGL4_COMPILED_EFFECTS` (`GL4-0020`) | 84 `OpenGL4Compiled*`, `EffectTests`, `EffectMaterialTests` |
+| Occlusion queries | yes | yes, exact counts | `OpenGL4_OcclusionQuery`, corpus `OcclusionQuery*` |
+| Backbuffer / target readback | yes | yes | `OpenGL4_Readback`, corpus `BackbufferFirstRead`, `BackbufferReadbackDimension`, `BackbufferResize` |
+| Background content loading (context lease) | yes | yes | corpus `ThreadContextLease_Exclusion`, `TextureCube_ContentLoad` |
+| Multiple devices | single-context assumption (recorded, `GL4-0021`) | each device in its own context | `OpenGL4MultiDevice.*` 3/3 |
+| GL debug output as a failure gate | — | yes (`GL4-0016`) | 0 serious messages in every suite |
+| Context-loss recovery (`SetContextRecoveryEnabled`, `DebugSimulateContextLoss`, `CanBeginDrawEXT`) | yes — for WebGL/Android, where the browser or OS takes contexts away | **n/a** — a desktop 4.x core context without `GL_ARB_robustness` reset notification is never taken away; XNA's DeviceLost/Reset stays served by `GraphicsDevice.Reset` | base-class answers (`CanBeginDrawEXT` true) |
+| ES 2.0 / WebGL 1 fallbacks (sampler state on textures, ES 1.00 shader rewriting, pointer rebase) | yes | **n/a** — no ES 2 generation in a desktop 4.x context | — |
+| **Modern (Workstream B):** compute, storage buffers, image load/store, indirect draw, GPU timers, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`, texture arrays, limits | EasyGL implements where the context allows | **not yet** — every query answers false; `CnaGraphicsExtTests` 856/1/105 | `GL4-0006` baseline, Workstream B |
+
+## GL4-0023 — Integer shader inputs through `glVertexAttribIPointer` (A11)
+
+Every stock program and every XNA-ported effect declares float inputs — Direct3D 9 vertex inputs are
+float registers, and `Byte4` blend indices are read as floats by design (`FX-127`) — so the
+declaration-driven layout binds every element through the converting float path, as EasyGL does. A
+GLSL-authored `ShaderEffect` may declare an `ivecN`/`uvecN` input, and the float path leaves it
+undefined. After linking, `OpenGL4RawProgram` records its integer-typed attribute locations
+(`glGetActiveAttrib`, `glGetAttribLocation` — added to the loader as required 2.0-core entry points).
+A custom-effect draw re-points those locations through `glVertexAttribIPointer` from the element's
+integer storage (`Byte4`/`Color` as unsigned bytes, `Short2`/`Short4` and their normalized forms as
+raw shorts) — across single, multi-stream and per-instance streams — and restores the buffer's
+layout afterwards. A float-stored element bound to an integer input is refused with
+`NotSupportedException` naming the location and element, instead of rendering undefined values.
+
+`OpenGL4IntegerAttribute.AnIntegerShaderInputReadsTheStoredIntegers` renders a `Byte4`
+(200,100,50,255) through a `uvec4` input exactly; with the re-binding disabled it reads garbage
+(`FF FF FF 00`, `FF FF FF FE`, … per pixel). The refusal case is the second test. Corpus 405/405;
+`CnaRendererTests` 323/0/10, `CnaGraphicsTests` 2 833/0/57, `CnaGraphicsExtTests` 856/1/105, zero
+GL errors in each.

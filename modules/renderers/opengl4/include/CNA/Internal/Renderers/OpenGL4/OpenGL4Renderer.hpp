@@ -76,6 +76,16 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] int UniformLocation(const char* name) const;
         /** @brief Returns the GL program name. */
         [[nodiscard]] unsigned int Handle() const { return program_; }
+        /**
+         * @brief Attribute locations 0..31 whose declared GLSL type is an integer (`int`, `ivecN`,
+         *        `uint`, `uvecN`).
+         *
+         * GL4-0023: such an input must be fed through glVertexAttribIPointer, or the shader reads
+         * undefined values.
+         *
+         * @return A bit per location.
+         */
+        [[nodiscard]] std::uint32_t IntegerAttributeMask() const { return integerAttributeMask_; }
         /** @brief Deletes the program now; its context must be current. */
         void Reset() { Destroy(); }
         /** @brief Forgets the program without any GL call: its context is already gone. */
@@ -86,6 +96,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         unsigned int program_ = 0;
         std::string error_;
+        std::uint32_t integerAttributeMask_ = 0;
     };
 
     /**

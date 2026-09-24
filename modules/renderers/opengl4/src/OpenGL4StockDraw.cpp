@@ -297,6 +297,102 @@ namespace CNA::Internal::Renderers::OpenGL4
             return scratch;
         }
 
+        /// GL4-0023: the integer attribute shape of a stored format, for an integer-typed input.
+        /// Normalized storage is read as its raw integers; float storage has no integer reading.
+        bool IntegerStorageOf(VertexElementFormat format, GLint& components, GLenum& type)
+        {
+            switch (format)
+            {
+            case VertexElementFormat::Byte4:
+            case VertexElementFormat::Color:            components = 4; type = GL_UNSIGNED_BYTE; return true;
+            case VertexElementFormat::Short2:
+            case VertexElementFormat::NormalizedShort2: components = 2; type = GL_SHORT; return true;
+            case VertexElementFormat::Short4:
+            case VertexElementFormat::NormalizedShort4: components = 4; type = GL_SHORT; return true;
+            default:                                    return false;
+            }
+        }
+
+        /// GL4-0023: re-points a ShaderEffect's integer-typed inputs (`ivecN`/`uvecN`) through
+        /// glVertexAttribIPointer; the declaration-driven layout reads every element through the
+        /// converting float path, which leaves an integer input undefined. XNA itself never
+        /// declares one -- Direct3D 9 vertex inputs are float registers -- so this concerns
+        /// GLSL-authored effects only. Must run with the draw's VAO bound, after the stream layout
+        /// is configured.
+        /// @return True when a location was re-pointed; the caller restores the buffer's layout.
+        bool RebindIntegerShaderInputs(IEffectRenderer* effect,
+                                       const OpenGL4VertexBufferRenderer& vb,
+                                       const GpuDrawParams& params,
+                                       const InstanceStreamPlacements* placements)
+        {
+            const auto* renderer = dynamic_cast<OpenGL4EffectRenderer*>(effect);
+            if (renderer == nullptr) return false;
+            const std::uint32_t mask =
+                const_cast<OpenGL4EffectRenderer*>(renderer)->GetProgram().IntegerAttributeMask();
+            if (mask == 0) return false;
+
+            bool rebound = false;
+            const auto rebind = [&](const OpenGL4VertexBufferRenderer& buffer, unsigned int first,
+                                    int vertexOffset, GLuint divisor, std::size_t count) {
+                const auto& declaration = buffer.GetDeclarationElements();
+                const std::size_t stride = buffer.GetStride();
+                for (std::size_t i = 0; i < count && i < declaration.size(); ++i)
+                {
+                    const unsigned int location = first + static_cast<unsigned int>(i);
+                    if (location >= 32 || (mask & (1u << location)) == 0) continue;
+                    GLint components = 0;
+                    GLenum type = 0;
+                    if (!IntegerStorageOf(declaration[i].getVertexElementFormatProperty(),
+                                          components, type))
+                    {
+                        throw System::NotSupportedException(
+                            "OpenGL4: the ShaderEffect declares an integer input at attribute "
+                            "location " + std::to_string(location) + ", but VertexElement " +
+                            std::to_string(i) + " is stored in a floating-point format, which has "
+                            "no integer reading. Declare the input as a float type, or store the "
+                            "element as Byte4, Color, Short2 or Short4.");
+                    }
+                    const std::size_t byteOffset =
+                        static_cast<std::size_t>(std::max(vertexOffset, 0)) * stride +
+                        static_cast<std::size_t>(declaration[i].getOffsetProperty());
+                    gl4_glBindBuffer(GL_ARRAY_BUFFER, buffer.VboHandle());
+                    gl4_glEnableVertexAttribArray(location);
+                    gl4_glVertexAttribIPointer(location, components, type,
+                                               static_cast<GLsizei>(stride),
+                                               reinterpret_cast<const void*>(byteOffset));
+                    gl4_glVertexAttribDivisor(location, divisor);
+                    rebound = true;
+                }
+            };
+
+            if (params.vertexStreamCount == 0)
+            {
+                rebind(vb, 0, 0, 0, vb.GetDeclarationElements().size());
+                return rebound;
+            }
+            std::size_t placementIndex = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.buffer == nullptr) continue;
+                const auto& buffer = AsBuffer(stream.buffer);
+                if (stream.instanceFrequency == 0)
+                {
+                    rebind(buffer, FirstLocationForStream(params, i), stream.vertexOffset, 0,
+                           buffer.GetDeclarationElements().size());
+                }
+                else if (stream.instanceFrequency > 0 && placements != nullptr &&
+                         placementIndex < static_cast<std::size_t>(placements->count))
+                {
+                    const InstanceStreamPlacement& placement =
+                        placements->entries[placementIndex++];
+                    rebind(buffer, placement.firstLocation, stream.vertexOffset,
+                           static_cast<GLuint>(stream.instanceFrequency), placement.elementCount);
+                }
+            }
+            return rebound;
+        }
+
         // Task 1079: a ShaderEffect's own program and the World/View/Projection names every
         // original XNA sample's .fx source declares.
         void BindCustomEffectMatrices(IEffectRenderer& renderer, const Matrix& world,
@@ -1351,9 +1447,12 @@ namespace CNA::Internal::Renderers::OpenGL4
                     "VertexDeclaration.");
             }
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
+            const bool integerInputs =
+                RebindIntegerShaderInputs(params.customEffectRenderer, vb, params, nullptr);
             glDrawArrays(ToGLPrimitive(primitive), params.vertexStart, vertexCount);
             if (multiStream) RestoreSingleStreamAttributes(params);
             gl4_glBindVertexArray(0);
+            if (integerInputs) RestoreDeclarationLayout(vb);
             return;
         }
 
@@ -1411,11 +1510,14 @@ namespace CNA::Internal::Renderers::OpenGL4
                     "VertexDeclaration.");
             }
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
+            const bool integerInputs =
+                RebindIntegerShaderInputs(params.customEffectRenderer, vb, params, nullptr);
             DrawIndexedWithBaseVertexFallback(ib, ToGLPrimitive(primitive), indexCount, indexType,
                                               indexOffset, params.startIndex, params.baseVertex,
                                               false, 0);
             if (multiStream) RestoreSingleStreamAttributes(params);
             gl4_glBindVertexArray(0);
+            if (integerInputs) RestoreDeclarationLayout(vb);
             return;
         }
 
@@ -1516,9 +1618,12 @@ namespace CNA::Internal::Renderers::OpenGL4
         }
 
         OpenGL4StockProgram* stock = nullptr;
+        bool integerInputs = false;
         if (params.customEffectRenderer)
         {
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
+            integerInputs =
+                RebindIntegerShaderInputs(params.customEffectRenderer, vb, params, &placements);
         }
         else
         {
@@ -1541,7 +1646,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         if (stock != nullptr && stock->loc_instanced >= 0)
             gl4_glUniform1f(stock->loc_instanced, 0.0f);
         gl4_glBindVertexArray(0);
-        if (semanticLayout) RestoreDeclarationLayout(vb);
+        if (semanticLayout || integerInputs) RestoreDeclarationLayout(vb);
     }
 
     namespace
