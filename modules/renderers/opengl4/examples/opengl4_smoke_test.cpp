@@ -23,11 +23,13 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
 #include <cstdint>
+#include <string>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -59,6 +61,17 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
+        // plans/plan_opengl4_modern_graphics.md GL4-0035: in a tree with several renderers the
+        // device may have selected another one at runtime; casting its renderer to OpenGL4Renderer
+        // would then be undefined behaviour, not a test.
+        if (dev.GetGraphicsRendererType() != CNA::GraphicsRendererType::OpenGL4)
+        {
+            std::printf("SKIP: this run selected %s, not OPENGL4\n",
+                        std::string(dev.GetGraphicsRendererName()).c_str());
+            result_ = CNA::Examples::kSkipExitCode;
+            Exit();
+            return;
+        }
         auto& renderer = static_cast<OpenGL4Renderer&>(dev.GetRenderer());
 
         if (frame_ == 1)

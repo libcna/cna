@@ -3,6 +3,7 @@
 // context oracle for independently discovered modern features and truthful shader reporting.
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -13,6 +14,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <string>
 
 using CNA::Internal::Renderers::OpenGL4::OpenGL4Renderer;
 using CNA::Internal::Renderers::OpenGL4::GL4::ClassifyModernCapabilities;
@@ -98,6 +100,16 @@ protected:
               "one missing entry-point group disables only its own feature");
 
         auto& device = getGraphicsDeviceProperty();
+        // plans/plan_opengl4_modern_graphics.md GL4-0035: another runtime-selected renderer is not
+        // an OpenGL4Renderer, and casting it to one would be undefined behaviour.
+        if (device.GetGraphicsRendererType() != CNA::GraphicsRendererType::OpenGL4)
+        {
+            std::printf("SKIP: this run selected %s, not OPENGL4\n",
+                        std::string(device.GetGraphicsRendererName()).c_str());
+            result_ = CNA::Examples::kSkipExitCode;
+            Exit();
+            return;
+        }
         auto& renderer = static_cast<OpenGL4Renderer&>(device.GetRenderer());
         const auto& live = renderer.GetModernCapabilitiesEXT();
         std::printf("OpenGL %d.%d modern facts: compute=%d ssbo=%d image=%d array=%d "

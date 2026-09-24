@@ -26,7 +26,7 @@
 // Check E -- the thread count did not grow.
 // Check F -- the work really happened: the last cycle's readback holds what its dispatch wrote.
 //
-// Exit code 0 = all checks PASS, 1 = any FAILs, 77 = this renderer has no compute.
+// Exit code 0 = all checks PASS, 1 = any FAILs, 77 = not OPENGL4, or no compute.
 //
 //   ./cna_test_opengl4_modern_stress [--cycles N]   (default 3000)
 
@@ -45,6 +45,7 @@ int main()
 #include "CNA/Graphics/StorageTexture2D.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/Logger.hpp"
 
@@ -186,6 +187,16 @@ protected:
     {
         if (frame_++ < 1) return;
         auto& dev = getGraphicsDeviceProperty();
+        // Its shaders are desktop GLSL 4.30 and its oracle is this renderer's debug callback, so it
+        // measures OpenGL4 and nothing else a multi-renderer tree may select at runtime.
+        if (dev.GetGraphicsRendererType() != CNA::GraphicsRendererType::OpenGL4)
+        {
+            std::printf("SKIP: this run selected %s, not OPENGL4\n",
+                        std::string(dev.GetGraphicsRendererName()).c_str());
+            skipped_ = true;
+            Exit();
+            return;
+        }
         if (!dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         {
             std::printf("SKIP: this renderer has no compute shaders\n");

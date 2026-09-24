@@ -1293,3 +1293,107 @@ eglMakeCurrent(d, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); eglDestroyCon
 
 All are far under the brief's 15 GB alarm line, so nothing needed investigating. Only the targets a
 run needed were built, never whole trees.
+
+## GL4-0035 — Final regression, runtime-selection guards, test-count integrity, capability audit (B41–B47)
+
+### A defect in three OpenGL4 examples, found by the EasyGL regression
+
+Run under EasyGL's runtime selection, `OpenGL4_Smoke` and `OpenGL4_ModernFeatureDiscovery` did
+`static_cast<OpenGL4Renderer&>` on an **EasyGLRenderer**. That is undefined behaviour:
+
+- At the A gate it happened to pass (those runs were not part of the EasyGL comparison).
+- After Workstream B's new renderer members moved the fields it read, Smoke crashed.
+
+The new `OpenGL4_ModernStress` also crashed under OPENGLES3. It feeds desktop GLSL 4.30 to a GLES
+context, and Mesa's threaded-dispatch worker (`gl0`) faulted.
+
+All three now print `SKIP: this run selected <renderer>, not OPENGL4` and exit 77 unless the device
+really runs OpenGL4. Measured: they pass on OPENGL4 and skip on OPENGL33 and OPENGLES3.
+
+The other OpenGL4-own example tests (`InstancedModel`, `OcclusionQuery`, `RenderState`,
+`ShaderEffect3D`, `ShaderEffectSpriteBatch`) are OpenGL4 assertions — native wireframe, a precise
+`GL_SAMPLES_PASSED` count, desktop GLSL — and fail by design on an EasyGL GLES context. **The EasyGL
+comparison is, as at the A gate, the 378 parity and EasyGL-source tests**, not OpenGL4's own
+examples.
+
+### Final regression (Radeon 780M, Mesa 25.0.7 radeonsi, GL 4.6 core, private runner, Wayland/EGL)
+
+| Suite | OPENGL4 at `GL4-A-GATE` | OPENGL4 now |
+|---|---|---|
+| corpus `-R '^OpenGL4_'` | 405 / 0 | **406 / 0** (+ `OpenGL4_ModernStress`) |
+| `CnaRendererTests` | 323 / 0 / 10 | **336 / 0 / 10** (+ 13 Workstream B cases; the 10: EasyGL-internal suites) |
+| `CnaGraphicsTests` | 2 833 / 0 / 57 | **2 833 / 0 / 57** |
+| `CnaContentTests` | 1 850 / 0 / 4 | **1 850 / 0 / 4** (its run deletes the committed `video_xnb_object_fixture.xnb`, the pre-existing `GL4-0018` finding; restored) |
+| `CnaGraphicsExtTests` (modern) | 856 / 1 / 105 | **955 / 0 / 7** — EasyGL OPENGLES3, the reference, is 954 / 0 / 8 |
+| CNAEXT oracles | 21 / 1 / 11 | **32 / 1 / 0** (the failure is `CNAEXT_NoPosixSetenv`, every renderer, `GL4-0024`) |
+| `[OpenGL4 GL Error]` lines | 0 | **0** in every suite |
+| profile-dead tests | 0 | **0** |
+
+**EasyGL regression** (same binaries, runtime selection). Shared test and shader-package code
+changed in `GL4-0025` and `GL4-0029`.
+
+| Suite | At `GL4-A-GATE` / `GL4-0024` | Now |
+|---|---|---|
+| OPENGL33 parity + EasyGL sources (378) | 14 failures | **the identical 14** |
+| OPENGLES3 parity + EasyGL sources (378) | 20 failures | **the identical 20** |
+| `CnaGraphicsExtTests` OPENGLES3 | 954 / 0 / 8 | 954 / 0 / 8 |
+| `CnaGraphicsExtTests` OPENGL33 | 922 / 7 / 33 | **954 / 1 / 7** |
+
+OPENGL33's remaining failure is the newly visible EasyGL desktop image-binding defect (`GL4-0025`).
+
+### Test-count integrity
+
+- Every suite counts what it counted before, plus exactly what Workstream B added:
+  - `CnaGraphicsExtTests` 962 before and after; B changed payloads, not cases.
+  - `CnaRendererTests` 333 → 346 (Wayland) and 219 → 232 (X11), the 13 new OpenGL4 cases.
+  - The corpus 405 → 406.
+  - `CnaGraphicsTests` 2 890 and `CnaContentTests` 1 854, unchanged.
+- No test died on, or skipped because of, a graphics-profile refusal (`profile_dead_tests`).
+- Every OpenGL4 skip is classified:
+  - `CnaGraphicsExtTests`' 7: six refusal legs of capabilities OpenGL4 has, and the SPIR-V-only
+    compute intake.
+  - `CnaRendererTests`' 10: EasyGL-internal suites.
+  - `CnaGraphicsTests`' 57: `GL4-0006`/`GL4-0018`.
+- Every new OpenGL4 case was mutation-checked where it guards a fix: compute restore, base instance,
+  marker, storage sampling, and GL name release.
+
+### No false capabilities
+
+Every modern answer OpenGL4 gives true, with the evidence that exercises it on this hardware:
+
+| Answer | Evidence |
+|---|---|
+| `ComputeShaders`, GlslDesktop/Compute | `ComputeTest.*` (legacy and packages), `ModernGpuConformance.*` (8 cases, 22 checks), `OpenGL4ComputeIsolation.*`, `CNAEXT_ComputeParticles`, stress |
+| `ComputeImageBinding`, `MaxStorageImagesPerShaderStage` | `ComputeTest.ImageBindingEitherWorks…` (gradient asserted exactly), `ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote`, `OpenGL4StorageTexture.*` |
+| Storage/constant buffers, `MaxStorageBufferBytes`, `MaxUniformBufferBytes` | `StorageBufferTest.*`, `ConstantBufferTest.*`, `ComputeTest.PortableConstantBuffer…`, `ModernGpuConformance.BufferRanges…` |
+| `IndirectDrawing` | `IndirectDrawTest.*` (the counts read from the buffer, offsets, indexed five-word record), `CNAEXT_GpuDriven` |
+| `BaseInstanceDrawing` | `OpenGL4BaseInstance.*` (mutation-checked) |
+| `GpuTimers`, `TimestampPeriodPicoseconds` | `GpuTimerTest.*` (workload scaling over three sizes), `PassTimingTest.*`, `CNAEXT_GpuTiming`, `OpenGL4Timing.*` (nested timers) |
+| `ShadowSampling` | 31 shadow cases, `CNAEXT_ShadowMap`/`CascadedShadowMap`/`PointShadow`/`ShadowReceiver`/`Showcase` pixel oracles |
+| `ImageBasedLighting` | `CNAEXT_ImageBasedLighting`, `CNAEXT_GltfPbr`, `CNAEXT_Showcase` |
+| Format usages (Sampled, Filterable, Blendable, Multisample, Storage*, Transfer*, Mipmapped) | driver-asked (`glGetInternalformativ`); StorageRead/Write/Transfer proven by `OpenGL4StorageTexture.EveryStorageFormatRoundTripsItsExactBytes` |
+
+The answers deliberately false are listed below; the capability audit on every CNA renderer depends
+on their being truthful.
+
+| False answer | Why |
+|---|---|
+| `MaxTextureArrayLayers = 0` | no renderer-neutral case (`GL4-0030`) |
+| `StorageAtomic` on every format | GLSL atomics need `r32i`/`r32ui` |
+| GLSL ES and any other dialect | desktop GLSL only |
+| scRGB/HDR10 display output | sRGB only |
+
+### No public API expansion
+
+`git diff b2a0a5671..HEAD -- 'modules/*/include/**'` touches only `CNA/Internal/Renderers/…`
+headers: the OpenGL4 family's own, the shared GL stock-shader corpus and presentation transform of
+Workstream A, and `PlatformGlContextOwner`. No `Microsoft/Xna/…` header and no public `CNA/…` header
+changed. Every modern entry point OpenGL4 implements is an existing `IGraphicsRenderer` virtual.
+
+### Pipeline cache
+
+GL has no pipeline-state objects to cache. Every stock program is compiled once per device and
+reused (`GL4-0013`); each `ComputeShader` owns its one program; the engine layer's
+`ShaderEffectFactory` caches effects; and Mesa's own on-disk shader cache serves repeated processes.
+Nothing more was added, because nothing measured needed it: the stress test compiles two compute
+programs every cycle and runs 3 010 cycles in 5.5 s.
