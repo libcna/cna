@@ -1171,3 +1171,78 @@ GL errors 0 -> 0
 While writing it, one trap: the first version labelled check B "zero [OpenGL4 GL Error] lines". The
 CTest error gate (`GL4-0016`) matches that literal in the output and failed a run whose six checks
 all passed. The label no longer contains the gate's token; the gate itself is unchanged.
+
+## GL4-0033 — AddressSanitizer, UndefinedBehaviorSanitizer and LeakSanitizer (B34)
+
+**Tree.**
+
+- `build-asan/`, from the closed list of build directories:
+  - `CNA_SANITIZE=address,undefined`, which covers LeakSanitizer through ASan's `detect_leaks`;
+  - OPENGL4 only, Wayland, SDL-free;
+  - `CNA_CNAEXT=ON`, `CNA_SHARED_LIBRARY=ON`, Debug;
+  - compiled effects off, which keeps MojoShader out of the instrumented build.
+- Only three targets were built: `CnaRendererTests`, `CnaGraphicsExtTests` and
+  `cna_test_opengl4_modern_stress`. 922 steps took 5 min with ccache, and the tree is 2.9 GB.
+- The existing `build-ubsan/` belongs to the WebGPU workstream and was not reconfigured.
+- Environment:
+  - `ASAN_OPTIONS=detect_leaks=1`;
+  - `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1`, so any undefined behaviour fails the process;
+  - `LSAN_OPTIONS=suppressions=tools/platform/lsan_x11_mesa.supp`.
+
+**Results** (Radeon 780M, private runner):
+
+| Suite | Result |
+|---|---|
+| OpenGL4's own gtests (`--gtest_filter='OpenGL4*'`: isolation, base instance, integer inputs, multi-device, lifetime, storage textures, timers, markers) | **18 / 0 / 0**, no ASan/UBSan report, LSan clean |
+| `CnaGraphicsExtTests` OPENGL4 (bounded runner, 5 shards) | **956 / 0 / 6**, no sanitizer report in any shard. The one case more than the regular tree's 955 is `RequireCapabilityTest.AnUnsupportedCapabilityThrowsWithTheRenderersOwnName`: this tree has compiled effects off, so a capability exists to refuse. |
+| `OpenGL4_ModernStress`, 3000 cycles | 6 / 6 with `quarantine_size_mb=0`: RSS +3.8 MB, fds and threads flat, zero GL errors, LSan clean |
+
+With ASan's default 256 MB quarantine, the stress run's RSS check fails (+161 MB): freed memory is
+held in quarantine by design. With the quarantine off, the same run grows 3.8 MB, so it is ASan
+accounting, not a leak. The regular build's figure is +0.9 MB (`GL4-0032`).
+
+**The one leak report, and why it is Mesa's.**
+
+- Without a suppression, every OpenGL4 test that *draws* reported the same direct leak: 2,112 bytes
+  in 44 allocations, whose only stack frame is `libgallium` (radeonsi). Mesa debug symbols are not
+  installed.
+- Tests that only clear, upload or read back reported nothing. The count does not scale with the
+  work.
+- It was then reproduced without any CNA code, using the probe below. A desktop 4.1 core context
+  draws one triangle into a framebuffer object:
+  - exiting **without `eglTerminate`** leaks exactly 2,112 bytes in 44 allocations, on the Wayland
+    and on the surfaceless EGL platform alike;
+  - with `eglTerminate`, or without the draw, it leaks nothing.
+- The CNA processes are in the leaking configuration. The Wayland platform does call `eglTerminate`
+  in `~WaylandGlContext`, but the lazily created default platform is deliberately never destroyed
+  (`CurrentPlatform.cpp`, a heap-allocated static, avoiding static-destruction order). A standalone
+  `GraphicsDevice` process therefore exits without terminating its display.
+- The finding was added to `tools/platform/lsan_x11_mesa.supp` (`leak:libgallium`), under that
+  file's own rule: only a leak reproduced without CNA code, with the program and byte count.
+- Genuine GL object leaks are unaffected by this suppression. They are not LSan leaks at all while
+  the context lives, and are accounted separately by `glIs*` (`GL4-0031`).
+
+The probe (built in `build-probe/`, deleted after this entry):
+
+```c
+EGLDisplay d = (argv[2] == "wayland") ? eglGetPlatformDisplay(EGL_PLATFORM_WAYLAND_KHR, wl_display_connect(NULL), NULL)
+                                      : eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+eglInitialize(d, NULL, NULL); eglBindAPI(EGL_OPENGL_API);
+EGLint attr[] = {EGL_CONTEXT_MAJOR_VERSION, 4, EGL_CONTEXT_MINOR_VERSION, 1,
+                 EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};
+EGLContext c = eglCreateContext(d, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attr);
+eglMakeCurrent(d, EGL_NO_SURFACE, EGL_NO_SURFACE, c);
+/* "draw": RGBA8 texture + FBO, "#version 410 core" pass-through program, one triangle,
+ * glReadPixels -> (255,0,0,255), then every object deleted. */
+eglMakeCurrent(d, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); eglDestroyContext(d, c);
+/* "noterm" skips: */ eglTerminate(d); eglReleaseThread();
+```
+
+`gcc -fsanitize=address`, `ASAN_OPTIONS=detect_leaks=1`:
+
+| Run | Result |
+|---|---|
+| `draw wayland noterm` | 2,112 B / 44 allocations leaked |
+| `draw surfaceless noterm` | 2,112 B / 44 allocations leaked |
+| `none wayland noterm` | nothing |
+| `draw wayland` / `draw surfaceless` / with KHR_debug output | nothing |

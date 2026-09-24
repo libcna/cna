@@ -63,11 +63,34 @@ work in its own context.
 
 ## Modern (CNAEXT) GPU features
 
-Compute, storage buffers, image load/store, indirect draw, GPU timers, texture arrays and the
-shadow/IBL sampling queries are Workstream B of `plans/plan_opengl4_modern_graphics.md`. Until a
-subset is implemented and tested its capability answers false; `GL4::DiscoverModernCapabilities`
-records the live context's native facts separately from those promises (`plans/plan_modern.md`
-`MOD-2260`).
+Workstream B of `plans/plan_opengl4_modern_graphics.md` (`GL4-0024` onward) implements the modern
+API over the live context. Every answer below is asked of the driver, never assumed, and
+`GL4::DiscoverModernCapabilities` keeps the native facts separate from these promises
+(`plans/plan_modern.md` `MOD-2260`).
+
+- **Compute** — desktop GLSL 4.30 programs (`#version 430 core` payloads), promised only on a 4.3+
+  context. Scalar uniforms go to the program object. Storage-buffer, constant-buffer, sampled-texture
+  and image bindings are recorded and installed only for the dispatch, then restored, so a compute
+  pass never disturbs XNA draw state. Each dispatch ends in one GPU-side `glMemoryBarrier`, so results
+  are visible to whatever follows without caller barriers; nothing waits on the CPU.
+- **Storage and constant buffers** — every usage/CPU-access role, ranged transfers and GPU copies.
+  Indirect-argument-only buffers exist without compute.
+- **Storage textures** — Vulkan's fifteen storage formats, exact-byte transfers, compute image
+  binding, and sampling from a `ShaderEffect`. `ByteEXT`/`UShortEXT` are refused by name because
+  OpenGL4's `Texture2D` does not store them.
+- **Indirect draws and base instance** — `glDraw*Indirect` through the instanced route's stream
+  handling; base instance offsets per-instance streams (Vulkan's contract).
+- **GPU timers** — `GL_TIMESTAMP` pairs (not `GL_TIME_ELAPSED`, which allows only one active query),
+  so timers nest, and 64-bit reads that do not saturate. The timestamp period is 1000 ps.
+- **Markers** — `SetStringMarkerEXT` inserts a KHR_debug application marker; compute dispatches are
+  debug groups while debug output is on.
+- **Shadows and image-based lighting** — the shared stock programs sample directional, cascaded,
+  point and spot shadows and PBR IBL; both queries answer true.
+- **Limits and format usages** — every `RendererLimit`, and per-format Sampled/Filterable/Blendable/
+  Multisample/Storage*/Transfer*/Mipmapped from `glGetInternalformativ`. StorageAtomic is false for
+  every format: GLSL image atomics need `r32i`/`r32ui`.
+- **Not implemented, deliberately:** `Texture2DArray` (no renderer-neutral case exercises it;
+  `MaxTextureArrayLayers` is 0), and scRGB/HDR10 display output (sRGB only, the base answer).
 
 ## Diagnostics
 
