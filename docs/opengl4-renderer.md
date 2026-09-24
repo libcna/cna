@@ -106,9 +106,12 @@ Measured on an AMD Radeon 780M (Mesa radeonsi, 4.6 core) through
 
 | suite | Wayland (EGL) | X11 (GLX) |
 |---|---|---|
-| `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures and 346 EasyGL example sources rebuilt against OpenGL4 | 405 / 405 | 405 / 405 |
+| `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures, 346 EasyGL example sources rebuilt against OpenGL4, and the modern stress run | 406 / 406 | 406 / 406 (openbox managing the private display) |
 | `CnaGraphicsTests` | 2 833 / 0 / 57 | 2 800 / 0 / 71 (OpenGL4-only build) |
-| `CnaRendererTests` | 323 / 0 / 10 | 219 / 0 / 0 |
+| `CnaRendererTests` | 336 / 0 / 10 | 232 / 0 / 0 |
+| `CnaGraphicsExtTests` (the modern engine layer) | 955 / 0 / 7 | 956 / 0 / 6 |
+| CNAEXT example oracles | 32 / 1 / 0 | 34 / 1 / 0 (the failure, on every renderer: `CNAEXT_NoPosixSetenv`, a source scan of the Wayland platform) |
+| AddressSanitizer + UBSan + LeakSanitizer (`build-asan`): OpenGL4's own tests, `CnaGraphicsExtTests`, 3000-cycle stress | 18 / 0 / 0, 956 / 0 / 6, 6 / 6 | — |
 
 Every remaining skip is classified in the ledger (tests owned by another renderer, refusal legs for
 behaviour OpenGL4 has, environment-dependent cases). Windows and macOS remain unvalidated.

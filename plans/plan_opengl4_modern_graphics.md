@@ -33,7 +33,7 @@ Companion documents this ledger does not duplicate:
 | Branch | `opengl4-modern-graphics` |
 | Baseline | `b2a0a5671c4db9b7ac1564a7ac2bf9ffd88530e1` (`origin/next` = `next`, 2026-09-24) |
 | Workstream A | **COMPLETE** (`GL4-A-GATE`, 2026-09-24) |
-| Workstream B | in progress |
+| Workstream B | **COMPLETE** (`GL4-B-GATE`, 2026-09-24) — handed back for merge review |
 
 ---
 
@@ -1419,3 +1419,57 @@ still visible in the log.
 |---|---|
 | Wayland, alone | threads outside the pool 10 → 10 |
 | X11, `-j6` | corpus **406 / 406** |
+
+## GL4-B-GATE — WORKSTREAM B COMPLETE
+
+Recorded 2026-09-24. Every Workstream B requirement, with the task that satisfies it:
+
+| requirement | where |
+|---|---|
+| B1 inventory · B2 baselines (EasyGL, Vulkan, WebGPU, SDL_GPU) | `GL4-0024` |
+| B3 GLSL versioning (4.30 core for compute, 4.1 floor elsewhere) · bindings · pipeline cache | `GL4-0025`, `GL4-0035` (no GL pipeline objects; nothing measured needed a cache) |
+| B4 compute · B5 memory barriers without `glFinish` · B6 storage buffers · B7 constant buffers · B8 image load/store | `GL4-0025` |
+| B9 limits | `GL4-0025`, `GL4-0030` |
+| B10 storage textures · B11 format-usage queries (`glGetInternalformativ`) · B13 Texture2DArray (not implemented: no renderer-neutral coverage) | `GL4-0030` |
+| B12 indirect draw · B15 base instance · draw-time SSBOs | `GL4-0025`, `GL4-0026` |
+| B14 instancing, samplers, FBOs, MRT, MSAA under the modern layer | Workstream A; exercised by the engine layer in `CnaGraphicsExtTests` 955 / 0 / 7 |
+| B16 shader payloads / desktop variants of shared packages | `GL4-0025`, `GL4-0029` |
+| B19 ShaderEffect lifetime (the `ForgetEffectEXT` question) | `GL4-0031` — OpenGL4 issues sprite draws from `End`, so there is no queued-draw window |
+| B20 shadows · B21 image-based lighting | `GL4-0028` |
+| B22 clustered forward | `GL4-0029` |
+| B24 GPU timers with workload scaling · B25 debug markers and groups | `GL4-0027` |
+| B26 readback · B27 uploads | `GL4-0025`, `GL4-0030` (exact-byte round trips) |
+| B28 lifetime · B29 classic + modern coexistence · B30 context ownership · B31 threading | `GL4-0025` (isolation), `GL4-0031`, `ModernGpuConformance.ClassicDrawingIsUnchangedByInterleavedCompute` |
+| B32 CNAEXT examples | `GL4-0028`, `GL4-0029`, `GL4-0034`: 32 / 1 / 0 Wayland, 34 / 1 / 0 X11 |
+| B33 progression ledger | this file, one row per task |
+| B34 ASan / UBSan / LSan | `GL4-0033` |
+| B35 GL object leak accounting | `GL4-0031` |
+| B36 3000+ cycle stress (RSS / fds / threads) | `GL4-0032`, `GL4-0036` |
+| B37–B39 X11 and Wayland hardware, SDL-free | `GL4-0034` (and the GLX link defect it found) |
+| B40 build size | `GL4-0034` |
+| B41 EasyGL regression whenever shared code changed | `GL4-0025`, `GL4-0029`, `GL4-0035` |
+| B42 test-count integrity · B43 no false capabilities · B44 no public API expansion | `GL4-0035` |
+| B45 stop rule — no DX11/DX12/Software/Metal work | nothing outside OpenGL4, the shared tests and shader packages it needed, and the one suppression-file entry was changed |
+
+### Final numbers (AMD Radeon 780M, Mesa 25.0.7 radeonsi, OpenGL 4.6 core, private runner)
+
+| suite | Wayland / EGL | X11 / GLX |
+|---|---|---|
+| corpus `-R '^OpenGL4_'` | **406 / 0** | **406 / 0** |
+| `CnaRendererTests` | **336 / 0 / 10** | **232 / 0 / 0** |
+| `CnaGraphicsTests` | **2 833 / 0 / 57** | **2 800 / 0 / 71** |
+| `CnaContentTests` | **1 850 / 0 / 4** | — |
+| `CnaGraphicsExtTests` (modern) | **955 / 0 / 7** (from 856 / 1 / 105) | **956 / 0 / 6** |
+| CNAEXT oracles | **32 / 1 / 0** (from 21 / 1 / 11) | **34 / 1 / 0** |
+| under ASan + UBSan + LSan | OpenGL4 18 / 0 / 0, `CnaGraphicsExtTests` 956 / 0 / 6, stress 6 / 6 | — |
+| `[OpenGL4 GL Error]` lines · profile-dead tests | 0 · 0 | 0 · 0 |
+| EasyGL on the same binaries (378 parity + EasyGL sources) | OPENGL33 and OPENGLES3 fail exactly the sets they failed at the A gate | — |
+
+### Findings recorded, not changed (outside this workstream)
+
+| Finding | Where it was found |
+|---|---|
+| EasyGL's desktop compute image binding reads back zero | `GL4-0025` |
+| `CNAEXT_NoPosixSetenv` fails on every renderer (Wayland platform sources) | `GL4-0024` |
+| `CnaContentTests` deletes a committed fixture | `GL4-0018` |
+| Mesa radeonsi's first-draw screen state leaks when `eglTerminate` never runs, which CNA's never-destroyed default platform guarantees (suppressed with evidence) | `GL4-0033` |
