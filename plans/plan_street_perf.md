@@ -36,6 +36,29 @@ main thread with gdb (60 stacks each) named a different cause in each:
 None of the three bring-ups (`plan_street.md`, `plan_street_webgpu.md`, `plan_street_sdlgpu.md`)
 measured speed; they compared pictures.
 
+## Where it ended
+
+`--benchmark baseline`, the five renderers back to back on the final build, load average about 2:
+
+| renderer | CPU frame before | fps before | CPU frame now | fps now |
+|---|---|---|---|---|
+| OPENGL4 | 67.9 ms | 14.7 | 26.8 ms | **37.3** (`STREETGL4-0001`) |
+| OPENGL33 (EasyGL) | 31.4 ms | 31.9 | 29.7 ms | 33.7 |
+| VULKAN | 120 ms | 8.3 | 29.4 ms | **34.0** |
+| SDL_GPU | 94-237 ms | 4-11 | 23.6 ms | **42.4** |
+| WEBGPU | 316-367 ms | 2.7-3.2 | 104 ms | **9.6** |
+
+**WebGPU is still three times slower, and the rest is structure, not a copy.** Measured with GPU
+timers switched off (a local experiment, not committed) the frame is 83-95 ms, so the timers'
+flush-and-submit at every `begin`/`end` costs about 20 ms. The rest: every draw creates its bind
+groups and writes its uniform blocks with `wgpuQueueWriteBuffer`, and every render-target switch
+finishes and submits an encoder. The street's 924 shadow casters are custom `ShaderEffect` draws,
+whose reflection-driven route builds four bind groups a draw. The fix is a new binding model --
+one uniform arena per flush bound with dynamic offsets, cached texture/sampler bind groups, and
+fewer submits (timestamps and resolves carried by the flush that is already happening) -- across
+the stock families and the ShaderEffect route. That is a redesign, left for a decision rather
+than started here.
+
 ## Status
 
 | ID | Task | Status |
