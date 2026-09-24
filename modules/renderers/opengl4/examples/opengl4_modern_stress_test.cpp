@@ -23,7 +23,8 @@
 // Check B -- zero "[OpenGL4 GL Error]" lines across the whole run.
 // Check C -- RSS did not grow beyond the allowance once the caches are warm.
 // Check D -- the open file descriptor count did not grow.
-// Check E -- the thread count did not grow.
+// Check E -- the thread count did not grow, not counting Mesa's shader-compiler pool, which the
+//            driver widens on its own under GPU contention (named, and printed when it grows).
 // Check F -- the work really happened: the last cycle's readback holds what its dispatch wrote.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = not OPENGL4, or no compute.
@@ -73,6 +74,7 @@ int main()
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -80,6 +82,7 @@ int main()
 #include <cstring>
 #include <dirent.h>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -133,6 +136,55 @@ namespace
 
     std::size_t openDescriptors() { return countEntries("/proc/self/fd"); }
     std::size_t threadCount() { return countEntries("/proc/self/task"); }
+
+    /// The kernel names of this process's threads (`/proc/self/task/<tid>/comm`), one per thread.
+    std::vector<std::string> threadNames()
+    {
+        std::vector<std::string> names;
+        DIR* dir = ::opendir("/proc/self/task");
+        if (dir == nullptr) return names;
+        while (const dirent* entry = ::readdir(dir))
+        {
+            if (entry->d_name[0] == '.') continue;
+            const std::string path = std::string("/proc/self/task/") + entry->d_name + "/comm";
+            std::FILE* f = std::fopen(path.c_str(), "r");
+            if (f == nullptr) continue;
+            char name[64] = {};
+            if (std::fgets(name, sizeof(name), f) != nullptr)
+            {
+                std::string text(name);
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+                names.push_back(text);
+            }
+            std::fclose(f);
+        }
+        ::closedir(dir);
+        std::sort(names.begin(), names.end());
+        return names;
+    }
+
+    /// Mesa radeonsi's shader-compiler queues ("<process>:sh<N>", "<process>:shlo<N>"). Mesa
+    /// starts them lazily and adds workers when the queue backs up -- which happens when other
+    /// processes compete for the GPU, as a parallel ctest run does -- up to a fixed ceiling. A
+    /// bounded pool of the driver's, not something a cycle of this test could leak.
+    bool isDriverShaderCompilerThread(const std::string& name)
+    {
+        const std::size_t colon = name.rfind(':');
+        if (colon == std::string::npos) return false;
+        std::string tail = name.substr(colon + 1);
+        if (tail.rfind("shlo", 0) == 0) tail = tail.substr(4);
+        else if (tail.rfind("sh", 0) == 0) tail = tail.substr(2);
+        else return false;
+        return !tail.empty() &&
+               std::all_of(tail.begin(), tail.end(), [](char c) { return c >= '0' && c <= '9'; });
+    }
+
+    std::size_t countExcludingDriverPool(const std::vector<std::string>& names)
+    {
+        return static_cast<std::size_t>(std::count_if(
+            names.begin(), names.end(),
+            [](const std::string& name) { return !isDriverShaderCompilerThread(name); }));
+    }
 
     // Writes element i as (i + seed), so a readback proves this cycle's dispatch ran rather than a
     // previous one's result still sitting in a reused buffer.
@@ -249,6 +301,7 @@ protected:
         std::size_t rssBefore = 0;
         std::size_t fdBefore = 0;
         std::size_t threadsBefore = 0;
+        std::vector<std::string> namesBefore;
 
         std::string failure;
         int completed = 0;
@@ -262,6 +315,7 @@ protected:
                 rssBefore = residentKiB();
                 fdBefore = openDescriptors();
                 threadsBefore = threadCount();
+                namesBefore = threadNames();
                 std::printf("    warm: RSS %zu KiB, %zu fds, %zu threads, %zu GL errors\n",
                             rssBefore, fdBefore, threadsBefore, errorsBefore);
             }
@@ -360,6 +414,12 @@ protected:
         const std::size_t rssAfter = residentKiB();
         const std::size_t fdAfter = openDescriptors();
         const std::size_t threadsAfter = threadCount();
+        const std::vector<std::string> namesAfter = threadNames();
+        std::vector<std::string> gained;
+        std::set_difference(namesAfter.begin(), namesAfter.end(), namesBefore.begin(),
+                            namesBefore.end(), std::back_inserter(gained));
+        for (const std::string& name : gained)
+            std::printf("    thread gained since warm-up: '%s'\n", name.c_str());
 
         std::printf("    ran %d of %d cycles%s%s\n", completed, cycles + kWarmUp,
                     failure.empty() ? "" : ", stopped by: ", failure.c_str());
@@ -379,7 +439,12 @@ protected:
             static_cast<long long>(rssAfter) - static_cast<long long>(rssBefore);
         check(rssDelta < 64 * 1024, "Check C: RSS did not grow beyond the allowance");
         check(fdAfter <= fdBefore, "Check D: no file descriptor was leaked");
-        check(threadsAfter <= threadsBefore, "Check E: no thread was leaked");
+        const std::size_t ownBefore = countExcludingDriverPool(namesBefore);
+        const std::size_t ownAfter = countExcludingDriverPool(namesAfter);
+        std::printf("    threads outside the driver's shader-compiler pool: %zu -> %zu\n", ownBefore,
+                    ownAfter);
+        check(ownAfter <= ownBefore,
+              "Check E: no thread was leaked (Mesa's lazily scaled shader-compiler pool excluded)");
 
         bool lastCycleLanded = completed > 0;
         for (int i = 0; i < kElements && lastCycleLanded; ++i)

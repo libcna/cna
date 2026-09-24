@@ -1397,3 +1397,25 @@ reused (`GL4-0013`); each `ComputeShader` owns its one program; the engine layer
 `ShaderEffectFactory` caches effects; and Mesa's own on-disk shader cache serves repeated processes.
 Nothing more was added, because nothing measured needed it: the stress test compiles two compute
 programs every cycle and runs 3 010 cycles in 5.5 s.
+
+## GL4-0036 — The stress test's thread check and Mesa's shader-compiler pool
+
+In the X11 corpus run at `-j6`, `OpenGL4_ModernStress` failed check E alone (threads 17 → 18). It had
+passed on its own and on Wayland. Two more `-j6` runs reproduced it (17 → 19). The stress test now
+names what it gained, from `/proc/self/task/*/comm`, and both runs gained exactly
+**`cna_test_o:sh4`** and **`cna_test_o:sh5`**. These are radeonsi's shader-compiler queue: Mesa starts
+its workers lazily and adds more, up to a fixed ceiling, when the queue backs up, which is what
+other processes competing for the GPU cause.
+
+Six CPU-only busy loops beside the test did not reproduce it (17 → 17, twice). The trigger is GPU
+contention, and a two-thread widening of a bounded driver pool is not a leak. A leak in a loop
+of 3 010 cycles would grow with the cycle count.
+
+Check E therefore excludes exactly that pool, by the names Mesa gives it (`:sh<N>`, `:shlo<N>`).
+It prints the count it compares and every thread gained since warm-up, so an excluded thread is
+still visible in the log.
+
+| Run | Result |
+|---|---|
+| Wayland, alone | threads outside the pool 10 → 10 |
+| X11, `-j6` | corpus **406 / 406** |
